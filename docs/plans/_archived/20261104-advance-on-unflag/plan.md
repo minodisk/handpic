@@ -88,4 +88,4 @@ flag advances too, like a repeat reject or pick.
 
 ## Progress
 
-- (none yet)
+- (2026-11-04) Step 1 complete

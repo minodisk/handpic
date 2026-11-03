@@ -1762,6 +1762,22 @@ The `repeat-judgment-advance` feature makes a repeat press of the value a file a
   - In a JPEG-only folder (view-only), the keys do nothing.
 - [ ] On macOS, repeat the same checks as on Windows.
 
+### App: real-device check of auto-advance after un-reject / un-pick
+
+#### Background
+
+The `advance-on-unflag` feature makes the `unflag` key (`u`, "Un-reject / un-pick") move to the next file when `Auto-advance after a star, reject or pick` is on, under the same gates as reject and pick. A repeat `u` on a file with no flag also advances, writing nothing and adding no undo entry. The pure decision `shouldAdvance` is covered by Vitest in `advance.test.ts`, and `mise run ci` passes. The behavior was never exercised in the desktop app: the implementation agent had no GUI session. See `docs/plans/_archived/20261104-advance-on-unflag/plan.md` (Step 1). Files: `crates/app/ui/src/advance.ts`, `crates/app/ui/src/main.ts`.
+
+#### TODO
+
+- [ ] On Windows, with the app open and `Auto-advance after a star, reject or pick` on:
+  - Press `u` on a picked file and on a rejected file. Each moves to the next file.
+  - Press `u` on an unflagged file. It moves to the next file, writes nothing and adds no undo entry.
+  - With Auto-advance off, `u` stays on the file.
+  - In Compare, `u` stays on the file.
+  - With a 2-file selection, `u` stays on the file.
+- [ ] On macOS, repeat the same checks as on Windows.
+
 ### App: real-device check of the disk read and disk busy series in the performance overlay
 
 #### Background
