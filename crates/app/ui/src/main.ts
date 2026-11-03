@@ -4899,7 +4899,7 @@ function runAction(action: string): boolean {
     case "unflag":
       // Clears a reject or a pick and keeps the stars; does nothing to a file
       // with neither.
-      judge(() => (own) => ({ ...own, flag: "none" }));
+      judged = judge(() => (own) => ({ ...own, flag: "none" }));
       break;
     case "clear":
       // Clears the stars and leaves the flag alone.

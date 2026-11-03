@@ -568,7 +568,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `~/Library/Logs/com.minodisk.riffle/` on macOS and
   `~/.local/share/com.minodisk.riffle/logs/` on Linux.
 - **Auto-advance**: when `Auto-advance after a star, reject or pick` is on in
-  `Riffle > Settings...` (on by default), `1`-`5`, reject and pick move to the
+  `Riffle > Settings...` (on by default), `1`-`5`, reject, pick and un-reject / un-pick move to the
   next file, also when the file already has the value pressed (which leaves
   it as it is and writes nothing), so a run of files that are already right
   can be confirmed with the same key. The last file stays selected. A file the judgment
