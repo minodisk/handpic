@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
   "productName": "Riffle",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "identifier": "com.minodisk.riffle",
   "build": {
     "devUrl": "http://localhost:1420",
