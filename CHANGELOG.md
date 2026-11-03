@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.9.0](https://github.com/minodisk/riffle/compare/v1.8.0...v1.9.0) (2026-11-03)
+
+
+### Features
+
+* **app:** advance after un-reject / un-pick when Auto-advance is on ([#885](https://github.com/minodisk/riffle/issues/885)) ([cd04328](https://github.com/minodisk/riffle/commit/cd04328fc9a014919f0f31ca36b890b9f28a724d))
+* **app:** show yaw, pitch and roll as separate meta rows ([#861](https://github.com/minodisk/riffle/issues/861)) ([8ec2083](https://github.com/minodisk/riffle/commit/8ec20833edece3472899f02a01aebccac43193a2))
+* **app:** show YuNet's score, size, eye distance and five landmarks beside each face box ([#867](https://github.com/minodisk/riffle/issues/867)) ([22c694c](https://github.com/minodisk/riffle/commit/22c694c4bb134e8880d56198cb27080e09eafc65))
+* **cli:** add the facechoice per-face eye_focus dump (Step 2) ([#872](https://github.com/minodisk/riffle/issues/872)) ([7abe15e](https://github.com/minodisk/riffle/commit/7abe15ea528b92599120603ca0a3af46a4485812))
+* **plans:** dump the six fresh folders label-free (Step 4) ([#880](https://github.com/minodisk/riffle/issues/880)) ([ef96e33](https://github.com/minodisk/riffle/commit/ef96e33d802645c56299ddeb9a0492c431597231))
+* **plans:** fit every model-search candidate on both fit sets (Step 2) ([#863](https://github.com/minodisk/riffle/issues/863)) ([ca553e1](https://github.com/minodisk/riffle/commit/ca553e11c57c91cb8f643ca2bde8bb5826b19229))
+* **plans:** fit the discard candidates out of fold (Step 2) ([#878](https://github.com/minodisk/riffle/issues/878)) ([fd6c976](https://github.com/minodisk/riffle/commit/fd6c9767bb7d872b20e3e5f923b20dc4dd034be6))
+* **plans:** fit the held-out G0+B, D0 and D0+B scores on every dump frame (Step 3) ([#855](https://github.com/minodisk/riffle/issues/855)) ([825b2ac](https://github.com/minodisk/riffle/commit/825b2aca6bba62049c843d356b80056cd633428b))
+* **plans:** pre-register the confirmation and draw the fresh blind sample (Step 5) ([#881](https://github.com/minodisk/riffle/issues/881)) ([5896103](https://github.com/minodisk/riffle/commit/58961031cc254c4c3c4de8f6926d016d6f99f189))
+* **plans:** pre-register the model-search confirmation and draw the fresh blind sample (Step 4) ([#865](https://github.com/minodisk/riffle/issues/865)) ([d429ac8](https://github.com/minodisk/riffle/commit/d429ac8dffd8fd262ca3a9ff7312a987ad1eaed4))
+* **plans:** read the discard candidates on both rounds, LR/T wins (Step 3) ([#879](https://github.com/minodisk/riffle/issues/879)) ([5b93ca6](https://github.com/minodisk/riffle/commit/5b93ca61d4a6a8c69f132dfdade24bc4e7256245))
+* **plans:** read the discard-retarget cells against the blind labels (Step 4) ([#857](https://github.com/minodisk/riffle/issues/857)) ([53252ec](https://github.com/minodisk/riffle/commit/53252ecfd802e53d0062a5665fd139b74e155e7b))
+* **plans:** read the face-choice rules once (Step 3) ([#873](https://github.com/minodisk/riffle/issues/873)) ([94dadc7](https://github.com/minodisk/riffle/commit/94dadc714ff2a1452f0047a0b5ffec940789aba2))
+* **plans:** read the fresh blind confirmation (Step 6) ([#882](https://github.com/minodisk/riffle/issues/882)) ([3c8f748](https://github.com/minodisk/riffle/commit/3c8f74823b0bf92f0d1534bea7e525b923a821ba))
+* **plans:** read the model-search confirmation once (Step 5) ([#866](https://github.com/minodisk/riffle/issues/866)) ([b032d0a](https://github.com/minodisk/riffle/commit/b032d0aebbba8351afba2f8122537f0a06650f9f))
+* **plans:** read the model-search exploration and choose the winners (Step 3) ([#864](https://github.com/minodisk/riffle/issues/864)) ([9d57d9f](https://github.com/minodisk/riffle/commit/9d57d9f95e358488a3009c1b6b728cf565fdb1ff))
+* **plans:** write the model-search Decision (Step 6) ([#868](https://github.com/minodisk/riffle/issues/868)) ([d444caf](https://github.com/minodisk/riffle/commit/d444caf7beb78c7c635595e491a97b2412ec43fd))
+
 ## [1.8.0](https://github.com/minodisk/riffle/compare/v1.7.0...v1.8.0) (2026-10-20)
 
 
