@@ -50,7 +50,7 @@ Decided design:
 
 ## Steps
 
-- [ ] Step 1: The plan of a folder's date rename or split (`crates/app/src/datefolder.rs`) and its `date_folder_preview` command
+- [x] Step 1: The plan of a folder's date rename or split (`crates/app/src/datefolder.rs`) and its `date_folder_preview` command
   - Done when: a pure planner groups the folder's photos by capture date and
     yields `Rename { name }` (one date), `Split { groups }` (several dates;
     each group a sibling target folder name and the files going into it) or a
