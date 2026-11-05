@@ -1375,6 +1375,7 @@ body {
 }
 
 #import-box p:empty,
+#import-rows:empty,
 #import-collisions:empty,
 #import-undated:empty {
   display: none;

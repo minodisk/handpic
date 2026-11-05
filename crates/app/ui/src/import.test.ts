@@ -3,7 +3,9 @@ import {
   type ImportDone,
   ImportFlow,
   type ImportPreview,
+  NOTHING_NEW,
   NOTHING_TO_COPY,
+  NO_PHOTOS,
   canRun,
   collisionItems,
   doneStatus,
@@ -93,6 +95,36 @@ describe("text", () => {
     expect(importNote(preview())).toBeNull();
     expect(importNote(nothing())).toBe(NOTHING_TO_COPY);
     expect(importNote(preview({ id: null, refusal: "not set" }))).toBe("not set");
+  });
+
+  test("the note: no photos under the folder", () => {
+    const empty = preview({
+      folders: [],
+      totals: { copyCount: 0, copyBytes: 0, skipped: 0, collisions: 0, undated: 0 },
+    });
+    expect(importNote(empty)).toBe(NO_PHOTOS);
+  });
+
+  test("the note: collisions or undated files are not 'already there'", () => {
+    const collided = preview({
+      folders: [
+        {
+          path: "D:\\Photos\\2026\\2026-10-24",
+          copyCount: 0,
+          copyBytes: 0,
+          skipped: 0,
+          collisions: ["DSC00001.ARW"],
+        },
+      ],
+      totals: { copyCount: 0, copyBytes: 0, skipped: 0, collisions: 1, undated: 0 },
+    });
+    expect(importNote(collided)).toBe(NOTHING_NEW);
+    const undated = preview({
+      folders: [],
+      undated: ["a.ARW"],
+      totals: { copyCount: 0, copyBytes: 0, skipped: 0, collisions: 0, undated: 1 },
+    });
+    expect(importNote(undated)).toBe(NOTHING_NEW);
   });
 
   test("runs whenever a file is to be copied", () => {

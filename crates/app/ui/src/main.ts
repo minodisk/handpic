@@ -1639,9 +1639,13 @@ function importFrom(dir: string): void {
   ) {
     return;
   }
+  importing = `reading ${dir}…`;
+  renderMeta();
   window.__TAURI__.core
     .invoke<ImportPreview>("import_preview", { dir })
     .then((preview) => {
+      importing = null;
+      renderMeta();
       if (importFlow.previewed(preview.id)) {
         showImportPreview(preview);
       }
@@ -1650,6 +1654,8 @@ function importFrom(dir: string): void {
 }
 
 function failImport(err: unknown): void {
+  importing = null;
+  renderMeta();
   const dir = importFlow.dir;
   importFlow.fail();
   errors.add(

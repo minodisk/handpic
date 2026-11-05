@@ -61,6 +61,9 @@ export const COLLISIONS_HEADING = "Already at the destination with another size,
 export const UNDATED_HEADING = "Without a capture date, not copied:";
 
 export const NOTHING_TO_COPY = "Nothing left to copy: every dated file is already there.";
+export const NO_PHOTOS = "No photos were found under the folder.";
+export const NOTHING_NEW =
+  "Nothing to copy: the dated files are not copied (see the lists above) or there are none.";
 
 function files(count: number): string {
   return `${count} ${count === 1 ? "file" : "files"}`;
@@ -107,7 +110,14 @@ export function importNote(preview: ImportPreview): string | null {
   if (preview.refusal !== null) {
     return preview.refusal;
   }
-  return preview.totals.copyCount === 0 ? NOTHING_TO_COPY : null;
+  const { copyCount, skipped, collisions } = preview.totals;
+  if (copyCount > 0) {
+    return null;
+  }
+  if (preview.folders.length === 0 && preview.undated.length === 0) {
+    return NO_PHOTOS;
+  }
+  return skipped > 0 && collisions === 0 ? NOTHING_TO_COPY : NOTHING_NEW;
 }
 
 // A collision or an undated file is informational: the run is enabled
