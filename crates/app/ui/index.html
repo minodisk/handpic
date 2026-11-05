@@ -609,6 +609,17 @@
               Cache
             </button>
             <button
+              id="tab-import"
+              type="button"
+              class="sidenav-item"
+              role="tab"
+              aria-controls="import"
+              aria-selected="false"
+              tabindex="-1"
+            >
+              Import
+            </button>
+            <button
               id="tab-mcp"
               type="button"
               class="sidenav-item"
@@ -743,6 +754,31 @@
               <div class="dialog-actions">
                 <button id="clear-index" class="button outline" type="button">Clear Cache</button>
               </div>
+            </section>
+            <section
+              id="import"
+              class="scrollarea"
+              role="tabpanel"
+              aria-labelledby="tab-import"
+              hidden
+            >
+              <p>
+                Import… in the folder tree copies the photos of a folder, such as a memory card,
+                into one folder per capture date under the destination root.
+              </p>
+              <label class="field" for="import-root">Destination root</label>
+              <div id="import-root-row">
+                <input id="import-root" class="input" type="text" readonly />
+                <button id="import-root-choose" class="button outline" type="button">
+                  Choose…
+                </button>
+              </div>
+              <p id="import-root-note" hidden></p>
+              <label class="field" for="import-pattern">Folder pattern</label>
+              <input id="import-pattern" class="input" type="text" spellcheck="false" />
+              <p id="import-example"></p>
+              <div id="import-pattern-examples"></div>
+              <table id="import-specifiers"></table>
             </section>
             <section id="mcp" class="scrollarea" role="tabpanel" aria-labelledby="tab-mcp" hidden>
               <label class="field"

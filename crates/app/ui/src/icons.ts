@@ -1,7 +1,8 @@
 // The Lucide icons the UI inlines as SVG strings.
 
 /*! Lucide `scan-face`, `scan`, `check`, `file-text`, `sliders-horizontal`,
- * `keyboard`, `database`, `plug`, `bug`, `clock` and `sparkles` icons, lucide-static v1.48.0 (https://github.com/lucide-icons/lucide), ISC
+ * `keyboard`, `database`, `plug`, `bug`, `clock`, `sparkles` and
+ * `hard-drive-download` icons, lucide-static v1.48.0 (https://github.com/lucide-icons/lucide), ISC
  * License, Copyright (c) 2026 Lucide Icons and Contributors.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -33,3 +34,5 @@ export const BUG_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 
 export const CLOCK_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
 
 export const SPARKLES_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></svg>`;
+
+export const HARD_DRIVE_DOWNLOAD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v8"/><path d="m16 6-4 4-4-4"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 18h.01"/><path d="M10 18h.01"/></svg>`;
