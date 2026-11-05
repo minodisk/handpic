@@ -1230,6 +1230,29 @@ body {
   color: var(--muted-foreground);
 }
 
+#import-root-row,
+#import-pattern-examples {
+  display: flex;
+  gap: 0.5rem;
+}
+
+#import-root {
+  flex: 1;
+}
+
+#import-pattern-examples {
+  flex-wrap: wrap;
+}
+
+#import-root-note,
+#import-example {
+  color: var(--muted-foreground);
+}
+
+#import-example.error {
+  color: var(--destructive);
+}
+
 #mcp-examples,
 #mcp-examples .example {
   display: flex;

@@ -643,7 +643,9 @@ pub async fn pick_folder(app: tauri::AppHandle) -> Option<String> {
 
 /// The settings store. Settings are preferences, not a cache, so the file
 /// lives in the config dir rather than beside the index.
-fn settings(app: &tauri::AppHandle) -> Result<Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
+pub(crate) fn settings(
+    app: &tauri::AppHandle,
+) -> Result<Arc<tauri_plugin_store::Store<tauri::Wry>>, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     app.store(dir.join("settings.json"))
         .map_err(|e| e.to_string())

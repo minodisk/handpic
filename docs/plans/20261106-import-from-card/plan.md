@@ -41,7 +41,7 @@ lists what is still open):
 
 ## Steps
 
-- [ ] Step 1: Import settings: destination root and folder pattern, validated, persisted, with live help in the settings modal
+- [x] Step 1: Import settings: destination root and folder pattern, validated, persisted, with live help in the settings modal
   - Done when:
     - `crates/app/src/import.rs` (new module, registered in `main.rs`) holds the pattern logic: `validate_pattern(pattern) -> Result<(), String>` and `format_date(pattern, date: NaiveDate) -> Result<String, String>` (the formatted relative path, `/` already the separator); the settings' parsers in the style of `label_names_setting` (`importRoot` string, `importPattern` string defaulting to `%Y/%F`); and the commands `import_settings` (both values), `set_import_root(path)`, `set_import_pattern(pattern)` (rejects an invalid pattern with the reason and keeps the stored one) and `import_pattern_example(pattern)` (the live example for the UI, or the reason).
     - A pattern is rejected when (in this order): `chrono::format::StrftimeItems` yields any `Item::Error`; formatting a `NaiveDate` through `write!` (never `.to_string()`, which panics) fails, which is how `%H %M %S %p %z %Z %s %T %R %c %+ ...` are refused; the output has an empty segment, a `.` or `..` segment, a segment with a character invalid on Windows or macOS (`< > : " | ? * \`, control characters) or ending in a space or a dot. Unit tests cover the accepted set (`%Y %y %m %d %b %B %a %A %j %F` and literal text) and every rejection class.
@@ -123,4 +123,4 @@ lists what is still open):
 
 ## Progress
 
-- (none yet)
+- (2026-11-06) Step 1 complete

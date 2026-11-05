@@ -7,6 +7,7 @@ mod diagnostics;
 mod exif;
 mod folders;
 mod foldersidecars;
+mod import;
 mod index;
 mod mcp;
 mod perf;
@@ -741,6 +742,9 @@ fn main() {
             app.manage(perf::AppPerf::default());
             app.manage(commands::AppSidecarFormat(Mutex::new(format)));
             app.manage(commands::AppLabelNames(Mutex::new(label_names)));
+            app.manage(import::AppImportSettings(Mutex::new(
+                import::load_settings(app.handle()),
+            )));
             app.manage(commands::AppAutoAdvance(AtomicBool::new(auto_advance)));
             app.manage(commands::AppPanels(Mutex::new(commands::stored_panels(
                 app.handle(),
@@ -852,6 +856,10 @@ fn main() {
             foldersidecars::delete_sidecars_run,
             rename::rename_folder,
             rename::rename_file,
+            import::import_settings,
+            import::set_import_root,
+            import::set_import_pattern,
+            import::import_pattern_example,
             sequence::sequence_preview,
             sequence::sequence_run,
             sequence::sequence_cancel,

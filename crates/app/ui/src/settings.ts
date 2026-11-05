@@ -4,11 +4,18 @@ import {
   BUG_SVG,
   DATABASE_SVG,
   FILE_TEXT_SVG,
+  HARD_DRIVE_DOWNLOAD_SVG,
   KEYBOARD_SVG,
   PLUG_SVG,
   SLIDERS_HORIZONTAL_SVG,
 } from "./icons.js";
 import { IdleGate } from "./idle.js";
+import {
+  IMPORT_PATTERN_EXAMPLES,
+  IMPORT_SPECIFIERS,
+  type ImportSettings,
+  rootNote,
+} from "./importsettings.js";
 import { type Binding, displayKey, keyName } from "./keys.js";
 import { LABEL_COLORS, type LabelNames, type LabelPreset, labelNamesPayload } from "./labels.js";
 import { type McpState, mcpEndpoint, mcpExamples, mcpStatus } from "./mcp.js";
@@ -102,6 +109,10 @@ export function initSettings(hooks: SettingsHooks): Settings {
   const mcpEndpointText = document.getElementById("mcp-endpoint") as HTMLPreElement;
   const mcpExamplesBlock = document.getElementById("mcp-examples") as HTMLDivElement;
   const debugTiming = document.getElementById("debug-timing") as HTMLInputElement;
+  const importRoot = document.getElementById("import-root") as HTMLInputElement;
+  const importRootNote = document.getElementById("import-root-note") as HTMLParagraphElement;
+  const importPattern = document.getElementById("import-pattern") as HTMLInputElement;
+  const importExample = document.getElementById("import-example") as HTMLParagraphElement;
   const indexSize = document.getElementById("index-size") as HTMLParagraphElement;
   const clearIndex = document.getElementById("clear-index") as HTMLButtonElement;
   const clearIndexNote = document.getElementById("clear-index-note") as HTMLParagraphElement;
@@ -112,6 +123,7 @@ export function initSettings(hooks: SettingsHooks): Settings {
     "tab-culling": SLIDERS_HORIZONTAL_SVG,
     "tab-shortcuts": KEYBOARD_SVG,
     "tab-cache": DATABASE_SVG,
+    "tab-import": HARD_DRIVE_DOWNLOAD_SVG,
     "tab-mcp": PLUG_SVG,
     "tab-debug": BUG_SVG,
   };
@@ -321,6 +333,108 @@ export function initSettings(hooks: SettingsHooks): Settings {
   void window.__TAURI__.core.invoke<boolean>("timing_logs").then((enabled) => {
     debugTiming.checked = enabled;
   });
+
+  // Only the newest example request is shown, as the responses of a fast
+  // typist's earlier ones can arrive after it.
+  let exampleRequest = 0;
+  let exampleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function showImportExample(): void {
+    clearTimeout(exampleTimer);
+    const request = ++exampleRequest;
+    window.__TAURI__.core
+      .invoke<string>("import_pattern_example", { pattern: importPattern.value })
+      .then(
+        (example) => {
+          if (request !== exampleRequest) return;
+          importExample.classList.remove("error");
+          importExample.textContent = example;
+        },
+        (error: unknown) => {
+          if (request !== exampleRequest) return;
+          importExample.classList.add("error");
+          importExample.textContent = String(error);
+        },
+      );
+  }
+
+  function showImportSettings({ root, pattern }: ImportSettings): void {
+    importRoot.value = root;
+    const note = rootNote(root);
+    importRootNote.textContent = note ?? "";
+    importRootNote.hidden = note === null;
+    importPattern.value = pattern;
+    showImportExample();
+  }
+
+  function saveImportPattern(): void {
+    status.textContent = "";
+    window.__TAURI__.core
+      .invoke("set_import_pattern", { pattern: importPattern.value })
+      .then(showImportExample, (error: unknown) => {
+        exampleRequest++;
+        importExample.classList.add("error");
+        importExample.textContent = String(error);
+      });
+  }
+
+  (document.getElementById("import-specifiers") as HTMLTableElement).replaceChildren(
+    ...IMPORT_SPECIFIERS.map(({ spec, meaning, example }) => {
+      const row = document.createElement("tr");
+      const specCell = document.createElement("td");
+      const code = document.createElement("code");
+      code.textContent = spec;
+      specCell.append(code);
+      const meaningCell = document.createElement("td");
+      meaningCell.textContent = meaning;
+      const exampleCell = document.createElement("td");
+      exampleCell.textContent = example;
+      row.append(specCell, meaningCell, exampleCell);
+      return row;
+    }),
+  );
+
+  (document.getElementById("import-pattern-examples") as HTMLDivElement).replaceChildren(
+    ...IMPORT_PATTERN_EXAMPLES.map((pattern) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "button outline";
+      button.textContent = pattern;
+      button.addEventListener("click", () => {
+        importPattern.value = pattern;
+        saveImportPattern();
+      });
+      return button;
+    }),
+  );
+
+  importPattern.addEventListener("input", () => {
+    clearTimeout(exampleTimer);
+    exampleTimer = setTimeout(showImportExample, 200);
+  });
+  importPattern.addEventListener("change", saveImportPattern);
+
+  (document.getElementById("import-root-choose") as HTMLButtonElement).addEventListener(
+    "click",
+    () => {
+      status.textContent = "";
+      window.__TAURI__.core
+        .invoke<string | null>("pick_folder")
+        .then(async (path) => {
+          if (path === null) return;
+          const settings = await window.__TAURI__.core.invoke<ImportSettings>("set_import_root", {
+            path,
+          });
+          // Keep a pattern still being typed rather than the stored one.
+          showImportSettings({ ...settings, pattern: importPattern.value });
+        })
+        .catch((error: unknown) => {
+          status.textContent = String(error);
+        });
+    },
+  );
+
+  void window.__TAURI__.core.invoke<ImportSettings>("import_settings").then(showImportSettings);
 
   // The backend formats the size in the units of the platform's file manager.
   function showIndexSize(size: string): void {
