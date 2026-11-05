@@ -196,7 +196,7 @@ Decided design:
       rather than copying it.
     - Add the new action to the `showMenu` `switch` near line 3531.
 
-- [ ] Step 5: Documentation
+- [x] Step 5: Documentation
   - Done when: `CLAUDE.md`'s layout lists `src/datefolder.rs` and
     `ui/src/datefolder.ts` in the style of the neighbors; `README.md` /
     `README.ja.md` mention the item next to `Rename…` in the folder-tree

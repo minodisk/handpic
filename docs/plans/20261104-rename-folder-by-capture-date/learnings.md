@@ -106,6 +106,17 @@
   and `mise exec -- node ./node_modules/vite-plus/bin/vp test` run the
   frontend checks alone.
 
+## Step 5: documentation
+
+- The usage section documents what Steps 1-4 shipped rather than the plan's
+  first wording: a press during a scan is refused with the scan message (not
+  held), a split target named like the folder itself is a collision, and the
+  status line's `<name> kept (N left)` counts every entry left (subfolders
+  and stray files included).
+- Only the trash-undo limitation is documented for users; the judgment undo
+  history naming the moved files' old paths (deferred in Step 4) is left out
+  of the docs, since it is a bug to fix rather than a designed limitation.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Windows)**: split a folder that is expanded in the
