@@ -489,7 +489,8 @@ Risks:
 Written 2026-11-06 at Step 7, against the stop rule pre-registered in Step 1
 ([efgate.md](efgate.md), "Pre-registration of the exploration", "Tuning,
 selection and stop rules"). The numbers come from efgate.md "The grid as
-fixed" (label-free) and "Results of the exploration" (the read, once,
+fixed" (label-free; the band shares in item 4 are from
+`gatescores.out.md`, "By |yaw| band") and "Results of the exploration" (the read, once,
 `D:\Photos\tests\2026-11-04-ef-gate-fill\gateread.out.md`); weighted by each
 round's `1/π`, stratified bootstrap 95% intervals in brackets. No bar or rule
 was moved and nothing was re-read against labels for this section.
@@ -533,7 +534,7 @@ round's gated-subset +0.010. On round 3 it adds +0.004 [+0.000,
 +0.010] to the fill on all frames. At the cuts the gate leaves q5 unchanged
 on every round (`ef`'s q5 cut is almost all frames without `ef`) and moves
 q10 `RR` by −0.3 / −1.3 / +0.7 points; the fill lowers `PL` throughout but
-its `RR` differences span −3.3 to +16.0 points with wide intervals. So the
+its q5 / q10 `RR` differences span −3.3 to +16.0 points with wide intervals. So the
 winner's round 3 lead is the fill's +0.002 plus the gate's +0.004, and
 rounds 1 and 2 carry the fill's losses.
 

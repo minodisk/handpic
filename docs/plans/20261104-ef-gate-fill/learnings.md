@@ -163,7 +163,8 @@
 ## Step 7 (the Decision)
 
 - Written against the stop rule (Step 4 ended the plan; Steps 5-6 skipped),
-  from efgate.md and `gateread.out.md` only; nothing was re-read against
+  from efgate.md, `gateread.out.md` and (for the label-free band shares)
+  `gatescores.out.md` only; nothing was re-read against
   labels and no bar or rule moved.
 - **Compute time** of the plan: the per-face dump 8,465 s (Step 2, I/O-bound
   on drive D:), `gatescores.py` 114 s (Step 3, final run), `gateread.py`
