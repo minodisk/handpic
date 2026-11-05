@@ -284,7 +284,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
 
 ## Steps
 
-- [ ] Step 1: Pre-register the exploration in `efgate.md`, before the CLI extension and any per-face value exist
+- [x] Step 1: Pre-register the exploration in `efgate.md`, before the CLI extension and any per-face value exist
   - Done when:
     - `efgate.md` in this plan folder has a "Pre-registration of the
       exploration" section merged **before the CLI extension exists and
