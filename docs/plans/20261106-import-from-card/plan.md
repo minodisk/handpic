@@ -124,3 +124,4 @@ lists what is still open):
 ## Progress
 
 - (2026-11-06) Step 1 complete
+- (2026-11-06) Step 2 complete
