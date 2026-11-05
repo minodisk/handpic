@@ -366,6 +366,9 @@ let sequencing: string | null = null;
 // The import's status line: the preview being read, then how far the run got;
 // null when neither is under way.
 let importing: string | null = null;
+// The last import's done line, kept until the next import starts or a folder
+// opens, so paging and decoded previews (`setStatus()`) do not wipe it.
+let imported: string | null = null;
 // True between `start_scan` and its `faces-done`, i.e. through both scan
 // passes. A rescan asked for while it is true is deferred (`resyncPending`)
 // rather than canceling the scan.
@@ -862,6 +865,9 @@ function renderMeta(): void {
   }
   if (importing !== null) {
     metaStatusEl.append(line("note", importing));
+  }
+  if (imported !== null) {
+    metaStatusEl.append(line("note", imported));
   }
   if (idle.waiting !== null) {
     metaStatusEl.append(line("note", `${idle.waiting}: waiting for the scan to finish`));
@@ -1665,6 +1671,7 @@ function importFrom(dir: string): void {
   if (!importFlow.start(dir)) {
     return;
   }
+  imported = null;
   importing = `reading ${dir}…`;
   renderMeta();
   window.__TAURI__.core
@@ -1773,7 +1780,8 @@ function reportImport(payload: ImportDone): void {
     errors.add(failure.path, importFailureText(failure));
   }
   importing = null;
-  setStatus(importDoneStatus(payload));
+  imported = importDoneStatus(payload);
+  renderMeta();
   // A file that landed between the open folder's listing and its watch
   // being set reaches the strip here at the latest.
   if (openDir !== null && opensTarget(openDir, payload.folders, folders.ignoreCase)) {
@@ -1781,9 +1789,9 @@ function reportImport(payload: ImportDone): void {
   }
 }
 
-function dismissImport(): void {
-  const decision = importFlow.dismiss();
-  if (decision.kind === "close") {
+function dismissImport(key = false): void {
+  const decision = importFlow.dismiss(key);
+  if (decision.kind === "close" || decision.kind === "aside") {
     closeImportDialog();
   } else if (decision.kind === "cancel" && decision.runId !== null) {
     void window.__TAURI__.core.invoke("import_cancel", { runId: decision.runId });
@@ -1795,7 +1803,7 @@ function importKeydown(event: KeyboardEvent): void {
   const decision = importKeys.key(keyName(event));
   if (decision.kind === "close") {
     event.preventDefault();
-    dismissImport();
+    dismissImport(true);
   } else if (decision.kind === "focus") {
     event.preventDefault();
     const buttons = [importRunButton, importCancelButton].filter((b) => !b.disabled);
@@ -1805,7 +1813,9 @@ function importKeydown(event: KeyboardEvent): void {
 }
 
 importRunButton.addEventListener("click", runImport);
-importCancelButton.addEventListener("click", dismissImport);
+importCancelButton.addEventListener("click", () => {
+  dismissImport();
+});
 
 void window.__TAURI__.event.listen<ImportProgress>("import-progress", ({ payload }) => {
   if (!importFlow.accepts(payload.runId)) {
@@ -4182,6 +4192,7 @@ function openDirectory(folder: string, token: number): Promise<void> {
     history.removeWhere(isJudgments);
     redoable.removeWhere(isJudgments);
     errors.clear();
+    imported = null;
     fileIndex.clear();
     files.forEach((path, at) => {
       fileIndex.set(path, at);

@@ -172,6 +172,7 @@ export class ImportFlow {
   private early: ImportDone | null = null;
   private cancelAsked = false;
   private aside = false;
+  private reopened = false;
 
   get isOpen(): boolean {
     return this.phase === "previewed" || (this.phase === "running" && !this.aside);
@@ -196,6 +197,7 @@ export class ImportFlow {
     this.early = null;
     this.cancelAsked = false;
     this.aside = false;
+    this.reopened = false;
     return true;
   }
 
@@ -205,6 +207,7 @@ export class ImportFlow {
       return false;
     }
     this.aside = false;
+    this.reopened = true;
     return true;
   }
 
@@ -269,13 +272,26 @@ export class ImportFlow {
 
   // The dialog's Cancel or Escape: close a preview, or cancel the run, whose
   // `import-done` closes the dialog. `cancel` carries the run id, or null
-  // when it is not known yet (`started` passes the cancel on).
-  dismiss(): { kind: "close" } | { kind: "cancel"; runId: number | null } | { kind: "none" } {
+  // when it is not known yet (`started` passes the cancel on). Escape (`key`)
+  // on a dialog brought back by `reopen` only steps aside again: the Cancel
+  // button is the one thing that cancels then.
+  dismiss(
+    key = false,
+  ):
+    | { kind: "close" }
+    | { kind: "aside" }
+    | { kind: "cancel"; runId: number | null }
+    | { kind: "none" } {
     switch (this.phase) {
       case "previewed":
         this.phase = "idle";
         return { kind: "close" };
       case "running":
+        if (key && this.reopened && this.runId !== null) {
+          this.aside = true;
+          this.reopened = false;
+          return { kind: "aside" };
+        }
         if (this.runId === null) {
           this.cancelAsked = true;
         }

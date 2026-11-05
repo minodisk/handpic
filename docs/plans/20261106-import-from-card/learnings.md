@@ -147,9 +147,9 @@
   Step 4's `run_plan` created the folders on the `spawn_blocking` task, after
   `import_run` had returned the run id. The run is now split into
   `prepare` (creates every destination folder and lines up the jobs) and
-  `run_plan` (copies); `prepare` runs synchronously inside `begin`'s spawn
-  closure (after the one-run-at-a-time check, so a refused run creates
-  nothing), and `import_run` returns `{ runId, folders }`, the created
+  `run_plan` (copies); `prepare` runs on the `spawn_blocking` task with no lock
+  held (`begin` only claims the run, after the one-run-at-a-time check, so a
+  refused run creates nothing), and `import_run` returns `{ runId, folders }`, the created
   folders in date order. `main.ts` opens `folders[0]` through
   `openDirectory` with a fresh folder token, always, even over another open
   folder; `openDirectory` already calls `folders.reveal`.
@@ -205,9 +205,17 @@
 - One gap found and closed: `list_arw` runs before `scan_folder`'s
   `watch::set`, so a file renamed into the folder in between is scanned but
   not in `allFiles` until another trigger. During an import the next file
-  covers it; for the last files, `finishImport` now runs
-  `resync("import")` (a new `RescanTrigger`) when the open folder is one
-  of the run's folders.
+  covers it; for the last files, `reportImport`, after the import's
+  open settles, runs `resync("import")` (a new `RescanTrigger`) when the
+  open folder is one of the run's folders.
+- The done line lives in its own `imported` slot, rendered in `renderMeta`
+  next to `importing`, not in the transient `note`: `show()` and every decoded
+  preview call `setStatus()`, which would wipe it. It is cleared at the next
+  `importFrom` start or the next folder open.
+- A dialog brought back with `reopen` steps aside again on Escape
+  (`dismiss(true)` returns `{ kind: "aside" }`); only its Cancel button
+  cancels the run, so a user can reopen it from `Import…` and still keep
+  culling. Step 6's docs should say so.
 
 ## Deferred issues (todo candidates)
 

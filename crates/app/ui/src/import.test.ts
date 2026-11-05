@@ -259,4 +259,16 @@ describe("ImportFlow", () => {
     expect(flow.started(1)).toEqual({ done: null, cancel: true });
     expect(flow.isOpen).toBe(true);
   });
+
+  test("Escape on a reopened dialog steps aside again, Cancel still cancels", () => {
+    const flow = running();
+    flow.started(4);
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(true);
+    expect(flow.isOpen).toBe(true);
+    expect(flow.dismiss(true)).toEqual({ kind: "aside" });
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(true);
+    expect(flow.dismiss()).toEqual({ kind: "cancel", runId: 4 });
+  });
 });
