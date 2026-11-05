@@ -548,11 +548,14 @@ rule.
   wide intervals, its `PL` lower than `ef`'s throughout.
 - Gated frames are discardable more often than the complement on every
   round (weighted 97.5 / 56.9 / 71.3% against 55.7 / 36.9 / 41.6%). The
-  window re-measure changes the value of only 7 / 13 / 9 of the gated
+  window re-measure changes the value of 7 / 13 / 9 of the gated
   labels; 20 / 41 / 38 have `window_ef` equal to `ef`.
-- The gated labels are not concentrated on profiles: each of the 0–15,
-  15–30 and 30–60 |yaw| bands holds 22–33% of them on every round, and 60+
-  holds 3 / 9 / 9 (11–19%).
+- By the judged face's |yaw|, among labels with a pose: each of the gated
+  labels' 0–15, 15–30 and 30–60 bands holds 22–33% of them on every round,
+  and the 60+ band holds 3 of 25 (round 3), 9 of 50 (round 2) and 9 of 45
+  (round 1) of them (12 / 18 / 20%), against 25 of 168, 45 of 297 and 33 of
+  276 of the complement (15 / 15 / 12%). Whether the gate needs a profile
+  exemption is Step 7's judgment.
 - Multiplicity: the tuning read 8 pairs on 2 rounds and the selection 3
   candidates on round 3, without correction, on labels the design was
   chosen after.
