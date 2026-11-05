@@ -123,4 +123,4 @@ lists what is still open):
 
 ## Progress
 
-- (none yet)
+- (2026-11-06) Step 1 complete
