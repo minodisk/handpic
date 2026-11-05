@@ -551,7 +551,7 @@ rule.
   window re-measure changes the value of 7 / 13 / 9 of the gated
   labels; 20 / 41 / 38 have `window_ef` equal to `ef`.
 - By the judged face's |yaw|, among labels with a pose: each of the gated
-  labels' 0–15, 15–30 and 30–60 bands holds 22–33% of them on every round,
+  labels' 0–15, 15–30 and 30–60 bands holds 24–36% of them on every round,
   and the 60+ band holds 3 of 25 (round 3), 9 of 50 (round 2) and 9 of 45
   (round 1) of them (12 / 18 / 20%), against 25 of 168, 45 of 297 and 33 of
   276 of the complement (15 / 15 / 12%). Whether the gate needs a profile
