@@ -18,6 +18,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use riffle_core::copy::TEMP_SUFFIX;
 use riffle_core::xmp::LabelNames;
 use riffle_core::{dop, xmp, Flag};
 
@@ -231,9 +232,6 @@ fn retry_delay(attempts: u32) -> Option<Duration> {
         .contains(&attempts)
         .then(|| RETRY_BASE * 2u32.pow(attempts - 1))
 }
-
-/// Suffix of the temp file each write goes to before being renamed into place.
-pub(crate) const TEMP_SUFFIX: &str = ".riffle-tmp";
 
 /// Longest the quit path waits for the writer to drain.
 pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);

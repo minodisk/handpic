@@ -54,7 +54,7 @@ lists what is still open):
     - The example date is today; the unit tests pass a fixed `NaiveDate`.
     - Follow `docs/agents/ui-styling.md`: reuse `.field`, `.input`, `.button outline`, `.dialog-actions`; the tab button is another `.sidenav-item` with an icon from `icons.ts`.
 
-- [ ] Step 2: The copy pipeline in `riffle-core` and a CLI benchmark of it
+- [x] Step 2: The copy pipeline in `riffle-core` and a CLI benchmark of it
   - Done when:
     - `crates/core/src/copy.rs` (new) exposes `copy_files(jobs: &[Job { src, dst }], cancel: &AtomicBool, progress: impl FnMut(Progress)) -> Summary` that copies each job with one reader thread (sequential over the jobs, large chunks) feeding a bounded channel of buffers to one writer thread; each destination is written to `<dst file name><TEMP_SUFFIX>` in the destination folder, flushed, renamed to the final name, and given the source's modified time (`File::set_modified`); a destination that exists at write time is never overwritten (the job fails with a message); a cancel stops before the next file and removes the temp file of the file in flight; `Summary` holds per-job results, bytes copied, elapsed time and whether it was canceled; `progress` reports files done / total and bytes done / total.
     - The temp suffix is the app's `.riffle-tmp` (`sidecar::TEMP_SUFFIX` moves to, or is mirrored by, a `riffle_core` constant the app's `sidecar.rs` and `watch.rs` use), so the open folder's watcher filters the temp file's events and `read_listing` never lists it (its extension is not a RAW's).
@@ -124,3 +124,4 @@ lists what is still open):
 ## Progress
 
 - (2026-11-06) Step 1 complete
+- (2026-11-06) Step 2 complete
