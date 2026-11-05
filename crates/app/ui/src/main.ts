@@ -1522,6 +1522,9 @@ function runDateFolder(): void {
         if (ran.kind === "renamed") {
           return folderRenamed(dir, ran.path, baseName(ran.path), ran.warning);
         }
+        for (const { path, message } of ran.failed) {
+          errors.add(path, `${baseName(path)}: could not move: ${message}`);
+        }
         setStatus(splitStatus(ran, baseName(dir) || dir));
         folders.refresh(parentOf(dir));
         if (openDir === null || !opensTarget(openDir, [dir], folders.ignoreCase)) {
