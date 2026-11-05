@@ -302,7 +302,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
     - Doc-only PR; model it on discardmodel.md's "Pre-registration of the
       exploration" and facechoice.md's "Pre-registration".
 
-- [ ] Step 2: Extend `riffle-cli facechoice` with the per-face nose, mesh landmarks, offsets and window score; rerun on the 33 folders with `--check`
+- [x] Step 2: Extend `riffle-cli facechoice` with the per-face nose, mesh landmarks, offsets and window score; rerun on the 33 folders with `--check`
   - Done when:
     - `crates/cli/src/facechoice.rs` appends to every face row, after
       `mesh_ms`: `nose` (YuNet, `x,y`), `mesh_left_eye`, `mesh_right_eye`
