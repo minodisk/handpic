@@ -180,3 +180,8 @@
   "rounds 1/2/3"; efgate.md's cross-tab lists them as rounds 3 / 2 / 1
   (97.5% is round 3's gated share), and the Decision and todo.md follow the
   table.
+
+## Deferred issues (todo candidates)
+
+- **`wait-pr-actionable.sh` returns `ACTION=blocked` while checks are still pending.** Right after a PR was created, `.claude/skills/pr/scripts/wait-pr-actionable.sh` returned `ACTION=blocked` with `pendingCount=0` while `statusCheckRollup` showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified; a BLOCKED `mergeStateStatus` or an empty check list read before the checks register is likely. Change: read the script, reproduce on a fresh PR, treat an empty or pending rollup as "keep waiting", and make `pendingCount` count the rollup's pending entries. Done when a PR polled right after creation never returns `blocked` while any check is pending, shown by a test or a recorded transcript. Merge into an existing pr-runner polling item if one covers it.
+- **`test (ubuntu-latest)` hangs on docs-only commits.** PR 904's first run was cancelled, and main run 42128694204 hit the job's 30-minute `timeout-minutes` with the `riffle_core` test binary running; both reruns took about 4 minutes against the usual 5–6. PR 901's ubuntu job stalled in `actions/cache`. Change: collect the hung runs' logs and decide whether it is a flaky test, a cache stall or a runner problem, then lower the job timeout, add a per-test timeout, or add a "rerun, then check X" note to `docs/agents/github-actions-workflows.md`. Done when the cause is identified or a decision that reruns are enough is recorded, a rerun-only rule landing in that guide.
