@@ -443,7 +443,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
     - Assumes Step 5 merged and the labeling done. Reuse Step 4's functions
       and `freshread.py`'s cell construction.
 
-- [ ] Step 7: The Decision
+- [x] Step 7: The Decision
   - Done when:
     - A "Decision" section in this plan, written against the Step 5 bars
       (or the stop rule if Step 4 ended the plan): whether the gated /
@@ -483,6 +483,87 @@ Risks:
   rounds 3 and 4 compare; rounds 1–2 ("hid") had lower base rates.
 - **The discard-model folder may be archived mid-plan**; its path is
   resolved at run time.
+
+## Decision (the stop rule ended the plan; no fresh round; nothing, `eye_focus` stays)
+
+Written 2026-11-06 at Step 7, against the stop rule pre-registered in Step 1
+([efgate.md](efgate.md), "Pre-registration of the exploration", "Tuning,
+selection and stop rules"). The numbers come from efgate.md "The grid as
+fixed" (label-free) and "Results of the exploration" (the read, once,
+`D:\Photos\tests\2026-11-04-ef-gate-fill\gateread.out.md`); weighted by each
+round's `1/π`, stratified bootstrap 95% intervals in brackets. No bar or rule
+was moved and nothing was re-read against labels for this section.
+
+**1. Does a gated / filled `ef` beat today's `ef` on a fresh blind
+confirmation? Not tested.** The pre-registered stop rule ended the plan
+after the exploration, so Steps 5–6 (the confirmation's pre-registration,
+the draw, the labeling and the read) were skipped. There is no fresh
+depth, `RR` / `PL` at a usable cut, or shrinkage from exploration to
+confirmation to report. **The follow-up by the pre-registered rule is
+nothing: `eye_focus` stays as it is**; no in-app plan and no labeling round
+follows.
+
+**2. The exploration numbers.**
+
+- Tuning (rounds 1 and 2, `ef-gate(s, τ)` AUC − `ef` summed over the two
+  rounds): every one of the 8 pairs is negative (−0.0030 to −0.0083); the
+  least negative, `(s*, τ*)` = (`nose`, 0.215, the p90 of the grid), reads
+  −0.001 [−0.015, +0.012] on round 1 and −0.002 [−0.007, +0.003] on round 2.
+- Round 3 AUCs: `ef` 0.743 [0.679, 0.800]; `ef-gate(nose, 0.215)` 0.745
+  [0.682, 0.802]; `ef-fill` 0.744 [0.681, 0.803]; `ef-gate+fill(nose,
+  0.215)` 0.748 [0.686, 0.804]. All three candidates passed the label-free
+  conditions on the 33 folders at q5 (none at q10).
+- Winner: `ef-gate+fill(nose, 0.215)` (round 3 AUC 0.7482). Its AUC − `ef`
+  is **+0.0057** on round 3 (+0.006 [−0.005, +0.017]), **−0.0109** on round
+  2 (−0.011 [−0.023, −0.001]) and **−0.0130** on round 1 (−0.013 [−0.036,
+  +0.006]). The stop rule needs all three points above zero; two are
+  below, so no fresh round.
+
+**3. Where the gain or loss sat.** On the complement (frames with `ef`, not
+gated) every candidate equals `ef` by construction. The fill's effect sits
+on the no-crop-face frames and changes sign across rounds: +0.277 [+0.131,
++0.407] on round 3 (the reading that motivated it), +0.091 [−0.176, +0.359]
+on round 2, −0.300 [−0.549, +0.074] on round 1. The gate's effect sits on
+the gated frames (27 / 54 / 47 labels on rounds 3 / 2 / 1): −0.014, +0.010,
++0.048, every interval reaching zero; on round 3 it adds +0.004 [+0.000,
++0.010] to the fill on all frames. At the cuts the gate leaves q5 unchanged
+on every round (`ef`'s q5 cut is almost all frames without `ef`) and moves
+q10 `RR` by −0.3 / −1.3 / +0.7 points; the fill lowers `PL` throughout but
+its `RR` differences span −3.3 to +16.0 points with wide intervals. So the
+winner's round 3 lead is the fill's +0.002 plus the gate's +0.004, and
+rounds 1 and 2 carry the fill's losses.
+
+**4. Misfits or profiles: no profile exemption is proposed.** The gate at
+`nose` > 0.215 does not concentrate on profiles. Label-free, it gates 8.5 /
+10.1 / 9.7 / 11.2% of the meshed `af` faces in the |yaw| bands 0–15 / 15–30
+/ 30–60 / 60+, nearly flat (against `eye_offset` > 0.10, which rises from
+18.5% to 44.1%), and 71.5% of the 165 meshed faces without a pose. Among the
+labels, the 60+ band holds 12 / 18 / 20% of the gated frames with a pose
+against 15 / 15 / 12% of the complement. What the gate flags looks like
+mesh misfits rather than profiles (the faces without a pose, and the 77% of
+gated faces whose window value equals `ef`, presumably already scored on the
+window because no mesh eyelid region counted), though no gated face was checked by eye. The data gives no basis
+for an exemption.
+
+**5. The caveats weighed.** Round 3's not pre-registered subset reading
+motivated the fill, so round 3 favored it by construction, and rounds 1–2,
+where `ef-fill` alone was already −0.010 / −0.011, were the protection the
+stop rule used; it worked as designed. One photographer, mostly basketball.
+The gate changes few values: 77.1% of the faces it gates at 0.215 read the
+same on the window as their `ef` (20 / 41 / 38 of the 27 / 54 / 47 gated
+labels), so the gated AUC differences rest on 7 / 13 / 9 labels per round.
+The fresh-population caveat (never-labeled frames of known folders) did not
+arise, as no fresh round was drawn. Multiplicity: 8 pairs × 2 rounds and 3
+candidates on round 3, uncorrected, on labels the design was chosen after.
+
+**6. An observation for future work, not pre-registered and not a
+decision.** Gated frames were markedly more often discardable than the
+complement: weighted 97.5 / 56.9 / 71.3% against 55.7 / 36.9 / 41.6% on
+rounds 3 / 2 / 1. Yet the window re-measure leaves most of their
+values unchanged, so the high nose offset carries information the re-measure
+does not use. The nose offset may work better as a direct "sort last"
+signal than as a mesh-misfit gate. Any such idea needs its own
+pre-registration and fresh labels; these three rounds are spent on it.
 
 ## Progress
 

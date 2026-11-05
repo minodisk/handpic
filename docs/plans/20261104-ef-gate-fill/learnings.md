@@ -159,3 +159,23 @@
   (no code, no data); killed by its PID. Multi-line text into a file goes
   through the Edit / Write tools here: a heredoc holding apostrophes broke
   the Bash tool's quoting.
+
+## Step 7 (the Decision)
+
+- Written against the stop rule (Step 4 ended the plan; Steps 5-6 skipped),
+  from efgate.md and `gateread.out.md` only; nothing was re-read against
+  labels and no bar or rule moved.
+- **Compute time** of the plan: the per-face dump 8,465 s (Step 2, I/O-bound
+  on drive D:), `gatescores.py` 114 s (Step 3, final run), `gateread.py`
+  239 s (Step 4, once), about 2 h 26 min in all; this step ran nothing.
+  **Labeling time: none** (no fresh round was drawn).
+- The todo item the plan names, "Core: improve on `eye_focus` for the
+  discard question", no longer exists: the discard-model wrap-up replaced
+  it with "Core: decide whether `ef` / `ef-fill` at per-folder q5, sorted
+  last, is worth shipping", which pointed at this plan as in progress. That
+  item now carries the outcome. The `G0` item mentions only the
+  discard-model finding, not this plan, so it is unchanged.
+- The gated / complement discard shares from the brief were given as
+  "rounds 1/2/3"; efgate.md's cross-tab lists them as rounds 3 / 2 / 1
+  (97.5% is round 3's gated share), and the Decision and todo.md follow the
+  table.
