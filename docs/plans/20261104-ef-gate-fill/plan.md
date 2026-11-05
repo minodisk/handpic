@@ -367,7 +367,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
       `discardfilter`, `facechoiceread` by path; extend `load_faces`'s
       record with the new columns in this script. Seconds to a minute.
 
-- [ ] Step 4: `gateread.py`, the exploration read of the three rounds, `(s*, τ*)` and the winner by the pre-registered rules
+- [x] Step 4: `gateread.py`, the exploration read of the three rounds, `(s*, τ*)` and the winner by the pre-registered rules
   - Done when:
     - `gateread.py` in this plan folder (the Step 3 arguments plus
       `<strict-labels-dir> <discard-labels-dir> <model-search-dir>`, the
@@ -394,7 +394,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
       per round so differences are paired. Dry-run on synthetic labels in
       the scratchpad first. About two minutes.
 
-- [ ] Step 5: Pre-register the confirmation and draw the fresh blind sample; the plan pauses for the user's labeling
+- [ ] ~~Step 5: Pre-register the confirmation and draw the fresh blind sample; the plan pauses for the user's labeling~~ skipped (Step 4's stop rule: no fresh round)
   - Done when:
     - `efgate.md` has a "Pre-registration of the confirmation" section
       merged **before any fresh label exists**: the frozen winner (with
@@ -423,7 +423,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
       `freshsample.py`'s draw and copy pattern by path (no refit). About 26
       GB, 15 minutes for the copy.
 
-- [ ] Step 6: The confirmatory read, once
+- [ ] ~~Step 6: The confirmatory read, once~~ skipped (Step 4's stop rule: no fresh round)
   - Done when:
     - After "done", `gatelabels.py` (the `freshlabels.py` recipe) writes
       `labels.tsv`; `learnings.md` records the session length and anything
@@ -490,3 +490,4 @@ Risks:
 - (2026-11-05) Step 1 complete
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
+- (2026-11-06) Step 4 complete (stop rule: no fresh round; Steps 5–6 skipped)

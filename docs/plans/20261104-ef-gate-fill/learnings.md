@@ -108,3 +108,54 @@
 - Process slip: a stray `python3 -` (no script, waiting on stdin) was
   started by mistake while grepping; it was killed by its PID and touched
   no data.
+
+## Step 4 (`gateread.py`, the exploration read)
+
+- Run once: `python -I -B gateread.py D:\Photos\tests\2026-10-12-rank-app
+  D:\Photos\tests\2026-10-23-discard-model D:\Photos\tests\2026-11-04-ef-gate-fill
+  D:\Photos\tests\2026-10-17-bad-labels D:\Photos\tests\2026-10-18-discard-labels
+  D:\Photos\tests\2026-10-20-model-search` from the scratchpad. All 85
+  checks passed (every known number of the three rounds reproduced to the
+  printed digit); output `gateread.out.md` in the gate folder. **Wall time
+  239 s** (load 9 s; the bootstraps of 19 scores on rounds 1–2 and 5 scores
+  × 4 subsets on all three rounds the rest).
+- Outcome by the pre-registered rules: `(s*, τ*)` = (`nose`, 0.215) (every
+  pair's rounds 1 + 2 sum negative, this one the least), the winner
+  `ef-gate+fill(nose, 0.215)` (round 3 AUC 0.7482), the stop rule says no
+  fresh round (round 1 −0.0130, round 2 −0.0109). Steps 5–6 are marked
+  skipped in plan.md in the dropped-step style of the archived
+  ball-game-ranking-features plan (`- [ ] ~~Step N: …~~ skipped (…)`).
+- Deviation: the plan's argument list has no place for round 1's and
+  round 2's `G0` bands (`scores_reject.tsv`), which the strata recompute
+  needs; the script takes it from `2026-10-16-reject-filter-eval\`, the
+  sibling of `<discard-model-dir>` (stated in its docstring), as Step 3 did
+  for the face-choice dump.
+- Deviation: the candidates are read from Step 3's `scores_gate.tsv`, not
+  rebuilt; a label-free check recomputes the 8 `ef-gate` columns from its
+  `ef`, `s` and `window_ef` columns and the grid, checks `ef-gate+fill`
+  against `ef-gate` where `ef` exists, and compares the judged face of
+  Step 2's per-face dump (loaded through `gatescores.load_faces`, imported
+  by path) with the file.
+- Addition beside the pre-registered readings: the label × gated cross-tab
+  also splits the gated and complement labels by the judged face's |yaw|
+  band, since the Reading has to say whether gated frames are profiles
+  (Step 3's yaw-band reading is label-free only). It decides nothing.
+- Round 3's `manifest.tsv` stores `eye_focus` at 6 significant digits, so
+  that reproduction check uses 5.1e-5 (rounds 1–2 kept 1e-6).
+- The stop-rule points print with 6 decimals: in the dry run `ef-gate`
+  read +0.0000 at 4 decimals on round 3 but was +0.000011, a real (tiny)
+  change, which "above zero" counts.
+- Dry run: `scratchpad\dry\` held copies of the round folders' manifests,
+  strata and score files with synthetic `labels.tsv` (drawn from each
+  manifest, discard more likely at low `eye_focus`), copies of
+  `scores_gate.tsv` and `scores_reject.tsv`, and directory junctions
+  (`_winapi.CreateJunction`) to the six-folder `dump\` and the per-face
+  `faces\`; a driver set the script's `DRY_RUN` flag (label reproduction
+  failures printed, not fatal) and an audit hook that refused any
+  `labels.tsv` outside the scratch folder. The label-free checks all
+  passed there before the real read, and the refusal on an existing
+  `gateread.out.md` was exercised.
+- Process slip, again: an empty `python3 -` heredoc was started by mistake
+  (no code, no data); killed by its PID. Multi-line text into a file goes
+  through the Edit / Write tools here: a heredoc holding apostrophes broke
+  the Bash tool's quoting.

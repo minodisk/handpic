@@ -395,3 +395,167 @@ readings beside them (`gatescores.out.md` has the full tables):
   (`PL` 3.49–4.33%, removed 4.96%) and none at q10 (`PL` 6.61–8.63%), so all
   17 are eligible; every `ef-gate` removes as many picks at q5 as `ef` (269, `PL`
   4.33%), the fill lowers it to 217–224.
+
+## Results of the exploration
+
+Step 4, 2026-11-06: `gateread.py` (in this plan folder) read once, the output
+saved as `D:\Photos\tests\2026-11-04-ef-gate-fill\gateread.out.md` (the
+script refuses to run again while that file exists), after a dry run on
+synthetic labels in a scratch copy. Weighted by each round's `1/π`; stratified
+95% intervals in brackets, folder-cluster 95% in parentheses; one count matrix
+per round, so every difference against `ef` is paired.
+
+### Checks
+
+All 85 checks passed. Label-free, before any `labels.tsv` was opened:
+`scores_gate.tsv`'s `ef` equals the stored `eye_focus` (27 folders) and
+`scores_fresh.tsv`'s `ef` (six folders), its `ef-fill` equals
+`scores_model.tsv`'s and `scores_fresh.tsv`'s, the 16 gated columns
+recompute from `ef`, `s`, `window_ef` and the grid as fixed, and the judged
+face of the per-face dump agrees with them; the three rounds' manifests,
+strata, `π` and `1/π` sums recompute (30, 31 and 10 strata rows); the earlier
+`PL` and removed readings reproduce, as do Step 3's 33-folder `PL` of `ef`
+and the eligibility count (17 at q5, 0 at q10). With the labels, every known
+number reproduced to the printed digit:
+
+| Round | Labels keep / discard | Base rate % | `ef` AUC | `ef-fill` AUC | `ef-fill` − `ef` |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 211 / 389 | 48.45 [42.03, 55.11] | 0.777 [0.716, 0.841] | 0.766 [0.699, 0.828] | −0.011 [−0.028, +0.003] |
+| 2 | 248 / 352 | 42.31 [35.85, 48.91] | 0.785 [0.723, 0.844] | 0.775 [0.714, 0.835] | −0.010 [−0.022, −0.001] |
+| 3 | 127 / 473 | 60.56 [53.81, 67.29] | 0.743 [0.679, 0.800] | 0.744 [0.681, 0.803] | +0.002 [−0.008, +0.012] |
+
+`ef`'s `RR` at q5 / q10 / q20 reproduced on all three rounds (round 3: 11.3 /
+14.6 / 14.8%), and so did round 3's no-crop-face `ef-fill` − `ef` (+0.277
+[+0.131, +0.407]). The audit hook found only the allowed files opened: the
+strict folder's `manifest.tsv`, the three rounds' `manifest.tsv`,
+`strata.tsv` and `labels.tsv`, round 2's `scores_discard.tsv`,
+`scores_model.tsv`, `scores_fresh.tsv`, `scores_reject.tsv` and
+`scores_gate.tsv`; no other `labels.tsv` and no sidecar.
+
+### The tuning (rounds 1 and 2)
+
+`ef-gate(s, τ)`'s AUC − `ef` per round and their sum; the rule takes the
+largest sum.
+
+| `s` | `τ` | Round 1 gated labels | Round 1 AUC − `ef` | Round 2 gated labels | Round 2 AUC − `ef` | Sum |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `nose` | 0.149 | 81 | −0.003 [−0.020, +0.012] | 90 | −0.005 [−0.014, +0.002] | −0.0076 |
+| `nose` | 0.215 | 47 | −0.001 [−0.015, +0.012] | 54 | −0.002 [−0.007, +0.003] | **−0.0030** |
+| `nose` | 0.286 | 28 | −0.005 [−0.017, +0.007] | 29 | −0.003 [−0.008, +0.001] | −0.0075 |
+| `nose` | 0.357 | 19 | −0.005 [−0.017, +0.007] | 11 | −0.004 [−0.009, −0.000] | −0.0083 |
+| `max` | 0.165 | 82 | −0.004 [−0.021, +0.011] | 96 | −0.003 [−0.009, +0.002] | −0.0069 |
+| `max` | 0.232 | 53 | −0.001 [−0.015, +0.012] | 60 | −0.003 [−0.008, +0.002] | −0.0037 |
+| `max` | 0.300 | 32 | −0.001 [−0.015, +0.012] | 27 | −0.003 [−0.008, +0.001] | −0.0035 |
+| `max` | 0.364 | 18 | −0.004 [−0.016, +0.008] | 13 | −0.003 [−0.008, +0.001] | −0.0070 |
+
+**`(s*, τ*)` = (`nose`, 0.215)**, no tie. Every pair's sum is negative.
+
+### The AUCs, all labeled frames
+
+| Score | Round 3 AUC | Round 3 AUC − `ef` | Round 2 AUC − `ef` | Round 1 AUC − `ef` |
+| --- | ---: | ---: | ---: | ---: |
+| `ef` (reference) | 0.743 [0.679, 0.800] | | | |
+| random (reference) | 0.521 [0.442, 0.606] | −0.222 [−0.322, −0.115] | −0.249 [−0.349, −0.152] | −0.250 [−0.341, −0.156] |
+| `ef-gate(nose, 0.215)` | 0.745 [0.682, 0.802] | +0.002 [−0.000, +0.008] ([−0.000, +0.010]) | −0.002 [−0.007, +0.003] | −0.001 [−0.015, +0.012] |
+| `ef-fill` | 0.744 [0.681, 0.803] | +0.002 [−0.008, +0.012] ([−0.007, +0.012]) | −0.010 [−0.022, −0.001] | −0.011 [−0.028, +0.003] |
+| `ef-gate+fill(nose, 0.215)` | 0.748 [0.686, 0.804] | +0.006 [−0.005, +0.017] ([−0.002, +0.015]) | −0.011 [−0.023, −0.001] | −0.013 [−0.036, +0.006] |
+
+On round 3, `ef-gate+fill` − `ef-fill` is +0.004 [+0.000, +0.010].
+
+### The cuts at q5 and q10
+
+`RR` % and its paired difference against `ef` in points; `PL` is the share of
+the round's dump's picks inside the cut (`gateread.out.md` has `DP`, the
+removed shares, q20 and the cluster intervals).
+
+| Round | Score | `RR` q5 | − `ef` | `PL` q5 | `RR` q10 | − `ef` | `PL` q10 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3 | `ef` | 11.3 [6.3, 17.4] | | 4.07 | 14.6 [10.2, 19.4] | | 7.30 |
+| 3 | `ef-gate` | 11.3 [6.3, 17.4] | +0.0 | 4.07 | 14.3 [10.0, 18.8] | −0.3 [−0.7, −0.0] | 7.30 |
+| 3 | `ef-fill` | 10.0 [4.3, 16.3] | −1.3 [−9.1, +6.3] | 2.84 | 13.1 [8.2, 18.5] | −1.5 [−7.0, +4.2] | 5.96 |
+| 3 | `ef-gate+fill` | 10.0 [4.3, 16.3] | −1.3 [−9.1, +6.3] | 2.84 | 13.6 [8.6, 18.8] | −1.0 [−6.6, +4.5] | 6.07 |
+| 2 | `ef` | 5.5 [1.1, 14.5] | | 4.44 | 12.9 [7.2, 21.8] | | 9.14 |
+| 2 | `ef-gate` | 5.5 [1.1, 14.5] | +0.0 | 4.44 | 11.6 [6.4, 19.7] | −1.3 [−3.8, +0.0] | 9.14 |
+| 2 | `ef-fill` | 16.4 [7.1, 37.0] | +10.9 [−0.3, +30.8] | 3.91 | 9.8 [5.2, 17.1] | −3.1 [−9.6, +1.8] | 6.99 |
+| 2 | `ef-gate+fill` | 13.9 [5.4, 33.5] | +8.3 [−2.2, +26.6] | 3.76 | 9.4 [4.9, 16.5] | −3.5 [−10.1, +1.7] | 6.95 |
+| 1 | `ef` | 16.8 [1.2, 43.3] | | 4.44 | 14.3 [2.9, 29.9] | | 9.14 |
+| 1 | `ef-gate` | 16.8 [1.2, 43.3] | +0.0 | 4.44 | 15.0 [3.6, 30.7] | +0.7 [+0.0, +1.9] | 9.14 |
+| 1 | `ef-fill` | 13.5 [0.0, 34.4] | −3.3 [−16.4, +6.9] | 3.91 | 30.2 [11.3, 47.9] | +16.0 [−2.5, +33.8] | 6.99 |
+| 1 | `ef-gate+fill` | 16.5 [0.9, 39.7] | −0.3 [−14.1, +12.9] | 3.76 | 30.2 [11.4, 47.6] | +15.9 [−2.3, +33.7] | 6.95 |
+
+### The subsets and the label × gated cross-tab
+
+AUC − `ef` on each subset of the labeled frames (the cut and the score are
+the full ones). On the complement every candidate equals `ef` (+0.000 on all
+rounds).
+
+| Round | Subset (labels) | `ef-gate` − `ef` | `ef-fill` − `ef` | `ef-gate+fill` − `ef` |
+| --- | --- | ---: | ---: | ---: |
+| 3 | No crop face (201) | −0.006 [−0.021, +0.005] | +0.277 [+0.131, +0.407] | +0.284 [+0.137, +0.417] |
+| 3 | Gated (27) | −0.014 [−0.052, +0.000] | +0.000 | −0.014 [−0.052, +0.000] |
+| 2 | No crop face (95) | −0.024 [−0.080, +0.000] | +0.091 [−0.176, +0.359] | +0.123 [−0.140, +0.392] |
+| 2 | Gated (54) | +0.010 [−0.111, +0.137] | +0.000 | +0.010 [−0.111, +0.137] |
+| 1 | No crop face (99) | −0.000 [−0.003, +0.000] | −0.300 [−0.549, +0.074] | −0.296 [−0.537, +0.043] |
+| 1 | Gated (47) | +0.048 [−0.280, +0.446] | +0.000 | +0.048 [−0.280, +0.446] |
+
+The label × gated cross-tab at `nose` > 0.215 (weighted discard %; the
+complement is the frames with `ef`, not gated):
+
+| Round | Gated labels (keep / discard) | Gated discard % | Complement discard % | No crop face discard % | Gated `window_ef` lower / equal / higher than `ef` (labels) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 3 | 27 (2 / 25) | 97.5 [91.5, 100.0] | 55.7 [48.0, 63.2] | 86.5 [81.7, 90.7] | 4 / 20 / 3 |
+| 2 | 54 (13 / 41) | 56.9 [36.8, 87.1] | 36.9 [30.0, 44.4] | 89.5 [82.8, 94.4] | 10 / 41 / 3 |
+| 1 | 47 (9 / 38) | 71.3 [49.0, 91.9] | 41.6 [34.7, 48.5] | 77.7 [61.6, 93.5] | 6 / 38 / 3 |
+
+The gated labels by the judged face's |yaw| (0–15 / 15–30 / 30–60 / 60+ / no
+pose): round 3 7 / 6 / 9 / 3 / 2, round 2 15 / 13 / 13 / 9 / 4, round 1 11 /
+14 / 11 / 9 / 2.
+
+### The selection and the stop rule
+
+| Candidate | q5 `PL` / removed % (33 folders) | q10 `PL` / removed % | Eligible | Round 3 AUC | Rounds 1 + 2 AUC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `ef-gate(nose, 0.215)` | 4.33 / 4.96 (passes) | 8.61 / 9.97 | yes | 0.7446 | 1.5597 |
+| `ef-fill` | 3.60 / 4.96 (passes) | 6.69 / 9.97 | yes | 0.7443 | 1.5410 |
+| `ef-gate+fill(nose, 0.215)` | 3.49 / 4.96 (passes) | 6.69 / 9.97 | yes | 0.7482 | 1.5389 |
+
+**Winner: `ef-gate+fill(nose, 0.215)`** (round 3 AUC 0.7482, no tie).
+**Stop rule: no fresh round.** Its AUC − `ef` points are +0.0057 on round 3
+but −0.0130 on round 1 and −0.0109 on round 2, so Steps 5–6 are skipped and
+the Decision (Step 7) is "nothing, keep `eye_focus`" by the pre-registered
+rule.
+
+### Reading
+
+- No (`s`, `τ`) pair improved on `ef` on rounds 1 and 2: every sum of AUC −
+  `ef` is negative (−0.0030 to −0.0083), and the chosen pair's two
+  differences are −0.001 and −0.002 with intervals spanning zero. On round 3
+  the gate alone reads +0.002 [−0.000, +0.008].
+- Where the gains and losses sit: by construction nothing moves on the
+  complement. The fill's effect sits on the no-crop-face subset and changes
+  sign across rounds: +0.277 on round 3, +0.091 on round 2, −0.300 on round
+  1, the intervals wide on rounds 1–2. The gate's effect sits on the gated
+  subset (27–54 labels per round): −0.014 on round 3, +0.010 on round 2,
+  +0.048 on round 1, every interval reaching zero. The gate also shifts the
+  no-crop-face subset slightly (−0.006, −0.024, −0.000), because it can
+  change a folder's lowest finite value, which places that folder's missing
+  frames in the AUC. The winner's round 3 lead (+0.006) is the fill's +0.002
+  plus +0.004 [+0.000, +0.010] from the gate, while rounds 1 and 2 carry the
+  fill's losses.
+- At the cuts, the gate leaves q5 unchanged on every round (`ef`'s q5 cut
+  is almost all frames without `ef`, which the gate does not touch) and moves `RR` at q10 by −0.3, −1.3 and +0.7 points;
+  the fill's q5 / q10 `RR` differences range from −3.3 to +16.0 points with
+  wide intervals, its `PL` lower than `ef`'s throughout.
+- Gated frames are discardable more often than the complement on every
+  round (weighted 97.5 / 56.9 / 71.3% against 55.7 / 36.9 / 41.6%). The
+  window re-measure changes the value of 7 / 13 / 9 of the gated
+  labels; 20 / 41 / 38 have `window_ef` equal to `ef`.
+- By the judged face's |yaw|, among labels with a pose: each of the gated
+  labels' 0–15, 15–30 and 30–60 bands holds 24–36% of them on every round,
+  and the 60+ band holds 3 of 25 (round 3), 9 of 50 (round 2) and 9 of 45
+  (round 1) of them (12 / 18 / 20%), against 25 of 168, 45 of 297 and 33 of
+  276 of the complement (15 / 15 / 12%). Whether the gate needs a profile
+  exemption is Step 7's judgment.
+- Multiplicity: the tuning read 8 pairs on 2 rounds and the selection 3
+  candidates on round 3, without correction, on labels the design was
+  chosen after.
