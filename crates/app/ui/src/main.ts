@@ -362,7 +362,8 @@ let scanId: number | null = null;
 let scanning: string | null = null;
 // How far the sequencing run got, or null when none runs.
 let sequencing: string | null = null;
-// How far the import run got, or null when none runs.
+// The import's status line: the preview being read, then how far the run got;
+// null when neither is under way.
 let importing: string | null = null;
 // True between `start_scan` and its `faces-done`, i.e. through both scan
 // passes. A rescan asked for while it is true is deferred (`resyncPending`)
