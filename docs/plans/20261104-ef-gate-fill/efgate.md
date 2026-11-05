@@ -336,3 +336,62 @@ fill in `candidate.rs` / the scan with `(s*, τ*)`; a pass on fresh frames of
 known folders may first ask for a folder-fresh round when new shoots
 exist); close (as the discard-model plan defined it) → more labels;
 otherwise → nothing, `eye_focus` stays. Step 7 decides.
+
+## The grid as fixed
+
+Step 3, 2026-11-06, label-free: `gatescores.py` (in this plan folder) on
+Step 2's per-face dump of the 33 folders, with no `labels.tsv` and no
+sidecar opened (its audit hook lists every file it opened; stdout saved as
+`D:\Photos\tests\2026-11-04-ef-gate-fill\gatescores.out.md`, the scores as
+`scores_gate.tsv` beside it). Every check passed: `af` reproduces the
+stored `eye_focus` (27 folders exactly, the six fresh to the features TSV's
+4 decimals) and the old per-face dumps' `af` / `af-whole` exactly; `ef-fill`
+equals `scores_model.tsv`'s and `scores_fresh.tsv`'s; the judged face's
+`eye_offset` equals the features TSVs'; the mesh columns are `-` exactly on
+the faces scored on the window with a box under 60 px; the earlier `PL` and
+missing readings of `ef` and `ef-fill` reproduce.
+
+The rule applied: the percentiles of `s` over the **30,658 meshed `af`
+faces** of the 33 folders (the judged face of every frame with `ef` whose
+face has a mesh; `numpy.percentile`, linear interpolation), rounded to 3
+decimals; a face is gated where `s` > `τ`.
+
+| `s` | p50 | p80 | p90 | p95 | p97.5 | p99 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `nose` | 0.0723 | 0.1485 | 0.2147 | 0.2862 | 0.3573 | 0.4394 |
+| `max` | 0.0869 | 0.1654 | 0.2322 | 0.2999 | 0.3638 | 0.4438 |
+
+| `s` | `τ` (p80) | `τ` (p90) | `τ` (p95) | `τ` (p97.5) |
+| --- | ---: | ---: | ---: | ---: |
+| `nose` | 0.149 | 0.215 | 0.286 | 0.357 |
+| `max` | 0.165 | 0.232 | 0.300 | 0.364 |
+
+These eight (`s`, `τ`) pairs are the tuning grid of Step 4. Label-free
+readings beside them (`gatescores.out.md` has the full tables):
+
+| Gate | Gated `af` faces (% of the 46,984 frames) | % of the 6,214 picks | `window_ef` lower / equal / higher than `ef`, % |
+| --- | ---: | ---: | ---: |
+| `nose` > 0.149 | 6,104 (12.99) | 13.45 | 27.3 / 67.7 / 5.1 |
+| `nose` > 0.215 | 3,055 (6.50) | 5.87 | 17.6 / 77.1 / 5.3 |
+| `nose` > 0.286 | 1,534 (3.26) | 2.85 | 14.5 / 80.7 / 4.8 |
+| `nose` > 0.357 | 770 (1.64) | 1.61 | 15.6 / 79.5 / 4.9 |
+| `max` > 0.165 | 6,158 (13.11) | 13.34 | 25.0 / 69.3 / 5.7 |
+| `max` > 0.232 | 3,070 (6.53) | 5.87 | 17.3 / 77.1 / 5.6 |
+| `max` > 0.300 | 1,532 (3.26) | 2.94 | 15.4 / 78.6 / 6.0 |
+| `max` > 0.364 | 766 (1.63) | 1.54 | 16.7 / 77.4 / 5.9 |
+| `eye_offset` > 0.10 (reference, not a candidate) | 8,742 (18.61) | 18.80 | 28.3 / 65.9 / 5.8 |
+
+- Most gated faces read the same on the window as their `ef` (equal), so
+  the gate changes the value of 19–32% of the faces it touches; no gated
+  face has `window_ef` = 0.
+- The gated share is flat over the |yaw| bands (0–15, 15–30, 30–60, 60+)
+  for `nose` at p95 and p97.5 (5.0 / 5.1 / 4.5 / 4.4% at 0.286) and rises
+  toward profiles at p80 (17.1 to 24.2%); `eye_offset` > 0.10 rises from
+  18.5% to 44.1% (the mesh-roll finding). The 165 meshed faces without a
+  pose are gated at 25–96%.
+- Missing shares: `ef` and every `ef-gate` 11.34% of the 33 folders' frames;
+  `ef-fill` and every `ef-gate+fill` 2.50%.
+- Label-free conditions on the 33 folders: every candidate passes at q5
+  (`PL` 3.49–4.33%, removed 4.96%) and none at q10 (`PL` 6.61–8.63%), so all
+  17 are eligible; every `ef-gate` removes as many picks at q5 as `ef` (269, `PL`
+  4.33%), the fill lowers it to 217–224.

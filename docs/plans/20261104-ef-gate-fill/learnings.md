@@ -65,3 +65,46 @@
   -n0 -F logs/wall.log | grep -m1 "facesdump done"` repeated.
 - No value of the dump was read against any label; only the column count,
   the file sets and the `--check` totals were looked at.
+
+## Step 3 (`gatescores.py`, the scores and the grid)
+
+- Run: `python -I -B gatescores.py D:\Photos\tests\2026-10-12-rank-app
+  D:\Photos\tests\2026-10-23-discard-model D:\Photos\tests\2026-11-04-ef-gate-fill`
+  from the scratchpad. Every check passed; `scores_gate.tsv` (46,984 rows,
+  22 columns: `folder`, `file`, `ef`, `nose`, `max`, `window_ef`, `ef-fill`,
+  8 `ef-gate(s,τ)`, 8 `ef-gate+fill(s,τ)`, `τ` printed to 3 decimals in the
+  column name) and `gatescores.out.md` in the gate folder.
+- **Wall time**: 18 s to 235 s for the same run (load 10–15 s, the scores
+  and cuts under 1 s; the rest is the imports and the 18 MB write on drive
+  D:, which other processes kept busy, as in Step 2). The final run took
+  114 s.
+- The three-argument usage the plan fixes has no place for the 27 folders'
+  old per-face dump, so the script takes it as the sibling
+  `2026-10-23-face-choice\faces\` of `<discard-model-dir>` (stated in its
+  docstring); the six folders' old dump is `<discard-model-dir>\dump\faces\`.
+- The first run stopped on a check of my own expectation, not on the data:
+  the plan's "12.4% on the dump (4.5% after the `af-whole` fill)" is the
+  `af-whole` rule's own missing share; `ef-fill` (`ef` first, then
+  `af-whole`) leaves 3.1% (1,002 frames), as `discardfit.out.md` already
+  printed. The check now compares the three counts (4,022 / 1,446 / 1,002)
+  with that output; no pre-registered rule is touched.
+- `load_faces` reads only the dump's own folders' files of the new per-face
+  dump (each dump's call first read all 33 and counted the other dump's
+  rows as extras).
+- `folder_gate.extend` is not called: it only adds columns, and the picks
+  (`gate.build`'s `pick`) and the row order the cuts use do not depend on
+  it; `ef`'s `PL` on the 27 folders reproduces facechoiceread's 4.44 / 9.14
+  / 15.59 without it.
+- Readings worth carrying into Step 4 (label-free): 67.7–80.7% of the gated
+  faces have `window_ef` exactly equal to `ef` (presumably faces already
+  scored on the window because no mesh eyelid region counted), so a gate
+  changes the value of only 19–32% of the faces it touches; at q5 every
+  `ef-gate` removes the same number of picks as `ef` (269); the 165 meshed
+  `af` faces without a pose are gated at 25–96%.
+- The audit hook records every `open` event; the report lists the data
+  files by directory (the venv, the Python installation and `docs/plans`
+  left out) and the run fails if any `labels.tsv` or `.xmp` / `.dop` was
+  opened. None was.
+- Process slip: a stray `python3 -` (no script, waiting on stdin) was
+  started by mistake while grepping; it was killed by its PID and touched
+  no data.
