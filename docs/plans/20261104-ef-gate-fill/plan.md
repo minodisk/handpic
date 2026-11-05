@@ -578,3 +578,4 @@ pre-registration and fresh labels; these three rounds are spent on it.
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
 - (2026-11-06) Step 4 complete (stop rule: no fresh round; Steps 5–6 skipped)
+- (2026-11-06) Step 7 complete
