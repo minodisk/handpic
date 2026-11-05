@@ -85,56 +85,63 @@ pub async fn rename_folder(
     if index::lock(&app.state::<Scans>().0).scanning() {
         return Err(SCAN_RUNNING.to_string());
     }
-    tauri::async_runtime::spawn_blocking(move || {
-        let target = folder_target(Path::new(&dir), &name)?;
-        if let Some(writer) = &app.state::<AppWriter>().0 {
-            writer.flush(crate::sidecar::DRAIN_TIMEOUT);
+    tauri::async_runtime::spawn_blocking(move || rename_folder_blocking(&app, &dir, &name))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// The body of `rename_folder`, run on a blocking thread after its first
+/// scan check, shared with the one-date branch of `date_folder_run`.
+pub(crate) fn rename_folder_blocking(
+    app: &tauri::AppHandle,
+    dir: &str,
+    name: &str,
+) -> Result<Renamed, String> {
+    let target = folder_target(Path::new(dir), name)?;
+    if let Some(writer) = &app.state::<AppWriter>().0 {
+        writer.flush(crate::sidecar::DRAIN_TIMEOUT);
+    }
+    let scans = app.state::<Scans>();
+    let state = index::lock(&scans.0);
+    if state.scanning() {
+        return Err(SCAN_RUNNING.to_string());
+    }
+    state.stop_embedding();
+    let old = std::fs::canonicalize(dir)
+        .map_err(|e| format!("{dir}: {e}"))?
+        .to_string_lossy()
+        .into_owned();
+    let released = crate::watch::release_under(app, &old);
+    if let Err(e) = crate::treewatch::with_released(app, &old, || {
+        std::fs::rename(dir, &target).map_err(|e| format!("{name}: {e}"))
+    }) {
+        if let Some((dir, owner)) = released {
+            crate::watch::set(app, &dir, &owner);
         }
-        let scans = app.state::<Scans>();
-        let state = index::lock(&scans.0);
-        if state.scanning() {
-            return Err(SCAN_RUNNING.to_string());
-        }
-        state.stop_embedding();
-        let old = std::fs::canonicalize(&dir)
-            .map_err(|e| format!("{dir}: {e}"))?
-            .to_string_lossy()
-            .into_owned();
-        let released = crate::watch::release_under(&app, &old);
-        if let Err(e) = crate::treewatch::with_released(&app, &old, || {
-            std::fs::rename(&dir, &target).map_err(|e| format!("{name}: {e}"))
-        }) {
-            if let Some((dir, owner)) = released {
-                crate::watch::set(&app, &dir, &owner);
+        return Err(e);
+    }
+    let new = std::fs::canonicalize(&target).map_or_else(
+        |_| target.to_string_lossy().into_owned(),
+        |p| p.to_string_lossy().into_owned(),
+    );
+    let mut warning = None;
+    if let Some(index) = app.state::<AppIndex>().0.clone() {
+        match index::lock(&index).rename_dir(&old, &new) {
+            Ok(moved) => log::info!("renamed folder: {old} -> {new} files={moved}"),
+            Err(e) => {
+                log::warn!("renamed folder {old} -> {new} but not its index rows: {e}");
+                warning = Some(format!(
+                    "the folder was renamed but its cache was not ({e});                      it is rebuilt on the next open"
+                ));
             }
-            return Err(e);
         }
-        let new = std::fs::canonicalize(&target).map_or_else(
-            |_| target.to_string_lossy().into_owned(),
-            |p| p.to_string_lossy().into_owned(),
-        );
-        let mut warning = None;
-        if let Some(index) = app.state::<AppIndex>().0.clone() {
-            match index::lock(&index).rename_dir(&old, &new) {
-                Ok(moved) => log::info!("renamed folder: {old} -> {new} files={moved}"),
-                Err(e) => {
-                    log::warn!("renamed folder {old} -> {new} but not its index rows: {e}");
-                    warning = Some(format!(
-                        "the folder was renamed but its cache was not ({e}); \
-                         it is rebuilt on the next open"
-                    ));
-                }
-            }
-        }
-        app.state::<crate::trash::Runs>().rename_dir(&old, &new);
-        drop(state);
-        Ok(Renamed {
-            path: target.to_string_lossy().into_owned(),
-            warning,
-        })
+    }
+    app.state::<crate::trash::Runs>().rename_dir(&old, &new);
+    drop(state);
+    Ok(Renamed {
+        path: target.to_string_lossy().into_owned(),
+        warning,
     })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// The renames that move one RAW and its sidecars, RAW first, as

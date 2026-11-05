@@ -845,6 +845,7 @@ fn main() {
             commands::trash_rejected_undo,
             commands::trash_rejected_redo,
             datefolder::date_folder_preview,
+            datefolder::date_folder_run,
             foldersidecars::rewrite_sidecars_preview,
             foldersidecars::rewrite_sidecars_run,
             foldersidecars::delete_sidecars_preview,

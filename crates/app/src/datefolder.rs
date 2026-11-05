@@ -2,7 +2,7 @@
 //! after the capture date of the photos directly in it, or splits it into
 //! one sibling folder per date when they span several, and the
 //! `date_folder_preview` command that serializes it for the confirmation
-//! dialog.
+//! dialog, and the `date_folder_run` command that carries it out.
 //!
 //! The date is the Exif `DateTimeOriginal` as the camera wrote it, its local
 //! date with no time-zone handling, taken from the index when the file has a
@@ -10,7 +10,9 @@
 //! folder lists count (its RAWs, or its JPEGs when it is JPEG-only);
 //! subfolders are not descended into. A target name that exists in the
 //! parent is a collision, which the dialog shows as the reason the run is
-//! disabled; nothing is merged.
+//! disabled; nothing is merged. A split moves each dated file with its
+//! sidecars into its sibling date folder, its index rows following, leaves
+//! the undated files, and removes the folder only when it ends up empty.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -18,9 +20,11 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use tauri::Manager;
 
-use crate::commands::{canonicalize, read_listing, AppIndex, Scans, SCAN_RUNNING};
+use crate::commands::{canonicalize, read_listing, AppIndex, AppWriter, Scans, SCAN_RUNNING};
 use crate::index;
-use crate::rename::folder_target;
+use crate::rename::{file_run, folder_target, rename_folder_blocking, FilePlan, Renamed};
+use crate::sidecar::{existing_sidecar, SidecarFormat};
+use crate::trash::Failure;
 
 /// The `YYYY-MM-DD` of an Exif `YYYY:MM:DD HH:MM:SS` time, `None` for an
 /// empty or malformed one (including the all-zero time some cameras write
@@ -202,6 +206,26 @@ fn preview(dir: &Path, plan: Plan) -> Preview {
     }
 }
 
+/// Plan the canonical `dir` from its listing, the dates taken from the index
+/// first.
+fn plan_of(app: &tauri::AppHandle, dir: &str) -> Result<Plan, String> {
+    let indexed: HashMap<String, Option<String>> = match app.state::<AppIndex>().0.clone() {
+        Some(index) => index::lock(&index)
+            .entries(dir)?
+            .into_iter()
+            .map(|entry| (entry.path, entry.capture_time))
+            .collect(),
+        None => HashMap::new(),
+    };
+    let dir = Path::new(dir);
+    let files = dated(dir, &indexed, |path| {
+        riffle_core::reader::read_metadata(path)
+            .ok()
+            .and_then(|arw| arw.shot.capture_time)
+    })?;
+    plan(dir, &files)
+}
+
 /// Plan the date rename or split of `dir` for the confirmation dialog,
 /// refusing while a scan runs. Nothing on disk changes; the run plans again.
 #[tauri::command]
@@ -211,21 +235,254 @@ pub async fn date_folder_preview(app: tauri::AppHandle, dir: String) -> Result<P
     }
     tauri::async_runtime::spawn_blocking(move || -> Result<Preview, String> {
         let dir = canonicalize(&dir);
-        let indexed: HashMap<String, Option<String>> = match app.state::<AppIndex>().0.clone() {
-            Some(index) => index::lock(&index)
-                .entries(&dir)?
-                .into_iter()
-                .map(|entry| (entry.path, entry.capture_time))
-                .collect(),
-            None => HashMap::new(),
-        };
-        let dir = Path::new(&dir);
-        let files = dated(dir, &indexed, |path| {
-            riffle_core::reader::read_metadata(path)
-                .ok()
-                .and_then(|arw| arw.shot.capture_time)
+        let plan = plan_of(&app, &dir)?;
+        Ok(preview(Path::new(&dir), plan))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The renames that move `file` into the folder `target`, file first: a RAW
+/// takes the existing sidecars of both formats along, their targets minted
+/// from the moved RAW's path (a `.dop` name embeds the RAW's whole name), and
+/// a JPEG moves alone. Refuses any target that already exists, so nothing is
+/// overwritten.
+pub fn move_plan(file: &Path, target: &Path) -> Result<FilePlan, String> {
+    let to = target.join(file.file_name().unwrap_or_default());
+    let mut moves = vec![(file.to_path_buf(), to.clone())];
+    if riffle_core::scan::is_raw_file(file) {
+        for format in [SidecarFormat::Xmp, SidecarFormat::Dop] {
+            if let Some(sidecar) = existing_sidecar(file, format) {
+                moves.push((sidecar, format.sidecar_path(&to)));
+            }
+        }
+    }
+    if let Some((_, taken)) = moves.iter().find(|(_, to)| to.symlink_metadata().is_ok()) {
+        return Err(format!("{} already exists", file_name(taken)));
+    }
+    Ok(FilePlan { moves })
+}
+
+/// One file a split moved: where it was, and the folder it is in now.
+#[derive(Debug, PartialEq)]
+struct Move {
+    from: PathBuf,
+    dir: PathBuf,
+}
+
+/// Create each group's folder in `parent` and move its files in with
+/// `rename`, never stopping at a failure: a file whose move fails (rolled
+/// back by `file_run`) is listed and stays, and a folder nothing moved into
+/// is removed again. Returns each folder that received files with its count,
+/// the failures and every file moved.
+fn split(
+    parent: &Path,
+    groups: &[Group],
+    mut rename: impl FnMut(&Path, &Path) -> Result<(), String>,
+) -> (Vec<(String, usize)>, Vec<Failure>, Vec<Move>) {
+    let mut counts = Vec::new();
+    let mut failed = Vec::new();
+    let mut moves = Vec::new();
+    for group in groups {
+        let target = parent.join(&group.name);
+        if let Err(e) = std::fs::create_dir(&target) {
+            failed.extend(group.files.iter().map(|file| Failure {
+                path: file.to_string_lossy().into_owned(),
+                message: format!("{}: {e}", group.name),
+            }));
+            continue;
+        }
+        let mut count = 0;
+        for file in &group.files {
+            match move_plan(file, &target).and_then(|plan| file_run(plan, &mut rename)) {
+                Ok(()) => {
+                    count += 1;
+                    moves.push(Move {
+                        from: file.clone(),
+                        dir: target.clone(),
+                    });
+                }
+                Err(message) => failed.push(Failure {
+                    path: file.to_string_lossy().into_owned(),
+                    message,
+                }),
+            }
+        }
+        if count == 0 {
+            if let Err(e) = std::fs::remove_dir(&target) {
+                log::warn!("could not remove the empty {}: {e}", target.display());
+            }
+        } else {
+            counts.push((group.name.clone(), count));
+        }
+    }
+    (counts, failed, moves)
+}
+
+/// Remove `dir` when it holds nothing, else list what is left in it, sorted.
+/// `remove_dir` refuses a folder that is not empty, so an entry that appeared
+/// meanwhile keeps it.
+fn remove_if_empty(dir: &Path) -> (bool, Vec<String>) {
+    let mut left: Vec<String> = match std::fs::read_dir(dir) {
+        Ok(entries) => entries
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect(),
+        Err(e) => {
+            log::warn!("could not list {}: {e}", dir.display());
+            return (false, Vec::new());
+        }
+    };
+    if left.is_empty() {
+        match std::fs::remove_dir(dir) {
+            Ok(()) => return (true, left),
+            Err(e) => log::warn!("could not remove {}: {e}", dir.display()),
+        }
+    }
+    left.sort();
+    (false, left)
+}
+
+/// One date folder a split moved files into: its name, its path spelled the
+/// caller's way, and how many files went in.
+#[derive(Debug, PartialEq, Serialize)]
+pub struct Moved {
+    name: String,
+    path: String,
+    count: usize,
+}
+
+/// What a split produced: the date folders with their file counts, the files
+/// that could not be moved, the names left in the original folder, whether
+/// the original folder was removed (its index state forgotten; the frontend
+/// opens the first date folder if it was the open one), and a warning when
+/// the disk changed but the index rows did not follow.
+#[derive(Debug, Serialize)]
+pub struct Split {
+    moved: Vec<Moved>,
+    failed: Vec<Failure>,
+    left: Vec<String>,
+    removed: bool,
+    warning: Option<String>,
+}
+
+/// What `date_folder_run` did: a rename (`rename_folder`'s result) or a
+/// split.
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Ran {
+    Renamed(Renamed),
+    Split(Split),
+}
+
+/// Split the canonical `dir` (spelled `caller` by the frontend) along
+/// `plan`, on a blocking thread. The guards are `rename_folder`'s: the
+/// sidecar writer is drained first, so a sidecar a pending judgment has just
+/// written moves too, and the `Scans` lock is held across the moves and the
+/// index writes. The open folder's watcher and the tree watches on `dir` and
+/// under it are released before the moves (Windows refuses to remove a
+/// watched folder); the open folder's watcher is put back when `dir`
+/// remains, and the tree re-render sets the tree watches again. A failed
+/// index write after the moves still returns `Ok` with a warning, as in
+/// `rename_folder`.
+fn split_blocking(
+    app: &tauri::AppHandle,
+    dir: &str,
+    caller: &str,
+    plan: &Plan,
+) -> Result<Split, String> {
+    if let Some(writer) = &app.state::<AppWriter>().0 {
+        writer.flush(crate::sidecar::DRAIN_TIMEOUT);
+    }
+    let scans = app.state::<Scans>();
+    let state = index::lock(&scans.0);
+    if state.scanning() {
+        return Err(SCAN_RUNNING.to_string());
+    }
+    state.stop_embedding();
+    let path = Path::new(dir);
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("{dir}: a root cannot be renamed"))?;
+    let released = crate::watch::release_under(app, dir);
+    let ((counts, failed, moves), (removed, left)) =
+        crate::treewatch::with_released(app, dir, || {
+            let split = split(parent, &plan.groups, |from, to| {
+                std::fs::rename(from, to).map_err(|e| format!("{}: {e}", file_name(from)))
+            });
+            Ok((split, remove_if_empty(path)))
         })?;
-        Ok(preview(dir, plan(dir, &files)?))
+    if !removed {
+        if let Some((dir, owner)) = released {
+            crate::watch::set(app, &dir, &owner);
+        }
+    }
+    let mut warning = None;
+    if let Some(index) = app.state::<AppIndex>().0.clone() {
+        let mut index = index::lock(&index);
+        let mut result = moves.iter().try_for_each(|m| {
+            let to_dir = canonicalize(&m.dir.to_string_lossy());
+            let to = Path::new(&to_dir).join(m.from.file_name().unwrap_or_default());
+            index.move_file(&m.from.to_string_lossy(), &to_dir, &to.to_string_lossy())
+        });
+        if removed && result.is_ok() {
+            result = index.forget_dir(dir);
+        }
+        if let Err(e) = result {
+            log::warn!("split folder {dir} but not its index rows: {e}");
+            warning = Some(format!(
+                "the files were moved but their cache was not ({e}); \
+                 it is rebuilt on the next open"
+            ));
+        }
+    }
+    drop(state);
+    let caller_parent = Path::new(caller).parent().unwrap_or(parent);
+    let moved = counts
+        .into_iter()
+        .map(|(name, count)| Moved {
+            path: caller_parent.join(&name).to_string_lossy().into_owned(),
+            name,
+            count,
+        })
+        .collect();
+    let split = Split {
+        moved,
+        failed,
+        left,
+        removed,
+        warning,
+    };
+    log::info!("split folder by capture date: {dir} {split:?}");
+    Ok(split)
+}
+
+/// Carry out the date rename or split of `dir`, refusing while a scan runs.
+/// The folder is planned again (the preview is not trusted across the
+/// dialog) and the run refused on any collision or when the folder is
+/// already named its date. One date renames the folder as `rename_folder`
+/// does; several dates split it (`split_blocking`).
+#[tauri::command]
+pub async fn date_folder_run(app: tauri::AppHandle, dir: String) -> Result<Ran, String> {
+    if index::lock(&app.state::<Scans>().0).scanning() {
+        return Err(SCAN_RUNNING.to_string());
+    }
+    tauri::async_runtime::spawn_blocking(move || -> Result<Ran, String> {
+        let canonical = canonicalize(&dir);
+        let plan = plan_of(&app, &canonical)?;
+        if !plan.collisions.is_empty() {
+            return Err(format!("{} already exists", plan.collisions.join(", ")));
+        }
+        match plan.kind {
+            Kind::Named => Err(format!(
+                "{} is already named its capture date",
+                file_name(Path::new(&canonical))
+            )),
+            Kind::Rename => {
+                rename_folder_blocking(&app, &dir, &plan.groups[0].name).map(Ran::Renamed)
+            }
+            Kind::Split => split_blocking(&app, &canonical, &dir, &plan).map(Ran::Split),
+        }
     })
     .await
     .map_err(|e| e.to_string())?
@@ -461,5 +718,159 @@ mod tests {
                 collisions: Vec::new(),
             }
         );
+    }
+
+    fn touch(dir: &Path, names: &[&str]) {
+        for name in names {
+            std::fs::write(dir.join(name), b"x").unwrap();
+        }
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    fn fs_rename(from: &Path, to: &Path) -> Result<(), String> {
+        std::fs::rename(from, to).map_err(|e| e.to_string())
+    }
+
+    fn group(name: &str, files: Vec<PathBuf>) -> Group {
+        Group {
+            name: name.to_string(),
+            files,
+        }
+    }
+
+    #[test]
+    fn a_raw_moves_with_the_sidecars_of_both_formats_and_a_jpeg_alone() {
+        let dir = folder("move-plan");
+        let target = dir.parent().unwrap().join("2026-10-31");
+        touch(&dir, &["a.ARW", "a.xmp", "a.ARW.dop", "b.JPG", "b.xmp"]);
+        assert_eq!(
+            move_plan(&dir.join("a.ARW"), &target).unwrap().moves,
+            vec![
+                (dir.join("a.ARW"), target.join("a.ARW")),
+                (dir.join("a.xmp"), target.join("a.xmp")),
+                (dir.join("a.ARW.dop"), target.join("a.ARW.dop")),
+            ]
+        );
+        assert_eq!(
+            move_plan(&dir.join("b.JPG"), &target).unwrap().moves,
+            vec![(dir.join("b.JPG"), target.join("b.JPG"))]
+        );
+    }
+
+    #[test]
+    fn a_move_onto_an_existing_file_is_refused() {
+        let dir = folder("move-collision");
+        let target = dir.parent().unwrap().join("2026-10-31");
+        std::fs::create_dir(&target).unwrap();
+        touch(&dir, &["a.ARW", "a.xmp", "b.ARW"]);
+        touch(&target, &["a.xmp", "b.ARW"]);
+        assert!(move_plan(&dir.join("a.ARW"), &target).is_err());
+        assert!(move_plan(&dir.join("b.ARW"), &target).is_err());
+    }
+
+    #[test]
+    fn split_moves_each_file_into_its_date_folder_and_leaves_the_undated() {
+        let dir = folder("split-run");
+        let parent = dir.parent().unwrap();
+        touch(&dir, &["a.ARW", "a.xmp", "b.ARW", "b.ARW.dop", "c.ARW"]);
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("b.ARW")]),
+        ];
+        let (counts, failed, moves) = split(parent, &groups, fs_rename);
+        assert_eq!(
+            counts,
+            vec![("2026-10-31".to_string(), 1), ("2026-11-01".to_string(), 1)]
+        );
+        assert!(failed.is_empty());
+        assert_eq!(
+            moves,
+            vec![
+                Move {
+                    from: dir.join("a.ARW"),
+                    dir: parent.join("2026-10-31"),
+                },
+                Move {
+                    from: dir.join("b.ARW"),
+                    dir: parent.join("2026-11-01"),
+                },
+            ]
+        );
+        assert_eq!(names(&parent.join("2026-10-31")), ["a.ARW", "a.xmp"]);
+        assert_eq!(names(&parent.join("2026-11-01")), ["b.ARW", "b.ARW.dop"]);
+        assert_eq!(names(&dir), ["c.ARW"]);
+    }
+
+    #[test]
+    fn a_failing_sidecar_rolls_its_file_back_and_the_rest_still_move() {
+        let dir = folder("split-rollback");
+        let parent = dir.parent().unwrap();
+        touch(&dir, &["a.ARW", "a.xmp", "b.ARW", "c.ARW", "c.ARW.dop"]);
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW"), dir.join("b.ARW")]),
+            group("2026-11-01", vec![dir.join("c.ARW")]),
+        ];
+        let refuse = |from: &Path, to: &Path| {
+            if from
+                .file_name()
+                .is_some_and(|n| n == "a.xmp" || n == "c.ARW.dop")
+            {
+                return Err("refused".to_string());
+            }
+            fs_rename(from, to)
+        };
+        let (counts, failed, moves) = split(parent, &groups, refuse);
+        assert_eq!(counts, vec![("2026-10-31".to_string(), 1)]);
+        let failed: Vec<_> = failed.iter().map(|f| f.path.clone()).collect();
+        assert_eq!(
+            failed,
+            [dir.join("a.ARW"), dir.join("c.ARW")].map(|p| p.to_string_lossy().into_owned())
+        );
+        assert_eq!(moves.len(), 1);
+        assert_eq!(names(&parent.join("2026-10-31")), ["b.ARW"]);
+        assert!(!parent.join("2026-11-01").exists());
+        assert_eq!(names(&dir), ["a.ARW", "a.xmp", "c.ARW", "c.ARW.dop"]);
+    }
+
+    #[test]
+    fn split_never_merges_into_an_existing_folder() {
+        let dir = folder("split-existing");
+        let parent = dir.parent().unwrap();
+        std::fs::create_dir(parent.join("2026-10-31")).unwrap();
+        touch(&dir, &["a.ARW"]);
+        let groups = [group("2026-10-31", vec![dir.join("a.ARW")])];
+        let (counts, failed, moves) = split(parent, &groups, fs_rename);
+        assert!(counts.is_empty());
+        assert_eq!(failed.len(), 1);
+        assert!(moves.is_empty());
+        assert_eq!(names(&dir), ["a.ARW"]);
+        assert!(names(&parent.join("2026-10-31")).is_empty());
+    }
+
+    #[test]
+    fn the_folder_is_removed_only_when_empty() {
+        let dir = folder("remove-empty");
+        assert_eq!(remove_if_empty(&dir), (true, Vec::new()));
+        assert!(!dir.exists());
+
+        let dir = folder("remove-left");
+        touch(&dir, &["b.ARW", "a.txt"]);
+        std::fs::create_dir(dir.join("sub")).unwrap();
+        assert_eq!(
+            remove_if_empty(&dir),
+            (
+                false,
+                vec!["a.txt".to_string(), "b.ARW".to_string(), "sub".to_string()]
+            )
+        );
+        assert!(dir.exists());
     }
 }
