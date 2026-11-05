@@ -76,8 +76,9 @@ export function contextMenuGroups(
 // the `reveal_label` command, then copying the folder's path or name, then re-listing it (Refresh), then
 // renaming it (by hand or by its photos' capture date), then expanding or collapsing every subfolder under it, then
 // rewriting its sidecars from the index or deleting them, then the sequencing of the folder's
-// JPEGs. The renames and expanding / collapsing all are not offered on a root
-// (home or a volume).
+// JPEGs, then importing the photos under it (offered on a root too, since a
+// memory card is a volume root). The renames and expanding / collapsing all
+// are not offered on a root (home or a volume).
 export function folderMenuGroups(revealLabel: string, root: boolean): MenuItem[][] {
   return [
     [{ action: "revealFolder", label: revealLabel, shortcut: "", checked: undefined }],
@@ -120,6 +121,7 @@ export function folderMenuGroups(revealLabel: string, root: boolean): MenuItem[]
         checked: undefined,
       },
     ],
+    [{ action: "importFolder", label: "Import…", shortcut: "", checked: undefined }],
   ];
 }
 

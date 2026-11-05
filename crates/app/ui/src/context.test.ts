@@ -187,7 +187,7 @@ describe("contextMenuGroups", () => {
 });
 
 describe("folderMenuGroups", () => {
-  test("holds the reveal item, then the copy items, then the refresh item, then the rename items, then the expand / collapse items, then the rewrite sidecars item, then the sequence item, without a shortcut or checked state", () => {
+  test("holds the reveal item, then the copy items, then the refresh item, then the rename items, then the expand / collapse items, then the rewrite sidecars item, then the sequence item, then the import item, without a shortcut or checked state", () => {
     expect(folderMenuGroups("Reveal in Finder", false)).toEqual([
       [{ action: "revealFolder", label: "Reveal in Finder", shortcut: "", checked: undefined }],
       [
@@ -225,10 +225,11 @@ describe("folderMenuGroups", () => {
           checked: undefined,
         },
       ],
+      [{ action: "importFolder", label: "Import…", shortcut: "", checked: undefined }],
     ]);
   });
 
-  test("leaves the rename items and the expand / collapse items out for a root", () => {
+  test("leaves the rename items and the expand / collapse items out for a root, keeping Import…", () => {
     expect(
       folderMenuGroups("Reveal in Finder", true).map((group) => group.map(({ action }) => action)),
     ).toEqual([
@@ -237,6 +238,7 @@ describe("folderMenuGroups", () => {
       ["refreshFolder"],
       ["rewriteSidecars", "deleteSidecars"],
       ["sequenceTimestamps"],
+      ["importFolder"],
     ]);
   });
 });

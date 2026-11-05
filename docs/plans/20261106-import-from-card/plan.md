@@ -78,7 +78,7 @@ lists what is still open):
     - The preview reads every file's head on the card once; the run (Step 4) takes the stored plan by id rather than re-reading, re-checking each destination just before writing. Keep the stored plan in a `Mutex<Option<(id, Plan)>>` in the managed state, replaced by the next preview.
     - Nothing on disk changes in this step.
 
-- [ ] Step 4: The run: `import_run` / `import_cancel`, progress events, the dialog and the tree's `Import…` item
+- [x] Step 4: The run: `import_run` / `import_cancel`, progress events, the dialog and the tree's `Import…` item
   - Done when:
     - `import_run(preview_id)` creates the destination folders, runs the Step 2 pipeline on the plan's `copy` jobs (RAW first, then its sidecars, in date then name order) on a `spawn_blocking` task, streams `import-progress` (run id, files done / total, bytes done / total, the file in flight) and ends with one `import-done` (run id, copied, skipped, failed with messages, canceled, bytes, elapsed ms, the destination folders in order); `import_cancel(run_id)` stops before the next file; one run at a time (`sequence.rs`'s `begin` / `finish` shape in a managed `Imports` state).
     - After every run `Riffle.log` has one `import:` line with files, bytes, elapsed and MB/s, plus the source and root, so the throughput can be compared with Explorer.
@@ -126,3 +126,4 @@ lists what is still open):
 - (2026-11-06) Step 1 complete
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
+- (2026-11-06) Step 4 complete

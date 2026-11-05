@@ -3,7 +3,9 @@
 //! `importPattern`, the pattern's validation, and the plan of an import:
 //! every RAW and JPEG under the right-clicked folder, a RAW's sidecars with
 //! it, grouped into destination folders by capture date, each file copied,
-//! skipped as already imported or refused as a collision.
+//! skipped as already imported or refused as a collision, and the one run
+//! that copies a previewed plan through `riffle_core::copy`, without touching
+//! the index.
 //!
 //! The pattern is chrono strftime syntax over the capture date, `/`
 //! separating folders. Only date specifiers are allowed, and every folder
@@ -13,15 +15,16 @@ use std::collections::{BTreeMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::NaiveDate;
+use riffle_core::copy;
 use riffle_core::scan::{is_jpeg_file, is_raw_file};
 use serde::Serialize;
 use serde_json::Value;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::commands::canonicalize;
 use crate::sidecar::SidecarFormat;
@@ -407,7 +410,15 @@ pub fn plan(
 #[derive(Default)]
 pub struct ImportPreviews {
     next_id: AtomicU64,
-    plan: Mutex<Option<(u64, Plan)>>,
+    plan: Mutex<Option<(u64, Previewed)>>,
+}
+
+/// A stored plan with the source folder and the destination root it was
+/// made for, which the run's log line names.
+struct Previewed {
+    source: String,
+    root: String,
+    plan: Plan,
 }
 
 /// One destination folder in the dialog.
@@ -498,6 +509,26 @@ fn summarize(id: Option<u64>, source: String, plan: &Plan) -> Preview {
     }
 }
 
+/// The plan of importing every photo under `source` into `settings`' root
+/// and pattern, each file's capture time read from its head.
+fn plan_dir(source: &Path, settings: &ImportSettings) -> Result<Plan, String> {
+    let dated: Vec<(Photo, Option<String>)> = walk(source)?
+        .into_iter()
+        .map(|photo| {
+            let time = riffle_core::reader::read_metadata(&photo.file.path)
+                .ok()
+                .and_then(|arw| arw.shot.capture_time);
+            (photo, time)
+        })
+        .collect();
+    plan(
+        &dated,
+        Path::new(&settings.root),
+        &settings.pattern,
+        |path| fs::metadata(path).ok().map(|m| m.len()),
+    )
+}
+
 /// Plan the import of every photo under `dir` into the destination root and
 /// pattern in use, reading each file's capture time from its head, and keep
 /// the plan for the run. Nothing on disk changes.
@@ -518,29 +549,255 @@ pub async fn import_preview(app: tauri::AppHandle, dir: String) -> Result<Previe
             preview.refusal = Some(reason);
             return Ok(preview);
         }
-        let dated: Vec<(Photo, Option<String>)> = walk(Path::new(&source))?
-            .into_iter()
-            .map(|photo| {
-                let time = riffle_core::reader::read_metadata(&photo.file.path)
-                    .ok()
-                    .and_then(|arw| arw.shot.capture_time);
-                (photo, time)
-            })
-            .collect();
-        let plan = plan(
-            &dated,
-            Path::new(&settings.root),
-            &settings.pattern,
-            |path| fs::metadata(path).ok().map(|m| m.len()),
-        )?;
+        let plan = plan_dir(Path::new(&source), &settings)?;
         let previews = app.state::<ImportPreviews>();
         let id = previews.next_id.fetch_add(1, Ordering::Relaxed) + 1;
-        let preview = summarize(Some(id), source, &plan);
-        *index::lock(&previews.plan) = Some((id, plan));
+        let preview = summarize(Some(id), source.clone(), &plan);
+        *index::lock(&previews.plan) = Some((
+            id,
+            Previewed {
+                source,
+                root: settings.root,
+                plan,
+            },
+        ));
         Ok(preview)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// The id of the last run handed out and the cancel flag and join handle of
+/// the one import that may be in progress, behind one lock so that the
+/// "already running" check and the store are never interleaved between two
+/// `import_run` calls (`sequence::Sequences`' shape).
+#[derive(Default)]
+pub struct Imports(Mutex<RunState>);
+
+#[derive(Default)]
+struct RunState {
+    next_id: u64,
+    /// The run in progress, cleared by its own task when it ends.
+    running: Option<(u64, Arc<AtomicBool>, tauri::async_runtime::JoinHandle<()>)>,
+}
+
+impl RunState {
+    fn finish(&mut self, run_id: u64) {
+        if self
+            .running
+            .as_ref()
+            .is_some_and(|(id, _, _)| *id == run_id)
+        {
+            self.running = None;
+        }
+    }
+}
+
+const RUN_IN_PROGRESS: &str = "an import is already in progress";
+
+/// Mint a run id and store the task `spawn` starts for it, or refuse while
+/// another run is in progress. The lock is held across `spawn`, so the task
+/// cannot clear its entry before it is stored.
+fn begin(
+    imports: &Imports,
+    spawn: impl FnOnce(u64, Arc<AtomicBool>) -> tauri::async_runtime::JoinHandle<()>,
+) -> Result<u64, String> {
+    let mut state = index::lock(&imports.0);
+    if state.running.is_some() {
+        return Err(RUN_IN_PROGRESS.to_string());
+    }
+    state.next_id += 1;
+    let run_id = state.next_id;
+    let cancel = Arc::new(AtomicBool::new(false));
+    let handle = spawn(run_id, cancel.clone());
+    state.running = Some((run_id, cancel, handle));
+    Ok(run_id)
+}
+
+/// One file that could not be copied.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Failure {
+    path: String,
+    message: String,
+}
+
+/// What a run did: the files copied, the files skipped (by the plan, or
+/// found at the destination with their size when their turn came), the
+/// failures, whether it was canceled, the bytes copied, the time it took, and
+/// the destination folders that got files to copy, in date order.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Ran {
+    copied: usize,
+    skipped: usize,
+    failed: Vec<Failure>,
+    canceled: bool,
+    bytes: u64,
+    elapsed_ms: u64,
+    folders: Vec<String>,
+}
+
+/// Create the destination folders of `plan` that get a file and copy its
+/// `Copy` items in plan order (date, then name, each RAW followed by its
+/// sidecars). The copy re-checks each destination just before writing; a
+/// file that appeared there since the preview counts as skipped when it has
+/// the source's size and as a failure otherwise. `progress` gets each copy
+/// progress with the destination of the file in flight.
+fn run_plan(
+    plan: &Plan,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(&copy::Progress, &Path),
+) -> Ran {
+    let mut skipped = 0;
+    let mut failed = Vec::new();
+    let mut folders = Vec::new();
+    let mut jobs = Vec::new();
+    let mut sizes = Vec::new();
+    for destination in &plan.destinations {
+        skipped += destination
+            .items
+            .iter()
+            .filter(|item| item.decision == Decision::Skip)
+            .count();
+        let copies: Vec<&Planned> = destination
+            .items
+            .iter()
+            .filter(|item| item.decision == Decision::Copy)
+            .collect();
+        if copies.is_empty() {
+            continue;
+        }
+        if let Err(e) = fs::create_dir_all(&destination.path) {
+            let message = format!("create {}: {e}", destination.path.display());
+            failed.extend(copies.iter().map(|item| Failure {
+                path: item.src.to_string_lossy().into_owned(),
+                message: message.clone(),
+            }));
+            continue;
+        }
+        folders.push(destination.path.to_string_lossy().into_owned());
+        for item in copies {
+            jobs.push(copy::Job {
+                src: item.src.clone(),
+                dst: item.dst.clone(),
+            });
+            sizes.push(item.size);
+        }
+    }
+    let summary = copy::copy_files(&jobs, cancel, |p| progress(&p, &jobs[p.job].dst));
+    let mut copied = 0;
+    for ((job, size), outcome) in jobs.iter().zip(&sizes).zip(&summary.results) {
+        match outcome {
+            copy::Outcome::Copied(_) => copied += 1,
+            copy::Outcome::Failed(_) if fs::metadata(&job.dst).is_ok_and(|m| m.len() == *size) => {
+                skipped += 1
+            }
+            copy::Outcome::Failed(message) => failed.push(Failure {
+                path: job.src.to_string_lossy().into_owned(),
+                message: message.clone(),
+            }),
+            copy::Outcome::NotRun => {}
+        }
+    }
+    Ran {
+        copied,
+        skipped,
+        failed,
+        canceled: summary.canceled,
+        bytes: summary.bytes,
+        elapsed_ms: u64::try_from(summary.elapsed.as_millis()).unwrap_or(u64::MAX),
+        folders,
+    }
+}
+
+/// The `import:` line a run leaves in `Riffle.log`, so its throughput can be
+/// compared with Explorer's.
+fn log_line(source: &str, root: &str, ran: &Ran) -> String {
+    let seconds = ran.elapsed_ms as f64 / 1000.0;
+    let mb_per_s = if seconds > 0.0 {
+        ran.bytes as f64 / 1_000_000.0 / seconds
+    } else {
+        0.0
+    };
+    format!(
+        "import: files={} bytes={} mb_per_s={mb_per_s:.1} skipped={} failed={} canceled={} source={source} root={root} in {}ms",
+        ran.copied,
+        ran.bytes,
+        ran.skipped,
+        ran.failed.len(),
+        ran.canceled,
+        ran.elapsed_ms
+    )
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct RunProgress {
+    run_id: u64,
+    files_done: usize,
+    files_total: usize,
+    bytes_done: u64,
+    bytes_total: u64,
+    file: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Done {
+    run_id: u64,
+    #[serde(flatten)]
+    ran: Ran,
+}
+
+/// Copy the previewed plan `preview_id` in the background and return the
+/// run's id. Streams `import-progress` and ends with one `import-done`, which
+/// follows every progress event of the run because the copy only returns
+/// after its last progress callback. The index is not touched.
+#[tauri::command]
+pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<u64, String> {
+    let (source, root, plan) = match &*index::lock(&app.state::<ImportPreviews>().plan) {
+        Some((id, previewed)) if *id == preview_id => (
+            previewed.source.clone(),
+            previewed.root.clone(),
+            previewed.plan.clone(),
+        ),
+        _ => return Err("the import preview is out of date; choose Import… again".to_string()),
+    };
+    let imports = app.state::<Imports>();
+    begin(&imports, |run_id, cancel| {
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let ran = run_plan(&plan, &cancel, |p, dst| {
+                let _ = app.emit(
+                    "import-progress",
+                    RunProgress {
+                        run_id,
+                        files_done: p.files_done,
+                        files_total: p.files_total,
+                        bytes_done: p.bytes_done,
+                        bytes_total: p.bytes_total,
+                        file: name_of(dst),
+                    },
+                );
+            });
+            log::info!("{}", log_line(&source, &root, &ran));
+            // Cleared before `import-done`, so a run started in answer to it
+            // is not refused.
+            index::lock(&app.state::<Imports>().0).finish(run_id);
+            let _ = app.emit("import-done", Done { run_id, ran });
+        })
+    })
+}
+
+/// Ask the run `run_id` to stop before its next file; a finished or unknown
+/// run is ignored.
+#[tauri::command]
+pub async fn import_cancel(app: tauri::AppHandle, run_id: u64) {
+    if let Some((id, cancel, _)) = &index::lock(&app.state::<Imports>().0).running {
+        if *id == run_id {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1027,5 +1284,173 @@ mod tests {
         assert!(refusal(&settings("", DEFAULT_PATTERN)).is_some());
         assert!(refusal(&settings("D:\\Photos", "%H")).is_some());
         assert_eq!(refusal(&settings("D:\\Photos", DEFAULT_PATTERN)), None);
+    }
+
+    /// A JPEG holding only an Exif APP1 with `DateTimeOriginal`, which is all
+    /// the preview reads, padded to `size` bytes past its end marker.
+    fn jpeg(datetime: &str, size: usize) -> Vec<u8> {
+        let mut tiff = b"II".to_vec();
+        tiff.extend_from_slice(&42u16.to_le_bytes());
+        tiff.extend_from_slice(&8u32.to_le_bytes());
+        // IFD0 at 8: the Exif IFD pointer, pointing at 26.
+        tiff.extend_from_slice(&1u16.to_le_bytes());
+        tiff.extend_from_slice(&0x8769u16.to_le_bytes());
+        tiff.extend_from_slice(&4u16.to_le_bytes());
+        tiff.extend_from_slice(&1u32.to_le_bytes());
+        tiff.extend_from_slice(&26u32.to_le_bytes());
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+        // Exif IFD at 26: DateTimeOriginal, its value at 44.
+        tiff.extend_from_slice(&1u16.to_le_bytes());
+        tiff.extend_from_slice(&0x9003u16.to_le_bytes());
+        tiff.extend_from_slice(&2u16.to_le_bytes());
+        tiff.extend_from_slice(&20u32.to_le_bytes());
+        tiff.extend_from_slice(&44u32.to_le_bytes());
+        tiff.extend_from_slice(&0u32.to_le_bytes());
+        tiff.extend_from_slice(datetime.as_bytes());
+        tiff.push(0);
+        let mut payload = b"Exif\0\0".to_vec();
+        payload.extend_from_slice(&tiff);
+        let mut out = vec![0xFF, 0xD8, 0xFF, 0xE1];
+        out.extend_from_slice(&((payload.len() + 2) as u16).to_be_bytes());
+        out.extend_from_slice(&payload);
+        out.extend_from_slice(&[0xFF, 0xD9]);
+        out.resize(out.len().max(size), 0);
+        out
+    }
+
+    fn copies(plan: &Plan) -> usize {
+        plan.destinations
+            .iter()
+            .flat_map(|d| &d.items)
+            .filter(|item| item.decision == Decision::Copy)
+            .count()
+    }
+
+    fn import_case(name: &str) -> (PathBuf, PathBuf, ImportSettings) {
+        let dir = temp_dir(name);
+        let card = dir.join("card").join("DCIM").join("100MSDCF");
+        fs::create_dir_all(&card).unwrap();
+        fs::write(card.join("DSC00001.JPG"), jpeg("2026:10:24 07:00:00", 3000)).unwrap();
+        fs::write(card.join("DSC00002.JPG"), jpeg("2026:10:25 08:00:00", 5000)).unwrap();
+        fs::write(card.join("DSC00003.JPG"), b"no exif").unwrap();
+        let root = dir.join("Photos");
+        let settings = ImportSettings {
+            root: root.to_string_lossy().into_owned(),
+            pattern: DEFAULT_PATTERN.to_string(),
+        };
+        (dir.join("card"), root, settings)
+    }
+
+    #[test]
+    fn a_run_copies_the_plan_and_a_second_import_copies_nothing() {
+        let (card, root, settings) = import_case("run");
+
+        let first = plan_dir(&card, &settings).unwrap();
+        assert_eq!(copies(&first), 2);
+        let mut last = None;
+        let ran = run_plan(&first, &AtomicBool::new(false), |p, _| last = Some(*p));
+
+        let day1 = root.join("2026").join("2026-10-24");
+        let day2 = root.join("2026").join("2026-10-25");
+        assert_eq!(
+            ran,
+            Ran {
+                copied: 2,
+                skipped: 0,
+                failed: Vec::new(),
+                canceled: false,
+                bytes: 8000,
+                elapsed_ms: ran.elapsed_ms,
+                folders: vec![
+                    day1.to_string_lossy().into_owned(),
+                    day2.to_string_lossy().into_owned(),
+                ],
+            }
+        );
+        let last = last.unwrap();
+        assert_eq!((last.files_done, last.bytes_done), (2, 8000));
+        let src = card.join("DCIM").join("100MSDCF").join("DSC00001.JPG");
+        let dst = day1.join("DSC00001.JPG");
+        assert_eq!(fs::read(&dst).unwrap(), fs::read(&src).unwrap());
+        assert_eq!(
+            fs::metadata(&dst).unwrap().modified().unwrap(),
+            fs::metadata(&src).unwrap().modified().unwrap()
+        );
+        assert!(day2.join("DSC00002.JPG").is_file());
+
+        let second = plan_dir(&card, &settings).unwrap();
+        assert_eq!(copies(&second), 0);
+        assert_eq!(
+            summarize(Some(1), String::new(), &second).totals.copy_count,
+            0
+        );
+        let ran = run_plan(&second, &AtomicBool::new(false), |_, _| {});
+        assert_eq!((ran.copied, ran.skipped, ran.bytes), (0, 2, 0));
+        assert!(ran.failed.is_empty());
+        assert!(ran.folders.is_empty());
+        fs::remove_dir_all(card.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_file_that_appears_after_the_preview_is_skipped_or_failed_never_overwritten() {
+        let (card, root, settings) = import_case("appeared");
+        let plan = plan_dir(&card, &settings).unwrap();
+        let day1 = root.join("2026").join("2026-10-24");
+        let day2 = root.join("2026").join("2026-10-25");
+        fs::create_dir_all(&day1).unwrap();
+        fs::create_dir_all(&day2).unwrap();
+        fs::write(day1.join("DSC00001.JPG"), vec![1u8; 3000]).unwrap();
+        fs::write(day2.join("DSC00002.JPG"), b"other").unwrap();
+
+        let ran = run_plan(&plan, &AtomicBool::new(false), |_, _| {});
+
+        assert_eq!((ran.copied, ran.skipped), (0, 1));
+        assert_eq!(ran.failed.len(), 1);
+        assert!(ran.failed[0].path.ends_with("DSC00002.JPG"));
+        assert_eq!(fs::read(day2.join("DSC00002.JPG")).unwrap(), b"other");
+        fs::remove_dir_all(card.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn a_canceled_run_copies_nothing_more() {
+        let (card, _, settings) = import_case("cancel");
+        let plan = plan_dir(&card, &settings).unwrap();
+
+        let ran = run_plan(&plan, &AtomicBool::new(true), |_, _| {});
+
+        assert!(ran.canceled);
+        assert_eq!((ran.copied, ran.bytes), (0, 0));
+        assert!(ran.failed.is_empty());
+        fs::remove_dir_all(card.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn the_log_line_has_the_throughput_source_and_root() {
+        let ran = Ran {
+            copied: 3,
+            skipped: 1,
+            failed: Vec::new(),
+            canceled: false,
+            bytes: 50_000_000,
+            elapsed_ms: 2000,
+            folders: Vec::new(),
+        };
+        assert_eq!(
+            log_line("E:\\DCIM", "D:\\Photos", &ran),
+            "import: files=3 bytes=50000000 mb_per_s=25.0 skipped=1 failed=0 canceled=false source=E:\\DCIM root=D:\\Photos in 2000ms"
+        );
+    }
+
+    #[test]
+    fn a_second_import_is_refused_while_one_runs() {
+        let imports = Imports::default();
+        let first = begin(&imports, |_, _| tauri::async_runtime::spawn_blocking(|| {})).unwrap();
+        assert_eq!(
+            begin(&imports, |_, _| unreachable!()),
+            Err(RUN_IN_PROGRESS.to_string())
+        );
+        index::lock(&imports.0).finish(first);
+        let second = begin(&imports, |_, _| tauri::async_runtime::spawn_blocking(|| {}));
+        assert_eq!(second, Ok(first + 1));
     }
 }
