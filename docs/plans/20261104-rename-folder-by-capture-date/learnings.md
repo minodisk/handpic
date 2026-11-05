@@ -82,6 +82,30 @@
 - Removing the `#[cfg_attr(not(test), expect(dead_code))]` from
   `Index::move_file` / `Index::forget_dir` was required, as Step 2 planned.
 
+## Step 4: the `Rename by Capture Date…` item and its dialog
+
+- The plan says a press during a scan is refused "like the sidecar
+  commands", but `rewriteSidecarsIn` / `deleteSidecarsIn` do go through
+  `whenIdle` (held for the scan's end). The date flow follows the plan's
+  intent instead: no `whenIdle`, the preview is invoked at once and the
+  backend's `SCAN_RUNNING` refusal lands on the status line.
+- The dialog is its own `#datefolder-dialog` (not the sidecar dialog
+  reused), since it needs the undated line, the removal note and the
+  disabled reason as separate paragraphs; empty ones are hidden with
+  `#datefolder-box p:empty`. With a collision or an already named folder,
+  `Run` is disabled and focus goes to `Cancel`.
+- `renameFolder`'s post-rename continuation is now `folderRenamed(path,
+  newPath, name, warning)` in `main.ts`, shared with the one-date result
+  (the name passed is `baseName` of the returned path).
+- A split re-lists the parent with `folders.refresh(parentOf(dir))`;
+  `parentOf` (in `datefolder.ts`) keeps a root's separator (`E:\DCIM` ->
+  `E:\`, `/DCIM` -> `/`) so it names the tree's root node.
+- Python's text-mode write on Windows turns `\n` into `\r\n`; files
+  edited by a script need `newline=""` or a `sed -i 's/\r$//'` afterwards.
+- `pnpm` is not on the Git Bash `PATH`; `mise exec -- pnpm exec vp check`
+  and `mise exec -- node ./node_modules/vite-plus/bin/vp test` run the
+  frontend checks alone.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Windows)**: split a folder that is expanded in the
@@ -100,3 +124,26 @@
   `rename::file_plan` has. Basis: Step 3 implementation of
   `datefolder::move_plan`; files `crates/app/src/datefolder.rs`,
   `crates/app/src/rename.rs`.
+- After a split, the undo history's judgment entries still name the moved
+  files' old paths (only a folder rename's trash entries are rebased, by
+  `folderRenamed`); an undo of a judgment made before the split would write
+  to a path that no longer exists. `date_folder_run`'s `Split` does not list
+  the per-file moves, so the frontend cannot rebase them. Basis: Step 4
+  implementation of `runDateFolder`; files `crates/app/ui/src/main.ts`,
+  `crates/app/src/datefolder.rs`.
+- **Pending manual check (Windows / macOS)**: in the running app, right-click
+  a folder in the tree and choose `Rename by Capture Date…` on (a) a folder
+  of one date: the dialog reads `Rename <name> to YYYY-MM-DD?` with the
+  file count, `Run` renames it in the tree and reopens it if it was open;
+  (b) a folder of two dates with an undated file: one row per date folder,
+  the undated line and the removal note show, `Run` creates the sibling
+  folders, the tree re-lists the parent, the original stays with the
+  undated file and is re-listed if open; (c) the same without an undated
+  file while open: the original disappears from the tree and the first date
+  folder opens; (d) a sibling already named a target date: the reason shows
+  in red and `Run` is disabled; (e) during a scan: the status line shows the
+  scan message and no dialog opens. Step 4's checkbox was ticked on the
+  automated criteria (Vitest on the text helpers and the flow, `mise run
+  ci`); the dialog and the tree's follow-up were not exercised in a running
+  app. Basis: plan Step 4 Done when; files `crates/app/ui/src/main.ts`,
+  `crates/app/ui/index.html`.
