@@ -158,6 +158,23 @@ import {
   splitStatus,
   undatedLine,
 } from "./datefolder.js";
+import {
+  COLLISIONS_HEADING,
+  IMPORT_RUNNING_NOTE,
+  type ImportDone,
+  ImportFlow,
+  type ImportPreview,
+  type ImportProgress,
+  UNDATED_HEADING,
+  canRun,
+  collisionItems,
+  doneStatus as importDoneStatus,
+  failureText as importFailureText,
+  folderRows,
+  importNote,
+  progressStatus as importProgressStatus,
+  totalLine,
+} from "./import.js";
 import { UncaughtGate, uncaughtLine } from "./uncaught.js";
 import { dwellTimer, switchesFolder, viewedWriter } from "./viewed.js";
 import { type PerfSample, PerfModel, WINDOW_MS, latencyStart } from "./perf.js";
@@ -345,6 +362,8 @@ let scanId: number | null = null;
 let scanning: string | null = null;
 // How far the sequencing run got, or null when none runs.
 let sequencing: string | null = null;
+// How far the import run got, or null when none runs.
+let importing: string | null = null;
 // True between `start_scan` and its `faces-done`, i.e. through both scan
 // passes. A rescan asked for while it is true is deferred (`resyncPending`)
 // rather than canceling the scan.
@@ -828,6 +847,9 @@ function renderMeta(): void {
   if (sequencing !== null) {
     metaStatusEl.append(line("note", sequencing));
   }
+  if (importing !== null) {
+    metaStatusEl.append(line("note", importing));
+  }
   if (idle.waiting !== null) {
     metaStatusEl.append(line("note", `${idle.waiting}: waiting for the scan to finish`));
   }
@@ -901,6 +923,7 @@ function confirmTrashFiles(paths: string[]): void {
     sequenceFlow.busy ||
     sidecarFlow.busy ||
     dateFolderFlow.busy ||
+    importFlow.busy ||
     !trashFlow.start({ dir: openDir, paths })
   ) {
     return;
@@ -940,6 +963,7 @@ function trashFilesIn(dir: string, paths: string[]): void {
       sidecarFlow.busy ||
       sequenceFlow.busy ||
       dateFolderFlow.busy ||
+      importFlow.busy ||
       (!own && trashFlow.busy)
     ) {
       done();
@@ -1098,6 +1122,7 @@ function startSequence(): boolean {
     !trashFlow.busy &&
     !sidecarFlow.busy &&
     !dateFolderFlow.busy &&
+    !importFlow.busy &&
     sequenceFlow.start()
   );
 }
@@ -1282,6 +1307,7 @@ function rewriteSidecarsIn(dir: string): void {
       trashFlow.busy ||
       sequenceFlow.busy ||
       dateFolderFlow.busy ||
+      importFlow.busy ||
       !sidecarFlow.start({ kind: "rewrite", dir })
     ) {
       return;
@@ -1308,6 +1334,7 @@ function deleteSidecarsIn(dir: string): void {
       trashFlow.busy ||
       sequenceFlow.busy ||
       dateFolderFlow.busy ||
+      importFlow.busy ||
       !sidecarFlow.start({ kind: "delete", dir })
     ) {
       return;
@@ -1465,6 +1492,7 @@ function renameByDateIn(dir: string): void {
     trashFlow.busy ||
     sequenceFlow.busy ||
     sidecarFlow.busy ||
+    importFlow.busy ||
     !dateFolderFlow.start(dir)
   ) {
     return;
@@ -1572,6 +1600,164 @@ function dateFolderKeydown(event: KeyboardEvent): void {
 
 dateFolderRunButton.addEventListener("click", runDateFolder);
 dateFolderCancelButton.addEventListener("click", dismissDateFolder);
+
+// The folder tree's `Import…`: plan copying every photo under the
+// right-clicked folder (a memory card's root included) into the date folders
+// of the import settings, then run the copy with progress and cancel. The run
+// does not touch the index nor wait for a scan. Its errors join the sticky
+// `errors` list, keyed by path.
+const importFlow = new ImportFlow();
+// Only its key decisions are used: Escape and Tab, as in the settings modal.
+const importKeys = new SettingsModal();
+const importDialog = document.getElementById("import-dialog") as HTMLDivElement;
+const importSource = document.getElementById("import-source") as HTMLSpanElement;
+const importTotal = document.getElementById("import-total") as HTMLParagraphElement;
+const importRows = document.getElementById("import-rows") as HTMLUListElement;
+const importCollisionsHeading = document.getElementById(
+  "import-collisions-heading",
+) as HTMLParagraphElement;
+const importCollisions = document.getElementById("import-collisions") as HTMLUListElement;
+const importUndatedHeading = document.getElementById(
+  "import-undated-heading",
+) as HTMLParagraphElement;
+const importUndated = document.getElementById("import-undated") as HTMLUListElement;
+const importNoteEl = document.getElementById("import-note") as HTMLParagraphElement;
+const importRunning = document.getElementById("import-running") as HTMLParagraphElement;
+const importRunButton = document.getElementById("import-run") as HTMLButtonElement;
+const importCancelButton = document.getElementById("import-cancel") as HTMLButtonElement;
+importRunning.textContent = IMPORT_RUNNING_NOTE;
+
+function importFrom(dir: string): void {
+  if (
+    !formatDialog.hidden ||
+    settings.isOpen ||
+    trashFlow.busy ||
+    sequenceFlow.busy ||
+    sidecarFlow.busy ||
+    dateFolderFlow.busy ||
+    !importFlow.start(dir)
+  ) {
+    return;
+  }
+  window.__TAURI__.core
+    .invoke<ImportPreview>("import_preview", { dir })
+    .then((preview) => {
+      if (importFlow.previewed(preview.id)) {
+        showImportPreview(preview);
+      }
+    })
+    .catch(failImport);
+}
+
+function failImport(err: unknown): void {
+  const dir = importFlow.dir;
+  importFlow.fail();
+  errors.add(
+    dir ?? "import",
+    dir === null ? String(err) : importFailureText({ path: dir, message: String(err) }),
+  );
+  setStatus();
+}
+
+function showImportPreview(preview: ImportPreview): void {
+  setFilterMenuOpen(false);
+  setSortMenuOpen(false);
+  closeContextMenu();
+  importSource.textContent = preview.source;
+  importTotal.textContent = preview.refusal === null ? totalLine(preview) : "";
+  importRows.replaceChildren(...folderRows(preview).map(listItem));
+  const collisions = collisionItems(preview);
+  importCollisionsHeading.textContent = collisions.length === 0 ? "" : COLLISIONS_HEADING;
+  importCollisions.replaceChildren(...collisions.map(listItem));
+  importUndatedHeading.textContent = preview.undated.length === 0 ? "" : UNDATED_HEADING;
+  importUndated.replaceChildren(...preview.undated.map(listItem));
+  importNoteEl.textContent = importNote(preview) ?? "";
+  importRunning.hidden = true;
+  importRunButton.disabled = !canRun(preview);
+  importDialog.hidden = false;
+  (importRunButton.disabled ? importCancelButton : importRunButton).focus();
+}
+
+function closeImportDialog(): void {
+  importDialog.hidden = true;
+}
+
+function runImport(): void {
+  const previewId = importFlow.run();
+  if (previewId === null) {
+    return;
+  }
+  importRunButton.disabled = true;
+  importRunning.hidden = false;
+  importCancelButton.focus();
+  importing = importProgressStatus(0, 0);
+  renderMeta();
+  window.__TAURI__.core
+    .invoke<number>("import_run", { previewId })
+    .then((runId) => {
+      const { done, cancel } = importFlow.started(runId);
+      if (done !== null) {
+        finishImport(done);
+      } else if (cancel) {
+        void window.__TAURI__.core.invoke("import_cancel", { runId });
+      }
+    })
+    .catch((err: unknown) => {
+      closeImportDialog();
+      importing = null;
+      failImport(err);
+    });
+}
+
+function finishImport(payload: ImportDone): void {
+  if (!importFlow.done(payload)) {
+    return;
+  }
+  closeImportDialog();
+  for (const failure of payload.failed) {
+    errors.add(failure.path, importFailureText(failure));
+  }
+  importing = null;
+  setStatus(importDoneStatus(payload));
+}
+
+function dismissImport(): void {
+  const decision = importFlow.dismiss();
+  if (decision.kind === "close") {
+    closeImportDialog();
+  } else if (decision.kind === "cancel" && decision.runId !== null) {
+    void window.__TAURI__.core.invoke("import_cancel", { runId: decision.runId });
+  }
+}
+
+// Every key stops here while the dialog is open, so none reaches the strip.
+function importKeydown(event: KeyboardEvent): void {
+  const decision = importKeys.key(keyName(event));
+  if (decision.kind === "close") {
+    event.preventDefault();
+    dismissImport();
+  } else if (decision.kind === "focus") {
+    event.preventDefault();
+    const buttons = [importRunButton, importCancelButton].filter((b) => !b.disabled);
+    const from = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    buttons[cycleFocus(buttons.length, from, decision.step)].focus();
+  }
+}
+
+importRunButton.addEventListener("click", runImport);
+importCancelButton.addEventListener("click", dismissImport);
+
+void window.__TAURI__.event.listen<ImportProgress>("import-progress", ({ payload }) => {
+  if (!importFlow.accepts(payload.runId)) {
+    return;
+  }
+  importing = importProgressStatus(payload.filesDone, payload.filesTotal);
+  renderMeta();
+});
+
+void window.__TAURI__.event.listen<ImportDone>("import-done", ({ payload }) => {
+  finishImport(payload);
+});
 
 // Set the transient note, or clear it when called with no argument.
 function setStatus(extra?: string): void {
@@ -3677,7 +3863,8 @@ function renameFile(path: string, name: string): void {
 // A folder clicked in the tree opens the way a drop does; a right-click
 // offers to reveal it in the OS file manager, to copy its path or name, to
 // rename it, to expand or collapse every subfolder under it, to rewrite its
-// sidecars from the index or delete them, or to sequence its JPEGs.
+// sidecars from the index or delete them, to sequence its JPEGs, or to import
+// the photos under it.
 folders.init(
   (path) => {
     if (!formatGate.isOpen) {
@@ -3733,6 +3920,9 @@ folders.init(
             break;
           case "sequenceTimestamps":
             sequenceTimestampsOf(path);
+            break;
+          case "importFolder":
+            importFrom(path);
             break;
         }
       });
@@ -3991,7 +4181,7 @@ function openFolder(): void {
 }
 
 // The menu accelerators of keymap actions (Open Folder, Undo, Redo) stay out
-// of the way while the settings, the sequence, the trash or the sidecar modal is open, or a folder
+// of the way while the settings, the sequence, the trash, the sidecar or the import modal is open, or a folder
 // or file name is being edited, as their keys do.
 function modalOpen(): boolean {
   return (
@@ -4000,6 +4190,7 @@ function modalOpen(): boolean {
     trashFlow.busy ||
     sidecarFlow.isOpen ||
     dateFolderFlow.isOpen ||
+    importFlow.isOpen ||
     folders.isEditing() ||
     strip.isEditing()
   );
@@ -4845,7 +5036,8 @@ void window.__TAURI__.event.listen("open-settings", () => {
     sequenceFlow.busy ||
     trashFlow.busy ||
     sidecarFlow.busy ||
-    dateFolderFlow.busy
+    dateFolderFlow.busy ||
+    importFlow.busy
   ) {
     return;
   }
@@ -4908,6 +5100,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (dateFolderFlow.isOpen) {
     dateFolderKeydown(event);
+    return;
+  }
+  if (importFlow.isOpen) {
+    importKeydown(event);
     return;
   }
   // A live file rename takes every key: Enter and Escape end it, the rest

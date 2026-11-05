@@ -106,6 +106,41 @@
   sidecars (`copyCount` is files, not photos), matching what the run's
   progress will count.
 
+## Step 4: The run, the dialog and `Import…`
+
+- `import_run(preview_id)` clones the stored plan rather than taking it, so
+  a refused second run (one at a time) does not lose the preview; running the
+  same preview again just finds every file at its destination.
+- The stored preview now also keeps the source folder and the root
+  (`Previewed`), which the `import:` log line names; `import_preview`'s walk
+  and plan moved into `plan_dir`, which the tests call directly.
+- The copy pipeline re-checks each destination before reading and again
+  before the rename, failing the job with `exists: ...`. `run_plan` turns a
+  failed job whose destination now exists with the planned size into a skip
+  (imported meanwhile), so it does not have to match the message text; any
+  other failure, a different-size file there included, stays a failure and
+  the existing file is untouched.
+- Destination folders are created only for those with a file to copy, all
+  before the copy begins (Step 5 opens the first one at run start); a folder
+  that cannot be created fails its files with the OS error and the run goes
+  on with the others. `import-done`'s `folders` lists those created.
+- The `import:` line: `import: files=N bytes=N mb_per_s=X skipped=N
+  failed=N canceled=B source=... root=... in Nms` (MB = 10^6 bytes, as in
+  the dialog's sizes).
+- The payloads are camelCase (`runId`, `filesDone`, ...) like Step 3's
+  preview, unlike `sequence-*`'s snake_case; `ImportFlow` follows
+  `SequenceFlow` minus its vestigial `picking` phase (`start(dir)` goes
+  straight to previewing) and keeps the preview id for `run()`. A refused
+  preview (`id: null`) still opens the dialog with the reason and Run
+  disabled.
+- `Import…` is its own last group in the folder menu, offered on roots.
+  `datefolder.ts`'s `Rename by Capture Date` was merged after the plan was
+  written; its start guard and every other flow's now include
+  `importFlow.busy`, and `modalOpen` / the keydown routing `importFlow.isOpen`.
+- The re-import criterion is covered by
+  `a_run_copies_the_plan_and_a_second_import_copies_nothing` on temp dirs
+  with Exif-only JPEGs (the sequence tests' builder, padded to a size).
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, the settings modal's `Import` tab): on
@@ -132,3 +167,22 @@
   such as a sidecar the app writes for a RAW that just landed, would be
   replaced. A per-OS no-replace rename would close it. Related file:
   `crates/core/src/copy.rs`.
+- Pending manual check (Step 4, the `Import…` flow in the running app): on
+  Windows with a memory card (or any folder of RAWs / JPEGs) and the
+  destination root set in Settings > Import, right-click the card's root in
+  the folder tree and choose `Import…`. Expect the dialog to list the source,
+  one row per date folder with its file count, size and skipped count, the
+  colliding and undated names in their own lists, and Run enabled. Run it:
+  the status line shows `importing N / M`, Cancel (or Escape) stops before
+  the next file and the dialog closes with `Import canceled, ...`; an
+  uncanceled run ends with `Imported N files (X MB)...`, the date folders
+  hold the copies with the card's modified times and no `.riffle-tmp` file,
+  and `Riffle.log` has one `import:` line. Choose `Import…` again on the
+  same card: expect the note "Nothing left to copy" and Run disabled. With
+  the root unset, expect the refusal in the dialog and Run disabled. Also
+  check that the other folder-menu dialogs (Sequence, Rename by Capture
+  Date, the sidecar items) and Settings do not open while the import dialog
+  is up. The step was ticked on the automated criteria (unit tests,
+  `mise run ci`); this GUI check was not run here. Related files:
+  `crates/app/src/import.rs`, `crates/app/ui/src/import.ts`,
+  `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`.
