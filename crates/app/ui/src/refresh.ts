@@ -116,7 +116,8 @@ export type RescanTrigger =
   | "trash"
   | "restore"
   | "rename"
-  | "ai";
+  | "ai"
+  | "import";
 
 // One `Riffle.log` line per `resync()` call: `defer` when a scan (or a
 // listing, or a deferred operation's invoke) holds it off, `start` when it

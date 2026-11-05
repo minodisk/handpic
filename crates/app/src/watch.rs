@@ -215,6 +215,21 @@ mod tests {
         assert!(!triggers(&paths(&["a.xmp", "b.arw.dop"])));
     }
 
+    /// An import writes `<name>.riffle-tmp` and renames it into place: the
+    /// writes do not trigger, the rename's event (which names both paths on
+    /// some platforms) does.
+    #[test]
+    fn an_import_temp_file_triggers_only_once_renamed() {
+        assert!(!triggers(&paths(&["DSC00001.ARW.riffle-tmp"])));
+        assert!(!triggers(&paths(&["DSC00001.JPG.riffle-tmp"])));
+        assert!(!triggers(&paths(&["DSC00001.ARW.dop.riffle-tmp"])));
+        assert!(triggers(&paths(&["DSC00001.ARW"])));
+        assert!(triggers(&paths(&[
+            "DSC00001.ARW.riffle-tmp",
+            "DSC00001.ARW"
+        ])));
+    }
+
     #[test]
     fn raw_paths_and_empty_events_trigger() {
         assert!(triggers(&paths(&["a.arw"])));

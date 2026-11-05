@@ -40,6 +40,11 @@ export type ImportProgress = {
   file: string;
 };
 
+// What `import_run` returns: the run's id and the destination folders it
+// created before copying, in date order. The first is opened at once so the
+// culling can start while the copy fills it.
+export type ImportStarted = { runId: number; folders: string[] };
+
 // The `import-done` payload: `folders` are the destination folders that got
 // files to copy, in date order.
 export type ImportDone = {
@@ -151,7 +156,9 @@ export function doneStatus(done: ImportDone): string {
 export type Phase = "idle" | "previewing" | "previewed" | "running" | "done";
 
 // The flow of one import, from the tree's menu item to `import-done`. The
-// dialog is open while previewed and while running.
+// dialog is open while previewed and until the run has started; it then
+// steps aside so the strip can be culled while the copy runs, and the tree's
+// `Import…` brings it back (`reopen`) to cancel the run.
 //
 // `import_run` returns the run id after the run has started, so its events
 // can arrive before the id is known: an `import-done` that comes first is
@@ -164,9 +171,10 @@ export class ImportFlow {
   runId: number | null = null;
   private early: ImportDone | null = null;
   private cancelAsked = false;
+  private aside = false;
 
   get isOpen(): boolean {
-    return this.phase === "previewed" || this.phase === "running";
+    return this.phase === "previewed" || (this.phase === "running" && !this.aside);
   }
 
   // True from `start()` through `done()`/`fail()`: the flow is under way even
@@ -187,6 +195,16 @@ export class ImportFlow {
     this.runId = null;
     this.early = null;
     this.cancelAsked = false;
+    this.aside = false;
+    return true;
+  }
+
+  // While a run is under way with its dialog aside: show the dialog again.
+  reopen(): boolean {
+    if (this.phase !== "running" || !this.aside) {
+      return false;
+    }
+    this.aside = false;
     return true;
   }
 
@@ -215,7 +233,8 @@ export class ImportFlow {
   }
 
   // `import_run` returned `runId`: the `import-done` that already came, if
-  // any, and whether a cancel was asked for in the meantime.
+  // any, and whether a cancel was asked for in the meantime. Otherwise the
+  // dialog steps aside; a cancel keeps it up until its `import-done`.
   started(runId: number): { done: ImportDone | null; cancel: boolean } {
     if (this.phase !== "running") {
       return { done: null, cancel: false };
@@ -223,7 +242,9 @@ export class ImportFlow {
     this.runId = runId;
     const done = this.early?.runId === runId ? this.early : null;
     this.early = null;
-    return { done, cancel: done === null && this.cancelAsked };
+    const cancel = done === null && this.cancelAsked;
+    this.aside = done === null && !cancel;
+    return { done, cancel };
   }
 
   accepts(runId: number): boolean {

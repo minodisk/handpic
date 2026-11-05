@@ -141,6 +141,65 @@
   `a_run_copies_the_plan_and_a_second_import_copies_nothing` on temp dirs
   with Exif-only JPEGs (the sequence tests' builder, padded to a size).
 
+## Step 5: Cull while importing
+
+- The first date folder did not exist when the frontend learned of the run:
+  Step 4's `run_plan` created the folders on the `spawn_blocking` task, after
+  `import_run` had returned the run id. The run is now split into
+  `prepare` (creates every destination folder and lines up the jobs) and
+  `run_plan` (copies); `prepare` runs synchronously inside `begin`'s spawn
+  closure (after the one-run-at-a-time check, so a refused run creates
+  nothing), and `import_run` returns `{ runId, folders }`, the created
+  folders in date order. `main.ts` opens `folders[0]` through
+  `openDirectory` with a fresh folder token, always, even over another open
+  folder; `openDirectory` already calls `folders.reveal`.
+- Step 4 kept the import dialog modal for the whole run, which would have
+  made culling during the copy impossible (every key went to
+  `importKeydown`, the backdrop took the mouse). `ImportFlow.started` now
+  puts the dialog aside (`isOpen` false while running) unless a cancel was
+  asked for before the run id came; the status line keeps
+  `importing N / M`, and the tree's `Import…` while a run is under way
+  brings the dialog back (`reopen`) with Cancel. This is a design call made
+  in this step without asking the user; Step 6's docs must describe it.
+  The other flows (Move to Trash, Settings, Sequence, Rename by Capture
+  Date, the sidecar items) still refuse while `importFlow.busy`; flagging,
+  rating and labels work.
+- Code reading of the growing-folder path, no fix needed:
+  - Empty folder: `openDirectory` with `files.length === 0` leaves
+    `meta = null`, `selection = single(undefined)`; the next `resync`'s
+    `refilter(undefined, true, false, previous)` sees the list changed,
+    `anchorAfterFilter` returns `undefined` for an `undefined` anchor so
+    `index = 0`, and `mustReshow(false, files[0], undefined)` is true, so
+    `show()` runs. Covered by a `resume.test.ts` case over the same
+    helpers, plus one for files landing after the current one (it stays,
+    no reshow).
+  - Temp files: the copy writes `<name>.riffle-tmp` and sets the mtime
+    before the rename, so only the rename's event names a listable file;
+    `watch::triggers` drops events whose paths are all temp files or
+    sidecars (new test `an_import_temp_file_triggers_only_once_renamed`).
+    The import's `.xmp` / `.dop` copies are dropped too; they land right
+    after their RAW, inside the RAW's 500 ms debounce window.
+  - Cadence: a `folder-changed` during a scan is deferred to `faces-done`
+    and drained as one rescan; `DEBOUNCE` collapses a burst into one event.
+    The embed pass is not "scanning", so a drained or new rescan cancels it
+    (`scan_folder` joins it) and the next cycle's third pass resumes from
+    the stored embeddings: during a long import with `aiEnabled` on the
+    embeddings mostly fill after the import, the strip is never held back
+    by them.
+  - Tree count: `reveal` expands every node down to the date folder itself,
+    so the date folder is in `watchedFolders` and its `tree-changed`
+    re-lists it with the new `raw_count`.
+  - Another date folder: the open folder's watch is non-recursive on that
+    folder alone, and `folder-changed` is dropped unless its `dir` is
+    `openDir`, so writes into a sibling date folder leave the strip alone
+    (the expanded parent may re-list its children in the tree, no change).
+- One gap found and closed: `list_arw` runs before `scan_folder`'s
+  `watch::set`, so a file renamed into the folder in between is scanned but
+  not in `allFiles` until another trigger. During an import the next file
+  covers it; for the last files, `finishImport` now runs
+  `resync("import")` (a new `RescanTrigger`) when the open folder is one
+  of the run's folders.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, the settings modal's `Import` tab): on
@@ -186,3 +245,32 @@
   `mise run ci`); this GUI check was not run here. Related files:
   `crates/app/src/import.rs`, `crates/app/ui/src/import.ts`,
   `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`.
+- Pending manual check (Step 5, cull while importing): on Windows with a
+  memory card in the reader (`E:\DCIM\...`, never written to) and Settings >
+  Import's root set to a test root such as
+  `D:\Photos\tests\20261106-import-step5\` (delete it afterwards), open any
+  other folder first, then right-click the card's root, choose `Import…`
+  and Run. Expect: the dialog closes at once, the earliest date folder opens
+  (empty at first) and is revealed and selected in the tree with its
+  parents expanded; the first file appears in the strip and in the preview
+  about a second after it lands; the strip keeps growing in batches while
+  the status line shows `importing N / M`, the current file stays current
+  and flags / ratings set meanwhile stay; no `*.riffle-tmp` ever shows in
+  the strip and `Riffle.log` (with Timing logs on) shows `rescan:` lines
+  about once per scan cycle, not one per file; with 500+ files the arrow
+  keys and the preview stay responsive; the date folder's count badge in
+  the tree grows; while files land in the second date folder the strip
+  does not change; `Import…` again during the run brings the dialog back
+  and Cancel stops it. With `aiEnabled` on, expect the embeddings to fill
+  mostly after the import ends, not the strip to stall. The step was ticked
+  on the automated criteria (unit tests, `mise run ci`); this check was not
+  run here. Related files: `crates/app/ui/src/main.ts`,
+  `crates/app/ui/src/import.ts`, `crates/app/src/import.rs`,
+  `crates/app/src/watch.rs`.
+- The import dialog steps aside once the run has started and comes back
+  through the tree's `Import…` (Step 5 implementation, a design call not
+  confirmed by the user). Confirm the user wants this, or another cancel
+  affordance (a clickable status line, a toolbar button). Meanwhile Move to
+  Trash, Settings and the other folder-menu flows still refuse while the
+  import runs (`importFlow.busy`). Step 6's docs must describe the reopen.
+  Related files: `crates/app/ui/src/import.ts`, `crates/app/ui/src/main.ts`.

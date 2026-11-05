@@ -637,24 +637,30 @@ pub struct Ran {
     folders: Vec<String>,
 }
 
-/// Create the destination folders of `plan` that get a file and copy its
-/// `Copy` items in plan order (date, then name, each RAW followed by its
-/// sidecars). The copy re-checks each destination just before writing; a
-/// file that appeared there since the preview counts as skipped when it has
-/// the source's size and as a failure otherwise. `progress` gets each copy
-/// progress with the destination of the file in flight.
-fn run_plan(
-    plan: &Plan,
-    cancel: &AtomicBool,
-    mut progress: impl FnMut(&copy::Progress, &Path),
-) -> Ran {
-    let mut skipped = 0;
-    let mut failed = Vec::new();
-    let mut folders = Vec::new();
-    let mut jobs = Vec::new();
-    let mut sizes = Vec::new();
+/// A plan made ready to copy: its destination folders created, the jobs to
+/// run with their planned sizes, and what is already known before copying.
+struct Prepared {
+    jobs: Vec<copy::Job>,
+    sizes: Vec<u64>,
+    skipped: usize,
+    failed: Vec<Failure>,
+    folders: Vec<String>,
+}
+
+/// Create the destination folders of `plan` that get a file, before any copy
+/// starts, so the first one can be opened while it is still empty, and line
+/// up its `Copy` items in plan order (date, then name, each RAW followed by
+/// its sidecars). A folder that cannot be created fails its files.
+fn prepare(plan: &Plan) -> Prepared {
+    let mut prepared = Prepared {
+        jobs: Vec::new(),
+        sizes: Vec::new(),
+        skipped: 0,
+        failed: Vec::new(),
+        folders: Vec::new(),
+    };
     for destination in &plan.destinations {
-        skipped += destination
+        prepared.skipped += destination
             .items
             .iter()
             .filter(|item| item.decision == Decision::Skip)
@@ -669,21 +675,43 @@ fn run_plan(
         }
         if let Err(e) = fs::create_dir_all(&destination.path) {
             let message = format!("create {}: {e}", destination.path.display());
-            failed.extend(copies.iter().map(|item| Failure {
+            prepared.failed.extend(copies.iter().map(|item| Failure {
                 path: item.src.to_string_lossy().into_owned(),
                 message: message.clone(),
             }));
             continue;
         }
-        folders.push(destination.path.to_string_lossy().into_owned());
+        prepared
+            .folders
+            .push(destination.path.to_string_lossy().into_owned());
         for item in copies {
-            jobs.push(copy::Job {
+            prepared.jobs.push(copy::Job {
                 src: item.src.clone(),
                 dst: item.dst.clone(),
             });
-            sizes.push(item.size);
+            prepared.sizes.push(item.size);
         }
     }
+    prepared
+}
+
+/// Copy the jobs of `prepared`. The copy re-checks each destination just
+/// before writing; a file that appeared there since the preview counts as
+/// skipped when it has the source's size and as a failure otherwise.
+/// `progress` gets each copy progress with the destination of the file in
+/// flight.
+fn run_plan(
+    prepared: Prepared,
+    cancel: &AtomicBool,
+    mut progress: impl FnMut(&copy::Progress, &Path),
+) -> Ran {
+    let Prepared {
+        jobs,
+        sizes,
+        mut skipped,
+        mut failed,
+        folders,
+    } = prepared;
     let summary = copy::copy_files(&jobs, cancel, |p| progress(&p, &jobs[p.job].dst));
     let mut copied = 0;
     for ((job, size), outcome) in jobs.iter().zip(&sizes).zip(&summary.results) {
@@ -749,12 +777,22 @@ struct Done {
     ran: Ran,
 }
 
-/// Copy the previewed plan `preview_id` in the background and return the
-/// run's id. Streams `import-progress` and ends with one `import-done`, which
-/// follows every progress event of the run because the copy only returns
-/// after its last progress callback. The index is not touched.
+/// What `import_run` returns: the run's id and the destination folders it
+/// created, in date order, which exist (still empty or not) by then.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Started {
+    run_id: u64,
+    folders: Vec<String>,
+}
+
+/// Create the destination folders of the previewed plan `preview_id`, copy
+/// it in the background and return the run's id and those folders. Streams
+/// `import-progress` and ends with one `import-done`, which follows every
+/// progress event of the run because the copy only returns after its last
+/// progress callback. The index is not touched.
 #[tauri::command]
-pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<u64, String> {
+pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<Started, String> {
     let (source, root, plan) = match &*index::lock(&app.state::<ImportPreviews>().plan) {
         Some((id, previewed)) if *id == preview_id => (
             previewed.source.clone(),
@@ -764,10 +802,13 @@ pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<u64, S
         _ => return Err("the import preview is out of date; choose Import… again".to_string()),
     };
     let imports = app.state::<Imports>();
-    begin(&imports, |run_id, cancel| {
+    let mut folders = Vec::new();
+    let run_id = begin(&imports, |run_id, cancel| {
+        let prepared = prepare(&plan);
+        folders.clone_from(&prepared.folders);
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            let ran = run_plan(&plan, &cancel, |p, dst| {
+            let ran = run_plan(prepared, &cancel, |p, dst| {
                 let _ = app.emit(
                     "import-progress",
                     RunProgress {
@@ -786,7 +827,8 @@ pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<u64, S
             index::lock(&app.state::<Imports>().0).finish(run_id);
             let _ = app.emit("import-done", Done { run_id, ran });
         })
-    })
+    })?;
+    Ok(Started { run_id, folders })
 }
 
 /// Ask the run `run_id` to stop before its next file; a finished or unknown
@@ -1348,7 +1390,9 @@ mod tests {
         let first = plan_dir(&card, &settings).unwrap();
         assert_eq!(copies(&first), 2);
         let mut last = None;
-        let ran = run_plan(&first, &AtomicBool::new(false), |p, _| last = Some(*p));
+        let ran = run_plan(prepare(&first), &AtomicBool::new(false), |p, _| {
+            last = Some(*p)
+        });
 
         let day1 = root.join("2026").join("2026-10-24");
         let day2 = root.join("2026").join("2026-10-25");
@@ -1384,10 +1428,32 @@ mod tests {
             summarize(Some(1), String::new(), &second).totals.copy_count,
             0
         );
-        let ran = run_plan(&second, &AtomicBool::new(false), |_, _| {});
+        let ran = run_plan(prepare(&second), &AtomicBool::new(false), |_, _| {});
         assert_eq!((ran.copied, ran.skipped, ran.bytes), (0, 2, 0));
         assert!(ran.failed.is_empty());
         assert!(ran.folders.is_empty());
+        fs::remove_dir_all(card.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn prepare_creates_every_destination_folder_before_any_copy() {
+        let (card, root, settings) = import_case("prepare");
+        let plan = plan_dir(&card, &settings).unwrap();
+
+        let prepared = prepare(&plan);
+
+        let day1 = root.join("2026").join("2026-10-24");
+        let day2 = root.join("2026").join("2026-10-25");
+        assert_eq!(
+            prepared.folders,
+            vec![
+                day1.to_string_lossy().into_owned(),
+                day2.to_string_lossy().into_owned(),
+            ]
+        );
+        assert_eq!(fs::read_dir(&day1).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(&day2).unwrap().count(), 0);
+        assert_eq!(prepared.jobs.len(), 2);
         fs::remove_dir_all(card.parent().unwrap()).unwrap();
     }
 
@@ -1402,7 +1468,7 @@ mod tests {
         fs::write(day1.join("DSC00001.JPG"), vec![1u8; 3000]).unwrap();
         fs::write(day2.join("DSC00002.JPG"), b"other").unwrap();
 
-        let ran = run_plan(&plan, &AtomicBool::new(false), |_, _| {});
+        let ran = run_plan(prepare(&plan), &AtomicBool::new(false), |_, _| {});
 
         assert_eq!((ran.copied, ran.skipped), (0, 1));
         assert_eq!(ran.failed.len(), 1);
@@ -1416,7 +1482,7 @@ mod tests {
         let (card, _, settings) = import_case("cancel");
         let plan = plan_dir(&card, &settings).unwrap();
 
-        let ran = run_plan(&plan, &AtomicBool::new(true), |_, _| {});
+        let ran = run_plan(prepare(&plan), &AtomicBool::new(true), |_, _| {});
 
         assert!(ran.canceled);
         assert_eq!((ran.copied, ran.bytes), (0, 0));

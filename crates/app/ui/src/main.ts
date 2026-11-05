@@ -165,6 +165,7 @@ import {
   ImportFlow,
   type ImportPreview,
   type ImportProgress,
+  type ImportStarted,
   UNDATED_HEADING,
   canRun,
   collisionItems,
@@ -1605,8 +1606,11 @@ dateFolderCancelButton.addEventListener("click", dismissDateFolder);
 // The folder tree's `Import…`: plan copying every photo under the
 // right-clicked folder (a memory card's root included) into the date folders
 // of the import settings, then run the copy with progress and cancel. The run
-// does not touch the index nor wait for a scan. Its errors join the sticky
-// `errors` list, keyed by path.
+// does not touch the index nor wait for a scan. Once it has started, its first
+// date folder opens and the dialog steps aside, so the strip fills through the
+// folder watcher and can be culled meanwhile; `Import…` again brings the
+// dialog back to cancel. Its errors join the sticky `errors` list, keyed by
+// path.
 const importFlow = new ImportFlow();
 // Only its key decisions are used: Escape and Tab, as in the settings modal.
 const importKeys = new SettingsModal();
@@ -1635,9 +1639,19 @@ function importFrom(dir: string): void {
     trashFlow.busy ||
     sequenceFlow.busy ||
     sidecarFlow.busy ||
-    dateFolderFlow.busy ||
-    !importFlow.start(dir)
+    dateFolderFlow.busy
   ) {
+    return;
+  }
+  if (importFlow.reopen()) {
+    setFilterMenuOpen(false);
+    setSortMenuOpen(false);
+    closeContextMenu();
+    importDialog.hidden = false;
+    importCancelButton.focus();
+    return;
+  }
+  if (!importFlow.start(dir)) {
     return;
   }
   importing = `reading ${dir}…`;
@@ -1700,9 +1714,18 @@ function runImport(): void {
   importing = importProgressStatus(0, 0);
   renderMeta();
   window.__TAURI__.core
-    .invoke<number>("import_run", { previewId })
-    .then((runId) => {
+    .invoke<ImportStarted>("import_run", { previewId })
+    .then(({ runId, folders: created }) => {
       const { done, cancel } = importFlow.started(runId);
+      if (!importFlow.isOpen) {
+        closeImportDialog();
+      }
+      const first = created[0];
+      if (first !== undefined) {
+        openDirectory(first, newFolderToken()).catch((err: unknown) => {
+          setStatus(String(err));
+        });
+      }
       if (done !== null) {
         finishImport(done);
       } else if (cancel) {
@@ -1726,6 +1749,11 @@ function finishImport(payload: ImportDone): void {
   }
   importing = null;
   setStatus(importDoneStatus(payload));
+  // A file that landed between the open folder's listing and its watch
+  // being set reaches the strip here at the latest.
+  if (openDir !== null && opensTarget(openDir, payload.folders, folders.ignoreCase)) {
+    resync("import");
+  }
 }
 
 function dismissImport(): void {
