@@ -78,7 +78,9 @@ DxO PhotoLab.
   arrows, `Home` / `End`, `Enter` and typing a name move through and open
   folders, with the culling keys off until `Escape`. Right-click a folder
   to reveal it in Finder / File Explorer / the file manager, copy its
-  path or name, rename it with `Rename…`, rewrite its sidecars from
+  path or name, rename it with `Rename…` or after its photos' capture date
+  with `Rename by Capture Date…` (one `YYYY-MM-DD` folder, or one sibling
+  folder per date when they span several), rewrite its sidecars from
   Riffle's index with `Rewrite Sidecars from Index…` (patching only the
   judgments, so Lightroom's and PhotoLab's edits stay) or move them to the
   Trash with `Delete Sidecars…`; a slow second click on the

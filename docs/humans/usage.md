@@ -80,7 +80,11 @@ viewer shows a prompt in its center; click it to open the folder picker.
   follow the folder, so nothing is re-extracted; the tree keeps its
   expansion; and when the open folder is the renamed one or under it, it
   reopens under its new path at the file it was on (a reopen, so the undo
-  history and the selection start over). Then `Expand All` expands the
+  history and the selection start over). Then `Rename by Capture Date…`
+  (not offered on home or a volume at the top level either) renames the
+  folder after its photos' capture date, or splits it into one sibling
+  folder per date when they span several (see **Rename by Capture
+  Date…**). Then `Expand All` expands the
   folder and every folder below it, listing each in turn (a folder that
   fails to list shows its error and the rest still expand; a symlinked or
   junctioned folder is not descended into, since it can loop back on an
@@ -412,6 +416,48 @@ viewer shows a prompt in its center; click it to open the folder picker.
   with their sidecars, to the Trash again without the dialog (a file that
   could not come back is not touched, and one gone from its place since is
   listed as an error), and that move is undoable in turn.
+- **Rename by Capture Date…**: right-click a folder in the folder tree (not
+  home or a volume at the top level) and choose `Rename by Capture Date…` to
+  name it after the capture date of its photos, the way a card's `100MSDCF`
+  is usually renamed by hand before culling. The date is the
+  `DateTimeOriginal` the camera wrote, its local date as `YYYY-MM-DD` (e.g.
+  `2026-10-31`) with no time-zone handling, so a shoot across midnight spans
+  two dates. Only the files directly in the folder count, its RAW files or,
+  in a JPEG-only folder, its JPEGs; subfolders are not searched. A file
+  without a readable capture date is undated. It asks first in a dialog:
+  `Run` carries it out, `Cancel` or `Escape` leaves everything untouched,
+  and the buttons are disabled while the files move.
+  - **One date**: the dialog asks `Rename <name> to 2026-10-31?` with the
+    file count, and `Run` renames the folder exactly as `Rename…` does: the
+    undated files and the subfolders come along, and the index, the
+    judgments and the remembered file follow it.
+  - **Several dates**: the dialog lists one row per date folder with its
+    file count. `Run` creates those folders next to the original folder, in
+    its parent, and moves each dated file into its date's folder, a RAW
+    file with its `.xmp` and `.dop` sidecars (whichever exist) and a JPEG
+    alone. Its stars, flag, color label, thumbnail and AI analysis follow
+    it, so nothing is re-extracted. The undated files stay in the original
+    folder, and the dialog lists them; the subfolders stay too. A file that
+    fails to move stays where it was, its error listed, and the others
+    still move. When the original folder ends up empty it is removed, and
+    if it was the open folder the first date folder opens instead;
+    otherwise it is kept, and the status line says how many entries
+    (files and subfolders) were left in it
+    (`Split <name> into 2026-10-31 (120), 2026-11-01 (45); <name> kept (2 left)`).
+  - **Refusals**: nothing is ever merged. When a folder or file with a
+    target name already exists next to the folder, the dialog shows it in
+    red and `Run` is disabled, as it is when the folder already bears its
+    one date. In a split, a target named like the folder itself counts as
+    taken too, so a folder `2026-10-31` holding photos of two dates is not
+    split. A folder with no dated photo is refused on the status line, and
+    so is the item chosen while a scan runs, with the scan message; choose
+    it again once the scan ends. After a partial split, running it again on
+    the kept folder is refused, since its date folders now exist.
+  - **Undo**: the rename or split itself cannot be undone. A
+    `Move to Trash…` made before a split still undoes, but its files go
+    back to the original folder rather than their date folders, and when
+    the original folder was removed the undo fails and lists them as errors,
+    leaving them in the Trash.
 - **Rewrite Sidecars from Index… and Delete Sidecars…**: right-click a
   folder in the folder tree to push Riffle's judgments of its files back out to their
   sidecars, or to remove the sidecars altogether, for instance after a write

@@ -114,7 +114,15 @@ home and volume roots, one folder's subfolders and RAW count, and
 strip's menu a file, in the OS file manager under the per-platform
 `REVEAL_LABEL`), `src/rename.rs` the
 `rename_folder` command (it checks the new name, releases the folder watcher,
-renames the folder and carries its index rows to the new path), `src/watch.rs`
+renames the folder and carries its index rows to the new path),
+`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands
+(`date_folder_preview` plans from the capture dates of the photos directly in
+the folder a rename to its one `YYYY-MM-DD` or a split into one sibling folder
+per date, with the undated files and any colliding target; `date_folder_run`
+re-plans and either renames through `rename_folder`'s path or moves each dated
+file with its sidecars and index rows into its date folder, leaving the
+undated ones and removing the original folder only when it ends up empty),
+`src/watch.rs`
 the open folder's watcher and `src/treewatch.rs` the folder tree's watchers on
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
 `src/trash.rs` the
@@ -197,6 +205,9 @@ renames) until the scan ends, `src/viewonly.ts`
 decides from the listed paths whether a folder is JPEG-only and so opens
 view-only (no judgment, capture-time order), `src/sidecars.ts` holds the
 Rewrite Sidecars from Index / Delete Sidecars dialog's text and its flow,
+`src/datefolder.ts` holds the Rename by Capture Date dialog's text (the title
+line, the per-folder rows, the undated files, the removal note and the reason
+the run is disabled) and its flow,
 `src/sequence.ts` holds the
 Sequence JPEG Timestamps dialog's text and its flow from the folder tree's right-click
 through the preview to the run's end, `src/uncaught.ts` builds the
