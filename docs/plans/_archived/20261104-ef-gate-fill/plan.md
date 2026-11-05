@@ -27,7 +27,7 @@ discard-model plan's learned `LR/T` did not beat it on a fresh blind round
 "Results of the confirmation", in `docs/plans/20261023-discard-model/`, which
 may move under `docs/plans/_archived/`), and the face-choice evaluation found
 no better face rule than the AF-nearest face
-([facechoice.md, Decision](../_archived/20261023-face-choice/facechoice.md)).
+([facechoice.md, Decision](../20261023-face-choice/facechoice.md)).
 
 This plan changes **`eye_focus` itself**, not a model over it, with two
 label-free rules that have not been tested and their combination:
