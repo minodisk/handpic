@@ -17,9 +17,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use riffle_core::copy::TEMP_SUFFIX;
 use tauri::{Emitter, Manager};
 
-use crate::sidecar::{SidecarFormat, TEMP_SUFFIX};
+use crate::sidecar::SidecarFormat;
 
 /// How long after the last event of a burst the rescan is triggered. Long
 /// enough that copying a batch of files in one go rescans once, short enough

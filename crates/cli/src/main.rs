@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use riffle_core::candidate;
+use riffle_core::copy;
 use riffle_core::decode::{apply_orientation, decode_rgb, decode_upright_near};
 use riffle_core::embed;
 use riffle_core::eyes;
@@ -106,12 +107,22 @@ fn main() -> Result<()> {
         Some("facechoice") => facechoice::run(&args[1..]),
         Some("embed") => embed_cmd(&args[1..]),
         Some("previews") => previews(&parse_previews(&args[1..])?),
+        Some("copybench") => match &args[1..] {
+            [src, dst, rest @ ..] if rest.len() <= 2 => copybench(
+                Path::new(src),
+                Path::new(dst),
+                rest.first().map(|s| s.parse()).transpose()?,
+                rest.get(1).map(|s| s.parse()).transpose()?,
+            ),
+            _ => bail!("usage: {COPYBENCH_USAGE}"),
+        },
         Some("embed-compare") => match &args[1..] {
             [a, b] => embed_compare(Path::new(a), Path::new(b)),
             _ => bail!("usage: {EMBED_COMPARE_USAGE}"),
         },
         _ => bail!(
-            "usage: riffle-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       riffle-cli crop <file.ARW> <out.png> [size]\n       riffle-cli scan <dir> [threads]\n       riffle-cli candidates <dir>... [threads]\n       riffle-cli detect <dir|file>... [threads]\n       riffle-cli eyecrops <dir|file>... <out-dir>\n       riffle-cli eyes <dir|file>...\n       riffle-cli features <dir>... [threads]\n       riffle-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}",
+            "usage: riffle-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       riffle-cli crop <file.ARW> <out.png> [size]\n       riffle-cli scan <dir> [threads]\n       riffle-cli candidates <dir>... [threads]\n       riffle-cli detect <dir|file>... [threads]\n       riffle-cli eyecrops <dir|file>... <out-dir>\n       riffle-cli eyes <dir|file>...\n       riffle-cli features <dir>... [threads]\n       riffle-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
+       {COPYBENCH_USAGE}",
             facechoice::USAGE
         ),
     }
@@ -405,6 +416,59 @@ fn bench(paths: &[String]) -> Result<()> {
 
 /// Extract a whole folder in parallel, with no database: the folder scan
 /// throughput benchmark.
+const COPYBENCH_USAGE: &str = "riffle-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]";
+
+/// Copy every RAW / JPEG under `src` flat into `dst` through the import's
+/// copy pipeline and print the throughput.
+fn copybench(
+    src: &Path,
+    dst: &Path,
+    chunk_mib: Option<usize>,
+    buffers: Option<usize>,
+) -> Result<()> {
+    let defaults = copy::Options::default();
+    let options = copy::Options {
+        chunk: chunk_mib.map_or(defaults.chunk, |m| m << 20),
+        buffers: buffers.unwrap_or(defaults.buffers),
+    };
+    let mut paths = Vec::new();
+    let mut failures = Vec::new();
+    collect(src, &mut paths, &mut failures);
+    for (path, e) in &failures {
+        eprintln!("{}: {e}", path.display());
+    }
+    paths.sort();
+    std::fs::create_dir_all(dst)?;
+    let jobs: Vec<copy::Job> = paths
+        .iter()
+        .filter_map(|p| {
+            Some(copy::Job {
+                src: p.clone(),
+                dst: dst.join(p.file_name()?),
+            })
+        })
+        .collect();
+    let summary = copy::copy_files_with(&jobs, options, &AtomicBool::new(false), |_| {});
+    let mut copied = 0;
+    for (job, outcome) in jobs.iter().zip(&summary.results) {
+        match outcome {
+            copy::Outcome::Copied(_) => copied += 1,
+            copy::Outcome::Failed(e) => eprintln!("{}: {e}", job.src.display()),
+            copy::Outcome::NotRun => {}
+        }
+    }
+    let secs = summary.elapsed.as_secs_f64();
+    println!(
+        "chunk {} MiB, {} buffers: {copied} / {} files, {} bytes, {secs:.2} s, {:.1} MB/s",
+        options.chunk >> 20,
+        options.buffers,
+        jobs.len(),
+        summary.bytes,
+        summary.bytes as f64 / 1e6 / secs.max(1e-9)
+    );
+    Ok(())
+}
+
 fn scan_dir(dir: &Path, threads: Option<usize>) -> Result<()> {
     let threads =
         threads.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));

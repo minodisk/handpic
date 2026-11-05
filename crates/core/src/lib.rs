@@ -2,6 +2,7 @@
 
 pub mod arw;
 pub mod candidate;
+pub mod copy;
 pub mod cr3;
 pub mod decode;
 pub mod dop;
