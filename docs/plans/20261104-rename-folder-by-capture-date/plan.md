@@ -94,7 +94,7 @@ Decided design:
       name(s) with their file counts, the undated files' names, and the
       colliding target names (the dialog disables the run on any).
 
-- [ ] Step 2: `Index::move_file` carries a file's rows to another folder, and `Index::forget_dir` drops a folder's state
+- [x] Step 2: `Index::move_file` carries a file's rows to another folder, and `Index::forget_dir` drops a folder's state
   - Done when: `Index::move_file(old_path, new_dir, new_path)` moves the
     `files`, `ratings`, `embeddings` and `views` rows of one file to a new
     `path` **and** `dir` in one transaction, dropping any stale rows already at
