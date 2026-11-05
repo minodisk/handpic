@@ -159,11 +159,20 @@
   puts the dialog aside (`isOpen` false while running) unless a cancel was
   asked for before the run id came; the status line keeps
   `importing N / M`, and the tree's `Import…` while a run is under way
-  brings the dialog back (`reopen`) with Cancel. This is a design call made
-  in this step without asking the user; Step 6's docs must describe it.
+  brings the dialog back (`reopen`) with Cancel. This design call was made
+  in this step and confirmed by the user afterwards (2026-11-06, over a
+  cancel button in the status line or keeping the dialog modal); Step 6's
+  docs must describe it.
   The other flows (Move to Trash, Settings, Sequence, Rename by Capture
   Date, the sidecar items) still refuse while `importFlow.busy`; flagging,
-  rating and labels work.
+  rating and labels work. The folder and file renames refuse too (checked
+  in `holdRename` at confirm time and again when a held rename drains),
+  since `copy.rs` does not recreate a folder renamed mid-run; reported in
+  review round 1. `finishImport` decides `importFlow.done` at once but
+  reports (errors, status, resync check) after the import's own
+  `openDirectory` settles, whose `errors.clear()` would otherwise wipe the
+  failures. `import_run` runs `prepare` on the blocking task and gets the
+  folders back over a channel.
 - Code reading of the growing-folder path, no fix needed:
   - Empty folder: `openDirectory` with `files.length === 0` leaves
     `meta = null`, `selection = single(undefined)`; the next `resync`'s
@@ -267,10 +276,3 @@
   run here. Related files: `crates/app/ui/src/main.ts`,
   `crates/app/ui/src/import.ts`, `crates/app/src/import.rs`,
   `crates/app/src/watch.rs`.
-- The import dialog steps aside once the run has started and comes back
-  through the tree's `Import…` (Step 5 implementation, a design call not
-  confirmed by the user). Confirm the user wants this, or another cancel
-  affordance (a clickable status line, a toolbar button). Meanwhile Move to
-  Trash, Settings and the other folder-menu flows still refuse while the
-  import runs (`importFlow.busy`). Step 6's docs must describe the reopen.
-  Related files: `crates/app/ui/src/import.ts`, `crates/app/ui/src/main.ts`.

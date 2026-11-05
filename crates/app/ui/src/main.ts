@@ -425,6 +425,7 @@ function whenIdle(label: string, run: () => void, cancel?: () => void): boolean 
 }
 
 const RENAME_CANCELED = "Rename… was canceled";
+const RENAME_REFUSED = "Rename… is unavailable while an import runs";
 // The path of the rename being requested, so the held rename of the same
 // folder or file it replaces (a re-edit of the pending name) is not reported
 // as canceled.
@@ -449,11 +450,21 @@ function holdRename(
       view.clearPending(mark);
     }
   };
+  if (importFlow.busy) {
+    setStatus(RENAME_REFUSED);
+    return;
+  }
   renaming = path;
   const held = whenIdle(
     "Rename…",
     () => {
       heldRename = null;
+      // A held rename can outlive the check above: an import may have begun.
+      if (importFlow.busy) {
+        clearPending();
+        setStatus(RENAME_REFUSED);
+        return;
+      }
       run(clearPending);
     },
     () => {
@@ -1721,11 +1732,16 @@ function runImport(): void {
         closeImportDialog();
       }
       const first = created[0];
-      if (first !== undefined) {
-        openDirectory(first, newFolderToken()).catch((err: unknown) => {
-          setStatus(String(err));
-        });
-      }
+      // The body of `finishImport` waits for this open, whose own `errors.clear()`
+      // and status would otherwise wipe the failures it lists, and which must
+      // have `openDir` set for the resync check.
+      const opening =
+        first === undefined
+          ? Promise.resolve()
+          : openDirectory(first, newFolderToken()).catch((err: unknown) => {
+              setStatus(String(err));
+            });
+      importOpening = opening;
       if (done !== null) {
         finishImport(done);
       } else if (cancel) {
@@ -1739,11 +1755,20 @@ function runImport(): void {
     });
 }
 
+// The open of the running import's first date folder, if any.
+let importOpening: Promise<void> = Promise.resolve();
+
 function finishImport(payload: ImportDone): void {
   if (!importFlow.done(payload)) {
     return;
   }
   closeImportDialog();
+  void importOpening.then(() => {
+    reportImport(payload);
+  });
+}
+
+function reportImport(payload: ImportDone): void {
   for (const failure of payload.failed) {
     errors.add(failure.path, importFailureText(failure));
   }

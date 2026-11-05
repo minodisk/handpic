@@ -802,12 +802,14 @@ pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<Starte
         _ => return Err("the import preview is out of date; choose Import… again".to_string()),
     };
     let imports = app.state::<Imports>();
-    let mut folders = Vec::new();
+    // `prepare` creates the folders on the blocking task, off the runtime and
+    // with no lock held; it hands them back here once they exist.
+    let (folders_tx, mut folders_rx) = tauri::async_runtime::channel::<Vec<String>>(1);
     let run_id = begin(&imports, |run_id, cancel| {
-        let prepared = prepare(&plan);
-        folders.clone_from(&prepared.folders);
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
+            let prepared = prepare(&plan);
+            let _ = folders_tx.blocking_send(prepared.folders.clone());
             let ran = run_plan(prepared, &cancel, |p, dst| {
                 let _ = app.emit(
                     "import-progress",
@@ -828,6 +830,10 @@ pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<Starte
             let _ = app.emit("import-done", Done { run_id, ran });
         })
     })?;
+    let folders = folders_rx
+        .recv()
+        .await
+        .ok_or_else(|| "the import stopped before it began".to_string())?;
     Ok(Started { run_id, folders })
 }
 
