@@ -109,6 +109,33 @@ pending flush can itself create the file the refusal needs to see.
 - Source: `docs/plans/_archived/20260930-todo-five-more-items/learnings.md`,
   Steps 3 and 5.
 
+### Moving files between folders (split by date): what the index, watchers and trash runs do (Hit)
+
+- `Index::forget_dir` is not `evict_folder`. Eviction keeps dirty `ratings`
+  rows and leaves `views`, so an unwritten judgment of a folder still on disk
+  is not lost. `forget_dir` is for a folder removed from disk. It drops every
+  row of exactly that `dir` (`files`, `ratings` including dirty ones,
+  `embeddings`, `views`, `folders`), and touches neither subfolders nor prefix
+  siblings such as `photos2`.
+- `Index::move_file` leaves the old folder's `folders.last_viewed` naming a
+  file now elsewhere. That is harmless, because `resume.ts` only takes it
+  when the listing holds it.
+- A split that removes the original folder must release the open folder's
+  watcher and the tree watches first (`with_released`), or Windows returns
+  `PermissionDenied`. `with_released` restores the tree watches only on
+  `Err`, so after a split that keeps the original folder, put the open
+  folder's watcher back with `watch::set`. The tree watches come back with
+  the tree re-render after `folders.refresh`, since `set_tree_watches` makes
+  the watched set equal to what the frontend sends.
+- Create each target folder with `std::fs::create_dir`, not `create_dir_all`.
+  It fails when the name appeared after the re-plan, so every file of that
+  group fails and nothing is ever merged. A split target named like the
+  source folder is a collision, because a split merges nothing.
+- A move does not rebase `Runs` or the frontend's undo history. An undo of a
+  trash run recorded before the split restores to the old path (which may be
+  gone), and judgment undo entries still name the old paths.
+- Source: `docs/plans/_archived/20261104-rename-folder-by-capture-date/learnings.md`, Steps 1-3.
+
 ### Resolve shortcut overrides order-independently, not in a single pass (Hit)
 
 `from_overrides` in `crates/app/src/shortcuts.rs` checks each stored override
