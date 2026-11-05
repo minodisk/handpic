@@ -1276,11 +1276,13 @@ body {
 }
 
 /* The Sequence JPEG Timestamps dialog, the Move to Trash
-   confirmation and the folder sidecars confirmation, over the whole window
+   confirmation, the folder sidecars confirmation and the Rename by Capture
+   Date confirmation, over the whole window
    like Settings. The list scrolls; the buttons stay in view. */
 #sequence-box,
 #trash-box,
-#sidecar-box {
+#sidecar-box,
+#datefolder-box {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -1293,18 +1295,23 @@ body {
 
 #sequence-box p,
 #trash-box p,
-#sidecar-box p {
+#sidecar-box p,
+#datefolder-box p {
   overflow-wrap: anywhere;
 }
 
 #sequence-rebuild,
 #sequence-running,
-#sidecar-running {
+#sidecar-running,
+#datefolder-undated,
+#datefolder-note,
+#datefolder-running {
   color: var(--muted-foreground);
 }
 
 #sequence-rows,
-#sidecar-rows {
+#sidecar-rows,
+#datefolder-rows {
   flex: 1;
   min-height: 0;
   padding: 0.4rem 0.5rem;
@@ -1322,6 +1329,14 @@ body {
 }
 
 #sidecar-rows:empty {
+  display: none;
+}
+
+#datefolder-reason {
+  color: var(--destructive);
+}
+
+#datefolder-box p:empty {
   display: none;
 }
 

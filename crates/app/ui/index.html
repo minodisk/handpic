@@ -542,6 +542,28 @@
       </div>
     </div>
     <div
+      id="datefolder-dialog"
+      class="dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="datefolder-title"
+      hidden
+    >
+      <div id="datefolder-box" class="dialog-box">
+        <h2 id="datefolder-title" class="dialog-title">Rename by Capture Date</h2>
+        <p id="datefolder-total"></p>
+        <ul id="datefolder-rows"></ul>
+        <p id="datefolder-undated"></p>
+        <p id="datefolder-note"></p>
+        <p id="datefolder-reason"></p>
+        <p id="datefolder-running" hidden></p>
+        <div class="dialog-actions">
+          <button id="datefolder-run" class="button primary" type="button">Run</button>
+          <button id="datefolder-cancel" class="button outline" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+    <div
       id="settings-dialog"
       class="dialog"
       role="dialog"

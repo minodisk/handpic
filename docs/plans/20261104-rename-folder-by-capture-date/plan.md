@@ -163,7 +163,7 @@ Decided design:
       `rename_file` has today). Do not extend `Runs`; note it in
       `learnings.md` and the docs (Step 5).
 
-- [ ] Step 4: The `Rename by Capture Date…` item in the folder tree and its confirmation dialog
+- [x] Step 4: The `Rename by Capture Date…` item in the folder tree and its confirmation dialog
   - Done when: the folder menu (`context.ts` `folderMenuGroups`) offers
     `Rename by Capture Date…` right under `Rename…` (not on a root); choosing
     it calls `date_folder_preview` and shows a dialog in the style of the
@@ -232,3 +232,4 @@ Decided design:
 - (2026-11-05) Step 1 complete
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
+- (2026-11-06) Step 4 complete

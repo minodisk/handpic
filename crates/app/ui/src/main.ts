@@ -145,6 +145,19 @@ import {
   rewriteTotalLine,
   rewrittenStatus,
 } from "./sidecars.js";
+import {
+  DATE_RUNNING_NOTE,
+  DateFolderFlow,
+  type DatePreview,
+  type DateRan,
+  dateRows,
+  dateTitleLine,
+  disabledReason,
+  parentOf,
+  removalNote,
+  splitStatus,
+  undatedLine,
+} from "./datefolder.js";
 import { UncaughtGate, uncaughtLine } from "./uncaught.js";
 import { dwellTimer, switchesFolder, viewedWriter } from "./viewed.js";
 import { type PerfSample, PerfModel, WINDOW_MS, latencyStart } from "./perf.js";
@@ -887,6 +900,7 @@ function confirmTrashFiles(paths: string[]): void {
     settings.isOpen ||
     sequenceFlow.busy ||
     sidecarFlow.busy ||
+    dateFolderFlow.busy ||
     !trashFlow.start({ dir: openDir, paths })
   ) {
     return;
@@ -925,6 +939,7 @@ function trashFilesIn(dir: string, paths: string[]): void {
       token !== folderToken ||
       sidecarFlow.busy ||
       sequenceFlow.busy ||
+      dateFolderFlow.busy ||
       (!own && trashFlow.busy)
     ) {
       done();
@@ -1082,6 +1097,7 @@ function startSequence(): boolean {
     !settings.isOpen &&
     !trashFlow.busy &&
     !sidecarFlow.busy &&
+    !dateFolderFlow.busy &&
     sequenceFlow.start()
   );
 }
@@ -1265,6 +1281,7 @@ function rewriteSidecarsIn(dir: string): void {
       settings.isOpen ||
       trashFlow.busy ||
       sequenceFlow.busy ||
+      dateFolderFlow.busy ||
       !sidecarFlow.start({ kind: "rewrite", dir })
     ) {
       return;
@@ -1290,6 +1307,7 @@ function deleteSidecarsIn(dir: string): void {
       settings.isOpen ||
       trashFlow.busy ||
       sequenceFlow.busy ||
+      dateFolderFlow.busy ||
       !sidecarFlow.start({ kind: "delete", dir })
     ) {
       return;
@@ -1419,6 +1437,141 @@ function sidecarKeydown(event: KeyboardEvent): void {
 
 sidecarRunButton.addEventListener("click", runSidecars);
 sidecarCancelButton.addEventListener("click", dismissSidecars);
+
+// The folder tree's `Rename by Capture Date…`: plan the rename or split of
+// the folder from its photos' capture dates, confirm, then carry it out. A
+// press during a scan is refused by the backend with the scan message rather
+// than held for the scan's end, since the plan could be stale by then. The
+// run cannot be canceled, so its buttons are disabled and Escape does nothing
+// while it runs.
+const dateFolderFlow = new DateFolderFlow();
+// Only its key decisions are used: Escape and Tab, as in the settings modal.
+const dateFolderKeys = new SettingsModal();
+const dateFolderDialog = document.getElementById("datefolder-dialog") as HTMLDivElement;
+const dateFolderTotal = document.getElementById("datefolder-total") as HTMLParagraphElement;
+const dateFolderRows = document.getElementById("datefolder-rows") as HTMLUListElement;
+const dateFolderUndated = document.getElementById("datefolder-undated") as HTMLParagraphElement;
+const dateFolderNote = document.getElementById("datefolder-note") as HTMLParagraphElement;
+const dateFolderReason = document.getElementById("datefolder-reason") as HTMLParagraphElement;
+const dateFolderRunning = document.getElementById("datefolder-running") as HTMLParagraphElement;
+const dateFolderRunButton = document.getElementById("datefolder-run") as HTMLButtonElement;
+const dateFolderCancelButton = document.getElementById("datefolder-cancel") as HTMLButtonElement;
+dateFolderRunning.textContent = DATE_RUNNING_NOTE;
+
+function renameByDateIn(dir: string): void {
+  if (
+    !formatDialog.hidden ||
+    settings.isOpen ||
+    trashFlow.busy ||
+    sequenceFlow.busy ||
+    sidecarFlow.busy ||
+    !dateFolderFlow.start(dir)
+  ) {
+    return;
+  }
+  window.__TAURI__.core
+    .invoke<DatePreview>("date_folder_preview", { dir })
+    .then((preview) => {
+      if (dateFolderFlow.previewed()) {
+        showDateFolderPreview(preview);
+      }
+    })
+    .catch((err: unknown) => {
+      dateFolderFlow.end();
+      setStatus(String(err));
+    });
+}
+
+function showDateFolderPreview(preview: DatePreview): void {
+  setFilterMenuOpen(false);
+  setSortMenuOpen(false);
+  closeContextMenu();
+  const reason = disabledReason(preview);
+  dateFolderTotal.textContent = dateTitleLine(preview);
+  dateFolderRows.replaceChildren(...dateRows(preview).map(listItem));
+  dateFolderUndated.textContent = undatedLine(preview) ?? "";
+  dateFolderNote.textContent = removalNote(preview) ?? "";
+  dateFolderReason.textContent = reason ?? "";
+  dateFolderRunning.hidden = true;
+  dateFolderRunButton.disabled = reason !== null;
+  dateFolderCancelButton.disabled = false;
+  dateFolderDialog.hidden = false;
+  (reason === null ? dateFolderRunButton : dateFolderCancelButton).focus();
+}
+
+function closeDateFolderDialog(): void {
+  dateFolderFlow.end();
+  dateFolderDialog.hidden = true;
+}
+
+// A rename follows as the tree's inline rename does. A split re-lists the
+// parent in the tree; when the split folder was the open one, it is re-listed
+// if it remains, else the first date folder opens.
+function runDateFolder(): void {
+  const dir = dateFolderFlow.run();
+  if (dir === null) {
+    return;
+  }
+  dateFolderRunButton.disabled = true;
+  dateFolderCancelButton.disabled = true;
+  dateFolderRunning.hidden = false;
+  settleIdle(
+    window.__TAURI__.core.invoke<DateRan>("date_folder_run", { dir }).then(
+      (ran) => {
+        closeDateFolderDialog();
+        if (ran.kind === "renamed") {
+          return folderRenamed(dir, ran.path, baseName(ran.path), ran.warning);
+        }
+        for (const { path, message } of ran.failed) {
+          errors.add(path, `${baseName(path)}: could not move: ${message}`);
+        }
+        setStatus(splitStatus(ran, baseName(dir) || dir));
+        folders.refresh(parentOf(dir));
+        if (openDir === null || !opensTarget(openDir, [dir], folders.ignoreCase)) {
+          return;
+        }
+        const first = ran.moved[0];
+        if (!ran.removed) {
+          resync("rename");
+        } else if (first !== undefined) {
+          return openDirectory(first.path, newFolderToken()).catch((err: unknown) => {
+            setStatus(String(err));
+          });
+        }
+      },
+      (err: unknown) => {
+        closeDateFolderDialog();
+        setStatus(String(err));
+      },
+    ),
+  );
+}
+
+function dismissDateFolder(): void {
+  if (dateFolderFlow.dismiss()) {
+    dateFolderDialog.hidden = true;
+  }
+}
+
+// Every key stops here while the dialog is open, so none reaches the strip.
+function dateFolderKeydown(event: KeyboardEvent): void {
+  const decision = dateFolderKeys.key(keyName(event));
+  if (decision.kind === "close") {
+    event.preventDefault();
+    dismissDateFolder();
+  } else if (decision.kind === "focus") {
+    event.preventDefault();
+    const buttons = [dateFolderRunButton, dateFolderCancelButton].filter((b) => !b.disabled);
+    if (buttons.length === 0) {
+      return;
+    }
+    const from = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    buttons[cycleFocus(buttons.length, from, decision.step)].focus();
+  }
+}
+
+dateFolderRunButton.addEventListener("click", runDateFolder);
+dateFolderCancelButton.addEventListener("click", dismissDateFolder);
 
 // Set the transient note, or clear it when called with no argument.
 function setStatus(extra?: string): void {
@@ -3358,10 +3511,37 @@ interface Renamed {
   warning: string | null;
 }
 
-// The tree's inline edit confirmed a new name. The tree follows the rename in
-// place; when the open folder is the renamed one or under it, it is reopened
-// under its new path, its judgments coming back from the rewritten index. The
-// trash entries' folders follow the rename, as the backend's recorded runs do.
+// The folder `path` is now `name` at `newPath`. The tree follows the rename
+// in place; when the open folder is the renamed one or under it, it is
+// reopened under its new path, its judgments coming back from the rewritten
+// index. The trash entries' folders follow the rename, as the backend's
+// recorded runs do.
+function folderRenamed(
+  path: string,
+  newPath: string,
+  name: string,
+  warning: string | null,
+): Promise<void> | undefined {
+  folders.renamed(path, newPath, name);
+  const moved = (dir: string): string => rebase(dir, path, newPath, folders.ignoreCase) ?? dir;
+  history.map(mapTrashDirs(moved));
+  redoable.map(mapTrashDirs(moved));
+  const warn = (): void => {
+    if (warning !== null) {
+      setStatus(warning);
+    }
+  };
+  const reopen = openDir === null ? null : rebase(openDir, path, newPath, folders.ignoreCase);
+  if (reopen === null) {
+    warn();
+    return;
+  }
+  return openDirectory(reopen, newFolderToken()).then(warn, (err: unknown) => {
+    setStatus(String(err));
+  });
+}
+
+// The tree's inline edit confirmed a new name; see `folderRenamed`.
 function renameFolder(path: string, name: string): void {
   holdRename(path, name, folders, (clearPending) => {
     folders.renameStarted(path);
@@ -3370,25 +3550,7 @@ function renameFolder(path: string, name: string): void {
         ({ path: newPath, warning }) => {
           folders.renameSettled(path);
           clearPending();
-          folders.renamed(path, newPath, name);
-          const moved = (dir: string): string =>
-            rebase(dir, path, newPath, folders.ignoreCase) ?? dir;
-          history.map(mapTrashDirs(moved));
-          redoable.map(mapTrashDirs(moved));
-          const warn = (): void => {
-            if (warning !== null) {
-              setStatus(warning);
-            }
-          };
-          const reopen =
-            openDir === null ? null : rebase(openDir, path, newPath, folders.ignoreCase);
-          if (reopen === null) {
-            warn();
-            return;
-          }
-          return openDirectory(reopen, newFolderToken()).then(warn, (err: unknown) => {
-            setStatus(String(err));
-          });
+          return folderRenamed(path, newPath, name, warning);
         },
         (err: unknown) => {
           folders.renameSettled(path);
@@ -3553,6 +3715,9 @@ folders.init(
             break;
           case "renameFolder":
             folders.startRename(path);
+            break;
+          case "renameByDate":
+            renameByDateIn(path);
             break;
           case "expandAll":
             void folders.expandAll(path);
@@ -3834,6 +3999,7 @@ function modalOpen(): boolean {
     sequenceFlow.isOpen ||
     trashFlow.busy ||
     sidecarFlow.isOpen ||
+    dateFolderFlow.isOpen ||
     folders.isEditing() ||
     strip.isEditing()
   );
@@ -4674,7 +4840,13 @@ void Promise.allSettled([sortLoaded, filterLoaded]).then(() => {
 // `Settings...` in the menu. The first-launch dialog is modal already, so the
 // settings wait until it is answered.
 void window.__TAURI__.event.listen("open-settings", () => {
-  if (!formatDialog.hidden || sequenceFlow.busy || trashFlow.busy || sidecarFlow.busy) {
+  if (
+    !formatDialog.hidden ||
+    sequenceFlow.busy ||
+    trashFlow.busy ||
+    sidecarFlow.busy ||
+    dateFolderFlow.busy
+  ) {
     return;
   }
   setFilterMenuOpen(false);
@@ -4732,6 +4904,10 @@ window.addEventListener("keydown", (event) => {
   }
   if (sidecarFlow.isOpen) {
     sidecarKeydown(event);
+    return;
+  }
+  if (dateFolderFlow.isOpen) {
+    dateFolderKeydown(event);
     return;
   }
   // A live file rename takes every key: Enter and Escape end it, the rest

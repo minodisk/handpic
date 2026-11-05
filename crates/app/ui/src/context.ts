@@ -74,9 +74,9 @@ export function contextMenuGroups(
 
 // The folder tree's right-click menu: the reveal item, labeled per platform by
 // the `reveal_label` command, then copying the folder's path or name, then re-listing it (Refresh), then
-// renaming it, then expanding or collapsing every subfolder under it, then
+// renaming it (by hand or by its photos' capture date), then expanding or collapsing every subfolder under it, then
 // rewriting its sidecars from the index or deleting them, then the sequencing of the folder's
-// JPEGs. Renaming and expanding / collapsing all are not offered on a root
+// JPEGs. The renames and expanding / collapsing all are not offered on a root
 // (home or a volume).
 export function folderMenuGroups(revealLabel: string, root: boolean): MenuItem[][] {
   return [
@@ -89,7 +89,15 @@ export function folderMenuGroups(revealLabel: string, root: boolean): MenuItem[]
     ...(root
       ? []
       : [
-          [{ action: "renameFolder", label: "Rename…", shortcut: "", checked: undefined }],
+          [
+            { action: "renameFolder", label: "Rename…", shortcut: "", checked: undefined },
+            {
+              action: "renameByDate",
+              label: "Rename by Capture Date…",
+              shortcut: "",
+              checked: undefined,
+            },
+          ],
           [
             { action: "expandAll", label: "Expand All", shortcut: "", checked: undefined },
             { action: "collapseAll", label: "Collapse All", shortcut: "", checked: undefined },
