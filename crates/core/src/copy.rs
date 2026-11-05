@@ -298,6 +298,11 @@ impl Writer<'_> {
     /// Record `job` as failed, dropping its temp file if it is in flight and
     /// telling the reader to stop reading it.
     fn fail(&mut self, job: usize, error: String, progress: &mut impl FnMut(Progress)) {
+        // The first error is the cause; a later one for the same job must not
+        // count the file twice.
+        if matches!(self.results[job], Outcome::Failed(_)) {
+            return;
+        }
         if let Some(f) = self.current.take_if(|f| f.job == job) {
             drop(f.file);
             let _ = fs::remove_file(&f.temp);
