@@ -335,7 +335,7 @@ frame is the per-face dump's `af` value (full precision; equals the stored
       -F | grep -m1`, never a sleep; about 37 min in all on 12 threads,
       chunked so no tool call exceeds 10 min.
 
-- [ ] Step 3: `gatescores.py`, every candidate on every frame of the 33 folders, the `τ` grid fixed, label-free readings only
+- [x] Step 3: `gatescores.py`, every candidate on every frame of the 33 folders, the `τ` grid fixed, label-free readings only
   - Done when:
     - `gatescores.py` in this plan folder (`python -I -B gatescores.py
       <app-dump-dir> <discard-model-dir> <gate-dir>`) loads both dumps
@@ -489,3 +489,4 @@ Risks:
 - (2026-11-04) Plan written
 - (2026-11-05) Step 1 complete
 - (2026-11-06) Step 2 complete
+- (2026-11-06) Step 3 complete
