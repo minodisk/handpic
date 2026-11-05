@@ -56,7 +56,10 @@ Decided design:
     each group a sibling target folder name and the files going into it) or a
     refusal (no dated file); the undated files are listed in the plan; a
     target that already exists in the parent (and is not the folder itself
-    in another case) is reported as a collision; a folder already named its
+    in another case) is reported as a collision (this case-only exemption
+    applies to the one-date rename only; in a split a target named like the
+    folder itself is a collision, since a split only creates siblings and
+    never merges); a folder already named its
     one date is reported as "already named" (no-op). The plan is serialized
     for the frontend by a `date_folder_preview` command registered in
     `main.rs`. Unit tests on temp dirs cover: the Exif time to `YYYY-MM-DD`
@@ -226,4 +229,4 @@ Decided design:
 
 ## Progress
 
-- (none yet)
+- (2026-11-05) Step 1 complete
