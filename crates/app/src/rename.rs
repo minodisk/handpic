@@ -131,7 +131,8 @@ pub(crate) fn rename_folder_blocking(
             Err(e) => {
                 log::warn!("renamed folder {old} -> {new} but not its index rows: {e}");
                 warning = Some(format!(
-                    "the folder was renamed but its cache was not ({e});                      it is rebuilt on the next open"
+                    "the folder was renamed but its cache was not ({e}); \
+                     it is rebuilt on the next open"
                 ));
             }
         }
