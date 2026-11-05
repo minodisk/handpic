@@ -525,7 +525,11 @@ on the no-crop-face frames and changes sign across rounds: +0.277 [+0.131,
 +0.407] on round 3 (the reading that motivated it), +0.091 [−0.176, +0.359]
 on round 2, −0.300 [−0.549, +0.074] on round 1. The gate's effect sits on
 the gated frames (27 / 54 / 47 labels on rounds 3 / 2 / 1): −0.014, +0.010,
-+0.048, every interval reaching zero; on round 3 it adds +0.004 [+0.000,
++0.048, every interval reaching zero. The gate also moves the no-crop-face
+subset (`ef-gate` − `ef` −0.006 / −0.024 / −0.000 on rounds 3 / 2 / 1),
+because it can change a folder's lowest finite value, which places that
+folder's missing frames in the AUC; round 2's −0.024 is larger than that
+round's gated-subset +0.010. On round 3 it adds +0.004 [+0.000,
 +0.010] to the fill on all frames. At the cuts the gate leaves q5 unchanged
 on every round (`ef`'s q5 cut is almost all frames without `ef`) and moves
 q10 `RR` by −0.3 / −1.3 / +0.7 points; the fill lowers `PL` throughout but
@@ -539,7 +543,7 @@ rounds 1 and 2 carry the fill's losses.
 / 30–60 / 60+, nearly flat (against `eye_offset` > 0.10, which rises from
 18.5% to 44.1%), and 71.5% of the 165 meshed faces without a pose. Among the
 labels, the 60+ band holds 12 / 18 / 20% of the gated frames with a pose
-against 15 / 15 / 12% of the complement. What the gate flags looks like
+against 15 / 15 / 12% of the complement (on rounds 3 / 2 / 1). What the gate flags looks like
 mesh misfits rather than profiles (the faces without a pose, and the 77% of
 gated faces whose window value equals `ef`, presumably already scored on the
 window because no mesh eyelid region counted), though no gated face was checked by eye. The data gives no basis
@@ -547,11 +551,12 @@ for an exemption.
 
 **5. The caveats weighed.** Round 3's not pre-registered subset reading
 motivated the fill, so round 3 favored it by construction, and rounds 1–2,
-where `ef-fill` alone was already −0.010 / −0.011, were the protection the
+where `ef-fill` alone was already −0.011 / −0.010, were the protection the
 stop rule used; it worked as designed. One photographer, mostly basketball.
 The gate changes few values: 77.1% of the faces it gates at 0.215 read the
 same on the window as their `ef` (20 / 41 / 38 of the 27 / 54 / 47 gated
-labels), so the gated AUC differences rest on 7 / 13 / 9 labels per round.
+labels on rounds 3 / 2 / 1), so the gated AUC differences rest on 7 / 13 / 9
+labels on those rounds.
 The fresh-population caveat (never-labeled frames of known folders) did not
 arise, as no fresh round was drawn. Multiplicity: 8 pairs × 2 rounds and 3
 candidates on round 3, uncorrected, on labels the design was chosen after.
