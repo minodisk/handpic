@@ -2114,3 +2114,40 @@ Files: `crates/core/src/candidate.rs`, `crates/app/src/index.rs` (`run_faces_sca
 
 - [ ] When the gated / filled `ef` plan (in progress in another session) finishes, take its result and ask the user: is `ef` or `ef-fill` at per-folder q5, sorted last (not hidden), worth shipping as it is? If no, delete this item.
 - [ ] If yes, write a plan with its own pre-registered question and bars, and a fresh blind round whose strata are cut for that score and over-sample the frames without `eye_focus`. Run the offline Python with `D:\Photos\tests\.venv-eval\Scripts\python.exe -I -B`.
+
+### App: real-device checks for Rename by Capture Date…
+
+#### Background
+
+The rename-folder-by-capture-date feature added `Rename by Capture Date…` to the folder tree's right-click menu. It renames a one-date folder through `rename_folder`'s path, or splits a several-date folder into sibling per-date folders. Unit tests on temp dirs cover the planner, the move planning and rollback, and the "remove when empty" rule. Vitest covers the dialog's text helpers and flow. The real watcher release on Windows, and the dialog and the tree's follow-up in a running app, were never exercised. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
+
+Files: `crates/app/src/datefolder.rs` (`split_blocking`), `crates/app/src/treewatch.rs` (`with_released`), `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`.
+
+#### TODO
+
+- [ ] On Windows, split a folder that is expanded in the folder tree and open in the strip, with photos of two dates, `.xmp` / `.dop` sidecars and no undated file, via `Rename by Capture Date…`. Expected: the two sibling date folders hold the files with their sidecars, the original folder is removed (no `PermissionDenied` from a held watch handle), and the first date folder opens with its judgments and thumbnails intact.
+- [ ] On Windows and macOS, right-click a folder in the tree and choose `Rename by Capture Date…` on (a) a folder of one date: the dialog reads `Rename <name> to YYYY-MM-DD?` with the file count, and `Run` renames it in the tree and reopens it if it was open. (b) A folder of two dates with an undated file: one row per date folder, and the undated line and the removal note show. `Run` creates the sibling folders, the tree re-lists the parent, and the original stays with the undated file and is re-listed if open. (c) The same without an undated file while open: the original disappears from the tree and the first date folder opens. (d) A sibling already named a target date: the reason shows in red and `Run` is disabled. (e) During a scan: the status line shows the scan message and no dialog opens.
+
+### App: the undo history's judgment entries name a split's moved files by their old paths
+
+#### Background
+
+After `Rename by Capture Date…` splits a folder, the undo history's judgment entries still name the moved files' old paths. Only a folder rename's trash entries are rebased, by `folderRenamed`. An undo of a judgment made before the split would write to a path that no longer exists. `date_folder_run`'s `Split` result does not list the per-file moves, so the frontend cannot rebase them. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
+
+Files: `crates/app/ui/src/main.ts` (`runDateFolder`), `crates/app/src/datefolder.rs`.
+
+#### TODO
+
+- [ ] Return the per-file moves (old path to new path) in the split result and rebase the judgment undo / redo entries from them, or drop the entries of the moved files.
+
+### App: a split moves a shared sidecar with whichever RAW moves first
+
+#### Background
+
+Two RAWs sharing a stem (`a.ARW` and `a.NEF`) share `a.xmp`. `Rename by Capture Date…` moves that sidecar with whichever RAW moves first, which leaves the other RAW without it when the two have different dates. This is the same ambiguity `rename::file_plan` has. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
+
+Files: `crates/app/src/datefolder.rs` (`move_plan`), `crates/app/src/rename.rs`.
+
+#### TODO
+
+- [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
