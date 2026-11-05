@@ -1601,8 +1601,6 @@ impl Index {
     /// belong to a file that no longer exists there and are dropped first, as
     /// in `rename_file`. No `folders` row is made for `new_dir`; `reconcile`
     /// makes it when the folder is opened.
-    // Used by the date-folder split (`date_folder_run`), its next step.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn move_file(&mut self, old: &str, new_dir: &str, new: &str) -> Result<(), String> {
         if old == new {
             return Ok(());
@@ -1631,8 +1629,6 @@ impl Index {
     /// Drop every row of exactly the folder `dir`, dirty ratings included,
     /// and its `folders` row, in one transaction, for a folder removed from
     /// disk. A folder under it and a prefix sibling are untouched.
-    // Used by the date-folder split (`date_folder_run`), its next step.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub fn forget_dir(&mut self, dir: &str) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         for table in ["files", "ratings", "embeddings", "views", "folders"] {

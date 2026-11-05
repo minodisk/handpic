@@ -115,7 +115,7 @@ Decided design:
       before adding one.
     - Independent of Step 1; Step 3 needs both.
 
-- [ ] Step 3: The `date_folder_run` command: rename through `rename_folder`'s path, or split into sibling per-date folders
+- [x] Step 3: The `date_folder_run` command: rename through `rename_folder`'s path, or split into sibling per-date folders
   - Done when: `date_folder_run(dir)` re-plans the folder (the preview is
     not trusted across the dialog) and refuses on any collision or while a
     scan runs; then either (a) one date: renames the folder exactly as
@@ -231,3 +231,4 @@ Decided design:
 
 - (2026-11-05) Step 1 complete
 - (2026-11-06) Step 2 complete
+- (2026-11-06) Step 3 complete
