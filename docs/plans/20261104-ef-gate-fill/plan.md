@@ -490,3 +490,4 @@ Risks:
 - (2026-11-05) Step 1 complete
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
+- (2026-11-06) Step 4 complete (stop rule: no fresh round; Steps 5–6 skipped)
