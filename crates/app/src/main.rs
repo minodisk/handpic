@@ -2,6 +2,7 @@
 
 mod ai;
 mod commands;
+mod datefolder;
 mod diagnostics;
 mod exif;
 mod folders;
@@ -843,6 +844,7 @@ fn main() {
             commands::trash_files,
             commands::trash_rejected_undo,
             commands::trash_rejected_redo,
+            datefolder::date_folder_preview,
             foldersidecars::rewrite_sidecars_preview,
             foldersidecars::rewrite_sidecars_run,
             foldersidecars::delete_sidecars_preview,
