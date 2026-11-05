@@ -1594,6 +1594,54 @@ impl Index {
         tx.commit().map_err(|e| e.to_string())
     }
 
+    /// Move the rows of the file `old` to `new` in the folder `new_dir`, in
+    /// one transaction: the `path` and `dir` of `files`, `ratings`,
+    /// `embeddings` and `views`, and `folders.last_viewed` where it names
+    /// `old`. Every other column is kept. Rows already stored under `new`
+    /// belong to a file that no longer exists there and are dropped first, as
+    /// in `rename_file`. No `folders` row is made for `new_dir`; `reconcile`
+    /// makes it when the folder is opened.
+    // Used by the date-folder split (`date_folder_run`), its next step.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn move_file(&mut self, old: &str, new_dir: &str, new: &str) -> Result<(), String> {
+        if old == new {
+            return Ok(());
+        }
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        for table in ["files", "ratings", "embeddings", "views"] {
+            tx.execute(
+                &format!("DELETE FROM {table} WHERE path = ?1"),
+                params![new],
+            )
+            .map_err(|e| e.to_string())?;
+            tx.execute(
+                &format!("UPDATE {table} SET path = ?2, dir = ?3 WHERE path = ?1"),
+                params![old, new, new_dir],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.execute(
+            "UPDATE folders SET last_viewed = ?2 WHERE last_viewed = ?1",
+            params![old, new],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    /// Drop every row of exactly the folder `dir`, dirty ratings included,
+    /// and its `folders` row, in one transaction, for a folder removed from
+    /// disk. A folder under it and a prefix sibling are untouched.
+    // Used by the date-folder split (`date_folder_run`), its next step.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub fn forget_dir(&mut self, dir: &str) -> Result<(), String> {
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        for table in ["files", "ratings", "embeddings", "views", "folders"] {
+            tx.execute(&format!("DELETE FROM {table} WHERE dir = ?1"), params![dir])
+                .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
     /// The raw `orientation` column of one file, `None` when the index has
     /// no row for it, `Some(None)` when the row has no Orientation (an
     /// error row, or a not-yet-extracted one).
@@ -5748,6 +5796,173 @@ pub(crate) mod tests {
             )]
         );
         assert_eq!(index.last_viewed(&s(&photos)).unwrap(), Some(renamed));
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn move_file_carries_its_rows_to_another_folder_and_replaces_stale_ones() {
+        let dir = temp_dir("move-file");
+        let mut index = open(&dir);
+        let photos = dir.join("photos");
+        let dated = dir.join("2026-10-31");
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        index
+            .write_batch(
+                &s(&photos),
+                &[
+                    (synthetic(&photos, 0), Ok(entry())),
+                    (synthetic(&photos, 1), Ok(entry())),
+                ],
+            )
+            .unwrap();
+        let a = s(&photos.join("00000.ARW"));
+        let b = s(&photos.join("00001.ARW"));
+        let moved = s(&dated.join("00000.ARW"));
+        let embed = |path: String| EmbedRow {
+            file: EmbedTodo {
+                path,
+                size: 1,
+                mtime_ns: 1,
+            },
+            vec: Some(vec![1.0]),
+        };
+        index
+            .set_rating(&s(&photos), &a, Some(4), Flag::Reject, Some("Blue"), true)
+            .unwrap();
+        index
+            .set_rating(&s(&photos), &b, Some(2), Flag::None, None, true)
+            .unwrap();
+        index.set_last_viewed(&s(&photos), &a).unwrap();
+        index
+            .mark_viewed(&s(&photos), &[a.clone(), b.clone()])
+            .unwrap();
+        index
+            .write_embeddings(&s(&photos), &[embed(a.clone()), embed(b.clone())])
+            .unwrap();
+        index
+            .write_batch(&s(&dated), &[(synthetic(&dated, 0), Err("stale".into()))])
+            .unwrap();
+        index
+            .set_rating(&s(&dated), &moved, Some(1), Flag::Pick, None, true)
+            .unwrap();
+        index
+            .mark_viewed(&s(&dated), std::slice::from_ref(&moved))
+            .unwrap();
+        index
+            .write_embeddings(
+                &s(&dated),
+                &[EmbedRow {
+                    vec: None,
+                    ..embed(moved.clone())
+                }],
+            )
+            .unwrap();
+
+        index.move_file(&a, &s(&dated), &moved).unwrap();
+
+        let paths = |index: &Index, folder: &Path| -> Vec<(String, bool)> {
+            index
+                .entries(&s(folder))
+                .unwrap()
+                .into_iter()
+                .map(|e| (e.path, e.has_thumb))
+                .collect()
+        };
+        assert_eq!(paths(&index, &photos), vec![(b.clone(), true)]);
+        assert_eq!(paths(&index, &dated), vec![(moved.clone(), true)]);
+        assert_eq!(
+            index.dirty_rows(&s(&dated)).unwrap(),
+            vec![(
+                moved.clone(),
+                Some(4),
+                Flag::Reject,
+                Some("Blue".to_string()),
+                true
+            )]
+        );
+        assert_eq!(
+            index.dirty_rows(&s(&photos)).unwrap(),
+            vec![(b.clone(), Some(2), Flag::None, None, true)]
+        );
+        assert_eq!(index.viewed_files(&s(&dated)).unwrap(), [moved.as_str()]);
+        assert_eq!(index.viewed_files(&s(&photos)).unwrap(), [b.as_str()]);
+        let rows: Vec<(String, String, Option<Vec<f32>>)> = embedding_rows(&index)
+            .into_iter()
+            .map(|r| (r.0, r.1, r.3))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (moved.clone(), s(&dated), Some(vec![1.0])),
+                (b.clone(), s(&photos), Some(vec![1.0])),
+            ]
+        );
+        assert_eq!(index.last_viewed(&s(&photos)).unwrap(), Some(moved));
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn forget_dir_drops_exactly_one_folder() {
+        let dir = temp_dir("forget-dir");
+        let mut index = open(&dir);
+        let photos = dir.join("photos");
+        let sub = photos.join("sub");
+        let sibling = dir.join("photos2");
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        for folder in [&photos, &sub, &sibling] {
+            let path = s(&folder.join("00000.ARW"));
+            index
+                .write_batch(&s(folder), &[(synthetic(folder, 0), Ok(entry()))])
+                .unwrap();
+            index
+                .set_rating(&s(folder), &path, Some(3), Flag::Pick, None, true)
+                .unwrap();
+            index.set_last_viewed(&s(folder), &path).unwrap();
+            index
+                .mark_viewed(&s(folder), std::slice::from_ref(&path))
+                .unwrap();
+            index
+                .write_embeddings(
+                    &s(folder),
+                    &[EmbedRow {
+                        file: EmbedTodo {
+                            path,
+                            size: 1,
+                            mtime_ns: 1,
+                        },
+                        vec: Some(vec![1.0]),
+                    }],
+                )
+                .unwrap();
+        }
+
+        index.forget_dir(&s(&photos)).unwrap();
+
+        assert!(index.entries(&s(&photos)).unwrap().is_empty());
+        assert!(index.dirty_rows(&s(&photos)).unwrap().is_empty());
+        assert!(index.viewed_files(&s(&photos)).unwrap().is_empty());
+        assert_eq!(index.last_viewed(&s(&photos)).unwrap(), None);
+        let folders: Vec<String> = index
+            .conn
+            .prepare("SELECT dir FROM folders ORDER BY dir")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        let mut kept = vec![s(&sub), s(&sibling)];
+        kept.sort();
+        assert_eq!(folders, kept);
+        let mut embedded: Vec<String> = embedding_rows(&index).into_iter().map(|r| r.1).collect();
+        embedded.sort();
+        assert_eq!(embedded, kept);
+        for folder in [&sub, &sibling] {
+            assert_eq!(index.entries(&s(folder)).unwrap().len(), 1);
+            assert_eq!(index.dirty_rows(&s(folder)).unwrap().len(), 1);
+            assert_eq!(index.viewed_files(&s(folder)).unwrap().len(), 1);
+        }
 
         remove_temp_dir(&dir);
     }
