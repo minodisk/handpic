@@ -66,7 +66,7 @@ lists what is still open):
     - `sequence.rs` in core is the model for the run / cancel / progress shape (`riffle_core::sequence::run(dir, dry_run, cancel, progress)`).
     - Do not touch the index here: the pipeline is pure file copying.
 
-- [ ] Step 3: The import plan and the `import_preview` command
+- [x] Step 3: The import plan and the `import_preview` command
   - Done when:
     - `import.rs` gains the pure planner: `walk(dir)` lists every RAW / JPEG under `dir` recursively (following `folders::kind`'s symlink rule, skipping hidden folders as `folders::list` does) with each RAW's existing `.xmp` / `.dop` sidecars; `plan(files_with_dates, root, pattern, probe)` groups by date through `datefolder::date_of` + `format_date`, and decides per file: `copy`, `skip` (same name and size already at the destination), `collision` (same name, different size) or `undated`; sidecars follow their RAW's decision (a sidecar whose RAW is skipped is itself skipped unless missing at the destination).
     - `import_preview(dir)` reads each file's `DateTimeOriginal` from its head (`riffle_core::reader::read_metadata`, as `date_folder_preview` does when there is no index row), builds the plan, stores it in managed state under a preview id, and returns to the dialog: the preview id, the source folder, per destination folder (in date order) its path, files to copy, bytes to copy, skipped count and the colliding file names, the undated file names, totals, and a refusal reason when the root is not set or the pattern is invalid.
@@ -125,3 +125,4 @@ lists what is still open):
 
 - (2026-11-06) Step 1 complete
 - (2026-11-06) Step 2 complete
+- (2026-11-06) Step 3 complete
