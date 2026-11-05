@@ -72,6 +72,40 @@
 - Read-only timings taken while a copy to D: was still running in the
   background came out at 16–22 MB/s. Do not time the card while D: is busy.
 
+## Step 3: The import plan and `import_preview`
+
+- The planner's per-file type is `Planned`, not `Item`: `import.rs`
+  already imports `chrono::format::Item` for the pattern check.
+- `walk` attaches sidecars from the folder's own listing (a case-insensitive
+  match of `SidecarFormat::sidecar_path`'s name among the entries
+  `SidecarFormat::Both.matches`), not through `sidecar::existing_sidecar`,
+  which re-reads the folder for every RAW without a sidecar of the exact
+  case. A sidecar goes to the first RAW (by path) claiming it, so
+  `FOO.xmp` next to `FOO.ARW` and `FOO.NEF` is not copied twice. A
+  JPEG takes no sidecar.
+- `walk` follows symlinked folders (`folders::kind`, now `pub(crate)`)
+  and keeps a set of canonical folders it has read, so a link loop ends.
+  An unreadable subfolder fails the whole preview rather than silently
+  leaving its photos out.
+- Two card files with one name on one date (Sony numbering wraps across
+  `100MSDCF` / `101MSDCF`) are a collision for the second one: the
+  planner keeps the lowercased names already planned per destination,
+  since Windows and macOS compare names case-insensitively.
+- Sidecar rules as implemented: next to a colliding RAW the sidecar is a
+  collision too (and listed); next to a skipped RAW it is copied when
+  missing and skipped when anything by that name is there, whatever its
+  size (Riffle has likely rewritten it since the first import); next to a
+  copied RAW it is decided on its own (missing copy, same size skip,
+  other size collision).
+- Several dates the pattern maps to one folder (`%Y/%m`) merge into one
+  destination, its items in date then file-name order.
+- `date_of` accepts day 31 of any month; `NaiveDate::parse_from_str` then
+  refuses an impossible date such as `2026:02:31`, which lands in undated.
+- A refused preview (root unset, pattern invalid) returns `id: None` and
+  the reason without walking the folder. Counts in the preview include the
+  sidecars (`copyCount` is files, not photos), matching what the run's
+  progress will count.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, the settings modal's `Import` tab): on

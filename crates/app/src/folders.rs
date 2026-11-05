@@ -237,7 +237,7 @@ fn list(dir: &Path) -> Result<Folder, String> {
 /// call (which does follow the link) only in that rare case, keeping the
 /// common path free of a per-entry stat: `file_type()` comes with the
 /// directory listing on Windows.
-fn kind(entry: &DirEntry) -> Option<(bool, bool)> {
+pub(crate) fn kind(entry: &DirEntry) -> Option<(bool, bool)> {
     let file_type = entry.file_type().ok()?;
     if file_type.is_symlink() {
         let m = std::fs::metadata(entry.path()).ok()?;

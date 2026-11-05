@@ -768,6 +768,7 @@ fn main() {
             }
             app.manage(commands::EyesRequests::default());
             app.manage(sequence::Sequences::default());
+            app.manage(import::ImportPreviews::default());
             app.manage(trash::Runs::default());
             app.manage(commands::AppListing::default());
             app.manage(watch::Watch::spawn(app.handle().clone()));
@@ -860,6 +861,7 @@ fn main() {
             import::set_import_root,
             import::set_import_pattern,
             import::import_pattern_example,
+            import::import_preview,
             sequence::sequence_preview,
             sequence::sequence_run,
             sequence::sequence_cancel,
