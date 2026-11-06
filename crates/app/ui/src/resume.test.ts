@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { anchorAfterFilter, filterListChanged } from "./filter.js";
 import {
   firstEntriesAnchor,
   type LastViewed,
@@ -52,6 +53,31 @@ describe("mustReshow", () => {
 
   test("no pending resume but the current file moved off its anchor still needs show()", () => {
     expect(mustReshow(false, "/b.ARW", "/a.ARW")).toBe(true);
+  });
+
+  // An import's date folder opens empty: its first `resync` lists the first
+  // file that landed, and `refilter` must rebuild the strip and show it.
+  test("the first file to land in a folder opened empty is rebuilt and shown", () => {
+    const empty: string[] = [];
+    const landed = ["/d/DSC00001.ARW"];
+    const anchor = empty[0];
+    expect(filterListChanged(empty, landed, false)).toBe(true);
+    const target = anchorAfterFilter(landed, () => true, anchor, empty);
+    const current = target ?? landed[0];
+    expect(current).toBe("/d/DSC00001.ARW");
+    expect(mustReshow(false, current, anchor)).toBe(true);
+  });
+
+  // While the import goes on, each `resync` adds files after the current one:
+  // the current file stays and is not shown again.
+  test("files landing after the current one keep it current without a reshow", () => {
+    const before = ["/d/DSC00001.ARW", "/d/DSC00002.ARW"];
+    const after = [...before, "/d/DSC00003.ARW", "/d/DSC00004.ARW"];
+    const anchor = before[1];
+    expect(filterListChanged(before, after, false)).toBe(true);
+    const target = anchorAfterFilter(after, () => true, anchor, before);
+    expect(target).toBe(anchor);
+    expect(mustReshow(false, target, anchor)).toBe(false);
   });
 });
 

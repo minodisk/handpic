@@ -165,6 +165,7 @@ import {
   ImportFlow,
   type ImportPreview,
   type ImportProgress,
+  type ImportStarted,
   UNDATED_HEADING,
   canRun,
   collisionItems,
@@ -365,6 +366,9 @@ let sequencing: string | null = null;
 // The import's status line: the preview being read, then how far the run got;
 // null when neither is under way.
 let importing: string | null = null;
+// The last import's done line, kept until the next import starts or a folder
+// opens, so paging and decoded previews (`setStatus()`) do not wipe it.
+let imported: string | null = null;
 // True between `start_scan` and its `faces-done`, i.e. through both scan
 // passes. A rescan asked for while it is true is deferred (`resyncPending`)
 // rather than canceling the scan.
@@ -424,6 +428,7 @@ function whenIdle(label: string, run: () => void, cancel?: () => void): boolean 
 }
 
 const RENAME_CANCELED = "Rename… was canceled";
+const RENAME_REFUSED = "Rename… is unavailable while an import runs";
 // The path of the rename being requested, so the held rename of the same
 // folder or file it replaces (a re-edit of the pending name) is not reported
 // as canceled.
@@ -448,11 +453,21 @@ function holdRename(
       view.clearPending(mark);
     }
   };
+  if (importFlow.busy) {
+    setStatus(RENAME_REFUSED);
+    return;
+  }
   renaming = path;
   const held = whenIdle(
     "Rename…",
     () => {
       heldRename = null;
+      // A held rename can outlive the check above: an import may have begun.
+      if (importFlow.busy) {
+        clearPending();
+        setStatus(RENAME_REFUSED);
+        return;
+      }
       run(clearPending);
     },
     () => {
@@ -850,6 +865,9 @@ function renderMeta(): void {
   }
   if (importing !== null) {
     metaStatusEl.append(line("note", importing));
+  }
+  if (imported !== null) {
+    metaStatusEl.append(line("note", imported));
   }
   if (idle.waiting !== null) {
     metaStatusEl.append(line("note", `${idle.waiting}: waiting for the scan to finish`));
@@ -1605,8 +1623,11 @@ dateFolderCancelButton.addEventListener("click", dismissDateFolder);
 // The folder tree's `Import…`: plan copying every photo under the
 // right-clicked folder (a memory card's root included) into the date folders
 // of the import settings, then run the copy with progress and cancel. The run
-// does not touch the index nor wait for a scan. Its errors join the sticky
-// `errors` list, keyed by path.
+// does not touch the index nor wait for a scan. Once it has started, its first
+// date folder opens and the dialog steps aside, so the strip fills through the
+// folder watcher and can be culled meanwhile; `Import…` again brings the
+// dialog back to cancel. Its errors join the sticky `errors` list, keyed by
+// path.
 const importFlow = new ImportFlow();
 // Only its key decisions are used: Escape and Tab, as in the settings modal.
 const importKeys = new SettingsModal();
@@ -1635,11 +1656,22 @@ function importFrom(dir: string): void {
     trashFlow.busy ||
     sequenceFlow.busy ||
     sidecarFlow.busy ||
-    dateFolderFlow.busy ||
-    !importFlow.start(dir)
+    dateFolderFlow.busy
   ) {
     return;
   }
+  if (importFlow.reopen()) {
+    setFilterMenuOpen(false);
+    setSortMenuOpen(false);
+    closeContextMenu();
+    importDialog.hidden = false;
+    importCancelButton.focus();
+    return;
+  }
+  if (!importFlow.start(dir)) {
+    return;
+  }
+  imported = null;
   importing = `reading ${dir}…`;
   renderMeta();
   window.__TAURI__.core
@@ -1700,9 +1732,23 @@ function runImport(): void {
   importing = importProgressStatus(0, 0);
   renderMeta();
   window.__TAURI__.core
-    .invoke<number>("import_run", { previewId })
-    .then((runId) => {
+    .invoke<ImportStarted>("import_run", { previewId })
+    .then(({ runId, folders: created }) => {
       const { done, cancel } = importFlow.started(runId);
+      if (!importFlow.isOpen) {
+        closeImportDialog();
+      }
+      const first = created[0];
+      // The body of `finishImport` waits for this open, whose own `errors.clear()`
+      // and status would otherwise wipe the failures it lists, and which must
+      // have `openDir` set for the resync check.
+      const opening =
+        first === undefined
+          ? Promise.resolve()
+          : openDirectory(first, newFolderToken()).catch((err: unknown) => {
+              setStatus(String(err));
+            });
+      importOpening = opening;
       if (done !== null) {
         finishImport(done);
       } else if (cancel) {
@@ -1716,21 +1762,36 @@ function runImport(): void {
     });
 }
 
+// The open of the running import's first date folder, if any.
+let importOpening: Promise<void> = Promise.resolve();
+
 function finishImport(payload: ImportDone): void {
   if (!importFlow.done(payload)) {
     return;
   }
   closeImportDialog();
+  void importOpening.then(() => {
+    reportImport(payload);
+  });
+}
+
+function reportImport(payload: ImportDone): void {
   for (const failure of payload.failed) {
     errors.add(failure.path, importFailureText(failure));
   }
   importing = null;
-  setStatus(importDoneStatus(payload));
+  imported = importDoneStatus(payload);
+  renderMeta();
+  // A file that landed between the open folder's listing and its watch
+  // being set reaches the strip here at the latest.
+  if (openDir !== null && opensTarget(openDir, payload.folders, folders.ignoreCase)) {
+    resync("import");
+  }
 }
 
-function dismissImport(): void {
-  const decision = importFlow.dismiss();
-  if (decision.kind === "close") {
+function dismissImport(key = false): void {
+  const decision = importFlow.dismiss(key);
+  if (decision.kind === "close" || decision.kind === "aside") {
     closeImportDialog();
   } else if (decision.kind === "cancel" && decision.runId !== null) {
     void window.__TAURI__.core.invoke("import_cancel", { runId: decision.runId });
@@ -1742,7 +1803,7 @@ function importKeydown(event: KeyboardEvent): void {
   const decision = importKeys.key(keyName(event));
   if (decision.kind === "close") {
     event.preventDefault();
-    dismissImport();
+    dismissImport(true);
   } else if (decision.kind === "focus") {
     event.preventDefault();
     const buttons = [importRunButton, importCancelButton].filter((b) => !b.disabled);
@@ -1752,7 +1813,9 @@ function importKeydown(event: KeyboardEvent): void {
 }
 
 importRunButton.addEventListener("click", runImport);
-importCancelButton.addEventListener("click", dismissImport);
+importCancelButton.addEventListener("click", () => {
+  dismissImport();
+});
 
 void window.__TAURI__.event.listen<ImportProgress>("import-progress", ({ payload }) => {
   if (!importFlow.accepts(payload.runId)) {
@@ -4129,6 +4192,7 @@ function openDirectory(folder: string, token: number): Promise<void> {
     history.removeWhere(isJudgments);
     redoable.removeWhere(isJudgments);
     errors.clear();
+    imported = null;
     fileIndex.clear();
     files.forEach((path, at) => {
       fileIndex.set(path, at);

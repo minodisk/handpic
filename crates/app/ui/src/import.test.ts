@@ -174,7 +174,10 @@ describe("ImportFlow", () => {
     expect(flow.isOpen).toBe(true);
     expect(flow.run()).toBe(7);
     expect(flow.phase).toBe("running");
+    expect(flow.isOpen).toBe(true);
     expect(flow.started(1)).toEqual({ done: null, cancel: false });
+    expect(flow.isOpen).toBe(false);
+    expect(flow.busy).toBe(true);
     expect(flow.accepts(1)).toBe(true);
     expect(flow.done(done())).toBe(true);
     expect(flow.phase).toBe("done");
@@ -208,11 +211,31 @@ describe("ImportFlow", () => {
     expect(flow.previewed(1)).toBe(false);
   });
 
-  test("dismissing a run cancels it and keeps the dialog open", () => {
+  test("a started run's dialog steps aside and comes back to cancel", () => {
     const flow = running();
     flow.started(4);
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(true);
+    expect(flow.isOpen).toBe(true);
+    expect(flow.reopen()).toBe(false);
     expect(flow.dismiss()).toEqual({ kind: "cancel", runId: 4 });
     expect(flow.isOpen).toBe(true);
+    expect(flow.done(done({ runId: 4, canceled: true }))).toBe(true);
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(false);
+  });
+
+  test("only a run under way with its dialog aside reopens", () => {
+    const flow = new ImportFlow();
+    expect(flow.reopen()).toBe(false);
+    flow.start("E:\\");
+    expect(flow.reopen()).toBe(false);
+    flow.previewed(7);
+    expect(flow.reopen()).toBe(false);
+    flow.run();
+    expect(flow.reopen()).toBe(false);
+    flow.started(1);
+    expect(flow.reopen()).toBe(true);
   });
 
   test("ignores the events of another run", () => {
@@ -234,5 +257,18 @@ describe("ImportFlow", () => {
     const flow = running();
     expect(flow.dismiss()).toEqual({ kind: "cancel", runId: null });
     expect(flow.started(1)).toEqual({ done: null, cancel: true });
+    expect(flow.isOpen).toBe(true);
+  });
+
+  test("Escape on a reopened dialog steps aside again, Cancel still cancels", () => {
+    const flow = running();
+    flow.started(4);
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(true);
+    expect(flow.isOpen).toBe(true);
+    expect(flow.dismiss(true)).toEqual({ kind: "aside" });
+    expect(flow.isOpen).toBe(false);
+    expect(flow.reopen()).toBe(true);
+    expect(flow.dismiss()).toEqual({ kind: "cancel", runId: 4 });
   });
 });

@@ -92,7 +92,7 @@ lists what is still open):
     - A collision or an undated file is informational: the run button is enabled whenever at least one file is to be copied.
     - Errors join the sticky `errors` list keyed by path, as the sequence flow's do.
 
-- [ ] Step 5: Cull while importing: open the first date folder at run start and let the strip fill
+- [x] Step 5: Cull while importing: open the first date folder at run start and let the strip fill
   - Done when:
     - When the run starts, `main.ts` opens the first destination folder (the earliest date; created empty by `import_run` before the copy begins) through `openDirectory`, and the folder tree reveals it (`folders.reveal`, which the existing open path already does).
     - As files are renamed into the open folder, the existing watcher → `folder-changed` → `resync("watch")` path lists them and scans only the new ones: the strip grows without a full reload, the current file stays current, the judgments made so far stay. The folder's node in the tree updates its count (`tree-changed` on the expanded parent through `treewatch`).
@@ -127,3 +127,4 @@ lists what is still open):
 - (2026-11-06) Step 2 complete
 - (2026-11-06) Step 3 complete
 - (2026-11-06) Step 4 complete
+- (2026-11-06) Step 5 complete
