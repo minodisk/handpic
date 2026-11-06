@@ -1437,6 +1437,20 @@ JPEG-only (view-only) folder never lists anything.
   a `Genre` item is checked, at most one call in flight. The `Genre`
   section and its checks exist only while `aiEnabled` is on; turning it
   off clears them, and they are not part of the stored filter.
+- **`outputs_of(dir, files)` feeds a destructive filter, so it never
+  guesses.** The `No output` filter section can be piped straight into
+  `Move to Trash…`, so a wrong `no` trashes a file that has an export.
+  `output.rs` therefore does not reuse `read_listing` or `folders::is_file`,
+  which swallow per-entry errors (`entries.flatten()`, `kind` returning
+  `None`); it propagates every read error. A missing `dir` is `Ok(None)`, any
+  other failure to read it is `Err`, and a dangling symlink named `Output` is
+  `Err`. The frontend's `readOutputs` turns only its own rejection into "no
+  answer" and puts the failure on `outputsFailure`, its own `renderMeta` line,
+  so an unreadable export folder never fails the folder open. Known
+  over-matches (`X_1.jpg` also counts for `X.DNG`; any extension counts) are
+  accepted because they only keep a file out of `No output`. The symlink
+  tests are `#[cfg(unix)]`, so Windows does not run them.
+  Source: `docs/plans/_archived/20261106-filter-by-output/learnings.md`, Step 1 and Step 2.
 - **The ranking is derived too; only its weights are stored.**
   `ranking_of(dir)` reads `Index::rank_rows` (every `files` row of the
   folder with its flag, capture time, the pass-2 values when the row is at
@@ -1707,6 +1721,27 @@ cannot rely on `refilter` alone to recompute it.
   (`refreshEntries`), and also inside `refilter` after `setFiles`, which clears
   the strip's per-index store.
 - Source: `docs/plans/_archived/20260919-sharpness-cue/learnings.md`, Step 3.
+
+### A backend answer that is a subset of the request cannot tell "no" from "never asked" (Hit)
+
+`outputs_of` returns only the files that have an export, so a file missing from
+`fileOutputs` is ambiguous. Trash undo appends the restored files to `allFiles`
+and refilters before `resync("restore")`, and that resync defers for a whole
+scan. In that window a restored file with an export would read `no` and be
+offered to the trash again.
+
+- Give the lookup (`outputOf`) the listing the answer was made for, and answer
+  `undefined` for a file outside it. An unknown file passes no checked `Output`
+  item, so it is never offered as `No output`.
+- `setOutputSection` deliberately does not `refilter()`, unlike
+  `setGenreSection(false)`. In `openDirectory` it runs before `files`, `index`
+  and `openDir` are switched, so `refilter` would call `show()` and could write
+  the new folder's file as the old folder's last viewed. In `resync` it would
+  drop `previous`. Call it only where a filter follows on the next lines.
+- `outputs_of` needs the listing, so it cannot sit in the flat `Promise.all`
+  with `list_arw`. Put `listed.then(readOutputs)` next to the `list_arw` promise
+  in both `openDirectory` and `resync`.
+- Source: `docs/plans/_archived/20261106-filter-by-output/learnings.md`, Step 2.
 
 ### Give the current folder one token, not one counter per feature (Hit, repeatedly)
 
