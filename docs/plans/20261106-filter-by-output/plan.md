@@ -179,3 +179,4 @@ What is established from the code, the docs and the user's library:
 ## Progress
 
 - (2026-11-07) Step 1 complete
+- (2026-11-07) Step 2 complete
