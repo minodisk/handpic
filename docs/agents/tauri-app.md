@@ -874,6 +874,22 @@ system does case-insensitive but case-preserving lookups.
 - Source: `docs/plans/_archived/20260918-photolab-dop-sidecar/learnings.md`,
   Step 2.
 
+### chrono `format(...)` with a user-supplied pattern: `.to_string()` panics, so write with `write!` (Hit)
+
+`NaiveDate::format` with a pattern the user typed does not fail up front. An
+unknown specifier or a lone `%` becomes `Item::Error`. A specifier that needs
+a time, an offset or a timestamp (`%H %M %S %p %I %f %z %Z %s %T %R %c %+`)
+makes `Display` return `fmt::Error`. `.to_string()` on that value panics.
+
+- Format with `write!` into a `String` and map the error to a refusal message
+  (`import.rs`'s `format_date`).
+- `%n` and `%t` are valid and emit a newline and a tab. A control-character
+  check on each produced path segment is what refuses them.
+- Validate a pattern by formatting a fixed date, and run the same segment
+  checks on every real date. Re-validate a stored pattern at load, falling back
+  to the default, so a bad stored value never reaches a run.
+- Source: `docs/plans/_archived/20261106-import-from-card/learnings.md`, Step 1.
+
 ### Path comparisons in the UI take the platform `ignoreCase` flag; a DOM-touching module cannot be imported by a node-env test (Hit)
 
 The UI's path helpers (`rebase`, `opensTarget`, `restoredInto`, and the trash
@@ -2657,6 +2673,15 @@ single file.
   claim and copied forward as one.
 - State what was actually measured next to the number, and say plainly what
   still needs a real-folder measurement.
+- For a copy or write benchmark the destination is a condition too. A nearly
+  full, DRAM-less SATA SSD lost its write cache under sustained writes, so
+  throughput fell run after run with identical settings (21.6 then 8.1 MB/s)
+  while the source read alone ran at 135 MB/s. Methods measured back to back on
+  such a drive cannot be told apart. Compare on a destination faster than the
+  source, wait or alternate the order, and do not time the source while the
+  destination is still busy (read timings taken during a background copy came
+  out at 16-22 MB/s). Source:
+  `docs/plans/_archived/20261106-import-from-card/learnings.md`, Step 2.
 
 ### Run a multi-minute step in the background and poll it in short loops (Hit)
 

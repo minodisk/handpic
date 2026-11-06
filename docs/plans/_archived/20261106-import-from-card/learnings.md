@@ -299,3 +299,9 @@
   run here. Related files: `crates/app/ui/src/main.ts`,
   `crates/app/ui/src/import.ts`, `crates/app/src/import.rs`,
   `crates/app/src/watch.rs`.
+- `wait-pr-actionable.sh` returns `ACTION=blocked` with `checksOverall=success`
+  and `pendingCount=0` right after a push while the PR's CI checks are still
+  `IN_PROGRESS` (seen on #894, #898, #902, #906 and #908; #898's `pr-runner`
+  aborted on it). It should count in-progress checks as pending and keep
+  waiting. Done when a `blocked` is only returned once no check is in progress.
+  Related file: the `pr` / `develop` skills' wait script.

@@ -2156,11 +2156,11 @@ Files: `crates/app/src/datefolder.rs` (`move_plan`), `crates/app/src/rename.rs`.
 
 #### Background
 
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
+The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. The import-from-card feature (plan: `docs/plans/_archived/20261106-import-from-card/plan.md`) saw the same on PRs 894, 898, 902, 906 and 908: `ACTION=blocked` with `checksOverall=success` and `pendingCount=0` right after a push while the PR's checks were still `IN_PROGRESS`; #898's `pr-runner` aborted on it. So the script is not counting in-progress checks as pending. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
 
 #### TODO
 
-- [ ] Read the script and reproduce on a fresh PR. Treat an empty or pending rollup as "keep waiting", and make `pendingCount` count the rollup's pending entries. Done when a PR polled right after creation never returns `blocked` while any check is pending, shown by a test or a recorded transcript. Merge into an existing pr-runner polling item if one covers it.
+- [ ] Read the script and reproduce on a fresh PR. Treat an empty or pending rollup as "keep waiting", and make `pendingCount` count the rollup's pending entries. Count `IN_PROGRESS` checks as pending, and return `blocked` only once no check is in progress. Done when a PR polled right after creation never returns `blocked` while any check is pending, shown by a test or a recorded transcript. Merge into an existing pr-runner polling item if one covers it.
 
 ### Agents: `test (ubuntu-latest)` hangs on docs-only commits
 
@@ -2171,3 +2171,41 @@ The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/pl
 #### TODO
 
 - [ ] Collect the hung runs' logs and decide whether the cause is a flaky test, a cache stall or a runner problem. Then lower the job timeout, add a per-test timeout, or add a "rerun, then check X" note to `docs/agents/github-actions-workflows.md`. Done when the cause is identified, or a decision that reruns are enough is recorded with a rerun-only rule in that guide.
+
+### App: real-device checks for Import… (import-from-card)
+
+#### Background
+
+The import-from-card feature added a Settings > `Import` tab (destination root and folder pattern), the folder tree's `Import…` item, and cull-while-importing (the first date folder opens at run start and the strip fills as files land). Unit tests on temp dirs, Vitest and `mise run ci` cover the pattern validation, the copy pipeline, the planner, the run, the flow's state machine and the watcher's temp-file filter. The settings tab, the dialog and the run in a running app were never exercised, nor was cull-while-importing on a real card. Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
+
+Files: `crates/app/ui/src/settings.ts`, `crates/app/ui/index.html`, `crates/app/ui/src/import.ts`, `crates/app/ui/src/main.ts`, `crates/app/src/import.rs`, `crates/app/src/watch.rs`.
+
+#### TODO
+
+- [ ] On Windows (and macOS if available), open Settings > Import and press `Choose…` to pick a folder. Expected: the root field shows it and the example line reads `<root>\<YYYY>\<YYYY-MM-DD>` for today. Type `%Y/%H`: the error shows in red under the input. Blur: the stored pattern is kept (reopen the app and the field shows the last valid pattern). Click each example button (`%Y/%F`, `%F`, `%Y/%m/%d`, `%Y/%m`): the input and the example follow, and after a restart the stored value follows too.
+- [ ] On Windows, with a memory card (or any folder of RAWs / JPEGs) and the root set, right-click the card's root in the folder tree and choose `Import…`. Expected: the dialog lists the source, one row per date folder with its file count, size and skipped count, the colliding and undated names in their own lists, and `Run` enabled. Run it: the status line shows `importing N / M`. An uncanceled run ends with `Imported N files (X MB)...`. The date folders hold the copies with the card's modified times and no `.riffle-tmp` file, and `Riffle.log` has one `import:` line. Choose `Import…` again on the same card: the note "Nothing left to copy" shows and `Run` is disabled. With the root unset, the refusal shows in the dialog and `Run` is disabled. While the import dialog is up, Sequence, Rename by Capture Date, the sidecar items and Settings do not open.
+- [ ] On Windows, with a card never written to and the root set to a test root such as `D:\Photos\tests\20261106-import-step5\` (delete it afterwards), open another folder first, then `Import…` on the card's root and `Run`. Expected: the dialog closes at once. The earliest date folder opens (empty at first) and is revealed and selected in the tree with its parents expanded. The first file appears in the strip and the preview about a second after it lands. The strip keeps growing in batches while the status line shows `importing N / M`. The current file stays current, and flags / ratings set meanwhile stay. No `*.riffle-tmp` ever shows in the strip. `Riffle.log` (Timing logs on) shows `rescan:` lines about once per scan cycle, not one per file. With 500+ files the arrow keys and the preview stay responsive. The date folder's count badge in the tree grows. While files land in a second date folder the strip does not change. `Import…` again during the run brings the dialog back, Escape only closes it (the run continues), and `Cancel` stops it with `Import canceled, ...`. With `aiEnabled` on, the embeddings fill mostly after the import ends and the strip does not stall.
+
+### Core: re-measure the import copy pipeline against Explorer on a fast destination
+
+#### Background
+
+The import-from-card feature's `riffle-cli copybench` measured the copy pipeline (8 MiB x 4 buffers, per-file `sync_all`) only against `D:` (a Crucial BX500, DRAM-less, 96 % full). That drive capped every method at 8-22 MB/s, including `robocopy`, while the card read alone ran at 135 MB/s. The numbers cannot tell the methods apart, and Explorer itself was never timed. The defaults stay at 8 MiB x 4, and `FILE_FLAG_SEQUENTIAL_SCAN` and dropping `sync_all` showed no gain on that drive. Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
+
+Files: `crates/core/src/copy.rs`, `crates/cli/src/main.rs`, `docs/humans/performance.md`.
+
+#### TODO
+
+- [ ] Copy the same fresh, never-read files from the card into a destination on a faster or emptier drive (the NVMe `C:`) by `riffle-cli copybench <card-dir> <dst-dir>` and by an Explorer copy, with idle time between runs, and record the MB/s. Done when the table in `docs/humans/performance.md` has the Explorer row and the 8 MiB x 4 defaults and the per-file `sync_all` are confirmed or changed.
+
+### Core: `copy::copy_files` can replace a destination created between its check and the rename
+
+#### Background
+
+The import-from-card feature's `copy::copy_files` checks `dst.exists()` before reading and again just before `fs::rename`, but `fs::rename` replaces the destination on every platform. A file created at the destination in that window, such as a sidecar the app writes for a RAW that just landed, would be replaced. A per-OS no-replace rename closes it (`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING`, `renameat2` with `RENAME_NOREPLACE`, `renamex_np` with `RENAME_EXCL`). Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
+
+Files: `crates/core/src/copy.rs`.
+
+#### TODO
+
+- [ ] Replace the final `fs::rename` with a no-replace rename on Windows, Linux and macOS, and keep the failing-job message `exists: ...`. Done when a unit test that creates the destination between the check and the rename (through a hook or a stub) leaves the existing file untouched on the platform CI runs.
