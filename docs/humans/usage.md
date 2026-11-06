@@ -467,8 +467,8 @@ viewer shows a prompt in its center; click it to open the folder picker.
     imported and is skipped, so a second import of the same card copies
     nothing. A file with the same name and another size is a collision: it is
     listed and skipped, and the file there is never overwritten. So is the
-    second of two files of one date with one name, as when the camera's
-    numbering wraps across `100MSDCF` and `101MSDCF`. Only name and size are
+    second of two files with one name bound for one folder, as when the
+    camera's numbering wraps across `100MSDCF` and `101MSDCF`. Only name and size are
     compared, with no hash, so a file edited in place to the same length
     counts as imported. A sidecar follows its RAW: next to a colliding RAW it
     collides too, and next to a skipped RAW it is copied when missing and left
