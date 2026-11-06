@@ -157,7 +157,11 @@ only the judgment fields of the current format's sidecars, and
 OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
 `Sequence JPEG Timestamps…` commands (`sequence_preview`,
 `sequence_run`, `sequence_cancel`) and their `sequence-progress` /
-`sequence-done` events, and
+`sequence-done` events, `src/output.rs` the `outputs_of` command behind the
+strip's `Output` filter (which of a folder's files have an export in its
+`Output` or `Output-sequenced` subfolder, by file stem, with PhotoLab's copy
+and DeepPRIME suffixes; no answer without such a folder, an error when one
+cannot be read whole), and
 `src/photolab.rs` the PhotoLab database lookup that gives a fresh `.dop` the
 registered image's Source and master Item Uuids so PhotoLab does not import it
 as a virtual copy (see `docs/agents/photolab.md`), and

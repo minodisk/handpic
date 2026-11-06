@@ -54,7 +54,7 @@ What is established from the code, the docs and the user's library:
 
 ## Steps
 
-- [ ] Step 1: The `outputs_of` command: which of a folder's files have an export
+- [x] Step 1: The `outputs_of` command: which of a folder's files have an export
   - Done when:
     - A new `crates/app/src/output.rs` holds the pure match: given the RAW
       file names of a folder and the file names found in its export folders,
