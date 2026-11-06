@@ -400,9 +400,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
   Trash", with how many failed); whatever could not be moved is listed as
   an error and stays in the folder. Nothing is deleted: the file and its
   sidecars all go to the Trash, so restoring them brings back the stars,
-  the flag and the color label. Confirmed while a scan runs, it waits for
-  the scan, the status line saying so, and moves the files when the scan
-  ends; opening another folder meanwhile drops it. One `Edit > Undo`
+  the flag and the color label. Confirmed while a scan runs, it stops the
+  scan, the status line saying it waits for it, moves the files as soon as
+  the scan has stopped, and then scans the files left; opening another
+  folder meanwhile drops it. One `Edit > Undo`
   (`CmdOrCtrl+Z`) takes the whole move back, whichever folder is open (none
   at all included): every file and sidecar it moved goes back where it came
   from, the status line says how many came back ("Restored 3 files from the

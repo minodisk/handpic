@@ -94,7 +94,7 @@ import { type Panels, toggle, toggleSides } from "./panels.js";
 import { treeGate } from "./treekeys.js";
 import { rebase } from "./tree.js";
 import { type Pending, editKey } from "./rename.js";
-import { IdleGate } from "./idle.js";
+import { IdleGate, cancelsScan } from "./idle.js";
 import { scanFocusPaths } from "./scanfocus.js";
 import {
   type RescanTrigger,
@@ -419,6 +419,14 @@ function sendScanFocus(): void {
 // An operation pressed while a scan runs waits here for the scan's end; a
 // folder switch drops it.
 const idle = new IdleGate(() => scanRunning);
+
+// Stops the current scan, if `scan_folder` has given it an id. A stale id is
+// ignored by the backend, so `startScan` asks again for the scan it starts.
+function cancelScan(): void {
+  if (scanId !== null) {
+    void window.__TAURI__.core.invoke<void>("cancel_scan", { scanId }).catch(() => {});
+  }
+}
 
 // Whether `run` was held for the scan's end rather than run at once.
 function whenIdle(label: string, run: () => void, cancel?: () => void): boolean {
@@ -958,8 +966,10 @@ function confirmTrashFiles(paths: string[]): void {
 }
 
 // Move `paths` of `dir` and their sidecars to the Trash through
-// `trash_files`, once no scan runs. Dropped when another folder was opened
-// meanwhile; the run's result is reported even if one was opened while it
+// `trash_files`, at once when no scan runs, else as soon as the scan this
+// cancels has ended: the backend refuses the move until then. The canceled
+// scan leaves files unscanned, so a rescan is queued whatever becomes of the
+// held move. Dropped when another folder was opened meanwhile; the run's result is reported even if one was opened while it
 // ran, since the backend recorded it for undo. The confirm dialog stays open
 // in its running phase until the invoke settles, so the strip does not get
 // the keyboard back mid-move. When the idle gate holds the move for a scan's
@@ -1007,6 +1017,8 @@ function trashFilesIn(dir: string, paths: string[]): void {
   sync = false;
   if (held) {
     closeTrashDialog();
+    cancelScan();
+    resyncPending ??= "scan-canceled";
   }
 }
 
@@ -4073,7 +4085,13 @@ function startScan(folder: string): Promise<void> {
         .invoke<void>("start_scan", {
           scanId: scan_id,
         })
-        .then(sendScanFocus);
+        .then(() => {
+          sendScanFocus();
+          // A trash held while `scan_folder` ran had no id to cancel yet.
+          if (cancelsScan(idle.waiting)) {
+            cancelScan();
+          }
+        });
     })
     .catch((err: unknown) => {
       if (seq !== currentScan) {

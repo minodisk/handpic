@@ -1794,6 +1794,24 @@ folder changed" event has to pick the right one.
   (`idle.inFlight`, set by `settleIdle`), whose settle drains it: the
   confirm dialog closing refocuses the window, and a rescan started then
   would make the command's own scan guard refuse it.
+- Move to Trash is the held operation that cancels the scan (`cancelsScan`
+  in `idle.ts`): its files are about to go, so scanning them is wasted. It is
+  still held, because `trash_files` refuses while `scanning()`, which stays
+  true until the canceled task's `finish`, just before `faces-done`, so
+  `faces-done` remains the one point that runs it. `cancel_scan` only sets
+  the flag of the scan whose id it is given, short of the third pass (which
+  `stop_embedding` covers), and the task then ends the usual way: `scan-done`
+  with the partial total, `faces-done`, an empty `embed-done`.
+  Pressing it sets `resyncPending ??= "scan-canceled"`, so the canceled scan's
+  `faces-done` leads to a rescan whatever becomes of the held move: run, it
+  re-defers behind `idle.inFlight` and `trashed()`'s `resync("trash")`
+  collapses into it, so one rescan follows the move; replaced by a later
+  `request` or dropped by its guards, the rescan still finishes the folder's
+  scan; a folder switch clears the slot and scans anyway.
+  A press while `scan_folder` is in flight has no id to cancel (the current
+  `scanId` is null or stale, which the backend ignores), so `startScan` asks
+  again after `start_scan` resolves when `cancelsScan(idle.waiting)`, and
+  `cancel` needs no case for `pending` entries.
 - `IdleGate.request(label, run, cancel?)` returns whether it held `run`; the
   optional `cancel` fires when the held operation is replaced by a later
   `request` or dropped by `discard()`, never when `drain()` runs it. The two

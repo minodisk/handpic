@@ -137,4 +137,11 @@ describe("rescanLine", () => {
     expect(rescanLine("refresh", "start")).toBe("rescan: trigger=refresh deferred=false");
     expect(rescanLine("refresh", "defer")).toBe("rescan deferred: trigger=refresh");
   });
+
+  test("names the rescan after a canceled scan", () => {
+    expect(rescanLine("scan-canceled", "defer")).toBe("rescan deferred: trigger=scan-canceled");
+    expect(rescanLine("scan-canceled", "drained")).toBe(
+      "rescan: trigger=scan-canceled deferred=true",
+    );
+  });
 });

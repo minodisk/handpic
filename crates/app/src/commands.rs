@@ -1195,6 +1195,18 @@ impl ScansState {
         }
     }
 
+    /// Cancel the scan spawned under `scan_id`, short of its third pass. A
+    /// stale or unknown id is ignored, and so is a scan in that pass, which
+    /// `stop_embedding` covers and no guard waits for. It only sets the flag:
+    /// `scanning()` stays true until the task's own `finish`.
+    fn cancel(&self, scan_id: u64) {
+        if let Some((id, cancel, _, _)) = &self.running {
+            if *id == scan_id && !self.in_embed_pass() {
+                cancel.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
     /// Drop the entry of the scan spawned under `scan_id`, if it is still the
     /// one stored. A later `scan_folder` may have taken it and a later
     /// `start_scan` stored a newer one, which this must not clear.
@@ -1905,6 +1917,20 @@ pub fn set_scan_focus(app: tauri::AppHandle, scan_id: u64, paths: Vec<String>) {
         Err(std::sync::TryLockError::WouldBlock) => return,
     };
     state.set_focus(scan_id, paths);
+}
+
+/// Stop the scan `scan_id` before its third pass, for a Move to Trash the
+/// frontend holds until the scan has ended. It still ends the normal way:
+/// `scan-done` with the partial total, then `faces-done`. A scan that has
+/// ended or been superseded ignores it, so a late call is harmless.
+#[tauri::command]
+pub async fn cancel_scan(app: tauri::AppHandle, scan_id: u64) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let scans = app.state::<Scans>();
+        index::lock(&scans.0).cancel(scan_id);
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[derive(serde::Serialize, Clone)]
@@ -3095,6 +3121,52 @@ mod tests {
         state.finish(1);
         assert_eq!(state.embedding, None);
         assert!(!state.scanning());
+        drop(state);
+        let _ = go.send(());
+    }
+
+    #[test]
+    fn canceling_a_scan_by_its_id_sets_its_flag_and_it_scans_until_it_finishes() {
+        let scans = Arc::new(Scans(Mutex::new(ScansState::default())));
+        let (go, handle) = spawn_scan(&scans, 1);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut state = index::lock(&scans.0);
+        state.running = Some((1, cancel.clone(), ScanFocus::default(), handle));
+
+        state.cancel(1);
+        assert!(cancel.load(Ordering::Relaxed));
+        assert!(state.scanning(), "the task has not finished yet");
+
+        state.finish(1);
+        assert!(!state.scanning());
+        drop(state);
+        let _ = go.send(());
+    }
+
+    #[test]
+    fn canceling_a_stale_id_leaves_the_running_scan_alone() {
+        let scans = Arc::new(Scans(Mutex::new(ScansState::default())));
+        let (go, handle) = spawn_scan(&scans, 2);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut state = index::lock(&scans.0);
+        state.cancel(1);
+        state.running = Some((2, cancel.clone(), ScanFocus::default(), handle));
+        state.cancel(1);
+        assert!(!cancel.load(Ordering::Relaxed));
+        drop(state);
+        let _ = go.send(());
+    }
+
+    #[test]
+    fn canceling_leaves_a_scan_in_its_embed_pass_alone() {
+        let scans = Arc::new(Scans(Mutex::new(ScansState::default())));
+        let (go, handle) = spawn_scan(&scans, 1);
+        let cancel = Arc::new(AtomicBool::new(false));
+        let mut state = index::lock(&scans.0);
+        state.running = Some((1, cancel.clone(), ScanFocus::default(), handle));
+        state.start_embedding(1);
+        state.cancel(1);
+        assert!(!cancel.load(Ordering::Relaxed));
         drop(state);
         let _ = go.send(());
     }

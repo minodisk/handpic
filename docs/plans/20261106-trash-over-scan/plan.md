@@ -59,7 +59,7 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 
 ## Steps
 
-- [ ] Step 1: Cancel the running scan when Move to Trash is held
+- [x] Step 1: Cancel the running scan when Move to Trash is held
   - Done when:
     - `ScansState::cancel(scan_id)` in `crates/app/src/commands.rs` sets the
       cancel flag of the scan in `running` when its id is `scan_id` and it
@@ -393,4 +393,4 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 
 ## Progress
 
-- (none yet)
+- (2026-11-06) Step 1 complete
