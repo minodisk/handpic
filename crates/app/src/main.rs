@@ -813,6 +813,7 @@ fn main() {
             commands::scan_folder,
             commands::start_scan,
             commands::set_scan_focus,
+            commands::cancel_scan,
             commands::folder_entries,
             commands::genres_of,
             rank::ranking_of,

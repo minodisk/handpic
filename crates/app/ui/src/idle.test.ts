@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { IdleGate } from "./idle.js";
+import { IdleGate, cancelsScan } from "./idle.js";
 
 describe("IdleGate", () => {
   test("runs at once when idle", () => {
@@ -112,5 +112,18 @@ describe("IdleGate", () => {
     expect(held).toBe(false);
     expect(gate.waiting).toBeNull();
     expect(events).toEqual(["run"]);
+  });
+});
+
+describe("cancelsScan", () => {
+  test("is true for Move to Trash", () => {
+    expect(cancelsScan("Move to Trash")).toBe(true);
+  });
+
+  test("is false for the operations that wait out the scan, and for none", () => {
+    expect(cancelsScan("Rename…")).toBe(false);
+    expect(cancelsScan("Undo Move to Trash")).toBe(false);
+    expect(cancelsScan("Delete Sidecars")).toBe(false);
+    expect(cancelsScan(null)).toBe(false);
   });
 });

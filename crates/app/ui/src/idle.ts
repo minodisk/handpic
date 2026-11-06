@@ -55,3 +55,9 @@ export class IdleGate {
     return this.held?.label ?? null;
   }
 }
+
+// Whether the operation held under `label` stops the running scan rather than
+// waiting it out: its files are about to go, so scanning them is wasted.
+export function cancelsScan(label: string | null): boolean {
+  return label === "Move to Trash";
+}

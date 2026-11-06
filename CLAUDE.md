@@ -103,7 +103,8 @@ collapsed into one rerun; the shared weights and the per-genre offsets stored in
 `ranking.json` under the app's local data dir, the prior's when none fits),
 `src/commands.rs` the Tauri commands, including `set_scan_focus`, which hands
 the running scan the current file and the strip's visible range,
-`faces_of`, which detects the faces (box, score, five landmarks) the focus mark
+`cancel_scan`, which stops the running scan short of its third pass for a
+held Move to Trash, `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
 draws on demand through the scan's `detect_around` without touching the index,
 `genres_of`, which gives the folder's genre labels from its stored
 embeddings, and `eyes_of`, which judges with `eyes` whether the eyes of the shown file's
@@ -203,7 +204,8 @@ a file as viewed once its decoded preview has stayed on screen for
 tells a switch to another folder, which refits the ranking,
 `src/idle.ts`
 holds an operation pressed during a scan (Move to Trash, the
-renames) until the scan ends, `src/viewonly.ts`
+renames) until the scan ends and says which of them cancel it
+(`cancelsScan`), `src/viewonly.ts`
 decides from the listed paths whether a folder is JPEG-only and so opens
 view-only (no judgment, capture-time order), `src/sidecars.ts` holds the
 Rewrite Sidecars from Index / Delete Sidecars dialog's text and its flow,
