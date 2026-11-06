@@ -837,7 +837,7 @@ pub async fn import_run(app: tauri::AppHandle, preview_id: u64) -> Result<Starte
     Ok(Started { run_id, folders })
 }
 
-/// Ask the run `run_id` to stop before its next file; a finished or unknown
+/// Ask the run `run_id` to stop at once, dropping the file in flight; a finished or unknown
 /// run is ignored.
 #[tauri::command]
 pub async fn import_cancel(app: tauri::AppHandle, run_id: u64) {

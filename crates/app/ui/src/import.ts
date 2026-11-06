@@ -59,7 +59,7 @@ export type ImportDone = {
 };
 
 export const IMPORT_RUNNING_NOTE =
-  "Cancel stops before the next file; the files copied so far stay, and the next import skips them.";
+  "Cancel stops at once and drops the file in flight; the files copied so far stay, and the next import skips them.";
 
 export const COLLISIONS_HEADING = "Already at the destination with another size, not copied:";
 

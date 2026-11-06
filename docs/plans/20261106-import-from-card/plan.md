@@ -103,7 +103,7 @@ lists what is still open):
     - If the hand test shows a problem, the fix goes here (likely candidates: `resync` while `files.length === 0` not calling `show()`; a rescan deferred behind the AI embed pass; the tree count not refreshed). Record what was and was not needed.
     - Do not add a special-cased "import mode" to the scan; the goal is that the general growing-folder path works.
 
-- [ ] Step 6: Documentation
+- [x] Step 6: Documentation
   - Done when:
     - `README.md` / `README.ja.md` mention `Import…` in the feature list and the quick-start; `docs/humans/usage.md` / `usage.ja.md` get an `Import…` entry under the folder-tree operations (settings, the pattern and its specifiers, skip and collision rules, partial-file safety, cull while importing, the throughput log line) and the settings section lists the `Import` tab; `docs/humans/performance.md` / `.ja.md` get a short note on how to compare the copy with Explorer (`riffle-cli copybench`, the `import:` log line) if that document is where measurements go; `CLAUDE.md`'s layout paragraph names `crates/app/src/import.rs`, `crates/core/src/copy.rs`, `ui/src/import.ts`, `ui/src/importsettings.ts` and the `importRoot` / `importPattern` keys.
     - `mise run ci` (lychee included) passes.
@@ -128,3 +128,4 @@ lists what is still open):
 - (2026-11-06) Step 3 complete
 - (2026-11-06) Step 4 complete
 - (2026-11-06) Step 5 complete
+- (2026-11-06) Step 6 complete

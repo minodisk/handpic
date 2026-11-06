@@ -1859,8 +1859,10 @@ is still `openDir`. Two things keep the app's own sidecar writes from feeding
 back into it:
 
 - `triggers()` drops an event whose paths are *all* sidecars (`*.xmp`,
-  `*.arw.dop`, either format, case-insensitive) or `sidecar::TEMP_SUFFIX`
-  temporaries, which is exactly what `sidecar::write` produces. So a rating
+  `*.arw.dop`, either format, case-insensitive) or `riffle_core::copy::TEMP_SUFFIX`
+  temporaries, which is exactly what `sidecar::write` produces and what the
+  import's copies produce (`<name>.riffle-tmp` in the date folder, renamed to
+  `<name>` when complete). So a rating
   does not cost a rescan at all while culling.
 - Even unfiltered it would terminate: `reconcile_sidecars` reparses a sidecar
   only when its on-disk stat differs from the one `mark_written` stored, so a
