@@ -482,7 +482,8 @@ viewer shows a prompt in its center; click it to open the folder picker.
   - **Cull while importing**: `Run` creates the date folders and opens the
     first one to receive files, the earliest, at once, even when another
     folder was open, whose scan stops; the folder tree reveals it. It starts
-    empty and fills as files land: the strip grows, the current file stays
+    with whatever the folder already holds (empty for a new one) and fills as
+    files land: the strip grows, the current file stays
     current and the judgments made so far stay. Files landing in the other
     date folders leave the strip alone. With AI analysis on, the embeddings
     mostly fill in after the import, and the strip does not wait for them.
@@ -492,7 +493,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
     its `Cancel` stops the run, before the next file: the files copied so far
     stay, and the next import skips them. `Escape` just closes the dialog and
     the run goes on. At the end the status line shows
-    `Imported N files (X MB)`, or `Import canceled, N files copied`, followed
+    `Imported N files (X MB)` (`X GB` from 1 GB up), or `Import canceled, N files copied`, followed
     by `, K already there` and `, J failed` when there are any. A file that
     fails is listed as `name: reason` in the error list at the bottom of the
     right pane, and the others are still copied. An import has no undo: its
