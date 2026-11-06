@@ -217,6 +217,21 @@
   cancels the run, so a user can reopen it from `Import…` and still keep
   culling. Step 6's docs should say so.
 
+## Step 6: Documentation
+
+- `usage.md` has no settings section of its own: each tab is described in
+  the feature it belongs to (`Cache` under Clear Cache, `MCP` under the MCP
+  companion), so the `Import` tab is the `Settings` sub-entry of `Import…`.
+- `performance.md` is where measurements go, so it gets the Step 2 table and
+  how to compare with Explorer, stating that Explorer itself was not timed
+  and claiming no speedup. `docs/agents/app-log.md`'s list of timing lines
+  also gained `import`, outside the Done-when list, to keep that list whole.
+- The Step 4 pending manual check still says Escape stops the run; Step 5
+  changed that. Once the dialog was brought back with `Import…`, Escape only
+  closes it and Cancel alone stops the run. The docs describe Step 5's
+  behavior. Escape before `import_run` has returned does cancel (`dismiss`
+  on a dialog not reopened), a window too short to be worth documenting.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, the settings modal's `Import` tab): on
@@ -284,3 +299,9 @@
   run here. Related files: `crates/app/ui/src/main.ts`,
   `crates/app/ui/src/import.ts`, `crates/app/src/import.rs`,
   `crates/app/src/watch.rs`.
+- `wait-pr-actionable.sh` returns `ACTION=blocked` with `checksOverall=success`
+  and `pendingCount=0` right after a push while the PR's CI checks are still
+  `IN_PROGRESS` (seen on #894, #898, #902, #906 and #908; #898's `pr-runner`
+  aborted on it). It should count in-progress checks as pending and keep
+  waiting. Done when a `blocked` is only returned once no check is in progress.
+  Related file: the `pr` / `develop` skills' wait script.

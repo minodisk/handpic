@@ -47,7 +47,10 @@ next time Riffle starts. For the other packages and the details, see
    dialog Riffle shows on its first launch, and for Lightroom also the
    language its menus are in, so the color labels match its names; both can
    be changed later in Settings.
-2. Drop a folder onto the window (or open one with `Cmd+O` / `Ctrl+O`).
+2. Drop a folder onto the window (or open one with `Cmd+O` / `Ctrl+O`). To
+   start from a memory card, set the destination in the settings' `Import`
+   tab, right-click the card in the folder tree and choose `Import…`; the
+   first date folder opens while the copy runs.
 3. Page through the shots with `←` `→`, give stars with `1`-`5` and reject with
    `x`.
 4. When the focus is in doubt, press `z` for the 1:1 view and check the focus
@@ -88,6 +91,16 @@ DxO PhotoLab.
   or a click away renames, `Escape` cancels, and the index, the ratings
   and the remembered position follow the folder, which reopens under its
   new name when it was the open one.
+- **Import from a card**: right-click a memory card, or any folder, in the
+  folder tree and choose `Import…` to copy its RAW files, its JPEGs and the
+  sidecars next to the RAW files into one folder per capture date, under the
+  root and the pattern set in the settings' `Import` tab (`%Y/%F` by default,
+  so `2026/2026-10-24`). Videos stay behind and the card is never modified.
+  A preview lists what will be copied; what is already there is skipped,
+  a same-named file of another size is listed and never overwritten, and
+  files without a capture date are listed and skipped. The first date folder
+  opens as the run starts and fills as files land, so culling starts while
+  the copy runs ([details](./docs/humans/usage.md#features)).
 - **Filmstrip**: thumbnails run along the bottom; click one to show it.
   `Cmd+click` / `Ctrl+click` adds or removes one, `Shift+click` and
   `Shift+←` / `Shift+→` select a range, `Cmd+A` / `Ctrl+A` selects every

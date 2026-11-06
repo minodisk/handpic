@@ -41,7 +41,10 @@ Olympus ORF parser (IFD0 and the Exif IFD of its `IIRO` TIFF, the preview from
 the MakerNote's CameraSettings, with note-relative offsets), which `reader`
 dispatches to for a `.orf`, `src/sequence.rs` the JPEG timestamp sequencer ported
 from lapse (orders a folder's JPEGs by capture time and writes copies with
-unique `DateTimeOriginal` seconds into `<folder>-sequenced/`), `src/embed.rs`
+unique `DateTimeOriginal` seconds into `<folder>-sequenced/`), `src/copy.rs`
+the import's file copy (one sequential reader thread feeding one writer
+thread through a bounded channel of buffers, each file written under
+`TEMP_SUFFIX`, renamed into place and never overwriting), `src/embed.rs`
 the SigLIP 2 image embedding of a preview (decoded near 404 px, 768-d,
 L2-normalized; the model is downloaded, not bundled, its pinned URL, size and
 SHA-256 here and its Apache-2.0 notice in `crates/core/models/LICENSE-siglip2`,
@@ -64,7 +67,8 @@ burst's genre offset), and
 sharpness score of the embedded preview, taken on the Sony eye-AF frame
 when the camera tracked a face, else around the AF point, else between
 the eyes of a detected face, else from the sharpest tile), `crates/cli` (the
-benchmark CLI, including the `scan` folder-extraction benchmark and the
+benchmark CLI, including the `scan` folder-extraction benchmark, the
+`copybench` timing of the import's copy pipeline and the
 `facechoice` per-face `eye_focus` dump, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets and the eye window's score),
 `crates/app`
@@ -125,6 +129,15 @@ per date, with the undated files and any colliding target; `date_folder_run`
 re-plans and either renames through `rename_folder`'s path or moves each dated
 file with its sidecars and index rows into its date folder, leaving the
 undated ones and removing the original folder only when it ends up empty),
+`src/import.rs` the folder menu's `Import…`: the destination root and the
+date-only folder pattern (chrono strftime, `%Y/%F` by default) of the
+settings' `Import` tab, persisted in the `importRoot` and `importPattern`
+keys, `import_preview`, which plans every RAW and JPEG under the folder, each
+RAW with its sidecars, into date folders (copy, skip on the same name and
+size, collision on another size, undated), and `import_run` /
+`import_cancel`, which create the folders, copy the plan through
+`riffle_core::copy`, stream `import-progress` / `import-done` and log one
+`import:` line per run,
 `src/watch.rs`
 the open folder's watcher and `src/treewatch.rs` the folder tree's watchers on
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
@@ -212,6 +225,11 @@ Rewrite Sidecars from Index / Delete Sidecars dialog's text and its flow,
 `src/datefolder.ts` holds the Rename by Capture Date dialog's text (the title
 line, the per-folder rows, the undated files, the removal note and the reason
 the run is disabled) and its flow,
+`src/import.ts` holds the Import dialog's text and `ImportFlow`, from the
+folder tree's right-click through the preview to the run's end, the dialog
+stepping aside during the run and coming back on `Import…`,
+`src/importsettings.ts` the settings' `Import` tab's text (the pattern's
+specifiers and examples, the note while no root is set),
 `src/sequence.ts` holds the
 Sequence JPEG Timestamps dialog's text and its flow from the folder tree's right-click
 through the preview to the run's end, `src/uncaught.ts` builds the

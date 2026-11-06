@@ -94,10 +94,11 @@ viewer shows a prompt in its center; click it to open the folder picker.
   top level. Then `Rewrite Sidecars from Index…` writes
   the judgments Riffle holds for that folder back into its sidecars, and
   `Delete Sidecars…` moves its sidecars to the Trash (see
-  **Rewrite Sidecars from Index… and Delete Sidecars…**). Last,
+  **Rewrite Sidecars from Index… and Delete Sidecars…**). Then
   `Sequence JPEG Timestamps…` previews and sequences the capture times of
   the JPEGs in that folder (see
-  **Sequence JPEG Timestamps…**). The right-click neither opens the folder nor gives the tree the
+  **Sequence JPEG Timestamps…**). Last, `Import…`, offered on every folder,
+  copies the photos under it into date folders (see **Import…**). The right-click neither opens the folder nor gives the tree the
   keyboard (or takes it away); `Escape` or a click elsewhere closes the menu.
   Several folders can be selected together: `Cmd+click` on macOS
   (`Ctrl+click` elsewhere) adds a folder to the selection or removes it, and
@@ -417,6 +418,102 @@ viewer shows a prompt in its center; click it to open the folder picker.
   with their sidecars, to the Trash again without the dialog (a file that
   could not come back is not touched, and one gone from its place since is
   listed as an error), and that move is undoable in turn.
+- **Import…**: right-click a folder in the folder tree and choose `Import…`
+  to copy the photos under it, at any depth, into one folder per capture date
+  under a destination root, skipping what is already there. It is offered on
+  every folder, a volume at the top level included, since that is what a
+  memory card is: `E:\DCIM\10061024\` lands in `D:\Photos\2026\2026-10-24\`
+  with no file manager copy and no rename by hand. The date is the
+  `DateTimeOriginal` the camera wrote, its local date with no time-zone
+  handling, so a shoot across midnight goes to two folders. The source is only
+  read: nothing on the card is changed or deleted.
+  - **Settings**: the `Import` tab of `Riffle > Settings...`
+    (`File > Settings...` on Windows and Linux) holds two values, both
+    remembered across launches. `Destination root` is the folder imports go
+    under, set with `Choose…`; until it is set, the dialog says so and `Run`
+    is disabled. `Folder pattern` is the path under the root, in chrono's
+    strftime syntax, `%Y/%F` by default: `%Y` the year (`2026`), `%y` its two
+    digits (`26`), `%m` the month (`10`), `%d` the day (`24`), `%b` / `%B` the
+    month's short / full name (`Oct` / `October`), `%a` / `%A` the weekday's
+    short / full name (`Sat` / `Saturday`), `%j` the day of the year (`297`),
+    `%F` the same as `%Y-%m-%d` (`2026-10-24`), and `/` separates folders.
+    Other text is kept as it is. The tab lists these and offers `%Y/%F`, `%F`,
+    `%Y/%m/%d` and `%Y/%m` as examples to click; when a pattern puts several
+    dates in one folder, as `%Y/%m` does, they share it.
+  - **Valid patterns**: the pattern is date-only. A time, zone or timestamp
+    specifier (`%H`, `%M`, `%S`, `%z`, `%s` and the like) is refused, and so
+    is an unknown specifier, a lone `%` and any folder name Windows or macOS
+    could not hold: empty, `.`, `..`, with one of `< > : " | ? * \` or a
+    control character, or ending in a space or a dot. The line under the input
+    shows where today's photos would go, or the reason in red, in which case
+    the stored pattern stays. Reserved names such as `CON` are not checked;
+    one fails when the folder is created, with the OS's error.
+  - **What is copied**: the RAW files Riffle supports and the JPEGs in the
+    folder and every folder below it, hidden folders left out, and each RAW's
+    existing `.xmp` and `.dop` sidecars. Videos and everything else stay
+    behind. A JPEG next to a RAW is copied as a file of its own; the strip
+    of the date folder then shows the RAW only, as in any folder of RAW and
+    JPEG files. A file without a readable capture date is undated: the dialog
+    lists it and it is not copied.
+  - **Preview**: the status line shows `reading <folder>…` while every file's
+    head is read, then a dialog shows the source, the total and one row per
+    destination folder, in date order, with the files and bytes to copy and
+    the number skipped, followed by the colliding and the undated names in
+    lists of their own. The counts include the sidecars. `Run` is enabled
+    when at least one file is to be copied, whatever the lists hold; else a
+    note says why there is nothing to do. `Cancel` or `Escape` closes the
+    dialog with nothing changed.
+  - **Existing folders**: a date folder that already exists gets only what is
+    missing. A file with the same name and the same size there counts as
+    imported and is skipped, so a second import of the same card copies
+    nothing. A file with the same name and another size is a collision: it is
+    listed and skipped, and the file there is never overwritten. So is the
+    second of two files with one name bound for one folder, as when the
+    camera's numbering wraps across `100MSDCF` and `101MSDCF`. Only name and size are
+    compared, with no hash, so a file edited in place to the same length
+    counts as imported. A sidecar follows its RAW: next to a colliding RAW it
+    collides too, and next to a skipped RAW it is copied when missing and left
+    alone otherwise, whatever its size, since Riffle has likely rewritten it.
+    The check is repeated just before each file is written: a file that
+    appeared since the preview is skipped at the planned size, else that file
+    fails, and either way what is there stays.
+  - **Partial files**: each file is written to `<name>.riffle-tmp` in its date
+    folder, flushed, given the source's modified time and only then renamed to
+    its name, so neither the strip nor a scan ever sees a partial file.
+  - **Cull while importing**: `Run` creates the date folders and opens the
+    first one to receive files, the earliest, at once, even when another
+    folder was open, whose scan stops; the folder tree reveals it. It starts
+    with whatever the folder already holds (empty for a new one) and fills as
+    files land: the strip grows, the current file stays
+    current and the judgments made so far stay. Files landing in the other
+    date folders leave the strip alone. With AI analysis on, the embeddings
+    mostly fill in after the import, and the strip does not wait for them.
+  - **Progress and cancel**: the dialog steps aside once the run starts, and
+    the status line shows `importing N / M`. Choosing `Import…` again, on any
+    folder, brings the dialog back rather than starting another import. Only
+    its `Cancel` stops the run at once, dropping the file in flight (the next
+    import copies it): the files copied so far stay, and the next import skips
+    them. `Escape` just closes the dialog and
+    the run goes on. At the end the status line shows
+    `Imported N files (X MB)` (`X GB` from 1 GB up), or `Import canceled, N files copied`, followed
+    by `, K already there` and `, J failed` when there are any. A file that
+    fails is listed as `name: reason` in the error list at the bottom of the
+    right pane, and the others are still copied. An import has no undo: its
+    copies go like any other file, with `Move to Trash…`.
+  - **While importing**: flags, ratings and color labels work, in the date
+    folder as anywhere, except that a date folder holding only JPEGs is
+    view-only (see **JPEG-only folders**), so they apply once it holds a RAW
+    file. `Move to Trash…`, Settings, `Rename…`,
+    `Rename by Capture Date…`, `Rewrite Sidecars from Index…`,
+    `Delete Sidecars…` and `Sequence JPEG Timestamps…` are refused until the
+    run ends, a rename with `Rename… is unavailable while an import runs` on
+    the status line.
+  - **Throughput**: every run writes one line to `Riffle.log` (see
+    **Open Log Folder**) with the throughput, MB being 10^6 bytes:
+    `import: files=120 bytes=5280000000 mb_per_s=41.2 skipped=3 failed=0 canceled=false source=E:\DCIM root=D:\Photos in 128155ms`.
+    Riffle does not claim to copy faster than the file manager; see
+    [Copying from a memory card](./performance.md#copying-from-a-memory-card)
+    for what was measured and how to compare the two.
 - **Rename by Capture Date…**: right-click a folder in the folder tree (not
   home or a volume at the top level) and choose `Rename by Capture Date…` to
   name it after the capture date of its photos, the way a card's `100MSDCF`
