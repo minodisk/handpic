@@ -2151,3 +2151,23 @@ Files: `crates/app/src/datefolder.rs` (`move_plan`), `crates/app/src/rename.rs`.
 #### TODO
 
 - [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
+
+### Agents: `wait-pr-actionable.sh` returns `ACTION=blocked` while checks are still pending
+
+#### Background
+
+The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
+
+#### TODO
+
+- [ ] Read the script and reproduce on a fresh PR. Treat an empty or pending rollup as "keep waiting", and make `pendingCount` count the rollup's pending entries. Done when a PR polled right after creation never returns `blocked` while any check is pending, shown by a test or a recorded transcript. Merge into an existing pr-runner polling item if one covers it.
+
+### Agents: `test (ubuntu-latest)` hangs on docs-only commits
+
+#### Background
+
+The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) hit the `test (ubuntu-latest)` job stalling on docs-only commits. PR 904's first run was cancelled. Main run 42128694204 hit the job's 30-minute `timeout-minutes` with the `riffle_core` test binary running. Both reruns took about 4 minutes, against the usual 5-6. PR 901's ubuntu job stalled in `actions/cache`. Files: `.github/workflows/`, `docs/agents/github-actions-workflows.md`.
+
+#### TODO
+
+- [ ] Collect the hung runs' logs and decide whether the cause is a flaky test, a cache stall or a runner problem. Then lower the job timeout, add a per-test timeout, or add a "rerun, then check X" note to `docs/agents/github-actions-workflows.md`. Done when the cause is identified, or a decision that reruns are enough is recorded with a rerun-only rule in that guide.

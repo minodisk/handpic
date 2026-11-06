@@ -12,8 +12,8 @@ per-face dumps carry neither), no script of this plan existed, and
 merged on its own, before Step 2's CLI change or Step 3's `gatescores.py`
 exists; the merge commit of the PR that adds this section, without results,
 is the record, as for the archived
-[discard-model exploration](../_archived/20261023-discard-model/discardmodel.md)
-and [face-choice evaluation](../_archived/20261023-face-choice/facechoice.md)
+[discard-model exploration](../20261023-discard-model/discardmodel.md)
+and [face-choice evaluation](../20261023-face-choice/facechoice.md)
 before it. Nothing in this section changes after a per-face value of this
 plan exists; a deviation found while implementing Steps 2–4 is recorded in
 `learnings.md` with its reason and does not touch the tuning, selection or
@@ -44,30 +44,30 @@ round of Steps 5–6 decides. Every number below is weighted by its round's
 
 | Round | Reading | Value | Source |
 | --- | --- | --- | --- |
-| 3 | `ef` (missing last) weighted discard AUC | 0.743 [0.679, 0.800] | [discardmodel.md, "Results of the confirmation"](../_archived/20261023-discard-model/discardmodel.md) |
+| 3 | `ef` (missing last) weighted discard AUC | 0.743 [0.679, 0.800] | [discardmodel.md, "Results of the confirmation"](../20261023-discard-model/discardmodel.md) |
 | 3 | `ef-fill` AUC; − `ef` (paired) | 0.744 [0.681, 0.803]; +0.002 [−0.008, +0.012] | same |
 | 3 | `LR/T` (the discard-model winner) AUC − `ef` | −0.013 [−0.048, +0.023] | same |
 | 3 | Discardable base rate | 60.56% [53.81, 67.29] | same |
 | 3 | `ef` `RR` q5 / q10 / q20 | 11.3 / 14.6 / 14.8% | same |
 | 3 | `ef` `PL` q5 / q10 / q20 (the six folders' 1,795 picks) | 4.07 / 7.30 / 14.99% | same |
 | 3 | Missing-face subset (201 labels): `ef-fill` − `ef` (not pre-registered) | +0.277 [+0.131, +0.407] | same, the subset table |
-| 2 | `ef` AUC | 0.785 [0.723, 0.844] | [facechoice.md, "Reproduction checks"](../_archived/20261023-face-choice/facechoice.md); discardmodel.md, "Results of the exploration" |
+| 2 | `ef` AUC | 0.785 [0.723, 0.844] | [facechoice.md, "Reproduction checks"](../20261023-face-choice/facechoice.md); discardmodel.md, "Results of the exploration" |
 | 2 | `ef-fill` − `ef` | −0.010 [−0.022, −0.001] | discardmodel.md, "Results of the exploration" |
 | 2 | Discardable base rate | 42.31% [35.85, 48.91] | facechoice.md, "Reproduction checks" |
 | 1 | `ef` AUC | 0.777 [0.716, 0.841] | same |
 | 1 | `ef-fill` − `ef` | −0.011 [−0.028, +0.003] | discardmodel.md, "Results of the exploration" |
 | 1 | Discardable base rate | 48.45% [42.03, 55.11] | facechoice.md, "Reproduction checks" |
 | - | Missing `ef` share, dump (27 folders) / after the `af-whole` fill | 12.4% / 4.5% | facechoice.md, "Results" (face counts) |
-| - | Missing `ef` share, the six fresh folders / after `ef-fill` | 9.00% / 1.18% | [discard-model learnings, Step 4](../_archived/20261023-discard-model/learnings.md) |
-| - | `facechoice --check` against the stored `eye_focus` | 0 mismatches on 32,459 + 14,525 frames | [face-choice learnings](../_archived/20261023-face-choice/learnings.md); discard-model learnings, Step 4 |
+| - | Missing `ef` share, the six fresh folders / after `ef-fill` | 9.00% / 1.18% | [discard-model learnings, Step 4](../20261023-discard-model/learnings.md) |
+| - | `facechoice --check` against the stored `eye_focus` | 0 mismatches on 32,459 + 14,525 frames | [face-choice learnings](../20261023-face-choice/learnings.md); discard-model learnings, Step 4 |
 
 - **No learned model has beaten `ef`**; the face-choice evaluation found no
   better face rule than the AF-nearest face. This plan therefore changes the
   value `ef` takes on two kinds of frame, not the model over it.
 - **The mesh-roll finding**
-  ([mesh-roll learnings](../_archived/20261010-mesh-roll/learnings.md),
-  summarized in [tract-onnx-inference.md](../../agents/tract-onnx-inference.md)
-  and [burst-keep-score plan](../_archived/20261008-burst-keep-score/plan.md)):
+  ([mesh-roll learnings](../20261010-mesh-roll/learnings.md),
+  summarized in [tract-onnx-inference.md](../../../agents/tract-onnx-inference.md)
+  and [burst-keep-score plan](../20261008-burst-keep-score/plan.md)):
   of the frames with `eye_offset` > 0.10, about **27%** have a mesh off the
   face (a real misfit) and about **65%** have a fitted mesh against YuNet eye
   points that are off the eyes (profiles, YuNet eye distance under about
