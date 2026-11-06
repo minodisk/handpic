@@ -172,4 +172,4 @@ What is established from the code, the docs and the user's library:
 
 ## Progress
 
-- (none yet)
+- (2026-11-07) Step 1 complete
