@@ -10,6 +10,7 @@ mod foldersidecars;
 mod import;
 mod index;
 mod mcp;
+mod output;
 mod perf;
 mod photolab;
 mod rank;
@@ -816,6 +817,7 @@ fn main() {
             commands::cancel_scan,
             commands::folder_entries,
             commands::genres_of,
+            output::outputs_of,
             rank::ranking_of,
             rank::ranking_model,
             rank::refit_ranking,
