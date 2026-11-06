@@ -490,8 +490,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   - **Progress and cancel**: the dialog steps aside once the run starts, and
     the status line shows `importing N / M`. Choosing `Import…` again, on any
     folder, brings the dialog back rather than starting another import. Only
-    its `Cancel` stops the run, before the next file: the files copied so far
-    stay, and the next import skips them. `Escape` just closes the dialog and
+    its `Cancel` stops the run at once, dropping the file in flight (the next
+    import copies it): the files copied so far stay, and the next import skips
+    them. `Escape` just closes the dialog and
     the run goes on. At the end the status line shows
     `Imported N files (X MB)` (`X GB` from 1 GB up), or `Import canceled, N files copied`, followed
     by `, K already there` and `, J failed` when there are any. A file that
