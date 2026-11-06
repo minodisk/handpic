@@ -217,6 +217,21 @@
   cancels the run, so a user can reopen it from `Import…` and still keep
   culling. Step 6's docs should say so.
 
+## Step 6: Documentation
+
+- `usage.md` has no settings section of its own: each tab is described in
+  the feature it belongs to (`Cache` under Clear Cache, `MCP` under the MCP
+  companion), so the `Import` tab is the `Settings` sub-entry of `Import…`.
+- `performance.md` is where measurements go, so it gets the Step 2 table and
+  how to compare with Explorer, stating that Explorer itself was not timed
+  and claiming no speedup. `docs/agents/app-log.md`'s list of timing lines
+  also gained `import`, outside the Done-when list, to keep that list whole.
+- The Step 4 pending manual check still says Escape stops the run; Step 5
+  changed that. Once the dialog was brought back with `Import…`, Escape only
+  closes it and Cancel alone stops the run. The docs describe Step 5's
+  behavior. Escape before `import_run` has returned does cancel (`dismiss`
+  on a dialog not reopened), a window too short to be worth documenting.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, the settings modal's `Import` tab): on

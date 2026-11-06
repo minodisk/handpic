@@ -862,3 +862,52 @@ machine the sidecar pass roughly doubles a second open, adding about 36ms
 for 5000 sidecars, and that cost is a listing plus a `stat` each, not a
 parse, because an unchanged stat parses nothing. A first open of a folder
 full of foreign sidecars pays the parse as well and was not measured.
+
+## Copying from a memory card
+
+`Import…` copies through `riffle_core::copy`: one thread reads the card in
+order in 8 MiB chunks and feeds up to 4 buffers to one thread writing the
+destination, which flushes each file before renaming it into place. No speedup
+over Explorer is claimed. The one measurement so far found the destination
+drive to be the limit, so it cannot tell the copy methods apart, and Explorer
+itself was not timed.
+
+Sony ARWs of about 44 MB, from a USB card reader (exFAT) to a Crucial BX500
+4 TB SATA SSD (NTFS, 96 % full) on Windows 11. Each run used 50 files (~2.2 GB)
+that had not been read before, so the card was read cold, with 60 s idle between
+runs. In run order:
+
+| Run | Method | MB/s |
+|-----|--------|------|
+| A | pipeline, 8 MiB × 4 | 21.6 |
+| B | `robocopy /J` | 14.4 |
+| C | `robocopy` (buffered) | 12.1 |
+| D | pipeline, 32 MiB × 2, `FILE_FLAG_SEQUENTIAL_SCAN` | 12.9 |
+| E | pipeline, 8 MiB × 4, no per-file flush | 11.1 |
+| F | pipeline, 8 MiB × 4, `FILE_FLAG_SEQUENTIAL_SCAN` | 9.6 |
+| – | read only, `dd bs=8M` to `/dev/null` | 134.7 |
+| G | pipeline, 8 MiB × 4 (A repeated) | 8.1 |
+
+The throughput fell from run to run whatever the method (A and G are the same
+settings), while the card alone read at 135 MB/s. The BX500, DRAM-less and
+nearly full, loses its write cache under sustained writes: an earlier 4.5 GB
+run reached 45 MB/s cold and only 9 MB/s when repeated right after.
+`FILE_FLAG_SEQUENTIAL_SCAN` and dropping the per-file flush showed no gain, so
+neither was kept.
+
+### Comparing with Explorer on your own card
+
+`riffle-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]` copies every
+RAW and JPEG under `src-dir`, flat, into `dst-dir` through the pipeline the app
+uses and prints the files, bytes, seconds and MB/s. A real import writes the same
+figures to `Riffle.log`, as the `import:` line (`mb_per_s=`; see
+[Using Riffle](./usage.md#features)). Time an Explorer copy of the same number of
+files against either one, and for a fair comparison:
+
+- Use a destination faster than the card, such as an NVMe drive or an emptier
+  SSD; a slow one measures itself.
+- Use files not read since the card went in, or the OS cache answers instead of
+  the card.
+- Do not time the card while the destination is still busy with an earlier copy
+  (reads taken that way came out at 16–22 MB/s), and let the drive idle between
+  runs.
