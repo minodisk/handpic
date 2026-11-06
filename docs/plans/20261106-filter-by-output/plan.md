@@ -91,7 +91,7 @@ What is established from the code, the docs and the user's library:
       one `read_dir` of two small folders and is re-read on every open and
       resync (Step 2).
 
-- [ ] Step 2: The `Output` section of the filter menu, shown while an export folder exists, and the docs
+- [x] Step 2: The `Output` section of the filter menu, shown while an export folder exists, and the docs
   - Done when:
     - `crates/app/ui/index.html` has a `<div id="filter-output" hidden>` after
       the `Eyes` section (before `#filter-genre`) with a `menu-label`
@@ -147,6 +147,12 @@ What is established from the code, the docs and the user's library:
     - Verify during implementation that `resync("focus")` after an export
       from PhotoLab refreshes the section (the `FOCUS_RESCAN_INTERVAL` skip
       may delay it; note the observed behavior in `learnings.md`).
+    - As built, three changes to the wording above, the reasons in
+      `learnings.md`: `setOutputSection` does not `refilter()` itself, since
+      both callers filter right after it; a rejected `outputs_of` shows in
+      its own status line (`outputsFailure`) rather than through `setStatus`,
+      whose `note` the decoded preview wipes; and a file outside the listing
+      `outputs_of` was asked about is unknown, not `No output` (`outputOf`).
 
 ## Trade-offs and risks
 
@@ -173,3 +179,4 @@ What is established from the code, the docs and the user's library:
 ## Progress
 
 - (2026-11-07) Step 1 complete
+- (2026-11-07) Step 2 complete

@@ -7,10 +7,12 @@ import {
   type Flag,
   type Judgment,
   type Orientation,
+  type OutputState,
   anchorAfterFilter,
   applyStored,
   filterListChanged,
   orientationOf,
+  outputOf,
   passes,
   toStored,
   UNKNOWN_GENRE,
@@ -26,6 +28,7 @@ function state(
   candidates: AfEye[] = [],
   eyes: EyeState[] = [],
   genres: string[] = [],
+  outputs: OutputState[] = [],
 ): FilterState {
   return {
     flags: new Set(flags),
@@ -35,6 +38,7 @@ function state(
     candidates: new Set(candidates),
     eyes: new Set(eyes),
     genres: new Set(genres),
+    outputs: new Set(outputs),
     exif: new Map(exif.map(([group, values]) => [group, new Set(values)])),
   };
 }
@@ -484,6 +488,75 @@ describe("passes: genres", () => {
     const s = genres("sports");
     applyStored(s, toStored(state(["picked"])));
     expect([...s.genres]).toEqual(["sports"]);
+  });
+});
+
+describe("passes: outputs", () => {
+  const outputs = (...items: OutputState[]) => state([], [], [], [], [], [], [], [], items);
+  const check = (s: FilterState, output: OutputState | undefined) =>
+    passes(s, unjudged, undefined, 1, undefined, undefined, undefined, output);
+
+  test("nothing checked lets every file through, known or not", () => {
+    expect(check(outputs(), "yes")).toBe(true);
+    expect(check(outputs(), "no")).toBe(true);
+    expect(check(outputs(), undefined)).toBe(true);
+  });
+
+  test("Output passes the files with an export", () => {
+    expect(check(outputs("yes"), "yes")).toBe(true);
+    expect(check(outputs("yes"), "no")).toBe(false);
+  });
+
+  test("No output passes the files without an export", () => {
+    expect(check(outputs("no"), "no")).toBe(true);
+    expect(check(outputs("no"), "yes")).toBe(false);
+  });
+
+  test("both checked pass both states", () => {
+    expect(check(outputs("yes", "no"), "yes")).toBe(true);
+    expect(check(outputs("yes", "no"), "no")).toBe(true);
+  });
+
+  test("an unknown state passes no checked item", () => {
+    expect(check(outputs("no"), undefined)).toBe(false);
+    expect(check(outputs("yes"), undefined)).toBe(false);
+    expect(check(outputs("yes", "no"), undefined)).toBe(false);
+  });
+
+  test("ANDs with the other groups", () => {
+    const both = state(["untagged"], [], [], [], [], [], [], [], ["no"]);
+    const pass = (judgment: Judgment) =>
+      passes(both, judgment, undefined, 1, undefined, undefined, undefined, "no");
+    expect(pass(unjudged)).toBe(true);
+    expect(pass(pickedTwo)).toBe(false);
+  });
+
+  test("is not remembered", () => {
+    expect(toStored(outputs("no"))).not.toHaveProperty("outputs");
+    const s = outputs("no");
+    applyStored(s, toStored(state(["picked"])));
+    expect([...s.outputs]).toEqual(["no"]);
+  });
+});
+
+describe("outputOf", () => {
+  const listing = new Set(["A.ARW", "B.ARW"]);
+
+  test("reads a listed file from the answer", () => {
+    expect(outputOf(new Set(["A.ARW"]), listing, "A.ARW")).toBe("yes");
+    expect(outputOf(new Set(["A.ARW"]), listing, "B.ARW")).toBe("no");
+  });
+
+  test("an empty answer is every listed file without an export", () => {
+    expect(outputOf(new Set(), listing, "A.ARW")).toBe("no");
+  });
+
+  test("no answer leaves every file unknown", () => {
+    expect(outputOf(null, listing, "A.ARW")).toBeUndefined();
+  });
+
+  test("a file the answer was not asked about is unknown", () => {
+    expect(outputOf(new Set(["A.ARW"]), listing, "C.ARW")).toBeUndefined();
   });
 });
 

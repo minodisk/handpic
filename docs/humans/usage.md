@@ -349,7 +349,8 @@ viewer shows a prompt in its center; click it to open the folder picker.
   as the pass runs), the stored eye state of the judged face (the
   `Eyes` section: `Open`, `Closed`, or `Unknown` for a file with no stored
   state, such as one with no face found, with a face under about 60 pixels,
-  or not reached by the second pass yet), the genre (the `Genre` section,
+  or not reached by the second pass yet), whether the file was exported
+  (the `Output` section, described below), the genre (the `Genre` section,
   shown while AI analysis is on; see **AI analysis and genres**),
   camera, lens, aperture, shutter speed, ISO and focal length (grouped into
   ranges such as `24–35 mm`). The color
@@ -357,6 +358,26 @@ viewer shows a prompt in its center; click it to open the folder picker.
   seven colors matches no color item (nor `No label`). The orientation is
   decided by the file's EXIF Orientation — a quarter turn is portrait, so a
   frame the camera did not tag as rotated counts as landscape.
+  The `Output` section has `Output` and `No output`, so that the RAW files
+  you never exported can be narrowed down and moved to the Trash with
+  `Select All` and `Move to Trash…`. It shows while the open folder has an
+  `Output` or `Output-sequenced` subfolder directly inside it, in any case:
+  the folders PhotoLab exports to by default and **Sequence JPEG
+  Timestamps…** writes. A file counts as exported when the stem (the name
+  without its extension, compared case-insensitively) of a file directly in
+  either folder equals the file's own stem, adds `_<n>` or `-<n>` to it (a
+  PhotoLab virtual copy, such as `DSC0001_1.jpg` for `DSC0001.ARW`), or
+  starts with its stem plus `-DxO` (a DeepPRIME DNG: `L1002140-DxO_DeepPRIME
+  3.jpg` counts for that DNG and for the original `L1002140.DNG`). An
+  empty export folder still shows the section, with every file as
+  `No output`. With no export folder the section is hidden, and with one
+  that cannot be read it is hidden too and the status line says why; the
+  section's checks clear then, so a file is never shown as `No output`
+  without its folder having been read. The folder watcher does not watch the
+  export folders: an export made while the folder is open shows up when the
+  window regains focus, on `File > Reload Folder` or when the folder is
+  reopened. The re-read waits for a running scan to finish, and regaining
+  focus within 5 seconds of the last rescan does not trigger one.
   The EXIF groups list only values present in the folder. Checks within a group
   are OR-ed, groups are AND-ed, and `Reset` clears them all. A judgment that drops
   the current file out of the filter hides it at once and moves to the next
@@ -364,8 +385,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   The flag, star, label, orientation, `AF eye` and `Eyes` checks are
   remembered across restarts and apply to every folder; the EXIF checks are
   not, and clear whenever a folder opens. The `Genre` checks last until the
-  app quits or AI analysis is turned off. `Reset` clears the remembered
-  filter too.
+  app quits or AI analysis is turned off, and the `Output` checks until the
+  app quits or the section is hidden. `Reset` clears the remembered filter
+  too.
 - **Sort menu**: orders the strip by file name, capture time or rating, or,
   while AI analysis is on, `Recommended` (see **Recommended order**);
   paging and `n / N` follow the chosen order. Capture time breaks ties by
