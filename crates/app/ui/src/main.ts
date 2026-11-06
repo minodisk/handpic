@@ -48,12 +48,14 @@ import { type EyeState, type Eyes, EyesCache, type Pose } from "./eyes.js";
 import { FaceCache, NO_FACES } from "./faces.js";
 import { meshEdges, meshPoints } from "./facemesh.js";
 import {
+  type TrashProgress,
   type TrashRestored,
   type TrashSummary,
   type TrashWhat,
   TrashFlow,
   filesLine,
   opensTarget,
+  progressStatus as trashProgressStatus,
   restoredInto,
   restoredStatus,
   stillHeld,
@@ -363,6 +365,9 @@ let scanId: number | null = null;
 let scanning: string | null = null;
 // How far the sequencing run got, or null when none runs.
 let sequencing: string | null = null;
+// How far the move to the Trash in flight got, or null when none runs. Also
+// what refuses a second one: `trashFlow` ended already when the move was held.
+let trashing: string | null = null;
 // The import's status line: the preview being read, then how far the run got;
 // null when neither is under way.
 let importing: string | null = null;
@@ -871,6 +876,9 @@ function renderMeta(): void {
   if (sequencing !== null) {
     metaStatusEl.append(line("note", sequencing));
   }
+  if (trashing !== null) {
+    metaStatusEl.append(line("note", trashing));
+  }
   if (importing !== null) {
     metaStatusEl.append(line("note", importing));
   }
@@ -940,9 +948,10 @@ function listItem(text: string): HTMLLIElement {
 }
 
 // Ask whether to move `paths`, files of the open folder taken when the strip's
-// `Move to Trash…` was chosen, to the Trash.
+// `Move to Trash…` was chosen, to the Trash. Refused while a move is in flight.
 function confirmTrashFiles(paths: string[]): void {
   if (
+    trashing !== null ||
     openDir === null ||
     paths.length === 0 ||
     !formatDialog.hidden ||
@@ -993,15 +1002,19 @@ function trashFilesIn(dir: string, paths: string[]): void {
       sequenceFlow.busy ||
       dateFolderFlow.busy ||
       importFlow.busy ||
+      trashing !== null ||
       (!own && trashFlow.busy)
     ) {
       done();
       return;
     }
+    trashing = trashProgressStatus("trash", 0, paths.length);
+    renderMeta();
     settleIdle(
       window.__TAURI__.core
         .invoke<TrashSummary>("trash_files", { dir, paths })
         .then((summary) => {
+          trashing = null;
           done();
           if (summary.run_id !== null) {
             redoable.clear();
@@ -1009,6 +1022,7 @@ function trashFilesIn(dir: string, paths: string[]): void {
           trashed(summary, [dir]);
         })
         .catch((err: unknown) => {
+          trashing = null;
           done();
           setStatus(String(err));
         }),
@@ -1021,6 +1035,16 @@ function trashFilesIn(dir: string, paths: string[]): void {
     resyncPending ??= "scan-canceled";
   }
 }
+
+// The last event can land after the invoke settled, and must not bring the
+// line and the guard back.
+void window.__TAURI__.event.listen<TrashProgress>("trash-progress", ({ payload }) => {
+  if (trashing === null) {
+    return;
+  }
+  trashing = trashProgressStatus(payload.op, payload.done, payload.total);
+  renderMeta();
+});
 
 function closeTrashDialog(): void {
   trashFlow.end();
@@ -2678,20 +2702,24 @@ function undoTrash(entry: TrashEntry): void {
 function redoTrash(entry: TrashEntry): void {
   const label = entry.what === "sidecars" ? "Delete Sidecars" : "Move to Trash";
   whenIdle(`Redo ${label}`, () => {
-    if (trashStep !== null || redoable.peek() !== entry) {
+    if (trashStep !== null || trashing !== null || redoable.peek() !== entry) {
       return;
     }
     trashStep = entry;
+    trashing = trashProgressStatus("trash", 0, entry.count);
+    renderMeta();
     settleIdle(
       window.__TAURI__.core
         .invoke<TrashSummary>("trash_rejected_redo", { runId: entry.runId })
         .then((summary) => {
           trashStep = null;
+          trashing = null;
           redoable.remove(entry);
           trashed(summary, entry.dirs, entry.what);
         })
         .catch((err: unknown) => {
           trashStep = null;
+          trashing = null;
           if (!stillHeld(String(err))) {
             redoable.remove(entry);
           }
@@ -3642,7 +3670,14 @@ function openContextMenu(x: number, y: number): void {
   };
   const paths = comparing ? [focused] : targets(selection, files, index);
   void revealLabel.then((label) => {
-    const groups = contextMenuGroups(keyBindings, state, label, viewOnly, paths.length);
+    const groups = contextMenuGroups(
+      keyBindings,
+      state,
+      label,
+      viewOnly,
+      paths.length,
+      trashing !== null,
+    );
     showMenu(groups, x, y, (action) => {
       if (action === "renameFile") {
         strip.startRename(index);
@@ -3691,10 +3726,11 @@ for (const item of document.querySelectorAll<HTMLElement>('.menu-item[role^="men
 function showMenu(groups: MenuItem[][], x: number, y: number, run: (action: string) => void): void {
   contextMenu.replaceChildren(
     ...groups.flatMap((group, i) => {
-      const items: HTMLElement[] = group.map(({ action, label, shortcut, checked }) => {
+      const items: HTMLElement[] = group.map(({ action, label, shortcut, checked, disabled }) => {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "menu-item";
+        item.disabled = disabled === true;
         if (checked === undefined) {
           item.setAttribute("role", "menuitem");
         } else {

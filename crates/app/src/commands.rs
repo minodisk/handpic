@@ -2752,11 +2752,33 @@ pub async fn clear_index(app: tauri::AppHandle) -> Result<bool, String> {
     Ok(true)
 }
 
+/// How far a move to the Trash got, in groups (a RAW with its sidecars). No
+/// run id: the `Scans` lock runs one such operation at a time.
+#[derive(serde::Serialize, Clone)]
+struct TrashProgress<'a> {
+    op: &'a str,
+    dir: &'a str,
+    done: usize,
+    total: usize,
+}
+
+fn emit_trash_progress(app: &tauri::AppHandle, op: &str, dir: &str, done: usize, total: usize) {
+    let _ = app.emit(
+        "trash-progress",
+        TrashProgress {
+            op,
+            dir,
+            done,
+            total,
+        },
+    );
+}
+
 /// Move `paths`, files of the folder `dir` as the listing gave them, to the
 /// OS trash in their order, each RAW together with the `.xmp` and `.dop`
 /// sidecars that exist for it and a JPEG alone (see `trash::groups_of`). A
 /// path outside `dir` fails without being moved, one gone meanwhile fails in
-/// the mover.
+/// the mover. Each group moved emits `trash-progress`.
 ///
 /// A running scan is refused under the `Scans` lock, which is held across
 /// the moves, and the sidecar writer is drained first, as in `clear_index`:
@@ -2783,7 +2805,9 @@ pub async fn trash_files(
             &paths,
             &stat_sidecars(&listing.sidecars),
         );
-        let (mut summary, moved) = trash::run(groups, trash_one);
+        let (mut summary, moved) = trash::run(groups, trash_one, |done, total| {
+            emit_trash_progress(&app, "trash", &dir, done, total);
+        });
         summary.failed.extend(foreign);
         summary.run_id = app.state::<trash::Runs>().record(moved);
         log::info!("moved files to the trash: {summary:?}");
@@ -2804,6 +2828,9 @@ pub async fn trash_files(
 /// the moves. The sidecar writer is not drained: nothing pending can target
 /// a file that is in the Trash. No index row is written either; the
 /// frontend re-lists the folder and the scan picks the files up again.
+///
+/// No `trash-progress` yet: `trash::restore` has no progress callback, which
+/// a follow-up can add the way `trash::run` has one.
 #[tauri::command]
 pub async fn trash_rejected_undo(
     app: tauri::AppHandle,
@@ -2834,7 +2861,8 @@ pub async fn trash_rejected_undo(
 /// exactly those, RAW before its sidecars, with no dialog and no new
 /// collection (see `trash::redo`); a file gone meanwhile is a failure. The
 /// move is recorded as a new run, whose id the `Summary` carries. An
-/// unknown run is an `Err`; it is forgotten once redone.
+/// unknown run is an `Err`; it is forgotten once redone. Each group moved
+/// emits `trash-progress`, with an empty `dir`: a run can span folders.
 ///
 /// The guards are `trash_files`'s: the sidecar writer is drained
 /// first, and a running scan is refused under the `Scans` lock, which is
@@ -2857,7 +2885,9 @@ pub async fn trash_rejected_redo(
         let paths = runs
             .take_undone(run_id)
             .ok_or_else(|| trash::UNDONE_GONE.to_string())?;
-        let (mut summary, moved) = trash::redo(paths, Path::exists, trash_one);
+        let (mut summary, moved) = trash::redo(paths, Path::exists, trash_one, |done, total| {
+            emit_trash_progress(&app, "trash", "", done, total);
+        });
         summary.run_id = runs.record(moved);
         log::info!("moved restored files to the trash again: {summary:?}");
         drop(state);

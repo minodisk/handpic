@@ -281,13 +281,17 @@ pub fn groups_of(
 /// first: when it fails its sidecars are left alone, so the judgment stays
 /// with the file. `mover` returns where the file went when the platform
 /// tells; every file moved is listed, in order, next to the summary.
+/// `progress` is called after each group with the groups done and their
+/// total; a group whose RAW failed counts as done.
 pub fn run(
     groups: Vec<Group>,
     mut mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    mut progress: impl FnMut(usize, usize),
 ) -> (Summary, Vec<Trashed>) {
     let mut summary = Summary::default();
     let mut moved = Vec::new();
-    for group in groups {
+    let total = groups.len();
+    for (at, group) in groups.into_iter().enumerate() {
         let raw = group.raw.to_string_lossy().into_owned();
         match mover(&group.raw) {
             Ok(trashed_at) => {
@@ -301,6 +305,7 @@ pub fn run(
             }
             Err(message) => {
                 summary.failed.push(Failure { path: raw, message });
+                progress(at + 1, total);
                 continue;
             }
         }
@@ -322,6 +327,7 @@ pub fn run(
                 }),
             }
         }
+        progress(at + 1, total);
     }
     (summary, moved)
 }
@@ -405,6 +411,7 @@ pub fn redo(
     paths: Vec<PathBuf>,
     exists: impl Fn(&Path) -> bool,
     mut mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    progress: impl FnMut(usize, usize),
 ) -> (Summary, Vec<Trashed>) {
     let mut groups: Vec<Group> = Vec::new();
     for path in paths {
@@ -421,13 +428,17 @@ pub fn redo(
             }),
         }
     }
-    run(groups, |path| {
-        if exists(path) {
-            mover(path)
-        } else {
-            Err(GONE.to_string())
-        }
-    })
+    run(
+        groups,
+        |path| {
+            if exists(path) {
+                mover(path)
+            } else {
+                Err(GONE.to_string())
+            }
+        },
+        progress,
+    )
 }
 
 /// Put `run` back from where each file went, as recorded at trash time
@@ -1084,7 +1095,7 @@ mod tests {
                 sidecars: vec![dir.join(format!("{name}.xmp"))],
             })
             .collect();
-        let (summary, moved) = run(groups, mover(trash.clone()));
+        let (summary, moved) = run(groups, mover(trash.clone()), |_, _| {});
         assert_eq!(
             moved,
             [
@@ -1112,6 +1123,36 @@ mod tests {
     }
 
     #[test]
+    fn progress_counts_every_group_a_failed_raw_included() {
+        let dir = temp_dir("progress");
+        let trash = dir.join("trash");
+        std::fs::create_dir(&trash).unwrap();
+        for name in ["ok.ARW", "ok.xmp", "fail.ARW", "fail.xmp", "last.ARW"] {
+            write(&dir.join(name));
+        }
+        let groups = vec![
+            Group {
+                raw: dir.join("ok.ARW"),
+                sidecars: vec![dir.join("ok.xmp")],
+            },
+            Group {
+                raw: dir.join("fail.ARW"),
+                sidecars: vec![dir.join("fail.xmp")],
+            },
+            Group {
+                raw: dir.join("last.ARW"),
+                sidecars: Vec::new(),
+            },
+        ];
+        let mut calls = Vec::new();
+        let (summary, _) = run(groups, mover(trash.clone()), |done, total| {
+            calls.push((done, total));
+        });
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(calls, [(1, 3), (2, 3), (3, 3)]);
+    }
+
+    #[test]
     fn a_failing_sidecar_is_reported_after_its_raw_went() {
         let dir = temp_dir("sidecar-failure");
         let trash = dir.join("trash");
@@ -1122,7 +1163,7 @@ mod tests {
             raw: dir.join("d.ARW"),
             sidecars: vec![dir.join("fail.xmp"), dir.join("d.ARW.dop")],
         }];
-        let (summary, moved) = run(groups, mover(trash.clone()));
+        let (summary, moved) = run(groups, mover(trash.clone()), |_, _| {});
         assert_eq!(
             moved.iter().map(|t| t.path.clone()).collect::<Vec<_>>(),
             [dir.join("d.ARW"), dir.join("d.ARW.dop")]
@@ -1233,7 +1274,7 @@ mod tests {
         let paths = ["a.xmp", "b.xmp", "c.ARW.dop"]
             .map(|name| dir.join(name))
             .to_vec();
-        let (summary, moved) = redo(paths, Path::exists, mover(trash.clone()));
+        let (summary, moved) = redo(paths, Path::exists, mover(trash.clone()), |_, _| {});
         assert_eq!(
             summary.moved,
             [key(&dir.join("b.xmp")), key(&dir.join("c.ARW.dop"))]
@@ -1250,6 +1291,24 @@ mod tests {
     }
 
     #[test]
+    fn a_redo_reports_progress_per_group() {
+        let dir = temp_dir("redo-progress");
+        let trash = dir.join("trash");
+        std::fs::create_dir(&trash).unwrap();
+        for name in ["a.ARW", "a.xmp", "c.ARW"] {
+            write(&dir.join(name));
+        }
+        let paths = ["a.ARW", "a.xmp", "b.ARW", "c.ARW"]
+            .map(|name| dir.join(name))
+            .to_vec();
+        let mut calls = Vec::new();
+        redo(paths, Path::exists, mover(trash.clone()), |done, total| {
+            calls.push((done, total));
+        });
+        assert_eq!(calls, [(1, 3), (2, 3), (3, 3)]);
+    }
+
+    #[test]
     fn a_redo_reports_a_file_gone_meanwhile_and_moves_the_rest() {
         let dir = temp_dir("redo");
         let trash = dir.join("trash");
@@ -1260,7 +1319,7 @@ mod tests {
         let paths = ["a.ARW", "a.xmp", "b.ARW", "b.xmp", "c.ARW", "c.ARW.dop"]
             .map(|name| dir.join(name))
             .to_vec();
-        let (summary, moved) = redo(paths, Path::exists, mover(trash.clone()));
+        let (summary, moved) = redo(paths, Path::exists, mover(trash.clone()), |_, _| {});
         assert_eq!(
             summary.moved,
             [key(&dir.join("a.ARW")), key(&dir.join("c.ARW"))]

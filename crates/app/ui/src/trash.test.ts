@@ -3,12 +3,20 @@ import {
   TrashFlow,
   filesLine,
   opensTarget,
+  progressStatus,
   restoredInto,
   restoredStatus,
   shownPath,
   stillHeld,
   trashedStatus,
 } from "./trash.js";
+
+describe("progressStatus", () => {
+  test("counts the move", () => {
+    expect(progressStatus("trash", 0, 2677)).toBe("moving to Trash 0 / 2677");
+    expect(progressStatus("trash", 12, 2677)).toBe("moving to Trash 12 / 2677");
+  });
+});
 
 describe("trashedStatus", () => {
   test("counts the files it moved", () => {

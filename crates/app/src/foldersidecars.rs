@@ -338,7 +338,7 @@ fn delete(
             sidecars: Vec::new(),
         })
         .collect();
-    let (mut summary, moved) = trash::run(groups, mover);
+    let (mut summary, moved) = trash::run(groups, mover, |_, _| {});
     summary.failed = summary
         .failed
         .into_iter()

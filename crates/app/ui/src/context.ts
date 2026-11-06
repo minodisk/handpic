@@ -7,6 +7,7 @@ export type MenuItem = {
   label: string;
   shortcut: string;
   checked: boolean | undefined;
+  disabled?: boolean;
 };
 
 export type MenuState = { rating: number | null; flag: PickFlag; label: string | null };
@@ -41,13 +42,14 @@ const JUDGMENT_SECTIONS: Entry[][] = [
 // folder takes no judgment and no rename, so those are left out. `Rename…`
 // and the reveal item act on the focused file alone; the copy items and
 // `Move to Trash…` on the `count` files they target, the latter naming them
-// when there are several.
+// when there are several, and greyed out while `trashing`, a move in flight.
 export function contextMenuGroups(
   bindings: Binding[],
   state: MenuState,
   revealLabel: string,
   viewOnly = false,
   count = 1,
+  trashing = false,
 ): MenuItem[][] {
   const sections: Entry[][] = [
     [["selectAll", "Select All"]],
@@ -67,6 +69,7 @@ export function contextMenuGroups(
         label: action === "trashFiles" && count > 1 ? `Move ${count} Files to Trash…` : label,
         shortcut: key === undefined ? "" : displayKey(key),
         checked: checked?.(state),
+        ...(action === "trashFiles" && trashing ? { disabled: true } : {}),
       };
     }),
   );

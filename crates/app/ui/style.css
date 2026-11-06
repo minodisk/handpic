@@ -275,6 +275,11 @@ select {
   outline: none;
 }
 
+.menu-item:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .menu-item .menu-check {
   position: absolute;
   top: 50%;

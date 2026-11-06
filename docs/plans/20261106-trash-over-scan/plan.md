@@ -134,7 +134,7 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
       pattern (`docs/agents/tauri-app.md`, "An index/scan mutation that must
       not race a rescan...").
 
-- [ ] Step 2: Stream the move's progress and refuse a second Move to Trash while one is in flight
+- [x] Step 2: Stream the move's progress and refuse a second Move to Trash while one is in flight
   - Done when:
     - `trash::run` (`crates/app/src/trash.rs:284`) takes a
       `progress: impl FnMut(usize, usize)` called after each group with

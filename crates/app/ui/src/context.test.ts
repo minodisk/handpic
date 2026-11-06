@@ -26,6 +26,16 @@ const unset = { rating: null, flag: "none" as const, label: null };
 const reveal = "Reveal in File Explorer";
 
 describe("contextMenuGroups", () => {
+  test("greys out Move to Trash… alone while a move is in flight", () => {
+    const disabled = (trashing: boolean): string[] =>
+      contextMenuGroups(defaults, unset, reveal, false, 1, trashing)
+        .flat()
+        .filter((item) => item.disabled === true)
+        .map((item) => item.action);
+    expect(disabled(true)).toEqual(["trashFiles"]);
+    expect(disabled(false)).toEqual([]);
+  });
+
   test("lists Select All, the reveal and copy items, the flag, rating and label groups, Rename…, then Move to Trash…", () => {
     const groups = contextMenuGroups(defaults, unset, reveal);
     expect(groups.map((group) => group.map(({ action, label }) => [action, label]))).toEqual([
