@@ -499,7 +499,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
     right pane, and the others are still copied. An import has no undo: its
     copies go like any other file, with `Move to Trash…`.
   - **While importing**: flags, ratings and color labels work, in the date
-    folder as anywhere. `Move to Trash…`, Settings, `Rename…`,
+    folder as anywhere, except that a date folder holding only JPEGs is
+    view-only (see **JPEG-only folders**), so they apply once it holds a RAW
+    file. `Move to Trash…`, Settings, `Rename…`,
     `Rename by Capture Date…`, `Rewrite Sidecars from Index…`,
     `Delete Sidecars…` and `Sequence JPEG Timestamps…` are refused until the
     run ends, a rename with `Rename… is unavailable while an import runs` on
