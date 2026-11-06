@@ -19,10 +19,12 @@ import {
   type FilterState,
   type Flag,
   type Orientation,
+  type OutputState,
   type StoredFilter,
   anchorAfterFilter,
   applyStored,
   filterListChanged,
+  outputOf,
   passes as filterPasses,
   toStored,
 } from "./filter.js";
@@ -643,6 +645,17 @@ const shownGenres = new Set<string>();
 let fileGenres = new Map<string, string[]>();
 let genresInFlight = false;
 let genresPending = false;
+// The checked `Output` items, per session like the genres.
+const shownOutputs = new Set<OutputState>();
+// The open folder's files with an export (`outputs_of`) out of
+// `outputsListing`, the files it was asked about; null while no export folder
+// is known, so no file counts as not exported.
+let fileOutputs: Set<string> | null = null;
+let outputsListing = new Set<string>();
+// Why the last `outputs_of` failed, kept apart from the transient `note`: the
+// decoded preview's `setStatus()` would wipe it at once, and it stays true
+// until a read succeeds.
+let outputsFailure: string | null = null;
 // The personal ranking of the open folder's files with an embedding
 // (`ranking_of`) and the model it ran, while AI analysis is on.
 let rankingOn = false;
@@ -671,6 +684,7 @@ const filterState: FilterState = {
   candidates: shownCandidates,
   eyes: shownEyes,
   genres: shownGenres,
+  outputs: shownOutputs,
   exif: shownExif,
 };
 let showFocus = false;
@@ -864,6 +878,9 @@ function renderMeta(): void {
   }
   if (note !== undefined) {
     metaStatusEl.append(line("note", note));
+  }
+  if (outputsFailure !== null) {
+    metaStatusEl.append(line("note", outputsFailure));
   }
   if (scanning !== null) {
     metaStatusEl.append(line("note", scanning));
@@ -2284,6 +2301,7 @@ function passes(path: string): boolean {
     afEyeState(entries.get(path)?.focus),
     entries.get(path)?.focus?.eyes,
     fileGenres.get(path),
+    outputOf(fileOutputs, outputsListing, path),
   );
 }
 
@@ -4135,9 +4153,9 @@ function resync(trigger: RescanTrigger, deferred = false): void {
   const previous = files;
   const target = files[index];
   resyncInFlight = true;
-  window.__TAURI__.core
-    .invoke<string[]>("list_arw", { dir })
-    .then((found) => {
+  const listed = window.__TAURI__.core.invoke<string[]>("list_arw", { dir });
+  Promise.all([listed, listed.then((found) => readOutputs(dir, found))])
+    .then(([found, outputs]) => {
       resyncInFlight = false;
       if (dir !== openDir || token !== folderToken) {
         drainResync();
@@ -4145,7 +4163,9 @@ function resync(trigger: RescanTrigger, deferred = false): void {
       }
       allFiles = found;
       setViewOnly(isViewOnly(found));
+      applyOutputs(found, outputs);
       refilter(target, true, false, previous);
+      renderMeta();
       return startScan(dir);
     })
     .catch((err: unknown) => {
@@ -4164,15 +4184,31 @@ function drainResync(): void {
   resync(trigger, true);
 }
 
+interface OutputsRead {
+  found: Set<string> | null;
+  failure: string | null;
+}
+
+// What `outputs_of` says of `listing`. A folder that could not be read is no
+// answer, like one with no export folder, and never fails the listing itself.
+function readOutputs(dir: string, listing: string[]): Promise<OutputsRead> {
+  return window.__TAURI__.core.invoke<string[] | null>("outputs_of", { dir, files: listing }).then(
+    (found) => ({ found: found === null ? null : new Set(found), failure: null }),
+    (err: unknown) => ({ found: null, failure: `Output filter: ${String(err)}` }),
+  );
+}
+
 function openDirectory(folder: string, token: number): Promise<void> {
   if (!formatGate.isOpen) {
     return Promise.resolve();
   }
+  const listed = window.__TAURI__.core.invoke<string[]>("list_arw", { dir: folder });
   return Promise.all([
-    window.__TAURI__.core.invoke<string[]>("list_arw", { dir: folder }),
+    listed,
+    listed.then((found) => readOutputs(folder, found)),
     window.__TAURI__.core.invoke<string | null>("last_viewed", { dir: folder }),
     window.__TAURI__.core.invoke<string[]>("viewed_files", { dir: folder }),
-  ]).then(([found, remembered, viewed]) => {
+  ]).then(([found, outputs, remembered, viewed]) => {
     if (token !== folderToken) {
       return;
     }
@@ -4189,6 +4225,7 @@ function openDirectory(folder: string, token: number): Promise<void> {
     labels.clear();
     fileGenres = new Map();
     fileRanks = new Map();
+    applyOutputs(found, outputs);
     pendingResume = resumeTarget(remembered, allFiles);
     viewedFiles = new Set(viewed);
     const order = ordered();
@@ -4687,6 +4724,26 @@ function setGenreSection(enabled: boolean): void {
   }
 }
 
+// The filter menu's `Output` section shows while the open folder has an export
+// folder that could be read. Hiding it unchecks the section, so a hidden item
+// filters nothing. Both callers filter right after, so no `refilter()` here:
+// it would drop `resync`'s `previous` and run on `openDirectory`'s half-switched
+// state.
+function setOutputSection(found: Set<string> | null): void {
+  fileOutputs = found;
+  filterOutput.hidden = found === null;
+  if (found === null && shownOutputs.size > 0) {
+    shownOutputs.clear();
+    mirrorFilter();
+  }
+}
+
+function applyOutputs(listing: string[], { found, failure }: OutputsRead): void {
+  outputsListing = new Set(listing);
+  outputsFailure = failure;
+  setOutputSection(found);
+}
+
 // The third pass stores embeddings as it runs: a checked `Genre` item fills
 // in as it goes, and its end brings every label in.
 void window.__TAURI__.event.listen<{ scan_id: number }>("embed-progress", ({ payload }) => {
@@ -4719,8 +4776,9 @@ void window.__TAURI__.core.invoke<boolean>("auto_advance").then((enabled) => {
 const filterToggle = document.getElementById("filter-toggle") as HTMLButtonElement;
 const filterMenu = document.getElementById("filter-menu") as HTMLDivElement;
 const filterItems = filterMenu.querySelectorAll<HTMLButtonElement>(
-  "[data-flag], [data-stars], [data-label], [data-orientation], [data-candidate], [data-eyes], [data-genre]",
+  "[data-flag], [data-stars], [data-label], [data-orientation], [data-candidate], [data-eyes], [data-output], [data-genre]",
 );
+const filterOutput = document.getElementById("filter-output") as HTMLDivElement;
 const filterGenre = document.getElementById("filter-genre") as HTMLDivElement;
 const filterExif = document.getElementById("filter-exif") as HTMLDivElement;
 // The icons of the `AF eye` items, the strip's icon of the same state in the
@@ -4735,8 +4793,8 @@ function exifSelected(): boolean {
   return [...shownExif.values()].some((set) => set.size > 0);
 }
 
-// Whether any flag, star, label, orientation, candidate, eyes, genre or EXIF
-// filter is checked.
+// Whether any flag, star, label, orientation, candidate, eyes, genre, output or
+// EXIF filter is checked.
 function filterActive(): boolean {
   return (
     shownFlags.size +
@@ -4745,7 +4803,8 @@ function filterActive(): boolean {
       shownOrientations.size +
       shownCandidates.size +
       shownEyes.size +
-      shownGenres.size >
+      shownGenres.size +
+      shownOutputs.size >
       0 || exifSelected()
   );
 }
@@ -4805,7 +4864,7 @@ function setFilterMenuOpen(open: boolean): void {
 // Mirror the sets onto the menu's check marks and the button's lit state.
 function mirrorFilter(): void {
   for (const item of filterItems) {
-    const { flag, stars, label, orientation, candidate, eyes, genre } = item.dataset;
+    const { flag, stars, label, orientation, candidate, eyes, genre, output } = item.dataset;
     const checked =
       flag !== undefined
         ? shownFlags.has(flag as Flag)
@@ -4819,7 +4878,9 @@ function mirrorFilter(): void {
                 ? shownEyes.has(eyes as EyeState)
                 : genre !== undefined
                   ? shownGenres.has(genre)
-                  : shownStars.has(Number(stars));
+                  : output !== undefined
+                    ? shownOutputs.has(output as OutputState)
+                    : shownStars.has(Number(stars));
     item.setAttribute("aria-checked", String(checked));
   }
   for (const item of filterExif.querySelectorAll<HTMLButtonElement>("[data-group]")) {
@@ -4853,7 +4914,7 @@ document.addEventListener("mousedown", (event) => {
 for (const item of filterItems) {
   item.addEventListener("click", () => {
     item.blur();
-    const { flag, stars, label, orientation, candidate, eyes, genre } = item.dataset;
+    const { flag, stars, label, orientation, candidate, eyes, genre, output } = item.dataset;
     const set: Set<string | number> =
       flag !== undefined
         ? shownFlags
@@ -4867,8 +4928,11 @@ for (const item of filterItems) {
                 ? shownEyes
                 : genre !== undefined
                   ? shownGenres
-                  : shownStars;
-    const value = flag ?? label ?? orientation ?? candidate ?? eyes ?? genre ?? Number(stars);
+                  : output !== undefined
+                    ? shownOutputs
+                    : shownStars;
+    const value =
+      flag ?? label ?? orientation ?? candidate ?? eyes ?? genre ?? output ?? Number(stars);
     if (set.has(value)) {
       set.delete(value);
     } else {
@@ -4905,6 +4969,7 @@ filterExif.addEventListener("click", (event) => {
     shownCandidates.clear();
     shownEyes.clear();
     shownGenres.clear();
+    shownOutputs.clear();
     for (const set of shownExif.values()) {
       set.clear();
     }

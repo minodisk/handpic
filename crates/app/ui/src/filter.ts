@@ -17,6 +17,9 @@ import type { PickFlag } from "./selection.js";
 // Its `Genre` items put genre labels (`genre.rs`'s, `Unknown` included) in
 // `genres`; a file passes when one of its labels is checked, and a file
 // without an embedding yet counts as `Unknown` the same way.
+// Its `Output` items put `yes` or `no` in `outputs`. The files `No output` lets
+// through go to the trash, so unlike the sections above a file whose export
+// state is not known passes neither item.
 export type Flag = "picked" | "untagged" | "rejected";
 
 // One item of the `AF eye` section: an AF eye state.
@@ -25,6 +28,9 @@ export type AfEye = MarkState;
 // The displayed shape, decided by the EXIF Orientation tag alone: every
 // sensor Riffle reads is landscape, so a quarter turn (6 or 8) is portrait.
 export type Orientation = "portrait" | "landscape";
+
+// One item of the `Output` section: whether a file has an export.
+export type OutputState = "yes" | "no";
 
 export function orientationOf(tag: number): Orientation {
   return tag === 6 || tag === 8 ? "portrait" : "landscape";
@@ -38,6 +44,7 @@ export interface FilterState {
   candidates: Set<AfEye>;
   eyes: Set<EyeState>;
   genres: Set<string>;
+  outputs: Set<OutputState>;
   exif: Map<ExifGroup, Set<string>>;
 }
 
@@ -45,8 +52,8 @@ export interface FilterState {
 export const UNKNOWN_GENRE = "Unknown";
 
 // The remembered filter, the wire shape of the `filter` / `set_filter`
-// commands: every section but the EXIF groups and the genres, which stay per
-// session.
+// commands: every section but the EXIF groups, the genres and the outputs,
+// which stay per session.
 export interface StoredFilter {
   flags: Flag[];
   stars: number[];
@@ -99,6 +106,7 @@ export function passes(
   afEye?: AfEye,
   eyes?: EyeState,
   genres?: readonly string[],
+  output?: OutputState,
 ): boolean {
   const flag: Flag =
     pickFlag === "pick" ? "picked" : pickFlag === "reject" ? "rejected" : "untagged";
@@ -113,6 +121,7 @@ export function passes(
     (state.candidates.size === 0 || state.candidates.has(afEye ?? "unknown")) &&
     (state.eyes.size === 0 || state.eyes.has(eyes ?? "unknown")) &&
     (state.genres.size === 0 || (genres ?? [UNKNOWN_GENRE]).some((g) => state.genres.has(g))) &&
+    (state.outputs.size === 0 || (output !== undefined && state.outputs.has(output))) &&
     [...state.exif].every(([group, set]) => {
       if (set.size === 0) {
         return true;
@@ -121,6 +130,20 @@ export function passes(
       return key !== null && set.has(key.label);
     })
   );
+}
+
+// The export state of `path`, from the `found` subset `outputs_of` gave of
+// `listing`, or null when it gave no answer. A file outside `listing`, one
+// restored from the Trash since the read, is unknown rather than `no`.
+export function outputOf(
+  found: ReadonlySet<string> | null,
+  listing: ReadonlySet<string>,
+  path: string,
+): OutputState | undefined {
+  if (found === null || !listing.has(path)) {
+    return undefined;
+  }
+  return found.has(path) ? "yes" : "no";
 }
 
 // The path that becomes current after a refilter: `anchor` if it still
