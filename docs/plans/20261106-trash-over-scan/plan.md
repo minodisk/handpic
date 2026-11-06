@@ -393,4 +393,4 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 
 ## Progress
 
-- (none yet)
+- (2026-11-06) Step 1 complete
