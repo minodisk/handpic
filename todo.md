@@ -2209,3 +2209,24 @@ Files: `crates/core/src/copy.rs`.
 #### TODO
 
 - [ ] Replace the final `fs::rename` with a no-replace rename on Windows, Linux and macOS, and keep the failing-job message `exists: ...`. Done when a unit test that creates the destination between the check and the rename (through a hook or a stub) leaves the existing file untouched on the platform CI runs.
+
+### App: real-device checks for the Output filter section (filter-by-output)
+
+#### Background
+
+The `filter-by-output` plan added an `Output` section to the strip's filter menu (`Output` / `No output`). It is shown while the open folder has an `Output` or `Output-sequenced` subfolder that could be read. The match rule and the filter decision are covered by Rust unit tests and vitest tests. Never exercised: the `No output` → select all → `Move to Trash…` flow in the running app on a real folder, and the refresh of the section when an export is made while the folder is open. For the second check, `resync("focus")` was only read from the code, not observed. `focusRescanDue` skips a focus within `FOCUS_RESCAN_INTERVAL` (5 s) of the last rescan, and `resync` defers until `faces-done` while a scan runs. Plan: `docs/plans/_archived/20261106-filter-by-output/plan.md`. Files: `crates/app/ui/src/main.ts`, `crates/app/ui/src/filter.ts`, `crates/app/ui/src/refresh.ts`, `crates/app/src/watch.rs`.
+
+#### TODO
+
+- [ ] On Windows, under `D:\Photos\tests\<date>-<topic>\`, make a folder of RAW files with an `Output/` holding exports of a subset (an exact stem, a `_1` copy, a DeepPRIME export). Open it in Riffle, check `No output`, press `CmdOrCtrl+A`, right-click and choose `Move N Files to Trash…`. Expected: the section shows, the strip lists only the files with no export, and exactly those go to the Trash with their sidecars. Then rename `Output/` away and refocus. Expected: the section hides, the check clears and every file shows again.
+- [ ] On Windows, with `No output` checked, export a file from PhotoLab into `Output/`, wait more than 5 s with no scan running and bring Riffle back to the front. Expected: the exported file leaves the strip. Repeat within 5 s of the last rescan, and during a scan, and record what happens. If the delay proves too long, the plan's fallback is to add `Output/` to `watch.rs`.
+
+### Docs: CLAUDE.md's description of `src/filter.ts` omits the `Output` section
+
+#### Background
+
+`CLAUDE.md`'s layout paragraph says `src/filter.ts` covers the strip's filter menu, including the `AF eye`, `Eyes` and `Genre` sections. It does not mention the `Output` section added by `filter-by-output`, which is per-session like `Genre` and shown while an `Output` / `Output-sequenced` folder is readable. Plan: `docs/plans/_archived/20261106-filter-by-output/plan.md`. Files: `CLAUDE.md`, `crates/app/ui/src/filter.ts`.
+
+#### TODO
+
+- [ ] Add the `Output` section (`Output` / `No output`, from the `outputs_of` command) to that description in `CLAUDE.md`.
