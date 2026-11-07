@@ -1847,6 +1847,27 @@ folder changed" event has to pick the right one.
   `scanId` is null or stale, which the backend ignores), so `startScan` asks
   again after `start_scan` resolves when `cancelsScan(idle.waiting)`, and
   `cancel` needs no case for `pending` entries.
+- `trash_files` and `trash_rejected_redo` stream `trash-progress { op, dir,
+  done, total }` per group from `trash::run`'s callback, a group whose RAW
+  failed counting as done (`dir` is empty for a redo, whose run can span
+  folders; `op` is `"trash"`). `trash_rejected_undo` has none: `trash::restore`
+  has no callback. The event carries no run id: the `Scans` lock runs such
+  operations one at a time and the frontend starts one at a time. `main.ts`
+  keeps the line in the module-level `trashing`, which `renderMeta` shows like
+  `sequencing`: set when the invoke starts, `null` when it settles, not tied to
+  the folder, so a reopen mid-move keeps it. The listener drops an event while
+  `trashing` is `null`, since nothing orders the last event against the
+  invoke's resolve, and a late one would bring the line back for good, and
+  with it the guard below.
+- `trashing !== null` is also what refuses a second Move to Trash:
+  `confirmTrashFiles` opens no dialog, `contextMenuGroups` greys the item
+  (`MenuItem.disabled`), and the held closure of `trashFilesIn` and of
+  `redoTrash` return without invoking, so the press neither reaches the
+  backend nor gets held. `trashFlow` is not enough: `closeTrashDialog()` ends
+  the flow at once when the move is held, so it is idle through the whole run.
+  Only the invoke's own `.then` / `.catch` clear the flag, not `done()`, which
+  also runs when the guards drop the move and would clear another's flag. A
+  held trash is still replaced by a later request as before.
 - `IdleGate.request(label, run, cancel?)` returns whether it held `run`; the
   optional `cancel` fires when the held operation is replaced by a later
   `request` or dropped by `discard()`, never when `drain()` runs it. The two

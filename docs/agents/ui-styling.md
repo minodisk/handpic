@@ -115,7 +115,9 @@ ring is always `--ring` (`--sidebar-ring` in a side pane).
   The open folder (`.current`) and the selected nav item
   (`[aria-selected="true"]`) are `600` on `--sidebar-accent` / `--accent`; a
   multi-selected folder (`.selected`) shares the surface at normal weight.
-- **Menus:** a checked item (`aria-checked="true"`) shows Lucide's `check`
+- **Menus:** a disabled item is greyed with `.button:disabled`'s `opacity`
+  and takes no pointer events (`MenuItem.disabled`, for `showMenu`'s items).
+  A checked item (`aria-checked="true"`) shows Lucide's `check`
   in its leading column, no fill. `addMenuCheck` in `main.ts` prepends the
   `.menu-check` span; CSS alone shows it, so toggling `aria-checked` is
   enough.

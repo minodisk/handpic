@@ -1,8 +1,8 @@
 import { relation } from "./tree.js";
 
 // The strip's `Move to Trash…`: the confirmation dialog's text and flow,
-// what the status line says once the run comes back, and whether the open
-// folder was among the folders it trashed in.
+// what the status line says during the run and once it comes back, and
+// whether the open folder was among the folders it trashed in.
 
 export type TrashFailure = { path: string; message: string };
 
@@ -48,6 +48,17 @@ export function shownPath(dir: string): string {
 // The strip's `Move to Trash…` asks with the count alone.
 export function filesLine(count: number): string {
   return `Move ${count} ${files(count)} to the Trash?`;
+}
+
+// The operation a `trash-progress` event reports on.
+export type TrashOp = "trash";
+
+export type TrashProgress = { op: TrashOp; dir: string; done: number; total: number };
+
+const PROGRESS_LABEL: Record<TrashOp, string> = { trash: "moving to Trash" };
+
+export function progressStatus(op: TrashOp, done: number, total: number): string {
+  return `${PROGRESS_LABEL[op]} ${done} / ${total}`;
 }
 
 export function trashedStatus(summary: TrashSummary, what: TrashWhat = "files"): string {

@@ -416,8 +416,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
   and `.ARW.dop` when both are there, no matter which format is currently
   selected; in a view-only JPEG folder each JPEG goes alone. It asks first
   with the count alone ("Move 3 files to the Trash?"): `Move to Trash` moves
-  them, `Cancel` or `Escape` leaves everything untouched. Once they went,
-  the strip shows the neighbour of the shown file, the gone files leave the
+  them, `Cancel` or `Escape` leaves everything untouched. While they go,
+  the status line counts them (`moving to Trash 12 / 300`), the line stays
+  if a folder is opened meanwhile, and the menu item is greyed out until the
+  move ends. Once they went, the strip shows the neighbour of the shown file, the gone files leave the
   selection, and the status line says how many went ("Moved 3 files to the
   Trash", with how many failed); whatever could not be moved is listed as
   an error and stays in the folder. Nothing is deleted: the file and its
