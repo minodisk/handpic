@@ -66,7 +66,67 @@
 - No new test: the block needs an `AppHandle`, and the plan asks for the existing
   scan tests to pass unchanged.
 
+## Step 4
+
+- Measured first, on real-size copies: per-file about 200 ms a file, a chunk of
+  100 about 7 ms, so 27-30x, and `CHUNK = 100`, Windows only. See
+  `trash-bench.md`.
+- The plan's 100-RAW set makes `chunk-100` and `whole` the same operation. A
+  300-RAW set was added to tell them apart.
+- The failure probe changed the design. The plan's "a chunk `Err` falls back to
+  the per-file mover" read as if nothing had moved, but the shell goes on past a
+  locked file and moves the rest. The plan's risks section says to skip such
+  paths with `GONE`; they have to be recorded as moved instead, or Undo loses
+  them. `GONE` is for a file missing before the chunk, which is checked first
+  because one missing path fails `delete_all` before it moves anything.
+- Not in the plan: `moved` must keep each RAW directly before its sidecars
+  though the moves are batched, since `restore`'s `raw_back` and `redo`'s
+  regrouping read that order. `run_chunked` rebuilds it per group.
+- `run_chunked` sits next to `run` rather than changing `run`'s signature:
+  `foldersidecars::delete`, macOS, Linux and Step 5's `delete_files` stay on
+  `run` untouched. `redo` split out `redo_groups` for `redo_chunked`.
+  `commands.rs` chooses by platform in `move_groups` / `move_again`.
+- Measuring trap: the bin's size and item count came back exact while 23,450
+  `$I` files sat orphaned in `$Recycle.Bin`, since `restore_all` leaves them and
+  the shell does not list them. Only a 19 MB free space gap showed something was
+  off. Counting the folder found them; they were removed by the original path
+  each records. See the safety record in `trash-bench.md`.
+- Beyond the plan's list: `docs/humans/usage.md` / `usage.ja.md`, as the count
+  now goes in steps on Windows, plus `docs/agents/tauri-app.md` and `CLAUDE.md`.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check** (Step 4, Windows; the step's checkbox was ticked on
+  the automated criteria, as Riffle was not to be launched for this step). In a
+  test folder of copies, move 500+ files. Expected: `moved files to the trash`
+  arrives in `Riffle.log` at about 7 ms a file, near `trash-bench.md`'s numbers
+  (a large gap means the app adds a cost the bench did not have); the status
+  count goes up in steps of 100; Undo restores all, each sidecar with its RAW;
+  Redo moves them again. Basis: plan Step 4's manual check; files
+  `crates/app/src/trash.rs` (`run_chunked`), `crates/app/src/commands.rs`
+  (`move_groups`, `move_again`).
+- A locked file in a real chunk is only covered by the fake mover and the bench
+  probe. Worth trying once by hand: hold one file open, move a selection around
+  it, and expect that file listed as a failure with its sidecars left, and the
+  rest moved and restored by Undo. Basis: Step 4 failure probe; file
+  `crates/app/src/trash.rs` (`move_chunk`).
+- Every restore leaves an orphaned `$I` file in `$Recycle.Bin`: trash 5.2.9's
+  Windows `restore_all` moves the `$R` file back and nothing removes its `$I`.
+  Riffle's Undo restores through the same call, so it presumably does this for
+  every file it brings back. D: already held 5327 older orphans naming other
+  paths (their source was not traced; they were left alone). Each is small and
+  the shell does not list them, but they pile up and cost a file record each.
+  Check whether Explorer's own restore cleans up, and whether the crate can.
+  Basis: Step 4 measurement; `trash-bench.md`; file `crates/app/src/commands.rs`
+  (`restore_run`).
+- `trash_rejected_undo` is still per-item, one shell operation each. Not timed,
+  but if an operation costs what a move does (about 200 ms), an Undo of a large
+  move now takes far longer than the move.
+  One `restore_all` for the whole run took 1 s for 150 files in the bench, but
+  `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite)
+  would need the same treatment `run_chunked` gave `run`. Basis: Step 4
+  measurement; files `crates/app/src/trash.rs` (`restore`),
+  `crates/app/src/commands.rs` (`restore_run`).
 
 - **Pending manual check** (Step 3, Windows; the step's checkbox was ticked on
   the automated criteria). Start a move of 200+ files and reopen the folder

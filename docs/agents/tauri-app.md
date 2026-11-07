@@ -1869,8 +1869,24 @@ folder changed" event has to pick the right one.
   `scanId` is null or stale, which the backend ignores), so `startScan` asks
   again after `start_scan` resolves when `cancelsScan(idle.waiting)`, and
   `cancel` needs no case for `pending` entries.
+- On Windows `trash_files` and `trash_rejected_redo` move through
+  `trash::run_chunked`: `CHUNK` RAWs in one `::trash::delete_all`, then their
+  sidecars in another. A shell operation costs about 200 ms whatever it moves,
+  so this is about 30 times faster (the trash-over-scan plan's
+  `trash-bench.md`). Elsewhere `delete_all` gains nothing (Linux) or the mover
+  must report each file's location (macOS), so they stay on `trash::run`.
+  Three rules hold it together:
+  - A chunk's `Err` does not mean nothing moved. The shell goes on past a locked
+    file and then reports the operation aborted, so `move_chunk` records as
+    moved whatever is gone afterwards, or Undo would lose it, and retries only
+    what is left, one by one, so each `Failure` names its file.
+  - A path that does not exist makes `delete_all` fail before moving anything,
+    so a file already gone is taken out first and fails alone with `GONE`.
+  - `moved` stays in `run`'s order, each RAW followed by its sidecars, though
+    the moves are not: `restore`'s `raw_back` and `redo`'s regrouping read it.
 - `trash_files` and `trash_rejected_redo` stream `trash-progress { op, dir,
-  done, total }` per group from `trash::run`'s callback, a group whose RAW
+  done, total }` per group from `trash::run`'s callback, or per chunk from
+  `run_chunked`'s, a group whose RAW
   failed counting as done (`dir` is empty for a redo, whose run can span
   folders; `op` is `"trash"`). `trash_rejected_undo` has none: `trash::restore`
   has no callback. The event carries no run id: the `Scans` lock runs such
