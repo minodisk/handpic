@@ -346,15 +346,50 @@ pub fn remove_one(path: &Path) -> Result<Option<PathBuf>, String> {
 /// Delete `paths` of `dir` with `remover`, grouped and ordered as a move to
 /// the Trash is: a RAW first, its sidecars only if it went, a JPEG alone, and
 /// a path of another folder a `Failure`, never touched. The summary's
-/// `run_id` stays `None`, so no undo is offered.
+/// `run_id` stays `None`, so no undo is offered. `files` is the listing of
+/// `dir`: a `.xmp` shared by name with a RAW that is not among `paths` (a
+/// `FOO.xmp` of `FOO.ARW` and `FOO.DNG`) is kept, as nothing can bring it
+/// back and the kept RAW still uses it.
 pub fn delete_for_good(
     dir: &Path,
     paths: &[String],
+    files: &[String],
     sidecars: &HashMap<String, SidecarStat>,
     remover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
     progress: impl FnMut(usize, usize),
 ) -> Summary {
-    let (groups, foreign) = groups_of(dir, paths, sidecars);
+    let (mut groups, foreign) = groups_of(dir, paths, sidecars);
+    let name_of = |path: &str| {
+        Path::new(path)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
+    };
+    let stem_of = |path: &str| {
+        Path::new(path)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_lowercase())
+    };
+    let chosen: std::collections::HashSet<String> =
+        paths.iter().filter_map(|path| name_of(path)).collect();
+    let kept_stems: std::collections::HashSet<String> = files
+        .iter()
+        .filter(|file| {
+            riffle_core::scan::is_raw_file(Path::new(file.as_str()))
+                && name_of(file).is_some_and(|name| !chosen.contains(&name))
+        })
+        .filter_map(|file| stem_of(file))
+        .collect();
+    for group in &mut groups {
+        group.sidecars.retain(|sidecar| {
+            let is_xmp = sidecar
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"));
+            let shared = sidecar
+                .file_stem()
+                .is_some_and(|stem| kept_stems.contains(&stem.to_string_lossy().to_lowercase()));
+            !(is_xmp && shared)
+        });
+    }
     let (mut summary, _) = run(groups, remover, progress);
     summary.failed.extend(foreign);
     summary
@@ -1350,6 +1385,7 @@ mod tests {
         delete_for_good(
             dir,
             &paths,
+            &listing.files,
             &stat_sidecars(&listing.sidecars),
             remover,
             |_, _| {},
@@ -1408,6 +1444,22 @@ mod tests {
     }
 
     #[test]
+    fn a_delete_keeps_an_xmp_a_kept_raw_shares() {
+        let dir = temp_dir("delete-shared-xmp");
+        for name in ["a.ARW", "a.DNG", "a.xmp", "a.ARW.dop", "b.ARW", "b.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["a.ARW", "b.ARW"], remove_one);
+        assert_eq!(summary.moved.len(), 2);
+        assert!(!dir.join("a.ARW").exists());
+        assert!(!dir.join("a.ARW.dop").exists());
+        assert!(dir.join("a.xmp").exists());
+        assert!(dir.join("a.DNG").exists());
+        assert!(!dir.join("b.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn a_delete_takes_a_jpeg_alone() {
         let dir = temp_dir("delete-jpeg");
         for name in ["d.jpg", "d.xmp"] {
@@ -1432,6 +1484,7 @@ mod tests {
         let summary = delete_for_good(
             &dir,
             &paths,
+            &listing.files,
             &stat_sidecars(&listing.sidecars),
             remove_one,
             |_, _| {},

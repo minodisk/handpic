@@ -7,8 +7,10 @@ import {
   type Entry,
   type TrashEntry,
   History,
+  isEmptyBatch,
   isJudgments,
   mapJudgments,
+  withoutPaths,
   mapTrashDirs,
   undoneTrash,
 } from "./undo.js";
@@ -63,6 +65,7 @@ import {
   restoredStatus,
   stillHeld,
   swallowedByDelete,
+  confirmsDelete,
   trashedStatus,
 } from "./trash.js";
 import {
@@ -1079,10 +1082,10 @@ function closeTrashDialog(): void {
 }
 
 // The confirmed files go to `trashFilesIn`, which closes the dialog once
-// the run comes back. A click with `detail` 0 did not come from a mouse, the
-// only yes a delete takes.
+// the run comes back. A delete takes a single mouse click only (see
+// `confirmsDelete`).
 function runTrash(event: MouseEvent): void {
-  if (trashFlow.target?.mode === "delete" && event.detail === 0) {
+  if (trashFlow.target?.mode === "delete" && !confirmsDelete(event)) {
     return;
   }
   const target = trashFlow.run();
@@ -1126,7 +1129,15 @@ function trashed(
   }
   // The judgments of the trashed files stay: this entry sits above
   // them, so undo reaches them only once the files are back, and
-  // `step` skips a file that did not come back.
+  // `step` skips a file that did not come back. A delete pushes no such
+  // entry and the files never come back, so their judgments go.
+  if (mode === "delete" && summary.moved.length > 0) {
+    const gone = new Set(summary.moved);
+    for (const stack of [history, redoable]) {
+      stack.map(withoutPaths(gone));
+      stack.removeWhere(isEmptyBatch);
+    }
+  }
   if (summary.run_id !== null) {
     history.push({
       kind: "trash",

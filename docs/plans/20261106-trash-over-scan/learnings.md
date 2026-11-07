@@ -138,15 +138,6 @@
   manual check; files `crates/app/ui/src/main.ts` (`confirmTrashFiles`,
   `trashKeydown`, `runTrash`, `trashFilesIn`), `crates/app/src/commands.rs`
   (`delete_files`).
-- After a delete the judgment history keeps its batches, with no trash entry
-  above them as a move has. `step` drops the gone paths, so an Undo of a batch of
-  deleted files does nothing and says nothing, which the usual flow (reject,
-  filter, select all, delete) reaches at once. Worse, until the rescan's listing
-  lands `allFiles` still holds the files, so an Undo in that short window would
-  judge a gone file and could mint an orphan sidecar. Dropping `summary.moved`
-  from `history` and `redoable` in `trashed()` would close both. Basis: Step 5
-  implementation; files `crates/app/ui/src/main.ts` (`trashed`, `step`),
-  `crates/app/ui/src/undo.ts`.
 - A read-only file (a camera's protect flag) goes to the Trash but may fail
   `remove_file`, depending on the platform; it is then listed as a failure and
   stays, which is safe, but the user has no way to delete it from Riffle. Not

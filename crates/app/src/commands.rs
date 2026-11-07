@@ -2852,6 +2852,7 @@ pub async fn delete_files(
         let summary = trash::delete_for_good(
             Path::new(&canonicalize(&dir)),
             &paths,
+            &listing.files,
             &stat_sidecars(&listing.sidecars),
             trash::remove_one,
             |done, total| emit_trash_progress(&app, "delete", &dir, done, total),

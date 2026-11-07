@@ -1902,6 +1902,9 @@ folder changed" event has to pick the right one.
   `redoTrash` return without invoking, so the press neither reaches the
   backend nor gets held. `trashFlow` is not enough: `closeTrashDialog()` ends
   the flow at once when the move is held, so it is idle through the whole run.
+  Only the invoke's own `.then` / `.catch` clear the flag, not `done()`, which
+  also runs when the guards drop the move and would clear another's flag. A
+  held trash is still replaced by a later request as before.
 - `Delete Permanently…` is the same operation with another mover, so it takes
   every guard above: `delete_files` is `trash_files`'s shape on `trash::run`
   with `trash::remove_one`, never `run_chunked` (a removal pays no shell
@@ -1909,18 +1912,23 @@ folder changed" event has to pick the right one.
   either, the `cancelsScan` label `"Delete Permanently"`, and `trashed()`'s
   `resync("trash")`, whose `reconcile` drops the index rows. It records no run,
   so `summary.run_id` is `null`, which pushes no history entry and clears no
-  redo. It is on purpose not in `shortcuts.rs` or `mcp.rs`.
+  redo. `trashed()` therefore prunes the deleted paths from the judgment
+  batches of `history` and `redoable` itself (`withoutPaths`, then
+  `isEmptyBatch`), as no trash entry sits above them to guard an undo. The
+  backend keeps a `.xmp` that a RAW of the listing outside the selection still
+  shares by stem (`delete_for_good`'s `files`), and the dialog says so. It is
+  on purpose not in `shortcuts.rs` or `mcp.rs`.
 - It shares `trash-dialog` too (`dialogText`, `TrashTarget.mode`), but no key may
   say yes to it. The dialog focuses Cancel, and `trashKeydown` swallows Enter
   and Space by `event.key`, not `keyName`, whose `shift+enter` is a different
   name for a key that clicks the button just the same, plus any `event.repeat`,
-  a key held from before the dialog opened. `runTrash` also ignores a click with
-  `detail` 0, what a keyboard-made click carries, so a WebView that clicks on
-  Space's keyup despite the `preventDefault` still deletes nothing. Tab can reach
+  a key held from before the dialog opened. `runTrash` takes a click only when
+  `confirmsDelete` says so, `detail` exactly 1: 0 is what a keyboard-made click
+  carries, so a WebView that clicks on Space's keyup despite the
+  `preventDefault` still deletes nothing, and 2 or more is the second click of
+  a double-click on the menu item, which can land on the run button the first
+  click's dialog put under the cursor. Tab can reach
   the run button; that is harmless for the same reason.
-  Only the invoke's own `.then` / `.catch` clear the flag, not `done()`, which
-  also runs when the guards drop the move and would clear another's flag. A
-  held trash is still replaced by a later request as before.
 - `IdleGate.request(label, run, cancel?)` returns whether it held `run`; the
   optional `cancel` fires when the held operation is replaced by a later
   `request` or dropped by `discard()`, never when `drain()` runs it. The two

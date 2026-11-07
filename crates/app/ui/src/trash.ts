@@ -54,8 +54,8 @@ export function filesLine(count: number): string {
 // way back.
 function deleteLine(count: number): string {
   return count === 1
-    ? "Permanently delete 1 file and its sidecars? It is not moved to the Trash and this cannot be undone."
-    : `Permanently delete ${count} files and their sidecars? They are not moved to the Trash and this cannot be undone.`;
+    ? "Permanently delete 1 file and its sidecars (a .xmp shared with a file you keep stays)? It is not moved to the Trash and this cannot be undone."
+    : `Permanently delete ${count} files and their sidecars (a .xmp shared with a file you keep stays)? They are not moved to the Trash and this cannot be undone.`;
 }
 
 // The operation a `trash-progress` event reports on, and what the dialog asks.
@@ -75,6 +75,13 @@ export function dialogText(
 // is a key still held from before the dialog opened.
 export function swallowedByDelete(event: { key: string; repeat: boolean }): boolean {
   return event.repeat || event.key === "Enter" || event.key === " ";
+}
+
+// Whether a click on the run button confirms a delete: only a single mouse
+// click. `detail` 0 is a key, and 2 or more is the rest of a double-click that
+// opened the dialog from the menu item under the cursor.
+export function confirmsDelete(event: { detail: number }): boolean {
+  return event.detail === 1;
 }
 
 export type TrashProgress = { op: TrashOp; dir: string; done: number; total: number };

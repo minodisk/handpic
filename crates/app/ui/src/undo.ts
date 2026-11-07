@@ -32,6 +32,18 @@ export function mapJudgments<J>(fn: (judgment: J) => J): (entry: Entry<J>) => En
   return (entry) => (isJudgments(entry) ? entry.map(fn) : entry);
 }
 
+// Drop the judgments of the files in `gone` from a batch, leaving a trash
+// entry as is. A batch left empty is for `isEmptyBatch` to remove.
+export function withoutPaths<J extends { path: string }>(
+  gone: ReadonlySet<string>,
+): (entry: Entry<J>) => Entry<J> {
+  return (entry) => (isJudgments(entry) ? entry.filter((j) => !gone.has(j.path)) : entry);
+}
+
+export function isEmptyBatch<J>(entry: Entry<J>): boolean {
+  return isJudgments(entry) && entry.length === 0;
+}
+
 // Rewrite the folders of a trash entry through `fn`, leaving a batch of
 // judgments as is, e.g. to follow a folder rename.
 export function mapTrashDirs<J>(fn: (dir: string) => string): (entry: Entry<J>) => Entry<J> {

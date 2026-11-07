@@ -3,10 +3,12 @@ import {
   type Entry,
   type TrashEntry,
   History,
+  isEmptyBatch,
   isJudgments,
   mapJudgments,
   mapTrashDirs,
   undoneTrash,
+  withoutPaths,
 } from "./undo.js";
 
 describe("History", () => {
@@ -105,6 +107,19 @@ describe("undo entries", () => {
     history.map(mapJudgments((j) => (j.path === "/a/1.ARW" ? { path: "/a/9.ARW" } : j)));
     expect(history.pop()).toBe(run);
     expect(history.pop()).toEqual([{ path: "/a/9.ARW" }, { path: "/a/2.ARW" }]);
+  });
+
+  test("dropping deleted paths empties a batch of them and leaves a trash entry alone", () => {
+    const history = new History<Entry<J>>(10);
+    const mixed = [{ path: "/a/1.ARW" }, { path: "/a/2.ARW" }];
+    history.push(mixed);
+    history.push([{ path: "/a/1.ARW" }]);
+    history.push(run);
+    history.map(withoutPaths(new Set(["/a/1.ARW"])));
+    history.removeWhere(isEmptyBatch);
+    expect(history.pop()).toBe(run);
+    expect(history.pop()).toEqual([{ path: "/a/2.ARW" }]);
+    expect(history.pop()).toBeUndefined();
   });
 
   test("mapping trash folders rewrites every trash entry and leaves judgments alone", () => {

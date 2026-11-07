@@ -10,6 +10,7 @@ import {
   shownPath,
   stillHeld,
   swallowedByDelete,
+  confirmsDelete,
   trashedStatus,
 } from "./trash.js";
 
@@ -214,11 +215,11 @@ describe("dialogText", () => {
   test("says a delete is permanent, singular for one file", () => {
     expect(dialogText("delete", 3)).toEqual({
       title: "Delete Permanently",
-      line: "Permanently delete 3 files and their sidecars? They are not moved to the Trash and this cannot be undone.",
+      line: "Permanently delete 3 files and their sidecars (a .xmp shared with a file you keep stays)? They are not moved to the Trash and this cannot be undone.",
       run: "Delete Permanently",
     });
     expect(dialogText("delete", 1).line).toBe(
-      "Permanently delete 1 file and its sidecars? It is not moved to the Trash and this cannot be undone.",
+      "Permanently delete 1 file and its sidecars (a .xmp shared with a file you keep stays)? It is not moved to the Trash and this cannot be undone.",
     );
   });
 });
@@ -234,6 +235,15 @@ describe("swallowedByDelete", () => {
   test("leaves Escape and Tab to the dialog", () => {
     expect(swallowedByDelete({ key: "Escape", repeat: false })).toBe(false);
     expect(swallowedByDelete({ key: "Tab", repeat: false })).toBe(false);
+  });
+});
+
+describe("confirmsDelete", () => {
+  test("takes a single mouse click only", () => {
+    expect(confirmsDelete({ detail: 1 })).toBe(true);
+    expect(confirmsDelete({ detail: 0 })).toBe(false);
+    expect(confirmsDelete({ detail: 2 })).toBe(false);
+    expect(confirmsDelete({ detail: 3 })).toBe(false);
   });
 });
 
