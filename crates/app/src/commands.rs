@@ -2869,8 +2869,9 @@ pub async fn trash_rejected_undo(
 /// exactly those, RAW before its sidecars, with no dialog and no new
 /// collection (see `trash::redo`); a file gone meanwhile is a failure. The
 /// move is recorded as a new run, whose id the `Summary` carries. An
-/// unknown run is an `Err`; it is forgotten once redone. Each group moved
-/// emits `trash-progress`, with an empty `dir`: a run can span folders.
+/// unknown run is an `Err`; it is forgotten once redone. Each group moved, or
+/// each chunk on Windows (see `move_again`), emits `trash-progress`, with an
+/// empty `dir`: a run can span folders.
 ///
 /// The guards are `trash_files`'s: the sidecar writer is drained
 /// first, and a running scan is refused under the `Scans` lock, which is

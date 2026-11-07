@@ -234,7 +234,8 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
       `CHUNK` groups in one `delete_all`, then their sidecars in one
       `delete_all`, so RAW-before-sidecars holds at chunk granularity and
       a chunk whose RAWs failed leaves its sidecars alone. A chunk `Err`
-      falls back to the per-file mover for that chunk, so every `Failure`
+      falls back to the per-file mover for what the chunk left (a file
+      already gone after the `Err` counts as moved), so every `Failure`
       names the file that failed. `Trashed` records are built per path as
       now (`trashed_at: None` on Windows / Linux, so `trash_key` lookups,
       `Runs`, Undo and Redo are untouched); the macOS `trash_file` per-file
@@ -376,9 +377,10 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
   add the same callback to `trash::restore`.
 - Step 4 is conditional: the measurement may show per-file is as fast on
   the Recycle Bin, in which case only the note ships. If chunking lands,
-  the risk is a chunk failure's fallback re-trying files already moved; the
-  fallback must skip paths that no longer exist (`GONE`) rather than report
-  them as failures. `delete_all` on Windows is one shell operation, so a
+  the risk is a chunk failure's fallback re-trying files already moved.
+  The failure probe in `trash-bench.md` decided the rule: `move_chunk`
+  records a file gone after a chunk `Err` as moved (`GONE` would lose it
+  for Undo), and `GONE` means gone before the chunk. `delete_all` on Windows is one shell operation, so a
   cancel mid-chunk is not possible, which is fine since the move has no
   cancel today.
 - Delete Permanently and the sidecar writer: like `trash_files`, the writer
@@ -396,3 +398,4 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 - (2026-11-06) Step 1 complete
 - (2026-11-07) Step 2 complete
 - (2026-11-07) Step 3 complete
+- (2026-11-07) Step 4 complete
