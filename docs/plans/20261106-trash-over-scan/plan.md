@@ -214,7 +214,7 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
       boundary proves awkward, mint the id and take `running` in the
       blocking task and start `Preparing` under the same lock there.
 
-- [ ] Step 4: Measure `::trash::delete_all` in chunks against per-file `::trash::delete` on Windows, and chunk the move only if it is clearly faster
+- [x] Step 4: Measure `::trash::delete_all` in chunks against per-file `::trash::delete` on Windows, and chunk the move only if it is clearly faster
   - Done when:
     - A measurement note `trash-bench.md` in this plan folder: method
       (files, sizes, chunk sizes, repetitions, timings per file), the

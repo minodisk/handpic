@@ -145,7 +145,8 @@ its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
 move behind the strip's `Move to Trash…` and the `trash_files` command (it
 groups the given files of one folder, each RAW with the `.xmp` and `.dop`
 sidecars that exist for it and a JPEG alone, and moves them to the OS trash,
-RAW first, streaming `trash-progress` events (as `trash_rejected_redo` does),
+RAW first, in chunks on Windows (`run_chunked`), streaming `trash-progress`
+events (as `trash_rejected_redo` does),
 recording every run that moved something in `Runs`, the newest
 100, which `trash_rejected_undo` takes one from to restore its files, RAW
 before its sidecars, never overwriting, keeping what came back for

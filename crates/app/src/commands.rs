@@ -2784,8 +2784,9 @@ fn emit_trash_progress(app: &tauri::AppHandle, op: &str, dir: &str, done: usize,
 /// Move `paths`, files of the folder `dir` as the listing gave them, to the
 /// OS trash in their order, each RAW together with the `.xmp` and `.dop`
 /// sidecars that exist for it and a JPEG alone (see `trash::groups_of`). A
-/// path outside `dir` fails without being moved, one gone meanwhile fails in
-/// the mover. Each group moved emits `trash-progress`.
+/// path outside `dir` fails without being moved, one gone meanwhile fails
+/// too. Each group moved, or each chunk on Windows (see `move_groups`), emits
+/// `trash-progress`.
 ///
 /// A running scan is refused under the `Scans` lock, which is held across
 /// the moves, and the sidecar writer is drained first, as in `clear_index`:
@@ -2812,7 +2813,7 @@ pub async fn trash_files(
             &paths,
             &stat_sidecars(&listing.sidecars),
         );
-        let (mut summary, moved) = trash::run(groups, trash_one, |done, total| {
+        let (mut summary, moved) = move_groups(groups, |done, total| {
             emit_trash_progress(&app, "trash", &dir, done, total);
         });
         summary.failed.extend(foreign);
@@ -2892,7 +2893,7 @@ pub async fn trash_rejected_redo(
         let paths = runs
             .take_undone(run_id)
             .ok_or_else(|| trash::UNDONE_GONE.to_string())?;
-        let (mut summary, moved) = trash::redo(paths, Path::exists, trash_one, |done, total| {
+        let (mut summary, moved) = move_again(paths, |done, total| {
             emit_trash_progress(&app, "trash", "", done, total);
         });
         summary.run_id = runs.record(moved);
@@ -2966,6 +2967,51 @@ pub(crate) fn trash_one(path: &Path) -> Result<Option<PathBuf>, String> {
     ::trash::delete(path)
         .map(|()| None)
         .map_err(|e| e.to_string())
+}
+
+/// The chunk mover of `trash_files` and `trash_rejected_redo`: one shell
+/// operation for all of `paths`.
+#[cfg(windows)]
+fn trash_many(paths: &[PathBuf]) -> Result<(), String> {
+    ::trash::delete_all(paths).map_err(|e| e.to_string())
+}
+
+/// Move `groups` to the Trash in chunks: a shell operation costs far more
+/// than the files it moves.
+#[cfg(windows)]
+fn move_groups(
+    groups: Vec<trash::Group>,
+    progress: impl FnMut(usize, usize),
+) -> (trash::Summary, Vec<trash::Trashed>) {
+    trash::run_chunked(groups, Path::exists, trash_many, trash_one, progress)
+}
+
+/// Move `groups` to the Trash one file at a time: macOS needs where each file
+/// went, and `::trash::delete_all` is a loop of single moves on Linux.
+#[cfg(not(windows))]
+fn move_groups(
+    groups: Vec<trash::Group>,
+    progress: impl FnMut(usize, usize),
+) -> (trash::Summary, Vec<trash::Trashed>) {
+    trash::run(groups, trash_one, progress)
+}
+
+/// `trash::redo` of `paths`, chunked like `move_groups`.
+#[cfg(windows)]
+fn move_again(
+    paths: Vec<PathBuf>,
+    progress: impl FnMut(usize, usize),
+) -> (trash::Summary, Vec<trash::Trashed>) {
+    trash::redo_chunked(paths, Path::exists, trash_many, trash_one, progress)
+}
+
+/// `trash::redo` of `paths`, one file at a time like `move_groups`.
+#[cfg(not(windows))]
+fn move_again(
+    paths: Vec<PathBuf>,
+    progress: impl FnMut(usize, usize),
+) -> (trash::Summary, Vec<trash::Trashed>) {
+    trash::redo(paths, Path::exists, trash_one, progress)
 }
 
 /// Resolve symlinks and normalize a folder path so the same folder reached

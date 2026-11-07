@@ -332,6 +332,114 @@ pub fn run(
     (summary, moved)
 }
 
+/// How many groups `run_chunked` moves per shell operation: about 30 times
+/// faster per file than one operation each, as measured in the
+/// trash-over-scan plan's `trash-bench.md`.
+const CHUNK: usize = 100;
+
+/// `run` for a platform where one call moves many files far faster than one
+/// call per file (Windows): up to `CHUNK` RAWs in one `move_many`, then the
+/// sidecars of the ones that went in another, so a sidecar still moves only
+/// after its RAW. `moved` keeps `run`'s order, each RAW followed by its
+/// sidecars, which `restore` and `redo` read. `progress` is called per chunk.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn run_chunked(
+    mut groups: Vec<Group>,
+    exists: impl Fn(&Path) -> bool,
+    mut move_many: impl FnMut(&[PathBuf]) -> Result<(), String>,
+    mut mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    mut progress: impl FnMut(usize, usize),
+) -> (Summary, Vec<Trashed>) {
+    let mut summary = Summary::default();
+    let mut moved = Vec::new();
+    let total = groups.len();
+    let mut done = 0;
+    while !groups.is_empty() {
+        let rest = groups.split_off(CHUNK.min(groups.len()));
+        let chunk = std::mem::replace(&mut groups, rest);
+        let raws: Vec<PathBuf> = chunk.iter().map(|group| group.raw.clone()).collect();
+        let raw_results = move_chunk(&raws, &exists, &mut move_many, &mut mover);
+        let sidecars: Vec<PathBuf> = chunk
+            .iter()
+            .zip(&raw_results)
+            .filter(|(_, result)| result.is_ok())
+            .flat_map(|(group, _)| group.sidecars.iter().cloned())
+            .collect();
+        let mut sidecar_results =
+            move_chunk(&sidecars, &exists, &mut move_many, &mut mover).into_iter();
+        done += chunk.len();
+        for (group, raw_result) in chunk.into_iter().zip(raw_results) {
+            let raw = group.raw.to_string_lossy().into_owned();
+            match raw_result {
+                Ok(trashed_at) => moved.push(trashed(group.raw, trashed_at)),
+                Err(message) => {
+                    summary.failed.push(Failure { path: raw, message });
+                    continue;
+                }
+            }
+            summary.moved.push(raw);
+            for (sidecar, result) in group.sidecars.into_iter().zip(sidecar_results.by_ref()) {
+                match result {
+                    Ok(trashed_at) => moved.push(trashed(sidecar, trashed_at)),
+                    Err(message) => summary.failed.push(Failure {
+                        path: sidecar.to_string_lossy().into_owned(),
+                        message,
+                    }),
+                }
+            }
+        }
+        progress(done, total);
+    }
+    (summary, moved)
+}
+
+/// The outcome of each of `paths`, in order: where the file went, as `mover`
+/// tells it, or why it did not. A file already gone fails without reaching
+/// `move_many`, which would refuse the whole call for it. `move_many` can fail
+/// having moved all but one file (the Windows shell goes on past a locked
+/// file, then reports the operation aborted), so after a failure a file that
+/// is gone went to the Trash, and the rest go through `mover` one at a time
+/// so that each failure names its file.
+fn move_chunk(
+    paths: &[PathBuf],
+    exists: &impl Fn(&Path) -> bool,
+    move_many: &mut impl FnMut(&[PathBuf]) -> Result<(), String>,
+    mover: &mut impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+) -> Vec<Result<Option<PathBuf>, String>> {
+    let was_there: Vec<bool> = paths.iter().map(|path| exists(path)).collect();
+    let there: Vec<PathBuf> = paths
+        .iter()
+        .zip(&was_there)
+        .filter(|(_, there)| **there)
+        .map(|(path, _)| path.clone())
+        .collect();
+    let all_moved = there.is_empty() || move_many(&there).is_ok();
+    paths
+        .iter()
+        .zip(was_there)
+        .map(|(path, was_there)| {
+            if !was_there {
+                Err(GONE.to_string())
+            } else if all_moved || !exists(path) {
+                Ok(None)
+            } else {
+                mover(path)
+            }
+        })
+        .collect()
+}
+
+/// The record of `path`, moved to `trashed_at`.
+fn trashed(path: PathBuf, trashed_at: Option<PathBuf>) -> Trashed {
+    let trashed_id = trashed_at.as_deref().and_then(file_id);
+    Trashed {
+        path,
+        trashed_at,
+        trashed_id,
+        restore_to: None,
+    }
+}
+
 /// `(dev, ino)` of `path`, `None` when it cannot be stat'd or the platform is
 /// not Unix. A rename within the same volume keeps this identity, but the
 /// Trash reusing a freed name after emptying does not.
@@ -407,12 +515,40 @@ pub fn restore<I>(
 /// `Delete Sidecars…` moves sidecars alone) is a group of its own, so one
 /// failure does not hold back the others. No reject is collected again; a
 /// file that no longer `exists` fails without reaching `mover`.
+#[cfg_attr(windows, allow(dead_code))]
 pub fn redo(
     paths: Vec<PathBuf>,
     exists: impl Fn(&Path) -> bool,
     mut mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
     progress: impl FnMut(usize, usize),
 ) -> (Summary, Vec<Trashed>) {
+    run(
+        redo_groups(paths),
+        |path| {
+            if exists(path) {
+                mover(path)
+            } else {
+                Err(GONE.to_string())
+            }
+        },
+        progress,
+    )
+}
+
+/// `redo` through `run_chunked`.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn redo_chunked(
+    paths: Vec<PathBuf>,
+    exists: impl Fn(&Path) -> bool,
+    move_many: impl FnMut(&[PathBuf]) -> Result<(), String>,
+    mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    progress: impl FnMut(usize, usize),
+) -> (Summary, Vec<Trashed>) {
+    run_chunked(redo_groups(paths), exists, move_many, mover, progress)
+}
+
+/// The groups of `paths`, what an undo brought back.
+fn redo_groups(paths: Vec<PathBuf>) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
     for path in paths {
         match groups.last_mut() {
@@ -428,17 +564,7 @@ pub fn redo(
             }),
         }
     }
-    run(
-        groups,
-        |path| {
-            if exists(path) {
-                mover(path)
-            } else {
-                Err(GONE.to_string())
-            }
-        },
-        progress,
-    )
+    groups
 }
 
 /// Put `run` back from where each file went, as recorded at trash time
@@ -585,12 +711,13 @@ pub fn newest_by_path(items: Vec<::trash::TrashItem>) -> HashMap<String, ::trash
 #[cfg(test)]
 mod tests {
     use super::{
-        create_missing, groups_of, newest_by_path, redo, relocate, restore, restore_recorded, run,
-        trash_key, Group, Restored, Runs, TrashRun, Trashed, ALREADY_EXISTS, GONE, MAX_RUNS,
-        NOT_IN_TRASH, RAW_NOT_RESTORED,
+        create_missing, groups_of, newest_by_path, redo, redo_chunked, relocate, restore,
+        restore_recorded, run, run_chunked, trash_key, Group, Restored, Runs, TrashRun, Trashed,
+        ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
     };
     use crate::commands::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
+    use std::cell::RefCell;
     use std::path::{Path, PathBuf};
 
     fn temp_dir(name: &str) -> PathBuf {
@@ -1335,5 +1462,229 @@ mod tests {
             assert!(trash.join(name).exists());
             assert!(!dir.join(name).exists());
         }
+    }
+
+    /// A `move_many` that behaves like the Windows shell: it renames into
+    /// `trash` all it can, going on past a `fail` file, then errs. Every call
+    /// is kept in `calls`.
+    fn move_many<'a>(
+        trash: &'a Path,
+        calls: &'a RefCell<Vec<Vec<String>>>,
+    ) -> impl FnMut(&[PathBuf]) -> Result<(), String> + 'a {
+        move |paths: &[PathBuf]| {
+            calls.borrow_mut().push(
+                paths
+                    .iter()
+                    .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+                    .collect(),
+            );
+            let mut result = Ok(());
+            for path in paths {
+                let name = path.file_name().unwrap();
+                if name.to_string_lossy().contains("fail") {
+                    result = Err("Some operations were aborted".to_string());
+                } else {
+                    std::fs::rename(path, trash.join(name)).unwrap();
+                }
+            }
+            result
+        }
+    }
+
+    fn chunk_dir(name: &str, files: &[&str]) -> (PathBuf, PathBuf) {
+        let dir = temp_dir(name);
+        let trash = dir.join("trash");
+        std::fs::create_dir(&trash).unwrap();
+        for file in files {
+            write(&dir.join(file));
+        }
+        (dir, trash)
+    }
+
+    fn group(dir: &Path, raw: &str, sidecars: &[&str]) -> Group {
+        Group {
+            raw: dir.join(raw),
+            sidecars: sidecars.iter().map(|name| dir.join(name)).collect(),
+        }
+    }
+
+    fn moved_paths(moved: &[Trashed]) -> Vec<PathBuf> {
+        moved.iter().map(|trashed| trashed.path.clone()).collect()
+    }
+
+    #[test]
+    fn a_chunk_moves_its_raws_then_their_sidecars_and_records_them_raw_by_raw() {
+        let (dir, trash) = chunk_dir("chunk", &["a.ARW", "a.xmp", "b.ARW", "c.ARW", "c.xmp"]);
+        let groups = vec![
+            group(&dir, "a.ARW", &["a.xmp"]),
+            group(&dir, "b.ARW", &[]),
+            group(&dir, "c.ARW", &["c.xmp"]),
+        ];
+        let calls = RefCell::new(Vec::new());
+        let (summary, moved) = run_chunked(
+            groups,
+            Path::exists,
+            move_many(&trash, &calls),
+            |_: &Path| panic!("no per-file move after a chunk that went"),
+            |_, _| {},
+        );
+        assert_eq!(
+            calls.into_inner(),
+            [vec!["a.ARW", "b.ARW", "c.ARW"], vec!["a.xmp", "c.xmp"]]
+        );
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.xmp", "b.ARW", "c.ARW", "c.xmp"].map(|name| dir.join(name))
+        );
+        assert!(moved.iter().all(|trashed| trashed.trashed_at.is_none()));
+        assert_eq!(
+            summary.moved,
+            ["a.ARW", "b.ARW", "c.ARW"].map(|name| key(&dir.join(name)))
+        );
+        assert!(summary.failed.is_empty());
+    }
+
+    #[test]
+    fn a_failed_chunk_falls_back_per_file_for_only_what_it_left() {
+        let (dir, trash) = chunk_dir(
+            "chunk-failure",
+            &["a.ARW", "a.xmp", "fail.ARW", "fail.xmp", "c.ARW"],
+        );
+        let groups = vec![
+            group(&dir, "a.ARW", &["a.xmp"]),
+            group(&dir, "fail.ARW", &["fail.xmp"]),
+            group(&dir, "c.ARW", &[]),
+        ];
+        let calls = RefCell::new(Vec::new());
+        let mut one_by_one = Vec::new();
+        let mut per_file = mover(trash.clone());
+        let (summary, moved) = run_chunked(
+            groups,
+            Path::exists,
+            move_many(&trash, &calls),
+            |path: &Path| {
+                one_by_one.push(path.to_path_buf());
+                per_file(path)
+            },
+            |_, _| {},
+        );
+        assert_eq!(one_by_one, [dir.join("fail.ARW")]);
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.xmp", "c.ARW"].map(|name| dir.join(name))
+        );
+        assert_eq!(
+            summary.moved,
+            ["a.ARW", "c.ARW"].map(|name| key(&dir.join(name)))
+        );
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("fail.ARW")));
+        assert_eq!(summary.failed[0].message, "refused");
+        assert_eq!(
+            calls.into_inner()[1],
+            ["a.xmp"],
+            "the failed RAW's sidecar stays out of the sidecars' chunk"
+        );
+        assert!(dir.join("fail.ARW").exists());
+        assert!(dir.join("fail.xmp").exists());
+    }
+
+    #[test]
+    fn a_failing_sidecar_of_a_chunk_is_reported_after_its_raw_went() {
+        let (dir, trash) = chunk_dir("chunk-sidecar", &["a.ARW", "a.fail.xmp", "b.ARW", "b.xmp"]);
+        let groups = vec![
+            group(&dir, "a.ARW", &["a.fail.xmp"]),
+            group(&dir, "b.ARW", &["b.xmp"]),
+        ];
+        let calls = RefCell::new(Vec::new());
+        let (summary, moved) = run_chunked(
+            groups,
+            Path::exists,
+            move_many(&trash, &calls),
+            mover(trash.clone()),
+            |_, _| {},
+        );
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "b.ARW", "b.xmp"].map(|name| dir.join(name))
+        );
+        assert_eq!(summary.moved.len(), 2);
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("a.fail.xmp")));
+    }
+
+    #[test]
+    fn a_file_gone_before_its_chunk_fails_alone() {
+        let (dir, trash) = chunk_dir("chunk-gone", &["a.ARW", "c.ARW"]);
+        let groups = vec![
+            group(&dir, "a.ARW", &[]),
+            group(&dir, "b.ARW", &["b.xmp"]),
+            group(&dir, "c.ARW", &[]),
+        ];
+        let calls = RefCell::new(Vec::new());
+        let (summary, moved) = run_chunked(
+            groups,
+            Path::exists,
+            move_many(&trash, &calls),
+            |_: &Path| panic!("the chunk of what is there goes whole"),
+            |_, _| {},
+        );
+        assert_eq!(calls.into_inner(), [vec!["a.ARW", "c.ARW"]]);
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "c.ARW"].map(|name| dir.join(name))
+        );
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("b.ARW")));
+        assert_eq!(summary.failed[0].message, GONE);
+    }
+
+    #[test]
+    fn progress_counts_the_groups_of_each_chunk() {
+        let (dir, trash) = chunk_dir("chunk-progress", &[]);
+        let names: Vec<String> = (0..CHUNK + 1).map(|at| format!("{at}.ARW")).collect();
+        for name in &names {
+            write(&dir.join(name));
+        }
+        let groups = names.iter().map(|name| group(&dir, name, &[])).collect();
+        let calls = RefCell::new(Vec::new());
+        let mut progress = Vec::new();
+        let (summary, _) = run_chunked(
+            groups,
+            Path::exists,
+            move_many(&trash, &calls),
+            mover(trash.clone()),
+            |done, total| progress.push((done, total)),
+        );
+        assert_eq!(summary.moved.len(), CHUNK + 1);
+        assert_eq!(calls.borrow().len(), 2);
+        assert_eq!(progress, [(CHUNK, CHUNK + 1), (CHUNK + 1, CHUNK + 1)]);
+    }
+
+    #[test]
+    fn a_chunked_redo_keeps_each_sidecar_behind_its_raw() {
+        let (dir, trash) = chunk_dir("chunk-redo", &["a.ARW", "a.xmp", "c.ARW", "c.xmp"]);
+        let paths = ["a.ARW", "a.xmp", "b.ARW", "b.xmp", "c.ARW", "c.xmp"]
+            .map(|name| dir.join(name))
+            .to_vec();
+        let calls = RefCell::new(Vec::new());
+        let (summary, moved) = redo_chunked(
+            paths,
+            Path::exists,
+            move_many(&trash, &calls),
+            mover(trash.clone()),
+            |_, _| {},
+        );
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.xmp", "c.ARW", "c.xmp"].map(|name| dir.join(name))
+        );
+        assert_eq!(
+            calls.into_inner(),
+            [vec!["a.ARW", "c.ARW"], vec!["a.xmp", "c.xmp"]]
+        );
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("b.ARW")));
+        assert_eq!(summary.failed[0].message, GONE);
     }
 }
