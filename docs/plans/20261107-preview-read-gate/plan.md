@@ -302,4 +302,4 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 
 ## Progress
 
-- (none yet)
+- (2026-11-07) Step 1 complete
