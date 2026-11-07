@@ -204,8 +204,9 @@ keys that do not confirm (`swallowedByDelete`) and their status lines,
 dots and labels (score, box size and eye distance in stored preview px) and holds the good-photo rule
 (`photoTier`: the AF eyes in focus, the eyes open and the face toward the
 camera, from the values pass 2 stored for the AF face), which colors the
-mark bright green and puts the strip's face icon on a good frame, and the
-eyes' openness the meta pane shows, and
+mark bright green and puts the strip's face icon on a good frame, `afEyeState`
+(Good / Neutral / Low), the one state the mark's color, the strip's icon and the
+filter menu read, and the eyes' openness the meta pane shows, and
 `src/meta.ts` groups the meta pane rows by provenance (EXIF, Maker note
 and Analysis, whose rows include the AF eye in-focus probability and the
 `Eyes` judgment with its openness and the `Yaw`, `Pitch` and `Roll` of the head pose, from the values pass 2 stored for
@@ -217,7 +218,7 @@ orders the strip (file name, capture time, rating, or `recommended`: bursts in
 capture order, each by the ranking's score), `src/eyes.ts` caches the `eyes_of` judgments per file with one
 in flight at a time, `src/facemesh.ts` holds MediaPipe's face parts
 outline and iris edges the focus mark draws over the judged face, `src/filter.ts` decides which files the strip's filter menu
-lets through (including its `AF eye` section, whose `Good` item applies the good-photo rule, its `Eyes` section on the
+lets through (including its `Face focus` section, whose `Good` item applies the good-photo rule and whose `Low` item is Rust's `not_candidate`, its `Eyes` section on the
 stored eye state, and its `Genre` section on the `genres_of` labels, shown
 while `aiEnabled` is on), `src/companion.ts` answers the MCP bridge's
 requests over the main window's view state, `src/resume.ts` picks the file a

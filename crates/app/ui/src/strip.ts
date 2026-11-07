@@ -98,7 +98,7 @@ const labels = new Map<number, string>();
 // The burst band and badge per index, from `burstMarks` in `burst.ts`; a missing
 // entry is not in a burst of two or more.
 const bursts = new Map<number, BurstMark>();
-// The focus mark state of the indices whose file has one other than `unknown`
+// The focus mark state of the indices whose file has one other than `neutral`
 // (`stripState` in `focus.ts`).
 const tiers = new Map<number, MarkState>();
 // The indices the personal ranking puts first in their burst (`recommended`
@@ -172,7 +172,7 @@ function paintBurst(index: number, cell: Cell): void {
 // The focus mark state's icon at the image box's bottom-left, in the mark's
 // color; none when Riffle does not know.
 function paintTier(index: number, cell: Cell): void {
-  const state = tiers.get(index) ?? "unknown";
+  const state = tiers.get(index) ?? "neutral";
   const icon = FOCUS_MARK_ICONS[state];
   cell.tier.hidden = icon === null;
   cell.tier.innerHTML = icon ?? "";
@@ -473,7 +473,7 @@ export function setBurst(index: number, value: BurstMark | null): void {
 // Record the focus mark state of one file, repainting its cell when it is on
 // screen.
 export function setTier(index: number, state: MarkState): void {
-  if (state === "unknown") {
+  if (state === "neutral") {
     tiers.delete(index);
   } else {
     tiers.set(index, state);

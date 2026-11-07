@@ -4651,8 +4651,8 @@ void window.__TAURI__.event.listen<{
   const current = applyFaceReady(entries, payload.ready, files[index]);
   applySharpnessReady(entries, sharpness, payload.ready);
   applyTiers();
-  // The candidate, tier and eyes filters fill in as the pass runs; the strip keeps
-  // its scroll offset, as on a resync.
+  // The `Face focus` filter's Good, Neutral and Low and the eyes filter fill in as
+  // the pass runs; the strip keeps its scroll offset, as on a resync.
   if (shownCandidates.size > 0 || shownEyes.size > 0) {
     refilter(files[index], true);
   }
@@ -4851,9 +4851,9 @@ const filterItems = filterMenu.querySelectorAll<HTMLButtonElement>(
 const filterOutput = document.getElementById("filter-output") as HTMLDivElement;
 const filterGenre = document.getElementById("filter-genre") as HTMLDivElement;
 const filterExif = document.getElementById("filter-exif") as HTMLDivElement;
-// The icons of the `AF eye` items, the strip's icon of the same state in the
-// focus mark's color; `Unknown` keeps its slot empty.
-for (const state of ["good", "not_candidate"] as const) {
+// The icons of the `Face focus` items, the strip's icon of the same state in the
+// focus mark's color; `Neutral` keeps its slot empty.
+for (const state of ["good", "low"] as const) {
   const face = filterMenu.querySelector<HTMLElement>(`[data-candidate="${state}"] .face`)!;
   face.innerHTML = FOCUS_MARK_ICONS[state];
   face.style.color = FOCUS_MARK_COLORS[state];
