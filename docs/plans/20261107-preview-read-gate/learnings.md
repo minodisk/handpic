@@ -17,6 +17,33 @@
   permit and shows that nothing is delivered until it drops, which proves the
   read needs a permit; the same test runs `extract_analysis_all`.
 
+## Step 2
+
+- `preview_during_pass_1_on_a_real_folder` holds every third file out of the
+  pass, which the plan does not say: the first is the coldness check and the
+  rest are the probe's, each read once. A probe on `(i * 37) % len`, as
+  `embed_pass_on_a_real_folder` has it, soon lands on files the pass has read
+  and reads them from the cache, hiding the very wait the sweep measures. So
+  ms/file compares between the sweep's cells, not with the plan's 42.8 ms on a
+  whole folder. The probe runs out on a pass slower than about 125 ms/file;
+  `probes` equal to `probe_files` shows it.
+- The probe sleeps before its read, so its first sample does not land on a disk
+  the workers have not reached yet.
+- The `MAX_PAUSE` skew reaches past cap 1. On a disk-bound pass a worker's cycle
+  is `threads * ms/file` whatever the cap, nearly all of it in `acquire` for a
+  small cap: `(threads - cap) * ms/file`, 0.9 s at cap 1, 0.86 s at 2 and 0.77 s
+  at 4 by the plan's 42.8 ms. Any slowdown from the shallower queue (about
+  48 ms/file at cap 1) passes `MAX_PAUSE`, and the workers then read through a
+  live pause. The test prints that estimate as `permit_wait_ms`; read a pause-on
+  cell near 1000 as understating the pause, and compare it with the same cap's
+  pause-off cell before ruling the cap out.
+- `summarize` now returns `(n, median, p95)` so the `sweep-cell` line can print
+  plain numbers; `embed_pass_on_a_real_folder` wraps it to keep its output.
+- The app-alive check compares the whole process name with `riffle-app.exe`, so
+  it does not apply off Windows, where the sweep does not run. Run against the
+  live app, the test stopped at that check, before reading the folder. A run
+  past the check has not happened yet: the first sweep cell is its smoke test.
+
 ## Deferred issues (todo candidates)
 
 - **`MAX_PAUSE` counts from the start of `acquire`, including the wait for a
