@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.10.0](https://github.com/minodisk/riffle/compare/v1.9.0...v1.10.0) (2026-11-07)
+
+
+### Features
+
+* **app:** add a ? that defines the Face focus items ([#923](https://github.com/minodisk/riffle/issues/923)) ([565b584](https://github.com/minodisk/riffle/commit/565b584dde734a63a0bc43233c7d530ad780aea4))
+* **app:** add Delete Permanently to the strip's menu (trash-over-scan Step 5) ([#918](https://github.com/minodisk/riffle/issues/918)) ([34fad12](https://github.com/minodisk/riffle/commit/34fad120b79225a04fb8967aa3d6a3cf181c89d4))
+* **app:** add the import destination root and folder pattern settings ([#894](https://github.com/minodisk/riffle/issues/894)) ([cd0d023](https://github.com/minodisk/riffle/commit/cd0d023f0aafd7e608ced28baf03d7a3df06b1ed))
+* **app:** add the import plan and the import_preview command (import-from-card Step 3) ([#900](https://github.com/minodisk/riffle/issues/900)) ([b986ab4](https://github.com/minodisk/riffle/commit/b986ab4d93b72ecac16a965793228a31d96e3102))
+* **app:** add the import run, its dialog and the tree's Import item (import-from-card Step 4) ([#902](https://github.com/minodisk/riffle/issues/902)) ([90988af](https://github.com/minodisk/riffle/commit/90988af977bc0fb75f313e470532c67715d7f943))
+* **app:** add the outputs_of command that finds a folder's exported files ([#912](https://github.com/minodisk/riffle/issues/912)) ([d74c215](https://github.com/minodisk/riffle/commit/d74c215ac287822a4fbfc2ad99cb013dc544de07))
+* **app:** add the Rename by Capture Date item and its confirmation dialog ([#895](https://github.com/minodisk/riffle/issues/895)) ([96cc29a](https://github.com/minodisk/riffle/commit/96cc29a5b3b2c6cad2348c8a7ccc2b5a7d575254))
+* **app:** cancel the running scan when Move to Trash is held (trash-over-scan Step 1) ([#910](https://github.com/minodisk/riffle/issues/910)) ([b0da6a1](https://github.com/minodisk/riffle/commit/b0da6a1051701cbb2628a4cffc9607eb928872fb))
+* **app:** cull while importing by opening the first date folder (import-from-card Step 5) ([#906](https://github.com/minodisk/riffle/issues/906)) ([c233f60](https://github.com/minodisk/riffle/commit/c233f60f24a1ac23768ecdc709db413c08c1abd2))
+* **app:** filter the strip by whether a file has an export (filter-by-output Step 2) ([#914](https://github.com/minodisk/riffle/issues/914)) ([eecb48b](https://github.com/minodisk/riffle/commit/eecb48b3667ed240d7f10808bbee12217460686d))
+* **app:** move a file's index rows across folders and forget a folder ([#891](https://github.com/minodisk/riffle/issues/891)) ([fec6c72](https://github.com/minodisk/riffle/commit/fec6c72c940b064167aa4d665785595c5ee53fb6))
+* **app:** move files to the Trash in chunks on Windows (trash-over-scan Step 4) ([#917](https://github.com/minodisk/riffle/issues/917)) ([c2e70af](https://github.com/minodisk/riffle/commit/c2e70af25485c88ec8e093cb2fa104693d5367c8))
+* **app:** plan a folder's rename or split by capture date ([#889](https://github.com/minodisk/riffle/issues/889)) ([dc1db61](https://github.com/minodisk/riffle/commit/dc1db6185ccccb3c6447e9731b100f54f38e242c))
+* **app:** rename or split a folder by capture date with date_folder_run ([#893](https://github.com/minodisk/riffle/issues/893)) ([5d9578d](https://github.com/minodisk/riffle/commit/5d9578d6442aa3f0ee59e9566c8b22ddaa242d28))
+* **app:** split the filter's AF eye section into Face focus Good / Neutral / Low ([#922](https://github.com/minodisk/riffle/issues/922)) ([8203ce7](https://github.com/minodisk/riffle/commit/8203ce73d5c564c36dc8fe076a8668062e36b5a1))
+* **app:** stream Move to Trash progress and refuse a second move (trash-over-scan Step 2) ([#913](https://github.com/minodisk/riffle/issues/913)) ([5a1ca35](https://github.com/minodisk/riffle/commit/5a1ca358d91a4888da4d80e1de7ee3fb11f5f5f9))
+* **cli:** dump the mesh landmarks, offsets and window score in facechoice (ef-gate-fill Step 2) ([#899](https://github.com/minodisk/riffle/issues/899)) ([5265796](https://github.com/minodisk/riffle/commit/52657961f25bcc170accec4ed0a16890887dfa4c))
+* **core:** add the import copy pipeline and a copybench CLI ([#898](https://github.com/minodisk/riffle/issues/898)) ([a188806](https://github.com/minodisk/riffle/commit/a1888062bb7a14d4a3417b443833be8938cd8001))
+* **plans:** add gatescores.py and fix the ef-gate tau grid (ef-gate-fill Step 3) ([#901](https://github.com/minodisk/riffle/issues/901)) ([6746615](https://github.com/minodisk/riffle/commit/6746615d6c582b137e4857e225ce63fe7b4623c0))
+* **plans:** read the ef-gate-fill exploration, the stop rule ends it (ef-gate-fill Step 4) ([#903](https://github.com/minodisk/riffle/issues/903)) ([2882130](https://github.com/minodisk/riffle/commit/2882130696d714850ecaf6682143b4c67fc4a93c))
+
+
+### Bug Fixes
+
+* **app:** keep scan_folder off the runtime workers while a move holds Scans (trash-over-scan Step 3) ([#916](https://github.com/minodisk/riffle/issues/916)) ([674cf12](https://github.com/minodisk/riffle/commit/674cf12d5fc38adc35c37ac22e16365a0871ccba))
+
 ## [1.9.0](https://github.com/minodisk/riffle/compare/v1.8.0...v1.9.0) (2026-11-03)
 
 
