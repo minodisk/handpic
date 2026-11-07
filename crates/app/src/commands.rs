@@ -3502,11 +3502,7 @@ mod tests {
     /// before the pass ends (`probes` equal to `probe_files`).
     ///
     /// Prints one `sweep-cell` line of `key=value` fields; discard a run whose
-    /// `cold_ms` is under 100. `permit_wait_ms` estimates a worker's wait for a
-    /// permit on a disk-bound pass, `(threads - cap) * ms_per_file`. `acquire`
-    /// counts `MAX_PAUSE` from its start, permit wait included, so when that
-    /// nears 1000 workers ignore a live pause and the pause-on cell reads worse
-    /// than the pause deserves.
+    /// `cold_ms` is under 100.
     #[test]
     #[ignore = "needs RIFFLE_SCAN_DIR and RIFFLE_READ_SLOTS, on cold data with the app closed"]
     fn preview_during_pass_1_on_a_real_folder() {
@@ -3599,12 +3595,11 @@ mod tests {
         let (probes, read_p50, read_p95) = summarize(reads);
         let (_, read_decode_p50, read_decode_p95) = summarize(read_decodes);
         println!(
-            "sweep-cell cap={cap} pause={} threads={threads} files={} errors={} cold_ms={cold_ms:.1} pass_s={:.1} ms_per_file={ms_per_file:.1} permit_wait_ms={:.0} probe_files={} probes={probes} read_p50={read_p50:.1} read_p95={read_p95:.1} read_decode_p50={read_decode_p50:.1} read_decode_p95={read_decode_p95:.1}",
+            "sweep-cell cap={cap} pause={} threads={threads} files={} errors={} cold_ms={cold_ms:.1} pass_s={:.1} ms_per_file={ms_per_file:.1} probe_files={} probes={probes} read_p50={read_p50:.1} read_p95={read_p95:.1} read_decode_p50={read_decode_p50:.1} read_decode_p95={read_decode_p95:.1}",
             if pause { "on" } else { "off" },
             summary.total,
             summary.errors,
             wall.as_secs_f64(),
-            threads.saturating_sub(cap) as f64 * ms_per_file,
             probe_files.len(),
         );
         remove_temp_dir(&tmp);

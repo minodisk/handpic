@@ -71,7 +71,8 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
   `for_each_path` before `take_next`: the cap must bound the read alone, so
   that the CPU work after it runs uncapped, and the read is the first stage
   of each of those functions.
-- A worker waits for the pause at most `MAX_PAUSE` (1 s), then takes a
+- A worker waits for the pause at most `MAX_PAUSE` (1 s) from when it first
+  sees it on, then takes a
   permit when one is free, so a stuck or leaked pause slows the scan to one
   file per worker per `MAX_PAUSE` at worst and never stalls it. The cap
   itself is released by every slot's drop, including a panic unwind, so it
@@ -128,7 +129,9 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       `wait_timeout` with a short tick (around 50 ms) because the cancel
       flag is a plain `AtomicBool` with no notifier; it leaves with `None`
       when `canceled(cancel)`, and takes a permit when `free > 0` and
-      (`paused == 0` or this call has waited `MAX_PAUSE`). Guards decrement
+      (`paused == 0` or this call has seen the pause on for `MAX_PAUSE`, a
+      clock that starts when it first sees a pause and starts over once it
+      sees none, so a wait for a permit alone does not count). Guards decrement
       / increment and `notify_all`. Keep the tests fast by letting the
       maximum pause be a parameter the tests shorten (a `with_max_pause`
       constructor or a field), not a sleep of a second per test.

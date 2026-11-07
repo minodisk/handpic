@@ -29,14 +29,14 @@
   `probes` equal to `probe_files` shows it.
 - The probe sleeps before its read, so its first sample does not land on a disk
   the workers have not reached yet.
-- The `MAX_PAUSE` skew reaches past cap 1. On a disk-bound pass a worker's cycle
-  is `threads * ms/file` whatever the cap, nearly all of it in `acquire` for a
-  small cap: `(threads - cap) * ms/file`, 0.9 s at cap 1, 0.86 s at 2 and 0.77 s
-  at 4 by the plan's 42.8 ms. Any slowdown from the shallower queue (about
-  48 ms/file at cap 1) passes `MAX_PAUSE`, and the workers then read through a
-  live pause. The test prints that estimate as `permit_wait_ms`; read a pause-on
-  cell near 1000 as understating the pause, and compare it with the same cap's
-  pause-off cell before ruling the cap out.
+- `MAX_PAUSE` counted from the start of `acquire`, which would have biased
+  every small cap, not just cap 1. On a disk-bound pass a worker waits about
+  `(threads - cap) * ms/file` for a permit: 0.9 s at cap 1, 0.86 s at 2 and
+  0.77 s at 4 by the plan's 42.8 ms, so about 48 ms/file at cap 1 would have
+  let workers read through a live pause. Fixed before the sweep: the clock
+  starts when `acquire` first sees a pause on and starts over once it sees none,
+  and a wait for a permit alone uses none of it. A worker that misses a gap
+  between two pauses keeps its clock, which only ends the wait sooner.
 - `summarize` now returns `(n, median, p95)` so the `sweep-cell` line can print
   plain numbers; `embed_pass_on_a_real_folder` wraps it to keep its output.
 - The app-alive check compares the whole process name with `riffle-app.exe`, so
@@ -46,15 +46,6 @@
 
 ## Deferred issues (todo candidates)
 
-- **`MAX_PAUSE` counts from the start of `acquire`, including the wait for a
-  permit.** Implemented as the plan's Implementation approach says ("this call
-  has waited `MAX_PAUSE`"). A worker that queued for a permit for over 1 s then
-  ignores a live pause. It cannot happen at Step 1's cap of `scan_threads()`,
-  but by the plan's 42.8 ms per read the queue at a cap of 1 with 22 workers is
-  about 0.9 s, so that cell of Step 2's sweep may read worse than the pause
-  deserves. If so, start the clock when the worker first sees the pause and
-  reset it when the pause is off. Basis: Step 1's `ReadSlots::acquire`,
-  `crates/core/src/scan.rs`.
 - **`embed_all`'s slot has no test.** Its per-file closure needs a loaded SigLIP
   model, which the tests do not have, so its acquire is only checked by reading
   the code; `extract_all` and `extract_analysis_all` are both tested. Basis:
