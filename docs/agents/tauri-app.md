@@ -93,7 +93,9 @@ delete. Releasing it between files would let a rescan index a half-moved
 folder and race the operation's own reconcile.
 
 - A `scan_folder` issued meanwhile waits, which is acceptable because the
-  status shows the move (`moving to Trash N / M`). The wait must not sit on an
+  status shows the move (`moving to Trash N / M`). An undo shows nothing yet,
+  as `trash::restore` has no progress callback, so a reopen during it waits
+  silently until that follow-up lands. The wait must not sit on an
   async runtime worker, so `scan_folder`'s first block (mint the id, take
   `running`, start `Preparing`) runs in `spawn_blocking` and hands `Preparing`
   back from it.
