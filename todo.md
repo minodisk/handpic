@@ -2230,3 +2230,146 @@ The `filter-by-output` plan added an `Output` section to the strip's filter menu
 #### TODO
 
 - [ ] Add the `Output` section (`Output` / `No output`, from the `outputs_of` command) to that description in `CLAUDE.md`.
+
+### App: real-device check of Move to Trash pressed during a scan (trash-over-scan Step 1)
+
+#### Background
+
+`trash-over-scan` Step 1 makes Move to Trash cancel a running scan and run, instead of waiting for it to end. Tests and CI cover the logic, but the step's checkbox was ticked on the automated criteria, and the app was never launched against a large cold folder on a real machine. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/src/commands.rs`, `crates/app/ui/src/main.ts`.
+
+#### TODO
+
+- [ ] On Windows, open a large folder cold (or after Clear Cache), filter to non-picked, select all, and press Move to Trash during `scanning N / M`, then again in another run during `analyzing N / M`. Expect the move to start within seconds. Expect `Riffle.log` (Timing logs on) to show `scan extract ... canceled=true` or `scan faces ... canceled=true`, then the trash's rescan with `scan reconcile ... removed=K` and a smaller `todo`. Expect no `faces-done after scan-done` or `start_scan once per scan` invariant line. Undo restores the files and the next rescan picks them up.
+- [ ] On Windows, press Move to Trash during a scan, then rename a file before the move ran. Expect the rename to run and the folder to still finish its scan.
+
+### App: real-device check of the Move to Trash progress line and menu guard (trash-over-scan Step 2)
+
+#### Background
+
+`trash-over-scan` Step 2 streams `trash-progress` as a status line (`moving to Trash N / M`), greys `Move to Trash…` in the strip's menu while a move runs, and refuses a second move. Automated criteria passed, but the app was never run against a real 200+ file move. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/ui/src/main.ts`, `crates/app/src/commands.rs`.
+
+#### TODO
+
+- [ ] On Windows, move 200+ files. Expect the status to count up (`moving to Trash N / M`) and clear when the run ends. Expect `Move to Trash…` to be greyed in the strip's menu while it runs. Reopening the folder during the move (File > Reload, or the tree) keeps the line and starts the rescan after the move. Redo shows the count too. Undo still restores. The strip's menu and the tree are only reachable in the held path, so press Move to Trash during a scan to check those two.
+
+### App: real-device check that the UI stays responsive during a long Move to Trash (trash-over-scan Step 3)
+
+#### Background
+
+`trash-over-scan` Step 3 moved `scan_folder`'s `Scans` lock wait off the runtime workers, so a reopen during a move no longer parks them. Existing scan tests pass, but no test drives the `AppHandle` path and it was not run on a real machine. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/src/commands.rs` (`scan_folder`).
+
+#### TODO
+
+- [ ] On Windows, start a move of 200+ files and reopen the folder during it. Expect the UI to stay responsive (strip scroll, meta pane, other folders in the tree expand). Expect the `scan list` line to appear right after `moved files to the trash` in `Riffle.log`.
+
+### App: real-device check of the chunked Move to Trash on Windows (trash-over-scan Step 4)
+
+#### Background
+
+`trash-over-scan` Step 4 moves files to the Trash in chunks of 100 on Windows (`run_chunked`), measured at about 7 ms a file against 200 ms per-file (see `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`). Tests use a fake mover and the bench used copies; the real app path was never exercised, and a locked file in a real chunk is covered only by the fake mover and the bench probe. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/src/trash.rs` (`run_chunked`, `move_chunk`), `crates/app/src/commands.rs` (`move_groups`, `move_again`).
+
+#### TODO
+
+- [ ] On Windows, in a test folder of copies, move 500+ files. Expect `moved files to the trash` in `Riffle.log` at about 7 ms a file, near `trash-bench.md` (a large gap means the app adds a cost the bench did not have). Expect the status count to go up in steps of 100. Undo restores all, each sidecar with its RAW. Redo moves them again.
+- [ ] On Windows, hold one file open, then move a selection around it. Expect that file listed as a failure with its sidecars left, and the rest moved and restored by Undo.
+
+### App: real-device check of Delete Permanently (trash-over-scan Step 5)
+
+#### Background
+
+`trash-over-scan` Step 5 adds `Delete Permanently…` to the strip's menu (`delete_files`), with a mouse-click-only confirm (`confirmsDelete`, Enter/Space swallowed). The step's checkbox was ticked on the automated criteria, as Riffle was not launched. `confirmsDelete` assumes the second click of a double-click reaches `#trash-run` with `detail` 2 though its target changed; nothing has run that on WebView2. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/ui/src/main.ts` (`confirmTrashFiles`, `trashKeydown`, `runTrash`, `trashFilesIn`), `crates/app/src/commands.rs` (`delete_files`).
+
+#### TODO
+
+- [ ] On Windows, in a test folder of copies under `D:\Photos\tests\<date>-delete-permanently\` (never the user's photos), delete a selection with sidecars. Expect the files and sidecars to be gone from the folder and absent from the Recycle Bin, and free space on D: to go up by their size. `Edit > Undo` has no entry for it. The status shows `deleting N / M` then `Deleted N files`, and the strip rescans and shows the rest.
+- [ ] On Windows, with the confirm dialog open, press Enter and Space, also after Tab to the run button and with Shift held. Expect nothing deleted; only a mouse click deletes.
+- [ ] On Windows, press delete during a scan. Expect it to run after the scan stops. Press delete, then open another folder before it ran. Expect nothing deleted.
+- [ ] On Windows, double-click `Delete Permanently…` from a menu opened over the viewer, so the run button appears under the cursor. Expect nothing deleted.
+- [ ] On Windows, with `a.ARW`, `a.DNG` and `a.xmp` in the folder, delete `a.ARW` alone and expect `a.xmp` kept. Then select both RAWs and expect `a.xmp` removed.
+
+### App: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
+
+#### Background
+
+Found by `trash-over-scan` Step 4's measurement. trash 5.2.9's Windows `restore_all` moves the `$R` file back and nothing removes its `$I`. Riffle's Undo restores through the same call, so it presumably leaves one for every file it brings back. D: already held 5327 older orphans naming other paths (source not traced, left alone). Each is small and the shell does not list them, but they pile up and cost a file record each. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md` (safety record).
+Files: `crates/app/src/commands.rs` (`restore_run`).
+
+#### TODO
+
+- [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
+
+### App: Undo of Move to Trash is still one shell operation per item
+
+#### Background
+
+After `trash-over-scan` Step 4 chunked the move, `trash_rejected_undo` is still per-item, one shell operation each. Not timed, but if an operation costs what a move did (about 200 ms), an Undo of a large move takes far longer than the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
+Files: `crates/app/src/trash.rs` (`restore`), `crates/app/src/commands.rs` (`restore_run`).
+
+#### TODO
+
+- [ ] Time Undo of a 500+ file move on Windows.
+- [ ] If slow, restore in chunks while keeping the RAW-before-sidecar and never-overwrite rules.
+
+### App: other async commands park a runtime worker on the `Scans` lock during a move
+
+#### Background
+
+`trash-over-scan` Step 3 moved `scan_folder`'s lock wait off the runtime workers. `rename_folder`, `rename_file`, `date_folder_preview`, `date_folder_run`, `rewrite_sidecars_preview`, `delete_sidecars_preview` and `clear_index` still take `Scans` on a runtime worker for their `scanning()` guard, so each pressed during a move parks a worker until the move ends. They are single user actions so few can pile up, but moving the guards into `spawn_blocking` would close the same hole. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/src/rename.rs`, `crates/app/src/datefolder.rs`, `crates/app/src/foldersidecars.rs`, `crates/app/src/commands.rs`.
+
+#### TODO
+
+- [ ] Move those guards into `spawn_blocking`, as Step 3 did for `scan_folder`.
+
+### App: `scan_folder` calls waiting out one move may take their ids out of order
+
+#### Background
+
+Found by reading in `trash-over-scan` Step 3, not reproduced. Two `scan_folder` calls waiting out one move (reopen, then open another folder) mint their ids in the order they get the lock, which `std::sync::Mutex` does not promise is the order they asked. Inverted, the frontend's newer call gets the stale id and its scan is dropped, and the older call's `pending` entry, which the frontend ignores, keeps `scanning()` true until the next `scan_folder`. Not introduced by Step 3 (the workers waited on the same mutex). Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/src/commands.rs` (`scan_folder`, `start_scan`), `crates/app/ui/src/main.ts` (`startScan`).
+
+#### TODO
+
+- [ ] Try to reproduce on Windows (reopen, then open another folder, both during a 200+ file move).
+- [ ] If it reproduces, mint ids before waiting on the lock or order the waiters.
+
+### App: Delete Permanently cannot remove a read-only file on some platforms
+
+#### Background
+
+From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. Not tried.
+Files: `crates/app/src/trash.rs` (`remove_one`).
+
+#### TODO
+
+- [ ] On Windows, delete a read-only file with `Delete Permanently…` and see whether it fails.
+- [ ] If it fails, decide whether to clear the read-only flag first or leave it.
+
+### App: a slow or shifted double-click on Delete Permanently… can confirm the dialog
+
+#### Background
+
+From `trash-over-scan` Step 5. `confirmsDelete` takes a click only with `detail` exactly 1, which stops the second click of a fast double-click (`detail` 2) from hitting the run button that appears under the cursor. A slow or shifted double-click arrives with `detail` 1, so if the run button sits under the cursor that click would confirm a permanent delete. Also, Space clicks on keyup and the guard relies on `preventDefault` on keydown, which could not be tried here. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/ui/src/main.ts` (`confirmsDelete`, `runTrash`, `confirmTrashFiles`).
+
+#### TODO
+
+- [ ] Decide on a guard, such as placing the dialog so the run button is never under the menu item, or arming the run button only after a short delay.
+- [ ] Try Space on the focused run button on WebView2 (also covered by the Step 5 real-device item).
+
+### App: Move to Trash progress is dimmed behind the dialog, and Delete Sidecars and Undo are not refused during a move
+
+#### Background
+
+From `trash-over-scan` Step 2. (1) A move that was not held keeps the confirm dialog open in its running phase until the invoke settles (deliberate, per the comment above `trashFilesIn`), so the `moving to Trash N / M` line shows dimmed behind the `.dialog` overlay and the dialog still asks its question with disabled buttons. Closing the dialog when the run starts, or showing the count in it, would make the progress plainer but gives the strip the keyboard back mid-move. (2) `Delete Sidecars…` and Undo are not refused while `trashing !== null`: they queue on the `Scans` lock as before, and neither touches `trashing`, so a long move can leave them waiting with nothing said about them. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
+Files: `crates/app/ui/src/main.ts` (`trashFilesIn`, `closeTrashDialog`, `undoTrash`, the sidecar flow).
+
+#### TODO
+
+- [ ] Show the running count in the dialog or close the dialog when the run starts, without giving the strip keyboard focus mid-move.
+- [ ] Refuse or label `Delete Sidecars…` and Undo while `trashing !== null`.
