@@ -1883,6 +1883,15 @@ folder changed" event has to pick the right one.
     so a file already gone is taken out first and fails alone with `GONE`.
   - `moved` stays in `run`'s order, each RAW followed by its sidecars, though
     the moves are not: `restore`'s `raw_back` and `redo`'s regrouping read it.
+  - Do not trust the Recycle Bin's size or item count to tell that a test
+    cleaned up. trash 5.2.9's Windows `restore_all` (so Undo too) moves the `$R`
+    file back and leaves its `$I` metadata file in `$Recycle.Bin`, and the shell
+    does not list `$I` files. A bench run left 23,450 of them with the count and
+    size exact; only a free-space gap showed it. Count the `$Recycle.Bin`
+    folder itself, and remove only the `$I` files whose recorded original path
+    is your test folder. Source:
+    `docs/plans/_archived/20261106-trash-over-scan/learnings.md`, Step 4, and
+    `trash-bench.md`.
 - `trash_files` and `trash_rejected_redo` stream `trash-progress { op, dir,
   done, total }` per group from `trash::run`'s callback, or per chunk from
   `run_chunked`'s, a group whose RAW
