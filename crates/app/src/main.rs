@@ -759,6 +759,7 @@ fn main() {
             app.manage(commands::AppIndex(index));
             app.manage(commands::AppIndexReader(reader));
             app.manage(commands::Scans::default());
+            app.manage(commands::AppReadSlots::default());
             app.manage(ai::AppAi::new(ai_enabled, ai::model_path(app.handle())));
             app.manage(rank::AppRank::default());
             rank::refit_in_background(app.handle());
