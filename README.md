@@ -155,7 +155,7 @@ DxO PhotoLab.
   face's eyes are open and how open (0 to 100) as `Eyes` and the face's
   yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, both stored by the same second pass
   for the judged face and judged when the file is shown until then, and the filter menu's `Face focus` section (`Good` / `Neutral` /
-  `Low`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
+  `Low`, with a `?` that shows their definitions) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
   `Unknown`). The mark also draws the faces
   Riffle detects near the AF point as a cyan box with a cyan dot on each eye,

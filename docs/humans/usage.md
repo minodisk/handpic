@@ -350,8 +350,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   found, a JPEG, and files the second pass has not reached; and `Low` for
   gray, a judged face with an in-focus probability under about 77%, a frame
   with no AF point included; each file falls under exactly one of them,
-  checking several shows the files in any of them, and the strip refills
-  as the pass runs), the stored eye state of the judged face (the
+  checking several shows the files in any of them, the strip refills as
+  the pass runs, and the `?` at the right of the heading shows each item's
+  definition with its thresholds until the menu closes), the stored eye state of the judged face (the
   `Eyes` section: `Open`, `Closed`, or `Unknown` for a file with no stored
   state, such as one with no face found, with a face under about 60 pixels,
   or not reached by the second pass yet), whether the file was exported

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  AF_EYE_HELP,
+  AF_EYE_HELP_CLOSING,
   EYES_CLOSED_EAR,
   EYES_WIDE_OPEN_EAR,
   FOCUS_MARK_COLORS,
@@ -197,6 +199,31 @@ describe("afEyeState", () => {
   test("is neutral for an unknown focus: no face, or pass 2 not there yet", () => {
     expect(afEyeState({ ...point, candidate: "unknown", eye_focus: null })).toBe("neutral");
     expect(afEyeState({ ...good, candidate: "unknown", eye_focus: null })).toBe("neutral");
+  });
+});
+
+describe("AF_EYE_HELP", () => {
+  test("good names every cut with its figure", () => {
+    for (const figure of ["90%", "openness 41", "35°", "45°"]) {
+      expect(AF_EYE_HELP.good).toContain(figure);
+    }
+    expect(AF_EYE_HELP.good).not.toContain("77%");
+  });
+
+  test("neutral holds a candidate that misses Good and every file without a judged face", () => {
+    expect(AF_EYE_HELP.neutral).toContain("77% or more");
+    for (const holds of ["Good condition", "no judged face", "a JPEG", "not reached"]) {
+      expect(AF_EYE_HELP.neutral).toContain(holds);
+    }
+  });
+
+  test("low is a cue on the judged face under the candidate threshold", () => {
+    expect(AF_EYE_HELP.low).toContain("A face was judged");
+    expect(AF_EYE_HELP.low).toContain("under 77%");
+  });
+
+  test("the closing line says nothing is automatic", () => {
+    expect(AF_EYE_HELP_CLOSING).toContain("nothing is rejected for you");
   });
 });
 

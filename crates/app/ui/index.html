@@ -292,7 +292,19 @@
                 Landscape
               </button>
               <hr class="menu-separator" />
-              <div class="menu-label">Face focus</div>
+              <div class="menu-label menu-label-row">
+                Face focus
+                <button
+                  id="filter-face-focus-help-toggle"
+                  class="button ghost menu-help-toggle"
+                  type="button"
+                  aria-expanded="false"
+                  aria-controls="filter-face-focus-help"
+                  title="What these mean"
+                >
+                  ?
+                </button>
+              </div>
               <button
                 class="menu-item"
                 type="button"
@@ -320,6 +332,7 @@
               >
                 <i class="face"></i>Low
               </button>
+              <div id="filter-face-focus-help" class="menu-help" hidden></div>
               <hr class="menu-separator" />
               <div class="menu-label">Eyes</div>
               <button

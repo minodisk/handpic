@@ -87,7 +87,7 @@ by weight, border or a check mark (below), not by a new color.
 | `button` + `primary` | `<button>` | only the sequence dialog's `Run` |
 | `button` + `destructive` | `<button>` | `Move to Trash`, `Delete Permanently` |
 | `button` + `outline` | `<button>` | `Cancel`, `Reset`, `Reset all`, `Clear Cache`, `Copy`, `#label-names-reset`, the three format choices and the first-launch dialog's `Continue`, the strip bar's filter / sort toggles |
-| `button` + `ghost` | `<button>` | icon-only buttons: `#settings-close`, the shortcut chip `×`, the `+` key adder, the meta status dismiss `×` |
+| `button` + `ghost` | `<button>` | icon-only buttons: `#settings-close`, the shortcut chip `×`, the `+` key adder, the meta status dismiss `×`, the filter menu's `?` |
 | `input` | text `<input>` | the `#label-name-*` fields |
 | `select` | `<select>` | `#label-names-language` and `#format-language-select` (native arrow; its `option`s on `--popover`) |
 | `checkbox` | native checkbox / radio | the settings checkboxes and the sidecar format radios (`accent-color`) |
@@ -97,6 +97,7 @@ by weight, border or a check mark (below), not by a new color.
 | `menu` | the menu container | `#filter-menu`, `#sort-menu`, `#context-menu` |
 | `menu-item` | each `role="menuitem*"` button | static items in `index.html`, `showMenu`'s and the `#filter-exif` builder's items in `main.ts` |
 | `menu-separator`, `menu-label` | the `<hr>`, a section heading | the menus |
+| `menu-label-row`, `menu-help-toggle`, `menu-help` | a heading with a control at its right, its small `?` button, the definitions it shows | the filter menu's `Face focus` section |
 | `scrollarea` | any scrolling element | the menus, `#strip`, `#folders`, `#meta`, the settings panels |
 | `sidebar-item` | a side pane row | `.folder` (`folders.ts`), with `current` / `selected` |
 | `badge` | a small count | `.folder .count` (`folders.ts`) |
