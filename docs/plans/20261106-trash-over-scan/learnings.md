@@ -47,7 +47,50 @@
 - Beyond the plan's docs list: `docs/humans/usage.md` / `usage.ja.md` (the status
   count and the greyed item) and `docs/agents/ui-styling.md` (the disabled item).
 
+## Step 3
+
+- `cancel_scan` waiting on the lock, checked by reading: `trash_files` starts
+  only with `scanning()` false, and a `start_scan` needs the lock too, so while
+  the move runs `running` is empty or a scan in its third pass. When the waiting
+  `cancel_scan` gets the lock, its id is stale or in that pass, and `cancel`
+  ignores both. It parks a blocking-pool thread, not a runtime worker.
+  `set_scan_focus`'s `try_lock` is untouched.
+- Wrapping only the first block is enough for `scan_folder`: its later locks
+  (the `pending` insert, `Preparing`'s drop) run with `preparing > 0`, so every
+  long holder refuses instead of holding. The exception is `spawn_eviction`,
+  which checks `running` alone: its startup `VACUUM` can still make them wait,
+  as before.
+- `let scans = app.state::<Scans>();` moved down to the `pending` insert, its
+  only remaining use in the async body, so the closure's own binding shadows
+  nothing.
+- No new test: the block needs an `AppHandle`, and the plan asks for the existing
+  scan tests to pass unchanged.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check** (Step 3, Windows; the step's checkbox was ticked on
+  the automated criteria). Start a move of 200+ files and reopen the folder
+  during it. Expected: the UI stays responsive (strip scroll, meta pane, other
+  folders in the tree expand), and the `scan list` line appears right after
+  `moved files to the trash` in `Riffle.log`. Basis: plan Step 3's manual check;
+  file `crates/app/src/commands.rs` (`scan_folder`).
+- Other async commands still take the `Scans` lock on a runtime worker for their
+  `scanning()` guard: `rename_folder`, `rename_file`, `date_folder_preview`,
+  `date_folder_run`, `rewrite_sidecars_preview`, `delete_sidecars_preview` and
+  `clear_index`. Pressed during a move, each parks a worker until the move ends.
+  They are single user actions, so few can pile up, but moving the guards into
+  `spawn_blocking` would close the same hole Step 3 closed. Basis: Step 3
+  implementation; files `crates/app/src/rename.rs`, `crates/app/src/datefolder.rs`,
+  `crates/app/src/foldersidecars.rs`, `crates/app/src/commands.rs`.
+- Two `scan_folder` calls waiting out one move (reopen, then open another folder)
+  mint their ids in the order they get the lock, which `std::sync::Mutex` does not
+  promise is the order they asked. Inverted, the frontend's newer call gets the
+  stale id and its scan is dropped, and the older call's `pending` entry, which
+  the frontend ignores, keeps `scanning()` true until the next `scan_folder`. Not
+  introduced by Step 3 (the workers waited on the same mutex) and not reproduced;
+  found by reading. Basis: Step 3 implementation; files
+  `crates/app/src/commands.rs` (`scan_folder`, `start_scan`),
+  `crates/app/ui/src/main.ts` (`startScan`).
 
 - **Pending manual check** (Step 2, Windows; the step's checkbox was ticked on
   the automated criteria). Move 200+ files. Expected: the status counts up

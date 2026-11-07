@@ -87,6 +87,26 @@ pending flush can itself create the file the refusal needs to see.
 
 - Source: `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md`, Steps 1 and 3.
 
+`trash_files`, `trash_rejected_undo` and `trash_rejected_redo` hold the lock
+across the whole operation, even a move of minutes, and so must a permanent
+delete. Releasing it between files would let a rescan index a half-moved
+folder and race the operation's own reconcile.
+
+- A `scan_folder` issued meanwhile waits, which is acceptable because the
+  status shows the move (`moving to Trash N / M`). The wait must not sit on an
+  async runtime worker, so `scan_folder`'s first block (mint the id, take
+  `running`, start `Preparing`) runs in `spawn_blocking` and hands `Preparing`
+  back from it.
+- Its later locks, the `pending` insert and `Preparing`'s drop, stay on the
+  worker: they run with `preparing > 0`, so `scanning()` makes every long
+  holder refuse. Only `spawn_eviction`, which checks `running` alone, can
+  still make them wait, for its `VACUUM`.
+- `cancel_scan` waiting on the lock is harmless. While such an operation holds
+  it no scan runs short of its third pass, so by the time `cancel_scan` gets
+  the lock its id is stale or in that pass, and `cancel` ignores both.
+  `set_scan_focus` keeps dropping its calls (`try_lock`).
+- Source: `docs/plans/20261106-trash-over-scan/plan.md`, Step 3.
+
 ### Undoing a trash run after a folder rename, and walking the tree without following links (Hit)
 
 - `Trashed.path` stays the original path because the Windows / Linux Trash is
