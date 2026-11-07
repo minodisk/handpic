@@ -1916,8 +1916,14 @@ folder changed" event has to pick the right one.
   batches of `history` and `redoable` itself (`withoutPaths`, then
   `isEmptyBatch`), as no trash entry sits above them to guard an undo. The
   backend keeps a `.xmp` that a RAW of the listing outside the selection still
-  shares by stem (`delete_for_good`'s `files`), and the dialog says so. It is
-  on purpose not in `shortcuts.rs` or `mcp.rs`.
+  shares by stem (`delete_for_good`'s `files`), and the dialog says so. A
+  `.xmp` shared by several selected RAWs is taken out of their groups and
+  removed after `run`, through the remover (a failure is reported), only once
+  every one of them is in `summary.moved`: a RAW that failed keeps its sidecar,
+  and a fully successful delete reports no false failure from the second group
+  hitting NotFound. Do not put it back in the groups. `chosen` is built from the
+  groups, not the paths, so a refused foreign path never stands for a kept RAW.
+  It is on purpose not in `shortcuts.rs` or `mcp.rs`.
 - It shares `trash-dialog` too (`dialogText`, `TrashTarget.mode`), but no key may
   say yes to it. The dialog focuses Cancel, and `trashKeydown` swallows Enter
   and Space by `event.key`, not `keyName`, whose `shift+enter` is a different
