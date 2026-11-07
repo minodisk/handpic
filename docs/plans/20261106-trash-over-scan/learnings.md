@@ -101,11 +101,21 @@
   shape: the tests then run what the command runs, foreign refusal and
   `run_id: None` included, on temp folders and without an `AppHandle`.
   `remove_one` sits in `trash.rs` for the same reason.
+- Further departures in `delete_for_good`, from the review: a `.xmp` shared with
+  a RAW outside the selection is kept (deleting it would strip that RAW of its
+  sidecar), and a `.xmp` shared by several selected RAWs is not in the groups
+  but removed after `run` through the remover, only once every one of them is
+  in `summary.moved` (a RAW that failed keeps its sidecar, and a fully
+  successful delete reports no false failure). The dialog line's `.xmp` clause
+  states the same rule.
 - Enter and Space are swallowed by `event.key`, not `keyName`: `keyName` spells
   a modified key `shift+enter`, and such a key clicks a focused button too, so
   a match on `"enter"` would let it through.
-- Beyond the plan, for "only a mouse click confirms": `runTrash` ignores a click
-  with `detail` 0. Space clicks on keyup, and `preventDefault` on keydown stops
+- Beyond the plan, for "only a mouse click confirms": `runTrash` takes a click
+  only with `detail` exactly 1, through `confirmsDelete`: `detail` 0 is a
+  keyboard-made click, and `detail` 2 or more is the second click of a
+  double-click on the menu item, which can land on the run button that appears
+  under the cursor. Space clicks on keyup, and `preventDefault` on keydown stops
   that only because the engine then never arms the button; that could not be
   tried here (Riffle was not to be launched), so the guard does not rest on it.
 - Beyond the plan: `trashed()` takes the mode too, or a failed delete would read
@@ -116,8 +126,8 @@
 - Beyond the plan's docs list: `docs/agents/ui-styling.md` (the destructive
   button's users); in `usage.md` / `usage.ja.md` the "next to last" wording of
   `Rename…`, the list of what an import refuses and the view-only menu; in
-  `README.md` / `README.ja.md` the shared `FOO.xmp` note, as a delete destroys
-  it.
+  `README.md` / `README.ja.md` the shared `FOO.xmp` note, as a delete keeps
+  it while a RAW outside the selection still uses it.
 - First `mise run ci` failed in `context.test.ts`, which pins the menu's shape in
   two more places than the plan names: `shows the default keys` and the item
   count in `gives an empty shortcut for an unbound action`. Both updated.
@@ -134,7 +144,13 @@
   shows the rest. Enter and Space on the open dialog delete nothing, also after
   Tab to the run button and with Shift held; only a mouse click does. A delete
   pressed during a scan runs after the scan stops; a delete pressed, then
-  another folder opened before it ran, deletes nothing. Basis: plan Step 5's
+  another folder opened before it ran, deletes nothing. A double-click on
+  `Delete Permanently…`, from a menu opened over the viewer so that the run
+  button appears under the cursor, deletes nothing (`confirmsDelete` assumes the
+  second click reaches `#trash-run` with `detail` 2 though its target changed;
+  nothing has run that on WebView2). With `a.ARW`, `a.DNG` and `a.xmp` in the
+  folder, deleting `a.ARW` alone keeps `a.xmp`, and selecting both RAWs removes
+  it. Basis: plan Step 5's
   manual check; files `crates/app/ui/src/main.ts` (`confirmTrashFiles`,
   `trashKeydown`, `runTrash`, `trashFilesIn`), `crates/app/src/commands.rs`
   (`delete_files`).
