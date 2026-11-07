@@ -95,7 +95,7 @@ What is established from the code:
 
 ## Steps
 
-- [ ] Step 1: The three-way `Face focus` state (Good / Neutral / Low) across the menu, the strip icon and the mark, its persistence, the todo item and the docs
+- [x] Step 1: The three-way `Face focus` state (Good / Neutral / Low) across the menu, the strip icon and the mark, its persistence, the todo item and the docs
   - Done when:
     - `crates/app/ui/src/focus.ts`: `MarkState = PhotoTier | "neutral" |
       "low"`. `afEyeState(focus)`: `null` / `undefined` -> `neutral`;
@@ -268,4 +268,4 @@ What is established from the code:
 
 ## Progress
 
-- (none yet)
+- (2026-11-07) Step 1 complete

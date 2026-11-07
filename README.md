@@ -132,31 +132,30 @@ DxO PhotoLab.
   shots (see [What the camera records](./docs/humans/cameras.md)). The mark's
   color judges the face nearest the AF point, or, without an AF point or on
   manual focus, the largest face Riffle finds anywhere on the preview, so
-  such a frame can be good or bad although it shows no crosshair. The mark is
+  such a frame can be bright green or gray although it shows no crosshair. The mark is
   bright green for a good photo, one likely not a miss: the AF eyes in focus
   (an in-focus probability of 90% or more), the eyes open (an openness of 41
   or more) and the face toward the camera (turned no more than 35° and
   tilted no more than 45°), with a face mesh that sits on the face and a
   face the frame's edge does not cut. It is selective by design, on about
   20% of the author's frames with a face at the AF point, and bright green
-  means good only. The mark is gray when a face was judged but
-  the frame is not good, including when its eyes are likely not in focus (a
-  probability combining their sharpness and edge width); and white when
-  Riffle does not know
-  (no face found near the AF point, or anywhere without one, or not computed
-  yet). A frame with no face stays white, since on the author's folders the
+  means good only. The mark is gray when a face was judged and its eyes are
+  likely not in focus (a probability combining their sharpness and edge
+  width, under about 77%); and white for everything else (a judged face at
+  about 77% or more that misses a good cut, no face found near the AF point,
+  or anywhere without one, or not computed yet). A frame with no face stays white, since on the author's folders the
   sharpness score barely told picks from the rest on such frames.
   The camera's face tracking no longer colors the mark. The cue is computed
   in a second pass right after the thumbnails, so the marks turn from white
   as it runs, the files on screen first (both passes run below normal
-  priority, so the viewer comes first when they compete for the CPU); the strip marks each judged file
+  priority, so the viewer comes first when they compete for the CPU); the strip marks each bright green or gray file
   with an icon at the cell's bottom-left in the mark's color (a face on a good
   photo, a bare frame on gray, none on white), the meta pane
   shows the probability as `AF eye in focus` (a percentage), whether that
   face's eyes are open and how open (0 to 100) as `Eyes` and the face's
   yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, both stored by the same second pass
-  for the judged face and judged when the file is shown until then, and the filter menu's `AF eye` section (`Good` / `Bad` /
-  `Unknown`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
+  for the judged face and judged when the file is shown until then, and the filter menu's `Face focus` section (`Good` / `Neutral` /
+  `Low`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
   `Unknown`). The mark also draws the faces
   Riffle detects near the AF point as a cyan box with a cyan dot on each eye,
@@ -173,7 +172,7 @@ DxO PhotoLab.
   [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker)
   face mesh (Apache-2.0, converted to ONNX from Google's TFLite). Both run
   locally with no network access. The strip's
-  focus mark icons, also on the filter menu's `Good` and `Bad` items, are
+  focus mark icons, also on the filter menu's `Good` and `Low` items, are
   [Lucide](https://lucide.dev)'s `scan-face` and `scan`, and its
   recommended icon is Lucide's `sparkles` (ISC license).
 - **HDR PQ (HEIF) CR3 previews**: the HEVC previews of Canon CR3 files shot

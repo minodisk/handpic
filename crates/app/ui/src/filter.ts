@@ -8,10 +8,11 @@ import type { PickFlag } from "./selection.js";
 // lets everything through. `0` stars is unrated; a reject keeps its stars,
 // independent of its flag. A label is keyed lowercased, or `none`
 // when there is none; a label outside the menu's colors matches no item.
-// The menu's `AF eye` items put `good`, `not_candidate` (Bad) or `unknown` in
-// `candidates`, and they partition the files like the focus mark's states
-// (`afEyeState` in `focus.ts`): a file whose state is not known yet counts as
-// `unknown`.
+// The menu's `Face focus` items put `good`, `neutral` or `low` in `candidates`,
+// and they partition the files like the focus mark's states (`afEyeState` in
+// `focus.ts`): `good` is a good photo, `low` a judged face whose eyes are likely
+// not in focus, and `neutral` everything else, a file the pass has not reached
+// included.
 // Its `Eyes` items put the AF face's stored eye state, `open`, `closed` or
 // `unknown`, in `eyes`; a file without one counts as `unknown` the same way.
 // Its `Genre` items put genre labels (`genre.rs`'s, `Unknown` included) in
@@ -22,7 +23,7 @@ import type { PickFlag } from "./selection.js";
 // state is not known passes neither item.
 export type Flag = "picked" | "untagged" | "rejected";
 
-// One item of the `AF eye` section: an AF eye state.
+// One item of the `Face focus` section: a mark state.
 export type AfEye = MarkState;
 
 // The displayed shape, decided by the EXIF Orientation tag alone: every
@@ -118,7 +119,7 @@ export function passes(
     (state.labels.size === 0 || state.labels.has(labelKey)) &&
     (state.orientations.size === 0 ||
       (orientation !== undefined && state.orientations.has(orientationOf(orientation)))) &&
-    (state.candidates.size === 0 || state.candidates.has(afEye ?? "unknown")) &&
+    (state.candidates.size === 0 || state.candidates.has(afEye ?? "neutral")) &&
     (state.eyes.size === 0 || state.eyes.has(eyes ?? "unknown")) &&
     (state.genres.size === 0 || (genres ?? [UNKNOWN_GENRE]).some((g) => state.genres.has(g))) &&
     (state.outputs.size === 0 || (output !== undefined && state.outputs.has(output))) &&

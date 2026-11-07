@@ -2264,7 +2264,7 @@ const FILTER_LABELS: &[&str] = &[
     "red", "orange", "yellow", "green", "blue", "pink", "purple", "none",
 ];
 const FILTER_ORIENTATIONS: &[&str] = &["portrait", "landscape"];
-const FILTER_CANDIDATES: &[&str] = &["good", "not_candidate", "unknown"];
+const FILTER_CANDIDATES: &[&str] = &["good", "neutral", "low"];
 const FILTER_EYES: &[&str] = &["open", "closed", "unknown"];
 
 /// The stored `filter` value with every section present, each keeping only
@@ -3742,7 +3742,7 @@ mod tests {
                 "stars": [5, 7, "3", 2.5, 0, 6],
                 "labels": ["Red", "red", "none"],
                 "orientations": ["square", "landscape"],
-                "candidates": ["ok", "good", "unknown"],
+                "candidates": ["ok", "not_candidate", "unknown", "good", "neutral"],
                 "eyes": ["closed", 1],
             }))),
             json!({
@@ -3750,7 +3750,7 @@ mod tests {
                 "stars": [5, 0],
                 "labels": ["red", "none"],
                 "orientations": ["landscape"],
-                "candidates": ["good", "unknown"],
+                "candidates": ["good", "neutral"],
                 "eyes": ["closed"],
             })
         );
@@ -3764,7 +3764,7 @@ mod tests {
             "stars": [3, 1],
             "labels": ["purple", "green"],
             "orientations": ["portrait"],
-            "candidates": ["not_candidate"],
+            "candidates": ["low"],
             "eyes": ["unknown", "open"],
         });
         assert_eq!(super::filter_setting(Some(&valid)), valid);

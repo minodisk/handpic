@@ -2070,7 +2070,7 @@ The `discard-retarget` feature (plan: `docs/plans/_archived/20261019-discard-ret
 
 The `model-search` feature (plan: `docs/plans/_archived/20261020-model-search/plan.md`, Decision, "Facts the user may weigh") read `G0` on its 600 fresh labels. q5 again meets conditions 1-4: `RR` 23.5 [15.7, 30.9], cluster 97.5% 34.9, `PL` 0.68%, removed 4.53%, `DP` 2.5% 69.1 above the 42.31% base rate. q10 fails `RR` (30.1 [23.7, 35.8]). The strata were cut for the model-search winner, so this is a reading, not the pre-registered confirmation round this item asks for.
 
-The `discard-model` feature found that the plain `ef` cue beats the learned `LR/T`, a cue to weigh against shipping `G0`; see `### Core: decide whether ef / ef-fill at per-folder q5, sorted last, is worth shipping`.
+The `discard-model` feature found that the plain `ef` cue beats the learned `LR/T`, a cue to weigh against shipping `G0`. The question of shipping `ef` / `ef-fill` sorted last has since been closed: no sort-to-last, and the `Face focus` filter's `Low` item is the shipped form (plan: `docs/plans/_archived/20261107-face-focus-tiers/plan.md`).
 
 Files: `docs/plans/_archived/20261019-discard-retarget/plan.md`, `docs/plans/_archived/20261019-discard-retarget/retarget.md`, `docs/plans/_archived/20261020-model-search/modelsearch.md`, `crates/core/src/rank.rs`.
 
@@ -2099,21 +2099,6 @@ Files: `docs/plans/_archived/20261020-model-search/confirmsample.py`, `docs/plan
 #### TODO
 
 - [ ] On Windows, with `aiEnabled` off, open an unlabeled copy of the sample folder (no `.xmp` / `.dop`), sort by File name and let the scan finish. Expected: 600 files `0001_...` to `0600_...`, every one without a rating, Pick / Reject flag or color label, no `.xmp` / `.dop` in the folder before the first key press, and no recommended icon or ranking rows.
-
-### Core: decide whether `ef` / `ef-fill` at per-folder q5, sorted last, is worth shipping
-
-#### Background
-
-The `discard-model` feature (plan: `docs/plans/_archived/20261023-discard-model/plan.md`, Decision) trained `LR/T` on the 1,200 blind labels. On a fresh blind round of six unsampled folders it did not pass the pre-registered bars (AUC minus `ef` -0.013 [-0.048, +0.023]), so the plain `eye_focus` cue (`ef`) stays and nothing changed in the app. The user declined another `LR/T` round. On those fresh labels `ef`'s q5 cut meets bars 1-4 (`RR` 11.3% [6.3, 17.4], `PL` 4.07%, removed 4.98%, `DP` 2.5% quantile 82.6% against a 60.56% base rate), and `ef-fill` (the `af-whole` fill for frames without `eye_focus`) gives q5 `RR` 10.0%, `PL` 2.84%. The strata were cut for `LR/T`, so these are readings, not a confirmation. The fill's benefit is also a reading that was not pre-registered: `ef-fill` minus `ef` is +0.277 [+0.131, +0.407] on the 201 missing-face fresh labels, and level on all frames (+0.002). Deciding it needs a round whose strata are cut for that score, over-sample the frames without `eye_focus`, and have their own pre-registered bars.
-
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`, Decision) then tried to improve `ef` itself: a mesh-misfit gate (the mesh-versus-YuNet nose offset, the gated face re-measured on the eye window), the `af-whole` fill, and both. Its pre-registered stop rule ended it before a fresh round: the exploration winner `ef-gate+fill(nose, 0.215)` read AUC minus `ef` +0.006 on round 3 but -0.013 / -0.011 on rounds 1 / 2, and `ef-fill` alone -0.011 / -0.010 there. So nothing changed and `eye_focus` stays. The fill's gain on round 3's missing-face frames did not hold on rounds 1-2 (-0.300 / +0.091), which weighs against `ef-fill` in the question below. A non-pre-registered observation from that plan: frames with a high nose offset were far more often discardable (weighted 97.5 / 56.9 / 71.3% against 55.7 / 36.9 / 41.6% on rounds 3 / 2 / 1), so the nose offset might serve as a direct "sort last" signal; that would need its own pre-registration and fresh labels.
-
-Files: `crates/core/src/candidate.rs`, `crates/app/src/index.rs` (`run_faces_scan`), `docs/plans/_archived/20261023-discard-model/discardmodel.md`, `docs/plans/_archived/20261023-discard-model/freshread.py`, `docs/plans/_archived/20261023-face-choice/facechoice.md`.
-
-#### TODO
-
-- [ ] Ask the user, with the `ef-gate-fill` outcome above: is `ef` or `ef-fill` at per-folder q5, sorted last (not hidden), worth shipping as it is? If no, delete this item.
-- [ ] If yes, write a plan with its own pre-registered question and bars, and a fresh blind round whose strata are cut for that score and over-sample the frames without `eye_focus`. Run the offline Python with `D:\Photos\tests\.venv-eval\Scripts\python.exe -I -B`.
 
 ### App: real-device checks for Rename by Capture Date…
 

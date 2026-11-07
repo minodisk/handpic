@@ -87,7 +87,7 @@ describe("focusMark", () => {
       x: -175,
       y: -117,
       rect: null,
-      state: "unknown",
+      state: "neutral",
     });
   });
 
@@ -101,22 +101,22 @@ describe("focusMark", () => {
       x: -175,
       y: -117,
       rect: { x: -218.75, y: -146.25, width: 87.5, height: 58.5 },
-      state: "unknown",
+      state: "neutral",
     });
   });
 
-  test.each(["not_candidate", "unknown"] as const)(
-    "carries the %s focus candidate state",
-    (state) => {
-      expect(focusMark({ ...point, candidate: state }, 700, 468)?.state).toBe(state);
-    },
-  );
+  test.each([
+    ["not_candidate", "low"],
+    ["unknown", "neutral"],
+  ] as const)("maps the %s focus candidate to %s", (candidate, state) => {
+    expect(focusMark({ ...point, candidate }, 700, 468)?.state).toBe(state);
+  });
 
-  test("a focus candidate carries its photoTier, else not_candidate", () => {
+  test("a focus candidate carries its photoTier, else neutral", () => {
     expect(focusMark(good, 700, 468)?.state).toBe("good");
     expect(focusMark({ ...good, eyes_ear: GOOD_EYE_EAR }, 700, 468)?.state).toBe("good");
-    expect(focusMark({ ...good, eyes_ear: 0.1 }, 700, 468)?.state).toBe("not_candidate");
-    expect(focusMark({ ...point, candidate: "candidate" }, 700, 468)?.state).toBe("not_candidate");
+    expect(focusMark({ ...good, eyes_ear: 0.1 }, 700, 468)?.state).toBe("neutral");
+    expect(focusMark({ ...point, candidate: "candidate" }, 700, 468)?.state).toBe("neutral");
   });
 
   test("a manual-focus or missing point stays null whatever the state", () => {
@@ -128,68 +128,75 @@ describe("focusMark", () => {
 });
 
 describe("FOCUS_MARK_COLORS", () => {
-  test("bright green for good, gray for bad, white for unknown", () => {
+  test("bright green for good, gray for low, white for neutral", () => {
     expect(FOCUS_MARK_COLORS).toEqual({
       good: "#3f3",
-      not_candidate: "#999",
-      unknown: "#fff",
+      low: "#999",
+      neutral: "#fff",
     });
   });
 });
 
 describe("FOCUS_MARK_ICONS", () => {
-  test("scan-face for good, scan for bad, none for unknown", () => {
+  test("scan-face for good, scan for low, none for neutral", () => {
     expect(FOCUS_MARK_ICONS).toEqual({
       good: SCAN_FACE_SVG,
-      not_candidate: SCAN_SVG,
-      unknown: null,
+      low: SCAN_SVG,
+      neutral: null,
     });
   });
 });
 
 describe("stripState", () => {
-  test("is unknown without a focus", () => {
-    expect(stripState(null)).toBe("unknown");
-    expect(stripState(undefined)).toBe("unknown");
+  test("is neutral without a focus", () => {
+    expect(stripState(null)).toBe("neutral");
+    expect(stripState(undefined)).toBe("neutral");
   });
 
   test("is the mark's state, a manual-focus shot included", () => {
     expect(stripState(good)).toBe("good");
-    expect(stripState({ ...good, eyes_ear: 0.1 })).toBe("not_candidate");
-    expect(stripState({ ...point, candidate: "not_candidate" })).toBe("not_candidate");
-    expect(stripState(point)).toBe("unknown");
-    expect(stripState({ ...point, manual_focus: true, candidate: "not_candidate" })).toBe(
-      "not_candidate",
-    );
+    expect(stripState({ ...good, eyes_ear: 0.1 })).toBe("neutral");
+    expect(stripState({ ...point, candidate: "not_candidate" })).toBe("low");
+    expect(stripState(point)).toBe("neutral");
+    expect(stripState({ ...point, manual_focus: true, candidate: "not_candidate" })).toBe("low");
   });
 
   test("reads the cue of a focus with no recorded point", () => {
     expect(stripState({ ...good, point: null })).toBe("good");
-    expect(stripState({ ...good, point: null, eyes_ear: 0.1 })).toBe("not_candidate");
-    expect(stripState({ ...point, point: null, candidate: "not_candidate" })).toBe("not_candidate");
-    expect(stripState({ ...point, point: null })).toBe("unknown");
+    expect(stripState({ ...good, point: null, eyes_ear: 0.1 })).toBe("neutral");
+    expect(stripState({ ...point, point: null, candidate: "not_candidate" })).toBe("low");
+    expect(stripState({ ...point, point: null })).toBe("neutral");
   });
 });
 
 describe("afEyeState", () => {
-  test("is unknown without a focus", () => {
-    expect(afEyeState(null)).toBe("unknown");
-    expect(afEyeState(undefined)).toBe("unknown");
+  test("is neutral without a focus, as on a JPEG", () => {
+    expect(afEyeState(null)).toBe("neutral");
+    expect(afEyeState(undefined)).toBe("neutral");
   });
 
   test("is good for the photo tier", () => {
     expect(afEyeState(good)).toBe("good");
   });
 
-  test("is not_candidate for a focus candidate that is not good", () => {
-    expect(afEyeState({ ...good, eyes_ear: 0.1 })).toBe("not_candidate");
-    expect(afEyeState({ ...good, eye_focus: GOOD_EYE_FOCUS - 0.01 })).toBe("not_candidate");
-    expect(afEyeState({ ...point, candidate: "candidate" })).toBe("not_candidate");
+  test("is good at GOOD_EYE_FOCUS with the other conditions met", () => {
+    expect(afEyeState({ ...good, candidate: "candidate", eye_focus: GOOD_EYE_FOCUS })).toBe("good");
   });
 
-  test("carries a not_candidate or unknown focus as is", () => {
-    expect(afEyeState({ ...point, candidate: "not_candidate" })).toBe("not_candidate");
-    expect(afEyeState(point)).toBe("unknown");
+  test("is neutral for a focus candidate that is not good", () => {
+    expect(afEyeState({ ...good, eyes_ear: 0.1 })).toBe("neutral");
+    expect(afEyeState({ ...good, eye_focus: GOOD_EYE_FOCUS - 0.01 })).toBe("neutral");
+    expect(afEyeState({ ...point, candidate: "candidate", eye_focus: 0.772 })).toBe("neutral");
+  });
+
+  test("is low for a not_candidate focus, whatever else clears the rule", () => {
+    expect(afEyeState({ ...point, candidate: "not_candidate", eye_focus: 0.7719 })).toBe("low");
+    expect(afEyeState({ ...good, candidate: "not_candidate", eye_focus: 0.7719 })).toBe("low");
+  });
+
+  test("is neutral for an unknown focus: no face, or pass 2 not there yet", () => {
+    expect(afEyeState({ ...point, candidate: "unknown", eye_focus: null })).toBe("neutral");
+    expect(afEyeState({ ...good, candidate: "unknown", eye_focus: null })).toBe("neutral");
   });
 });
 

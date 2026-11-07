@@ -27,12 +27,14 @@ export interface MarkFocus extends StoredEyes {
 // The tier `photoTier` puts a frame in: a good photo, one that is not a miss.
 export type PhotoTier = "good";
 
-// The AF eye state the mark's color, the strip's icon and the filter menu's
-// `AF eye` item are read from: the frame's `photoTier`, `not_candidate` (Bad)
-// for any other frame whose face was judged (near the AF point, else the
-// largest on the whole preview without a trusted one), a focus candidate not
-// in the tier included, else `unknown`.
-export type MarkState = PhotoTier | "not_candidate" | "unknown";
+// The state the mark's color, the strip's icon and the filter menu's
+// `Face focus` item are read from: the frame's `photoTier`, `low` for a frame
+// whose judged face (near the AF point, else the largest on the whole preview
+// without a trusted one) is under the candidate threshold, which is Rust's
+// `not_candidate` (the threshold lives in `candidate.rs`), else `neutral`: a
+// focus candidate not in the tier, and both no face found and a file pass 2
+// has not reached, which the frontend cannot tell apart.
+export type MarkState = PhotoTier | "neutral" | "low";
 
 export interface FocusMark {
   x: number;
@@ -41,21 +43,21 @@ export interface FocusMark {
   state: MarkState;
 }
 
-// The mark's color per state: bright green for a good photo, gray when a
-// face was judged and the frame is not good, white when Riffle does not know.
+// The mark's color per state: bright green for a good photo, gray when the
+// judged face's eyes are likely not in focus, white for everything else.
 export const FOCUS_MARK_COLORS = {
   good: "#3f3",
-  not_candidate: "#999",
-  unknown: "#fff",
+  low: "#999",
+  neutral: "#fff",
 } as const satisfies Record<MarkState, string>;
 
-// The icon per state on the strip cell and the filter menu's `AF eye` item, in
-// the mark's color: a face for a good photo, the bare frame for a bad one, none
-// when Riffle does not know.
+// The icon per state on the strip cell and the filter menu's `Face focus` item,
+// in the mark's color: a face for a good photo, the bare frame for a low one, none
+// for a neutral one.
 export const FOCUS_MARK_ICONS = {
   good: SCAN_FACE_SVG,
-  not_candidate: SCAN_SVG,
-  unknown: null,
+  low: SCAN_SVG,
+  neutral: null,
 } as const satisfies Record<MarkState, string | null>;
 
 // The good-photo cuts on the values pass 2 stores for the judged face, fitted
@@ -135,16 +137,16 @@ export function photoTier(focus: MarkFocus | null | undefined): PhotoTier | null
   return clears(focus) ? "good" : null;
 }
 
-// The AF eye state of a file, `unknown` without a focus: the one place the
-// strip's icon, the mark and the filter menu read it from.
+// The state of a file, `neutral` without a focus: the one place the strip's
+// icon, the mark and the filter menu read it from.
 export function afEyeState(focus: MarkFocus | null | undefined): MarkState {
   if (focus === null || focus === undefined) {
-    return "unknown";
+    return "neutral";
   }
-  if (focus.candidate !== "candidate") {
-    return focus.candidate;
+  if (focus.candidate === "not_candidate") {
+    return "low";
   }
-  return photoTier(focus) ?? "not_candidate";
+  return photoTier(focus) ?? "neutral";
 }
 
 // The mark state of a file the strip's icon shows.

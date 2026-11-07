@@ -3018,9 +3018,9 @@ function refreshRanks(): void {
 // whose recorded point is not trusted, gets no mark. The mark is bright green
 // for a good photo (`photoTier`: the eyes of the face nearest the AF point are
 // sharp and open and the face is toward the camera), gray when that face was
-// judged and the frame is not good (its eyes not sharp included), and
-// white when Riffle does not know: no face near the point, or the second scan
-// pass has not reached the file yet.
+// judged and its eyes are likely not in focus, and white for
+// everything else: a focus candidate that is not good, no face near the point,
+// or a file the second scan pass has not reached yet.
 function drawFocusMark(drawWidth: number, drawHeight: number): void {
   if (!showFocus || files.length === 0) {
     return;
@@ -4651,8 +4651,8 @@ void window.__TAURI__.event.listen<{
   const current = applyFaceReady(entries, payload.ready, files[index]);
   applySharpnessReady(entries, sharpness, payload.ready);
   applyTiers();
-  // The candidate, tier and eyes filters fill in as the pass runs; the strip keeps
-  // its scroll offset, as on a resync.
+  // The `Face focus` filter's Good, Neutral and Low and the eyes filter fill in as
+  // the pass runs; the strip keeps its scroll offset, as on a resync.
   if (shownCandidates.size > 0 || shownEyes.size > 0) {
     refilter(files[index], true);
   }
@@ -4851,9 +4851,9 @@ const filterItems = filterMenu.querySelectorAll<HTMLButtonElement>(
 const filterOutput = document.getElementById("filter-output") as HTMLDivElement;
 const filterGenre = document.getElementById("filter-genre") as HTMLDivElement;
 const filterExif = document.getElementById("filter-exif") as HTMLDivElement;
-// The icons of the `AF eye` items, the strip's icon of the same state in the
-// focus mark's color; `Unknown` keeps its slot empty.
-for (const state of ["good", "not_candidate"] as const) {
+// The icons of the `Face focus` items, the strip's icon of the same state in the
+// focus mark's color; `Neutral` keeps its slot empty.
+for (const state of ["good", "low"] as const) {
   const face = filterMenu.querySelector<HTMLElement>(`[data-candidate="${state}"] .face`)!;
   face.innerHTML = FOCUS_MARK_ICONS[state];
   face.style.color = FOCUS_MARK_COLORS[state];

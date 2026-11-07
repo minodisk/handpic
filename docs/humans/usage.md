@@ -185,7 +185,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   [What the camera records](./cameras.md)). The mark's color says how the
   judged face came out: the face nearest the AF point, or, on a frame with no
   AF point or in manual focus, the largest face Riffle finds anywhere on the
-  preview, so such a frame can be good or bad although it shows no crosshair
+  preview, so such a frame can be bright green or gray although it shows no crosshair
   (the strip's icon, the meta pane and the filter carry its state; a group
   photo without an AF point is judged on that one face). Bright green marks a good photo, a
   frame that is likely not a miss: the AF eyes in focus, the eyes open and
@@ -200,18 +200,19 @@ viewer shows a prompt in its center; click it to open the folder picker.
   frames with a face at the AF point. On 180 frames the author rated (1 star
   for no subject, 2 for likely rejected, 3 or more for a pass), 54 of the 58
   good frames passed and none was a frame without a subject. Bright green
-  means good only. Gray means a face was judged but the frame is not good: the in-focus probability of its eyes (a logistic
-  combination of the Laplacian variance and the mean edge width; about 77%
-  or more makes a focus candidate) is under the cut, including a window
-  between the eyes with no clear edge, which counts as 0%, or the eyes, the
-  pose, the mesh or the frame's edge miss a cut. The
+  means good only. Gray means a face was judged and its eyes are likely not
+  in focus: their in-focus probability (a logistic combination of the
+  Laplacian variance and the mean edge width) is under about 77%, the focus
+  candidate threshold, including a window between the eyes with no clear
+  edge, which counts as 0%. The
   probability is measured over each eye's eyelid region, which a face mesh
   model (MediaPipe Face Landmarker v2) finds, and the sharper of the two
   eyes counts; when neither eye's region counts (under 24 px, as on small
   faces, or without a clear edge), it is measured over the preview between
-  the eyes instead. White when Riffle does not know: no face found (near
-  the AF point when there is one, anywhere on the preview when there is
-  none), or not computed yet. A frame with no face found stays white rather
+  the eyes instead. White is everything else: a judged face at about 77% or
+  more that misses a good cut (under 90%, or the eyes, the pose, the mesh or
+  the frame's edge), no face found (near the AF point when there is one,
+  anywhere on the preview when there is none), or not computed yet. A frame with no face found stays white rather
   than being judged on the sharpness score: on the author's 4361 face-free
   frames the score barely told picks from the rest (AUC 0.58). A frame with no face found or with a face
   under about 60 pixels on the embedded preview is never good,
@@ -221,7 +222,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   in a second pass that starts right after the thumbnails and metadata of the
   folder are in, so the marks turn from white to their color, the files on
   screen first, while the status shows `analyzing N / M`. The strip marks
-  each judged frame with an icon in the mark's color at the cell's
+  each bright green or gray frame with an icon in the mark's color at the cell's
   bottom-left, above the file name, filling in as the pass runs: a face
   (Lucide's `scan-face`) on a good frame and a bare frame (`scan`) on a
   gray one, both ISC license,
@@ -342,11 +343,13 @@ viewer shows a prompt in its center; click it to open the folder picker.
   **Recommended order**).
 - **Filter menu**: narrows the strip by pick flag, stars, color label,
   orientation (`Portrait` / `Landscape`), the focus mark's state (the
-  `AF eye` section, each item with the strip's icon of its state: `Good`
-  for a good photo, the bright green mark and face icon; `Bad` for gray,
-  a judged face on a frame that is not good, its eyes in focus or not, a
-  frame with no AF point included; and `Unknown` for white, including files the second pass
-  has not reached; each file falls under exactly one of them,
+  `Face focus` section, each item with the strip's icon of its state: `Good`
+  for a good photo, the bright green mark and face icon, an in-focus
+  probability of 90% or more among its cuts; `Neutral` for white, everything
+  else: a judged face at about 77% or more that misses a good cut, no face
+  found, a JPEG, and files the second pass has not reached; and `Low` for
+  gray, a judged face with an in-focus probability under about 77%, a frame
+  with no AF point included; each file falls under exactly one of them,
   checking several shows the files in any of them, and the strip refills
   as the pass runs), the stored eye state of the judged face (the
   `Eyes` section: `Open`, `Closed`, or `Unknown` for a file with no stored
@@ -384,7 +387,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   are OR-ed, groups are AND-ed, and `Reset` clears them all. A judgment that drops
   the current file out of the filter hides it at once and moves to the next
   passing file after it, else the last one before it, else the empty view.
-  The flag, star, label, orientation, `AF eye` and `Eyes` checks are
+  The flag, star, label, orientation, `Face focus` and `Eyes` checks are
   remembered across restarts and apply to every folder; the EXIF checks are
   not, and clear whenever a folder opens. The `Genre` checks last until the
   app quits or AI analysis is turned off, and the `Output` checks until the

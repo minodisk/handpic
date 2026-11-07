@@ -1093,9 +1093,9 @@ retried.
   file, about +28 ms in release (`riffle-cli features`, `analysis_ms`); a
   file with no face pays nothing, because `whole_image_cue` returns
   `Cue::unknown()` before any decode. The face-free frame itself stays
-  Unknown: the sharpness score did not separate picks from non-picks
+  Neutral: the sharpness score did not separate picks from non-picks
   (folder-stratified AUC 0.58 against 0.70 needed), so do not re-propose a
-  score-based Good / Bad for it without a new cue or 30 or more face-free
+  score-based Good / Low for it without a new cue or 30 or more face-free
   rejects. See
   `docs/plans/_archived/20261010-af-eye-good-bad-cascade/learnings.md`,
   Steps 2 and 3.

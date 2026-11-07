@@ -315,7 +315,7 @@ describe("passes: orientation", () => {
   });
 });
 
-describe("passes: AF eye states", () => {
+describe("passes: Face focus states", () => {
   const items = (...afEyes: AfEye[]) => state([], [], [], [], [], afEyes);
   const candidate: MarkFocus = {
     point: { sensor_w: 7008, sensor_h: 4672, x: 1752, y: 1168, frame: null },
@@ -331,63 +331,72 @@ describe("passes: AF eye states", () => {
   };
 
   test("off passes every state", () => {
-    for (const afEye of ["good", "not_candidate", "unknown", undefined] as const) {
+    for (const afEye of ["good", "neutral", "low", undefined] as const) {
       expect(passes(state(), unjudged, undefined, 1, afEye)).toBe(true);
     }
   });
 
   test("good passes a good frame only", () => {
     expect(passes(items("good"), unjudged, undefined, 1, "good")).toBe(true);
-    expect(passes(items("good"), unjudged, undefined, 1, "not_candidate")).toBe(false);
-    expect(passes(items("good"), unjudged, undefined, 1, "unknown")).toBe(false);
+    expect(passes(items("good"), unjudged, undefined, 1, "neutral")).toBe(false);
+    expect(passes(items("good"), unjudged, undefined, 1, "low")).toBe(false);
     expect(passes(items("good"), unjudged, undefined, 1, undefined)).toBe(false);
   });
 
-  test("not_candidate (Bad) passes a bad frame only", () => {
-    const bad = items("not_candidate");
-    expect(passes(bad, unjudged, undefined, 1, "not_candidate")).toBe(true);
-    expect(passes(bad, unjudged, undefined, 1, "good")).toBe(false);
-    expect(passes(bad, unjudged, undefined, 1, "unknown")).toBe(false);
-    expect(passes(bad, unjudged, undefined, 1, undefined)).toBe(false);
+  test("low passes a low frame only", () => {
+    const low = items("low");
+    expect(passes(low, unjudged, undefined, 1, "low")).toBe(true);
+    expect(passes(low, unjudged, undefined, 1, "good")).toBe(false);
+    expect(passes(low, unjudged, undefined, 1, "neutral")).toBe(false);
+    expect(passes(low, unjudged, undefined, 1, undefined)).toBe(false);
   });
 
-  test("a focus candidate that is not good passes Bad, not Good", () => {
+  test("a focus candidate that is not good passes Neutral, not Good or Low", () => {
     const notGood = afEyeState({ ...candidate, eyes_ear: 0.1 });
-    expect(passes(items("not_candidate"), unjudged, undefined, 1, notGood)).toBe(true);
+    expect(passes(items("neutral"), unjudged, undefined, 1, notGood)).toBe(true);
     expect(passes(items("good"), unjudged, undefined, 1, notGood)).toBe(false);
+    expect(passes(items("low"), unjudged, undefined, 1, notGood)).toBe(false);
     const good = afEyeState(candidate);
     expect(passes(items("good"), unjudged, undefined, 1, good)).toBe(true);
-    expect(passes(items("not_candidate"), unjudged, undefined, 1, good)).toBe(false);
+    expect(passes(items("neutral"), unjudged, undefined, 1, good)).toBe(false);
   });
 
-  test("unknown passes an unknown or not yet computed state", () => {
-    const unknown = items("unknown");
-    expect(passes(unknown, unjudged, undefined, 1, "unknown")).toBe(true);
-    expect(passes(unknown, unjudged, undefined, 1, undefined)).toBe(true);
-    expect(passes(unknown, unjudged, undefined, 1, "good")).toBe(false);
-    expect(passes(unknown, unjudged, undefined, 1, "not_candidate")).toBe(false);
+  test("neutral passes a neutral or not yet computed state", () => {
+    const neutral = items("neutral");
+    expect(passes(neutral, unjudged, undefined, 1, "neutral")).toBe(true);
+    expect(passes(neutral, unjudged, undefined, 1, undefined)).toBe(true);
+    expect(passes(neutral, unjudged, undefined, 1, "good")).toBe(false);
+    expect(passes(neutral, unjudged, undefined, 1, "low")).toBe(false);
   });
 
   test("ORs the checked states", () => {
-    const either = items("good", "unknown");
+    const either = items("good", "neutral");
     expect(passes(either, unjudged, undefined, 1, "good")).toBe(true);
-    expect(passes(either, unjudged, undefined, 1, "unknown")).toBe(true);
+    expect(passes(either, unjudged, undefined, 1, "neutral")).toBe(true);
     expect(passes(either, unjudged, undefined, 1, undefined)).toBe(true);
-    expect(passes(either, unjudged, undefined, 1, "not_candidate")).toBe(false);
+    expect(passes(either, unjudged, undefined, 1, "low")).toBe(false);
+  });
+
+  test("Good and Low checked exclude neutral", () => {
+    const ends = items("good", "low");
+    expect(passes(ends, unjudged, undefined, 1, "good")).toBe(true);
+    expect(passes(ends, unjudged, undefined, 1, "low")).toBe(true);
+    expect(passes(ends, unjudged, undefined, 1, "neutral")).toBe(false);
+    expect(passes(ends, unjudged, undefined, 1, undefined)).toBe(false);
   });
 
   test("the three items partition the frames", () => {
     const frames: [MarkFocus | undefined, AfEye][] = [
       [candidate, "good"],
-      [{ ...candidate, eyes_ear: 0.1 }, "not_candidate"],
-      [{ ...candidate, candidate: "not_candidate", eye_focus: 0.1 }, "not_candidate"],
-      [{ ...candidate, candidate: "unknown", eye_focus: null }, "unknown"],
+      [{ ...candidate, eyes_ear: 0.1 }, "neutral"],
+      [{ ...candidate, candidate: "not_candidate", eye_focus: 0.1 }, "low"],
+      [{ ...candidate, candidate: "unknown", eye_focus: null }, "neutral"],
       [{ ...candidate, point: null }, "good"],
-      [{ ...candidate, point: null, candidate: "not_candidate", eye_focus: 0.1 }, "not_candidate"],
-      [{ ...candidate, point: null, candidate: "unknown", eye_focus: null }, "unknown"],
-      [undefined, "unknown"],
+      [{ ...candidate, point: null, candidate: "not_candidate", eye_focus: 0.1 }, "low"],
+      [{ ...candidate, point: null, candidate: "unknown", eye_focus: null }, "neutral"],
+      [undefined, "neutral"],
     ];
-    for (const item of ["good", "not_candidate", "unknown"] as const) {
+    for (const item of ["good", "neutral", "low"] as const) {
       for (const [focus, owner] of frames) {
         expect(passes(items(item), unjudged, undefined, 1, afEyeState(focus))).toBe(item === owner);
       }
@@ -441,7 +450,7 @@ describe("passes: eyes", () => {
   test("ANDs with the other groups", () => {
     const both = state(["untagged"], [], [], [], [], ["good"], ["closed"]);
     expect(passes(both, unjudged, undefined, 1, "good", "closed")).toBe(true);
-    expect(passes(both, unjudged, undefined, 1, "not_candidate", "closed")).toBe(false);
+    expect(passes(both, unjudged, undefined, 1, "low", "closed")).toBe(false);
     expect(passes(both, pickedTwo, undefined, 1, "good", "closed")).toBe(false);
     expect(passes(both, unjudged, undefined, 1, "good", "open")).toBe(false);
   });
@@ -568,7 +577,7 @@ describe("toStored / applyStored", () => {
       [],
       ["red", "none"],
       ["portrait"],
-      ["unknown", "good"],
+      ["neutral", "low"],
       ["closed"],
     );
     const stored = toStored(s);
@@ -577,7 +586,7 @@ describe("toStored / applyStored", () => {
       stars: [5, 0],
       labels: ["red", "none"],
       orientations: ["portrait"],
-      candidates: ["unknown", "good"],
+      candidates: ["neutral", "low"],
       eyes: ["closed"],
     });
     const restored = state(["untagged"], [3]);
