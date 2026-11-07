@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+use std::time::{Duration, Instant};
 
 use crate::arw::{FocusLocation, Shot};
 use crate::candidate::{face_cue_unless, focus_cue_unless, Cue};
@@ -83,17 +84,31 @@ impl std::fmt::Display for Failure {
 /// the metadata when it could be parsed. The sharpness score and the face
 /// search are the analysis pass's (`extract_analysis`).
 pub fn extract(path: &Path) -> Result<Entry, Failure> {
-    extract_unless(path, &AtomicBool::new(false)).expect("a never-set flag never abandons")
+    extract_unless(path, &AtomicBool::new(false), &ReadSlots::default())
+        .expect("a never-set flag never abandons")
 }
 
-/// `extract`, abandoned (`None`) once `cancel` is set between its stages.
-fn extract_unless(path: &Path, cancel: &AtomicBool) -> Option<Result<Entry, Failure>> {
-    let (arw, preview) = match read_preview(path) {
+/// `extract`, abandoned (`None`) once `cancel` is set between its stages,
+/// its reads going through `slots`.
+fn extract_unless(
+    path: &Path,
+    cancel: &AtomicBool,
+    slots: &ReadSlots,
+) -> Option<Result<Entry, Failure>> {
+    let read = {
+        let _slot = slots.acquire(cancel)?;
+        read_preview(path)
+    };
+    let (arw, preview) = match read {
         Ok(read) => read,
         Err(e) => {
             // The preview can fail (missing, out of range, undecodable HEVC)
             // where the metadata parses, so read that alone.
-            let failure = match read_metadata(path) {
+            let metadata = {
+                let _slot = slots.acquire(cancel)?;
+                read_metadata(path)
+            };
+            let failure = match metadata {
                 Ok(arw) => Failure {
                     message: e.to_string(),
                     orientation: arw.orientation,
@@ -167,16 +182,25 @@ pub struct Analysis {
 /// panic in any of them, is an unknown cue or no score; a mesh failure falls
 /// back to the eye window. A JPEG file gets neither, and is not read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
-    extract_analysis_unless(path, &AtomicBool::new(false)).expect("a never-set flag never abandons")
+    extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
+        .expect("a never-set flag never abandons")
 }
 
 /// `extract_analysis`, abandoned (`None`) once `cancel` is set between its
-/// stages.
-fn extract_analysis_unless(path: &Path, cancel: &AtomicBool) -> Option<Result<Analysis, String>> {
+/// stages, its read going through `slots`.
+fn extract_analysis_unless(
+    path: &Path,
+    cancel: &AtomicBool,
+    slots: &ReadSlots,
+) -> Option<Result<Analysis, String>> {
     if is_jpeg_file(path) {
         return Some(Ok(Analysis::default()));
     }
-    let (arw, preview) = match read_preview(path) {
+    let read = {
+        let _slot = slots.acquire(cancel)?;
+        read_preview(path)
+    };
+    let (arw, preview) = match read {
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
@@ -286,6 +310,8 @@ fn canceled(cancel: &AtomicBool) -> bool {
 ///
 /// The workers take the paths `focus` lists first, in its order, then the rest
 /// in index order; `focus` may be changed from another thread while they run.
+/// Their file reads go through `focus`'s read slots, and one waiting there
+/// stops on `cancel` like any other stage.
 /// `threads` must be at least 1; `0` is rejected rather than silently falling
 /// back to rayon's default pool size.
 ///
@@ -366,8 +392,12 @@ pub fn embed_all<F>(
 where
     F: Fn(usize, Result<Vec<f32>, String>) + Send + Sync,
 {
-    let per_file = |path: &Path, cancel: &AtomicBool| {
-        let (arw, preview) = match read_preview(path) {
+    let per_file = |path: &Path, cancel: &AtomicBool, slots: &ReadSlots| {
+        let read = {
+            let _slot = slots.acquire(cancel)?;
+            read_preview(path)
+        };
+        let (arw, preview) = match read {
             Ok(read) => read,
             Err(e) => return Some(Err(e.to_string())),
         };
@@ -387,21 +417,141 @@ where
     for_each_path(paths, threads, priority, focus, per_file, on_item, cancel)
 }
 
-/// The paths a running scan takes first, nearest the user's view first. One
-/// handle can serve both passes of a scan; a handle never set leaves the order
-/// by index.
+/// How the view steers a running scan: the paths it takes first, nearest the
+/// user's view first, and the read slots its reads go through. One handle can
+/// serve every pass of a scan; a handle never set leaves the order by index,
+/// and the default one has uncapped read slots nothing can pause.
 #[derive(Debug, Clone, Default)]
-pub struct ScanFocus(Arc<Mutex<Vec<String>>>);
+pub struct ScanFocus {
+    paths: Arc<Mutex<Vec<String>>>,
+    slots: ReadSlots,
+}
 
 impl ScanFocus {
+    /// A handle whose scan reads through `slots`.
+    pub fn with_slots(slots: ReadSlots) -> Self {
+        ScanFocus {
+            slots,
+            ..Self::default()
+        }
+    }
+
     /// Replace the list whole. A path the scan does not have, or has already
     /// taken, is skipped.
     pub fn set(&self, paths: Vec<String>) {
-        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = paths;
+        *self.hot() = paths;
     }
 
-    fn hot(&self) -> std::sync::MutexGuard<'_, Vec<String>> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    fn hot(&self) -> MutexGuard<'_, Vec<String>> {
+        self.paths.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// How long `ReadSlots::acquire` honours a pause. A stuck or leaked pause
+/// slows a scan to one file per worker per `MAX_PAUSE` at worst and never
+/// stalls it; a preview read normally ends the pause long before this.
+const MAX_PAUSE: Duration = Duration::from_secs(1);
+
+/// How often a worker waiting in `ReadSlots::acquire` looks at its cancel
+/// flag, a plain `AtomicBool` that cannot wake it.
+const CANCEL_TICK: Duration = Duration::from_millis(50);
+
+/// The gate between a scan's workers and the disk: at most `cap` of them are
+/// inside a file read at once, and none starts one while a `Paused` is held,
+/// so the preview's read queues behind few reads and no new ones. Clones share
+/// the gate. The default one is uncapped.
+#[derive(Debug, Clone)]
+pub struct ReadSlots {
+    gate: Arc<(Mutex<Gate>, Condvar)>,
+    max_pause: Duration,
+}
+
+#[derive(Debug)]
+struct Gate {
+    free: usize,
+    paused: usize,
+}
+
+impl Default for ReadSlots {
+    fn default() -> Self {
+        Self::new(usize::MAX)
+    }
+}
+
+impl ReadSlots {
+    /// `cap` must be at least 1: nothing would ever read otherwise.
+    pub fn new(cap: usize) -> Self {
+        Self::with_max_pause(cap, MAX_PAUSE)
+    }
+
+    fn with_max_pause(cap: usize, max_pause: Duration) -> Self {
+        ReadSlots {
+            gate: Arc::new((
+                Mutex::new(Gate {
+                    free: cap,
+                    paused: 0,
+                }),
+                Condvar::new(),
+            )),
+            max_pause,
+        }
+    }
+
+    /// Wait for a free permit and no pause, then hold the permit until the
+    /// slot drops. `None` once `cancel` is set, the worker then abandoning its
+    /// file. A pause is honoured for `MAX_PAUSE` from the call, a free permit
+    /// taken regardless after that.
+    pub fn acquire(&self, cancel: &AtomicBool) -> Option<ReadSlot> {
+        let started = Instant::now();
+        let mut gate = self.lock();
+        loop {
+            if canceled(cancel) {
+                return None;
+            }
+            if gate.free > 0 && (gate.paused == 0 || started.elapsed() >= self.max_pause) {
+                gate.free -= 1;
+                return Some(ReadSlot(self.clone()));
+            }
+            gate = self
+                .gate
+                .1
+                .wait_timeout(gate, CANCEL_TICK)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+    }
+
+    /// Keep new reads from starting until the guard drops. Reads already
+    /// inside a slot run on.
+    pub fn pause(&self) -> Paused {
+        self.lock().paused += 1;
+        Paused(self.clone())
+    }
+
+    fn lock(&self) -> MutexGuard<'_, Gate> {
+        self.gate.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+/// One permit of `ReadSlots`, given back on drop, a panic unwind included.
+#[derive(Debug)]
+pub struct ReadSlot(ReadSlots);
+
+impl Drop for ReadSlot {
+    fn drop(&mut self) {
+        self.0.lock().free += 1;
+        self.0.gate.1.notify_all();
+    }
+}
+
+/// A pause of `ReadSlots`, ended on drop, a panic unwind included.
+#[derive(Debug)]
+pub struct Paused(ReadSlots);
+
+impl Drop for Paused {
+    fn drop(&mut self) {
+        self.0.lock().paused -= 1;
+        self.0.gate.1.notify_all();
     }
 }
 
@@ -536,7 +686,7 @@ fn for_each_path<T, X, E, F>(
     cancel: &AtomicBool,
 ) -> Result<Option<String>, String>
 where
-    E: Fn(&Path, &AtomicBool) -> Option<Result<T, X>> + Send + Sync,
+    E: Fn(&Path, &AtomicBool, &ReadSlots) -> Option<Result<T, X>> + Send + Sync,
     F: Fn(usize, Result<T, X>) + Send + Sync,
 {
     if threads == 0 {
@@ -577,7 +727,7 @@ where
             else {
                 break;
             };
-            if let Some(result) = per_file(&paths[i], cancel) {
+            if let Some(result) = per_file(&paths[i], cancel, &focus.slots) {
                 on_item(i, result);
             }
         }
@@ -741,7 +891,7 @@ mod tests {
                 4,
                 priority,
                 &ScanFocus::default(),
-                |_, _: &AtomicBool| {
+                |_, _: &AtomicBool, _: &ReadSlots| {
                     levels.lock().unwrap().push(worker_level());
                     Some(Ok::<_, String>(()))
                 },
@@ -766,7 +916,7 @@ mod tests {
             1,
             Priority::Normal,
             focus,
-            |_, _: &AtomicBool| Some(Ok::<_, String>(())),
+            |_, _: &AtomicBool, _: &ReadSlots| Some(Ok::<_, String>(())),
             |i, _| on_item(i),
             &AtomicBool::new(false),
         )
@@ -822,7 +972,7 @@ mod tests {
             4,
             Priority::Normal,
             &focus,
-            |_, _: &AtomicBool| Some(Ok::<_, String>(())),
+            |_, _: &AtomicBool, _: &ReadSlots| Some(Ok::<_, String>(())),
             |i, _| {
                 seen.lock().unwrap().push(i);
                 if i == 100 {
@@ -843,7 +993,7 @@ mod tests {
             2,
             Priority::Normal,
             &focus,
-            |_, _: &AtomicBool| Some(Ok::<_, String>(())),
+            |_, _: &AtomicBool, _: &ReadSlots| Some(Ok::<_, String>(())),
             |_, _| {
                 let mut done = done.lock().unwrap();
                 *done += 1;
@@ -924,11 +1074,17 @@ mod tests {
         let dir = dir("cancel-mid");
         let path = write(&dir, "a.ARW", &fixture(1, &jpeg(64, 48)));
         let set = AtomicBool::new(true);
-        assert!(extract_unless(&path, &set).is_none());
-        assert!(extract_analysis_unless(&path, &set).is_none());
+        let slots = ReadSlots::default();
+        assert!(extract_unless(&path, &set, &slots).is_none());
+        assert!(extract_analysis_unless(&path, &set, &slots).is_none());
         assert!(
-            extract_unless(&dir.join("missing.ARW"), &set).is_some_and(|r| r.is_err()),
-            "an unreadable file is still an error"
+            extract_unless(&dir.join("missing.ARW"), &set, &slots).is_none(),
+            "a canceled file is not read, so it cannot fail"
+        );
+        assert!(
+            extract_unless(&dir.join("missing.ARW"), &AtomicBool::new(false), &slots)
+                .is_some_and(|r| r.is_err()),
+            "an unreadable file is an error"
         );
         let focus = Some(FocusLocation {
             sensor_w: 6000,
@@ -951,13 +1107,14 @@ mod tests {
                 2,
                 Priority::Normal,
                 &ScanFocus::default(),
-                |path, cancel: &AtomicBool| {
+                |path, cancel: &AtomicBool, slots: &ReadSlots| {
                     let started = Instant::now();
                     cancel.store(true, Ordering::Relaxed);
                     let result = if analysis {
-                        extract_analysis_unless(path, cancel).map(|r| r.map(|_| ()))
+                        extract_analysis_unless(path, cancel, slots).map(|r| r.map(|_| ()))
                     } else {
-                        extract_unless(path, cancel).map(|r| r.map(|_| ()).map_err(|e| e.message))
+                        extract_unless(path, cancel, slots)
+                            .map(|r| r.map(|_| ()).map_err(|e| e.message))
                     };
                     assert!(started.elapsed() < Duration::from_secs(5));
                     result
@@ -972,6 +1129,222 @@ mod tests {
                 "analysis pass: {analysis}"
             );
         }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Long enough for the pool to start and reach the gate.
+    const SETTLE: Duration = Duration::from_millis(150);
+    /// A pause no test outlasts.
+    const LONG_PAUSE: Duration = Duration::from_secs(60);
+
+    fn fixtures(name: &str, n: usize) -> (PathBuf, Vec<PathBuf>) {
+        let dir = dir(name);
+        let bytes = fixture(1, &jpeg(64, 48));
+        let paths = (0..n)
+            .map(|i| write(&dir, &format!("{i}.ARW"), &bytes))
+            .collect();
+        (dir, paths)
+    }
+
+    /// Run one pass on two threads through `slots`, pushing each index
+    /// delivered to `seen`.
+    fn pass(
+        analysis: bool,
+        paths: &[PathBuf],
+        slots: &ReadSlots,
+        cancel: &AtomicBool,
+        seen: &Mutex<Vec<usize>>,
+    ) {
+        let focus = ScanFocus::with_slots(slots.clone());
+        let delivered = |i| seen.lock().unwrap().push(i);
+        if analysis {
+            let on_item = |i, _| delivered(i);
+            extract_analysis_all(paths, 2, Priority::Normal, &focus, on_item, cancel)
+        } else {
+            let on_item = |i, _| delivered(i);
+            extract_all(paths, 2, Priority::Normal, &focus, on_item, cancel)
+        }
+        .unwrap();
+    }
+
+    fn sorted(seen: Mutex<Vec<usize>>) -> Vec<usize> {
+        let mut seen = seen.into_inner().unwrap();
+        seen.sort();
+        seen
+    }
+
+    #[test]
+    fn no_more_slots_are_live_than_the_cap() {
+        let cap = 2;
+        let slots = ReadSlots::new(cap);
+        let cancel = AtomicBool::new(false);
+        let live = Mutex::new((0usize, 0usize));
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| {
+                    for _ in 0..5 {
+                        let _slot = slots.acquire(&cancel).unwrap();
+                        {
+                            let mut live = live.lock().unwrap();
+                            live.0 += 1;
+                            live.1 = live.1.max(live.0);
+                        }
+                        std::thread::sleep(Duration::from_millis(2));
+                        live.lock().unwrap().0 -= 1;
+                    }
+                });
+            }
+        });
+        let (now, peak) = live.into_inner().unwrap();
+        assert_eq!(now, 0);
+        assert!((1..=cap).contains(&peak), "peak of {peak} live slots");
+
+        let first = slots.acquire(&cancel);
+        let second = slots.acquire(&cancel);
+        assert!(
+            first.is_some() && second.is_some(),
+            "the whole cap is usable"
+        );
+    }
+
+    #[test]
+    fn a_scan_reads_only_through_a_free_slot_and_delivers_every_index_once() {
+        let (dir, paths) = fixtures("capped", 6);
+        for analysis in [false, true] {
+            let slots = ReadSlots::new(1);
+            let cancel = AtomicBool::new(false);
+            let seen = Mutex::new(Vec::new());
+            std::thread::scope(|s| {
+                let held = slots.acquire(&cancel);
+                let scan = s.spawn(|| pass(analysis, &paths, &slots, &cancel, &seen));
+                std::thread::sleep(SETTLE);
+                assert!(
+                    seen.lock().unwrap().is_empty(),
+                    "no read without the one slot, analysis pass: {analysis}"
+                );
+                drop(held);
+                scan.join().unwrap();
+            });
+            assert_eq!(sorted(seen), (0..6).collect::<Vec<_>>());
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn no_worker_reads_during_a_pause_and_all_do_once_it_ends() {
+        let (dir, paths) = fixtures("paused", 6);
+        for analysis in [false, true] {
+            let slots = ReadSlots::with_max_pause(usize::MAX, LONG_PAUSE);
+            let cancel = AtomicBool::new(false);
+            let seen = Mutex::new(Vec::new());
+            std::thread::scope(|s| {
+                let paused = slots.pause();
+                let scan = s.spawn(|| pass(analysis, &paths, &slots, &cancel, &seen));
+                std::thread::sleep(SETTLE);
+                assert!(
+                    seen.lock().unwrap().is_empty(),
+                    "no read while paused, analysis pass: {analysis}"
+                );
+                drop(paused);
+                scan.join().unwrap();
+            });
+            assert_eq!(sorted(seen), (0..6).collect::<Vec<_>>());
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn two_pauses_hold_until_the_last_one_ends() {
+        let slots = ReadSlots::with_max_pause(1, LONG_PAUSE);
+        let cancel = AtomicBool::new(false);
+        let (first, second) = (slots.pause(), slots.pause());
+        std::thread::scope(|s| {
+            let worker = s.spawn(|| slots.acquire(&cancel).is_some());
+            drop(first);
+            std::thread::sleep(SETTLE);
+            assert!(!worker.is_finished(), "one pause is still on");
+            drop(second);
+            assert!(worker.join().unwrap());
+        });
+    }
+
+    #[test]
+    fn a_pause_dropped_by_a_panic_releases_the_workers() {
+        let (dir, paths) = fixtures("pause-panic", 4);
+        let slots = ReadSlots::with_max_pause(usize::MAX, LONG_PAUSE);
+        let cancel = AtomicBool::new(false);
+        let seen = Mutex::new(Vec::new());
+        std::thread::scope(|s| {
+            let paused = slots.pause();
+            let scan = s.spawn(|| pass(false, &paths, &slots, &cancel, &seen));
+            std::thread::sleep(SETTLE);
+            assert!(seen.lock().unwrap().is_empty());
+            let panicked = catch_unwind(AssertUnwindSafe(move || {
+                let _paused = paused;
+                panic!("a panic while paused");
+            }));
+            assert!(panicked.is_err());
+            scan.join().unwrap();
+        });
+        assert_eq!(sorted(seen), (0..4).collect::<Vec<_>>());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_slot_dropped_by_a_panic_frees_its_permit() {
+        let slots = ReadSlots::new(1);
+        let cancel = AtomicBool::new(false);
+        let panicked = catch_unwind(AssertUnwindSafe(|| {
+            let _slot = slots.acquire(&cancel);
+            panic!("a panic inside the read");
+        }));
+        assert!(panicked.is_err());
+        assert!(slots.acquire(&cancel).is_some());
+    }
+
+    #[test]
+    fn a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit() {
+        let (dir, paths) = fixtures("wait-cancel", 6);
+        for on_pause in [true, false] {
+            let slots = ReadSlots::with_max_pause(1, LONG_PAUSE);
+            let cancel = AtomicBool::new(false);
+            let seen = Mutex::new(Vec::new());
+            std::thread::scope(|s| {
+                let paused = on_pause.then(|| slots.pause());
+                let slot = (!on_pause).then(|| slots.acquire(&cancel));
+                let scan = s.spawn(|| pass(false, &paths, &slots, &cancel, &seen));
+                std::thread::sleep(SETTLE);
+                let canceled = Instant::now();
+                cancel.store(true, Ordering::Relaxed);
+                scan.join().unwrap();
+                let took = canceled.elapsed();
+                assert!(took < Duration::from_secs(1), "took {took:?}");
+                drop((paused, slot));
+            });
+            assert_eq!(sorted(seen), Vec::<usize>::new(), "paused: {on_pause}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_cancel_is_answered_before_a_free_permit() {
+        let slots = ReadSlots::default();
+        assert!(slots.acquire(&AtomicBool::new(true)).is_none());
+    }
+
+    #[test]
+    fn a_pause_held_throughout_only_slows_the_scan() {
+        let (dir, paths) = fixtures("pause-held", 6);
+        let max_pause = Duration::from_millis(20);
+        let slots = ReadSlots::with_max_pause(usize::MAX, max_pause);
+        let seen = Mutex::new(Vec::new());
+        let _paused = slots.pause();
+        let started = Instant::now();
+        pass(false, &paths, &slots, &AtomicBool::new(false), &seen);
+        let took = started.elapsed();
+        assert_eq!(sorted(seen), (0..6).collect::<Vec<_>>());
+        assert!(took >= max_pause * 3, "6 files on 2 workers, took {took:?}");
+        assert!(took < Duration::from_secs(5), "took {took:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

@@ -91,7 +91,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 
 ## Steps
 
-- [ ] Step 1: Add `ReadSlots` (cap + pause) to the scan's reads and pause from `preview`
+- [x] Step 1: Add `ReadSlots` (cap + pause) to the scan's reads and pause from `preview`
   - Done when:
     - `riffle_core::scan::ReadSlots` exists: `new(cap)`, `acquire(&self,
       cancel: &AtomicBool) -> Option<ReadSlot>`, `pause(&self) -> Paused`;

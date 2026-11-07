@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use riffle_core::scan::ScanFocus;
+use riffle_core::scan::{ReadSlots, ScanFocus};
 use riffle_core::xmp::LabelNames;
 use serde_json::Value;
 use tauri::ipc::Response;
@@ -1054,10 +1054,13 @@ pub async fn metadata(path: String) -> Result<Metadata, String> {
 }
 
 #[tauri::command]
-pub async fn preview(path: String) -> Result<Response, String> {
-    let bytes = tauri::async_runtime::spawn_blocking(move || read_preview(Path::new(&path)))
-        .await
-        .map_err(|e| e.to_string())??;
+pub async fn preview(app: tauri::AppHandle, path: String) -> Result<Response, String> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || {
+        let _paused = app.state::<AppReadSlots>().0.pause();
+        read_preview(Path::new(&path))
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     Ok(Response::new(payload(
         PREVIEW_KIND_JPEG_V1,
         bytes.0,
@@ -1319,6 +1322,23 @@ pub fn spawn_eviction(app: tauri::AppHandle) {
 fn scan_threads() -> usize {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     cores.saturating_sub(2).max(1)
+}
+
+/// Scan workers inside a file read at once: all of them, so only the pause
+/// holds a read back until a smaller cap is measured.
+fn read_slots() -> usize {
+    scan_threads()
+}
+
+/// The read slots of every scan, and what `preview` pauses them through. App
+/// state rather than a field of `ScansState`: `preview` must not wait for the
+/// `Scans` lock, which a clear, a trash run or the eviction holds for seconds.
+pub struct AppReadSlots(ReadSlots);
+
+impl Default for AppReadSlots {
+    fn default() -> Self {
+        AppReadSlots(ReadSlots::new(read_slots()))
+    }
 }
 
 /// Threads the third pass runs on: a quarter of the cores. It runs while the
@@ -1759,7 +1779,7 @@ pub async fn start_scan(app: tauri::AppHandle, scan_id: u64) -> Result<(), Strin
             return Ok(());
         };
         let PendingScan { dir, todo, cancel } = pending;
-        let focus = ScanFocus::default();
+        let focus = ScanFocus::with_slots(app.state::<AppReadSlots>().0.clone());
 
         let handle = tauri::async_runtime::spawn_blocking({
             let cancel = cancel.clone();
