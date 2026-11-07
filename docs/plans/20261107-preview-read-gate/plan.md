@@ -199,6 +199,12 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       exists, `learnings.md` says the cap is untested on NVMe and what it
       is expected to cost there (a shallower queue costs more on a drive
       that needs deep queues for throughput, which the user's C: may show).
+    - HDR PQ CR3: because Step 1 holds the slot and the pause across
+      `hevc::to_jpeg` (65-125 ms of CPU per HDR PQ CR3, `docs/humans/performance.md`),
+      one run on a folder of HDR PQ CR3 files at the baseline and at each
+      candidate cap (1 / 2 at least) is recorded in the same table, or the
+      read is split from the decode (see `learnings.md`'s deferred issues)
+      before the cap is picked. The ARW sweep alone cannot show this.
     - `mise run ci` passes.
   - Implementation approach:
     - Assumes Step 1 is merged. The test builds its own `ScanFocus` with a

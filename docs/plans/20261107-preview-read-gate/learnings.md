@@ -38,3 +38,14 @@
   it. `acquire` now returns `None` first and nothing can set the flag during
   the read without a test hook in `read_preview`. Basis: Step 1's change to
   that test, `crates/core/src/scan.rs`.
+- **The slot and the pause cover `hevc::to_jpeg` for an HDR PQ CR3, not the
+  read alone.** `read_preview` ends in the HEVC decode (65-125 ms of CPU per
+  file), which runs inside `slots.acquire` in the three scan sites and inside
+  `preview`'s pause. At Step 1's cap of `scan_threads()` this changes nothing,
+  but `preview` on such a file pauses the scan for the decode too, and a small
+  cap (1 or 2) would also limit concurrent HEVC decodes while permits sit idle
+  at the disk. Fix: have a `reader` function return the undecoded
+  `(arw, bytes, codec)` so the guard covers the bytes and `to_jpeg` runs
+  outside it. Until then Step 2's done-when requires an HDR PQ CR3 run so the
+  cap is not picked blind to it. Basis: review round 1 item 1,
+  `crates/core/src/scan.rs`, `crates/core/src/reader.rs`.
