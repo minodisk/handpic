@@ -182,7 +182,7 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
       text.
     - Keep the per-file move as is (speed is Step 4).
 
-- [ ] Step 3: Keep holding `Scans` across the move, but stop `scan_folder` from parking a runtime worker on it
+- [x] Step 3: Keep holding `Scans` across the move, but stop `scan_folder` from parking a runtime worker on it
   - Done when:
     - Decision recorded in `docs/agents/tauri-app.md`: `trash_files` (and
       the undo / redo, and Step 5's delete) keep holding the `Scans` lock
@@ -395,3 +395,4 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 
 - (2026-11-06) Step 1 complete
 - (2026-11-07) Step 2 complete
+- (2026-11-07) Step 3 complete

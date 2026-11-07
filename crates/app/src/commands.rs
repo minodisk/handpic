@@ -1363,15 +1363,21 @@ pub struct ScanStarted {
 /// `scan-done` and `faces-done` for this `scan_id` in those cases.
 #[tauri::command]
 pub async fn scan_folder(app: tauri::AppHandle, dir: String) -> Result<ScanStarted, String> {
-    let scans = app.state::<Scans>();
+    // A trash run holds the `Scans` lock for as long as its move takes.
     let (scan_id, previous, previous_embedding, _preparing) = {
-        let mut state = index::lock(&scans.0);
-        let scan_id = state.next_id();
-        state.latest_id = scan_id;
-        let previous_embedding = state.in_embed_pass();
-        let previous = state.running.take();
-        let preparing = Preparing::start(app.clone(), &mut state);
-        (scan_id, previous, previous_embedding, preparing)
+        let app = app.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let scans = app.state::<Scans>();
+            let mut state = index::lock(&scans.0);
+            let scan_id = state.next_id();
+            state.latest_id = scan_id;
+            let previous_embedding = state.in_embed_pass();
+            let previous = state.running.take();
+            let preparing = Preparing::start(app.clone(), &mut state);
+            (scan_id, previous, previous_embedding, preparing)
+        })
+        .await
+        .map_err(|e| e.to_string())?
     };
     let canonical = canonicalize(&dir);
     crate::watch::set(&app, &canonical, &dir);
@@ -1515,6 +1521,7 @@ pub async fn scan_folder(app: tauri::AppHandle, dir: String) -> Result<ScanStart
     );
 
     let total = todo.len();
+    let scans = app.state::<Scans>();
     let mut state = index::lock(&scans.0);
     if state.latest_id != scan_id {
         // A later `scan_folder` has superseded this one while it was
