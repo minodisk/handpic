@@ -108,7 +108,9 @@ collapsed into one rerun; the shared weights and the per-genre offsets stored in
 `src/commands.rs` the Tauri commands, including `set_scan_focus`, which hands
 the running scan the current file and the strip's visible range,
 `cancel_scan`, which stops the running scan short of its third pass for a
-held Move to Trash, `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
+held Move to Trash or Delete Permanently, `delete_files`, the strip's
+`Delete Permanently…`, `trash_files`'s guards and grouping with
+`std::fs::remove_file` and no recorded run (`trash::delete_for_good`), `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
 draws on demand through the scan's `detect_around` without touching the index,
 `genres_of`, which gives the folder's genre labels from its stored
 embeddings, and `eyes_of`, which judges with `eyes` whether the eyes of the shown file's
@@ -193,8 +195,11 @@ formatted, linted, type-checked and tested by `mise run ci`; its
 classes every control uses (see `docs/agents/ui-styling.md`),
 `src/icons.ts` the inlined Lucide icons,
 `src/context.ts` builds the items of the strip's HTML right-click menu
-(including the file's reveal item and `Copy Path` / `Copy File Name`, which
-copy every targeted file, one per line),
+(including the file's reveal item, `Copy Path` / `Copy File Name`, which
+copy every targeted file, one per line, and `Move to Trash…` / `Delete
+Permanently…`),
+`src/trash.ts` the text and flow of the dialog those two share, a delete's
+keys that do not confirm (`swallowedByDelete`) and their status lines,
 `src/focus.ts` places the `f` focus mark and the face boxes' five landmark
 dots and labels (score, box size and eye distance in stored preview px) and holds the good-photo rule
 (`photoTier`: the AF eyes in focus, the eyes open and the face toward the

@@ -851,6 +851,7 @@ fn main() {
             commands::index_size,
             commands::clear_index,
             commands::trash_files,
+            commands::delete_files,
             commands::trash_rejected_undo,
             commands::trash_rejected_redo,
             datefolder::date_folder_preview,

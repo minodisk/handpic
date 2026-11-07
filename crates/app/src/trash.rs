@@ -7,6 +7,9 @@
 //! closures so the tests never touch the real Trash. What an undo brought
 //! back is kept in `Runs` too, and `redo` moves exactly those files to the
 //! Trash again for `commands::trash_rejected_redo`.
+//! `delete_for_good` runs the same grouping and loop with a remover instead
+//! of a mover, for `commands::delete_files`: nothing is recorded, as nothing
+//! can come back.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -330,6 +333,103 @@ pub fn run(
         progress(at + 1, total);
     }
     (summary, moved)
+}
+
+/// The remover of `commands::delete_files`: the file is gone, not in the
+/// Trash.
+pub fn remove_one(path: &Path) -> Result<Option<PathBuf>, String> {
+    std::fs::remove_file(path)
+        .map(|()| None)
+        .map_err(|e| e.to_string())
+}
+
+/// Delete `paths` of `dir` with `remover`, grouped and ordered as a move to
+/// the Trash is: a RAW first, its sidecars only if it went, a JPEG alone, and
+/// a path of another folder a `Failure`, never touched. The summary's
+/// `run_id` stays `None`, so no undo is offered. `files` is the listing of
+/// `dir`: a `.xmp` shared by name with a RAW that is not among `paths` (a
+/// `FOO.xmp` of `FOO.ARW` and `FOO.DNG`) is kept, as nothing can bring it
+/// back and the kept RAW still uses it.
+pub fn delete_for_good(
+    dir: &Path,
+    paths: &[String],
+    files: &[String],
+    sidecars: &HashMap<String, SidecarStat>,
+    remover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    progress: impl FnMut(usize, usize),
+) -> Summary {
+    let (mut groups, foreign) = groups_of(dir, paths, sidecars);
+    let name_of = |path: &str| {
+        Path::new(path)
+            .file_name()
+            .map(|name| name.to_string_lossy().to_lowercase())
+    };
+    let stem_of = |path: &str| {
+        Path::new(path)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_lowercase())
+    };
+    let chosen: std::collections::HashSet<String> = groups
+        .iter()
+        .filter_map(|group| name_of(&group.raw.to_string_lossy()))
+        .collect();
+    let kept_stems: std::collections::HashSet<String> = files
+        .iter()
+        .filter(|file| {
+            riffle_core::scan::is_raw_file(Path::new(file.as_str()))
+                && name_of(file).is_some_and(|name| !chosen.contains(&name))
+        })
+        .filter_map(|file| stem_of(file))
+        .collect();
+    for group in &mut groups {
+        group.sidecars.retain(|sidecar| {
+            let is_xmp = sidecar
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"));
+            let shared = sidecar
+                .file_stem()
+                .is_some_and(|stem| kept_stems.contains(&stem.to_string_lossy().to_lowercase()));
+            !(is_xmp && shared)
+        });
+    }
+    // A `.xmp` shared by several selected RAWs goes after `run`, and only
+    // when every one of them went: otherwise a RAW that failed would lose it.
+    let mut users: HashMap<PathBuf, Vec<String>> = HashMap::new();
+    for group in &groups {
+        for sidecar in &group.sidecars {
+            if sidecar
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"))
+            {
+                users
+                    .entry(sidecar.clone())
+                    .or_default()
+                    .push(group.raw.to_string_lossy().into_owned());
+            }
+        }
+    }
+    users.retain(|_, raws| raws.len() > 1);
+    for group in &mut groups {
+        group
+            .sidecars
+            .retain(|sidecar| !users.contains_key(sidecar));
+    }
+    let shared = users;
+    let mut remover = remover;
+    let (mut summary, _) = run(groups, &mut remover, progress);
+    for (sidecar, raws) in shared {
+        if !raws.iter().all(|raw| summary.moved.contains(raw)) {
+            continue;
+        }
+        if let Err(message) = remover(&sidecar) {
+            summary.failed.push(Failure {
+                path: sidecar.to_string_lossy().into_owned(),
+                message,
+            });
+        }
+    }
+    summary.failed.extend(foreign);
+    summary
 }
 
 /// How many groups `run_chunked` moves per shell operation: about 30 times
@@ -711,9 +811,10 @@ pub fn newest_by_path(items: Vec<::trash::TrashItem>) -> HashMap<String, ::trash
 #[cfg(test)]
 mod tests {
     use super::{
-        create_missing, groups_of, newest_by_path, redo, redo_chunked, relocate, restore,
-        restore_recorded, run, run_chunked, trash_key, Group, Restored, Runs, TrashRun, Trashed,
-        ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
+        create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked, relocate,
+        remove_one, restore, restore_recorded, run, run_chunked, trash_key, Group, Restored, Runs,
+        Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH,
+        RAW_NOT_RESTORED,
     };
     use crate::commands::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
@@ -1309,6 +1410,190 @@ mod tests {
         assert_eq!(restored.restored, ["a.jpg", "b.JPEG"]);
         assert!(restored.failed.is_empty());
         assert_eq!(asked, ["a.jpg", "b.JPEG"]);
+    }
+
+    fn delete_in(
+        dir: &Path,
+        names: &[&str],
+        remover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    ) -> Summary {
+        let listing = read_listing(dir, Some(SidecarFormat::Both)).unwrap();
+        let paths: Vec<String> = names.iter().map(|name| key(&dir.join(name))).collect();
+        delete_for_good(
+            dir,
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            remover,
+            |_, _| {},
+        )
+    }
+
+    #[test]
+    fn a_delete_removes_each_raw_then_its_sidecars_and_keeps_no_run() {
+        let dir = temp_dir("delete-order");
+        for name in ["a.ARW", "a.xmp", "a.ARW.dop", "b.ARW", "c.ARW"] {
+            write(&dir.join(name));
+        }
+        let mut order = Vec::new();
+        let summary = delete_in(&dir, &["a.ARW", "b.ARW"], |path| {
+            order.push(path.file_name().unwrap().to_string_lossy().into_owned());
+            remove_one(path)
+        });
+        assert_eq!(order[0], "a.ARW");
+        assert_eq!(order[3], "b.ARW");
+        order[1..3].sort();
+        assert_eq!(order[1..3], ["a.ARW.dop", "a.xmp"]);
+        assert_eq!(
+            summary.moved,
+            [key(&dir.join("a.ARW")), key(&dir.join("b.ARW"))]
+        );
+        assert!(summary.failed.is_empty());
+        assert_eq!(summary.run_id, None);
+        for name in ["a.ARW", "a.xmp", "a.ARW.dop", "b.ARW"] {
+            assert!(!dir.join(name).exists(), "{name}");
+        }
+        assert!(dir.join("c.ARW").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_raw_a_delete_fails_on_keeps_its_sidecars_and_is_reported() {
+        let dir = temp_dir("delete-failure");
+        for name in ["fail.ARW", "fail.xmp", "ok.ARW", "ok.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["fail.ARW", "ok.ARW"], |path| {
+            if path.file_name().unwrap() == "fail.ARW" {
+                return Err("locked".to_string());
+            }
+            remove_one(path)
+        });
+        assert_eq!(summary.moved, [key(&dir.join("ok.ARW"))]);
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("fail.ARW")));
+        assert_eq!(summary.failed[0].message, "locked");
+        assert!(dir.join("fail.ARW").exists());
+        assert!(dir.join("fail.xmp").exists());
+        assert!(!dir.join("ok.ARW").exists());
+        assert!(!dir.join("ok.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_delete_keeps_an_xmp_a_kept_raw_shares() {
+        let dir = temp_dir("delete-shared-xmp");
+        for name in ["a.ARW", "a.DNG", "a.xmp", "a.ARW.dop", "b.ARW", "b.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["a.ARW", "b.ARW"], remove_one);
+        assert_eq!(summary.moved.len(), 2);
+        assert!(!dir.join("a.ARW").exists());
+        assert!(!dir.join("a.ARW.dop").exists());
+        assert!(dir.join("a.xmp").exists());
+        assert!(dir.join("a.DNG").exists());
+        assert!(!dir.join("b.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_delete_removes_an_xmp_two_selected_raws_share_once_both_went() {
+        let dir = temp_dir("delete-shared-both");
+        for name in ["a.ARW", "a.DNG", "a.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["a.ARW", "a.DNG"], remove_one);
+        assert_eq!(summary.moved.len(), 2);
+        assert!(summary.failed.is_empty(), "{:?}", summary.failed);
+        assert!(!dir.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_delete_keeps_an_xmp_when_one_of_the_raws_sharing_it_fails() {
+        let dir = temp_dir("delete-shared-failure");
+        for name in ["a.ARW", "a.DNG", "a.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["a.ARW", "a.DNG"], |path| {
+            if path.file_name().unwrap() == "a.ARW" {
+                return Err("locked".to_string());
+            }
+            remove_one(path)
+        });
+        assert_eq!(summary.moved, [key(&dir.join("a.DNG"))]);
+        assert_eq!(summary.failed.len(), 1);
+        assert!(dir.join("a.ARW").exists());
+        assert!(dir.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_refused_foreign_raw_does_not_stand_for_the_kept_one_of_its_name() {
+        let dir = temp_dir("delete-foreign-same-name");
+        let other = temp_dir("delete-foreign-same-name-other");
+        for path in [
+            dir.join("a.DNG"),
+            dir.join("a.ARW"),
+            dir.join("a.xmp"),
+            other.join("a.DNG"),
+        ] {
+            write(&path);
+        }
+        let listing = read_listing(&dir, Some(SidecarFormat::Both)).unwrap();
+        let paths = [key(&other.join("a.DNG")), key(&dir.join("a.ARW"))];
+        let summary = delete_for_good(
+            &dir,
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            remove_one,
+            |_, _| {},
+        );
+        assert_eq!(summary.moved, [key(&dir.join("a.ARW"))]);
+        assert!(dir.join("a.DNG").exists());
+        assert!(dir.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn a_delete_takes_a_jpeg_alone() {
+        let dir = temp_dir("delete-jpeg");
+        for name in ["d.jpg", "d.xmp"] {
+            write(&dir.join(name));
+        }
+        let summary = delete_in(&dir, &["d.jpg"], remove_one);
+        assert_eq!(summary.moved, [key(&dir.join("d.jpg"))]);
+        assert!(!dir.join("d.jpg").exists());
+        assert!(dir.join("d.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_delete_refuses_a_path_outside_the_folder_and_reports_it() {
+        let dir = temp_dir("delete-foreign");
+        let other = temp_dir("delete-foreign-other");
+        for path in [dir.join("x.xmp"), dir.join("y.ARW"), other.join("x.ARW")] {
+            write(&path);
+        }
+        let listing = read_listing(&dir, Some(SidecarFormat::Both)).unwrap();
+        let paths = [key(&other.join("x.ARW")), key(&dir.join("y.ARW"))];
+        let summary = delete_for_good(
+            &dir,
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            remove_one,
+            |_, _| {},
+        );
+        assert_eq!(summary.moved, [key(&dir.join("y.ARW"))]);
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, paths[0]);
+        assert!(other.join("x.ARW").exists());
+        assert!(dir.join("x.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&other);
     }
 
     #[test]

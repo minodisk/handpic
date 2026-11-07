@@ -87,9 +87,8 @@ pending flush can itself create the file the refusal needs to see.
 
 - Source: `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md`, Steps 1 and 3.
 
-`trash_files`, `trash_rejected_undo` and `trash_rejected_redo` hold the lock
-across the whole operation, even a move of minutes, and so must a permanent
-delete. Releasing it between files would let a rescan index a half-moved
+`trash_files`, `delete_files`, `trash_rejected_undo` and `trash_rejected_redo`
+hold the lock across the whole operation, even a move of minutes. Releasing it between files would let a rescan index a half-moved
 folder and race the operation's own reconcile.
 
 - A `scan_folder` issued meanwhile waits, which is acceptable because the
@@ -1906,6 +1905,36 @@ folder changed" event has to pick the right one.
   Only the invoke's own `.then` / `.catch` clear the flag, not `done()`, which
   also runs when the guards drop the move and would clear another's flag. A
   held trash is still replaced by a later request as before.
+- `Delete Permanently…` is the same operation with another mover, so it takes
+  every guard above: `delete_files` is `trash_files`'s shape on `trash::run`
+  with `trash::remove_one`, never `run_chunked` (a removal pays no shell
+  operation), `trash-progress` with `op: "delete"`, the `trashing` flag for
+  either, the `cancelsScan` label `"Delete Permanently"`, and `trashed()`'s
+  `resync("trash")`, whose `reconcile` drops the index rows. It records no run,
+  so `summary.run_id` is `null`, which pushes no history entry and clears no
+  redo. `trashed()` therefore prunes the deleted paths from the judgment
+  batches of `history` and `redoable` itself (`withoutPaths`, then
+  `isEmptyBatch`), as no trash entry sits above them to guard an undo. The
+  backend keeps a `.xmp` that a RAW of the listing outside the selection still
+  shares by stem (`delete_for_good`'s `files`), and the dialog says so. A
+  `.xmp` shared by several selected RAWs is taken out of their groups and
+  removed after `run`, through the remover (a failure is reported), only once
+  every one of them is in `summary.moved`: a RAW that failed keeps its sidecar,
+  and a fully successful delete reports no false failure from the second group
+  hitting NotFound. Do not put it back in the groups. `chosen` is built from the
+  groups, not the paths, so a refused foreign path never stands for a kept RAW.
+  It is on purpose not in `shortcuts.rs` or `mcp.rs`.
+- It shares `trash-dialog` too (`dialogText`, `TrashTarget.mode`), but no key may
+  say yes to it. The dialog focuses Cancel, and `trashKeydown` swallows Enter
+  and Space by `event.key`, not `keyName`, whose `shift+enter` is a different
+  name for a key that clicks the button just the same, plus any `event.repeat`,
+  a key held from before the dialog opened. `runTrash` takes a click only when
+  `confirmsDelete` says so, `detail` exactly 1: 0 is what a keyboard-made click
+  carries, so a WebView that clicks on Space's keyup despite the
+  `preventDefault` still deletes nothing, and 2 or more is the second click of
+  a double-click on the menu item, which can land on the run button the first
+  click's dialog put under the cursor. Tab can reach
+  the run button; that is harmless for the same reason.
 - `IdleGate.request(label, run, cancel?)` returns whether it held `run`; the
   optional `cancel` fires when the held operation is replaced by a later
   `request` or dropped by `discard()`, never when `drain()` runs it. The two

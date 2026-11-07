@@ -116,8 +116,9 @@ describe("IdleGate", () => {
 });
 
 describe("cancelsScan", () => {
-  test("is true for Move to Trash", () => {
+  test("is true for Move to Trash and Delete Permanently", () => {
     expect(cancelsScan("Move to Trash")).toBe(true);
+    expect(cancelsScan("Delete Permanently")).toBe(true);
   });
 
   test("is false for the operations that wait out the scan, and for none", () => {

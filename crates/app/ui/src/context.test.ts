@@ -26,17 +26,17 @@ const unset = { rating: null, flag: "none" as const, label: null };
 const reveal = "Reveal in File Explorer";
 
 describe("contextMenuGroups", () => {
-  test("greys out Move to Trash… alone while a move is in flight", () => {
+  test("greys out Move to Trash… and Delete Permanently… alone while either is in flight", () => {
     const disabled = (trashing: boolean): string[] =>
       contextMenuGroups(defaults, unset, reveal, false, 1, trashing)
         .flat()
         .filter((item) => item.disabled === true)
         .map((item) => item.action);
-    expect(disabled(true)).toEqual(["trashFiles"]);
+    expect(disabled(true)).toEqual(["trashFiles", "deleteFiles"]);
     expect(disabled(false)).toEqual([]);
   });
 
-  test("lists Select All, the reveal and copy items, the flag, rating and label groups, Rename…, then Move to Trash…", () => {
+  test("lists Select All, the reveal and copy items, the flag, rating and label groups, Rename…, then Move to Trash… and Delete Permanently…", () => {
     const groups = contextMenuGroups(defaults, unset, reveal);
     expect(groups.map((group) => group.map(({ action, label }) => [action, label]))).toEqual([
       [["selectAll", "Select All"]],
@@ -69,7 +69,10 @@ describe("contextMenuGroups", () => {
         ["clearlabel", "No label"],
       ],
       [["renameFile", "Rename…"]],
-      [["trashFiles", "Move to Trash…"]],
+      [
+        ["trashFiles", "Move to Trash…"],
+        ["deleteFiles", "Delete Permanently…"],
+      ],
     ]);
   });
 
@@ -94,7 +97,7 @@ describe("contextMenuGroups", () => {
         "ctrl+alt+0",
       ],
       [""],
-      [""],
+      ["", ""],
     ]);
   });
 
@@ -125,7 +128,7 @@ describe("contextMenuGroups", () => {
     const shortcuts = contextMenuGroups([], unset, reveal).flatMap((group) =>
       group.map((item) => item.shortcut),
     );
-    expect(shortcuts).toHaveLength(23);
+    expect(shortcuts).toHaveLength(24);
     expect(shortcuts.every((shortcut) => shortcut === "")).toBe(true);
   });
 
@@ -149,7 +152,7 @@ describe("contextMenuGroups", () => {
     expect(checked).toEqual(["pick", "rate3", "orange"]);
   });
 
-  test("keeps only Select All, the reveal and copy items and Move to Trash… in a view-only folder", () => {
+  test("keeps only Select All, the reveal and copy items, Move to Trash… and Delete Permanently… in a view-only folder", () => {
     expect(contextMenuGroups(defaults, unset, reveal, true)).toEqual([
       [{ action: "selectAll", label: "Select All", shortcut: "meta+a", checked: undefined }],
       [{ action: "revealFile", label: reveal, shortcut: "", checked: undefined }],
@@ -157,17 +160,28 @@ describe("contextMenuGroups", () => {
         { action: "copyPath", label: "Copy Path", shortcut: "", checked: undefined },
         { action: "copyFileName", label: "Copy File Name", shortcut: "", checked: undefined },
       ],
-      [{ action: "trashFiles", label: "Move to Trash…", shortcut: "", checked: undefined }],
+      [
+        { action: "trashFiles", label: "Move to Trash…", shortcut: "", checked: undefined },
+        { action: "deleteFiles", label: "Delete Permanently…", shortcut: "", checked: undefined },
+      ],
     ]);
   });
 
-  test("names the count of a multi-selection in Move to Trash…", () => {
+  test("names the count of a multi-selection in Move to Trash… and Delete Permanently…", () => {
     expect(contextMenuGroups(defaults, unset, reveal, false, 3).at(-1)).toEqual([
       { action: "trashFiles", label: "Move 3 Files to Trash…", shortcut: "", checked: undefined },
+      {
+        action: "deleteFiles",
+        label: "Delete 3 Files Permanently…",
+        shortcut: "",
+        checked: undefined,
+      },
     ]);
-    expect(contextMenuGroups(defaults, unset, reveal, true, 2).at(-1)?.[0]?.label).toBe(
-      "Move 2 Files to Trash…",
-    );
+    expect(
+      contextMenuGroups(defaults, unset, reveal, true, 2)
+        .at(-1)
+        ?.map((item) => item.label),
+    ).toEqual(["Move 2 Files to Trash…", "Delete 2 Files Permanently…"]);
   });
 
   test("gives the reveal and copy items no shortcut and no checked state", () => {
@@ -189,10 +203,12 @@ describe("contextMenuGroups", () => {
     expect(groups.at(-1)?.[0]?.label).toBe("Move 3 Files to Trash…");
   });
 
-  test("keeps Move to Trash… singular for one file", () => {
-    expect(contextMenuGroups(defaults, unset, reveal, false, 1).at(-1)?.[0]?.label).toBe(
-      "Move to Trash…",
-    );
+  test("keeps Move to Trash… and Delete Permanently… singular for one file", () => {
+    expect(
+      contextMenuGroups(defaults, unset, reveal, false, 1)
+        .at(-1)
+        ?.map((item) => item.label),
+    ).toEqual(["Move to Trash…", "Delete Permanently…"]);
   });
 });
 

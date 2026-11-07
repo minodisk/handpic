@@ -36,13 +36,20 @@ const JUDGMENT_SECTIONS: Entry[][] = [
   [["renameFile", "Rename…"]],
 ];
 
+// The items that name the files they act on when there are several.
+const MANY_FILES: Record<string, ((count: number) => string) | undefined> = {
+  trashFiles: (count) => `Move ${count} Files to Trash…`,
+  deleteFiles: (count) => `Delete ${count} Files Permanently…`,
+};
+
 // `Select All`, then the reveal item, labeled per platform by the
 // `reveal_label` command, and copying the targeted files' paths or names, then
-// the judgment groups and `Rename…`, then `Move to Trash…`. A view-only (JPEG)
-// folder takes no judgment and no rename, so those are left out. `Rename…`
-// and the reveal item act on the focused file alone; the copy items and
-// `Move to Trash…` on the `count` files they target, the latter naming them
-// when there are several, and greyed out while `trashing`, a move in flight.
+// the judgment groups and `Rename…`, then `Move to Trash…` and `Delete
+// Permanently…`. A view-only (JPEG) folder takes no judgment and no rename, so
+// those are left out. `Rename…` and the reveal item act on the focused file
+// alone; the copy items and the last two on the `count` files they target, the
+// last two naming them when there are several, and greyed out while
+// `trashing`, a move or a delete in flight.
 export function contextMenuGroups(
   bindings: Binding[],
   state: MenuState,
@@ -59,17 +66,20 @@ export function contextMenuGroups(
       ["copyFileName", "Copy File Name"],
     ],
     ...(viewOnly ? [] : JUDGMENT_SECTIONS),
-    [["trashFiles", "Move to Trash…"]],
+    [
+      ["trashFiles", "Move to Trash…"],
+      ["deleteFiles", "Delete Permanently…"],
+    ],
   ];
   return sections.map((section) =>
     section.map(([action, label, checked]) => {
       const key = bindings.find((binding) => binding.action === action)?.keys[0];
       return {
         action,
-        label: action === "trashFiles" && count > 1 ? `Move ${count} Files to Trash…` : label,
+        label: (count > 1 ? MANY_FILES[action]?.(count) : undefined) ?? label,
         shortcut: key === undefined ? "" : displayKey(key),
         checked: checked?.(state),
-        ...(action === "trashFiles" && trashing ? { disabled: true } : {}),
+        ...(action in MANY_FILES && trashing ? { disabled: true } : {}),
       };
     }),
   );

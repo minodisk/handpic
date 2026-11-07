@@ -256,7 +256,7 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
     - Measure before touching code; the plan folder note is the step's
       artifact either way.
 
-- [ ] Step 5: Add `Delete Permanently…` to the strip's menu
+- [x] Step 5: Add `Delete Permanently…` to the strip's menu
   - Done when:
     - Backend: `#[tauri::command] pub async fn delete_files(app, dir,
       paths) -> Result<trash::Summary, String>` in `crates/app/src/commands.rs`
@@ -399,3 +399,4 @@ from. Their `ratings` and `views` rows stay, as today, which is what lets
 - (2026-11-07) Step 2 complete
 - (2026-11-07) Step 3 complete
 - (2026-11-07) Step 4 complete
+- (2026-11-07) Step 5 complete

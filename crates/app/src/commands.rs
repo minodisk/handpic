@@ -2826,6 +2826,45 @@ pub async fn trash_files(
     .map_err(|e| e.to_string())?
 }
 
+/// Delete `paths`, files of the folder `dir` as the listing gave them, for
+/// good: not to the Trash, so the space is freed and nothing can bring them
+/// back. The grouping, the order, the refusal of a path outside `dir` and the
+/// guards are `trash_files`'s (see `trash::delete_for_good`), the `Scans` lock
+/// across the whole run included, but no run is recorded and it goes file by
+/// file on every platform, as a removal pays no shell operation. Each group
+/// emits `trash-progress`.
+#[tauri::command]
+pub async fn delete_files(
+    app: tauri::AppHandle,
+    dir: String,
+    paths: Vec<String>,
+) -> Result<trash::Summary, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<trash::Summary, String> {
+        if let Some(writer) = &app.state::<AppWriter>().0 {
+            writer.flush(crate::sidecar::DRAIN_TIMEOUT);
+        }
+        let scans = app.state::<Scans>();
+        let state = index::lock(&scans.0);
+        if state.scanning() {
+            return Err(SCAN_RUNNING.to_string());
+        }
+        let listing = read_listing(Path::new(&canonicalize(&dir)), Some(SidecarFormat::Both))?;
+        let summary = trash::delete_for_good(
+            Path::new(&canonicalize(&dir)),
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            trash::remove_one,
+            |done, total| emit_trash_progress(&app, "delete", &dir, done, total),
+        );
+        log::info!("deleted files permanently: {summary:?}");
+        drop(state);
+        Ok(summary)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Move every file the run `run_id` of `trash_files` (or of `Delete
 /// Sidecars…`) moved back to where it came from, RAW before its sidecars,
 /// never overwriting (see `trash::restore`). An unknown run is an `Err`; a

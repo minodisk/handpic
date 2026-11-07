@@ -1,15 +1,15 @@
 import { relation } from "./tree.js";
 
-// The strip's `Move to Trash…`: the confirmation dialog's text and flow,
-// what the status line says during the run and once it comes back, and
-// whether the open folder was among the folders it trashed in.
+// The strip's `Move to Trash…` and `Delete Permanently…`: the confirmation
+// dialog's text and flow, what the status line says during the run and once it
+// comes back, and whether the open folder was among the folders it ran in.
 
 export type TrashFailure = { path: string; message: string };
 
-// The `Summary` that `trash_files` returns: the RAWs (or JPEGs) it moved,
-// which the frontend prunes its state by, every file whose move to the
-// Trash failed, and the recorded run `trash_rejected_undo` takes back (null
-// when nothing moved).
+// The `Summary` that `trash_files` and `delete_files` return: the RAWs (or
+// JPEGs) that went, which the frontend prunes its state by, every file that
+// failed, and the recorded run `trash_rejected_undo` takes back (null when
+// nothing moved, and always for a delete, which nothing takes back).
 export type TrashSummary = {
   moved: string[];
   failed: TrashFailure[];
@@ -50,21 +50,59 @@ export function filesLine(count: number): string {
   return `Move ${count} ${files(count)} to the Trash?`;
 }
 
-// The operation a `trash-progress` event reports on.
-export type TrashOp = "trash";
+// The strip's `Delete Permanently…` asks in the plainest words: this one has no
+// way back.
+function deleteLine(count: number): string {
+  return count === 1
+    ? "Permanently delete 1 file and its sidecars (a .xmp shared with a file you keep stays)? It is not moved to the Trash and this cannot be undone."
+    : `Permanently delete ${count} files and their sidecars (a .xmp shared with a file you keep stays)? They are not moved to the Trash and this cannot be undone.`;
+}
+
+// The operation a `trash-progress` event reports on, and what the dialog asks.
+export type TrashOp = "trash" | "delete";
+
+export function dialogText(
+  mode: TrashOp,
+  count: number,
+): { title: string; line: string; run: string } {
+  return mode === "delete"
+    ? { title: "Delete Permanently", line: deleteLine(count), run: "Delete Permanently" }
+    : { title: "Move to Trash", line: filesLine(count), run: "Move to Trash" };
+}
+
+// The keys the delete dialog swallows, so only a mouse click confirms: Enter
+// and Space, with or without a modifier, click the focused button, and a repeat
+// is a key still held from before the dialog opened.
+export function swallowedByDelete(event: { key: string; repeat: boolean }): boolean {
+  return event.repeat || event.key === "Enter" || event.key === " ";
+}
+
+// Whether a click on the run button confirms a delete: only a single mouse
+// click. `detail` 0 is a key, and 2 or more is the rest of a double-click that
+// opened the dialog from the menu item under the cursor.
+export function confirmsDelete(event: { detail: number }): boolean {
+  return event.detail === 1;
+}
 
 export type TrashProgress = { op: TrashOp; dir: string; done: number; total: number };
 
-const PROGRESS_LABEL: Record<TrashOp, string> = { trash: "moving to Trash" };
+const PROGRESS_LABEL: Record<TrashOp, string> = { trash: "moving to Trash", delete: "deleting" };
 
 export function progressStatus(op: TrashOp, done: number, total: number): string {
   return `${PROGRESS_LABEL[op]} ${done} / ${total}`;
 }
 
-export function trashedStatus(summary: TrashSummary, what: TrashWhat = "files"): string {
+export function trashedStatus(
+  summary: TrashSummary,
+  what: TrashWhat = "files",
+  mode: TrashOp = "trash",
+): string {
   const count = summary.moved.length;
-  const moved = `Moved ${count} ${noun(count, what)} to the Trash`;
-  return summary.failed.length === 0 ? moved : `${moved}, ${summary.failed.length} failed`;
+  const went =
+    mode === "delete"
+      ? `Deleted ${count} ${noun(count, what)}`
+      : `Moved ${count} ${noun(count, what)} to the Trash`;
+  return summary.failed.length === 0 ? went : `${went}, ${summary.failed.length} failed`;
 }
 
 // The run an undo restored: what it moved and how many files. Its `count`
@@ -118,11 +156,12 @@ export function opensTarget(openDir: string, dirs: string[], ignoreCase = false)
   return dirs.some((dir) => relation(openDir, dir, ignoreCase) === "same");
 }
 
-// The files of the folder `dir` the strip's `Move to Trash…` moves.
-export type TrashTarget = { dir: string; paths: string[] };
+// The files of the folder `dir` the strip's `Move to Trash…` moves, or its
+// `Delete Permanently…` deletes.
+export type TrashTarget = { dir: string; paths: string[]; mode: TrashOp };
 
-// The flow of one trashing, from the menu item through the dialog to the
-// run's end. A second start while one is under way does nothing. The dialog
+// The flow of one trashing or delete, from the menu item through the dialog to
+// the run's end. A second start while one is under way does nothing. The dialog
 // is open while asking and while running; a running move cannot be
 // canceled.
 export class TrashFlow {

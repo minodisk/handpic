@@ -59,5 +59,5 @@ export class IdleGate {
 // Whether the operation held under `label` stops the running scan rather than
 // waiting it out: its files are about to go, so scanning them is wasted.
 export function cancelsScan(label: string | null): boolean {
-  return label === "Move to Trash";
+  return label === "Move to Trash" || label === "Delete Permanently";
 }
