@@ -182,7 +182,7 @@ What is established from the code:
       filter saved before the change with `Bad` checked opens unchecked.
       Record in `learnings.md`.
 
-- [ ] Step 2: The `?` in the `Face focus` section that shows each item's definition
+- [x] Step 2: The `?` in the `Face focus` section that shows each item's definition
   - Done when:
     - `crates/app/ui/src/focus.ts` exports the definition text, built from
       the constants so it cannot drift from the rule: `AF_EYE_HELP:

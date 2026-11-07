@@ -34,6 +34,8 @@ import { type SortKey, orderFiles } from "./sort.js";
 import { burstFrameStep, burstMarks, burstStep, groupBursts, type BurstMember } from "./burst.js";
 import { placeholderRect } from "./zoom.js";
 import {
+  AF_EYE_HELP,
+  AF_EYE_HELP_CLOSING,
   FOCUS_MARK_COLORS,
   FOCUS_MARK_ICONS,
   type FaceReady,
@@ -4858,6 +4860,21 @@ for (const state of ["good", "low"] as const) {
   face.innerHTML = FOCUS_MARK_ICONS[state];
   face.style.color = FOCUS_MARK_COLORS[state];
 }
+const faceFocusHelpToggle = document.getElementById(
+  "filter-face-focus-help-toggle",
+) as HTMLButtonElement;
+const faceFocusHelp = document.getElementById("filter-face-focus-help") as HTMLDivElement;
+// One line per `Face focus` item, under the item's own name.
+for (const state of ["good", "neutral", "low"] as const) {
+  const name = document.createElement("strong");
+  name.textContent = filterMenu.querySelector(`[data-candidate="${state}"]`)!.textContent!.trim();
+  const line = document.createElement("p");
+  line.append(name, ` ${AF_EYE_HELP[state]}`);
+  faceFocusHelp.append(line);
+}
+const faceFocusHelpClosing = document.createElement("p");
+faceFocusHelpClosing.textContent = AF_EYE_HELP_CLOSING;
+faceFocusHelp.append(faceFocusHelpClosing);
 
 function exifSelected(): boolean {
   return [...shownExif.values()].some((set) => set.size > 0);
@@ -4926,9 +4943,17 @@ function rebuildExifMenu(): void {
   filterToggle.classList.toggle("active", filterActive());
 }
 
+function setFaceFocusHelpOpen(open: boolean): void {
+  faceFocusHelp.hidden = !open;
+  faceFocusHelpToggle.setAttribute("aria-expanded", String(open));
+}
+
 function setFilterMenuOpen(open: boolean): void {
   filterMenu.hidden = !open;
   filterToggle.setAttribute("aria-expanded", String(open));
+  if (!open) {
+    setFaceFocusHelpOpen(false);
+  }
 }
 
 // Mirror the sets onto the menu's check marks and the button's lit state.
@@ -4979,6 +5004,12 @@ document.addEventListener("mousedown", (event) => {
   if (!filterMenu.hidden && !(event.target as Element).closest("#filter")) {
     setFilterMenuOpen(false);
   }
+});
+
+faceFocusHelpToggle.addEventListener("click", (event) => {
+  event.stopPropagation();
+  faceFocusHelpToggle.blur();
+  setFaceFocusHelpOpen(!!faceFocusHelp.hidden);
 });
 
 for (const item of filterItems) {
