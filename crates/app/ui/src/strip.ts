@@ -170,7 +170,7 @@ function paintBurst(index: number, cell: Cell): void {
 }
 
 // The focus mark state's icon at the image box's bottom-left, in the mark's
-// color; none when Riffle does not know.
+// color; none for a neutral one.
 function paintTier(index: number, cell: Cell): void {
   const state = tiers.get(index) ?? "neutral";
   const icon = FOCUS_MARK_ICONS[state];

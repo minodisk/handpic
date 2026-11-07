@@ -53,7 +53,7 @@ export const FOCUS_MARK_COLORS = {
 
 // The icon per state on the strip cell and the filter menu's `Face focus` item,
 // in the mark's color: a face for a good photo, the bare frame for a low one, none
-// when Riffle does not know.
+// for a neutral one.
 export const FOCUS_MARK_ICONS = {
   good: SCAN_FACE_SVG,
   low: SCAN_SVG,

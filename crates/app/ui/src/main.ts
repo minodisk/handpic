@@ -3018,9 +3018,9 @@ function refreshRanks(): void {
 // whose recorded point is not trusted, gets no mark. The mark is bright green
 // for a good photo (`photoTier`: the eyes of the face nearest the AF point are
 // sharp and open and the face is toward the camera), gray when that face was
-// judged and the frame is not good (its eyes not sharp included), and
-// white when Riffle does not know: no face near the point, or the second scan
-// pass has not reached the file yet.
+// judged and its eyes are likely not in focus, and white for
+// everything else: a focus candidate that is not good, no face near the point,
+// or a file the second scan pass has not reached yet.
 function drawFocusMark(drawWidth: number, drawHeight: number): void {
   if (!showFocus || files.length === 0) {
     return;
