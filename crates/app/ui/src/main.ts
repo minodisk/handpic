@@ -50,17 +50,19 @@ import { type EyeState, type Eyes, EyesCache, type Pose } from "./eyes.js";
 import { FaceCache, NO_FACES } from "./faces.js";
 import { meshEdges, meshPoints } from "./facemesh.js";
 import {
+  type TrashOp,
   type TrashProgress,
   type TrashRestored,
   type TrashSummary,
   type TrashWhat,
   TrashFlow,
-  filesLine,
+  dialogText,
   opensTarget,
   progressStatus as trashProgressStatus,
   restoredInto,
   restoredStatus,
   stillHeld,
+  swallowedByDelete,
   trashedStatus,
 } from "./trash.js";
 import {
@@ -367,8 +369,9 @@ let scanId: number | null = null;
 let scanning: string | null = null;
 // How far the sequencing run got, or null when none runs.
 let sequencing: string | null = null;
-// How far the move to the Trash in flight got, or null when none runs. Also
-// what refuses a second one: `trashFlow` ended already when the move was held.
+// How far the move to the Trash or the delete in flight got, or null when none
+// runs. Also what refuses a second one: `trashFlow` ended already when the run
+// was held.
 let trashing: string | null = null;
 // The import's status line: the preview being read, then how far the run got;
 // null when neither is under way.
@@ -949,11 +952,12 @@ function renderTitle(): void {
 }
 
 // The confirmation of the strip's `Move to Trash…`, asking with the count
-// alone (`confirmTrashFiles`).
+// alone, and of its `Delete Permanently…` (`confirmTrashFiles`).
 const trashFlow = new TrashFlow();
 // Only its key decisions are used: Escape and Tab, as in the settings modal.
 const trashKeys = new SettingsModal();
 const trashDialog = document.getElementById("trash-dialog") as HTMLDivElement;
+const trashTitle = document.getElementById("trash-title") as HTMLHeadingElement;
 const trashTotal = document.getElementById("trash-total") as HTMLParagraphElement;
 const trashRunButton = document.getElementById("trash-run") as HTMLButtonElement;
 const trashCancelButton = document.getElementById("trash-cancel") as HTMLButtonElement;
@@ -965,8 +969,10 @@ function listItem(text: string): HTMLLIElement {
 }
 
 // Ask whether to move `paths`, files of the open folder taken when the strip's
-// `Move to Trash…` was chosen, to the Trash. Refused while a move is in flight.
-function confirmTrashFiles(paths: string[]): void {
+// `Move to Trash…` was chosen, to the Trash, or for `Delete Permanently…` to
+// delete them. Refused while either is in flight. A delete has no way back, so
+// its dialog opens on Cancel and takes no key as a yes (`trashKeydown`).
+function confirmTrashFiles(paths: string[], mode: TrashOp): void {
   if (
     trashing !== null ||
     openDir === null ||
@@ -977,22 +983,26 @@ function confirmTrashFiles(paths: string[]): void {
     sidecarFlow.busy ||
     dateFolderFlow.busy ||
     importFlow.busy ||
-    !trashFlow.start({ dir: openDir, paths })
+    !trashFlow.start({ dir: openDir, paths, mode })
   ) {
     return;
   }
   setFilterMenuOpen(false);
   setSortMenuOpen(false);
   closeContextMenu();
-  trashTotal.textContent = filesLine(paths.length);
+  const text = dialogText(mode, paths.length);
+  trashTitle.textContent = text.title;
+  trashTotal.textContent = text.line;
+  trashRunButton.textContent = text.run;
   trashRunButton.disabled = false;
   trashCancelButton.disabled = false;
   trashDialog.hidden = false;
-  trashRunButton.focus();
+  (mode === "delete" ? trashCancelButton : trashRunButton).focus();
 }
 
 // Move `paths` of `dir` and their sidecars to the Trash through
-// `trash_files`, at once when no scan runs, else as soon as the scan this
+// `trash_files`, or in the "delete" mode delete them through `delete_files`,
+// at once when no scan runs, else as soon as the scan this
 // cancels has ended: the backend refuses the move until then. The canceled
 // scan leaves files unscanned, so a rescan is queued whatever becomes of the
 // held move. Dropped when another folder was opened meanwhile; the run's result is reported even if one was opened while it
@@ -1002,10 +1012,10 @@ function confirmTrashFiles(paths: string[]): void {
 // end, the dialog closes at once instead and the held closure leaves the
 // dialog alone, since it may belong to another trashing by then; it also
 // waits out any trash dialog that is open or running.
-function trashFilesIn(dir: string, paths: string[]): void {
+function trashFilesIn(dir: string, paths: string[], mode: TrashOp): void {
   const token = folderToken;
   let sync = true;
-  const held = whenIdle("Move to Trash", () => {
+  const held = whenIdle(dialogText(mode, paths.length).title, () => {
     const own = sync;
     const done = (): void => {
       if (own) {
@@ -1025,18 +1035,18 @@ function trashFilesIn(dir: string, paths: string[]): void {
       done();
       return;
     }
-    trashing = trashProgressStatus("trash", 0, paths.length);
+    trashing = trashProgressStatus(mode, 0, paths.length);
     renderMeta();
     settleIdle(
       window.__TAURI__.core
-        .invoke<TrashSummary>("trash_files", { dir, paths })
+        .invoke<TrashSummary>(mode === "delete" ? "delete_files" : "trash_files", { dir, paths })
         .then((summary) => {
           trashing = null;
           done();
           if (summary.run_id !== null) {
             redoable.clear();
           }
-          trashed(summary, [dir]);
+          trashed(summary, [dir], "files", true, mode);
         })
         .catch((err: unknown) => {
           trashing = null;
@@ -1069,18 +1079,23 @@ function closeTrashDialog(): void {
 }
 
 // The confirmed files go to `trashFilesIn`, which closes the dialog once
-// the run comes back.
-function runTrash(): void {
+// the run comes back. A click with `detail` 0 did not come from a mouse, the
+// only yes a delete takes.
+function runTrash(event: MouseEvent): void {
+  if (trashFlow.target?.mode === "delete" && event.detail === 0) {
+    return;
+  }
   const target = trashFlow.run();
   if (target === null) {
     return;
   }
   trashRunButton.disabled = true;
   trashCancelButton.disabled = true;
-  trashFilesIn(target.dir, target.paths);
+  trashFilesIn(target.dir, target.paths, target.mode);
 }
 
-// What a run or a redo does once its files went to the Trash: prune the open
+// What a run or a redo does once its files went to the Trash, or a delete
+// (`mode` "delete", which recorded no run) once they are gone: prune the open
 // folder's state when it was among `dirs`, push the recorded run for undo,
 // report the failures, and re-list the folder. A run of sidecars (`what` is
 // "sidecars") drops the judgments the strip shows instead, and `rescan`
@@ -1091,6 +1106,7 @@ function trashed(
   dirs: string[],
   what: TrashWhat = "files",
   rescan = true,
+  mode: TrashOp = "trash",
 ): void {
   const refresh = openDir !== null && opensTarget(openDir, dirs, folders.ignoreCase);
   if (refresh && what === "sidecars") {
@@ -1121,9 +1137,10 @@ function trashed(
     });
   }
   for (const { path, message } of summary.failed) {
-    errors.add(path, `${baseName(path)}: could not move to the Trash: ${message}`);
+    const failure = mode === "delete" ? "could not delete" : "could not move to the Trash";
+    errors.add(path, `${baseName(path)}: ${failure}: ${message}`);
   }
-  setStatus(trashedStatus(summary, what));
+  setStatus(trashedStatus(summary, what, mode));
   if (refresh && rescan) {
     resync("trash");
   } else if (refresh) {
@@ -1149,6 +1166,10 @@ function dismissTrash(): void {
 
 // Every key stops here while the dialog is open, so none reaches the strip.
 function trashKeydown(event: KeyboardEvent): void {
+  if (trashFlow.target?.mode === "delete" && swallowedByDelete(event)) {
+    event.preventDefault();
+    return;
+  }
   const decision = trashKeys.key(keyName(event));
   if (decision.kind === "close") {
     event.preventDefault();
@@ -3700,7 +3721,9 @@ function openContextMenu(x: number, y: number): void {
       if (action === "renameFile") {
         strip.startRename(index);
       } else if (action === "trashFiles") {
-        confirmTrashFiles(paths);
+        confirmTrashFiles(paths, "trash");
+      } else if (action === "deleteFiles") {
+        confirmTrashFiles(paths, "delete");
       } else if (action === "revealFile") {
         window.__TAURI__.core.invoke("reveal_folder", { path: focused }).catch((err: unknown) => {
           setStatus(String(err));
@@ -4141,7 +4164,7 @@ function startScan(folder: string): Promise<void> {
         })
         .then(() => {
           sendScanFocus();
-          // A trash held while `scan_folder` ran had no id to cancel yet.
+          // A trash or delete held while `scan_folder` ran had no id to cancel yet.
           if (cancelsScan(idle.waiting)) {
             cancelScan();
           }

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   TrashFlow,
+  dialogText,
   filesLine,
   opensTarget,
   progressStatus,
@@ -8,6 +9,7 @@ import {
   restoredStatus,
   shownPath,
   stillHeld,
+  swallowedByDelete,
   trashedStatus,
 } from "./trash.js";
 
@@ -15,6 +17,10 @@ describe("progressStatus", () => {
   test("counts the move", () => {
     expect(progressStatus("trash", 0, 2677)).toBe("moving to Trash 0 / 2677");
     expect(progressStatus("trash", 12, 2677)).toBe("moving to Trash 12 / 2677");
+  });
+
+  test("counts the delete", () => {
+    expect(progressStatus("delete", 12, 2677)).toBe("deleting 12 / 2677");
   });
 });
 
@@ -179,8 +185,60 @@ describe("the confirmation dialog", () => {
   });
 });
 
+describe("trashedStatus of a delete", () => {
+  test("says the files were deleted, and how many failed", () => {
+    const summary = { moved: ["/a.ARW", "/b.ARW"], failed: [], run_id: null };
+    expect(trashedStatus(summary, "files", "delete")).toBe("Deleted 2 files");
+    expect(trashedStatus({ ...summary, moved: ["/a.ARW"] }, "files", "delete")).toBe(
+      "Deleted 1 file",
+    );
+    expect(
+      trashedStatus(
+        { ...summary, failed: [{ path: "/c.ARW", message: "locked" }] },
+        "files",
+        "delete",
+      ),
+    ).toBe("Deleted 2 files, 1 failed");
+  });
+});
+
+describe("dialogText", () => {
+  test("asks a move with the count alone", () => {
+    expect(dialogText("trash", 3)).toEqual({
+      title: "Move to Trash",
+      line: "Move 3 files to the Trash?",
+      run: "Move to Trash",
+    });
+  });
+
+  test("says a delete is permanent, singular for one file", () => {
+    expect(dialogText("delete", 3)).toEqual({
+      title: "Delete Permanently",
+      line: "Permanently delete 3 files and their sidecars? They are not moved to the Trash and this cannot be undone.",
+      run: "Delete Permanently",
+    });
+    expect(dialogText("delete", 1).line).toBe(
+      "Permanently delete 1 file and its sidecars? It is not moved to the Trash and this cannot be undone.",
+    );
+  });
+});
+
+describe("swallowedByDelete", () => {
+  test("takes the keys that click a button and any repeat", () => {
+    expect(swallowedByDelete({ key: "Enter", repeat: false })).toBe(true);
+    expect(swallowedByDelete({ key: " ", repeat: false })).toBe(true);
+    expect(swallowedByDelete({ key: "Escape", repeat: true })).toBe(true);
+    expect(swallowedByDelete({ key: "Tab", repeat: true })).toBe(true);
+  });
+
+  test("leaves Escape and Tab to the dialog", () => {
+    expect(swallowedByDelete({ key: "Escape", repeat: false })).toBe(false);
+    expect(swallowedByDelete({ key: "Tab", repeat: false })).toBe(false);
+  });
+});
+
 describe("TrashFlow", () => {
-  const target = { dir: "/photos", paths: ["/photos/a.ARW"] };
+  const target = { dir: "/photos", paths: ["/photos/a.ARW"], mode: "trash" as const };
 
   test("refuses a second start while one is under way", () => {
     const flow = new TrashFlow();

@@ -87,9 +87,8 @@ pending flush can itself create the file the refusal needs to see.
 
 - Source: `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md`, Steps 1 and 3.
 
-`trash_files`, `trash_rejected_undo` and `trash_rejected_redo` hold the lock
-across the whole operation, even a move of minutes, and so must a permanent
-delete. Releasing it between files would let a rescan index a half-moved
+`trash_files`, `delete_files`, `trash_rejected_undo` and `trash_rejected_redo`
+hold the lock across the whole operation, even a move of minutes. Releasing it between files would let a rescan index a half-moved
 folder and race the operation's own reconcile.
 
 - A `scan_folder` issued meanwhile waits, which is acceptable because the
@@ -1903,6 +1902,22 @@ folder changed" event has to pick the right one.
   `redoTrash` return without invoking, so the press neither reaches the
   backend nor gets held. `trashFlow` is not enough: `closeTrashDialog()` ends
   the flow at once when the move is held, so it is idle through the whole run.
+- `Delete Permanently…` is the same operation with another mover, so it takes
+  every guard above: `delete_files` is `trash_files`'s shape on `trash::run`
+  with `trash::remove_one`, never `run_chunked` (a removal pays no shell
+  operation), `trash-progress` with `op: "delete"`, the `trashing` flag for
+  either, the `cancelsScan` label `"Delete Permanently"`, and `trashed()`'s
+  `resync("trash")`, whose `reconcile` drops the index rows. It records no run,
+  so `summary.run_id` is `null`, which pushes no history entry and clears no
+  redo. It is on purpose not in `shortcuts.rs` or `mcp.rs`.
+- It shares `trash-dialog` too (`dialogText`, `TrashTarget.mode`), but no key may
+  say yes to it. The dialog focuses Cancel, and `trashKeydown` swallows Enter
+  and Space by `event.key`, not `keyName`, whose `shift+enter` is a different
+  name for a key that clicks the button just the same, plus any `event.repeat`,
+  a key held from before the dialog opened. `runTrash` also ignores a click with
+  `detail` 0, what a keyboard-made click carries, so a WebView that clicks on
+  Space's keyup despite the `preventDefault` still deletes nothing. Tab can reach
+  the run button; that is harmless for the same reason.
   Only the invoke's own `.then` / `.catch` clear the flag, not `done()`, which
   also runs when the guards drop the move and would clear another's flag. A
   held trash is still replaced by a later request as before.

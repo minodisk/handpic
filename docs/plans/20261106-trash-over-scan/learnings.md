@@ -94,7 +94,64 @@
 - Beyond the plan's list: `docs/humans/usage.md` / `usage.ja.md`, as the count
   now goes in steps on Windows, plus `docs/agents/tauri-app.md` and `CLAUDE.md`.
 
+## Step 5
+
+- `delete_files` calls `trash::delete_for_good` (`groups_of` + `run` + the
+  `foreign` failures) instead of inlining them, the one piece beyond the plan's
+  shape: the tests then run what the command runs, foreign refusal and
+  `run_id: None` included, on temp folders and without an `AppHandle`.
+  `remove_one` sits in `trash.rs` for the same reason.
+- Enter and Space are swallowed by `event.key`, not `keyName`: `keyName` spells
+  a modified key `shift+enter`, and such a key clicks a focused button too, so
+  a match on `"enter"` would let it through.
+- Beyond the plan, for "only a mouse click confirms": `runTrash` ignores a click
+  with `detail` 0. Space clicks on keyup, and `preventDefault` on keydown stops
+  that only because the engine then never arms the button; that could not be
+  tried here (Riffle was not to be launched), so the guard does not rest on it.
+- Beyond the plan: `trashed()` takes the mode too, or a failed delete would read
+  `could not move to the Trash` in the error list.
+- `crates/app/src/commands.rs`, `docs/agents/tauri-app.md` and this plan are CRLF
+  in the working tree though the index holds LF (`.gitattributes` has `eol=lf`),
+  so a multi-line match on `\n` misses them. `git add` normalizes them.
+- Beyond the plan's docs list: `docs/agents/ui-styling.md` (the destructive
+  button's users); in `usage.md` / `usage.ja.md` the "next to last" wording of
+  `Rename…`, the list of what an import refuses and the view-only menu; in
+  `README.md` / `README.ja.md` the shared `FOO.xmp` note, as a delete destroys
+  it.
+- First `mise run ci` failed in `context.test.ts`, which pins the menu's shape in
+  two more places than the plan names: `shows the default keys` and the item
+  count in `gives an empty shortcut for an unbound action`. Both updated.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check** (Step 5, Windows; the step's checkbox was ticked on
+  the automated criteria, as Riffle was not to be launched for this step). In a
+  test folder of copies under `D:\Photos\tests\<date>-delete-permanently\`,
+  never the user's photos, delete a selection with sidecars. Expected: the files
+  and sidecars are gone from the folder and absent from the Recycle Bin, free
+  space on D: goes up by their size, `Edit > Undo` has no entry for it, the
+  status shows `deleting N / M` then `Deleted N files`, the strip rescans and
+  shows the rest. Enter and Space on the open dialog delete nothing, also after
+  Tab to the run button and with Shift held; only a mouse click does. A delete
+  pressed during a scan runs after the scan stops; a delete pressed, then
+  another folder opened before it ran, deletes nothing. Basis: plan Step 5's
+  manual check; files `crates/app/ui/src/main.ts` (`confirmTrashFiles`,
+  `trashKeydown`, `runTrash`, `trashFilesIn`), `crates/app/src/commands.rs`
+  (`delete_files`).
+- After a delete the judgment history keeps its batches, with no trash entry
+  above them as a move has. `step` drops the gone paths, so an Undo of a batch of
+  deleted files does nothing and says nothing, which the usual flow (reject,
+  filter, select all, delete) reaches at once. Worse, until the rescan's listing
+  lands `allFiles` still holds the files, so an Undo in that short window would
+  judge a gone file and could mint an orphan sidecar. Dropping `summary.moved`
+  from `history` and `redoable` in `trashed()` would close both. Basis: Step 5
+  implementation; files `crates/app/ui/src/main.ts` (`trashed`, `step`),
+  `crates/app/ui/src/undo.ts`.
+- A read-only file (a camera's protect flag) goes to the Trash but may fail
+  `remove_file`, depending on the platform; it is then listed as a failure and
+  stays, which is safe, but the user has no way to delete it from Riffle. Not
+  tried. Basis: Step 5 implementation; file `crates/app/src/trash.rs`
+  (`remove_one`).
 
 - **Pending manual check** (Step 4, Windows; the step's checkbox was ticked on
   the automated criteria, as Riffle was not to be launched for this step). In a

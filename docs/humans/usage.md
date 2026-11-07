@@ -137,7 +137,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `Copy File Name` (the name with its extension), which copy the
   right-clicked file's full path or name, or, on a selection, every selected
   file's, one per line. All three are offered in a view-only JPEG folder too.
-  Next to last in the right-click menu comes `Rename…` (not offered in a
+  The group before the right-click menu's last holds `Rename…` (not offered in a
   view-only JPEG folder), which acts on the shown file alone, whatever else is
   selected: its name turns into a text box with the part before the
   extension selected. A slow second click on the shown file's name (a
@@ -162,7 +162,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   was. The menu ends with `Move to Trash…` (`Move N Files to Trash…` when
   the right-clicked file is in a selection of N), offered in a view-only
   JPEG folder too, which moves the right-clicked file, or the whole
-  selection, to the Trash (see **Move to Trash…**).
+  selection, to the Trash (see **Move to Trash…**), and `Delete Permanently…`
+  (`Delete N Files Permanently…`), offered there too, which deletes them
+  instead (see **Delete Permanently…**).
 - **Panels**: `Alt+Cmd+ArrowLeft` on macOS (`Ctrl+Alt+ArrowLeft` on
   Windows and Linux) hides and shows the left pane (the folder tree),
   `…ArrowRight` the right pane (the metadata), `…ArrowDown` the filmstrip,
@@ -443,6 +445,19 @@ viewer shows a prompt in its center; click it to open the folder picker.
   with their sidecars, to the Trash again without the dialog (a file that
   could not come back is not touched, and one gone from its place since is
   listed as an error), and that move is undoable in turn.
+- **Delete Permanently…**: the item below `Move to Trash…` in the strip's
+  right-click menu (`Delete N Files Permanently…` for a selection of N) deletes
+  the same files, each RAW with the sidecars next to it and a JPEG alone,
+  without going through the Trash, so the disk space comes back at once. It
+  cannot be undone: nothing goes to the Trash and `Edit > Undo` has no step for
+  it. The dialog says so and opens on `Cancel`, and neither `Enter` nor `Space`
+  confirms, so only a mouse click on `Delete Permanently` goes ahead; `Cancel`
+  or `Escape` leaves everything untouched. The status line counts the files
+  (`deleting 12 / 300`) and then says how many went ("Deleted 3 files", with
+  how many failed); a file that could not be deleted is listed as an error and
+  stays in the folder with its sidecars. Like a move, it stops a running scan,
+  runs as soon as the scan has stopped and then scans the files left; opening
+  another folder meanwhile drops it. The two are refused while either runs.
 - **Import…**: right-click a folder in the folder tree and choose `Import…`
   to copy the photos under it, at any depth, into one folder per capture date
   under a destination root, skipping what is already there. It is offered on
@@ -528,7 +543,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   - **While importing**: flags, ratings and color labels work, in the date
     folder as anywhere, except that a date folder holding only JPEGs is
     view-only (see **JPEG-only folders**), so they apply once it holds a RAW
-    file. `Move to Trash…`, Settings, `Rename…`,
+    file. `Move to Trash…`, `Delete Permanently…`, Settings, `Rename…`,
     `Rename by Capture Date…`, `Rewrite Sidecars from Index…`,
     `Delete Sidecars…` and `Sequence JPEG Timestamps…` are refused until the
     run ends, a rename with `Rename… is unavailable while an import runs` on
@@ -705,7 +720,8 @@ viewer shows a prompt in its center; click it to open the folder picker.
     `Shift+x` (reject the rest of a burst) and `Undo` / `Redo` of a judgment
     do nothing (a `Move to Trash…` and its undo and redo still work), and
     the strip's right-click menu holds only `Select All`, the reveal item,
-    `Copy Path`, `Copy File Name` and `Move to Trash…`. Navigation,
+    `Copy Path`, `Copy File Name`, `Move to Trash…` and
+    `Delete Permanently…`. Navigation,
     selection, the filter menu and the panel toggles keep working, and the
     folder reopens at its last viewed file like any other. The MCP
     `set_judgment` tool is refused with

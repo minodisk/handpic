@@ -85,7 +85,7 @@ by weight, border or a check mark (below), not by a new color.
 | Class | Goes on | Used by |
 | --- | --- | --- |
 | `button` + `primary` | `<button>` | only the sequence dialog's `Run` |
-| `button` + `destructive` | `<button>` | `Move to Trash` |
+| `button` + `destructive` | `<button>` | `Move to Trash`, `Delete Permanently` |
 | `button` + `outline` | `<button>` | `Cancel`, `Reset`, `Reset all`, `Clear Cache`, `Copy`, `#label-names-reset`, the three format choices and the first-launch dialog's `Continue`, the strip bar's filter / sort toggles |
 | `button` + `ghost` | `<button>` | icon-only buttons: `#settings-close`, the shortcut chip `×`, the `+` key adder, the meta status dismiss `×` |
 | `input` | text `<input>` | the `#label-name-*` fields |
