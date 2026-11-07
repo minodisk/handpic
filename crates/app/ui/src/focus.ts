@@ -120,7 +120,7 @@ export function eyesOpenness(ear: number | null): number | null {
 // cannot drift from the rule.
 export const AF_EYE_HELP: Record<MarkState, string> = {
   good: `A face was judged and all of these hold: its eyes are likely in focus (${Math.round(GOOD_EYE_FOCUS * 100)}% or more), open (openness ${Math.round(eyesOpenness(GOOD_EYE_EAR)!)} or more) and toward the camera (turned at most ${GOOD_MAX_YAW}°, tilted at most ${GOOD_MAX_PITCH}°), the face mesh sits on the face, and the frame's edge does not cut it.`,
-  neutral: `Everything else: a judged face whose eyes are likely in focus (${CANDIDATE_PERCENT}% or more) but misses a Good condition, no face found (a landscape, a snap without a face), a JPEG, or a file the analysis has not reached yet.`,
+  neutral: `Everything else: a judged face whose eyes are likely in focus (${CANDIDATE_PERCENT}% or more) but misses a Good condition, no judged face (a landscape, a snap without a face, faces away from the AF point), a JPEG, or a file the analysis has not reached yet.`,
   low: `A face was judged and its eyes are likely not in focus: the in-focus probability is under ${CANDIDATE_PERCENT}%.`,
 };
 

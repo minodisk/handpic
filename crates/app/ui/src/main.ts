@@ -4946,6 +4946,7 @@ function rebuildExifMenu(): void {
 function setFaceFocusHelpOpen(open: boolean): void {
   faceFocusHelp.hidden = !open;
   faceFocusHelpToggle.setAttribute("aria-expanded", String(open));
+  if (open) faceFocusHelp.scrollIntoView({ block: "nearest" });
 }
 
 function setFilterMenuOpen(open: boolean): void {

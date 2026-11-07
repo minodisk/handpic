@@ -212,7 +212,7 @@ describe("AF_EYE_HELP", () => {
 
   test("neutral holds a candidate that misses Good and every file without a judged face", () => {
     expect(AF_EYE_HELP.neutral).toContain("77% or more");
-    for (const holds of ["Good condition", "no face found", "a JPEG", "not reached"]) {
+    for (const holds of ["Good condition", "no judged face", "a JPEG", "not reached"]) {
       expect(AF_EYE_HELP.neutral).toContain(holds);
     }
   });
