@@ -14,29 +14,57 @@ Files: `crates/app/ui/src/main.ts` (`openContextMenu`), `crates/app/ui/src/conte
 - [ ] On Windows, select three files, right-click one of them and choose `Copy Path`, then paste into an editor. Expect three full paths, one per line, with no trailing newline. Then choose `Copy File Name` and paste. Expect three names with extensions, one per line.
 - [ ] On macOS and Linux, repeat the reveal check (`Reveal in Finder` / `Open Containing Folder` should select the file in the file manager) and the multi-file copy check.
 
-### App: real-device check of the AF eye Good / Bad / Unknown icons and mark colors
+### App: real-device check of the `Face focus` filter (Good / Neutral / Low)
 
-The `af-eye-good-ok-bad` feature renamed the filter menu's `AF eye` items to `Good` / `OK` / `Bad` / `Unknown` and gave each judged state its own icon and color on the strip, the filter menu and the `f` focus mark; the `af-eye-good-bad-cascade` plan (Step 1, `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`) then merged `OK` into `Bad`, so the states are `Good` / `Bad` / `Unknown`. CI and the unit tests cover the state -> icon / color mapping (`stripState`, `FOCUS_MARK_ICONS`, `FOCUS_MARK_COLORS` in `focus.test.ts`) and the filter logic. Nobody has looked at the rendered result in the running app, including whether the gray `#999` reads on photos. Plan: `docs/plans/_archived/20261010-af-eye-good-ok-bad/plan.md`.
+#### Background
+
+The `face-focus-tiers` feature (Step 1) re-cut the filter's `AF eye` section into `Face focus` with `Good` / `Neutral` / `Low`. `afEyeState` now feeds the menu, the strip icon and the `f` mark, and `FILTER_CANDIDATES` in `commands.rs` drops a saved `Bad` / `Unknown`. CI and the unit tests (`focus.test.ts`, `filter.test.ts`, the `filter_setting_*` tests) cover the state mapping, the filter logic and the persistence whitelist. Nobody has run the built app on a real folder, and the Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261107-face-focus-tiers/plan.md`.
+
+Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/filter.ts`, `crates/app/ui/src/main.ts`, `crates/app/src/commands.rs`.
+
+#### TODO
+
+- [ ] On Windows, use a folder with faced, face-less and JPEG frames under `D:\Photos\tests\<date>-<topic>\`. Open it for its first scan with `Low` checked. Expected: the list grows as pass 2 reaches files.
+- [ ] On Windows, after `faces-done`, step through the shown files. Expected: every one reads `AF eye in focus` under 77% in the meta pane.
+- [ ] On Windows, check `Neutral` alone. Expected: the face-less frames and the JPEGs show.
+- [ ] On Windows, launch with a filter saved before this change with `Bad` checked. Expected: the `Face focus` section opens unchecked and nothing is hidden.
+
+### App: real-device check of the `?` beside `Face focus`
+
+#### Background
+
+The `face-focus-tiers` feature (Step 2) added a `?` to the `Face focus` row that shows each item's definition and thresholds. `focus.ts` builds the text from the constants, and vitest checks it. A Rust test pins the 77% figure. Nobody has opened the menu in the built app, so the menu staying open, the wrapping and the close behaviour were never exercised. Learnings estimate the open block at about 24 lines at the menu's 180px minimum width, from the CSS only. The Step 2 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261107-face-focus-tiers/plan.md`.
+
+Files: `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`, `crates/app/ui/style.css`.
+
+#### TODO
+
+- [ ] On Windows, at the default window size, open the filter menu and click the `?` beside `Face focus`. Expected: the menu stays open, the definitions appear under `Low`, no item's check changes, and a second click hides them.
+- [ ] On Windows, with the definitions shown, look at the menu's width and scrolling. Expected: the text wraps at the menu's width and no horizontal scrollbar appears.
+- [ ] On Windows, with the definitions shown, press `Escape`, then reopen the menu. Expected: the menu closes and reopens with the definitions hidden. Clicking outside the menu does the same.
+
+### App: real-device check of the Face focus Good / Low icons and mark colors
+
+The `af-eye-good-ok-bad` feature gave each judged state its own icon and color on the strip, the filter menu and the `f` focus mark; the `af-eye-good-bad-cascade` plan (Step 1, `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`) merged `OK` into `Bad`, and the `face-focus-tiers` plan (`docs/plans/_archived/20261107-face-focus-tiers/plan.md`) then renamed the section `Face focus` with `Good` / `Neutral` / `Low`. A candidate face that is not good is now `Neutral` (white, no icon), and `Low` (gray `scan`) is a face whose in-focus probability is under about 77%. CI and the unit tests cover the state -> icon / color mapping (`stripState`, `FOCUS_MARK_ICONS`, `FOCUS_MARK_COLORS` in `focus.test.ts`) and the filter logic. Nobody has looked at the rendered result in the running app, including whether the gray `#999` reads on photos. Plan: `docs/plans/_archived/20261010-af-eye-good-ok-bad/plan.md`.
 
 Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/strip.ts`, `crates/app/ui/src/icons.ts`, `crates/app/ui/index.html`, `CLAUDE.md`.
 
 #### TODO
 
-- [ ] On any desktop platform, open a folder with faced AF frames and wait for `analyzing N / M` to finish. Check that the strip shows a bright green `scan-face` on good frames, a gray `scan` on bad frames (a face near the AF point, the frame not good, its AF eyes in focus or not) and nothing on unknown ones. Check that the filter menu's `AF eye` items (`Good` / `Bad` / `Unknown`) show the same icons (`Unknown` an empty aligned slot). Check that the `f` mark is bright green for good, gray for bad and white for unknown, with the gray readable on photos.
-- [ ] Reword the `src/focus.ts` sentence in `CLAUDE.md`, which still says `photoTier` "puts the strip's face icon on a good frame", to describe the per-state icon (`stripState` / `FOCUS_MARK_ICONS`), and drop its sharpness-bar / BEST mention.
-- [ ] Update the other `CLAUDE.md` Layout sentences left stale by `docs/plans/_archived/20261010-af-eye-good-bad-cascade/`: add "else the largest confident face on the whole preview when there is no trusted AF point" to the `run_faces_scan`, `eyes_of` and `src/candidate.rs` sentences; make the `src/focus.ts` sentence name the `afEyeState` helper (Good / Bad / Unknown) and drop the sharpness displays; and make the `src/sharpness.rs` sentence say the score now feeds the MCP companion only. Done when a PR edits those sentences.
+- [ ] On any desktop platform, open a folder with faced AF frames and wait for `analyzing N / M` to finish. Check that the strip shows a bright green `scan-face` on good frames, a gray `scan` on low frames (a judged face whose in-focus probability is under about 77%) and nothing on neutral ones (no face, a candidate face that is not good, a JPEG). Check that the filter menu's `Face focus` items (`Good` / `Neutral` / `Low`) show the same icons (`Neutral` an empty aligned slot). Check that the `f` mark is bright green for good, gray for low and white for neutral, with the gray readable on photos.
+- [ ] Update the other `CLAUDE.md` Layout sentences left stale by `docs/plans/_archived/20261010-af-eye-good-bad-cascade/`: add "else the largest confident face on the whole preview when there is no trusted AF point" to the `run_faces_scan`, `eyes_of` and `src/candidate.rs` sentences; make the `src/focus.ts` sentence name the `afEyeState` helper (Good / Neutral / Low) and drop the sharpness displays; and make the `src/sharpness.rs` sentence say the score now feeds the MCP companion only. Done when a PR edits those sentences.
 
-### App: real-device check of the Good / Bad judgment on frames with no AF point
+### App: real-device check of the Face focus judgment on frames with no AF point
 
 #### Background
 
-The `af-eye-good-bad-cascade` plan (Step 2) judges a frame with no trusted AF point (every Leica M and Sigma BF file, and manual-focus frames) on the largest confident face YuNet finds on the whole preview (`FACES_VERSION` 9). `Focus` now carries the cue without a point, and `focusMark` draws no crosshair for it. Unit tests and `mise run ci` cover the state mapping and the stored-vs-on-demand agreement (checked by a temporary example on `2026-02-01` and 12 manual-focus ARWs). Nobody has looked at the rendered strip icon, filter result and meta pane for these frames in the running app. Plan: `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`.
+The `af-eye-good-bad-cascade` plan (Step 2) judges a frame with no trusted AF point (every Leica M and Sigma BF file, and manual-focus frames) on the largest confident face YuNet finds on the whole preview (`FACES_VERSION` 9). `Focus` now carries the cue without a point, and `focusMark` draws no crosshair for it. Unit tests and `mise run ci` cover the state mapping and the stored-vs-on-demand agreement (checked by a temporary example on `2026-02-01` and 12 manual-focus ARWs). Nobody has looked at the rendered strip icon, filter result and meta pane for these frames in the running app. Plan: `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`. The `face-focus-tiers` plan (`docs/plans/_archived/20261107-face-focus-tiers/plan.md`) later renamed the states: bad is now `Low`, and a no-face frame is `Neutral`.
 
 Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/main.ts`, `crates/app/src/index.rs`.
 
 #### TODO
 
-- [ ] On Windows or macOS, open `D:\photos\2026\2026-02-01` in a build with this change and let the second pass re-run (`FACES_VERSION` 9). Check that Leica DNGs with a face get the strip's `scan-face` (good) or `scan` (bad) icon although `f` draws no crosshair; that the filter's `AF eye` `Good` / `Bad` items list them; that the meta pane shows `AF eye in focus`, `Eyes`, `Yaw`, `Pitch` and `Roll` for them from the stored values, matching the on-demand mesh overlay; and that a DNG with no face stays without an icon and under `Unknown`.
+- [ ] On Windows or macOS, open `D:\photos\2026\2026-02-01` in a build with this change and let the second pass re-run (`FACES_VERSION` 9). Check that Leica DNGs with a face get the strip's `scan-face` (good) or `scan` (low) icon although `f` draws no crosshair, or no icon when the face is neutral; that the filter's `Face focus` `Good` / `Low` items list them; that the meta pane shows `AF eye in focus`, `Eyes`, `Yaw`, `Pitch` and `Roll` for them from the stored values, matching the on-demand mesh overlay; and that a DNG with no face stays without an icon and under `Neutral`.
 - [ ] On Windows or macOS, repeat on a manual-focus ARW with a face (e.g. `D:\photos\samples\ARW\ILCE-6400_DSC00405.ARW` copied into a test folder under `D:\Photos\tests\`): same results, and still no crosshair.
 
 ### App: real-device check of the removed sharpness displays and the new Compare pairing
@@ -61,15 +89,15 @@ Files: `crates/core/src/dop.rs`.
 
 - [ ] Decide which `Items` entry's flag Riffle reads and writes, then change `read_flag` and its tests to match.
 
-### App: re-measure a Good / Bad for frames with no face
+### App: re-measure a Good / Low for frames with no face
 
-The `af-eye-good-bad-cascade` plan (Step 3, Decision C in `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`, numbers in `sharpness-fallback.md`, script `facefree.py` in the same folder) measured whether the sharpness score separates picks on frames where no face is analyzed (an AF point with no face near it, or no AF point and no face on the whole preview). It did not meet the pre-registered criterion (held-out AUC >= 0.70 pick vs non-pick and a cut at 2x the base precision marking 20% or more): absolute AUC 0.579, best held-out lift 1.25, so those frames stay `Unknown` (Step 4). The pick vs reject leg could not be run: only 9 face-free rejects exist (7 in `2026-09-19`, 2 in `2026-09-13-b`), and no folder has the 30 the criterion needs.
+The `af-eye-good-bad-cascade` plan (Step 3, Decision C in `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`, numbers in `sharpness-fallback.md`, script `facefree.py` in the same folder) measured whether the sharpness score separates picks on frames where no face is analyzed (an AF point with no face near it, or no AF point and no face on the whole preview). It did not meet the pre-registered criterion (held-out AUC >= 0.70 pick vs non-pick and a cut at 2x the base precision marking 20% or more): absolute AUC 0.579, best held-out lift 1.25, so those frames stay without a state (Step 4; since `face-focus-tiers`, `docs/plans/_archived/20261107-face-focus-tiers/plan.md`, they are `Neutral`). The pick vs reject leg could not be run: only 9 face-free rejects exist (7 in `2026-09-19`, 2 in `2026-09-13-b`), and no folder has the 30 the criterion needs.
 
 Files: `crates/app/ui/src/focus.ts` (where a rule would go, next to the good cuts), `crates/app/src/index.rs` (an `analyzed` flag on `Focus` / `FaceReady` so "analyzed, no face" differs from "not yet").
 
 #### TODO
 
-- [ ] Once a folder holds 30 or more face-free rejects (`.dop` `ShouldProcess` or XMP `xmpDM:good="False"`), or a cue other than the sharpness score exists for frames with no face, re-dump with `riffle-cli features`, re-run `facefree.py` against the same pre-registered criterion (pick vs reject included), and ship a face-free Good / Bad only if it passes.
+- [ ] Once a folder holds 30 or more face-free rejects (`.dop` `ShouldProcess` or XMP `xmpDM:good="False"`), or a cue other than the sharpness score exists for frames with no face, re-dump with `riffle-cli features`, re-run `facefree.py` against the same pre-registered criterion (pick vs reject included), and ship a face-free Good / Low only if it passes.
 
 ### App: the MCP `get_view` eyes summary carries no openness
 
@@ -2199,7 +2227,7 @@ Files: `crates/core/src/copy.rs`.
 
 #### Background
 
-`CLAUDE.md`'s layout paragraph says `src/filter.ts` covers the strip's filter menu, including the `AF eye`, `Eyes` and `Genre` sections. It does not mention the `Output` section added by `filter-by-output`, which is per-session like `Genre` and shown while an `Output` / `Output-sequenced` folder is readable. Plan: `docs/plans/_archived/20261106-filter-by-output/plan.md`. Files: `CLAUDE.md`, `crates/app/ui/src/filter.ts`.
+`CLAUDE.md`'s layout paragraph says `src/filter.ts` covers the strip's filter menu, including the `Face focus`, `Eyes` and `Genre` sections. It does not mention the `Output` section added by `filter-by-output`, which is per-session like `Genre` and shown while an `Output` / `Output-sequenced` folder is readable. Plan: `docs/plans/_archived/20261106-filter-by-output/plan.md`. Files: `CLAUDE.md`, `crates/app/ui/src/filter.ts`.
 
 #### TODO
 
