@@ -189,7 +189,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       the Good count from the dump should match those within a few frames
       (the index applied the same rule when the user made the sheets).
 
-- [ ] Step 3: Compute and store `full_eye_sharp` in pass 2
+- [x] Step 3: Compute and store `full_eye_sharp` in pass 2
   - Done when:
     - `scan::Analysis` gains `full_eye_sharp: Option<f64>`.
       `extract_analysis_unless` measures it after the cue when

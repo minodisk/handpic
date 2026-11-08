@@ -34,3 +34,41 @@
   the image edge did not show: no Good frame differs by more than 0.009.
 - The ranks are of the Good frames as the TSV re-derives them (903 / 473 / 303,
   equal to the index's counts).
+
+## Step 3
+
+- Cost of pass 2 on `D:\Photos\2026\2026-11-07` (3638 ARW), from the
+  `analysis_ms` column of `riffle-cli features` with 8 threads, release build,
+  one run before and one after, on a file cache warmed by the earlier runs:
+
+  | Files | n | Before mean / median / p95 (ms) | After mean / median / p95 (ms) |
+  | --- | --- | --- | --- |
+  | All | 3638 | 91.2 / 94.9 / 119.6 | 132.0 / 140.7 / 182.1 |
+  | `Candidate` (measured) | 2949 (81%) | 95.1 / 97.1 / 120.8 | 146.1 / 147.0 / 184.8 |
+  | Others (not measured) | 689 | 74.2 / 67.9 / 110.7 | 71.5 / 65.6 / 109.4 |
+
+  A measured frame costs about 51 ms more (mean and median of the per-file
+  difference), under the prototype's 100-170 ms, so every `Candidate` stays
+  measured. The whole `features` run went from 80 s to 98 s. `eye_focus` is
+  identical on all 3638 files. The measurement was on 8 threads rather than
+  the plan's one (a single-thread run of the folder does not fit a foreground
+  command), and the cache was warm, so the cold-disk read is not covered.
+- A fixture of every older schema version has to drop the new column, v19 to
+  v22 included: their `DROP COLUMN edge_gap` did not exist to key a regex on, as
+  those versions already had `edge_gap`.
+- `rank::Frame` carries `full_eye_sharp` as the plan's `rank_rows` line asks,
+  but nothing in the ranking reads it yet.
+
+## Deferred issues (todo candidates)
+
+- `good_photo` in `crates/core/src/rank.rs` is documented as "the good-photo
+  rule of `photoTier` in `focus.ts`", and Step 4 adds the full-size cut to
+  `photoTier` only. The Rust copy then disagrees with the frontend on a
+  demoted frame, which changes what the ranking counts as good. Step 4 or a
+  follow-up has to decide whether `good_photo` applies the cut too (it would
+  move the ranking's features, so the prior's calibration needs a look).
+  Found while carrying `full_eye_sharp` through `Index::rank_rows` in Step 3.
+- The cold-disk cost of the second read is unmeasured: Step 3's figures are on
+  a warm file cache (`crates/core/src/scan.rs`, `full_eye_sharp`). The plan's
+  "Cost" trade-off names this as the case to watch; a pass 2 on a freshly
+  mounted card or after a reboot would show it.
