@@ -334,3 +334,4 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 ## Progress
 
 - (2026-11-07) Step 1 complete
+- (2026-11-08) Step 2 complete
