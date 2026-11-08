@@ -336,3 +336,5 @@ picks the check catches, not how many soft frames it removes.
 
 - Step 1 (2026-11-08): added `crates/core/src/fullsharp.rs`, the full-size eye sharpness metric, with its unit tests.
 - (2026-11-08) Step 1 complete
+- Step 2 (2026-11-09): added the `edge_gap` and `full_sharp` columns to the `facechoice` dump, `rank.py` and `validation.md` in this plan folder; the 0.162 threshold is kept.
+- (2026-11-09) Step 2 complete

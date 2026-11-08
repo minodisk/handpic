@@ -75,7 +75,7 @@ the eyes of a detected face, else from the sharpest tile), `crates/cli` (the
 benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face `eye_focus` dump, with YuNet's nose, the face mesh's eye
-centers and nose tip, their eye and nose offsets and the eye window's score),
+centers and nose tip, their eye and nose offsets and the eye window's score, the mesh's edge gap and the full-size eye sharpness),
 `crates/app`
 (the Tauri 2 desktop app, whose `src/index.rs` is the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
