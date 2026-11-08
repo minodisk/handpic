@@ -78,7 +78,10 @@ measured. 16 presses against the 20 planned.
 ## Scenario 5: large previews
 
 Folder `D:\photos\samples\RAF`, mixed bodies and sizes; 804-4320 KB on the idle
-lines. Warm: scanned before the presses, not otherwise established. Scan pass:
+lines. File count: 298 `.RAF` files at the time of review; the count at
+measurement time was not recorded. Presses: 20 planned, 11 idle and 8 pass-2
+keyed lines landed, so the RAF target in R0 rests on n=11 (4416x2944 on n=7).
+Warm: scanned before the presses, not otherwise established. Scan pass:
 idle in the first table, 2 in the second. The run also has 1 unkeyed `scan=1`
 line, excluded.
 
