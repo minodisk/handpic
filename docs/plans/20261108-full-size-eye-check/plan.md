@@ -189,7 +189,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       the Good count from the dump should match those within a few frames
       (the index applied the same rule when the user made the sheets).
 
-- [ ] Step 3: Compute and store `full_eye_sharp` in pass 2
+- [x] Step 3: Compute and store `full_eye_sharp` in pass 2
   - Done when:
     - `scan::Analysis` gains `full_eye_sharp: Option<f64>`.
       `extract_analysis_unless` measures it after the cue when
@@ -338,3 +338,4 @@ picks the check catches, not how many soft frames it removes.
 - (2026-11-08) Step 1 complete
 - Step 2 (2026-11-09): added the `edge_gap` and `full_sharp` columns to the `facechoice` dump, `rank.py` and `validation.md` in this plan folder; the 0.162 threshold is kept.
 - (2026-11-09) Step 2 complete
+- (2026-11-09) Step 3 complete

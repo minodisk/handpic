@@ -2342,6 +2342,7 @@ mod tests {
                 preview_width: 0,
             },
             sharpness: Some(123.45678),
+            full_eye_sharp: None,
         });
         let eyes = Ok(EyesFeatures {
             capture_time: Some("2026:09:19 10:11:12".into()),

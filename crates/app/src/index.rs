@@ -94,8 +94,11 @@ use crate::exif::{exif, Exif};
 /// older database gains empty, and `folders.culling_manual`, whether the mark
 /// was toggled by hand. v23 dropped both `folders` columns, the ranking
 /// reading `views` per file instead; a v21 or v22 database drops them in
-/// place with an `ALTER TABLE` and keeps the rest.
-const SCHEMA_VERSION: i64 = 23;
+/// place with an `ALTER TABLE` and keeps the rest. v24 added
+/// `files.full_eye_sharp`, the sharpness of the AF face's eyes on the full
+/// JPEG (`NULL` = none); a v10 to v23 database gains it in place with an
+/// `ALTER TABLE` and keeps `files`, `ratings` and `folders`.
+const SCHEMA_VERSION: i64 = 24;
 
 /// The version of what `riffle_core::scan::extract` produces, stored on every
 /// `files` row. Bump it on any change to that output: ARW/DNG/NEF/CR3/RAF/ORF parsing
@@ -158,8 +161,9 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// `eyes_ear` and the `pose_*` columns from the mesh the cue already runs; `8`
 /// to fill `eye_offset` and `edge_gap` from it. `9` fills the cue, the EAR,
 /// the pose, the eye offset and the edge gap for frames with no trusted AF
-/// point from the largest confident face of the whole preview.
-pub const FACES_VERSION: i64 = 9;
+/// point from the largest confident face of the whole preview. `10` fills
+/// `full_eye_sharp` from a second read, of the full JPEG, on candidates.
+pub const FACES_VERSION: i64 = 10;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on
@@ -382,6 +386,8 @@ pub struct StoredEyes {
     /// How close the face and its mesh eye regions come to the preview's
     /// edge, in face box sides; negative outside.
     pub edge_gap: Option<f64>,
+    /// The sharpness of the eyes on the full JPEG (`Analysis::full_eye_sharp`).
+    pub full_eye_sharp: Option<f64>,
 }
 
 impl StoredEyes {
@@ -390,6 +396,7 @@ impl StoredEyes {
         pose: Option<EyesPose>,
         eye_offset: Option<f64>,
         edge_gap: Option<f64>,
+        full_eye_sharp: Option<f64>,
     ) -> Self {
         let judged = eyes_ear.map(Eyes::from_ear);
         StoredEyes {
@@ -399,6 +406,7 @@ impl StoredEyes {
             pose,
             eye_offset,
             edge_gap,
+            full_eye_sharp,
         }
     }
 }
@@ -438,6 +446,7 @@ pub struct FacesRow {
     pub pose: Option<EyesPose>,
     pub eye_offset: Option<f64>,
     pub edge_gap: Option<f64>,
+    pub full_eye_sharp: Option<f64>,
 }
 
 /// One file the third pass has to embed, with the `files` row's stat the
@@ -480,7 +489,8 @@ const INDEXED_FILE: &str = "SELECT path, orientation, capture_time, subsec,
             make, model, lens, f_num, f_den, f_estimated, exposure_num,
             exposure_den, iso, focal_num, focal_den, ratings.label,
             sharpness, frame_w, frame_h, manual_focus, eye_focus,
-            eyes_ear, pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap
+            eyes_ear, pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap,
+            full_eye_sharp
      FROM files LEFT JOIN ratings USING (path)";
 
 fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
@@ -509,7 +519,7 @@ fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
             manual_focus: r.get(28)?,
             eye_focus,
             candidate: candidate(eye_focus),
-            eyes: StoredEyes::new(r.get(30)?, pose, r.get(34)?, r.get(35)?),
+            eyes: StoredEyes::new(r.get(30)?, pose, r.get(34)?, r.get(35)?, r.get(36)?),
         })
     } else {
         None
@@ -710,7 +720,8 @@ impl Index {
                      pose_pitch REAL,
                      pose_roll REAL,
                      eye_offset REAL,
-                     edge_gap REAL
+                     edge_gap REAL,
+                     full_eye_sharp REAL
                  );
                  CREATE INDEX IF NOT EXISTS files_dir ON files (dir);
                  CREATE INDEX IF NOT EXISTS files_capture ON files (capture_time, subsec);
@@ -858,6 +869,10 @@ impl Index {
                  ALTER TABLE files ADD COLUMN edge_gap REAL;",
             )
             .map_err(|e| e.to_string())?;
+        }
+        if (10..24).contains(&version) {
+            tx.execute_batch("ALTER TABLE files ADD COLUMN full_eye_sharp REAL;")
+                .map_err(|e| e.to_string())?;
         }
         if (21..23).contains(&version) {
             tx.execute_batch("ALTER TABLE folders DROP COLUMN culling_finished;")
@@ -1190,7 +1205,7 @@ impl Index {
         tx.execute(
             "UPDATE files SET faces_extractor = ?2, eye_focus = NULL, sharpness = NULL,
                  eyes_ear = NULL, pose_yaw = NULL, pose_pitch = NULL, pose_roll = NULL,
-                 eye_offset = NULL, edge_gap = NULL
+                 eye_offset = NULL, edge_gap = NULL, full_eye_sharp = NULL
              WHERE dir = ?1 AND faces_extractor != ?2
                  AND (error IS NOT NULL OR path LIKE '%.jpg' OR path LIKE '%.jpeg')",
             params![dir, FACES_VERSION],
@@ -1212,15 +1227,15 @@ impl Index {
     }
 
     /// Store the in-focus probability, the sharpness score, the EAR, the head
-    /// pose, the eye offset and the edge gap of each path, `None` for none, at
-    /// `FACES_VERSION`, in a single transaction.
+    /// pose, the eye offset, the edge gap and the full-size eye sharpness of
+    /// each path, `None` for none, at `FACES_VERSION`, in a single transaction.
     pub fn write_faces(&mut self, rows: &[FacesRow]) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         for row in rows {
             tx.execute(
                 "UPDATE files SET eye_focus = ?2, sharpness = ?3, faces_extractor = ?4,
                      eyes_ear = ?5, pose_yaw = ?6, pose_pitch = ?7, pose_roll = ?8,
-                     eye_offset = ?9, edge_gap = ?10
+                     eye_offset = ?9, edge_gap = ?10, full_eye_sharp = ?11
                  WHERE path = ?1",
                 params![
                     row.path,
@@ -1233,6 +1248,7 @@ impl Index {
                     row.pose.map(|p| p.roll),
                     row.eye_offset,
                     row.edge_gap,
+                    row.full_eye_sharp,
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -1450,7 +1466,7 @@ impl Index {
                 "SELECT files.path, COALESCE(ratings.flag, 0), capture_time, subsec,
                      faces_extractor = ?3, sharpness, eye_focus, eyes_ear,
                      pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap, embeddings.vec,
-                     views.path IS NOT NULL
+                     views.path IS NOT NULL, full_eye_sharp
                  FROM files LEFT JOIN ratings USING (path)
                  LEFT JOIN embeddings ON embeddings.path = files.path
                      AND embeddings.version = ?2 AND embeddings.size = files.size
@@ -1487,6 +1503,7 @@ impl Index {
                         pose,
                         eye_offset: value(11)?,
                         edge_gap: value(12)?,
+                        full_eye_sharp: value(15)?,
                         vec: vec.map(|v| {
                             v.chunks_exact(4)
                                 .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
@@ -2250,6 +2267,7 @@ where
                 pose: analysis.cue.pose.map(EyesPose::from),
                 eye_offset: analysis.cue.eye_offset,
                 edge_gap: analysis.cue.edge_gap,
+                full_eye_sharp: analysis.full_eye_sharp,
             })
             .collect();
         if let Err(e) = lock(index).write_faces(&rows) {
@@ -2260,7 +2278,13 @@ where
             return;
         }
         lock(&ready).extend(rows.into_iter().map(|row| FaceReady {
-            eyes: StoredEyes::new(row.eyes_ear, row.pose, row.eye_offset, row.edge_gap),
+            eyes: StoredEyes::new(
+                row.eyes_ear,
+                row.pose,
+                row.eye_offset,
+                row.edge_gap,
+                row.full_eye_sharp,
+            ),
             candidate: candidate(row.eye_focus),
             path: row.path,
             eye_focus: row.eye_focus,
@@ -2719,6 +2743,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 10;",
@@ -2907,6 +2932,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 11;",
@@ -2955,6 +2981,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 12;",
@@ -3064,6 +3091,7 @@ pub(crate) mod tests {
             pose: None,
             eye_offset: None,
             edge_gap: None,
+            full_eye_sharp: None,
         }
     }
 
@@ -3095,6 +3123,7 @@ pub(crate) mod tests {
                     pose: Some(pose),
                     eye_offset: Some(0.0625),
                     edge_gap: Some(-0.125),
+                    full_eye_sharp: Some(0.25),
                     ..faces_row(&a_path, Some(0.9), None)
                 },
                 FacesRow {
@@ -3114,6 +3143,7 @@ pub(crate) mod tests {
                 pose: Some(pose),
                 eye_offset: Some(0.0625),
                 edge_gap: Some(-0.125),
+                full_eye_sharp: Some(0.25),
             }
         );
         let json = serde_json::to_value(focus).unwrap();
@@ -3126,6 +3156,7 @@ pub(crate) mod tests {
         );
         assert_eq!(json["eye_offset"], 0.0625);
         assert_eq!(json["edge_gap"], -0.125);
+        assert_eq!(json["full_eye_sharp"], 0.25);
         assert_eq!(json["candidate"], "candidate");
         let open = index.entry(&b_path).unwrap().unwrap().focus.unwrap();
         assert_eq!(open.eyes.eyes, Some(EyeState::Open));
@@ -3144,6 +3175,7 @@ pub(crate) mod tests {
         assert!(json["eyes_ear"].is_null());
         assert!(json["eyes_closed"].is_null());
         assert!(json["eye_offset"].is_null() && json["edge_gap"].is_null());
+        assert!(json["full_eye_sharp"].is_null());
 
         remove_temp_dir(&dir);
     }
@@ -3164,6 +3196,7 @@ pub(crate) mod tests {
                 }),
                 Some(0.05),
                 Some(1.5),
+                Some(0.5),
             ),
         };
         let json = serde_json::to_value(&ready).unwrap();
@@ -3178,6 +3211,7 @@ pub(crate) mod tests {
         );
         assert_eq!(json["eye_offset"], 0.05);
         assert_eq!(json["edge_gap"], 1.5);
+        assert_eq!(json["full_eye_sharp"], 0.5);
         let none = FaceReady {
             eyes: StoredEyes::default(),
             ..ready
@@ -3271,6 +3305,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      UPDATE files SET faces_extractor = 6;
                      DROP TABLE views;
                      PRAGMA user_version = 17;",
@@ -3299,6 +3334,7 @@ pub(crate) mod tests {
             "pose_roll",
             "eye_offset",
             "edge_gap",
+            "full_eye_sharp",
         ] {
             assert!(columns.iter().any(|n| n == c), "{c}");
         }
@@ -3346,6 +3382,7 @@ pub(crate) mod tests {
                          ('/rated.ARW', 'd', 4, 1, 1);
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      UPDATE files SET faces_extractor = 7;
                      DROP TABLE views;
                      PRAGMA user_version = 18;",
@@ -3367,7 +3404,7 @@ pub(crate) mod tests {
             .unwrap()
             .collect::<rusqlite::Result<_>>()
             .unwrap();
-        for c in ["eye_offset", "edge_gap"] {
+        for c in ["eye_offset", "edge_gap", "full_eye_sharp"] {
             assert!(columns.iter().any(|n| n == c), "{c}");
         }
         let entries = index.entries("d").unwrap();
@@ -3375,7 +3412,10 @@ pub(crate) mod tests {
         let focus = entries[0].focus.unwrap();
         assert_eq!(focus.eye_focus, Some(0.875));
         assert_eq!(entries[0].sharpness, Some(5.0));
-        assert_eq!(focus.eyes, StoredEyes::new(Some(0.3), None, None, None));
+        assert_eq!(
+            focus.eyes,
+            StoredEyes::new(Some(0.3), None, None, None, None)
+        );
         assert_eq!(
             index.faces_todo("d").unwrap(),
             [a.path.to_string_lossy().into_owned()]
@@ -3407,6 +3447,7 @@ pub(crate) mod tests {
                          ('/rated.ARW', 'd', 4, 1, 1);
                      DROP TABLE embeddings;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      PRAGMA user_version = 19;",
                 )
                 .unwrap();
@@ -3444,6 +3485,7 @@ pub(crate) mod tests {
                 .conn
                 .execute_batch(
                     "DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      PRAGMA user_version = 20;",
                 )
                 .unwrap();
@@ -3489,6 +3531,7 @@ pub(crate) mod tests {
                     "ALTER TABLE folders ADD COLUMN culling_finished INTEGER NOT NULL DEFAULT 0;
                      UPDATE folders SET culling_finished = 1 WHERE dir = 'd';
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      PRAGMA user_version = 21;",
                 )
                 .unwrap();
@@ -3523,6 +3566,7 @@ pub(crate) mod tests {
                     "ALTER TABLE folders ADD COLUMN culling_finished INTEGER NOT NULL DEFAULT 0;
                      ALTER TABLE folders ADD COLUMN culling_manual INTEGER NOT NULL DEFAULT 0;
                      UPDATE folders SET culling_finished = 1, culling_manual = 1;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      PRAGMA user_version = 22;",
                 )
                 .unwrap();
@@ -3686,6 +3730,7 @@ pub(crate) mod tests {
                     }),
                     eye_offset: Some(0.05),
                     edge_gap: Some(0.2),
+                    full_eye_sharp: Some(0.3),
                 },
                 FacesRow {
                     path: path(&b),
@@ -3695,6 +3740,7 @@ pub(crate) mod tests {
                     pose: None,
                     eye_offset: None,
                     edge_gap: None,
+                    full_eye_sharp: Some(0.4),
                 },
             ])
             .unwrap();
@@ -3760,12 +3806,14 @@ pub(crate) mod tests {
             (ra.frame.eye_offset, ra.frame.edge_gap),
             (Some(0.05), Some(0.2))
         );
+        assert_eq!(ra.frame.full_eye_sharp, Some(0.3));
         assert_eq!(ra.frame.vec, Some(vec![0.6, 0.8]));
         assert_eq!(
             (rb.frame.eye_focus, rb.frame.sharpness),
             (None, None),
             "a row behind FACES_VERSION has no second-pass values"
         );
+        assert_eq!(rb.frame.full_eye_sharp, None);
         assert_eq!(rb.frame.vec, None, "an embedding stale by stat is left out");
 
         remove_temp_dir(&dir);
@@ -4213,6 +4261,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 14;",
@@ -4275,6 +4324,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 15;",
@@ -4346,6 +4396,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 13;",
@@ -5445,6 +5496,48 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_stale_jpeg_row_loses_its_full_eye_sharpness_when_the_faces_pass_skips_it() {
+        let dir = temp_dir("faces-stale-full-sharp");
+        let a = file(&dir, "a.jpg", b"a");
+        let mut index = open(&dir);
+        let dir_name = dir.to_string_lossy().into_owned();
+        index
+            .write_batch(&dir_name, &[(a.clone(), Ok(entry()))])
+            .unwrap();
+        let path = a.path.to_string_lossy().into_owned();
+        index
+            .write_faces(&[FacesRow {
+                full_eye_sharp: Some(0.5),
+                ..faces_row(&path, None, None)
+            }])
+            .unwrap();
+        let stored = |index: &Index| -> Option<f64> {
+            index
+                .conn
+                .query_row(
+                    "SELECT full_eye_sharp FROM files WHERE path = ?1",
+                    params![path],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+        assert_eq!(stored(&index), Some(0.5));
+        index
+            .conn
+            .execute(
+                "UPDATE files SET faces_extractor = ?2 WHERE path = ?1",
+                params![path, FACES_VERSION - 1],
+            )
+            .unwrap();
+
+        assert!(index.faces_todo(&dir_name).unwrap().is_empty());
+        assert_eq!(stored(&index), None);
+        assert_eq!(faces_extractor(&index, &a.path), FACES_VERSION);
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
     fn a_row_the_old_first_pass_scored_keeps_its_score_and_a_new_one_gets_it_from_the_faces_pass() {
         let dir = temp_dir("faces-migrate");
         let (index, paths) = faces_fixture(&dir, 2);
@@ -6053,6 +6146,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN pose_roll;
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 16;",

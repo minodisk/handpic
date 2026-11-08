@@ -154,6 +154,8 @@ pub struct Frame {
     pub pose: Option<Pose>,
     pub eye_offset: Option<f64>,
     pub edge_gap: Option<f64>,
+    /// `scan::Analysis::full_eye_sharp`.
+    pub full_eye_sharp: Option<f64>,
     /// An `embed` vector at `EMBED_VERSION`; a frame without one gets no
     /// score and takes no part in a fit.
     pub vec: Option<Vec<f32>>,

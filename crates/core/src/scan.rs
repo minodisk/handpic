@@ -7,13 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-use crate::arw::{FocusLocation, Shot};
-use crate::candidate::{face_cue_unless, focus_cue_unless, Cue};
+use crate::arw::{Arw, FocusLocation, Shot};
+use crate::candidate::{face_cue_unless, focus_cue_unless, Cue, FocusCandidate};
 use crate::decode::{decode_rgb, thumbnail_jpeg, thumbnail_jpeg_near};
 use crate::embed::{embed_preview, Model};
 use crate::eyes::judged_face;
 use crate::faces::{detect_around, Detection, Face};
-use crate::reader::{read_metadata, read_preview};
+use crate::fullsharp::full_eye_sharpness;
+use crate::reader::{read_full, read_metadata, read_preview};
 use crate::sharpness::{eye_af_frame, score_preview, trusted_focus};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
@@ -171,6 +172,10 @@ pub struct Analysis {
     /// `sharpness::score_preview` of the preview; `None` when it could not be
     /// scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
+    /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the full
+    /// JPEG, measured when the cue is `Candidate`; `None` when it was not
+    /// measured or the file has no usable larger JPEG, or on any failure.
+    pub full_eye_sharp: Option<f64>,
 }
 
 /// Compute the focus candidate cue and the sharpness score of one file from
@@ -180,7 +185,9 @@ pub struct Analysis {
 /// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure falls
-/// back to the eye window. A JPEG file gets neither, and is not read.
+/// back to the eye window. A candidate's eyes are measured once more on the
+/// full JPEG, a second read (`full_eye_sharp`). A JPEG file gets none of
+/// these, and is not read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
     extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
         .expect("a never-set flag never abandons")
@@ -230,7 +237,55 @@ fn extract_analysis_unless(
         return None;
     }
     let sharpness = score(&preview, &arw.shot, focus, &faces);
-    Some(Ok(Analysis { cue, sharpness }))
+    let full_eye_sharp = full_eye_sharp(path, &arw, &cue, cancel, slots)?;
+    Some(Ok(Analysis {
+        cue,
+        sharpness,
+        full_eye_sharp,
+    }))
+}
+
+/// Whether `arw` holds a JPEG larger than its preview to measure the eyes on:
+/// not when it has no full image, an HEVC one, or only the preview itself.
+fn has_larger_jpeg(arw: &Arw) -> bool {
+    let same = match (arw.full, arw.preview) {
+        (Some(full), Some(preview)) => full.offset == preview.offset,
+        _ => false,
+    };
+    arw.full.is_some() && !arw.hevc && !same
+}
+
+/// The full-size sharpness of the eyes of a `Candidate` `cue`; `None` inside
+/// when nothing was measured or anything failed, `None` outside when `cancel`
+/// abandoned the file. The read goes through `slots`, the decode does not.
+fn full_eye_sharp(
+    path: &Path,
+    arw: &Arw,
+    cue: &Cue,
+    cancel: &AtomicBool,
+    slots: &ReadSlots,
+) -> Option<Option<f64>> {
+    let eyes = match cue.eye_centers {
+        Some(eyes) if cue.state == FocusCandidate::Candidate && has_larger_jpeg(arw) => eyes,
+        _ => return Some(None),
+    };
+    let read = {
+        let _slot = slots.acquire(cancel)?;
+        read_full(path)
+    };
+    if canceled(cancel) {
+        return None;
+    }
+    let Ok((_, full)) = read else {
+        return Some(None);
+    };
+    Some(
+        catch_unwind(AssertUnwindSafe(|| {
+            full_eye_sharpness(&full, eyes, cue.preview_width)
+        }))
+        .ok()
+        .flatten(),
+    )
 }
 
 /// The detection on the whole preview; any failure or panic is none.
@@ -745,6 +800,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::arw::{Codec, Embedded};
     use crate::candidate::FocusCandidate;
     use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
@@ -1136,6 +1192,78 @@ mod tests {
                 "analysis pass: {analysis}"
             );
         }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn only_a_separate_jpeg_is_worth_a_second_read() {
+        let embedded = |offset| Embedded {
+            offset,
+            length: 1,
+            codec: Codec::Jpeg,
+        };
+        let arw = |full, hevc| Arw {
+            preview: Some(embedded(10)),
+            full,
+            orientation: 1,
+            shot: Shot::default(),
+            hevc,
+        };
+        assert!(has_larger_jpeg(&arw(Some(embedded(20)), false)));
+        assert!(!has_larger_jpeg(&arw(None, false)));
+        assert!(!has_larger_jpeg(&arw(Some(embedded(20)), true)));
+        assert!(!has_larger_jpeg(&arw(Some(embedded(10)), false)));
+    }
+
+    #[test]
+    fn a_cue_that_is_not_a_candidate_reads_nothing_and_a_missing_full_jpeg_is_none() {
+        let dir = dir("full-eye-sharp");
+        let arw = Arw {
+            preview: Some(Embedded {
+                offset: 10,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            full: Some(Embedded {
+                offset: 20,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            orientation: 1,
+            shot: Shot::default(),
+            hevc: false,
+        };
+        let candidate = Cue {
+            state: FocusCandidate::Candidate,
+            eye_centers: Some([(10.0, 10.0), (30.0, 10.0)]),
+            preview_width: 100,
+            ..Cue::default()
+        };
+        let not_candidate = Cue {
+            state: FocusCandidate::NotCandidate,
+            ..candidate.clone()
+        };
+        let missing = dir.join("missing.ARW");
+        let (slots, set, unset) = (
+            ReadSlots::default(),
+            AtomicBool::new(true),
+            AtomicBool::new(false),
+        );
+        assert_eq!(
+            full_eye_sharp(&missing, &arw, &not_candidate, &set, &slots),
+            Some(None),
+            "nothing to read, so not even a cancel abandons the file"
+        );
+        assert_eq!(
+            full_eye_sharp(&missing, &arw, &candidate, &unset, &slots),
+            Some(None),
+            "a failed read is no score, not an error"
+        );
+        assert_eq!(
+            full_eye_sharp(&missing, &arw, &candidate, &set, &slots),
+            None,
+            "a cancel abandons the file at the slot"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
