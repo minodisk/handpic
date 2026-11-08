@@ -143,9 +143,9 @@ DxO PhotoLab.
   full-size embedded JPEG: a frame whose eyes are soft there is not good and
   turns white (it is not rejected), and a file with no JPEG larger than the
   preview (RAF, ORF, an HDR PQ CR3) skips the check. The threshold was checked
-  on three folders from one body (ILCE-7M5): a few sharp frames can leave
-  good (the author judged 5 of 145 hand-labeled good picks sharp under it),
-  and it misses soft frames at high ISO. It is selective by design, on about
+  on three folders from one body (ILCE-7M5) and on a separate hand-labeled
+  set, where the author judged 5 of the 145 good frames sharp under it (a few
+  sharp frames can leave good), and it misses soft frames at high ISO. It is selective by design, on about
   20% of the author's frames with a face at the AF point before the full-size
   check, and bright green means good only. The mark is gray when a face was judged and its eyes are
   likely not in focus (a probability combining their sharpness and edge
