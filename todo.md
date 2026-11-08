@@ -2421,3 +2421,24 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 #### TODO
 
 - [ ] Put an unopened RAW folder on the NVMe, close the app and run `preview_during_pass_1_on_a_real_folder` at `RIFFLE_READ_SLOTS` 22 and 2, on cold data. Done when `docs/agents/tauri-app.md`'s read cap section has the numbers and the cap is confirmed or changed.
+
+### App: real-device check of the scan's read cap and the preview pause while paging
+
+#### Background
+
+`preview-read-gate` caps the scan's concurrent file reads at `READ_SLOTS` (2) and pauses them while `preview` reads (`riffle_core::scan::ReadSlots`). Unit tests and the ignored sweep test `preview_during_pass_1_on_a_real_folder` cover the cap, the pause, cancel and `MAX_PAUSE`. The sweep measured the probe's read time on a cold pass 1 on a SATA SSD, with the app closed. Nobody has paged with the arrow keys through the real release app during a first scan, so the preview following the keys and the thumbnails still filling are unconfirmed. The user chose to do this after the merge. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/commands.rs` (`READ_SLOTS`, `preview`), `crates/core/src/scan.rs`.
+
+#### TODO
+
+- [ ] On Windows, in the running release app, open an unopened folder under `D:\Photos\2026` and page with the arrow keys during its first scan. Expected: the preview follows the keys without the multi-second lag, and the thumbnails keep filling while paging. Note anything odd (the strip pausing, a scan that seems to stall).
+
+### App: test the scan's read slot in `embed_all` and the post-read cancel check
+
+#### Background
+
+`embed_all`'s per-file closure needs a loaded SigLIP model, which the tests lack, so its `ReadSlots::acquire` is checked only by reading the code. `a_file_canceled_mid_pipeline_is_not_delivered` now stops at `acquire` returning `None`, because nothing can set the flag during the read without a hook in `read_preview`, so the first post-read cancel check in `extract_unless` and `extract_analysis_unless` is untested. File: `crates/core/src/scan.rs`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`.
+
+#### TODO
+
+- [ ] Add a test seam (a stub embedder or an injectable closure), and a test that holds the single permit and shows `embed_all` delivers nothing until it is dropped.
+- [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
