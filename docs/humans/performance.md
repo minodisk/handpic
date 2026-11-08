@@ -786,7 +786,8 @@ time a key spent behind an in-flight request, `read` the Rust read (the pause
 of the scan's reads included), `ipc` the rest of the `preview` call's round
 trip, `post` the main thread's work before handing the JPEG to the worker,
 `worker` the two hops to the worker and back, `decode` its `createImageBitmap`
-and `draw` the canvas draw. `total` runs from the request to the drawn canvas
+and `draw` the rest of the main thread's work to the drawn canvas (the meta pane
+rebuild and the canvas draw). `total` runs from the request to the drawn canvas
 and `keypressToPixels` from the keypress to the drawn canvas; `jpegKB` is the
 payload size, `px` the decoded size and `scan` the scan pass running at the
 request (`idle`, `1`, `2` or `3`). `wait` and `keypressToPixels` are left out

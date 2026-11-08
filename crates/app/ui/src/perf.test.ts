@@ -153,7 +153,7 @@ describe("stagesOf", () => {
     postedAt: 127,
     receivedAt: 157,
     decodeMs: 20,
-    drawStartedAt: 158,
+    drawStartedAt: 157,
     drawnAt: 163,
   };
 
@@ -165,8 +165,13 @@ describe("stagesOf", () => {
       post: 3,
       worker: 10,
       decode: 20,
-      draw: 5,
+      draw: 6,
     });
+  });
+
+  test("sums to the span from the start to the drawn canvas", () => {
+    const sum = Object.values(stagesOf(marks)).reduce((a, b) => a + b, 0);
+    expect(sum).toBe(marks.drawnAt - marks.startedAt);
   });
 
   test("clamps ipc at zero when the read exceeds the invoke", () => {

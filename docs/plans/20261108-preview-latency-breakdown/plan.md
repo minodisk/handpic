@@ -64,7 +64,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 | `post` | invoke resolved → `worker.postMessage` (header parse, `previewPixelLimit`, the `slice` copy) | frontend |
 | `worker` | postMessage → the worker's `message` handler fires, plus the bitmap transfer back (two queue hops) | derived: frontend span minus `decode` |
 | `decode` | `createImageBitmap` inside the worker | worker, carried in its reply |
-| `draw` | the `message` handler's `draw()` call (canvas resize, `drawImage`, the marks) | frontend |
+| `draw` | the `message` handler from its success path to the end of `draw()` (the bitmap swap, `setStatus()`'s meta-pane rebuild, canvas resize, `drawImage`, the marks) | frontend |
 
 `keypressToPixels` = the sum; `total` (from the request) = the sum without
 `wait`, as today.

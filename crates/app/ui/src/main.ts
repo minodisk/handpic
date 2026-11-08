@@ -405,6 +405,10 @@ let scanErrors = 0;
 // The first pass's `scan-done` total, so its `faces-done` can skip a re-read
 // when neither pass wrote anything.
 let scanDone: ScanDone | null = null;
+// The `startScan` call (`currentScan`) whose `scan-done` arrived, so
+// `scanPass()` tells pass 2 from the prepare phase of a later resync, which
+// has bumped `currentScan` before `scanId` changes.
+let passTwoOf: number | null = null;
 // The rows `scan_folder`'s reconcile changed, so its `scan-done` can skip a
 // re-read when neither it nor the scan pass wrote anything.
 let scanStarted: ScanStarted | null = null;
@@ -427,7 +431,7 @@ let embedPassScanId: number | null = null;
 
 function scanPass(): ScanPass {
   if (scanRunning) {
-    return scanDone?.scanId === scanId ? 2 : 1;
+    return passTwoOf === currentScan ? 2 : 1;
   }
   return embedPassScanId !== null && embedPassScanId === scanId ? 3 : "idle";
 }
@@ -3786,10 +3790,13 @@ worker.addEventListener("message", (event: MessageEvent<DecodeResponse>) => {
     setStatus(error ?? "decode failed");
     return;
   }
+  // `draw` runs from here to the drawn canvas, so the seven stages sum to
+  // `keypressToPixels`: the bitmap swap and `setStatus()`'s meta-pane
+  // rebuild count as drawing.
+  const drawStartedAt = performance.now();
   shown?.bitmap.close();
   shown = { bitmap, orientation, seq: responseSeq };
   setStatus();
-  const drawStartedAt = performance.now();
   draw();
   const drawnAt = performance.now();
   startDwell();
@@ -4530,6 +4537,7 @@ function openDirectory(folder: string, token: number): Promise<void> {
     scanning = null;
     scanId = null;
     scanDone = null;
+    passTwoOf = null;
     scanStarted = null;
     progressRefreshedFor = null;
     setScanRunning(false);
@@ -4823,6 +4831,7 @@ void window.__TAURI__.event.listen<{
   }
   scanErrors = payload.errors;
   scanDone = { scanId: payload.scan_id, total: payload.total };
+  passTwoOf = currentScan;
   scanning = payload.errors === 0 ? null : `${payload.errors} failed`;
   setScanProgress(null);
   renderMeta();
