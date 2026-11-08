@@ -105,7 +105,22 @@ them. Times are ms unless the column says otherwise.
   `hevc::to_jpeg` (65-125 ms of CPU per file), so its cost at cap 2 is a
   calculated 33-63 ms/file against 3-6 today. See the deferred item.
 
+## Step 3
+
+- `READ_SLOTS` is now a `const` of 2, replacing the `read_slots()` function.
+- The doc comment and `docs/agents/tauri-app.md` keep cap 22 pause off (155 ms)
+  and pause on (128 ms) apart, because cap 2 has only pause-on runs.
+
 ## Deferred issues (todo candidates)
+
+- **Pending hand check of Step 3 (pending manual check).** This is Step 3's one
+  remaining Done-when, so its checkbox stays unticked. On Windows, in the
+  running release app, open an unopened folder under `D:\Photos\2026` and page
+  with the arrow keys during its first scan. Expected: the preview follows the
+  keys without the multi-second lag and the thumbnails keep filling while
+  paging. Note anything odd (the strip pausing, a scan that seems to stall).
+  Not performed; no result is recorded. Basis: Step 3's Done-when,
+  `crates/app/src/commands.rs` (`READ_SLOTS`, `preview`).
 
 - **`embed_all`'s slot has no test.** Its per-file closure needs a loaded SigLIP
   model, which the tests do not have, so its acquire is only checked by reading
@@ -117,8 +132,8 @@ them. Times are ms unless the column says otherwise.
   it. `acquire` now returns `None` first and nothing can set the flag during
   the read without a test hook in `read_preview`. Basis: Step 1's change to
   that test, `crates/core/src/scan.rs`.
-- **The slot and the pause cover `hevc::to_jpeg` for an HDR PQ CR3, not the
-  read alone.** `read_preview` ends in the HEVC decode (65-125 ms of CPU per
+- **(Filed in `todo.md` by Step 3.) The slot and the pause cover
+  `hevc::to_jpeg` for an HDR PQ CR3, not the read alone.** `read_preview` ends in the HEVC decode (65-125 ms of CPU per
   file), which runs inside `slots.acquire` in the three scan sites and inside
   `preview`'s pause. At Step 1's cap of `scan_threads()` this changes nothing,
   but `preview` on such a file pauses the scan for the decode too, and a small
@@ -128,9 +143,14 @@ them. Times are ms unless the column says otherwise.
   outside it. Until then Step 2's done-when requires an HDR PQ CR3 run so the
   cap is not picked blind to it. Basis: review round 1 item 1,
   `crates/core/src/scan.rs`, `crates/core/src/reader.rs`.
-- **Split the read from `hevc::to_jpeg` so the slot covers the disk read only.**
+- **(Filed in `todo.md` by Step 3.) Split the read from `hevc::to_jpeg` so the
+  slot covers the disk read only.**
   With the picked cap of 2 and no HDR PQ CR3 run in the sweep, a folder of such
   files would pay a calculated 33-63 ms/file for the decode (65-125 ms of CPU)
   inside the two slots, against 3-6 ms/file today. The split removes that cost;
   the preceding item describes its shape. Basis: Step 2's sweep and the user's
   pick of cap 2, `crates/core/src/scan.rs`, `crates/core/src/reader.rs`.
+- **(Filed in `todo.md` by Step 3.) The plan's other follow-ups.** Prefetching
+  the neighbours, not waiting on a stale preview request, pausing for the other
+  read commands, and measuring the cap on NVMe. Basis: the plan's Purpose and
+  Step 3's Done-when.

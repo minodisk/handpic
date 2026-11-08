@@ -2381,3 +2381,43 @@ Files: `crates/app/ui/src/main.ts` (`trashFilesIn`, `closeTrashDialog`, `undoTra
 
 - [ ] Show the running count in the dialog or close the dialog when the run starts, without giving the strip keyboard focus mid-move.
 - [ ] Refuse or label `Delete Sidecars…` and Undo while `trashing !== null`.
+
+### App: split the disk read from `hevc::to_jpeg` so a read slot covers the read alone
+
+`read_preview` ends in the HEVC decode of an HDR PQ CR3 (65-125 ms of CPU per file), and that runs inside `ReadSlots::acquire` in the three scan sites and inside `preview`'s pause. With `READ_SLOTS` at 2 and no HDR PQ CR3 run in the sweep, a folder of such files pays a calculated 33-63 ms/file against 3-6 today, while the permits sit idle at the disk. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/core/src/scan.rs`, `crates/core/src/reader.rs`, `crates/app/src/commands.rs` (`preview`).
+
+#### TODO
+
+- [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
+
+### App: prefetch the neighbouring previews during a scan
+
+`preview-read-gate` capped the wait of the first preview but left out prefetching the neighbours, one of the three fixes offered to the user. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/ui/src/main.ts`, `crates/app/src/commands.rs` (`preview`).
+
+#### TODO
+
+- [ ] Decide after measuring paging during a scan whether prefetching the previews next to the current file is still needed at a read cap of 2; each prefetch would pause the scan's reads too.
+
+### App: stop waiting on a stale preview request
+
+`requestPreview` is single-flight, so paging past a file can wait for that file's read before the newest one starts. `preview-read-gate` left this out, as one of the three fixes offered to the user. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/ui/src/main.ts`.
+
+#### TODO
+
+- [ ] Measure how often a stale request holds back the current file's preview at a read cap of 2, then decide whether the current file should stop waiting for it.
+
+### App: pause the scan's reads for the other read commands if they show late
+
+Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `focus_crop` read the same prefix right after, normally from the cache, and each pause would be one more per page. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/commands.rs`.
+
+#### TODO
+
+- [ ] If the meta pane or the 1:1 crop is seen late during a first scan, measure those commands' reads and add a pause spanning the read only, never a model run or a decode.
+
+### App: measure the scan's read cap on NVMe
+
+`READ_SLOTS` (2) was picked on a SATA SSD; no RAW folder was on the NVMe (`C:`) at the time. A shallower queue costs more on a drive that needs deep queues for throughput, so cap 2 may slow the thumbnail fill there. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/commands.rs` (`READ_SLOTS`, `preview_during_pass_1_on_a_real_folder`).
+
+#### TODO
+
+- [ ] Put an unopened RAW folder on the NVMe, close the app and run `preview_during_pass_1_on_a_real_folder` at `RIFFLE_READ_SLOTS` 22 and 2, on cold data. Done when `docs/agents/tauri-app.md`'s read cap section has the numbers and the cap is confirmed or changed.

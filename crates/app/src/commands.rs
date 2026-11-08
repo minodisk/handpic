@@ -1324,11 +1324,14 @@ fn scan_threads() -> usize {
     cores.saturating_sub(2).max(1)
 }
 
-/// Scan workers inside a file read at once: all of them, so only the pause
-/// holds a read back until a smaller cap is measured.
-fn read_slots() -> usize {
-    scan_threads()
-}
+/// Scan workers inside a file read at once. A preview read waits behind the
+/// reads already queued, about threads x ms/file. On a cold first pass of ARW
+/// files on a SATA SSD (22 threads, the app closed), a preview read waited a
+/// median 155 ms at a cap of 22 without the pause (128 ms with it) and the pass
+/// took 7.2 ms/file; at a cap of 2 with the pause, a median 14-16 ms, p95 18-19
+/// ms, and 6.9-7.3 ms/file. A cap of 1 doubled the pass's time (one run). NVMe
+/// and HDR PQ CR3 are untested.
+const READ_SLOTS: usize = 2;
 
 /// The read slots of every scan, and what `preview` pauses them through. App
 /// state rather than a field of `ScansState`: `preview` must not wait for the
@@ -1337,7 +1340,7 @@ pub struct AppReadSlots(ReadSlots);
 
 impl Default for AppReadSlots {
     fn default() -> Self {
-        AppReadSlots(ReadSlots::new(read_slots()))
+        AppReadSlots(ReadSlots::new(READ_SLOTS))
     }
 }
 

@@ -1396,6 +1396,56 @@ least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
   `lock()`.
 - Source: `docs/plans/_archived/20260930-scan-priority/learnings.md`, Steps 4-6.
 
+### The scan's reads are capped and yield to the preview's at the disk (Measured)
+
+Every scan read goes through one process-wide `riffle_core::scan::ReadSlots`
+(`AppReadSlots`, app state): at most `READ_SLOTS` (2) workers are inside a
+file read at once, on any of the three passes, while decoding and the models
+stay on `scan_threads()` threads. `preview` holds `pause()` across its
+`read_preview`, so no worker starts a new read until it returns. The CLI and
+the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
+so `docs/humans/performance.md`'s numbers stay comparable.
+
+- The wait follows threads x ms/file: a preview read queues behind the reads
+  already at the disk (22 x 7 ms = 155 ms). So the cap gives most of the gain
+  and the pause little. Cold first pass of ARW files on a SATA SSD, 22 threads,
+  the app closed:
+
+  | Cap | Pause | Read p50 (ms) | Read p95 (ms) | ms/file |
+  | --- | ----- | ------------- | ------------- | ------- |
+  | 22  | off   | 154-156       | 159-163       | 7.2-7.3 |
+  | 22  | on    | 128-129       | 137-140       | 6.5-6.6 |
+  | 8   | on    | 29-57         | 46-62         | 7.5-8.1 |
+  | 4   | off   | 27            | 38            | 8.0     |
+  | 4   | on    | 20-25         | 30            | 7.1-8.0 |
+  | 2   | on    | 14-16         | 18-19         | 6.9-7.3 |
+  | 1   | on    | 11            | 18            | 14.0    |
+
+  Cap 2 has no pause-off run; cap 4 pause-off and cap 1 have one run each.
+- The 1.3 s (42.8 ms/file) first measured was inflated by the debug app reading
+  the same disk. Close the app before measuring;
+  `preview_during_pass_1_on_a_real_folder` refuses to run while it is alive.
+- The cap was measured on a SATA SSD only. NVMe is untested (no RAW folder on
+  it), and a drive that needs deep queues for throughput may lose some at a cap
+  of 2. HDR PQ CR3 is untested too.
+- The cap also covers `hevc::to_jpeg` until the read is split from it:
+  `read_preview` ends in that decode (65-125 ms of CPU per HDR PQ CR3), so at a
+  cap of 2 such a folder pays a calculated 33-63 ms/file, and `preview` on such
+  a file pauses the scan for the decode as well.
+- `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
+  it first sees one, then reads anyway, so a stuck or leaked pause slows the
+  scan to one file per worker per `MAX_PAUSE` and never stalls it. A wait for a
+  permit alone does not use that clock, or a small cap would let workers read
+  through a live pause.
+- Cancel is polled inside the wait (`CANCEL_TICK`, 50 ms) because the cancel
+  flag is a plain `AtomicBool` with no notifier and `ScansState::cancel` has no
+  handle on the slots. `acquire` then returns `None` and the worker abandons
+  the file, as `extract_unless` does at its other stages.
+- `preview` takes the slots from app state, not `ScansState`: it must not wait
+  for the `Scans` lock, which a clear, a trash run or the eviction holds for
+  seconds.
+- Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2.
+
 ### The third pass: `embeddings` is its own table, and the pass is not "scanning" (Inferred)
 
 `start_scan`'s task runs a third pass, `run_embed_pass`, after `faces-done`.
