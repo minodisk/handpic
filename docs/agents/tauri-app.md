@@ -2563,6 +2563,36 @@ without touching the app or the worker.
   pins it for every supported format; a new format gets an entry there.
 - Source: `docs/plans/_archived/20260930-orientation-neutral-preview/learnings.md`.
 
+### The preview ring (`prefetch.ts`) has ordering and invalidation rules that a page turn depends on (Hit)
+
+- `show()` must `take` the file's ring entry before it calls `plan`. `plan`
+  drops every non-neighbour, and the file about to be drawn is no longer a
+  neighbour of itself, so planning first closes the bitmap `show()` is about to
+  draw.
+- `requestPreview` returns early when `shown.seq === seq`. A ring hit draws
+  while an older real request may still be in flight, and that request's
+  stale-reply path would otherwise re-request and draw the same page twice.
+- A prefetch is deliberately not in the `inFlight` flag, because a page turn
+  issues its own request alongside it. A key that lands on a neighbour whose
+  prefetch has not returned costs a duplicate read, and the late reply is
+  closed.
+- The worker tells a prefetch reply from a page reply by an echoed `prefetch`
+  flag, not by `seq`, so the two id spaces cannot collide.
+- Only a re-listing (`resync`) clears the ring, because it is the only signal
+  that a file's bytes may have changed under the same path. A filter or sort
+  change only `retain`s. Any new path that rewrites a file in place must go
+  through `resync`, or the ring will show a stale image.
+- `refused` (failed reads) lasts until forgotten. `crowded` (files evicted for
+  the byte cap) lasts only while the file stays wanted. That is why two
+  neighbours that cannot share the cap, such as 24 MP view-only JPEGs against
+  the 32 MP cap, do not discard a read on every page turn. A RAF is 13 MP, so
+  RAW folders never hit this.
+- Timing: a keypress that finds a request in flight keeps its mark in
+  `queuedKeypressAt` for the re-request that serves it. Dropping the mark
+  would leave a held key with no `wait` in its `page` line.
+- Source: `docs/plans/_archived/20261108-preview-latency-breakdown/learnings.md`
+  (Step 1 and Step 4).
+
 ### WebKitGTK draws a large transferred `ImageBitmap` transparent (Hit)
 
 On Linux (WebKitGTK 2.50.4, WSLg), an `ImageBitmap` decoded in the worker and
