@@ -169,4 +169,7 @@ The default key is `e` (decided by the user at plan approval).
 
 ## Progress
 
-- (none yet)
+- 2026-11-08: Step 1 done. The worker was chosen from measurement (see
+  `learnings.md`). The hands-on check (alignment under orientations and dpr,
+  threshold tuning, the 4K raster timing) is still waiting on the user, so the
+  ticked box is not fully verified yet.
