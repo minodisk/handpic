@@ -164,12 +164,11 @@ function group(heading: string, rows: [string, string | null][]): MetaGroup {
 // analysis. The analysis group needs no `meta`, so a file whose metadata could
 // not be read still shows its analysis. The AF eye's in-focus probability gets a
 // row, as a percentage, only when there is one, and so do the open / closed
-// judgment with the openness of the eyes and the head pose of the same face. The
-// full-size eye score gets a row, with its verdict against the Good cut, only
-// when there is one. The values are the
-// scan stored for the judged face when it has them, else the `eyes` judgment taken
-// when the file was shown. The personal ranking's rows follow while AI
-// analysis is on and the file has a score.
+// judgment with the openness of the eyes and the head pose of the same face: the
+// values the scan stored for the judged face when it has them, else the `eyes`
+// judgment taken when the file was shown. The full-size eye score gets a row,
+// with its verdict against the Good cut, only when there is one. The personal
+// ranking's rows follow while AI analysis is on and the file has a score.
 export function metaGroups(
   meta: Metadata | null,
   focus?: FocusCue | null,
