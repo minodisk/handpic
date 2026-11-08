@@ -69,6 +69,14 @@
   fails when the Rust constant moves and its doc points at `focus.ts`; it does
   not read the TypeScript.
 
+## Step 5
+
+- Closed Step 4's deferred item: `CLAUDE.md`'s `src/focus.ts` description of
+  `photoTier` now names the full-size cut.
+- The docs' "about 20% of frames" and the 180-frame figures predate the
+  full-size check, which only lowers the share, so the 20% is now worded as
+  taken before it. Re-measuring it is not part of this step.
+
 ## Deferred issues (todo candidates)
 
 - `good_photo` in `crates/core/src/rank.rs` deliberately leaves out the
@@ -84,9 +92,6 @@
   the strip, a white focus mark, and filtered out by `Face focus` = Good), and
   the meta pane's `Eyes at full size` row reads `Soft`. Step 4's checkbox was
   ticked on the automated criteria; this check is the user's.
-- `CLAUDE.md`'s `src/focus.ts` description of the good-photo rule (`photoTier`)
-  does not name the full-size cut. Step 4's Done-when does not cover it, so it
-  was left; it belongs with Step 5's docs or the wrap-up.
 - The cold-disk cost of the second read is unmeasured: Step 3's figures are on
   a warm file cache (`crates/core/src/scan.rs`, `full_eye_sharp`). The plan's
   "Cost" trade-off names this as the case to watch; a pass 2 on a freshly

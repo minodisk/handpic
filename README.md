@@ -139,9 +139,15 @@ DxO PhotoLab.
   (an in-focus probability of 90% or more), the eyes open (an openness of 41
   or more) and the face toward the camera (turned no more than 35° and
   tilted no more than 45°), with a face mesh that sits on the face and a
-  face the frame's edge does not cut. It is selective by design, on about
-  20% of the author's frames with a face at the AF point, and bright green
-  means good only. The mark is gray when a face was judged and its eyes are
+  face the frame's edge does not cut. The eyes are also checked on the file's
+  full-size embedded JPEG: a frame whose eyes are soft there is not good and
+  turns white (it is not rejected), and a file with no JPEG larger than the
+  preview (RAF, ORF, an HDR PQ CR3) skips the check. The threshold was checked
+  on three folders from one body (ILCE-7M5): a few sharp frames can leave
+  good (the author judged 5 of 145 hand-labeled good picks sharp under it),
+  and it misses soft frames at high ISO. It is selective by design, on about
+  20% of the author's frames with a face at the AF point before the full-size
+  check, and bright green means good only. The mark is gray when a face was judged and its eyes are
   likely not in focus (a probability combining their sharpness and edge
   width, under about 77%); and white for everything else (a judged face at
   about 77% or more that misses a good cut, no face found near the AF point,
