@@ -65,7 +65,7 @@ Most `INFO` lines are timing lines, `<label>: key=value ... in <N>ms`: from
 the backend `open list`, `open entries`, `scan list`, `scan prepare`,
 `scan sidecars`, `scan reconcile` (`riffle_app::commands`) and `scan extract`,
 `scan faces` (`riffle_app::index`), `import` (`riffle_app::import`, one line per run with its throughput), and from the frontend, through the
-`log_timing` command, its timing lines (per-page preview timings, `zoom keypress`, `eyes` (the shown file's closed-eyes judgment: read, decode, detect, model, ipc) and the like) under target `riffle_app`.
+`log_timing` command, its timing lines (`page wait= read= ipc= post= worker= decode= draw= total= keypressToPixels= jpegKB= px=WxH scan=idle|1|2|3`, the per-page preview timings by stage, with `wait` and `keypressToPixels` omitted for a switch no key timed; `zoom keypress`, `eyes` (the shown file's closed-eyes judgment: read, decode, detect, model, ipc) and the like) under target `riffle_app`.
 The frontend ones appear only while the settings modal's `Timing logs` item
 (development builds only) is on. They describe performance, not failures.
 

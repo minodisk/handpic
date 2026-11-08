@@ -64,14 +64,14 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 | `post` | invoke resolved → `worker.postMessage` (header parse, `previewPixelLimit`, the `slice` copy) | frontend |
 | `worker` | postMessage → the worker's `message` handler fires, plus the bitmap transfer back (two queue hops) | derived: frontend span minus `decode` |
 | `decode` | `createImageBitmap` inside the worker | worker, carried in its reply |
-| `draw` | the `message` handler's `draw()` call (canvas resize, `drawImage`, the marks) | frontend |
+| `draw` | the `message` handler from its success path to the end of `draw()` (the bitmap swap, `setStatus()`'s meta-pane rebuild, canvas resize, `drawImage`, the marks) | frontend |
 
 `keypressToPixels` = the sum; `total` (from the request) = the sum without
 `wait`, as today.
 
 ## Steps
 
-- [ ] Step 1: Time every stage of the preview path and show the breakdown in the overlay and the `page` line
+- [x] Step 1: Time every stage of the preview path and show the breakdown in the overlay and the `page` line
   - Done when:
     - `preview` returns a `PREVIEW_KIND_JPEG_V2` payload whose header is
       still 8 bytes with the formerly reserved `u32` at offset 4 now
@@ -354,4 +354,4 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 
 ## Progress
 
-- (none yet)
+- (2026-11-08) Step 1 complete

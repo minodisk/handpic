@@ -170,7 +170,7 @@ End-to-end per-page latency (IPC + `createImageBitmap`) is unmeasured, since the
 
 #### TODO
 
-- [ ] Measure keypress-to-pixels per page turn on real hardware and add the numbers to "Per-page preview read" in docs/humans/performance.md. The instrumentation now exists: with `Timing logs` on, the app logs a `page invoke=… decode=… total=… keypressToPixels=…` line per page turn to `Riffle.log`, and "Measuring on your own folder" in docs/humans/performance.md spells out the procedure. Only running the measurement and filling in the numbers is left.
+- [ ] Measure keypress-to-pixels per page turn on real hardware and add the numbers to "Per-page preview read" in docs/humans/performance.md. The instrumentation now exists: with `Timing logs` on, the app logs a `page` line (fields `read=…`, `ipc=…`, `post=…`, `worker=…`, `decode=…`, `draw=…`, `total=…`, `keypressToPixels=…`) per page turn to `Riffle.log`, and "Measuring on your own folder" in docs/humans/performance.md spells out the procedure. Only running the measurement and filling in the numbers is left.
 
 ### App: cold first scan on an internal SSD is far slower than the extrapolation
 
@@ -991,8 +991,8 @@ Files: `crates/app/ui/src/worker.ts` (resize on decode),
 #### TODO
 
 - [ ] Measure first on the real app on Linux with `Timing logs` on: the
-      `page invoke=… decode=… total=… keypressToPixels=…` line splits the
-      IPC (invoke) from the decode.
+      `page read=… ipc=… post=… worker=… decode=… draw=… total=…
+      keypressToPixels=…` line splits the read and IPC from the decode.
 - [ ] Candidate fixes, none decided: prefetch and decode the neighbouring
       pages ahead; or have the backend downscale and cache a mid-size JPEG
       for files lacking one, which would serve the main view and, as a side
@@ -1619,7 +1619,7 @@ pass carries which cost").
 
 #### TODO
 
-- [ ] On Windows, clear the cache (settings modal, `Clear Cache`), open a large RAW folder (a few thousand files) in a development build with the settings modal's `Timing logs` on, and page through it with the arrow keys while `scanning N / M` and then `analyzing N / M` run. Compare the `page invoke=.. decode=.. total=.. keypressToPixels=..` lines in `Riffle.log` with the same run on the previous release (and with paging after the scan ends). Expect that during the passes they are not worse and are closer to the idle value. Note the wall time of the `scan extract` / `scan faces` summary lines of both runs, to see what the lowered priority costs while paging. No `ran at normal priority` warning may appear in the log.
+- [ ] On Windows, clear the cache (settings modal, `Clear Cache`), open a large RAW folder (a few thousand files) in a development build with the settings modal's `Timing logs` on, and page through it with the arrow keys while `scanning N / M` and then `analyzing N / M` run. Compare the `page read=.. ipc=.. post=.. worker=.. decode=.. draw=.. total=.. keypressToPixels=..` lines in `Riffle.log` with the same run on the previous release (and with paging after the scan ends). Expect that during the passes they are not worse and are closer to the idle value. Note the wall time of the `scan extract` / `scan faces` summary lines of both runs, to see what the lowered priority costs while paging. No `ran at normal priority` warning may appear in the log.
 - [ ] On Windows, clear the cache, open the same kind of folder in a development build with `Timing logs` on, and at once jump to the middle of the strip (drag the scrollbar, then click a cell). Expect the cells around the current file to get their thumbnails during `scanning N / M`, and then their focus marks during `analyzing N / M`, before the cells at the folder's start do (by eye, or from the `scan-progress` / `faces-progress` `ready` lists in the webview devtools). Note the wall time of the `scan extract` / `scan faces` summary lines against the previous TODO's run of the same folder, so the queue's own overhead shows.
 - [ ] On macOS, repeat the paging run once. Expect the analysis pass (`QOS_CLASS_BACKGROUND`, which also throttles disk IO) not to crawl; if it does, move it to `QOS_CLASS_UTILITY` and update the priority entry in `docs/agents/tauri-app.md`.
 - [ ] Done when: the measured page-latency and `scan extract` / `scan faces` numbers, with their conditions, are in `docs/humans/performance.md` ("Which pass carries which cost"), and the README wording on paging is revisited from that result.

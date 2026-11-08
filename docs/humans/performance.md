@@ -780,12 +780,19 @@ apart.
 Per-page latency is logged the same way. Turn on `Timing logs` in the settings
 window (the item only shows in a `mise run tauri:release:devtools` or debug
 build), page through a folder with the next/previous keys, and read the
-`page invoke=… decode=… total=… keypressToPixels=…` lines in `Riffle.log`.
-`invoke` is the `preview` call's round trip (the Rust read plus IPC), `decode`
-is the worker's `createImageBitmap` round trip, `total` runs from the request
-to the drawn canvas, and `keypressToPixels` from the keypress to the drawn
-canvas; it is left out for a page not asked for by a key (a strip click or a
-folder open). A page turn overtaken by the next one logs nothing.
+`page wait=… read=… ipc=… post=… worker=… decode=… draw=… total=…
+keypressToPixels=… jpegKB=… px=WxH scan=…` lines in `Riffle.log`. `wait` is the
+time a key spent behind an in-flight request, `read` the Rust read (the pause
+of the scan's reads included), `ipc` the rest of the `preview` call's round
+trip, `post` the main thread's work before handing the JPEG to the worker,
+`worker` the two hops to the worker and back, `decode` its `createImageBitmap`
+and `draw` the rest of the main thread's work to the drawn canvas (the meta pane
+rebuild and the canvas draw). `total` runs from the request to the drawn canvas
+and `keypressToPixels` from the keypress to the drawn canvas; `jpegKB` is the
+payload size, `px` the decoded size and `scan` the scan pass running at the
+request (`idle`, `1`, `2` or `3`). `wait` and `keypressToPixels` are left out
+for a page not asked for by a key (a strip click or a folder open). A page turn
+overtaken by the next one logs nothing.
 
 ## The 1:1 focus check path
 

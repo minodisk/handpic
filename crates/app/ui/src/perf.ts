@@ -21,9 +21,40 @@ export interface PerfSample {
   disk: number | null;
 }
 
+// The stages of one preview switch, in path order.
+export const STAGES = ["wait", "read", "ipc", "post", "worker", "decode", "draw"] as const;
+export type LatencyStages = Record<(typeof STAGES)[number], number>;
+
 export interface LatencyPoint {
   at: number;
   ms: number;
+  stages?: LatencyStages;
+}
+
+// One switch's marks on the main thread's clock, and the two durations
+// measured elsewhere (`readMs` by the backend, `decodeMs` by the worker).
+export interface StageMarks {
+  startedAt: number;
+  requestedAt: number;
+  invokedAt: number;
+  readMs: number;
+  postedAt: number;
+  receivedAt: number;
+  decodeMs: number;
+  drawStartedAt: number;
+  drawnAt: number;
+}
+
+export function stagesOf(marks: StageMarks): LatencyStages {
+  return {
+    wait: marks.requestedAt - marks.startedAt,
+    read: marks.readMs,
+    ipc: Math.max(0, marks.invokedAt - marks.requestedAt - marks.readMs),
+    post: marks.postedAt - marks.invokedAt,
+    worker: Math.max(0, marks.receivedAt - marks.postedAt - marks.decodeMs),
+    decode: marks.decodeMs,
+    draw: marks.drawnAt - marks.drawStartedAt,
+  };
 }
 
 export interface PerfView {
