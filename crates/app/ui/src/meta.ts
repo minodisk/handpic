@@ -1,5 +1,5 @@
 import type { EyeState, Eyes, Pose } from "./eyes.js";
-import { eyesOpenness } from "./focus.js";
+import { eyesOpenness, GOOD_FULL_EYE_SHARP } from "./focus.js";
 
 // Mirrors `Metadata` in `crates/app/src/commands.rs`: already formatted for
 // display, so a field is either a string to show or null to leave out.
@@ -46,13 +46,15 @@ export type FocusCandidate = "candidate" | "not_candidate" | "unknown";
 // The second scan pass's result for one file, as `Focus` in `main.ts` carries
 // it. `eyes_ear`, `eyes` and `pose` are what it stored for the judged face
 // (nearest the AF point, else the largest on the whole preview), `null` /
-// `unknown` when it ran no face mesh there.
+// `unknown` when it ran no face mesh there. `full_eye_sharp` is the sharpness
+// of its eyes on the full-size image, `null` when there is none.
 export interface FocusCue {
   candidate: FocusCandidate;
   eye_focus: number | null;
   eyes_ear: number | null;
   eyes: EyeState;
   pose: Pose | null;
+  full_eye_sharp: number | null;
 }
 
 // One file's place in its burst under the personal ranking, as `Ranked` in
@@ -142,6 +144,14 @@ function degrees(angle: number): string {
   return `${Math.round(angle)}°`;
 }
 
+// The full-size eye score with its verdict against the Good cut, `Soft · 0.143`.
+function fullSharpValue(score: number | null): string | null {
+  if (score === null) {
+    return null;
+  }
+  return `${score >= GOOD_FULL_EYE_SHARP ? "Sharp" : "Soft"} · ${score.toFixed(3)}`;
+}
+
 function group(heading: string, rows: [string, string | null][]): MetaGroup {
   return {
     heading,
@@ -154,10 +164,11 @@ function group(heading: string, rows: [string, string | null][]): MetaGroup {
 // analysis. The analysis group needs no `meta`, so a file whose metadata could
 // not be read still shows its analysis. The AF eye's in-focus probability gets a
 // row, as a percentage, only when there is one, and so do the open / closed
-// judgment with the openness of the eyes and the head pose of the same face: the values the
-// scan stored for the judged face when it has them, else the `eyes` judgment taken
-// when the file was shown. The personal ranking's rows follow while AI
-// analysis is on and the file has a score.
+// judgment with the openness of the eyes and the head pose of the same face: the
+// values the scan stored for the judged face when it has them, else the `eyes`
+// judgment taken when the file was shown. The full-size eye score gets a row,
+// with its verdict against the Good cut, only when there is one. The personal
+// ranking's rows follow while AI analysis is on and the file has a score.
 export function metaGroups(
   meta: Metadata | null,
   focus?: FocusCue | null,
@@ -199,6 +210,7 @@ export function metaGroups(
   groups.push(
     group(ANALYSIS_HEADING, [
       ["AF eye in focus", focusPercent(focus?.eye_focus ?? null)],
+      ["Eyes at full size", fullSharpValue(focus?.full_eye_sharp ?? null)],
       [
         "Eyes",
         stored

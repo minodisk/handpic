@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { GOOD_FULL_EYE_SHARP } from "./focus.js";
 import {
   EXIF_HEADING,
   type FocusCue,
@@ -67,7 +68,7 @@ const leica: Metadata = {
   focus_distance: "1.5 m",
 };
 
-const noEyes = { eyes_ear: null, eyes: "unknown", pose: null } as const;
+const noEyes = { eyes_ear: null, eyes: "unknown", pose: null, full_eye_sharp: null } as const;
 
 describe("metaGroups", () => {
   test("splits Sony-like input into EXIF, Maker note and Analysis", () => {
@@ -264,6 +265,7 @@ describe("metaGroups", () => {
       eyes_ear: 0.09,
       eyes: "closed",
       pose: { yaw: 12.4, pitch: -5.2, roll: 3.5 },
+      full_eye_sharp: null,
     };
     expect(metaGroups(null, focus, undefined)[0]?.rows).toEqual([
       { label: "AF eye in focus", value: "87%" },
@@ -272,6 +274,21 @@ describe("metaGroups", () => {
       { label: "Pitch", value: "-5°" },
       { label: "Roll", value: "4°" },
     ]);
+  });
+
+  test("shows the full-size eye score against the Good cut only when there is one", () => {
+    const rows = (full_eye_sharp: number | null) =>
+      metaGroups(null, { candidate: "candidate", eye_focus: 0.87, ...noEyes, full_eye_sharp })[0]
+        ?.rows;
+    expect(rows(0.143)).toEqual([
+      { label: "AF eye in focus", value: "87%" },
+      { label: "Eyes at full size", value: "Soft · 0.143" },
+    ]);
+    expect(rows(GOOD_FULL_EYE_SHARP)?.[1]).toEqual({
+      label: "Eyes at full size",
+      value: "Sharp · 0.162",
+    });
+    expect(rows(null)).toEqual([{ label: "AF eye in focus", value: "87%" }]);
   });
 
   test("falls back to the judgment without a stored eye state", () => {
@@ -292,6 +309,7 @@ describe("metaGroups", () => {
       eyes_ear: 0.3,
       eyes: "open",
       pose: { yaw: 1, pitch: 2, roll: 3 },
+      full_eye_sharp: null,
     };
     const judged = { yaw: 40, pitch: 0, roll: 0 };
     expect(metaGroups(null, focus, judgment("closed", 0.09, judged))[0]?.rows).toEqual([

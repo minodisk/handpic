@@ -8,6 +8,7 @@ import {
   FOCUS_MARK_ICONS,
   GOOD_EYE_EAR,
   GOOD_EYE_FOCUS,
+  GOOD_FULL_EYE_SHARP,
   GOOD_MAX_PITCH,
   GOOD_MAX_YAW,
   MAX_EYE_OFFSET,
@@ -36,6 +37,7 @@ const noEyes = {
   pose: null,
   eye_offset: null,
   edge_gap: null,
+  full_eye_sharp: null,
 } as const;
 
 const at: FocusPoint = {
@@ -64,6 +66,7 @@ const good: MarkFocus = {
   pose: { yaw: 10, pitch: -5, roll: 3 },
   eye_offset: 0.03,
   edge_gap: 2,
+  full_eye_sharp: 0.3,
 };
 
 describe("focusMark", () => {
@@ -207,12 +210,19 @@ describe("AF_EYE_HELP", () => {
     for (const figure of ["90%", "openness 41", "35°", "45°"]) {
       expect(AF_EYE_HELP.good).toContain(figure);
     }
+    expect(AF_EYE_HELP.good).toContain("sharp on it");
     expect(AF_EYE_HELP.good).not.toContain("77%");
   });
 
   test("neutral holds a candidate that misses Good and every file without a judged face", () => {
     expect(AF_EYE_HELP.neutral).toContain("77% or more");
-    for (const holds of ["Good condition", "no judged face", "a JPEG", "not reached"]) {
+    for (const holds of [
+      "Good condition",
+      "soft at full size",
+      "no judged face",
+      "a JPEG",
+      "not reached",
+    ]) {
       expect(AF_EYE_HELP.neutral).toContain(holds);
     }
   });
@@ -293,6 +303,13 @@ describe("photoTier: good", () => {
     expect(goodPhoto({ ...good, edge_gap: MIN_EDGE_GAP + 0.001 })).toBe(true);
     expect(goodPhoto({ ...good, edge_gap: MIN_EDGE_GAP - 0.001 })).toBe(false);
     expect(goodPhoto({ ...good, edge_gap: -0.1 })).toBe(false);
+  });
+
+  test("a frame soft at full size is not good, at the cut or unmeasured it is", () => {
+    expect(photoTier({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 })).toBeNull();
+    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 })).toBe("neutral");
+    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP })).toBe("good");
+    expect(afEyeState({ ...good, full_eye_sharp: null })).toBe("good");
   });
 
   test("the three frames the user named are not good", () => {
@@ -633,6 +650,7 @@ describe("applyFaceReady", () => {
           pose,
           eye_offset: 0.05,
           edge_gap: -0.01,
+          full_eye_sharp: 0.14,
         },
       ],
       undefined,
@@ -644,6 +662,7 @@ describe("applyFaceReady", () => {
       pose,
       eye_offset: 0.05,
       edge_gap: -0.01,
+      full_eye_sharp: 0.14,
     });
   });
 

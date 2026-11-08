@@ -175,6 +175,13 @@ mod tests {
         c.finish().unwrap()
     }
 
+    /// `GOOD_FULL_EYE_SHARP` in `crates/app/ui/src/focus.ts` is this figure:
+    /// update it with the threshold.
+    #[test]
+    fn the_threshold_is_the_figure_the_ui_cuts_good_at() {
+        assert_eq!(SOFT_BELOW, 0.162);
+    }
+
     #[test]
     fn a_blurred_crop_scores_under_the_threshold_and_a_sharp_one_over_it() {
         let sharp = disc(100, 30, 220);

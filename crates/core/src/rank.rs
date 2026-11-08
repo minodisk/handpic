@@ -225,7 +225,9 @@ fn logit(p: f64) -> f64 {
     (p / (1.0 - p)).ln()
 }
 
-/// The good-photo rule of `photoTier` in `focus.ts`.
+/// The good-photo rule of `photoTier` in `focus.ts`, without its full-size
+/// eye cut (`full_eye_sharp`): the ranking's features deliberately stay on the
+/// preview's values.
 fn good_photo(f: &Frame) -> bool {
     candidate(f.eye_focus) == FocusCandidate::Candidate
         && f.eye_focus.is_some_and(|p| p >= GOOD_EYE_FOCUS)
