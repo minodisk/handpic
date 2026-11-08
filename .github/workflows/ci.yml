@@ -138,7 +138,8 @@ jobs:
       - name: Lint and test the native app
         shell: bash
         run: |
-          export PATH="$PATH:$(cygpath -u "$USERPROFILE")/nasm"
+          nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
+          export PATH="$PATH:$nasm_dir"
           command -v nasm
           nasm -v
           mise run native:check
