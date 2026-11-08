@@ -3314,6 +3314,13 @@ mod tests {
         let _ = go.send(());
     }
 
+    /// The count, median and p95 of `ms`, which must not be empty.
+    fn summarize(mut ms: Vec<f64>) -> (usize, f64, f64) {
+        ms.sort_by(f64::total_cmp);
+        let at = |q: f64| ms[((ms.len() - 1) as f64 * q).round() as usize];
+        (ms.len(), at(0.5), at(0.95))
+    }
+
     /// The plan's Step 3 measurement of the third pass without the GUI: the
     /// folder `RIFFLE_EMBED_DIR` through the app's three passes into a fresh
     /// index, at the app's priorities and thread counts (`RIFFLE_EMBED_THREADS`
@@ -3358,15 +3365,9 @@ mod tests {
             riffle_core::decode::decode_rgb(&jpeg).unwrap();
             t.elapsed().as_secs_f64() * 1000.0
         };
-        let summarize = |mut ms: Vec<f64>| {
-            ms.sort_by(f64::total_cmp);
-            let at = |q: f64| ms[((ms.len() - 1) as f64 * q).round() as usize];
-            format!(
-                "n={} median {:.1} ms, p95 {:.1} ms",
-                ms.len(),
-                at(0.5),
-                at(0.95)
-            )
+        let summarize = |ms: Vec<f64>| {
+            let (n, median, p95) = summarize(ms);
+            format!("n={n} median {median:.1} ms, p95 {p95:.1} ms")
         };
         // Runs `pass` with the working-set sampler and the preview probe
         // alongside, and prints what they saw.
@@ -3460,6 +3461,146 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "a rescan embeds 0 files"
+        );
+        remove_temp_dir(&tmp);
+    }
+
+    fn is_the_app(process_name: &std::ffi::OsStr) -> bool {
+        process_name == "riffle-app.exe"
+    }
+
+    fn app_is_running() -> bool {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        sys.processes().values().any(|p| is_the_app(p.name()))
+    }
+
+    #[test]
+    fn the_apps_process_name_is_matched_exactly() {
+        assert!(is_the_app("riffle-app.exe".as_ref()));
+        assert!(!is_the_app("riffle_app-0123456789abcdef.exe".as_ref()));
+    }
+
+    /// The plan's Step 2 measurement of the read cap without the GUI: pass 1
+    /// on `RIFFLE_SCAN_DIR` into a fresh index at the app's priority and thread
+    /// count, through a `ReadSlots` of cap `RIFFLE_READ_SLOTS`, while a
+    /// normal-priority probe does what `preview` does every 250 ms: the read
+    /// inside a pause (`RIFFLE_PROBE_PAUSE=0` leaves the pause out), then the
+    /// decode outside it. Refuses to run while the app is alive, whatever
+    /// checkout it runs from. `cargo test --release -p riffle-app
+    /// preview_during_pass_1_on_a_real_folder -- --ignored --nocapture`.
+    ///
+    /// Every third file stays out of the pass: the first is the coldness check
+    /// and the rest are the probe's, each read once, because a file the pass
+    /// has read is a cache hit that would show no wait at all. So ms/file
+    /// compares between the sweep's cells, not with a scan of the whole
+    /// folder, and on a pass slower than about 125 ms/file the probe runs out
+    /// before the pass ends (`probes` equal to `probe_files`).
+    ///
+    /// Prints one `sweep-cell` line of `key=value` fields; discard a run whose
+    /// `cold_ms` is about 1, a cached read.
+    #[test]
+    #[ignore = "needs RIFFLE_SCAN_DIR and RIFFLE_READ_SLOTS, on cold data with the app closed"]
+    fn preview_during_pass_1_on_a_real_folder() {
+        use std::time::Instant;
+        let (Ok(dir), Ok(cap)) = (
+            std::env::var("RIFFLE_SCAN_DIR"),
+            std::env::var("RIFFLE_READ_SLOTS"),
+        ) else {
+            panic!("set RIFFLE_SCAN_DIR and RIFFLE_READ_SLOTS");
+        };
+        let cap: usize = cap.parse().unwrap();
+        assert!(cap > 0, "RIFFLE_READ_SLOTS must be at least 1");
+        let pause = std::env::var("RIFFLE_PROBE_PAUSE").map_or(true, |p| p != "0");
+        assert!(
+            !app_is_running(),
+            "close riffle-app.exe: its reads would pollute the numbers"
+        );
+
+        let mut files: Vec<FileStat> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| riffle_core::scan::is_raw_file(p))
+            .filter_map(|p| index::stat(&p).ok())
+            .collect();
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        let (mut held_out, mut scanned) = (Vec::new(), Vec::new());
+        for (i, file) in files.into_iter().enumerate() {
+            if i % 3 == 0 {
+                held_out.push(file.path);
+            } else {
+                scanned.push(file);
+            }
+        }
+        let (cold_file, probe_files) = held_out.split_first().expect("no RAW file in the folder");
+
+        let tmp = temp_dir("preview-real");
+        let index = sidecar_index(&tmp);
+        let (todo, _) = index::lock(&index).reconcile(&dir, &scanned).unwrap();
+        let slots = ReadSlots::new(cap);
+        let (focus, cancel, threads) = (
+            ScanFocus::with_slots(slots.clone()),
+            AtomicBool::new(false),
+            scan_threads(),
+        );
+        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+
+        let t = Instant::now();
+        read_preview(cold_file).unwrap();
+        let cold_ms = ms(t.elapsed());
+
+        let running = AtomicBool::new(true);
+        let (summary, wall, probed) = std::thread::scope(|s| {
+            let prober = s.spawn(|| {
+                let mut probed = Vec::new();
+                for path in probe_files {
+                    std::thread::sleep(Duration::from_millis(250));
+                    if !running.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let t = Instant::now();
+                    let (_, jpeg) = {
+                        let _paused = pause.then(|| slots.pause());
+                        read_preview(path).unwrap()
+                    };
+                    let read = t.elapsed();
+                    riffle_core::decode::decode_rgb(&jpeg).unwrap();
+                    probed.push((ms(read), ms(t.elapsed())));
+                }
+                probed
+            });
+            let t = Instant::now();
+            let summary = index::run_scan(
+                &index,
+                &dir,
+                &todo,
+                threads,
+                &focus,
+                &cancel,
+                index::PROGRESS_INTERVAL,
+                |_, _, _| {},
+            );
+            let wall = t.elapsed();
+            running.store(false, Ordering::Relaxed);
+            (summary, wall, prober.join().unwrap())
+        });
+        assert!(!probed.is_empty(), "the pass ended before the first probe");
+
+        let ms_per_file = ms(wall) / summary.total.max(1) as f64;
+        let (reads, read_decodes) = probed.into_iter().unzip();
+        let (probes, read_p50, read_p95) = summarize(reads);
+        let (_, read_decode_p50, read_decode_p95) = summarize(read_decodes);
+        println!(
+            "sweep-cell cap={cap} pause={} threads={threads} files={} errors={} cold_ms={cold_ms:.1} pass_s={:.1} ms_per_file={ms_per_file:.1} probe_files={} probes={probes} read_p50={read_p50:.1} read_p95={read_p95:.1} read_decode_p50={read_decode_p50:.1} read_decode_p95={read_decode_p95:.1}",
+            if pause { "on" } else { "off" },
+            summary.total,
+            summary.errors,
+            wall.as_secs_f64(),
+            probe_files.len(),
         );
         remove_temp_dir(&tmp);
     }

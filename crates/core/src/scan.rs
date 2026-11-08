@@ -499,16 +499,23 @@ impl ReadSlots {
 
     /// Wait for a free permit and no pause, then hold the permit until the
     /// slot drops. `None` once `cancel` is set, the worker then abandoning its
-    /// file. A pause is honoured for `MAX_PAUSE` from the call, a free permit
-    /// taken regardless after that.
+    /// file. A pause is honoured for `MAX_PAUSE` from when this call first sees
+    /// it on, a free permit taken regardless after that; the clock starts over
+    /// once it sees no pause, so a wait for a permit alone uses none of it.
     pub fn acquire(&self, cancel: &AtomicBool) -> Option<ReadSlot> {
-        let started = Instant::now();
+        let mut paused_since = None;
         let mut gate = self.lock();
         loop {
             if canceled(cancel) {
                 return None;
             }
-            if gate.free > 0 && (gate.paused == 0 || started.elapsed() >= self.max_pause) {
+            if gate.paused == 0 {
+                paused_since = None;
+            } else {
+                paused_since.get_or_insert_with(Instant::now);
+            }
+            let pause_over = paused_since.is_none_or(|t| t.elapsed() >= self.max_pause);
+            if gate.free > 0 && pause_over {
                 gate.free -= 1;
                 return Some(ReadSlot(self.clone()));
             }
@@ -1346,6 +1353,45 @@ mod tests {
         assert!(took >= max_pause * 3, "6 files on 2 workers, took {took:?}");
         assert!(took < Duration::from_secs(5), "took {took:?}");
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_wait_for_a_permit_alone_does_not_use_up_the_pause() {
+        let max_pause = Duration::from_millis(400);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let cancel = AtomicBool::new(false);
+        let held = slots.acquire(&cancel);
+        std::thread::scope(|s| {
+            let worker = s.spawn(|| slots.acquire(&cancel).is_some());
+            std::thread::sleep(max_pause * 3 / 2);
+            let paused = slots.pause();
+            drop(held);
+            std::thread::sleep(max_pause / 2);
+            assert!(!worker.is_finished(), "the pause began after the wait");
+            drop(paused);
+            assert!(worker.join().unwrap());
+        });
+    }
+
+    #[test]
+    fn a_pause_seen_off_gives_the_next_one_the_whole_maximum() {
+        let max_pause = Duration::from_millis(400);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let cancel = AtomicBool::new(false);
+        let held = slots.acquire(&cancel);
+        std::thread::scope(|s| {
+            let first = slots.pause();
+            let worker = s.spawn(|| slots.acquire(&cancel).is_some());
+            std::thread::sleep(max_pause * 3 / 4);
+            drop(first);
+            std::thread::sleep(CANCEL_TICK * 2);
+            let second = slots.pause();
+            drop(held);
+            std::thread::sleep(max_pause / 2);
+            assert!(!worker.is_finished(), "the second pause began a new clock");
+            drop(second);
+            assert!(worker.join().unwrap());
+        });
     }
 
     #[test]

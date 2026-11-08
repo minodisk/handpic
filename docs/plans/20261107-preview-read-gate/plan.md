@@ -18,6 +18,18 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
+> **Correction (2026-11-08, from Step 2's sweep).** The figures below are kept
+> as written. The 1323 ms / 42.8 ms/file baseline, the 23 MiB/s derived from it
+> and the 330-570 ms cold read were inflated: the user's debug app was running
+> and reading D: at the time. With the app closed the baseline during pass 1 is
+> about 155 ms read p50 and 7.2 ms/file, and the queue model holds (the wait is
+> about threads x ms/file, 22 x 7 = 155). So a cap of 4 does not leave "about
+> 170 ms" (measured read p95: 30 ms with the pause, 38 ms without), and the same
+> goes for that estimate in "Trade-offs and risks". The cap gives almost all of
+> the gain and the pause a small part (cap 22: 155 off, 128 on; cap 4: 27 off,
+> 20-25 on). The picked cap is 2, by the user's decision. See `learnings.md`,
+> Step 2.
+
 Riffle is a culling app: the thumbnails and the preview of the focused
 thumbnail must win over every other piece of work. The user reports the
 preview sometimes appears late. Measured on a release build
@@ -71,7 +83,8 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
   `for_each_path` before `take_next`: the cap must bound the read alone, so
   that the CPU work after it runs uncapped, and the read is the first stage
   of each of those functions.
-- A worker waits for the pause at most `MAX_PAUSE` (1 s), then takes a
+- A worker waits for the pause at most `MAX_PAUSE` (1 s) from when it first
+  sees it on, then takes a
   permit when one is free, so a stuck or leaked pause slows the scan to one
   file per worker per `MAX_PAUSE` at worst and never stalls it. The cap
   itself is released by every slot's drop, including a panic unwind, so it
@@ -128,7 +141,9 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       `wait_timeout` with a short tick (around 50 ms) because the cancel
       flag is a plain `AtomicBool` with no notifier; it leaves with `None`
       when `canceled(cancel)`, and takes a permit when `free > 0` and
-      (`paused == 0` or this call has waited `MAX_PAUSE`). Guards decrement
+      (`paused == 0` or this call has seen the pause on for `MAX_PAUSE`, a
+      clock that starts when it first sees a pause and starts over once it
+      sees none, so a wait for a permit alone does not count). Guards decrement
       / increment and `notify_all`. Keep the tests fast by letting the
       maximum pause be a parameter the tests shorten (a `with_max_pause`
       constructor or a field), not a sleep of a second per test.
@@ -158,7 +173,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       the preview is reading; both read the same 1 MiB prefix and the
       second is served from the cache, or both hit the disk once for at
       most 1 MiB. Not handled.
-- [ ] Step 2: Measure the cap on a cold pass 1 and pick its value
+- [x] Step 2: Measure the cap on a cold pass 1 and pick its value
   - Done when:
     - A new ignored test in `crates/app/src/commands.rs`
       (`preview_during_pass_1_on_a_real_folder`, next to
@@ -186,6 +201,13 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       100 ms (a cold 1 MiB read on D: took 330-570 ms; a cached one about
       1 ms). Columns: cap, pause on/off, cold-check ms, pass ms/file, probe
       read p50 / p95, read + decode p50 / p95.
+      - Deviations (2026-11-08): the cold check of at least 100 ms was never
+        met (5-9 ms every run, the threshold came from the inflated numbers;
+        coldness is inferred from cap 22's 130-155 ms wait). The sweep ran out
+        of folders: cap 4 pause-off and cap 1 have one run each, the planned
+        cells at the end were not run, and the chosen cap 2 has no pause-off
+        run. The smoke on `D:\photos\samples\CR3` panicked in the probe's
+        decode of a sample and was not a sweep cell.
     - `learnings.md` states the picked cap and the rule it followed: among
       the caps whose probe read p95 during pass 1 is at or under 250 ms
       (roughly the idle read + decode + frontend path, so paging during the
@@ -194,17 +216,26 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       the uncapped throughput, note the next larger cap's wait and leave the
       final choice to the user with both rows; if no cap meets 250 ms,
       report the knee of the wait-versus-throughput curve and ask the user.
+      - Deviation (2026-11-08): the rule did not pick the cap. Every cap met
+        250 ms, so it would have picked the uncapped 22 within noise, which
+        improves nothing; the threshold was too loose. The user picked cap 2
+        with the table in hand.
     - NVMe: if a RAW folder exists on C: (NVMe), one run at the baseline and
       at the chosen cap there, cold, recorded in the same table; if none
       exists, `learnings.md` says the cap is untested on NVMe and what it
       is expected to cost there (a shallower queue costs more on a drive
       that needs deep queues for throughput, which the user's C: may show).
+      - Result (2026-11-08): no RAW folder was found on the NVMe, so NVMe is
+        untested.
     - HDR PQ CR3: because Step 1 holds the slot and the pause across
       `hevc::to_jpeg` (65-125 ms of CPU per HDR PQ CR3, `docs/humans/performance.md`),
       one run on a folder of HDR PQ CR3 files at the baseline and at each
       candidate cap (1 / 2 at least) is recorded in the same table, or the
       read is split from the decode (see `learnings.md`'s deferred issues)
       before the cap is picked. The ARW sweep alone cannot show this.
+      - Deviation (2026-11-08): neither was done. The cost at cap 2 is a
+        calculated 33-63 ms/file against 3-6 today; splitting the read from
+        `hevc::to_jpeg` is a deferred item in `learnings.md`.
     - `mise run ci` passes.
   - Implementation approach:
     - Assumes Step 1 is merged. The test builds its own `ScanFocus` with a
@@ -303,3 +334,4 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 ## Progress
 
 - (2026-11-07) Step 1 complete
+- (2026-11-08) Step 2 complete
