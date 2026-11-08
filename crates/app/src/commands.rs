@@ -1325,7 +1325,7 @@ fn scan_threads() -> usize {
 }
 
 /// Scan workers inside a file read at once. A preview read waits behind the
-/// reads already queued, about threads x ms/file. On a cold first pass of ARW
+/// reads already queued, about the reads in flight x ms/file (without a cap, threads x ms/file). On a cold first pass of ARW
 /// files on a SATA SSD (22 threads, the app closed), a preview read waited a
 /// median 155 ms at a cap of 22 without the pause (128 ms with it) and the pass
 /// took 7.2 ms/file; at a cap of 2 with the pause, a median 14-16 ms, p95 18-19

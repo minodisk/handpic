@@ -2384,7 +2384,7 @@ Files: `crates/app/ui/src/main.ts` (`trashFilesIn`, `closeTrashDialog`, `undoTra
 
 ### App: split the disk read from `hevc::to_jpeg` so a read slot covers the read alone
 
-`read_preview` ends in the HEVC decode of an HDR PQ CR3 (65-125 ms of CPU per file), and that runs inside `ReadSlots::acquire` in the three scan sites and inside `preview`'s pause. With `READ_SLOTS` at 2 and no HDR PQ CR3 run in the sweep, a folder of such files pays a calculated 33-63 ms/file against 3-6 today, while the permits sit idle at the disk. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/core/src/scan.rs`, `crates/core/src/reader.rs`, `crates/app/src/commands.rs` (`preview`).
+`read_preview` ends in the HEVC decode of an HDR PQ CR3 (65-125 ms of CPU per file), and that runs inside `ReadSlots::acquire` in the three scan sites and inside `preview`'s pause. With `READ_SLOTS` at 2 and no HDR PQ CR3 run in the sweep, a folder of such files pays a calculated 33-63 ms/file against 3-6 uncapped, while the permits sit idle at the disk. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/core/src/scan.rs`, `crates/core/src/reader.rs`, `crates/app/src/commands.rs` (`preview`).
 
 #### TODO
 

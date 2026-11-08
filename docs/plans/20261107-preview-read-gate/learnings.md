@@ -103,7 +103,7 @@ them. Times are ms unless the column says otherwise.
   cost throughput on C: that this table cannot show.
 - **The HDR PQ CR3 run was not done.** Step 1 holds the slot across
   `hevc::to_jpeg` (65-125 ms of CPU per file), so its cost at cap 2 is a
-  calculated 33-63 ms/file against 3-6 today. See the deferred item.
+  calculated 33-63 ms/file against 3-6 uncapped. See the deferred item.
 
 ## Step 3
 

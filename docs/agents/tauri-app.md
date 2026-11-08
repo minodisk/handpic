@@ -1406,8 +1406,8 @@ stay on `scan_threads()` threads. `preview` holds `pause()` across its
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
 so `docs/humans/performance.md`'s numbers stay comparable.
 
-- The wait follows threads x ms/file: a preview read queues behind the reads
-  already at the disk (22 x 7 ms = 155 ms). So the cap gives most of the gain
+- The wait follows the reads in flight (the cap, at most `scan_threads()`) x ms/file: a preview read queues behind the reads
+  already at the disk (uncapped, 22 x 7 ms = 155 ms; at a cap of 2, 2 x 7 ms). So the cap gives most of the gain
   and the pause little. Cold first pass of ARW files on a SATA SSD, 22 threads,
   the app closed:
 

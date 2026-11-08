@@ -234,7 +234,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       read is split from the decode (see `learnings.md`'s deferred issues)
       before the cap is picked. The ARW sweep alone cannot show this.
       - Deviation (2026-11-08): neither was done. The cost at cap 2 is a
-        calculated 33-63 ms/file against 3-6 today; splitting the read from
+        calculated 33-63 ms/file against 3-6 uncapped; splitting the read from
         `hevc::to_jpeg` is a deferred item in `learnings.md`.
     - `mise run ci` passes.
   - Implementation approach:
