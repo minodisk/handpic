@@ -33,4 +33,4 @@ The real-device hand check that `preview-read-gate` left as a todo (paging with 
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete
