@@ -147,7 +147,7 @@ them. Times are ms unless the column says otherwise.
   slot covers the disk read only.**
   With the picked cap of 2 and no HDR PQ CR3 run in the sweep, a folder of such
   files would pay a calculated 33-63 ms/file for the decode (65-125 ms of CPU)
-  inside the two slots, against 3-6 ms/file today. The split removes that cost;
+  inside the two slots, against 3-6 ms/file uncapped. The split removes that cost;
   the preceding item describes its shape. Basis: Step 2's sweep and the user's
   pick of cap 2, `crates/core/src/scan.rs`, `crates/core/src/reader.rs`.
 - **(Filed in `todo.md` by Step 3.) The plan's other follow-ups.** Prefetching
