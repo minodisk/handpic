@@ -4,7 +4,12 @@ import { fitWithin, jpegSize } from "./decode.js";
 
 interface DecodeRequest {
   seq: number;
+  // Echoed back so a neighbour's reply is told from a page's by what it is,
+  // not by its `seq`.
+  prefetch: boolean;
+  // The whole payload; the JPEG starts `offset` bytes in.
   jpeg: ArrayBuffer;
+  offset: number;
   maxPixels: number | null;
 }
 
@@ -18,13 +23,13 @@ interface WorkerScope {
 const ctx = self as unknown as WorkerScope;
 
 ctx.addEventListener("message", (event: MessageEvent<DecodeRequest>) => {
-  const { seq, jpeg, maxPixels } = event.data;
-  decode(jpeg, maxPixels)
+  const { seq, prefetch, jpeg, offset, maxPixels } = event.data;
+  decode(new Uint8Array(jpeg, offset), maxPixels)
     .then(({ bitmap, decodeMs }) => {
-      ctx.postMessage({ seq, bitmap, decodeMs }, [bitmap]);
+      ctx.postMessage({ seq, prefetch, bitmap, decodeMs }, [bitmap]);
     })
     .catch((err: unknown) => {
-      ctx.postMessage({ seq, error: String(err) });
+      ctx.postMessage({ seq, prefetch, error: String(err) });
     });
 });
 
@@ -32,11 +37,11 @@ ctx.addEventListener("message", (event: MessageEvent<DecodeRequest>) => {
 // the plain call, as does a JPEG whose size cannot be read. `decodeMs` is a
 // duration because this worker's clock has its own origin.
 async function decode(
-  jpeg: ArrayBuffer,
+  jpeg: Uint8Array<ArrayBuffer>,
   maxPixels: number | null,
 ): Promise<{ bitmap: ImageBitmap; decodeMs: number }> {
   const blob = new Blob([jpeg], { type: "image/jpeg" });
-  const size = maxPixels === null ? null : jpegSize(new Uint8Array(jpeg));
+  const size = maxPixels === null ? null : jpegSize(jpeg);
   const fit =
     size === null || maxPixels === null ? null : fitWithin(size.width, size.height, maxPixels);
   const startedAt = performance.now();
