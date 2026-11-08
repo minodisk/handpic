@@ -234,7 +234,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       read is split from the decode (see `learnings.md`'s deferred issues)
       before the cap is picked. The ARW sweep alone cannot show this.
       - Deviation (2026-11-08): neither was done. The cost at cap 2 is a
-        calculated 33-63 ms/file against 3-6 today; splitting the read from
+        calculated 33-63 ms/file against 3-6 uncapped; splitting the read from
         `hevc::to_jpeg` is a deferred item in `learnings.md`.
     - `mise run ci` passes.
   - Implementation approach:
@@ -249,7 +249,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - The CPU part of pass 1 is small (a 1 MiB read, a preview decode and a
       thumbnail encode, tens of ms of CPU), so at 23 MiB/s cold the pass is
       disk-bound and a cap may cost little throughput; the sweep decides.
-- [ ] Step 3: Fix the cap, document it, and hand-check the app
+- [x] Step 3: Fix the cap, document it, and hand-check the app (2026-11-08: the hand check is pending; the user chose to do it after the merge and it is filed as a manual check)
   - Done when:
     - `READ_SLOTS` in `crates/app/src/commands.rs` is the cap Step 2 picked,
       with a doc comment carrying the measured numbers the way
@@ -335,3 +335,4 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 
 - (2026-11-07) Step 1 complete
 - (2026-11-08) Step 2 complete
+- (2026-11-08) Step 3 complete, with the hand check pending

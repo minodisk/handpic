@@ -62,7 +62,9 @@ by the plan's `rank_prior.py`, `fit` refitting the shared weights on the
 user's judgments pulled toward the prior's plus one offset per top-level genre
 pulled toward zero `OFFSET_SHRINK` times harder, `rank` the place, the score
 and the reasons of each frame within its burst by the shared weights plus its
-burst's genre offset), and
+burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
+whose `ReadSlots` caps how many workers are inside a file read at once and
+holds new reads back while a `Paused` is held, and
 `src/sharpness.rs` the
 sharpness score of the embedded preview, taken on the Sony eye-AF frame
 when the camera tracked a face, else around the AF point, else between
@@ -106,8 +108,9 @@ while `aiEnabled` is on, one at a time with the requests meanwhile
 collapsed into one rerun; the shared weights and the per-genre offsets stored in
 `ranking.json` under the app's local data dir, the prior's when none fits),
 `src/commands.rs` the Tauri commands, including `set_scan_focus`, which hands
-the running scan the current file and the strip's visible range,
-`cancel_scan`, which stops the running scan short of its third pass for a
+the running scan the current file and the strip's visible range, `preview`,
+which pauses the scan's reads (`ReadSlots`, capped at `READ_SLOTS`) around its
+own, `cancel_scan`, which stops the running scan short of its third pass for a
 held Move to Trash or Delete Permanently, `delete_files`, the strip's
 `Delete Permanently…`, `trash_files`'s guards and grouping with
 `std::fs::remove_file` and no recorded run (`trash::delete_for_good`), `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
