@@ -8,8 +8,9 @@
 
 // The ring's total, excluding the bitmap on screen. At 4 bytes a pixel a
 // 1616x1080 bitmap is 7 MB and a 4416x2944 RAF one 52 MB, so 32 MP (128 MB)
-// holds both neighbours of the largest previews a culling folder has, and a
-// preview too large to share the cap with its neighbour is not kept at all.
+// holds both neighbours of the largest RAW previews, while the whole JPEGs of
+// a view-only folder (24 MP and up) may not fit two at once; a preview too
+// large to share the cap with its neighbour is not kept at all.
 export const PREFETCH_PIXEL_CAP = 32_000_000;
 
 export type Direction = -1 | 1;
@@ -40,9 +41,12 @@ export function neighbours(
 export class PrefetchRing<B extends Sized> {
   private readonly held = new Map<string, Held<B>>();
   private wanted: string[] = [];
-  // Files that failed to load or did not fit, not asked for again until they
-  // are forgotten, so a file over the cap is not re-read on every page turn.
+  // Files that failed to load, not asked for again until they are forgotten.
   private readonly refused = new Set<string>();
+  // Files evicted for space, not asked for again while they stay wanted, so a
+  // neighbour that cannot share the cap is not re-read on every page turn.
+  // They are dropped by `plan` once the page has moved past them.
+  private readonly crowded = new Set<string>();
   // The one prefetch in flight. It stays here until its reply settles, even
   // when it no longer matters, so stale reads never pile up.
   private pending: { path: string; stale: boolean } | null = null;
@@ -52,6 +56,9 @@ export class PrefetchRing<B extends Sized> {
   plan(files: readonly string[], index: number, direction: Direction): B[] {
     this.wanted = neighbours(files, index, direction);
     const wanted = new Set(this.wanted);
+    for (const path of [...this.crowded]) {
+      if (!wanted.has(path)) this.crowded.delete(path);
+    }
     return this.drop((path) => !wanted.has(path));
   }
 
@@ -61,7 +68,9 @@ export class PrefetchRing<B extends Sized> {
     if (this.pending !== null) {
       return null;
     }
-    const path = this.wanted.find((at) => !this.held.has(at) && !this.refused.has(at));
+    const path = this.wanted.find(
+      (at) => !this.held.has(at) && !this.refused.has(at) && !this.crowded.has(at),
+    );
     if (path === undefined) {
       return null;
     }
@@ -107,6 +116,7 @@ export class PrefetchRing<B extends Sized> {
   clear(): B[] {
     this.markStale(() => true);
     this.refused.clear();
+    this.crowded.clear();
     return this.drop(() => true);
   }
 
@@ -118,6 +128,9 @@ export class PrefetchRing<B extends Sized> {
     for (const path of [...this.refused]) {
       if (gone(path)) this.refused.delete(path);
     }
+    for (const path of [...this.crowded]) {
+      if (gone(path)) this.crowded.delete(path);
+    }
     return this.drop(gone);
   }
 
@@ -128,6 +141,7 @@ export class PrefetchRing<B extends Sized> {
     this.markStale(gone);
     for (const path of paths) {
       this.refused.delete(path);
+      this.crowded.delete(path);
     }
     return this.drop(gone);
   }
@@ -161,7 +175,7 @@ export class PrefetchRing<B extends Sized> {
       if (entry !== undefined) {
         closing.push(entry.bitmap);
         this.held.delete(victim);
-        if (victim === path) this.refused.add(path);
+        this.crowded.add(victim);
       }
     }
     return closing;

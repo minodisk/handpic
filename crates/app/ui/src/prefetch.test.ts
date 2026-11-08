@@ -99,6 +99,22 @@ describe("PrefetchRing", () => {
     expect(ring.next()).toBeNull();
   });
 
+  test("a neighbour evicted for space is not re-read while it stays wanted", () => {
+    const big = PREFETCH_PIXEL_CAP * 0.75;
+    const ring = new PrefetchRing<Fake>();
+    ring.plan(FILES, 1, 1);
+    ring.keep("a", held("a", big));
+    expect(ring.next()).toBe("c");
+    expect(names(ring.settle(held("c", big)))).toEqual(["a"]);
+    expect(ring.next()).toBeNull();
+    // Turning on to "c" makes "a" unwanted, which ends its exclusion.
+    ring.plan(FILES, 2, 1);
+    ring.plan(FILES, 1, 1);
+    expect(ring.next()).toBe("c");
+    ring.settle(held("c"));
+    expect(ring.next()).toBe("a");
+  });
+
   test("a failed read is not retried until the file is forgotten", () => {
     const ring = new PrefetchRing<Fake>();
     ring.plan(["a", "b"], 0, 1);

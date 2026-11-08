@@ -53,9 +53,12 @@
 - A re-listing clears the ring (`resync`), because it is the only signal that
   a file's bytes may have changed under the same path; a filter or sort change
   only `retain`s.
-- `refused` holds failed and over-cap paths until forgotten, so a folder of
-  previews each over the cap still reads one neighbour per page turn and
-  discards it. Not a case any listed body reaches (a RAF is 13 MP of the 32).
+- `refused` holds failed reads until forgotten. `crowded` holds the files evicted
+  for space and lasts only while they stay wanted (`plan` drops them once the
+  page has moved past), so two neighbours that cannot share the cap (24 MP JPEGs
+  of a view-only folder against 32 MP) cost no discarded read per page turn,
+  and a file is retried when the position comes back to it. A RAF is 13 MP of
+  the 32, so RAW folders never reach this.
 - Prefetch only while no scan pass runs (the plan's default): the measurement
   gave no argument against it. Pass 1 and 2 reads are not slowed by it.
 

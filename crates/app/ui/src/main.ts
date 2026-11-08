@@ -374,6 +374,9 @@ let shown: {
   seq: number;
   path: string;
   jpegKB: number;
+  // Whether the ring may take the bitmap back; false once a re-listing may
+  // have changed the file's bytes.
+  keepable: boolean;
 } | null = null;
 // The decoded neighbours of the current file. A bitmap is either in the ring
 // or `shown`, never both, so eviction cannot close the one being drawn.
@@ -2655,6 +2658,8 @@ function refilter(
     strip.setCurrent(index, !keepScroll);
     renderMeta();
     if (comparing) void loadCompare();
+    // The current file may have new neighbours.
+    requestPrefetch();
   }
   return true;
 }
@@ -3880,11 +3885,11 @@ function show(): void {
 // the draw, never before.
 function present(bitmap: ImageBitmap, orientation: number, path: string, jpegKB: number): void {
   const previous = shown;
-  shown = { bitmap, orientation, seq, path, jpegKB };
+  shown = { bitmap, orientation, seq, path, jpegKB, keepable: true };
   setStatus();
   draw();
   if (previous !== null) {
-    closeAll(ring.keep(previous.path, previous));
+    closeAll(previous.keepable ? ring.keep(previous.path, previous) : [previous.bitmap]);
   }
 }
 
@@ -4353,6 +4358,10 @@ function renameFile(path: string, name: string): void {
             fileIndex.set(newPath, at);
           }
           closeAll(ring.forget([path, newPath]));
+          if (shown?.path === path) shown.path = newPath;
+          for (const timing of pageTimings.values()) {
+            if (timing.path === path) timing.path = newPath;
+          }
           // `strip.setFiles` may be skipped below (the rescan sees the same list
           // it already holds), so the strip's own `indexOf` and the live cell's
           // name need their own update, and so does the meta pane / title bar.
@@ -4601,6 +4610,7 @@ function resync(trigger: RescanTrigger, deferred = false): void {
       setViewOnly(isViewOnly(found));
       applyOutputs(found, outputs);
       closeAll(ring.clear());
+      if (shown !== null) shown.keepable = false;
       refilter(target, true, false, previous);
       renderMeta();
       return startScan(dir);
@@ -4668,6 +4678,7 @@ function openDirectory(folder: string, token: number): Promise<void> {
     const order = ordered();
     files = order.filter(passes);
     closeAll(ring.clear());
+    if (shown !== null) shown.keepable = false;
     pageDirection = 1;
     lastShownIndex = 0;
     index = 0;
