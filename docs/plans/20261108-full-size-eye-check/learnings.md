@@ -74,8 +74,8 @@
 - Closed Step 4's deferred item: `CLAUDE.md`'s `src/focus.ts` description of
   `photoTier` now names the full-size cut.
 - The docs' "about 20% of frames" and the 180-frame figures predate the
-  full-size check, which only lowers the share, so the 20% is now worded as
-  taken before it. Re-measuring it is not part of this step.
+  full-size check, which only lowers the share, so both are now worded as
+  taken before it (the 54 of 58 may be lower now). Re-measuring it is not part of this step.
 
 ## Deferred issues (todo candidates)
 

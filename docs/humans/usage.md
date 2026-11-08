@@ -205,7 +205,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   sharp under it (a few sharp frames can leave good), and at high ISO it misses soft frames. It is selective by
   design, so most frames get no bright green: before the full-size check, on
   twelve of the author's folders it marked about 20% of the
-  frames with a face at the AF point. On 180 frames the author rated (1 star
+  frames with a face at the AF point; on 180 frames the author rated (1 star
   for no subject, 2 for likely rejected, 3 or more for a pass), 54 of the 58
   good frames passed and none was a frame without a subject. Bright green
   means good only. Gray means a face was judged and its eyes are likely not
