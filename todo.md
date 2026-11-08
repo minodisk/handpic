@@ -991,8 +991,8 @@ Files: `crates/app/ui/src/worker.ts` (resize on decode),
 #### TODO
 
 - [ ] Measure first on the real app on Linux with `Timing logs` on: the
-      `page invoke=… decode=… total=… keypressToPixels=…` line splits the
-      IPC (invoke) from the decode.
+      `page read=… ipc=… post=… worker=… decode=… draw=… total=…
+      keypressToPixels=…` line splits the read and IPC from the decode.
 - [ ] Candidate fixes, none decided: prefetch and decode the neighbouring
       pages ahead; or have the backend downscale and cache a mid-size JPEG
       for files lacking one, which would serve the main view and, as a side
