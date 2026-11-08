@@ -1,7 +1,6 @@
 use std::{env, process::Command};
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=NASM");
     println!("cargo:rerun-if-env-changed=PATH");
     println!("cargo:rerun-if-env-changed=RIFFLE_NATIVE_ALLOW_NO_SIMD");
 
@@ -30,14 +29,13 @@ fn main() {
 }
 
 fn check_nasm() -> Result<(), String> {
-    let nasm = env::var_os("NASM").unwrap_or_else(|| "nasm".into());
-    let shown = nasm.to_string_lossy().into_owned();
-    let output = Command::new(&nasm)
+    // mozjpeg-sys probes plain `nasm` from PATH and ignores `NASM`, so this does too.
+    let output = Command::new("nasm")
         .arg("-v")
         .output()
-        .map_err(|e| format!("`{shown} -v` did not run: {e}"))?;
+        .map_err(|e| format!("`nasm -v` did not run: {e}"))?;
     if !output.status.success() {
-        return Err(format!("`{shown} -v` failed: {}", output.status));
+        return Err(format!("`nasm -v` failed: {}", output.status));
     }
     let version = String::from_utf8_lossy(&output.stdout);
     if version.contains("NASM version 0.") {

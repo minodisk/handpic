@@ -24,8 +24,9 @@
   machine; `~/.cargo/git/db/zed-*` is 408 MB.
 - `.gitignore` needed `crates/native/target`, which the plan's Done-when list
   does not name: the existing `/target` matches only the root.
-- `build.rs` was exercised by hand: no NASM fails the build, a bogus `NASM`
-  fails it, a real `NASM` passes, `RIFFLE_NATIVE_ALLOW_NO_SIMD=1` gives the
+- `build.rs` was exercised by hand: no NASM fails the build, `NASM` set to a real
+  binary without `nasm` on `PATH` fails it (round 1 review fix), `nasm` on `PATH`
+  passes, `RIFFLE_NATIVE_ALLOW_NO_SIMD=1` gives the
   warning.
 - The window was checked on Windows: the title is `Riffle`, a real `q` key event
   and closing the window both end the process. `SendKeys` from a background
@@ -34,14 +35,6 @@
 
 ## Deferred issues (todo candidates)
 
-- **`NASM` passes `build.rs` while mozjpeg loses SIMD.** `crates/native/build.rs`
-  honors `$NASM` as the plan's Step 1 Done-when specifies, but the
-  `nasm_supported()` probe in `mozjpeg-sys` 2.2.3 (`src/build.rs`) runs plain
-  `nasm` from `PATH` and ignores the variable. With `NASM` set and no `nasm` on
-  `PATH`, the check passes and the build has no SIMD, which is the silent loss
-  the check exists to prevent. Candidate fix: also require `nasm` on `PATH` in
-  `build.rs`. Related: `crates/native/build.rs`, `CONTRIBUTING.md`,
-  `docs/agents/native-app.md`.
 - **Pending check: the first `native` CI job on GitHub.** What to verify: on
   `windows-latest`, the job passes, `mise run native:check` installs Rust 1.98.1
   through the task-level `tools` under CI's mise 2026.9.0 (local verification

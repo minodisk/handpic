@@ -65,8 +65,8 @@ instead of 46 ms.
   on Debian / Ubuntu or `brew install nasm` on macOS.
 - winget's package installs per user (`%LOCALAPPDATA%\bin\NASM`), not under
   `C:\Program Files\NASM`, and does not add itself to `PATH`. Add that
-  directory yourself. `mozjpeg-sys` only looks for `nasm` on `PATH`, so setting
-  the `NASM` variable alone is not enough for SIMD.
+  directory yourself. `mozjpeg-sys` only looks for `nasm` on `PATH`, so the build
+  fails unless `nasm` is on `PATH`, whatever the `NASM` variable holds.
 - `RIFFLE_NATIVE_ALLOW_NO_SIMD=1` turns the failure into a warning, for builds
   whose timings do not matter.
 

@@ -55,10 +55,10 @@ of non-path dependencies. RAF decode measured about 99 ms without SIMD and
 ### `mozjpeg-sys` ignores the `NASM` variable (Inferred)
 
 `nasm-rs` honors `NASM` as the binary path, but the `nasm_supported()` probe of
-`mozjpeg-sys` 2.2.3 runs plain `nasm` from `PATH`. With `NASM` set and nothing
-on `PATH`, `build.rs` passes while mozjpeg is built without SIMD.
+`mozjpeg-sys` 2.2.3 runs plain `nasm` from `PATH`. `build.rs` therefore runs
+`nasm -v` from `PATH` only and fails when it does not run, whatever `NASM` holds.
 
-- Rule: rely on `PATH`, not on `NASM`, whenever the timing matters.
+- Rule: put `nasm` on `PATH`; setting `NASM` does not satisfy the build.
 
 ## GPUI
 
