@@ -210,8 +210,9 @@ Permanently…`),
 keys that do not confirm (`swallowedByDelete`) and their status lines,
 `src/focus.ts` places the `f` focus mark and the face boxes' five landmark
 dots and labels (score, box size and eye distance in stored preview px) and holds the good-photo rule
-(`photoTier`: the AF eyes in focus, the eyes open and the face toward the
-camera, from the values pass 2 stored for the AF face), which colors the
+(`photoTier`: the AF eyes in focus, also on the full-size JPEG where measured
+(`full_eye_sharp`), the eyes open and the face toward the camera, from the
+values pass 2 stored for the AF face), which colors the
 mark bright green and puts the strip's face icon on a good frame, `afEyeState`
 (Good / Neutral / Low), the one state the mark's color, the strip's icon and the
 filter menu read, `AF_EYE_HELP`, the definitions the `Face focus` section's `?` shows, and the eyes' openness the meta pane shows, and

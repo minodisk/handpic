@@ -195,9 +195,17 @@ viewer shows a prompt in its center; click it to open the folder picker.
   or right; and it is tilted no more than 45° up or down (the roll is not
   looked at). A frame whose face mesh sits off the face (as on a face
   rotated far in-plane, such as a baby lying down) or whose face the frame's
-  edge cuts is never good. It is selective by design, so most frames get no
-  bright green: on twelve of the author's folders it marked about 20% of the
-  frames with a face at the AF point. On 180 frames the author rated (1 star
+  edge cuts is never good. The eyes of the judged face are also checked on the
+  file's full-size embedded JPEG, which shows softness the smaller preview
+  hides (the meta pane's `Eyes at full size` row): a frame whose eyes are soft
+  there is not good and turns white (it is not rejected). A file with no JPEG
+  larger than the preview (RAF, ORF, an HDR PQ CR3) skips the check. The
+  threshold was checked on three folders from one body (ILCE-7M5) and on a
+  separate hand-labeled set, where the author judged 5 of the 145 good frames
+  sharp under it (a few sharp frames can leave good), and at high ISO it misses soft frames. It is selective by
+  design, so most frames get no bright green: before the full-size check, on
+  twelve of the author's folders it marked about 20% of the
+  frames with a face at the AF point; on 180 frames the author rated (1 star
   for no subject, 2 for likely rejected, 3 or more for a pass), 54 of the 58
   good frames passed and none was a frame without a subject. Bright green
   means good only. Gray means a face was judged and its eyes are likely not
@@ -210,8 +218,8 @@ viewer shows a prompt in its center; click it to open the folder picker.
   eyes counts; when neither eye's region counts (under 24 px, as on small
   faces, or without a clear edge), it is measured over the preview between
   the eyes instead. White is everything else: a judged face at about 77% or
-  more that misses a good cut (under 90%, or the eyes, the pose, the mesh or
-  the frame's edge), no face found (near the AF point when there is one,
+  more that misses a good cut (under 90%, or the eyes, the pose, the mesh,
+  the frame's edge or soft eyes at full size), no face found (near the AF point when there is one,
   anywhere on the preview when there is none), or not computed yet. A frame with no face found stays white rather
   than being judged on the sharpness score: on the author's 4361 face-free
   frames the score barely told picks from the rest (AUC 0.58). A frame with no face found or with a face
@@ -320,6 +328,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
   largest face Riffle is confident of) that the focus candidate state is
   decided from (left out when there is none). It comes from the scan's second pass, so it
   appears a little after the file's thumbnail on a folder's first scan.
+  `Eyes at full size` is the sharpness of those same eyes on the file's
+  full-size embedded JPEG, as in `Sharp · 0.214` or `Soft · 0.143`; `Soft`
+  is the verdict that takes a frame out of good. It is left out when nothing
+  was measured (for example a file with no JPEG larger than the preview).
   `Eyes` says whether the eyes of the face nearest the AF point (without an
   AF point, the largest face Riffle is confident of) are open or closed and
   how open they are, from 0 to 100, as in `Open · 82` or `Closed · 0`. The

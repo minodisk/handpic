@@ -264,7 +264,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       `filter.test.ts`, `meta.test.ts`, `eyes.test.ts`) gains the field;
       search for `edge_gap:` to find them.
 
-- [ ] Step 5: Describe the new Good condition in the user docs
+- [x] Step 5: Describe the new Good condition in the user docs
   - Done when:
     - `README.md` / `README.ja.md` (the focus mark paragraph around "bright
       green for a good photo") and `docs/humans/usage.md` /
@@ -341,3 +341,4 @@ picks the check catches, not how many soft frames it removes.
 - (2026-11-09) Step 2 complete
 - (2026-11-09) Step 3 complete
 - (2026-11-09) Step 4 complete
+- (2026-11-09) Step 5 complete
