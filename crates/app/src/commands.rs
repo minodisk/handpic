@@ -3502,7 +3502,7 @@ mod tests {
     /// before the pass ends (`probes` equal to `probe_files`).
     ///
     /// Prints one `sweep-cell` line of `key=value` fields; discard a run whose
-    /// `cold_ms` is under 100.
+    /// `cold_ms` is about 1, a cached read.
     #[test]
     #[ignore = "needs RIFFLE_SCAN_DIR and RIFFLE_READ_SLOTS, on cold data with the app closed"]
     fn preview_during_pass_1_on_a_real_folder() {

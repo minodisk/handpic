@@ -41,8 +41,7 @@
   plain numbers; `embed_pass_on_a_real_folder` wraps it to keep its output.
 - The app-alive check compares the whole process name with `riffle-app.exe`, so
   it does not apply off Windows, where the sweep does not run. Run against the
-  live app, the test stopped at that check, before reading the folder. A run
-  past the check has not happened yet: the first sweep cell is its smoke test.
+  live app, the test stopped at that check, before reading the folder.
 
 ### Sweep results (2026-11-08)
 
