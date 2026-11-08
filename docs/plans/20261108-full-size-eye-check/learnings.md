@@ -59,15 +59,34 @@
 - `rank::Frame` carries `full_eye_sharp` as the plan's `rank_rows` line asks,
   but nothing in the ranking reads it yet.
 
+## Step 4
+
+- `applyFaceReady` in `focus.ts` copies the `faces-progress` fields one by one,
+  so the plan's "the new field rides along" needed one more line there: without
+  it a frame scanned while on screen would stay Good until the folder reloads.
+  `meta.ts`'s `FocusCue` and `main.ts`'s `Focus` needed the field too.
+- The `SOFT_BELOW` parity test pins the value as `CANDIDATE_PERCENT`'s does: it
+  fails when the Rust constant moves and its doc points at `focus.ts`; it does
+  not read the TypeScript.
+
 ## Deferred issues (todo candidates)
 
-- `good_photo` in `crates/core/src/rank.rs` is documented as "the good-photo
-  rule of `photoTier` in `focus.ts`", and Step 4 adds the full-size cut to
-  `photoTier` only. The Rust copy then disagrees with the frontend on a
-  demoted frame, which changes what the ranking counts as good. Step 4 or a
-  follow-up has to decide whether `good_photo` applies the cut too (it would
-  move the ranking's features, so the prior's calibration needs a look).
-  Found while carrying `full_eye_sharp` through `Index::rank_rows` in Step 3.
+- `good_photo` in `crates/core/src/rank.rs` deliberately leaves out the
+  full-size cut Step 4 added to `photoTier`, so its features do not move in
+  this feature; its doc comment says so. The Rust copy therefore disagrees with
+  the frontend on a demoted frame, and applying the cut to the ranking is a
+  separate piece of work (it moves the ranking's features, so the prior's
+  calibration needs a look). `rank::Frame::full_eye_sharp` is already carried
+  through `Index::rank_rows` for it, unread. Found in Step 3, decided in Step 4.
+- Pending manual check (Step 4): on Windows, in the real app, after a rescan of
+  `D:\Photos\2026\2026-11-07` (`FACES_VERSION` 10 re-runs pass 2), open
+  `_DSC1508.ARW` and `_DSC1536.ARW`. Expected: neither is Good (no face icon on
+  the strip, a white focus mark, and filtered out by `Face focus` = Good), and
+  the meta pane's `Eyes at full size` row reads `Soft`. Step 4's checkbox was
+  ticked on the automated criteria; this check is the user's.
+- `CLAUDE.md`'s `src/focus.ts` description of the good-photo rule (`photoTier`)
+  does not name the full-size cut. Step 4's Done-when does not cover it, so it
+  was left; it belongs with Step 5's docs or the wrap-up.
 - The cold-disk cost of the second read is unmeasured: Step 3's figures are on
   a warm file cache (`crates/core/src/scan.rs`, `full_eye_sharp`). The plan's
   "Cost" trade-off names this as the case to watch; a pass 2 on a freshly

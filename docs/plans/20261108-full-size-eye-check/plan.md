@@ -231,7 +231,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - `faces-progress` consumers in `main.ts` already refilter on each
       batch; the new field rides along in `FaceReady` via `StoredEyes`.
 
-- [ ] Step 4: Take a soft-at-full-size frame out of Good in the frontend
+- [x] Step 4: Take a soft-at-full-size frame out of Good in the frontend
   - Done when:
     - `eyes.ts`'s `StoredEyes` has `full_eye_sharp: number | null`.
     - `focus.ts`: `export const GOOD_FULL_EYE_SHARP = <SOFT_BELOW>` with a
@@ -253,7 +253,8 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - Manual check recorded in `learnings.md`: after a rescan of
       `D:\Photos\2026\2026-11-07` in the app, `_DSC1508.ARW` and
       `_DSC1536.ARW` are no longer Good (no strip face icon, white mark,
-      filtered out by `Face focus` = Good).
+      filtered out by `Face focus` = Good). Pending: the user's hand check,
+      recorded under `## Deferred issues (todo candidates)` in `learnings.md`.
     - `mise run ci` passes.
   - Implementation approach:
     - Assumes Step 3 is merged (the wire shape).

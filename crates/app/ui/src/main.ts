@@ -259,6 +259,7 @@ interface Focus {
   pose: Pose | null;
   eye_offset: number | null;
   edge_gap: number | null;
+  full_eye_sharp: number | null;
 }
 
 interface IndexedFile {

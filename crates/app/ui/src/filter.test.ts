@@ -328,6 +328,7 @@ describe("passes: Face focus states", () => {
     pose: { yaw: 10, pitch: -5, roll: 3 },
     eye_offset: 0.03,
     edge_gap: 2,
+    full_eye_sharp: null,
   };
 
   test("off passes every state", () => {

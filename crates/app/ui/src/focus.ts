@@ -93,6 +93,13 @@ export const MAX_EYE_OFFSET = 0.1;
 // edge of what is visible (`_DSC3345` at 0.008), so a small margin, not 0.
 export const MIN_EDGE_GAP = 0.02;
 
+// The sharpness of the eyes on the full-size embedded JPEG under which a frame
+// leaves the tier, `fullsharp::SOFT_BELOW` in `crates/core/src/fullsharp.rs`:
+// blind review of the Good frames of three ILCE-7M5 folders sorted by the
+// score (`docs/plans/20261108-full-size-eye-check/`). A file without the value
+// is not demoted.
+export const GOOD_FULL_EYE_SHARP = 0.162;
+
 // The candidate threshold as the `Face focus` help shows it, in percent:
 // `candidate_probability()`, the sigmoid of `CANDIDATE_LOGIT` in
 // `crates/core/src/candidate.rs`, rounded. Only the text reads it; the state
@@ -119,8 +126,8 @@ export function eyesOpenness(ear: number | null): number | null {
 // What each `Face focus` item holds, from the cuts themselves so the text
 // cannot drift from the rule.
 export const AF_EYE_HELP: Record<MarkState, string> = {
-  good: `A face was judged and all of these hold: its eyes are likely in focus (${Math.round(GOOD_EYE_FOCUS * 100)}% or more), open (openness ${Math.round(eyesOpenness(GOOD_EYE_EAR)!)} or more) and toward the camera (turned at most ${GOOD_MAX_YAW}°, tilted at most ${GOOD_MAX_PITCH}°), the face mesh sits on the face, and the frame's edge does not cut it.`,
-  neutral: `Everything else: a judged face whose eyes are likely in focus (${CANDIDATE_PERCENT}% or more) but misses a Good condition, no judged face (a landscape, a snap without a face, faces away from the AF point), a JPEG, or a file the analysis has not reached yet.`,
+  good: `A face was judged and all of these hold: its eyes are likely in focus (${Math.round(GOOD_EYE_FOCUS * 100)}% or more), open (openness ${Math.round(eyesOpenness(GOOD_EYE_EAR)!)} or more) and toward the camera (turned at most ${GOOD_MAX_YAW}°, tilted at most ${GOOD_MAX_PITCH}°), the face mesh sits on the face, the frame's edge does not cut it, and, where the file has a full-size image, its eyes are sharp on it.`,
+  neutral: `Everything else: a judged face whose eyes are likely in focus (${CANDIDATE_PERCENT}% or more) but misses a Good condition (soft at full size among them), no judged face (a landscape, a snap without a face, faces away from the AF point), a JPEG, or a file the analysis has not reached yet.`,
   low: `A face was judged and its eyes are likely not in focus: the in-focus probability is under ${CANDIDATE_PERCENT}%.`,
 };
 
@@ -128,7 +135,14 @@ export const AF_EYE_HELP: Record<MarkState, string> = {
 export const AF_EYE_HELP_CLOSING =
   "A cue for your review, not a verdict; nothing is rejected for you.";
 
-function clears({ eye_focus, eyes_ear, pose, eye_offset, edge_gap }: MarkFocus): boolean {
+function clears({
+  eye_focus,
+  eyes_ear,
+  pose,
+  eye_offset,
+  edge_gap,
+  full_eye_sharp,
+}: MarkFocus): boolean {
   return (
     eye_focus !== null &&
     eye_focus >= GOOD_EYE_FOCUS &&
@@ -140,7 +154,8 @@ function clears({ eye_focus, eyes_ear, pose, eye_offset, edge_gap }: MarkFocus):
     eye_offset !== null &&
     eye_offset <= MAX_EYE_OFFSET &&
     edge_gap !== null &&
-    edge_gap >= MIN_EDGE_GAP
+    edge_gap >= MIN_EDGE_GAP &&
+    (full_eye_sharp === null || full_eye_sharp >= GOOD_FULL_EYE_SHARP)
   );
 }
 
@@ -231,6 +246,7 @@ export function applyFaceReady<T extends { focus: MarkFocus | null }>(
     focus.pose = item.pose;
     focus.eye_offset = item.eye_offset;
     focus.edge_gap = item.edge_gap;
+    focus.full_eye_sharp = item.full_eye_sharp;
     if (item.path === current) {
       touched = true;
     }
