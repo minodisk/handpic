@@ -357,3 +357,4 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 
 - (2026-11-08) Step 1 complete
 - (2026-11-08) Step 2 complete
+- (2026-11-09) Step 4 complete (the scenario 1 and 5 re-run for `results.md` is still pending by hand, as `learnings.md` records)
