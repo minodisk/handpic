@@ -71,7 +71,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 
 ## Steps
 
-- [ ] Step 1: Time every stage of the preview path and show the breakdown in the overlay and the `page` line
+- [x] Step 1: Time every stage of the preview path and show the breakdown in the overlay and the `page` line
   - Done when:
     - `preview` returns a `PREVIEW_KIND_JPEG_V2` payload whose header is
       still 8 bytes with the formerly reserved `u32` at offset 4 now

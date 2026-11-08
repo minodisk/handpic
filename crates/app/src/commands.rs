@@ -23,8 +23,9 @@ use crate::trash;
 /// Size of the header that precedes the JPEG bytes in a `preview` payload.
 pub const PREVIEW_HEADER_LEN: usize = 8;
 
-/// Tag identifying the payload kind and version: an IFD0 preview JPEG, v1.
-pub const PREVIEW_KIND_JPEG_V1: u16 = 1;
+/// Tag identifying the payload kind and version: an IFD0 preview JPEG, v2. v1
+/// (tag 1) left the header's last word reserved instead of carrying `read_us`.
+pub const PREVIEW_KIND_JPEG_V2: u16 = 6;
 
 /// Tag for the other payload kind: a cached thumbnail JPEG, v1.
 pub const THUMBNAIL_KIND_JPEG_V1: u16 = 2;
@@ -49,18 +50,18 @@ pub const CROP_MAX: usize = 1024;
 ///
 /// | offset | size | field                                       |
 /// |--------|------|---------------------------------------------|
-/// | 0      | 2    | kind/version tag (`PREVIEW_KIND_JPEG_V1` or |
+/// | 0      | 2    | kind/version tag (`PREVIEW_KIND_JPEG_V2` or |
 /// |        |      | `THUMBNAIL_KIND_JPEG_V1`)                   |
 /// | 2      | 2    | EXIF Orientation (1..8)                     |
-/// | 4      | 4    | reserved, zero                              |
+/// | 4      | 4    | `read_us` for V2: the read, in us; else 0   |
 ///
 /// Width and height are not carried: the JPEG itself has them and
 /// `createImageBitmap` reports them.
-fn payload(kind: u16, orientation: u16, jpeg: &[u8]) -> Vec<u8> {
+fn payload(kind: u16, orientation: u16, read_us: u32, jpeg: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(PREVIEW_HEADER_LEN + jpeg.len());
     out.extend_from_slice(&kind.to_le_bytes());
     out.extend_from_slice(&orientation.to_le_bytes());
-    out.extend_from_slice(&0u32.to_le_bytes());
+    out.extend_from_slice(&read_us.to_le_bytes());
     out.extend_from_slice(jpeg);
     out
 }
@@ -1055,15 +1056,18 @@ pub async fn metadata(path: String) -> Result<Metadata, String> {
 
 #[tauri::command]
 pub async fn preview(app: tauri::AppHandle, path: String) -> Result<Response, String> {
-    let bytes = tauri::async_runtime::spawn_blocking(move || {
+    let (read_us, bytes) = tauri::async_runtime::spawn_blocking(move || {
+        let started = std::time::Instant::now();
         let _paused = app.state::<AppReadSlots>().0.pause();
-        read_preview(Path::new(&path))
+        let bytes = read_preview(Path::new(&path))?;
+        Ok::<_, String>((started.elapsed().as_micros() as u32, bytes))
     })
     .await
     .map_err(|e| e.to_string())??;
     Ok(Response::new(payload(
-        PREVIEW_KIND_JPEG_V1,
+        PREVIEW_KIND_JPEG_V2,
         bytes.0,
+        read_us,
         &bytes.1,
     )))
 }
@@ -2134,6 +2138,7 @@ pub async fn thumbnail(app: tauri::AppHandle, path: String) -> Result<Response, 
     Ok(Response::new(payload(
         THUMBNAIL_KIND_JPEG_V1,
         orientation,
+        0,
         &jpeg,
     )))
 }
@@ -4845,20 +4850,21 @@ mod tests {
     #[test]
     fn payload_header_encodes_kind_and_orientation() {
         let jpeg = [0xff, 0xd8, 0xff, 0xd9];
-        let out = payload(PREVIEW_KIND_JPEG_V1, 8, &jpeg);
+        let out = payload(PREVIEW_KIND_JPEG_V2, 8, 12_345, &jpeg);
         assert_eq!(out.len(), PREVIEW_HEADER_LEN + jpeg.len());
-        assert_eq!(u16::from_le_bytes([out[0], out[1]]), PREVIEW_KIND_JPEG_V1);
+        assert_eq!(u16::from_le_bytes([out[0], out[1]]), PREVIEW_KIND_JPEG_V2);
         assert_eq!(u16::from_le_bytes([out[2], out[3]]), 8);
-        assert_eq!(u32::from_le_bytes([out[4], out[5], out[6], out[7]]), 0);
+        assert_eq!(u32::from_le_bytes([out[4], out[5], out[6], out[7]]), 12_345);
         assert_eq!(&out[PREVIEW_HEADER_LEN..], &jpeg);
     }
 
     #[test]
     fn thumbnail_payload_header_encodes_kind_two_and_orientation() {
         let jpeg = [0xff, 0xd8, 0xff, 0xd9];
-        let out = payload(THUMBNAIL_KIND_JPEG_V1, 6, &jpeg);
+        let out = payload(THUMBNAIL_KIND_JPEG_V1, 6, 0, &jpeg);
         assert_eq!(u16::from_le_bytes([out[0], out[1]]), THUMBNAIL_KIND_JPEG_V1);
         assert_eq!(u16::from_le_bytes([out[2], out[3]]), 6);
+        assert_eq!(u32::from_le_bytes([out[4], out[5], out[6], out[7]]), 0);
         assert_eq!(&out[PREVIEW_HEADER_LEN..], &jpeg);
     }
 

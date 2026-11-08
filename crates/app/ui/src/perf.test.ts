@@ -1,5 +1,15 @@
 import { describe, expect, test } from "vitest";
-import { LATENCY_FLOOR_MS, PerfModel, READ_FLOOR_BPS, WINDOW_MS, latencyStart } from "./perf.js";
+import {
+  LATENCY_FLOOR_MS,
+  type LatencyStages,
+  PerfModel,
+  READ_FLOOR_BPS,
+  STAGES,
+  type StageMarks,
+  WINDOW_MS,
+  latencyStart,
+  stagesOf,
+} from "./perf.js";
 
 function recording(): PerfModel {
   const model = new PerfModel();
@@ -12,6 +22,16 @@ const EMPTY = {
   latency: [],
   latencyMax: LATENCY_FLOOR_MS,
   readMax: READ_FLOOR_BPS,
+};
+
+const STAGED: LatencyStages = {
+  wait: 1,
+  read: 2,
+  ipc: 3,
+  post: 4,
+  worker: 5,
+  decode: 6,
+  draw: 7,
 };
 
 function sample(at: number, read: number, disk: number | null = null) {
@@ -81,6 +101,27 @@ describe("PerfModel", () => {
     expect(model.view(WINDOW_MS + 1).latencyMax).toBe(LATENCY_FLOOR_MS);
   });
 
+  test("a point with stages keeps them", () => {
+    const model = recording();
+    model.addLatency({ at: 0, ms: 28, stages: STAGED });
+    expect(model.view(0).latency).toEqual([{ at: 0, ms: 28, stages: STAGED }]);
+  });
+
+  test("the latency axis maximum uses the total, not a stage", () => {
+    const model = recording();
+    const stages = { ...STAGED, read: 2_000 };
+    model.addLatency({ at: 0, ms: 900, stages });
+    expect(model.view(0).latencyMax).toBe(900);
+  });
+
+  test("stop drops staged points and a staged point is not recorded while off", () => {
+    const model = recording();
+    model.addLatency({ at: 0, ms: 28, stages: STAGED });
+    model.stop();
+    model.addLatency({ at: 1, ms: 28, stages: STAGED });
+    expect(model.view(1)).toEqual(EMPTY);
+  });
+
   test("the read axis maximum has a floor", () => {
     const model = recording();
     model.addSample(sample(0, 200_000));
@@ -100,6 +141,44 @@ describe("PerfModel", () => {
     model.addSample(sample(0, 0, null));
     model.addSample(sample(500, 0, 42));
     expect(model.view(500).samples.map((point) => point.disk)).toEqual([null, 42]);
+  });
+});
+
+describe("stagesOf", () => {
+  const marks: StageMarks = {
+    startedAt: 100,
+    requestedAt: 104,
+    invokedAt: 124,
+    readMs: 12,
+    postedAt: 127,
+    receivedAt: 157,
+    decodeMs: 20,
+    drawStartedAt: 158,
+    drawnAt: 163,
+  };
+
+  test("turns the marks into the seven stages", () => {
+    expect(stagesOf(marks)).toEqual({
+      wait: 4,
+      read: 12,
+      ipc: 8,
+      post: 3,
+      worker: 10,
+      decode: 20,
+      draw: 5,
+    });
+  });
+
+  test("clamps ipc at zero when the read exceeds the invoke", () => {
+    expect(stagesOf({ ...marks, readMs: 25 }).ipc).toBe(0);
+  });
+
+  test("clamps worker at zero when the decode exceeds the span", () => {
+    expect(stagesOf({ ...marks, decodeMs: 40 }).worker).toBe(0);
+  });
+
+  test("names the stages in path order", () => {
+    expect(STAGES).toEqual(["wait", "read", "ipc", "post", "worker", "decode", "draw"]);
   });
 });
 

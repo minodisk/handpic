@@ -259,7 +259,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
 - **Performance graph**: `d` shows a graph along the bottom of the viewer
   with the last 60 seconds of five series: a red bar per file switch, its
   height the time from the key or click to the preview being drawn (on a ms
-  scale at the right of the legend, at least 500 ms tall); Riffle's own CPU
+  scale at the right of the legend, at least 500 ms tall), stacked from the
+  bottom in shades of red by stage: `wait`, `read`, `ipc`, `post`, `worker`,
+  `decode` and `draw`; Riffle's own CPU
   usage (the thick solid blue line) and the whole system's (the thin dashed
   blue line), both 0–100 % of all cores; Riffle's own reads (the thick solid
   green line, on an MB/s scale at the right of the legend, at least 10 MB/s

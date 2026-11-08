@@ -20,8 +20,8 @@ const ctx = self as unknown as WorkerScope;
 ctx.addEventListener("message", (event: MessageEvent<DecodeRequest>) => {
   const { seq, jpeg, maxPixels } = event.data;
   decode(jpeg, maxPixels)
-    .then((bitmap) => {
-      ctx.postMessage({ seq, bitmap }, [bitmap]);
+    .then(({ bitmap, decodeMs }) => {
+      ctx.postMessage({ seq, bitmap, decodeMs }, [bitmap]);
     })
     .catch((err: unknown) => {
       ctx.postMessage({ seq, error: String(err) });
@@ -29,16 +29,19 @@ ctx.addEventListener("message", (event: MessageEvent<DecodeRequest>) => {
 });
 
 // Only a preview over `maxPixels` gets resize options; everything else takes
-// the plain call, as does a JPEG whose size cannot be read.
-function decode(jpeg: ArrayBuffer, maxPixels: number | null): Promise<ImageBitmap> {
+// the plain call, as does a JPEG whose size cannot be read. `decodeMs` is a
+// duration because this worker's clock has its own origin.
+async function decode(
+  jpeg: ArrayBuffer,
+  maxPixels: number | null,
+): Promise<{ bitmap: ImageBitmap; decodeMs: number }> {
   const blob = new Blob([jpeg], { type: "image/jpeg" });
-  if (maxPixels === null) {
-    return createImageBitmap(blob);
-  }
-  const size = jpegSize(new Uint8Array(jpeg));
-  const fit = size === null ? null : fitWithin(size.width, size.height, maxPixels);
-  if (fit === null) {
-    return createImageBitmap(blob);
-  }
-  return createImageBitmap(blob, { ...fit, resizeQuality: "high" });
+  const size = maxPixels === null ? null : jpegSize(new Uint8Array(jpeg));
+  const fit =
+    size === null || maxPixels === null ? null : fitWithin(size.width, size.height, maxPixels);
+  const startedAt = performance.now();
+  const bitmap = await (fit === null
+    ? createImageBitmap(blob)
+    : createImageBitmap(blob, { ...fit, resizeQuality: "high" }));
+  return { bitmap, decodeMs: performance.now() - startedAt };
 }

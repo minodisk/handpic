@@ -189,7 +189,7 @@ import {
 } from "./import.js";
 import { UncaughtGate, uncaughtLine } from "./uncaught.js";
 import { dwellTimer, switchesFolder, viewedWriter } from "./viewed.js";
-import { type PerfSample, PerfModel, WINDOW_MS, latencyStart } from "./perf.js";
+import { type PerfSample, PerfModel, STAGES, WINDOW_MS, latencyStart, stagesOf } from "./perf.js";
 
 // Registered before anything else runs so an early throw still reaches
 // `Riffle.log`. Not gated by `debugLogging`, and the default console output is
@@ -224,7 +224,7 @@ window.addEventListener("unhandledrejection", (event) => {
 
 // Header layout of a `preview` payload, see `crates/app/src/commands.rs`.
 const PREVIEW_HEADER_LEN = 8;
-const PREVIEW_KIND_JPEG_V1 = 1;
+const PREVIEW_KIND_JPEG_V2 = 6;
 // Header layout of a `focus_crop` payload, see `crates/app/src/commands.rs`.
 const CROP_HEADER_LEN = 32;
 const CROP_KIND_RGBA_V3 = 5;
@@ -271,6 +271,7 @@ interface IndexedFile {
 interface DecodeResponse {
   seq: number;
   bitmap?: ImageBitmap;
+  decodeMs?: number;
   error?: string;
 }
 
@@ -334,15 +335,25 @@ const orientations = new Map<number, number>();
 // its decoded bitmap, for the `page …` timing line.
 const pageTimings = new Map<
   number,
-  { startedAt: number; invokeMs: number; postedAt: number; keypressAt: number | null }
+  {
+    requestedAt: number;
+    invokedAt: number;
+    readMs: number;
+    postedAt: number;
+    keypressAt: number | null;
+    jpegKB: number;
+    scan: ScanPass;
+  }
 >();
 // `performance.now()` at the key that turned the page, cleared by the preview
 // request that page turn produced. A strip click or a folder open starts its
 // own request, which is not timed from a keypress.
 let pageKeypressAt: number | null = null;
+// The key whose page turn found a request in flight, for the re-request that
+// serves it to time its `wait` from; a later keyless turn overwrites it.
+let queuedKeypressAt: number | null = null;
 // `performance.now()` at the last `show()`, where a preview's latency starts
-// when no keypress timed it (a strip click, a folder open, or a key whose
-// request was queued behind an in-flight one).
+// when no keypress timed it (a strip click, a folder open).
 let switchAt = 0;
 // The performance overlay's series; it records only while the overlay is on.
 const perf = new PerfModel();
@@ -408,6 +419,19 @@ function setScanRunning(running: boolean): void {
   scanRunning = running;
   settings.setScanRunning(running);
 }
+
+type ScanPass = "idle" | 1 | 2 | 3;
+
+// The scan between its `faces-done` and `embed-done`, i.e. in its third pass.
+let embedPassScanId: number | null = null;
+
+function scanPass(): ScanPass {
+  if (scanRunning) {
+    return scanDone?.scanId === scanId ? 2 : 1;
+  }
+  return embedPassScanId !== null && embedPassScanId === scanId ? 3 : "idle";
+}
+
 // How long the current file and the strip's range must settle before the
 // running scan is told to take them first, so a held arrow key or a wheel
 // scroll sends one `set_scan_focus` per stop rather than one per step.
@@ -2169,6 +2193,11 @@ function togglePerf(): void {
   drawPerf();
 }
 
+// One latency stage's step of `--chart-latency`, fading up the bar.
+function perfStageAlpha(at: number): number {
+  return 1 - at * 0.11;
+}
+
 // The CPU and disk busy series on a 0-100 % scale, Riffle's reads on a
 // 0-`readMax` scale and the latency bars on a 0-`latencyMax` scale share the
 // plot below a one-line legend, the newest at the right edge.
@@ -2203,8 +2232,19 @@ function drawPerf(): void {
   ctx.stroke();
   ctx.fillStyle = THEME.chartLatency;
   for (const point of latency) {
-    const barHeight = (Math.min(point.ms, latencyMax) / latencyMax) * plot;
-    ctx.fillRect(x(point.at) - 1, bottom - barHeight, 2, barHeight);
+    if (point.stages === undefined) {
+      const barHeight = (Math.min(point.ms, latencyMax) / latencyMax) * plot;
+      ctx.fillRect(x(point.at) - 1, bottom - barHeight, 2, barHeight);
+      continue;
+    }
+    let top = bottom;
+    for (const [at, stage] of STAGES.entries()) {
+      const stageHeight = (point.stages[stage] / latencyMax) * plot;
+      top -= stageHeight;
+      ctx.globalAlpha = perfStageAlpha(at);
+      ctx.fillRect(x(point.at) - 1, top, 2, stageHeight);
+    }
+    ctx.globalAlpha = 1;
   }
   ctx.lineJoin = "round";
   // A series without a reading (the system disk on macOS) has no line and no
@@ -2237,10 +2277,11 @@ function drawPerf(): void {
   ctx.textBaseline = "top";
   ctx.textAlign = "left";
   let left = 6;
-  for (const [text, color, line] of [
-    ["100%  60 s", THEME.mutedForeground, null],
-    ...shown.map((line) => [line.label, line.color, line] as const),
-    ["Latency", THEME.chartLatency, null],
+  for (const [text, color, line, alpha] of [
+    ["100%  60 s", THEME.mutedForeground, null, 1],
+    ...shown.map((line) => [line.label, line.color, line, 1] as const),
+    ["Latency", THEME.chartLatency, null, 1],
+    ...STAGES.map((stage, at) => [stage, THEME.chartLatency, null, perfStageAlpha(at)] as const),
   ] as const) {
     if (line !== null) {
       const y = 9.5;
@@ -2254,7 +2295,9 @@ function drawPerf(): void {
       left += PERF_SWATCH + 4;
     }
     ctx.fillStyle = color;
+    ctx.globalAlpha = alpha;
     ctx.fillText(text, left, 3);
+    ctx.globalAlpha = 1;
     left += ctx.measureText(text).width + 12;
   }
   ctx.setLineDash([]);
@@ -2365,7 +2408,7 @@ async function loadCompare(): Promise<void> {
       async (path) => {
         const payload = await window.__TAURI__.core.invoke<ArrayBuffer>("preview", { path });
         const header = new DataView(payload, 0, PREVIEW_HEADER_LEN);
-        if (header.getUint16(0, true) !== PREVIEW_KIND_JPEG_V1) {
+        if (header.getUint16(0, true) !== PREVIEW_KIND_JPEG_V2) {
           throw new Error("unknown preview payload");
         }
         const orientation = header.getUint16(2, true);
@@ -3550,18 +3593,21 @@ function startDwell(): void {
 
 function requestPreview(): void {
   if (inFlight || files.length === 0) {
+    queuedKeypressAt = files.length === 0 ? null : pageKeypressAt;
     pageKeypressAt = null;
     return;
   }
   inFlight = true;
   const current = seq;
-  const requestStartedAt = performance.now();
-  const keypressAt = pageKeypressAt;
+  const requestedAt = performance.now();
+  const keypressAt = pageKeypressAt ?? queuedKeypressAt;
   pageKeypressAt = null;
+  queuedKeypressAt = null;
+  const scan = scanPass();
   window.__TAURI__.core
     .invoke<ArrayBuffer>("preview", { path: files[index] })
     .then((payload) => {
-      const invokeMs = performance.now() - requestStartedAt;
+      const invokedAt = performance.now();
       inFlight = false;
       if (current !== seq) {
         requestPreview();
@@ -3569,7 +3615,7 @@ function requestPreview(): void {
       }
       const header = new DataView(payload, 0, PREVIEW_HEADER_LEN);
       const kind = header.getUint16(0, true);
-      if (kind !== PREVIEW_KIND_JPEG_V1) {
+      if (kind !== PREVIEW_KIND_JPEG_V2) {
         throw new Error(`unknown preview payload kind ${kind}`);
       }
       return previewPixelLimit.then((maxPixels) => {
@@ -3583,10 +3629,13 @@ function requestPreview(): void {
         orientations.set(current, header.getUint16(2, true));
         const jpeg = payload.slice(PREVIEW_HEADER_LEN);
         pageTimings.set(current, {
-          startedAt: requestStartedAt,
-          invokeMs,
+          requestedAt,
+          invokedAt,
+          readMs: header.getUint32(4, true) / 1000,
           postedAt: performance.now(),
           keypressAt,
+          jpegKB: Math.round(payload.byteLength / 1024),
+          scan,
         });
         worker.postMessage({ seq: current, jpeg, maxPixels }, [jpeg]);
       });
@@ -3722,7 +3771,8 @@ function show(): void {
 }
 
 worker.addEventListener("message", (event: MessageEvent<DecodeResponse>) => {
-  const { seq: responseSeq, bitmap, error } = event.data;
+  const receivedAt = performance.now();
+  const { seq: responseSeq, bitmap, decodeMs, error } = event.data;
   const orientation = orientations.get(responseSeq) ?? 1;
   orientations.delete(responseSeq);
   const timing = pageTimings.get(responseSeq);
@@ -3739,23 +3789,39 @@ worker.addEventListener("message", (event: MessageEvent<DecodeResponse>) => {
   shown?.bitmap.close();
   shown = { bitmap, orientation, seq: responseSeq };
   setStatus();
-  const decodedAt = performance.now();
+  const drawStartedAt = performance.now();
   draw();
+  const drawnAt = performance.now();
   startDwell();
-  if (timing !== undefined) {
-    const drawnAt = performance.now();
-    const sinceKeypress =
-      timing.keypressAt === null
-        ? ""
-        : ` keypressToPixels=${(drawnAt - timing.keypressAt).toFixed(1)}ms`;
+  if (timing !== undefined && (debugLogging || perf.on)) {
+    const startedAt = latencyStart(timing.keypressAt, switchAt);
+    const stages = stagesOf({
+      ...timing,
+      startedAt,
+      receivedAt,
+      decodeMs: decodeMs ?? 0,
+      drawStartedAt,
+      drawnAt,
+    });
+    const ms = (value: number) => `${value.toFixed(1)}ms`;
+    const keyed = timing.keypressAt !== null;
     debugLog(
-      `page invoke=${timing.invokeMs.toFixed(1)}ms` +
-        ` decode=${(decodedAt - timing.postedAt).toFixed(1)}ms` +
-        ` total=${(drawnAt - timing.startedAt).toFixed(1)}ms` +
-        sinceKeypress,
+      "page" +
+        (keyed ? ` wait=${ms(stages.wait)}` : "") +
+        ` read=${ms(stages.read)}` +
+        ` ipc=${ms(stages.ipc)}` +
+        ` post=${ms(stages.post)}` +
+        ` worker=${ms(stages.worker)}` +
+        ` decode=${ms(stages.decode)}` +
+        ` draw=${ms(stages.draw)}` +
+        ` total=${ms(drawnAt - timing.requestedAt)}` +
+        (keyed ? ` keypressToPixels=${ms(drawnAt - startedAt)}` : "") +
+        ` jpegKB=${timing.jpegKB}` +
+        ` px=${bitmap.width}x${bitmap.height}` +
+        ` scan=${timing.scan}`,
     );
     if (perf.on) {
-      perf.addLatency({ at: drawnAt, ms: drawnAt - latencyStart(timing.keypressAt, switchAt) });
+      perf.addLatency({ at: drawnAt, ms: drawnAt - startedAt, stages });
       drawPerf();
     }
   }
@@ -4812,6 +4878,7 @@ void window.__TAURI__.event.listen<{
       .catch(() => {});
   }
   setScanRunning(false);
+  embedPassScanId = payload.scan_id;
   idle.drain();
   const failed = scanErrors + payload.errors;
   scanning = failed === 0 ? null : `${failed} failed`;
@@ -4954,6 +5021,9 @@ void window.__TAURI__.event.listen<{ scan_id: number }>("embed-progress", ({ pay
   }
 });
 void window.__TAURI__.event.listen<{ scan_id: number }>("embed-done", ({ payload }) => {
+  if (payload.scan_id === embedPassScanId) {
+    embedPassScanId = null;
+  }
   if (payload.scan_id === scanId) {
     refreshGenres();
     refreshRanks();

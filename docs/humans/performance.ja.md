@@ -381,7 +381,7 @@ Riffle は自分のスキャンの時間をログに書くので、これらの�
 
 2 回目に開くときも同じ行を書きますが `todo=0` となり、その `scan extract` は `files=0 done=0` でほぼゼロの時間になります。キャッシュから開いたことを示すのは、行がないことではなく、この `files=0` の行です。2 回目に開く処理は 3 つの別々の呼び出しにまたがるので、1 つの数字にはなりません。その回の `open list`、`open entries`、`scan prepare` の行を足してください。どの行も `in <n>ms` で終わり、ディレクトリ名を含み、タイムスタンプで 2 回の実行を見分けられます。
 
-ページごとのレイテンシーも同じようにログに書きます。設定ウィンドウで `Timing logs` をオンにし（この項目は `mise run tauri:release:devtools` かデバッグビルドでだけ表示されます）、次 / 前のキーでフォルダーのページを送り、`Riffle.log` の `page invoke=… decode=… total=… keypressToPixels=…` の行を読みます。`invoke` は `preview` 呼び出しの往復（Rust の読み込みと IPC）、`decode` はワーカーの `createImageBitmap` の往復、`total` はリクエストからキャンバスの描画まで、`keypressToPixels` はキー入力からキャンバスの描画までです。`keypressToPixels` はキーによらないページ（ストリップのクリックやフォルダーを開いたとき）では省かれます。次のページ送りに追い越されたページ送りは何もログに書きません。
+ページごとのレイテンシーも同じようにログに書きます。設定ウィンドウで `Timing logs` をオンにし（この項目は `mise run tauri:release:devtools` かデバッグビルドでだけ表示されます）、次 / 前のキーでフォルダーのページを送り、`Riffle.log` の `page wait=… read=… ipc=… post=… worker=… decode=… draw=… total=… keypressToPixels=… jpegKB=… px=WxH scan=…` の行を読みます。`wait` はキーが実行中のリクエストの後ろで待った時間、`read` は Rust の読み込み（スキャンの読み込みの一時停止を含みます）、`ipc` は `preview` 呼び出しの往復の残り、`post` は JPEG をワーカーへ渡すまでのメインスレッドの処理、`worker` はワーカーとの行き帰り、`decode` はワーカーの `createImageBitmap`、`draw` はキャンバスの描画です。`total` はリクエストからキャンバスの描画まで、`keypressToPixels` はキー入力からキャンバスの描画まで、`jpegKB` はペイロードのサイズ、`px` はデコード後のサイズ、`scan` はリクエスト時に動いていたスキャンのパス（`idle`、`1`、`2`、`3`）です。`wait` と `keypressToPixels` はキーによらないページ（ストリップのクリックやフォルダーを開いたとき）では省かれます。次のページ送りに追い越されたページ送りは何もログに書きません。
 
 ## 等倍ピントチェックの経路
 
