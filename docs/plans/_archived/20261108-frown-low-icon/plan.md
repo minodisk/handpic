@@ -76,4 +76,4 @@ guess look like the user's reject.
 
 ## Progress
 
-- (none yet)
+- (2026-11-08) Step 1 complete

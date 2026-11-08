@@ -17,4 +17,6 @@
   and the filter menu's `Face focus` > `Low` item at 12 px; expected: a
   frowning face in the scan frame in `#999`, distinguishable from Good's
   smiling face. The step's checkbox was ticked on the automated criteria
-  (unit test of `FOCUS_MARK_ICONS`, `mise run ci`).
+  (unit test of `FOCUS_MARK_ICONS`, `mise run ci`). Done when: the two icons
+  are told apart at 12 px (close it), else a follow-up adjusts the mouth path
+  or the stroke width.
