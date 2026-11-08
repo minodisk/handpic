@@ -356,3 +356,4 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 ## Progress
 
 - (2026-11-08) Step 1 complete
+- (2026-11-08) Step 2 complete
