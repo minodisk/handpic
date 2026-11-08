@@ -2446,3 +2446,33 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 
 - [ ] Add a test seam (a stub embedder or an injectable closure), and a test that holds the single permit and shows `embed_all` delivers nothing until it is dropped.
 - [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
+
+### App: real-device check that a frame soft at full size is no longer Good (full-size-eye-check)
+
+#### Background
+
+`full-size-eye-check` Step 4 takes a frame whose AF eyes are soft at full size out of Face focus `Good` (`photoTier`). CI covers the `SOFT_BELOW` parity test, the `afEyeState` and filter unit tests, and the meta row's presence and absence. The strip icon, the mark color, the `Face focus` = Good filter and the meta pane's `Eyes at full size` row were never exercised in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/meta.ts`, `crates/core/src/scan.rs`.
+
+#### TODO
+
+- [ ] On Windows, rescan `D:\Photos\2026\2026-11-07` in the real app (`FACES_VERSION` 10 re-runs pass 2), then open `_DSC1508.ARW` and `_DSC1536.ARW`. Expected: neither is Good (no face icon on the strip, a white focus mark, and filtered out by `Face focus` = Good), and the meta pane's `Eyes at full size` row reads `Soft`.
+
+### Core: `good_photo` in the ranking leaves out the full-size eye cut that `photoTier` applies
+
+#### Background
+
+`full-size-eye-check` Step 4 added a full-size eye-sharpness cut to the frontend's `photoTier`. `good_photo` in `crates/core/src/rank.rs` deliberately leaves it out, so its features do not move in that feature, and its doc comment says so. The Rust copy therefore disagrees with the frontend on a demoted frame. Applying the cut to the ranking moves the ranking's features, so the prior's calibration needs a look. `rank::Frame::full_eye_sharp` is already carried through `Index::rank_rows` for this and nothing reads it yet. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/core/src/rank.rs`, `crates/app/src/index.rs`.
+
+#### TODO
+
+- [ ] Decide whether `good_photo` applies the full-size cut (`full_eye_sharp` against `SOFT_BELOW`). If it does, apply it, check the effect on the prior (`crates/core/ranking/siglip2.json`, written by `rank_prior.py`) and refit or recalibrate as needed. If it does not, document the divergence from `photoTier` where both are defined.
+
+### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
+
+#### Background
+
+`full-size-eye-check` Step 3 measured pass 2 on `D:\Photos\2026\2026-11-07` (3638 ARW) with a warm file cache: a measured frame cost about 51 ms more (mean and median), and the whole `riffle-cli features` run went from 80 s to 98 s. The cost of the second read on a cold disk is unmeasured, and the plan's "Cost" trade-off names it as the case to watch. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/core/src/scan.rs` (`full_eye_sharp`).
+
+#### TODO
+
+- [ ] Time `riffle-cli features` (or a pass 2 in the app) on a freshly mounted card or after a reboot, with the same 8 threads and release build as Step 3, and compare it with the warm figures. If the second read is a noticeable share of the cost, consider reusing the first read's bytes.

@@ -1023,7 +1023,11 @@ that already have the column, and the `ALTER TABLE` fails.
   the v8+ fixtures need this: the v2-v7 fixtures create their own tables or
   drop `folders` entirely, and `CREATE TABLE IF NOT EXISTS` recreates the new
   table anyway. When a bump touches many fixtures, a regex over the previous
-  bump's `DROP COLUMN ...;` line adds the new drops in one pass.
+  bump's `DROP COLUMN ...;` line adds the new drops in one pass. The regex
+  has nothing to key on in fixtures that already had the neighbouring column
+  (v19 to v22 had `edge_gap`, so the v23-era `full_eye_sharp` drop had no
+  `DROP COLUMN edge_gap` line to anchor to): add the new drop to every
+  older fixture by hand, v19 to v22 included.
 - Put a new column at the end of `CREATE TABLE`, not next to the column it
   relates to: `ALTER TABLE ADD COLUMN` always appends, so only an end
   placement keeps fresh and migrated databases in the same column order
@@ -1078,10 +1082,12 @@ retried.
   regions and the face mesh, the eye window, the detector:
   `crates/core/src/candidate.rs`, `eyes.rs`, `faces.rs`) or the sharpness
   score (`sharpness::score_preview`, `crates/core/src/sharpness.rs`, or what
-  `extract_analysis` feeds it). Only the second pass then re-runs; thumbnails
+  `extract_analysis` feeds it) or the full-size eye sharpness
+  (`full_eye_sharp`: `crates/core/src/fullsharp.rs`, its `SOFT_BELOW`, the
+  eye crop size, or the full-size read it makes in `scan.rs`). Only the second pass then re-runs; thumbnails
   are kept. The column and the constant keep their names although they now
   cover the score too; a change to the columns it fills (`files.eye_focus`,
-  `files.sharpness`, and `files.eyes_ear` with `files.pose_yaw` /
+  `files.sharpness`, `files.full_eye_sharp`, and `files.eyes_ear` with `files.pose_yaw` /
   `pose_pitch` / `pose_roll`, the EAR of the more closed eye and the head
   pose from the mesh the cue already runs, and `files.eye_offset` /
   `files.edge_gap`, how well that mesh sits on the face) is a
@@ -1098,7 +1104,16 @@ retried.
   score-based Good / Low for it without a new cue or 30 or more face-free
   rejects. See
   `docs/plans/_archived/20261010-af-eye-good-bad-cascade/learnings.md`,
-  Steps 2 and 3.
+  Steps 2 and 3. `FACES_VERSION` 10 added the full-size eye check: a frame
+  whose AF eyes measure soft at full size (`SOFT_BELOW`, pinned by a Rust-side
+  test against the figure in `focus.ts`, which the test does not read) is no
+  longer Good. It costs about +51 ms per measured (`Candidate`) frame in pass
+  2, with 8 threads and a warm file cache; the cold-disk cost is unmeasured. A
+  new field of `faces-progress` must also be copied in `applyFaceReady`
+  (`focus.ts`), which copies field by field, or a frame scanned while on screen
+  stays Good until the folder reloads. See
+  `docs/plans/_archived/20261108-full-size-eye-check/learnings.md`, Steps 3
+  and 4.
 - Moving the score from the first pass to the second bumped neither version:
   the score's computation did not change, so a row the old first pass scored
   (at `FACES_VERSION`) keeps a correct score, and a row the second pass has
