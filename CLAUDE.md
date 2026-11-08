@@ -64,7 +64,10 @@ pulled toward zero `OFFSET_SHRINK` times harder, `rank` the place, the score
 and the reasons of each frame within its burst by the shared weights plus its
 burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
-holds new reads back while a `Paused` is held, and
+holds new reads back while a `Paused` is held, `src/fullsharp.rs` the eye
+sharpness of the judged face on the full-size embedded JPEG (a crop around each
+eye resized to 154 px, the gradient's 99th percentile over the contrast, the
+sharper eye counting, a frame under `SOFT_BELOW` being soft), and
 `src/sharpness.rs` the
 sharpness score of the embedded preview, taken on the Sony eye-AF frame
 when the camera tracked a face, else around the AF point, else between

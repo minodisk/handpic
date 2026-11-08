@@ -10,6 +10,7 @@ pub mod embed;
 mod exif;
 pub mod eyes;
 pub mod faces;
+pub mod fullsharp;
 pub mod genre;
 mod hevc;
 pub mod i18n;

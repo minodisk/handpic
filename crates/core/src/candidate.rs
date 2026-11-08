@@ -136,6 +136,13 @@ pub struct Cue {
     /// How close `face` and its mesh eye regions come to the preview's edge
     /// (`EyeMeasures::edge_gap`); `None` without a mesh.
     pub edge_gap: Option<f64>,
+    /// The two eye centers of `face` in stored coordinates: the mesh's
+    /// (`mesh_eye_centers`), else YuNet's landmarks; `None` when no face was
+    /// judged.
+    pub eye_centers: Option<[(f32, f32); 2]>,
+    /// The stored width of the preview the cue was taken on; 0 in a
+    /// `Cue::unknown`.
+    pub preview_width: usize,
 }
 
 impl Cue {
@@ -432,14 +439,10 @@ fn grown_bounds(points: &[[f32; 2]], indices: &[usize]) -> Option<[f32; 4]> {
     Some([x0 - margin, y0 - margin, x1 + margin, y1 + margin])
 }
 
-/// How far the mesh's eyes sit from YuNet's eye landmarks of the same
-/// `face`: the larger of the two distances between an eyelid contour's
-/// center (the mean of its points) and its landmark, in the pairing of the
-/// two eyes with the landmarks that keeps that larger distance smaller,
-/// divided by the face box's longer side. A mesh fitted off the face (an
-/// in-plane rotation the upright crop does not undo) reads far. `None` when
-/// a contour point is not finite or the box is empty.
-pub fn mesh_eye_offset(face: &Face, points: &[[f32; 2]]) -> Option<f64> {
+/// The centers (the mean of the points) of `LEFT_EYE_CONTOUR` and
+/// `RIGHT_EYE_CONTOUR`, in that order. `None` when a point is missing or not
+/// finite.
+pub fn mesh_eye_centers(points: &[[f32; 2]]) -> Option<[(f32, f32); 2]> {
     let center = |indices: &[usize]| -> Option<(f32, f32)> {
         let mut sum = (0.0, 0.0);
         for &i in indices {
@@ -452,7 +455,18 @@ pub fn mesh_eye_offset(face: &Face, points: &[[f32; 2]]) -> Option<f64> {
         let n = indices.len() as f32;
         Some((sum.0 / n, sum.1 / n))
     };
-    let (left, right) = (center(&LEFT_EYE_CONTOUR)?, center(&RIGHT_EYE_CONTOUR)?);
+    Some([center(&LEFT_EYE_CONTOUR)?, center(&RIGHT_EYE_CONTOUR)?])
+}
+
+/// How far the mesh's eyes sit from YuNet's eye landmarks of the same
+/// `face`: the larger of the two distances between an eyelid contour's
+/// center (the mean of its points) and its landmark, in the pairing of the
+/// two eyes with the landmarks that keeps that larger distance smaller,
+/// divided by the face box's longer side. A mesh fitted off the face (an
+/// in-plane rotation the upright crop does not undo) reads far. `None` when
+/// a contour point is not finite or the box is empty.
+pub fn mesh_eye_offset(face: &Face, points: &[[f32; 2]]) -> Option<f64> {
+    let [left, right] = mesh_eye_centers(points)?;
     let side = face.width.max(face.height);
     if side <= 0.0 {
         return None;
@@ -533,6 +547,8 @@ pub struct EyeMeasures {
     pub eye_offset: Option<f64>,
     /// `edge_gap` of the face and the mesh.
     pub edge_gap: Option<f64>,
+    /// `mesh_eye_centers` of the mesh.
+    pub eye_centers: Option<[(f32, f32); 2]>,
 }
 
 /// The `EyeMeasures` of `gray` (`width` x `height`, stored coordinates) over
@@ -568,6 +584,7 @@ pub fn mesh_eye_measures(
         pose: mesh.pose,
         eye_offset: mesh_eye_offset(face, &mesh.points),
         edge_gap: edge_gap(face, &mesh.points, width, height),
+        eye_centers: mesh_eye_centers(&mesh.points),
     }
 }
 
@@ -693,9 +710,10 @@ pub fn face_cue_unless(
 
 /// The cue of `face`, picked from `detection`, scored as `focus`; the EAR,
 /// the pose, the eye offset and the edge gap come from `focus`'s mesh, so a face
-/// without one has none of them.
+/// without one has none of them and its eye centers are `face`'s landmarks.
 fn cue_of(face: Option<Face>, detection: Detection, focus: Option<EyeFocus>) -> Cue {
     let mesh = focus.and_then(|f| f.mesh);
+    let preview_width = detection.width;
     Cue {
         state: focus.map_or(FocusCandidate::Unknown, |f| f.state),
         eye_focus: focus.map(|f| f.probability),
@@ -705,6 +723,11 @@ fn cue_of(face: Option<Face>, detection: Detection, focus: Option<EyeFocus>) -> 
         pose: mesh.and_then(|m| m.pose),
         eye_offset: mesh.and_then(|m| m.eye_offset),
         edge_gap: mesh.and_then(|m| m.edge_gap),
+        eye_centers: face.map(|f| {
+            mesh.and_then(|m| m.eye_centers)
+                .unwrap_or([f.left_eye, f.right_eye])
+        }),
+        preview_width,
     }
 }
 
@@ -1346,6 +1369,8 @@ mod tests {
             )
         );
         assert!(cue.eye_offset.is_some() && cue.edge_gap.is_some());
+        assert_eq!(cue.eye_centers, Some([(21.25, 25.0), (80.0, 25.0)]));
+        assert_eq!(cue.preview_width, 120);
     }
 
     #[test]
@@ -1425,6 +1450,8 @@ mod tests {
         let cue = cue_of(Some(small), detection, focus);
         assert_eq!(cue.eye_focus, focus.map(|f| f.probability));
         assert_eq!((cue.eyes_ear, cue.pose), (None, None));
+        assert_eq!(cue.eye_centers, Some([small.left_eye, small.right_eye]));
+        assert_eq!(cue.preview_width, 120);
         let side = |s: f32| face(0.0, 0.0, s, (20.0, 25.0), (40.0, 25.0));
         assert!(!meshes_face(&side(EYES_MIN_FACE.next_down())));
         assert!(meshes_face(&side(EYES_MIN_FACE)));

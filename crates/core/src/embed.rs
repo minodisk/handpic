@@ -253,7 +253,7 @@ pub fn input_tensor(
         Resize::ShortSideCrop if w <= h => (s, (s * h / w).max(s)),
         Resize::ShortSideCrop => ((s * w / h).max(s), s),
     };
-    let resized = resample(&up, w, h, rw, rh, spec.filter);
+    let resized = resample(&up, w, h, rw, rh, spec.filter, 3);
     let (x0, y0) = ((rw - s) / 2, (rh - s) / 2);
     let mut out = vec![0f32; 3 * s * s];
     for y in 0..s {
@@ -269,27 +269,34 @@ pub fn input_tensor(
     Ok(tract_ndarray::Array4::from_shape_vec((1, 3, s, s), out)?.into_tensor())
 }
 
-/// PIL's `Image.resize` of an 8-bit RGB image: a separable convolution,
-/// horizontal then vertical, whose kernel widens with the downscale
-/// (antialiasing), each pass rounded and clamped to 8 bits as PIL does.
-fn resample(rgb: &[u8], w: usize, h: usize, ow: usize, oh: usize, filter: Filter) -> Vec<u8> {
+/// PIL's `Image.resize` of an 8-bit image of interleaved `channels`: a
+/// separable convolution, horizontal then vertical, whose kernel widens with
+/// the downscale (antialiasing), each pass rounded and clamped to 8 bits as
+/// PIL does.
+pub(crate) fn resample(
+    pixels: &[u8],
+    w: usize,
+    h: usize,
+    ow: usize,
+    oh: usize,
+    filter: Filter,
+    channels: usize,
+) -> Vec<u8> {
     let horizontal = if ow == w {
-        rgb.to_vec()
+        pixels.to_vec()
     } else {
         let coeffs = coefficients(w, ow, filter);
-        let mut out = vec![0u8; ow * h * 3];
+        let mut out = vec![0u8; ow * h * channels];
         for y in 0..h {
             for (ox, (start, k)) in coeffs.iter().enumerate() {
-                let mut sum = [0f64; 3];
-                for (j, wgt) in k.iter().enumerate() {
-                    let i = (y * w + start + j) * 3;
-                    for c in 0..3 {
-                        sum[c] += f64::from(rgb[i + c]) * wgt;
-                    }
-                }
-                let o = (y * ow + ox) * 3;
-                for c in 0..3 {
-                    out[o + c] = sum[c].round().clamp(0.0, 255.0) as u8;
+                let o = (y * ow + ox) * channels;
+                for c in 0..channels {
+                    let sum: f64 = k
+                        .iter()
+                        .enumerate()
+                        .map(|(j, wgt)| f64::from(pixels[(y * w + start + j) * channels + c]) * wgt)
+                        .sum();
+                    out[o + c] = sum.round().clamp(0.0, 255.0) as u8;
                 }
             }
         }
@@ -299,19 +306,19 @@ fn resample(rgb: &[u8], w: usize, h: usize, ow: usize, oh: usize, filter: Filter
         return horizontal;
     }
     let coeffs = coefficients(h, oh, filter);
-    let mut out = vec![0u8; ow * oh * 3];
+    let mut out = vec![0u8; ow * oh * channels];
     for (oy, (start, k)) in coeffs.iter().enumerate() {
         for x in 0..ow {
-            let mut sum = [0f64; 3];
-            for (j, wgt) in k.iter().enumerate() {
-                let i = ((start + j) * ow + x) * 3;
-                for c in 0..3 {
-                    sum[c] += f64::from(horizontal[i + c]) * wgt;
-                }
-            }
-            let o = (oy * ow + x) * 3;
-            for c in 0..3 {
-                out[o + c] = sum[c].round().clamp(0.0, 255.0) as u8;
+            let o = (oy * ow + x) * channels;
+            for c in 0..channels {
+                let sum: f64 = k
+                    .iter()
+                    .enumerate()
+                    .map(|(j, wgt)| {
+                        f64::from(horizontal[((start + j) * ow + x) * channels + c]) * wgt
+                    })
+                    .sum();
+                out[o + c] = sum.round().clamp(0.0, 255.0) as u8;
             }
         }
     }
