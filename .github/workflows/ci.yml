@@ -118,19 +118,9 @@ jobs:
           version: 2026.9.0
 
       # The crate's build.rs refuses to build without NASM, because mozjpeg
-      # would otherwise lose SIMD silently.
-      - name: Check whether the runner image has NASM
-        id: nasm
-        shell: bash
-        run: |
-          if nasm -v; then
-            echo "found=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "found=false" >> "$GITHUB_OUTPUT"
-          fi
-
+      # would otherwise lose SIMD silently. Always install it: a bash-only probe
+      # can find a nasm the build script's PATH does not have.
       - uses: ilammy/setup-nasm@v1
-        if: steps.nasm.outputs.found != 'true'
 
       - uses: actions/cache@v4
         with:
