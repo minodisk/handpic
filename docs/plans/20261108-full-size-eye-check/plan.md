@@ -151,7 +151,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - Luma: `candidate::luma` (the same BT.601 integer luma the cue uses).
     - Do not touch `eye_focus`, its logit or `FACES_VERSION` in this step.
 
-- [ ] Step 2: Dump the score from `facechoice` and fix the threshold on the three folders
+- [x] Step 2: Dump the score from `facechoice` and fix the threshold on the three folders
   - Done when:
     - `riffle-cli facechoice` gains two columns after the existing ones:
       `edge_gap` (the mesh's, as pass 2 stores it; `-` without a mesh) and
@@ -336,3 +336,5 @@ picks the check catches, not how many soft frames it removes.
 
 - Step 1 (2026-11-08): added `crates/core/src/fullsharp.rs`, the full-size eye sharpness metric, with its unit tests.
 - (2026-11-08) Step 1 complete
+- Step 2 (2026-11-09): added the `edge_gap` and `full_sharp` columns to the `facechoice` dump, `rank.py` and `validation.md` in this plan folder; the 0.162 threshold is kept.
+- (2026-11-09) Step 2 complete

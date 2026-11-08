@@ -21,3 +21,16 @@
   `edge_gap >= 0.02`, which covers the eye region but not the whole
   `0.6 * d` square, so a few frames near the edge may differ from the
   prototype; Step 2's rank check is where that would show.
+
+## Step 2
+
+- Claude Code killed the first three-folder `facechoice` dump (24 threads by
+  default, in the background) when the system ran critically low on memory
+  while the session sat idle. 2026-11-07 had finished; the other two were
+  re-run one at a time with an explicit 8 threads (281 s and 145 s) and
+  completed. The thread count does not change the scores.
+- The ranks match the prototype (Spearman 0.9994-0.9996, cut ranks within one),
+  so 0.162 stays. See `validation.md`. Step 1's concern about crops clamped at
+  the image edge did not show: no Good frame differs by more than 0.009.
+- The ranks are of the Good frames as the TSV re-derives them (903 / 473 / 303,
+  equal to the index's counts).
