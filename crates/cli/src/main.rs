@@ -2283,6 +2283,7 @@ mod tests {
                 pose: Some(pose),
                 eye_offset: None,
                 edge_gap: None,
+                eye_centers: None,
             }),
         };
         let measured = Measured {
@@ -2337,6 +2338,8 @@ mod tests {
                 pose: None,
                 eye_offset: Some(0.04567),
                 edge_gap: Some(0.25),
+                eye_centers: None,
+                preview_width: 0,
             },
             sharpness: Some(123.45678),
         });

@@ -39,19 +39,13 @@ struct Landmarks {
 }
 
 impl Landmarks {
-    fn of(points: &[[f32; 2]]) -> Self {
-        let center = |indices: &[usize]| {
-            let (x, y) = indices.iter().fold((0.0, 0.0), |(x, y), &i| {
-                (x + points[i][0], y + points[i][1])
-            });
-            let n = indices.len() as f32;
-            (x / n, y / n)
-        };
-        Landmarks {
-            left_eye: center(&eyes::LEFT_EYE_CONTOUR),
-            right_eye: center(&eyes::RIGHT_EYE_CONTOUR),
+    fn of(points: &[[f32; 2]]) -> Option<Self> {
+        let [left_eye, right_eye] = candidate::mesh_eye_centers(points)?;
+        Some(Landmarks {
+            left_eye,
+            right_eye,
             nose: (points[4][0], points[4][1]),
-        }
+        })
     }
 }
 
@@ -231,7 +225,7 @@ fn frame(path: &Path) -> Result<Frame> {
             face: *face,
             focus: candidate::eye_focus(&gray, w, h, face, mesh.as_ref()),
             mesh_ms,
-            landmarks: mesh.as_ref().map(|m| Landmarks::of(&m.points)),
+            landmarks: mesh.as_ref().and_then(|m| Landmarks::of(&m.points)),
             window_ef: candidate::eye_focus(&gray, w, h, face, None).probability,
         }
     };
@@ -406,6 +400,7 @@ mod tests {
                     }),
                     eye_offset: Some(0.0625),
                     edge_gap: None,
+                    eye_centers: None,
                 }),
             },
             mesh_ms: meshed.then_some(30.5),
@@ -506,7 +501,7 @@ mod tests {
             points[i] = [140.0, 50.0 + if k % 2 == 0 { -2.0 } else { 2.0 }];
         }
         points[4] = [120.0, 82.5];
-        let l = Landmarks::of(&points);
+        let l = Landmarks::of(&points).unwrap();
         assert_eq!(
             (l.left_eye, l.right_eye, l.nose),
             ((100.0, 50.0), (140.0, 50.0), (120.0, 82.5))

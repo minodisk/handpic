@@ -73,6 +73,23 @@ pub fn decode_crop(jpeg: &[u8], cx: usize, cy: usize, size: usize) -> Result<Cro
     })
 }
 
+/// The width of `jpeg` from its header alone.
+pub fn jpeg_width(jpeg: &[u8]) -> Result<usize> {
+    guarded(|| unsafe {
+        let mut err: sys::jpeg_error_mgr = mem::zeroed();
+        let mut cinfo: sys::jpeg_decompress_struct = mem::zeroed();
+        cinfo.common.err = sys::jpeg_std_error(&mut err);
+        (*cinfo.common.err).error_exit = Some(unwind_error_exit);
+        sys::jpeg_create_decompress(&mut cinfo);
+        let _guard = scopeguard(&mut cinfo as *mut _);
+        sys::jpeg_mem_src(&mut cinfo, jpeg.as_ptr(), jpeg.len() as _);
+        if sys::jpeg_read_header(&mut cinfo, true as _) != 1 {
+            bail!("jpeg_read_header failed");
+        }
+        Ok(cinfo.image_width as usize)
+    })
+}
+
 /// The shared partial decode. `region` is handed the JPEG's size and returns
 /// the wanted center and size; the result is clamped to the image and snapped
 /// to MCU boundaries horizontally. A fatal libjpeg error comes back as `Err`.
@@ -82,12 +99,16 @@ fn decode_region(
     channels: usize,
     region: impl FnOnce(usize, usize) -> (usize, usize, usize, usize),
 ) -> Result<Crop> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        decode_region_unguarded(jpeg, color, channels, region)
-    }))
-    .map_err(|e| match e.downcast::<String>() {
-        Ok(msg) => anyhow!(*msg),
-        Err(_) => anyhow!("panic while partially decoding the JPEG"),
+    guarded(|| decode_region_unguarded(jpeg, color, channels, region))
+}
+
+/// `f`, its libjpeg error unwind turned into an `Err`.
+fn guarded<T>(f: impl FnOnce() -> Result<T>) -> Result<T> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|e| {
+        match e.downcast::<String>() {
+            Ok(msg) => anyhow!(*msg),
+            Err(_) => anyhow!("panic while partially decoding the JPEG"),
+        }
     })?
 }
 

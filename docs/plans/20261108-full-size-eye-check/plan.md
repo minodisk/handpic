@@ -33,9 +33,10 @@ edge_gap >= 0.02); the strip icon, the mark color and the filter all read
 The fix: measure the judged face's eyes once more on the full-size embedded
 JPEG (JpgFromRaw, `reader::read_full`, which already does a bounded prefix
 read plus a ranged read of the JPEG) and take the frame out of Good when that
-score is under a threshold. Riffle's goal is to cull the bad while keeping
-nearly every pick, so the check must never demote a sharp frame; under-catching
-soft ones at high ISO is acceptable.
+score is under a threshold. A demoted frame only moves to Neutral; it is not
+rejected. The check accepts demoting a few sharp frames (about 3% of the
+hand-labeled Good picks, see below) to take most soft frames out of Good, and
+under-catching soft ones at high ISO is acceptable.
 
 The metric, prototyped in Python
 (`D:\Photos\tests\20261108-good-eye-blur\proto\full_all.py`, `met` / `job`;
@@ -69,6 +70,12 @@ score (`D:\Photos\tests\20261108-good-eye-blur\`):
   with sharp and soft mixed in 120-160; 0.162 falls at rank 77 and not one
   sharp frame sits in ranks 1-77. At high ISO the threshold under-catches
   but never demotes a sharp frame.
+- Against the 806 hand-labeled frames of the 2026-10-08 mesh-eye-focus sets
+  (`D:\Photos\tests\20261108-good-eye-blur\labeled_picks_under_cut.jpg`):
+  the 145 frames clearing the Good rule are all picks, and 13 fall under
+  0.162. The user judged 5 of those 13 sharp (scores 0.145-0.157) and chose to
+  keep 0.162 over 0.15 (2 sharp) and 0.14 (0 sharp), which would leave many
+  more soft frames in Good.
 - Six noise-robust variants (half-size resize, Gaussian s1/s2, median 3/5,
   p99.5) did not align the three boundaries better; the simple metric stays.
 - Prototype cost: 0.1-0.17 s per frame with a whole-JPEG decode; the Rust
@@ -95,7 +102,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 
 ## Steps
 
-- [ ] Step 1: Add the full-size eye sharpness metric to `riffle-core` and the eye centers to `Cue`
+- [x] Step 1: Add the full-size eye sharpness metric to `riffle-core` and the eye centers to `Cue`
   - Done when:
     - `crates/core/src/fullsharp.rs` exists with (names indicative):
       `pub const SOFT_BELOW: f64 = 0.162` (the threshold, re-derived in
@@ -265,8 +272,8 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
       are also checked on the file's full-size embedded JPEG and a frame
       whose eyes are soft there is not good; files with no full-size JPEG
       (RAF, ORF, HDR PQ CR3) skip the check; a sentence on the validation
-      (three folders, never demoted a sharp frame, under-catches at high
-      ISO). Both pairs updated in the same PR.
+      (three folders; a few sharp frames can leave Good, and it under-catches
+      at high ISO). Both pairs updated in the same PR.
     - `mise run ci` (lychee included) passes.
   - Implementation approach:
     - Assumes Step 4 is merged so the text describes shipped behavior.
@@ -315,6 +322,17 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
   their Rust ranks below the Rust cut too, else the threshold or the port is
   wrong, not the files.
 
+## Refit experiment (not adopted)
+
+Before Step 1, full-size features were tried on the 806 hand-labeled frames
+(406 training, 400 held-out). Held-out AUC: current `eye_focus` 0.800, the
+full-size gradient score alone 0.705, `eye_focus` plus it 0.803, plus a
+full-size Laplacian 0.803. Full-size features did not improve the logistic
+model, so `eye_focus` stays and the score remains a separate check. These
+labels contain no reject among Good frames, so they measure only how many
+picks the check catches, not how many soft frames it removes.
+
 ## Progress
 
-- (none yet)
+- Step 1 (2026-11-08): added `crates/core/src/fullsharp.rs`, the full-size eye sharpness metric, with its unit tests.
+- (2026-11-08) Step 1 complete
