@@ -132,8 +132,16 @@ jobs:
           key: cargo-native-${{ runner.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
           restore-keys: cargo-native-${{ runner.os }}-
 
+      # setup-nasm puts its directory on the job's PATH, but the build script
+      # run under mise's bash task shell did not see it ("program not found").
+      # Put the directory on the PATH this step hands to mise explicitly.
       - name: Lint and test the native app
-        run: mise run native:check
+        shell: bash
+        run: |
+          export PATH="$PATH:$(cygpath -u "$USERPROFILE")/nasm"
+          command -v nasm
+          nasm -v
+          mise run native:check
 
   # Branch protection requires a single check named `ci`. This job stands in for
   # the whole run, so the lint job and the matrix can change shape without the
