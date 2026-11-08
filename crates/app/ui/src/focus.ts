@@ -160,9 +160,10 @@ function clears({
 }
 
 // A focus candidate whose AF eyes are in focus, whose eyes are open and whose
-// face is toward the camera, all at once, is `good`. A mesh off the face or a
-// face the frame's edge cuts is not, nor is any missing value (no face judged,
-// a face too small for the mesh).
+// face is toward the camera, all at once, and which is not soft at full size, is
+// `good`. A mesh off the face or a face the frame's edge cuts is not, nor is any
+// missing value (no face judged, a face too small for the mesh), except
+// `full_eye_sharp`: a file without it is not demoted.
 export function photoTier(focus: MarkFocus | null | undefined): PhotoTier | null {
   if (focus === null || focus === undefined || focus.candidate !== "candidate") {
     return null;
