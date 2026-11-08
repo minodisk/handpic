@@ -164,13 +164,27 @@ section.
       `scan extract` / `scan faces` log lines in `docs/humans/performance.md`
       "Focus candidate pass", next to the existing CLI numbers.
 
-### App: unmeasured end-to-end per-page latency
+### App: real-device check of the stacked latency bar and its legend in the performance overlay
 
-End-to-end per-page latency (IPC + `createImageBitmap`) is unmeasured, since the GUI could not be driven from this development machine. Only the Rust-side file-read cost was measured; see "Per-page preview read" in docs/humans/performance.md.
+#### Background
+
+`preview-latency-breakdown` Step 1 split the overlay's per-switch latency bar into seven stages (`wait`, `read`, `ipc`, `post`, `worker`, `decode`, `draw`), stacked bottom to top in path order in steps of the `--chart-latency` red, and added the stage names to the legend after `Latency`. CI covers the model (`perf.test.ts`, `stagesOf`) and the build. Drawing the canvas was never exercised: the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261108-preview-latency-breakdown/plan.md`. Files: `crates/app/ui/src/main.ts` (`drawPerf`), `crates/app/ui/src/perf.ts`.
 
 #### TODO
 
-- [x] Measure keypress-to-pixels per page turn on real hardware and add the numbers to "Per-page preview read" in docs/humans/performance.md. Done on Windows; see "End to end on Windows, keypress to pixels" under that section.
+- [ ] On Windows, open a folder, press `d` and page with `→`. Each red latency bar is stacked in seven shades of red, the legend names `wait` to `draw` after `Latency`, and it does not collide with the MB/s / ms text at the right on a normal window width.
+
+### App: the prefetch hit-rate re-run of scenarios 1 and 5 for results.md is still open
+
+#### Background
+
+`preview-latency-breakdown` Step 4 keeps the neighbours' decoded previews in a ring (`prefetch.ts`) and draws a page turn to a held index with no invoke, logging `source=prefetch` on the `page` line. CI covers the ring model (`prefetch.test.ts`) and the build. The hit rate and the hit / miss `keypressToPixels` were never measured on a real machine, and the rename, delete and folder-switch invalidation was never seen: the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261108-preview-latency-breakdown/plan.md`. Files: `crates/app/ui/src/main.ts` (`drawHeld`), `crates/app/ui/src/prefetch.ts`, `docs/plans/_archived/20261108-preview-latency-breakdown/results.md`.
+
+#### TODO
+
+- [ ] On Windows, in a `mise run tauri:release:devtools` build with `Timing logs` and the overlay (`d`) on, open a scanned folder of 1616x1080 previews with the status line idle and press `→` about once a second, 30 times. Then read `%LOCALAPPDATA%\com.minodisk.riffle\logs\Riffle.log`. Expected: after the first press every press is `source=prefetch` with `read`, `ipc`, `post`, `worker` and `decode` at 0.0ms and a `keypressToPixels` of a few ms (the `draw`, about 2 ms).
+- [ ] On Windows, in the same build, open `D:\photos\samples\RAF` after its scan is idle and press `→` 20 times; read the log between the two runs. Expected: the same `source=prefetch` zeros, with `keypressToPixels` up to about 15 ms (the `draw` of a 4416x2944 RAF). Split the `page` lines of both runs by `source=prefetch` / `source=read` and write the hit rate and the hit / miss p50 / p95 of `keypressToPixels` side by side in `results.md`.
+- [ ] On Windows, rename and delete a file and switch folders while paging. Expected: no stale image appears.
 
 ### App: cold first scan on an internal SSD is far slower than the extrapolation
 
