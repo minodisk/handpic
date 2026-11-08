@@ -223,9 +223,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   folder are in, so the marks turn from white to their color, the files on
   screen first, while the status shows `analyzing N / M`. The strip marks
   each bright green or gray frame with an icon in the mark's color at the cell's
-  bottom-left, above the file name, filling in as the pass runs: a face
-  (Lucide's `scan-face`) on a good frame and a bare frame (`scan`) on a
-  gray one, both ISC license,
+  bottom-left, above the file name, filling in as the pass runs: a smiling
+  face (Lucide's `scan-face`) on a good frame and the same face with its mouth
+  turned down on a gray one, both ISC license,
   text in `crates/app/ui/LICENSE-lucide`; white frames get none. On the 406 hand-labeled α7 V frames with a face the focus
   candidate cue was fitted on, 94% of the candidates were in focus and 91%
   of the in-focus frames were candidates; on 400 frames from other shoots it
