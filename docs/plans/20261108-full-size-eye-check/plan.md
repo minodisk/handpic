@@ -335,3 +335,4 @@ picks the check catches, not how many soft frames it removes.
 ## Progress
 
 - Step 1 (2026-11-08): added `crates/core/src/fullsharp.rs`, the full-size eye sharpness metric, with its unit tests.
+- (2026-11-08) Step 1 complete
