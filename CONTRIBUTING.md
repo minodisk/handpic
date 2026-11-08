@@ -49,6 +49,36 @@ mise run tauri:release
 The bundles land under `target/release/bundle/`. It skips the updater
 artifacts, which need the release signing key.
 
+### Native app (GPUI)
+
+`crates/native` is the GPUI port of the desktop app. It is a separate Cargo
+workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
+`mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
+the repository root never sees it.
+
+NASM is a hard prerequisite on x86 and x86_64: the crate's `build.rs` fails
+without it. `mozjpeg-sys` otherwise falls back to a build without SIMD with
+only a warning cargo hides, and a RAF preview then decodes in about 99 ms
+instead of 46 ms.
+
+- Install it with `winget install NASM.NASM` on Windows, `apt-get install nasm`
+  on Debian / Ubuntu or `brew install nasm` on macOS.
+- winget's package installs per user (`%LOCALAPPDATA%\bin\NASM`), not under
+  `C:\Program Files\NASM`, and does not add itself to `PATH`. Add that
+  directory yourself. `mozjpeg-sys` only looks for `nasm` on `PATH`, so setting
+  the `NASM` variable alone is not enough for SIMD.
+- `RIFFLE_NATIVE_ALLOW_NO_SIMD=1` turns the failure into a warning, for builds
+  whose timings do not matter.
+
+```sh
+mise run native:dev                # debug build; fast to compile, slow at runtime
+mise run native:release            # optimized build; the only one to take timings from
+mise run native:check              # clippy and the tests
+```
+
+`mise run ci` does not run `native:check` (CI has a `native` job for it); only
+the formatting check of the crate is part of `mise run lint`.
+
 ## Checks
 
 - `mise run fmt` formats both Rust (`cargo fmt`) and the frontend (`vp fmt`).

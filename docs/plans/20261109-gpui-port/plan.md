@@ -111,7 +111,7 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
 
 ## Steps
 
-- [ ] Step 1: Scaffold `crates/native` as its own workspace with the GPUI toolchain, the NASM check and a Windows CI job
+- [x] Step 1: Scaffold `crates/native` as its own workspace with the GPUI toolchain, the NASM check and a Windows CI job
   - Done when:
     - `crates/native/Cargo.toml` declares package `riffle-native` (bin
       `riffle-native`, edition 2024, `publish = false`) and its own

@@ -104,12 +104,53 @@ jobs:
       - name: Build and test
         run: mise run test
 
+  # crates/native is its own Cargo workspace on its own toolchain, so neither
+  # job above sees it. Windows only until the switch-over milestone of the
+  # gpui-port plan adds the other two platforms.
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      # The crate's build.rs refuses to build without NASM, because mozjpeg
+      # would otherwise lose SIMD silently.
+      - name: Check whether the runner image has NASM
+        id: nasm
+        shell: bash
+        run: |
+          if nasm -v; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ilammy/setup-nasm@v1
+        if: steps.nasm.outputs.found != 'true'
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            crates/native/target
+          key: cargo-native-${{ runner.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
+          restore-keys: cargo-native-${{ runner.os }}-
+
+      - name: Lint and test the native app
+        run: mise run native:check
+
   # Branch protection requires a single check named `ci`. This job stands in for
   # the whole run, so the lint job and the matrix can change shape without the
   # required check going missing. always() makes it report a failure rather
   # than being skipped when something it needs fails.
   ci:
-    needs: [lint, test]
+    needs: [lint, test, native]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -117,3 +158,4 @@ jobs:
         run: |
           [ "${{ needs.lint.result }}" = success ]
           [ "${{ needs.test.result }}" = success ]
+          [ "${{ needs.native.result }}" = success ]

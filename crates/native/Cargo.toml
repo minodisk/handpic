@@ -1,0 +1,25 @@
+[package]
+name = "riffle-native"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "riffle-native"
+path = "src/main.rs"
+
+[workspace]
+
+[dependencies]
+gpui = { git = "https://github.com/zed-industries/zed", rev = "b5cd310b3b54dfc659fcc06453e6358843dfe216" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "b5cd310b3b54dfc659fcc06453e6358843dfe216" }
+riffle-core = { path = "../core" }
+mozjpeg = "0.10"
+image = { version = "0.25", default-features = false }
+
+[profile.release]
+opt-level = 3
+
+[patch.crates-io]
+async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
+async-task = { git = "https://github.com/zed-industries/async-task.git", rev = "015845a19fc31752c02367567d3b8900a406f9da" }
