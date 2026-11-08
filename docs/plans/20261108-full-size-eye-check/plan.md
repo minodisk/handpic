@@ -151,7 +151,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - Luma: `candidate::luma` (the same BT.601 integer luma the cue uses).
     - Do not touch `eye_focus`, its logit or `FACES_VERSION` in this step.
 
-- [ ] Step 2: Dump the score from `facechoice` and fix the threshold on the three folders
+- [x] Step 2: Dump the score from `facechoice` and fix the threshold on the three folders
   - Done when:
     - `riffle-cli facechoice` gains two columns after the existing ones:
       `edge_gap` (the mesh's, as pass 2 stores it; `-` without a mesh) and
