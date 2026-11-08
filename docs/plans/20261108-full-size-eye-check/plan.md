@@ -71,7 +71,7 @@ score (`D:\Photos\tests\20261108-good-eye-blur\`):
   sharp frame sits in ranks 1-77. At high ISO the threshold under-catches
   but never demotes a sharp frame.
 - Against the 806 hand-labeled frames of the 2026-10-08 mesh-eye-focus sets
-  (`D:\Photos	ests61108-good-eye-blur\labeled_picks_under_cut.jpg`):
+  (`D:\Photos\tests\20261108-good-eye-blur\labeled_picks_under_cut.jpg`):
   the 145 frames clearing the Good rule are all picks, and 13 fall under
   0.162. The user judged 5 of those 13 sharp (scores 0.145-0.157) and chose to
   keep 0.162 over 0.15 (2 sharp) and 0.14 (0 sharp), which would leave many
@@ -334,4 +334,4 @@ picks the check catches, not how many soft frames it removes.
 
 ## Progress
 
-- (none yet)
+- Step 1 (2026-11-08): added `crates/core/src/fullsharp.rs`, the full-size eye sharpness metric, with its unit tests.

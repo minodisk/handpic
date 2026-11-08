@@ -221,19 +221,23 @@ mod tests {
             gray.extend_from_slice(&sharp[y * side..(y + 1) * side]);
         }
         let jpeg = encode(&gray, w, h);
-        // A quarter-size preview, its eyes 11 px apart: 0.6 * 11 * 4 = 26.4.
-        let eyes = [(20.0f32, 20.0f32), (31.0, 20.0)];
+        // A quarter-size preview, its eyes 17.5 px apart: 0.6 * 17.5 * 4 = 42.
+        // The first crop sits on the blurred disc's rim, the second on the
+        // sharp disc's.
+        let eyes = [(33.25f32, 20.0f32), (50.75, 20.0)];
         let (decoded, dw, _) = decode_rgb(&jpeg).unwrap();
         let full = luma(&decoded, dw, h);
         let at = |cx: f64, cy: f64| {
-            let (x0, x1) = ((cx - 26.4) as usize, (cx + 26.4) as usize);
-            let (y0, y1) = ((cy - 26.4) as usize, (cy + 26.4) as usize);
+            let (x0, x1) = ((cx - 42.0) as usize, (cx + 42.0) as usize);
+            let (y0, y1) = ((cy - 42.0) as usize, (cy + 42.0) as usize);
             let cut: Vec<u8> = (y0..y1)
                 .flat_map(|y| full[y * dw + x0..y * dw + x1].iter().copied())
                 .collect();
             eye_crop_score(&cut, x1 - x0, y1 - y0)
         };
-        let want = at(80.0, 80.0).max(at(124.0, 80.0));
+        let (soft, crisp) = (at(133.0, 80.0), at(203.0, 80.0));
+        assert!(crisp > soft, "sharp {crisp}, blurred {soft}");
+        let want = crisp;
         let got = full_eye_sharpness(&jpeg, eyes, w / 4).unwrap();
         assert!((got - want).abs() < 0.01, "{got} and {want}");
     }
