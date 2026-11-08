@@ -3,7 +3,7 @@
 // tested without mocks.
 
 import type { StoredEyes } from "./eyes.js";
-import { SCAN_FACE_SVG, SCAN_SVG } from "./icons.js";
+import { SCAN_FACE_FROWN_SVG, SCAN_FACE_SVG } from "./icons.js";
 
 // The AF point the camera recorded, in sensor coordinates.
 export interface FocusPoint {
@@ -52,11 +52,11 @@ export const FOCUS_MARK_COLORS = {
 } as const satisfies Record<MarkState, string>;
 
 // The icon per state on the strip cell and the filter menu's `Face focus` item,
-// in the mark's color: a face for a good photo, the bare frame for a low one, none
-// for a neutral one.
+// in the mark's color: a smiling face for a good photo, a frowning face for a
+// low one, none for a neutral one.
 export const FOCUS_MARK_ICONS = {
   good: SCAN_FACE_SVG,
-  low: SCAN_SVG,
+  low: SCAN_FACE_FROWN_SVG,
   neutral: null,
 } as const satisfies Record<MarkState, string | null>;
 

@@ -149,8 +149,8 @@ DxO PhotoLab.
   in a second pass right after the thumbnails, so the marks turn from white
   as it runs, the files on screen first (both passes run below normal
   priority, so the viewer comes first when they compete for the CPU); the strip marks each bright green or gray file
-  with an icon at the cell's bottom-left in the mark's color (a face on a good
-  photo, a bare frame on gray, none on white), the meta pane
+  with an icon at the cell's bottom-left in the mark's color (a smiling face
+  on a good photo, a frowning face on gray, none on white), the meta pane
   shows the probability as `AF eye in focus` (a percentage), whether that
   face's eyes are open and how open (0 to 100) as `Eyes` and the face's
   yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, both stored by the same second pass
@@ -173,7 +173,8 @@ DxO PhotoLab.
   face mesh (Apache-2.0, converted to ONNX from Google's TFLite). Both run
   locally with no network access. The strip's
   focus mark icons, also on the filter menu's `Good` and `Low` items, are
-  [Lucide](https://lucide.dev)'s `scan-face` and `scan`, and its
+  [Lucide](https://lucide.dev)'s `scan-face` and the same with its mouth
+  turned down, and its
   recommended icon is Lucide's `sparkles` (ISC license).
 - **HDR PQ (HEIF) CR3 previews**: the HEVC previews of Canon CR3 files shot
   with HDR PQ on are decoded by the bundled

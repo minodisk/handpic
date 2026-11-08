@@ -27,7 +27,7 @@ import {
   stripState,
   uprightPoint,
 } from "./focus.js";
-import { SCAN_FACE_SVG, SCAN_SVG } from "./icons.js";
+import { SCAN_FACE_FROWN_SVG, SCAN_FACE_SVG } from "./icons.js";
 
 const noEyes = {
   eyes_ear: null,
@@ -140,10 +140,10 @@ describe("FOCUS_MARK_COLORS", () => {
 });
 
 describe("FOCUS_MARK_ICONS", () => {
-  test("scan-face for good, scan for low, none for neutral", () => {
+  test("scan-face for good, the frowning scan-face for low, none for neutral", () => {
     expect(FOCUS_MARK_ICONS).toEqual({
       good: SCAN_FACE_SVG,
-      low: SCAN_SVG,
+      low: SCAN_FACE_FROWN_SVG,
       neutral: null,
     });
   });

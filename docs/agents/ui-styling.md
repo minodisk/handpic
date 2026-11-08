@@ -163,7 +163,10 @@ Icons are Lucide SVG strings in `src/icons.ts` (`SCAN_FACE_SVG`,
 `currentColor` and `aria-hidden`. Add a new one there, verbatim from the
 `lucide-static` version the file's `/*! ... */` license header names, and
 add its name to that header (and to the Feather note if `LICENSE-lucide`
-lists it as Feather-derived). The full notice is `crates/app/ui/LICENSE-lucide`.
+lists it as Feather-derived). The one derived icon is
+`SCAN_FACE_FROWN_SVG`, the Face focus Low icon: `scan-face` with its mouth
+path mirrored to turn down, which the header notes. The full notice is
+`crates/app/ui/LICENSE-lucide`.
 
 ## CSS features (Inferred)
 
