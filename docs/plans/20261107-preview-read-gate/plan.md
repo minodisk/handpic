@@ -249,7 +249,7 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
     - The CPU part of pass 1 is small (a 1 MiB read, a preview decode and a
       thumbnail encode, tens of ms of CPU), so at 23 MiB/s cold the pass is
       disk-bound and a cap may cost little throughput; the sweep decides.
-- [ ] Step 3: Fix the cap, document it, and hand-check the app
+- [x] Step 3: Fix the cap, document it, and hand-check the app (2026-11-08: the hand check is pending; the user chose to do it after the merge and it is filed as a manual check)
   - Done when:
     - `READ_SLOTS` in `crates/app/src/commands.rs` is the cap Step 2 picked,
       with a doc comment carrying the measured numbers the way
@@ -335,3 +335,4 @@ Design settled here (the reasoning is in "Trade-offs and risks"):
 
 - (2026-11-07) Step 1 complete
 - (2026-11-08) Step 2 complete
+- (2026-11-08) Step 3 complete, with the hand check pending
