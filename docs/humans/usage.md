@@ -251,6 +251,11 @@ viewer shows a prompt in its center; click it to open the folder picker.
 - **Grayscale preview**: holding `g` shows the viewed image in grayscale to
   judge composition; releasing it restores color. It is momentary and
   display-only: nothing is written or remembered.
+- **Focus peaking**: `e` lights the strong edges of the viewed image in red,
+  in the fitted view and in the 1:1 focus check, so the in-focus plane stands
+  out; pressing it again removes them. The edges are measured at the size the
+  image is drawn, a moment after it appears. It is off at launch, not
+  remembered, and Compare draws none. Holding `g` grays the red too.
 - **Performance graph**: `d` shows a graph along the bottom of the viewer
   with the last 60 seconds of five series: a red bar per file switch, its
   height the time from the key or click to the preview being drawn (on a ms
@@ -900,6 +905,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
 | `Cmd+O` / `Ctrl+O` | open a folder (`File > Open Folder…`) |
 | `f` | toggle the focus mark |
 | `z` | toggle the 1:1 focus check |
+| `e` | toggle focus peaking |
 | `g` (hold) | grayscale preview |
 | `v` | toggle comparison of selected files / the current file with its burst's good frame, else its first frame |
 | `d` | toggle the performance graph |

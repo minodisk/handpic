@@ -217,7 +217,11 @@ of two or more scored frames of its burst), `src/sort.ts`
 orders the strip (file name, capture time, rating, or `recommended`: bursts in
 capture order, each by the ranking's score), `src/eyes.ts` caches the `eyes_of` judgments per file with one
 in flight at a time, `src/facemesh.ts` holds MediaPipe's face parts
-outline and iris edges the focus mark draws over the judged face, `src/filter.ts` decides which files the strip's filter menu
+outline and iris edges the focus mark draws over the judged face,
+`src/peaking.ts` the focus peaking overlay (`e`): the 3x3 Sobel edges on
+luminance over `PEAKING_THRESHOLD` lit in `PEAKING_COLOR`, which
+`src/peakingworker.ts` computes off the main thread for the fit view and the
+1:1 crop at the drawn size, `src/filter.ts` decides which files the strip's filter menu
 lets through (including its `Face focus` section, whose `Good` item applies the good-photo rule and whose `Low` item is Rust's `not_candidate`, its `Eyes` section on the
 stored eye state, and its `Genre` section on the `genres_of` labels, shown
 while `aiEnabled` is on), `src/companion.ts` answers the MCP bridge's

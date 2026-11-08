@@ -701,6 +701,8 @@ const filterState: FilterState = {
   exif: shownExif,
 };
 let showFocus = false;
+// The focus peaking overlay (`peaking` key), session-only.
+let showPeaking = false;
 // The event.code of the key holding the grayscale preview, or null when off.
 let grayscaleHeld: string | null = null;
 // True while the 1:1 focus check is showing instead of the fitted preview.
@@ -746,6 +748,117 @@ let zoomKeypressAt: number | null = null;
 // until it fires, the held crop keeps being drawn into the new viewport.
 const CROP_RESIZE_DEBOUNCE_MS = 150;
 let cropResizeTimer: number | null = null;
+
+// The peaking overlay of one bitmap at one device-pixel size, one per view
+// (the fit view and the 1:1 crop). A layer is drawn only while its `source`
+// is the bitmap being drawn at that size, so an overlay computed for an
+// earlier file, crop or window size never shows. `tag` is 0 until the
+// layer's pixels go to the worker, which holds one request at a time; a
+// layer replaced meanwhile waits for the reply and is sent by the redraw it
+// triggers.
+interface PeakingLayer {
+  source: ImageBitmap;
+  width: number;
+  height: number;
+  tag: number;
+  overlay: ImageBitmap | null;
+}
+interface PeakingResponse {
+  tag: number;
+  overlay: ArrayBuffer;
+  width: number;
+  height: number;
+  computeMs: number;
+}
+const peakingWorker = new Worker(new URL("./peakingworker.js", import.meta.url), {
+  type: "module",
+});
+const peakingLayers: { fit: PeakingLayer | null; crop: PeakingLayer | null } = {
+  fit: null,
+  crop: null,
+};
+let peakingTag = 0;
+let peakingBusy = false;
+
+// The overlay of `source` drawn at `width` x `height` device pixels, or null
+// while it is being computed.
+function peakingOverlay(
+  view: "fit" | "crop",
+  source: ImageBitmap,
+  width: number,
+  height: number,
+): ImageBitmap | null {
+  if (width < 1 || height < 1) {
+    return null;
+  }
+  let layer = peakingLayers[view];
+  if (
+    layer === null ||
+    layer.source !== source ||
+    layer.width !== width ||
+    layer.height !== height
+  ) {
+    layer?.overlay?.close();
+    layer = { source, width, height, tag: 0, overlay: null };
+    peakingLayers[view] = layer;
+  }
+  if (layer.tag === 0 && !peakingBusy) {
+    sendPeaking(layer);
+  }
+  return layer.overlay;
+}
+
+function sendPeaking(layer: PeakingLayer): void {
+  const startedAt = performance.now();
+  const raster = document.createElement("canvas");
+  raster.width = layer.width;
+  raster.height = layer.height;
+  const rasterContext = raster.getContext("2d", { willReadFrequently: true });
+  if (rasterContext === null) {
+    return;
+  }
+  rasterContext.drawImage(layer.source, 0, 0, layer.width, layer.height);
+  const pixels = rasterContext.getImageData(0, 0, layer.width, layer.height).data.buffer;
+  peakingTag += 1;
+  layer.tag = peakingTag;
+  peakingBusy = true;
+  debugLog(
+    `peaking ${layer.width}x${layer.height} raster=${(performance.now() - startedAt).toFixed(1)}ms`,
+  );
+  peakingWorker.postMessage({ tag: layer.tag, pixels, width: layer.width, height: layer.height }, [
+    pixels,
+  ]);
+}
+
+function clearPeaking(): void {
+  for (const view of ["fit", "crop"] as const) {
+    peakingLayers[view]?.overlay?.close();
+    peakingLayers[view] = null;
+  }
+}
+
+peakingWorker.addEventListener("message", (event: MessageEvent<PeakingResponse>) => {
+  peakingBusy = false;
+  const { tag, overlay, width, height, computeMs } = event.data;
+  debugLog(`peaking ${width}x${height} compute=${computeMs.toFixed(1)}ms`);
+  const current = () =>
+    [peakingLayers.fit, peakingLayers.crop].find((layer) => layer?.tag === tag) ?? null;
+  if (current() === null) {
+    draw();
+    return;
+  }
+  void createImageBitmap(new ImageData(new Uint8ClampedArray(overlay), width, height)).then(
+    (bitmap) => {
+      const layer = current();
+      if (layer === null) {
+        bitmap.close();
+      } else {
+        layer.overlay = bitmap;
+      }
+      draw();
+    },
+  );
+});
 
 // Re-requests the crop once the viewport has stopped changing. The `seq` of
 // the file the resize was seen for is captured here rather than re-read in
@@ -1958,6 +2071,17 @@ function draw(): void {
     context.rotate(Math.PI);
   }
   context.drawImage(bitmap, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+  if (showPeaking) {
+    const overlay = peakingOverlay(
+      "fit",
+      bitmap,
+      Math.round(drawWidth * dpr),
+      Math.round(drawHeight * dpr),
+    );
+    if (overlay !== null) {
+      context.drawImage(overlay, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+    }
+  }
   drawFocusMark(drawWidth, drawHeight);
   drawFaceMarks(drawWidth, drawHeight);
   drawFaceMesh(drawWidth, drawHeight);
@@ -3263,6 +3387,12 @@ function drawZoom(): void {
   }
   if (crop !== null && crop.cropSeq === seq) {
     context.drawImage(crop.bitmap, -crop.pointX, -crop.pointY);
+    if (showPeaking) {
+      const overlay = peakingOverlay("crop", crop.bitmap, crop.bitmap.width, crop.bitmap.height);
+      if (overlay !== null) {
+        context.drawImage(overlay, -crop.pointX, -crop.pointY);
+      }
+    }
   }
   context.restore();
 }
@@ -5471,6 +5601,13 @@ function runAction(action: string): boolean {
       break;
     case "focus":
       showFocus = !showFocus;
+      draw();
+      break;
+    case "peaking":
+      showPeaking = !showPeaking;
+      if (!showPeaking) {
+        clearPeaking();
+      }
       draw();
       break;
     case "zoom":
