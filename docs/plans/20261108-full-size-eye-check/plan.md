@@ -341,3 +341,4 @@ picks the check catches, not how many soft frames it removes.
 - (2026-11-09) Step 2 complete
 - (2026-11-09) Step 3 complete
 - (2026-11-09) Step 4 complete
+- (2026-11-09) Step 5 complete
