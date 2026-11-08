@@ -1752,11 +1752,27 @@ Files: `crates/app/tauri.conf.json`, `crates/app/src/main.rs`.
 
 - [ ] On Windows (any platform works), open a folder and press `d`. Check at a glance that the overlay's legend shows a thick solid line before `Riffle CPU` and a thin dashed line before `System CPU`, matching the two plotted CPU lines, and that the labels do not overlap the swatches.
 
+### App: real-device checks for focus peaking
+
+#### Background
+
+`focus-peaking` added a session-only `peaking` toggle (default key `e`, off at launch) that draws red edge highlights over the fit view and the 1:1 (`z`) crop. The edge measure is a Sobel magnitude (`|gx| + |gy|`) computed in `peakingworker.ts`. CI covers only the pure module (`peaking.test.ts`), the keymap tests and the build. Never exercised in the running app: alignment under orientations 1, 3, 6 and 8 and at several window sizes and display scalings, the 1:1 crop overlay, staleness while paging, Compare, rebinding, tuning of `PEAKING_THRESHOLD` (160, a starting value not tuned by eye), and the main-thread raster cost on a 4K / 2x display. Plan: `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/app/ui/src/peaking.ts`, `crates/app/ui/src/peakingworker.ts`, `crates/app/ui/src/main.ts` (`draw()`, `drawZoom()`, `runAction`), `crates/app/src/shortcuts.rs`.
+
+#### TODO
+
+- [ ] On Windows (ideally also macOS and Linux), open a folder of RAW files and press `e`. Red edge highlights appear over the fit view a moment after the image and sit exactly on its edges for orientations 1, 3, 6 and 8 (use portrait shots rotated both ways), at several window sizes and at 100 % / 150 % / 200 % display scaling. Press `e` again: they vanish completely.
+- [ ] On Windows, press `z` with peaking on. The 1:1 crop gets its own overlay aligned with its pixels, and the scaled placeholder shown while the crop loads has none.
+- [ ] On Windows, hold `ArrowRight` through a folder with peaking on. No overlay from an earlier file ever shows over a later one, and the last file gets its overlay.
+- [ ] On Windows, press `v` (Compare). It shows no peaking.
+- [ ] On Windows, open Settings > Shortcuts. It lists `Focus peaking` on `e`, and it can be rebound.
+- [ ] On Windows, tune `PEAKING_THRESHOLD` (`crates/app/ui/src/peaking.ts`) by eye on `D:\photos\samples\`: a sharp eye is lit, smooth skin and bokeh are dark, and shadow noise is mostly dark. Note whether the fit view and the 1:1 crop want different values (that would justify two constants).
+- [ ] On a 4K / 2x display with `Timing logs` on, read the `peaking WxH raster=` lines at full window. If the main-thread rasterize plus `getImageData` costs well over a frame, consider moving the readback off the main thread (`OffscreenCanvas` in the worker; the `safari13` build target does not guarantee it).
+
 ### Shortcuts: a newly added default key silently displaces a user's stored override
 
 #### Background
 
-`performance-graph-overlay` added the default key `d`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, but the real-user case is unaddressed. Plan: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`. Files: `crates/app/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
+`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/app/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
 
 #### TODO
 

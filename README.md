@@ -126,6 +126,8 @@ DxO PhotoLab.
   picture settings.
 - **1:1 focus check**: `z` shows the image at 1:1, centered on the focus point.
   Paging keeps the zoom.
+- **Focus peaking**: `e` lights the image's strong edges in red over the
+  preview and the 1:1 view, so the in-focus plane stands out at a glance.
 - **Focus mark**: `f` draws the AF frame the camera used around a crosshair on
   its focus point when the camera records the frame, the crosshair alone when
   it records only a point, and nothing without an AF point or on manual-focus

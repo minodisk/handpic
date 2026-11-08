@@ -486,9 +486,9 @@ mod app_menu {
         /// every keyboard has; `extendPrevious` / `extendNext` are the
         /// keyboard's `Shift+click`; `grayscale` is held down, which a menu
         /// click cannot be; the judgments are in the strip's right-click menu
-        /// and on plain keys; `toggleSides`, `focus`, `zoom`, `compare` and
-        /// `performance` are main-view / strip keys, not menu items (`View`
-        /// holds only the pane check items).
+        /// and on plain keys; `toggleSides`, `focus`, `zoom`, `compare`,
+        /// `performance` and `peaking` are main-view / strip keys, not menu
+        /// items (`View` holds only the pane check items).
         const MENU_LESS: &[&str] = &[
             "previous",
             "next",
@@ -504,6 +504,7 @@ mod app_menu {
             "zoom",
             "compare",
             "performance",
+            "peaking",
             "rate1",
             "rate2",
             "rate3",
