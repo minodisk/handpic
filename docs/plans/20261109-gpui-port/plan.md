@@ -539,4 +539,4 @@ summary and `cx.quit()` when N presses are done.
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete
