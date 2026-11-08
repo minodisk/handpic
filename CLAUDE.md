@@ -217,7 +217,7 @@ filter menu read, `AF_EYE_HELP`, the definitions the `Face focus` section's `?` 
 and Analysis, whose rows include the AF eye in-focus probability and the
 `Eyes` judgment with its openness and the `Yaw`, `Pitch` and `Roll` of the head pose, from the values pass 2 stored for
 the AF face, else the `eyes_of` judgment, and, while `aiEnabled` is on, the
-personal ranking's place in the burst, reasons and confidence), `src/recommend.ts` decides from a file's
+personal ranking's place in the burst, reasons and confidence), `src/prefetch.ts` the ring of decoded neighbour previews (which files around the current one to hold, capped by total pixels, what to read next, and what a file list change, rename, delete or folder switch gives up), `src/recommend.ts` decides from a file's
 ranking entry whether the strip marks it with the recommended icon (first
 of two or more scored frames of its burst), `src/sort.ts`
 orders the strip (file name, capture time, rating, or `recommended`: bursts in

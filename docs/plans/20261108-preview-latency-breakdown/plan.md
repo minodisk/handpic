@@ -246,7 +246,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
   - Implementation approach:
     - Assumes Steps 1-2 merged. Keep the `pageTimings` / `seq` bookkeeping
       working so the breakdown stays valid for the chosen design.
-- [ ] Step 4 (conditional on R2 or R3): Prefetch and keep the neighbours' decoded previews
+- [x] Step 4 (conditional on R2 or R3): Prefetch and keep the neighbours' decoded previews
   - Runs by the user's decision despite R0, because fast display is the app's top priority; see "Decision" in `results.md`. Expected gain: no `read`, `ipc` or `decode` on a hit.
   - Done when:
     - A new `crates/app/ui/src/prefetch.ts` holds a pure ring model: given
@@ -357,3 +357,4 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 
 - (2026-11-08) Step 1 complete
 - (2026-11-08) Step 2 complete
+- (2026-11-09) Step 4 complete (the scenario 1 and 5 re-run for `results.md` is still pending by hand, as `learnings.md` records)

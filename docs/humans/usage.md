@@ -261,7 +261,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
   height the time from the key or click to the preview being drawn (on a ms
   scale at the right of the legend, at least 500 ms tall), stacked from the
   bottom in shades of red by stage: `wait`, `read`, `ipc`, `post`, `worker`,
-  `decode` and `draw`; Riffle's own CPU
+  `decode` and `draw` (a preview already read ahead has only `draw`: the
+  files on both sides of the current one, the next in the paging direction
+  first, are read and decoded ahead while no scan runs, so turning to one
+  draws at once); Riffle's own CPU
   usage (the thick solid blue line) and the whole system's (the thin dashed
   blue line), both 0–100 % of all cores; Riffle's own reads (the thick solid
   green line, on an MB/s scale at the right of the legend, at least 10 MB/s

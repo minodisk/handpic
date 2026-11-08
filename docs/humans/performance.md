@@ -799,11 +799,11 @@ Per-page latency is logged the same way. Turn on `Timing logs` in the settings
 window (the item only shows in a `mise run tauri:release:devtools` or debug
 build), page through a folder with the next/previous keys, and read the
 `page wait=… read=… ipc=… post=… worker=… decode=… draw=… total=…
-keypressToPixels=… jpegKB=… px=WxH scan=…` lines in `Riffle.log`. `wait` is the
+keypressToPixels=… jpegKB=… px=WxH scan=… source=…` lines in `Riffle.log`. `wait` is the
 time a key spent behind an in-flight request, `read` the Rust read (the pause
 of the scan's reads included), `ipc` the rest of the `preview` call's round
 trip, `post` the main thread's work before handing the JPEG to the worker,
-`worker` the two hops to the worker and back, `decode` its `createImageBitmap`
+`worker` the two hops to the worker and back, `decode` its `createImageBitmap` (every stage but `wait` and `draw` is 0 for `source=prefetch`, a preview read ahead)
 and `draw` the rest of the main thread's work to the drawn canvas (the meta pane
 rebuild and the canvas draw). `total` runs from the request to the drawn canvas
 and `keypressToPixels` from the keypress to the drawn canvas; `jpegKB` is the

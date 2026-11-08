@@ -189,7 +189,16 @@ import {
 } from "./import.js";
 import { UncaughtGate, uncaughtLine } from "./uncaught.js";
 import { dwellTimer, switchesFolder, viewedWriter } from "./viewed.js";
-import { type PerfSample, PerfModel, STAGES, WINDOW_MS, latencyStart, stagesOf } from "./perf.js";
+import {
+  type PerfSample,
+  type StageMarks,
+  PerfModel,
+  STAGES,
+  WINDOW_MS,
+  latencyStart,
+  stagesOf,
+} from "./perf.js";
+import { type Direction, type Held, PrefetchRing } from "./prefetch.js";
 
 // Registered before anything else runs so an early throw still reaches
 // `Riffle.log`. Not gated by `debugLogging`, and the default console output is
@@ -270,6 +279,7 @@ interface IndexedFile {
 
 interface DecodeResponse {
   seq: number;
+  prefetch: boolean;
   bitmap?: ImageBitmap;
   decodeMs?: number;
   error?: string;
@@ -336,6 +346,7 @@ const orientations = new Map<number, number>();
 const pageTimings = new Map<
   number,
   {
+    path: string;
     requestedAt: number;
     invokedAt: number;
     readMs: number;
@@ -357,7 +368,30 @@ let queuedKeypressAt: number | null = null;
 let switchAt = 0;
 // The performance overlay's series; it records only while the overlay is on.
 const perf = new PerfModel();
-let shown: { bitmap: ImageBitmap; orientation: number; seq: number } | null = null;
+let shown: {
+  bitmap: ImageBitmap;
+  orientation: number;
+  seq: number;
+  path: string;
+  jpegKB: number;
+  // Whether the ring may take the bitmap back; false once a re-listing may
+  // have changed the file's bytes.
+  keepable: boolean;
+} | null = null;
+// The decoded neighbours of the current file. A bitmap is either in the ring
+// or `shown`, never both, so eviction cannot close the one being drawn.
+const ring = new PrefetchRing<ImageBitmap>();
+// Which way the page last turned, so the next file in that direction is read
+// first, and the index it turned from.
+let pageDirection: Direction = 1;
+let lastShownIndex = 0;
+// The header of the neighbour's preview at the worker; `PrefetchRing` keeps
+// one prefetch in flight.
+let prefetching: { orientation: number; jpegKB: number } | null = null;
+
+function closeAll(bitmaps: ImageBitmap[]): void {
+  for (const bitmap of bitmaps) bitmap.close();
+}
 // The `seq` whose preview failed to load or decode, so the empty overlay says
 // so over the cleared canvas until the next page turn.
 let previewFailedSeq: number | null = null;
@@ -1281,6 +1315,7 @@ function trashed(
       stack.removeWhere(isEmptyBatch);
     }
   }
+  closeAll(ring.forget(summary.moved));
   if (summary.run_id !== null) {
     history.push({
       kind: "trash",
@@ -2417,7 +2452,7 @@ async function loadCompare(): Promise<void> {
         }
         const orientation = header.getUint16(2, true);
         const bitmap = await createImageBitmap(
-          new Blob([payload.slice(PREVIEW_HEADER_LEN)], { type: "image/jpeg" }),
+          new Blob([new Uint8Array(payload, PREVIEW_HEADER_LEN)], { type: "image/jpeg" }),
         );
         return { path, bitmap, orientation };
       },
@@ -2585,6 +2620,7 @@ function refilter(
     return false;
   }
   files = next;
+  closeAll(ring.retain(files));
   fileIndex.clear();
   files.forEach((path, at) => {
     fileIndex.set(path, at);
@@ -2622,6 +2658,8 @@ function refilter(
     strip.setCurrent(index, !keepScroll);
     renderMeta();
     if (comparing) void loadCompare();
+    // The current file may have new neighbours.
+    requestPrefetch();
   }
   return true;
 }
@@ -3596,6 +3634,11 @@ function startDwell(): void {
 }
 
 function requestPreview(): void {
+  // The ring drew this page while an older request was still out.
+  if (shown?.seq === seq) {
+    requestPrefetch();
+    return;
+  }
   if (inFlight || files.length === 0) {
     queuedKeypressAt = files.length === 0 ? null : pageKeypressAt;
     pageKeypressAt = null;
@@ -3608,8 +3651,9 @@ function requestPreview(): void {
   pageKeypressAt = null;
   queuedKeypressAt = null;
   const scan = scanPass();
+  const path = files[index];
   window.__TAURI__.core
-    .invoke<ArrayBuffer>("preview", { path: files[index] })
+    .invoke<ArrayBuffer>("preview", { path })
     .then((payload) => {
       const invokedAt = performance.now();
       inFlight = false;
@@ -3631,8 +3675,8 @@ function requestPreview(): void {
           return;
         }
         orientations.set(current, header.getUint16(2, true));
-        const jpeg = payload.slice(PREVIEW_HEADER_LEN);
         pageTimings.set(current, {
+          path,
           requestedAt,
           invokedAt,
           readMs: header.getUint32(4, true) / 1000,
@@ -3641,7 +3685,16 @@ function requestPreview(): void {
           jpegKB: Math.round(payload.byteLength / 1024),
           scan,
         });
-        worker.postMessage({ seq: current, jpeg, maxPixels }, [jpeg]);
+        worker.postMessage(
+          {
+            seq: current,
+            prefetch: false,
+            jpeg: payload,
+            offset: PREVIEW_HEADER_LEN,
+            maxPixels,
+          },
+          [payload],
+        );
       });
     })
     .catch((err: unknown) => {
@@ -3653,6 +3706,48 @@ function requestPreview(): void {
       failPreview();
       setStatus(String(err));
     });
+}
+
+// Reads the next neighbour once the current preview is on screen and no page
+// is being fetched. A page turn never waits for it: `requestPreview` does not
+// look at a prefetch, and the two run side by side. Skipped while a scan pass
+// runs, so the fill is not slowed by reads the user may never look at.
+function requestPrefetch(): void {
+  if (inFlight || shown?.seq !== seq || scanPass() !== "idle") {
+    return;
+  }
+  closeAll(ring.plan(files, index, pageDirection));
+  const path = ring.next();
+  if (path === null) {
+    return;
+  }
+  const abandon = (): void => {
+    closeAll(ring.settle(null));
+    requestPrefetch();
+  };
+  window.__TAURI__.core
+    .invoke<ArrayBuffer>("preview", { path })
+    .then((payload) => {
+      const header = new DataView(payload, 0, PREVIEW_HEADER_LEN);
+      if (header.getUint16(0, true) !== PREVIEW_KIND_JPEG_V2) {
+        throw new Error("unknown preview payload");
+      }
+      return previewPixelLimit.then((maxPixels) => {
+        if (!ring.stillWanted()) {
+          abandon();
+          return;
+        }
+        prefetching = {
+          orientation: header.getUint16(2, true),
+          jpegKB: Math.round(payload.byteLength / 1024),
+        };
+        worker.postMessage(
+          { seq: 0, prefetch: true, jpeg: payload, offset: PREVIEW_HEADER_LEN, maxPixels },
+          [payload],
+        );
+      });
+    })
+    .catch(abandon);
 }
 
 function requestMetadata(): void {
@@ -3762,7 +3857,18 @@ function show(): void {
   strip.setCurrent(index);
   sendScanFocus();
   setStatus();
-  requestPreview();
+  if (index !== lastShownIndex) {
+    pageDirection = index < lastShownIndex ? -1 : 1;
+    lastShownIndex = index;
+  }
+  const path = files[index];
+  const held = path === undefined ? undefined : ring.take(path);
+  closeAll(ring.plan(files, index, pageDirection));
+  if (held === undefined) {
+    requestPreview();
+  } else {
+    drawHeld(path, held);
+  }
   requestMetadata();
   requestEyes();
   if (zoomed) {
@@ -3774,9 +3880,93 @@ function show(): void {
   if (comparing) void loadCompare();
 }
 
+// Puts a decoded preview of the current page on screen. The bitmap it
+// replaces goes back to the ring if it is a neighbour, and is closed after
+// the draw, never before.
+function present(bitmap: ImageBitmap, orientation: number, path: string, jpegKB: number): void {
+  const previous = shown;
+  shown = { bitmap, orientation, seq, path, jpegKB, keepable: true };
+  setStatus();
+  draw();
+  if (previous !== null) {
+    closeAll(previous.keepable ? ring.keep(previous.path, previous) : [previous.bitmap]);
+  }
+}
+
+// Page turn to a neighbour the ring holds: the only stage left is the draw.
+function drawHeld(path: string, held: Held<ImageBitmap>): void {
+  const keypressAt = pageKeypressAt ?? queuedKeypressAt;
+  pageKeypressAt = null;
+  queuedKeypressAt = null;
+  const drawStartedAt = performance.now();
+  present(held.bitmap, held.orientation, path, held.jpegKB);
+  const drawnAt = performance.now();
+  startDwell();
+  recordPage("prefetch", keypressAt, held.jpegKB, scanPass(), held.bitmap, {
+    requestedAt: drawStartedAt,
+    invokedAt: drawStartedAt,
+    readMs: 0,
+    postedAt: drawStartedAt,
+    receivedAt: drawStartedAt,
+    decodeMs: 0,
+    drawStartedAt,
+    drawnAt,
+  });
+  requestPrefetch();
+}
+
+function recordPage(
+  source: "read" | "prefetch",
+  keypressAt: number | null,
+  jpegKB: number,
+  scan: ScanPass,
+  bitmap: ImageBitmap,
+  marks: Omit<StageMarks, "startedAt">,
+): void {
+  if (!debugLogging && !perf.on) {
+    return;
+  }
+  const startedAt = latencyStart(keypressAt, switchAt);
+  const stages = stagesOf({ ...marks, startedAt });
+  const { requestedAt, drawnAt } = marks;
+  const ms = (value: number) => `${value.toFixed(1)}ms`;
+  const keyed = keypressAt !== null;
+  debugLog(
+    "page" +
+      (keyed ? ` wait=${ms(stages.wait)}` : "") +
+      ` read=${ms(stages.read)}` +
+      ` ipc=${ms(stages.ipc)}` +
+      ` post=${ms(stages.post)}` +
+      ` worker=${ms(stages.worker)}` +
+      ` decode=${ms(stages.decode)}` +
+      ` draw=${ms(stages.draw)}` +
+      ` total=${ms(drawnAt - requestedAt)}` +
+      (keyed ? ` keypressToPixels=${ms(drawnAt - startedAt)}` : "") +
+      ` jpegKB=${jpegKB}` +
+      ` px=${bitmap.width}x${bitmap.height}` +
+      ` scan=${scan}` +
+      ` source=${source}`,
+  );
+  if (perf.on) {
+    perf.addLatency({ at: drawnAt, ms: drawnAt - startedAt, stages });
+    drawPerf();
+  }
+}
+
+function prefetchDecoded(bitmap: ImageBitmap | undefined): void {
+  const header = prefetching;
+  prefetching = null;
+  closeAll(ring.settle(bitmap === undefined || header === null ? null : { bitmap, ...header }));
+  requestPrefetch();
+}
+
 worker.addEventListener("message", (event: MessageEvent<DecodeResponse>) => {
   const receivedAt = performance.now();
-  const { seq: responseSeq, bitmap, decodeMs, error } = event.data;
+  const { seq: responseSeq, bitmap, decodeMs, error, prefetch } = event.data;
+  if (prefetch) {
+    prefetchDecoded(bitmap);
+    return;
+  }
   const orientation = orientations.get(responseSeq) ?? 1;
   orientations.delete(responseSeq);
   const timing = pageTimings.get(responseSeq);
@@ -3794,44 +3984,19 @@ worker.addEventListener("message", (event: MessageEvent<DecodeResponse>) => {
   // `keypressToPixels`: the bitmap swap and `setStatus()`'s meta-pane
   // rebuild count as drawing.
   const drawStartedAt = performance.now();
-  shown?.bitmap.close();
-  shown = { bitmap, orientation, seq: responseSeq };
-  setStatus();
-  draw();
+  present(bitmap, orientation, timing?.path ?? files[index], timing?.jpegKB ?? 0);
   const drawnAt = performance.now();
   startDwell();
-  if (timing !== undefined && (debugLogging || perf.on)) {
-    const startedAt = latencyStart(timing.keypressAt, switchAt);
-    const stages = stagesOf({
+  if (timing !== undefined) {
+    recordPage("read", timing.keypressAt, timing.jpegKB, timing.scan, bitmap, {
       ...timing,
-      startedAt,
       receivedAt,
       decodeMs: decodeMs ?? 0,
       drawStartedAt,
       drawnAt,
     });
-    const ms = (value: number) => `${value.toFixed(1)}ms`;
-    const keyed = timing.keypressAt !== null;
-    debugLog(
-      "page" +
-        (keyed ? ` wait=${ms(stages.wait)}` : "") +
-        ` read=${ms(stages.read)}` +
-        ` ipc=${ms(stages.ipc)}` +
-        ` post=${ms(stages.post)}` +
-        ` worker=${ms(stages.worker)}` +
-        ` decode=${ms(stages.decode)}` +
-        ` draw=${ms(stages.draw)}` +
-        ` total=${ms(drawnAt - timing.requestedAt)}` +
-        (keyed ? ` keypressToPixels=${ms(drawnAt - startedAt)}` : "") +
-        ` jpegKB=${timing.jpegKB}` +
-        ` px=${bitmap.width}x${bitmap.height}` +
-        ` scan=${timing.scan}`,
-    );
-    if (perf.on) {
-      perf.addLatency({ at: drawnAt, ms: drawnAt - startedAt, stages });
-      drawPerf();
-    }
   }
+  requestPrefetch();
 });
 
 function moveBurst(direction: -1 | 1): void {
@@ -4192,6 +4357,11 @@ function renameFile(path: string, name: string): void {
             fileIndex.delete(path);
             fileIndex.set(newPath, at);
           }
+          closeAll(ring.forget([path, newPath]));
+          if (shown?.path === path) shown.path = newPath;
+          for (const timing of pageTimings.values()) {
+            if (timing.path === path) timing.path = newPath;
+          }
           // `strip.setFiles` may be skipped below (the rescan sees the same list
           // it already holds), so the strip's own `indexOf` and the live cell's
           // name need their own update, and so does the meta pane / title bar.
@@ -4439,6 +4609,8 @@ function resync(trigger: RescanTrigger, deferred = false): void {
       allFiles = found;
       setViewOnly(isViewOnly(found));
       applyOutputs(found, outputs);
+      closeAll(ring.clear());
+      if (shown !== null) shown.keepable = false;
       refilter(target, true, false, previous);
       renderMeta();
       return startScan(dir);
@@ -4505,6 +4677,10 @@ function openDirectory(folder: string, token: number): Promise<void> {
     viewedFiles = new Set(viewed);
     const order = ordered();
     files = order.filter(passes);
+    closeAll(ring.clear());
+    if (shown !== null) shown.keepable = false;
+    pageDirection = 1;
+    lastShownIndex = 0;
     index = 0;
     selection = single(files[index]);
     if (switchesFolder(openDir, folder, folders.ignoreCase)) {
@@ -5032,6 +5208,7 @@ void window.__TAURI__.event.listen<{ scan_id: number }>("embed-progress", ({ pay
 void window.__TAURI__.event.listen<{ scan_id: number }>("embed-done", ({ payload }) => {
   if (payload.scan_id === embedPassScanId) {
     embedPassScanId = null;
+    requestPrefetch();
   }
   if (payload.scan_id === scanId) {
     refreshGenres();
