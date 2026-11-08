@@ -88,9 +88,8 @@ match what `riffle-cli scan` measures today.
 ## Per-page preview read
 
 The per-page cost on the Rust side only, on an Apple Silicon Mac.
-**It excludes the IPC hop and `createImageBitmap`**. The app now logs the
-end-to-end number per page turn (a `page …` line in `Riffle.log`; see
-"Measuring on your own folder" below), but it has not been measured yet. Reading the whole 48MB ARW (`std::fs::read` plus `arw::parse`) is
+**It excludes the IPC hop and `createImageBitmap`**; the end-to-end number is
+in "End to end on Windows, keypress to pixels" below. Reading the whole 48MB ARW (`std::fs::read` plus `arw::parse`) is
 compared with reading a bounded 1MiB prefix (`reader::read_preview`), which is
 where the metadata and the embedded preview live:
 
@@ -104,6 +103,25 @@ the copy folder is 20 `cp` copies, read in file-name
 order by a fresh process. The "first read" column cannot be guaranteed cold.
 
 The whole-file read dominates, which is what the bounded read removes.
+
+### End to end on Windows, keypress to pixels
+
+From the key to the canvas draw returning, in ms as p50 / p95, measured on
+2026-11-08 with `Timing logs` on and the overlay on: Windows 11, a
+`mise run tauri:release:devtools` build, a SATA SSD, a folder already scanned
+(warm, not otherwise established) and no scan pass running. At n below 20 the
+p95 is the largest sample. WebView compositing and input latency are not
+included.
+
+| Case | n | keypressToPixels | wait | read | ipc | post | worker | decode | draw |
+|---|---|---|---|---|---|---|---|---|---|
+| 1616x1080 preview | 20 | 19.4 / 22.6 | 0.9 / 1.5 | 6.0 / 9.0 | 4.0 / 5.8 | 0.1 / 0.2 | 0.3 / 0.8 | 6.0 / 6.7 | 1.0 / 2.0 |
+| RAF, 4416x2944 | 7 | 97.8 / 113.0 | 1.9 / 3.0 | 3.0 / 4.0 | 28.0 / 32.7 | 0.7 / 0.8 | 0.7 / 1.9 | 55.2 / 58.2 | 6.0 / 15.3 |
+| RAF, 1920x1280 | 4 | 23.9 / 26.6 | 1.9 / 2.2 | 1.1 / 1.5 | 8.6 / 10.2 | 0.1 / 0.3 | 0.3 / 1.0 | 11.1 / 12.3 | 0.4 / 0.4 |
+
+While the first pass ran only 3 presses landed, so this is a reference value and
+not a p95: p50 138.2 ms, largest 151.5 ms, with `read` up to 139.5 ms, on a
+folder never opened in the app whose files may still have been in the OS cache.
 
 ## Folder scan throughput
 

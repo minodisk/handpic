@@ -128,7 +128,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
       Step 2 decides from numbers. Record its cost as `post`.
     - The stacked bar only needs a loop over the stage array inside the
       existing `for (const point of latency)` in `drawPerf`.
-- [ ] Step 2: Measure on Windows, write the numbers and the decision
+- [x] Step 2: Measure on Windows, write the numbers and the decision
   - Done when:
     - `results.md` in this folder holds, per scenario below, n and p50 /
       p95 of `keypressToPixels` and of each of the seven stages, computed
@@ -225,7 +225,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
       - Every rule that fires is quoted with its number in `results.md`'s
         Decision; a rule that does not fire is listed with the number that
         kept it off.
-- [ ] Step 3 (conditional on R1): Let a newer page turn supersede an in-flight preview request
+- [ ] ~~Step 3 (conditional on R1): Let a newer page turn supersede an in-flight preview request~~ not run: R1 did not fire (`wait` p50 1.3 ms in scenario 2)
   - Done when:
     - Holding a paging key no longer waits a whole round trip for a
       preview that will be dropped: either (a) the backend takes a request
@@ -247,6 +247,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
     - Assumes Steps 1-2 merged. Keep the `pageTimings` / `seq` bookkeeping
       working so the breakdown stays valid for the chosen design.
 - [ ] Step 4 (conditional on R2 or R3): Prefetch and keep the neighbours' decoded previews
+  - Runs by the user's decision despite R0, because fast display is the app's top priority; see "Decision" in `results.md`. Expected gain: no `read`, `ipc` or `decode` on a hit.
   - Done when:
     - A new `crates/app/ui/src/prefetch.ts` holds a pure ring model: given
       the current index, the paging direction and the file list, which
@@ -282,7 +283,7 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
       fill is not slowed by reads the user may never look at.
     - A ring hit must still run `draw()` and the marks path; the
       `orientations` map entry comes from the cached header.
-- [ ] Step 5 (conditional on R3): Cut the decode of large previews
+- [ ] ~~Step 5 (conditional on R3): Cut the decode of large previews~~ not run: R0 fired and the user chose prefetch only
   - Done when:
     - For a preview over a pixel threshold the step sets from scenario 5
       (e.g. 6 MP), the path decodes to about the viewport size instead of
@@ -355,3 +356,4 @@ Stages (the names used by the log line, the overlay legend and `results.md`):
 ## Progress
 
 - (2026-11-08) Step 1 complete
+- (2026-11-08) Step 2 complete

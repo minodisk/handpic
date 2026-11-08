@@ -170,7 +170,7 @@ End-to-end per-page latency (IPC + `createImageBitmap`) is unmeasured, since the
 
 #### TODO
 
-- [ ] Measure keypress-to-pixels per page turn on real hardware and add the numbers to "Per-page preview read" in docs/humans/performance.md. The instrumentation now exists: with `Timing logs` on, the app logs a `page` line (fields `read=…`, `ipc=…`, `post=…`, `worker=…`, `decode=…`, `draw=…`, `total=…`, `keypressToPixels=…`) per page turn to `Riffle.log`, and "Measuring on your own folder" in docs/humans/performance.md spells out the procedure. Only running the measurement and filling in the numbers is left.
+- [x] Measure keypress-to-pixels per page turn on real hardware and add the numbers to "Per-page preview read" in docs/humans/performance.md. Done on Windows; see "End to end on Windows, keypress to pixels" under that section.
 
 ### App: cold first scan on an internal SSD is far slower than the extrapolation
 
