@@ -104,12 +104,54 @@ jobs:
       - name: Build and test
         run: mise run test
 
+  # crates/native is its own Cargo workspace on its own toolchain, so neither
+  # job above sees it. Windows only until the switch-over milestone of the
+  # gpui-port plan adds the other two platforms.
+  native:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      # The crate's build.rs refuses to build without NASM, because mozjpeg
+      # would otherwise lose SIMD silently. Always install it: a bash-only probe
+      # can find a nasm the build script's PATH does not have.
+      - uses: ilammy/setup-nasm@v1
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            crates/native/target
+          key: cargo-native-${{ runner.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
+          restore-keys: cargo-native-${{ runner.os }}-
+
+      # `mise run native:check` runs its task through `bash -c`, and on Windows
+      # the build script behind that shell did not find nasm ("program not
+      # found") even with the directory on PATH. Run the same two commands
+      # through `mise exec`, which hands cargo the environment directly.
+      - name: Lint and test the native app
+        shell: bash
+        working-directory: crates/native
+        run: |
+          nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
+          export PATH="$PATH:$nasm_dir"
+          mise exec rust@1.98.1 -- nasm -v
+          mise exec rust@1.98.1 -- cargo clippy --all-targets -- -D warnings
+          mise exec rust@1.98.1 -- cargo test
+
   # Branch protection requires a single check named `ci`. This job stands in for
   # the whole run, so the lint job and the matrix can change shape without the
   # required check going missing. always() makes it report a failure rather
   # than being skipped when something it needs fails.
   ci:
-    needs: [lint, test]
+    needs: [lint, test, native]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -117,3 +159,4 @@ jobs:
         run: |
           [ "${{ needs.lint.result }}" = success ]
           [ "${{ needs.test.result }}" = success ]
+          [ "${{ needs.native.result }}" = success ]

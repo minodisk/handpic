@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/app", "crates/cli", "crates/core"]
+exclude = ["crates/native"]
 resolver = "2"
 
 [profile.release]

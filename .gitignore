@@ -1,4 +1,5 @@
 /target
+crates/native/target
 /out
 node_modules
 

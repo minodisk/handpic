@@ -111,7 +111,7 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
 
 ## Steps
 
-- [ ] Step 1: Scaffold `crates/native` as its own workspace with the GPUI toolchain, the NASM check and a Windows CI job
+- [x] Step 1: Scaffold `crates/native` as its own workspace with the GPUI toolchain, the NASM check and a Windows CI job
   - Done when:
     - `crates/native/Cargo.toml` declares package `riffle-native` (bin
       `riffle-native`, edition 2024, `publish = false`) and its own
@@ -136,14 +136,14 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
       `cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check`;
       `fmt` gains the matching format.
     - `crates/native/build.rs` fails the build on `x86` / `x86_64` targets
-      when `nasm -v` (or `$NASM -v` when the variable is set, as `nasm-rs`
-      reads it) does not run or reports `NASM version 0.`, with a message
+      when `nasm -v` run from `PATH` (whatever `NASM` holds, as `mozjpeg-sys`
+      probes only that) does not run or reports `NASM version 0.`, with a message
       naming the install command (`winget install NASM.NASM` on Windows,
       `apt-get install nasm`, `brew install nasm`) and the escape hatch
       `RIFFLE_NATIVE_ALLOW_NO_SIMD=1`, which turns the failure into a
       `cargo:warning` (a path crate's warnings are shown). The check runs
-      on every build of the crate (`cargo:rerun-if-env-changed=NASM`,
-      `...=PATH`, `...=RIFFLE_NATIVE_ALLOW_NO_SIMD`).
+      on every build of the crate (`cargo:rerun-if-env-changed=PATH`,
+      `...=RIFFLE_NATIVE_ALLOW_NO_SIMD`).
     - `src/main.rs` opens one GPUI window titled `Riffle` with a black
       background and a one-line status text ("no folder" for now), and quits
       on `q` / window close. Nothing else.
@@ -167,7 +167,7 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
       unchanged (`crates/app` has no diff).
   - Implementation approach:
     - Before anything else the user installs NASM (`winget install
-      NASM.NASM`) or sets `NASM`; the step cannot be verified without it.
+      NASM.NASM`) and puts it on `PATH`; the step cannot be verified without it.
       Record the exact fix in `learnings.md`.
     - The separate workspace is the decision the user took (see "Trade-offs"
       below).
@@ -539,4 +539,4 @@ summary and `cx.quit()` when N presses are done.
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete

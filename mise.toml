@@ -30,6 +30,7 @@ shell = "bash -c"
 run = """
 set -euo pipefail
 cargo fmt --all
+cargo fmt --manifest-path crates/native/Cargo.toml --all
 # Direct node entry point, not `pnpm exec`: see the comment in [tasks.test].
 node ./node_modules/vite-plus/bin/vp fmt
 """
@@ -69,6 +70,7 @@ set -euo pipefail
 pnpm install --frozen-lockfile
 pnpm exec vp check
 cargo fmt --all -- --check
+cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
 shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
@@ -88,6 +90,37 @@ pnpm install --frozen-lockfile
 # the `.cmd` shim, which fails to find `node` because it runs under
 # cmd.exe with bash's POSIX-style PATH.
 node ./node_modules/vite-plus/bin/vp test
+cargo clippy --all-targets -- -D warnings
+cargo test
+"""
+
+[tasks."native:dev"]
+description = "Run the GPUI app (debug build; fast to compile, slow at runtime)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo run -- "$@"
+"""
+
+[tasks."native:release"]
+description = "Run the GPUI app with an optimized build (use this for any timing measurement)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo run --release -- "$@"
+"""
+
+[tasks."native:check"]
+description = "Lint and test the GPUI app (a separate workspace, so `lint` and `test` do not cover it)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
 cargo clippy --all-targets -- -D warnings
 cargo test
 """

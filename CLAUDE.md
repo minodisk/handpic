@@ -194,7 +194,10 @@ and disk sampler: `set_perf_sampling` starts or stops one thread that emits
 Riffle's process CPU and the system's, each 0–100 %, Riffle's read
 throughput in bytes per second and the system's disk busy time, 0–100 %
 (PDH on Windows, `/sys/block` on Linux, `null` on macOS), as `perf-sample`
-every 500 ms, so nothing samples while the overlay is off).
+every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)
+is the GPUI port of the desktop app, a separate Cargo workspace with its own
+`Cargo.lock` and Rust toolchain that uses `riffle-core` and must not depend on
+`crates/app` (see `docs/agents/native-app.md`).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
