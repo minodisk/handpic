@@ -56,7 +56,7 @@ export class PrefetchRing<B extends Sized> {
   plan(files: readonly string[], index: number, direction: Direction): B[] {
     this.wanted = neighbours(files, index, direction);
     const wanted = new Set(this.wanted);
-    for (const path of [...this.crowded]) {
+    for (const path of this.crowded) {
       if (!wanted.has(path)) this.crowded.delete(path);
     }
     return this.drop((path) => !wanted.has(path));
@@ -125,10 +125,10 @@ export class PrefetchRing<B extends Sized> {
     const kept = new Set(files);
     const gone = (path: string) => !kept.has(path);
     this.markStale(gone);
-    for (const path of [...this.refused]) {
+    for (const path of this.refused) {
       if (gone(path)) this.refused.delete(path);
     }
-    for (const path of [...this.crowded]) {
+    for (const path of this.crowded) {
       if (gone(path)) this.crowded.delete(path);
     }
     return this.drop(gone);
