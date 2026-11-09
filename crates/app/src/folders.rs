@@ -1,6 +1,8 @@
 //! The folder tree's commands: the top-level roots, one folder's subfolders
 //! with its own RAW count, and revealing a folder in the OS file manager.
 
+pub(crate) use riffle_backend::listing::kind;
+use riffle_backend::listing::Media;
 use std::fs::DirEntry;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
@@ -159,47 +161,6 @@ fn child_dirs(dir: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// A folder's files as one `read_dir` finds them: its RAW files, and its
-/// JPEGs, which it lists only when it holds no RAW at all, so a RAW+JPEG
-/// folder never doubles its strip. The strip's listing and the tree's count
-/// both go through it, so the two never disagree.
-pub(crate) struct Media<T> {
-    raws: Vec<T>,
-    jpegs: Vec<T>,
-}
-
-impl<T> Default for Media<T> {
-    fn default() -> Self {
-        Self {
-            raws: Vec::new(),
-            jpegs: Vec::new(),
-        }
-    }
-}
-
-impl<T> Media<T> {
-    /// Keep `item` if `path` names a RAW or a JPEG file; whether it did.
-    pub(crate) fn add(&mut self, path: &Path, item: T) -> bool {
-        if riffle_core::scan::is_raw_file(path) {
-            self.raws.push(item);
-        } else if riffle_core::scan::is_jpeg_file(path) {
-            self.jpegs.push(item);
-        } else {
-            return false;
-        }
-        true
-    }
-
-    /// The files the folder lists, and whether they are its JPEGs.
-    pub(crate) fn listed(self) -> (Vec<T>, bool) {
-        if self.raws.is_empty() && !self.jpegs.is_empty() {
-            (self.jpegs, true)
-        } else {
-            (self.raws, false)
-        }
-    }
-}
-
 /// One `read_dir` of `dir`: how many files it lists (its RAW files, or its
 /// JPEGs when it holds no RAW; see `Media`), and its visible subfolders
 /// sorted case-insensitively. Children are not probed for RAW files, which
@@ -228,28 +189,6 @@ fn list(dir: &Path) -> Result<Folder, String> {
         raw_count: media.listed().0.len(),
         children,
     })
-}
-
-/// Whether `entry` is a directory and whether it is a file, following a
-/// symlink; `None` if that cannot be told (a broken link, say).
-/// `file_type()` does not follow symlinks, so a symlinked folder or RAW file
-/// is reported as neither a dir nor a file. Fall back to one `metadata()`
-/// call (which does follow the link) only in that rare case, keeping the
-/// common path free of a per-entry stat: `file_type()` comes with the
-/// directory listing on Windows.
-pub(crate) fn kind(entry: &DirEntry) -> Option<(bool, bool)> {
-    let file_type = entry.file_type().ok()?;
-    if file_type.is_symlink() {
-        let m = std::fs::metadata(entry.path()).ok()?;
-        Some((m.is_dir(), m.is_file()))
-    } else {
-        Some((file_type.is_dir(), file_type.is_file()))
-    }
-}
-
-/// Whether `entry` is a file, following a symlink, as `kind` tells it.
-pub(crate) fn is_file(entry: &DirEntry) -> bool {
-    kind(entry).is_some_and(|(_, is_file)| is_file)
 }
 
 #[cfg(target_os = "windows")]

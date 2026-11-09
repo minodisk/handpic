@@ -14,6 +14,9 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_store::StoreExt;
 
+use riffle_backend::listing::Listing;
+pub(crate) use riffle_backend::listing::{canonicalize, read_listing, stat_sidecars};
+
 use crate::diagnostics::invariant;
 use crate::index::{self, FileStat, Index, IndexedFile, SidecarStat};
 use crate::shortcuts::{Binding, Keymap};
@@ -179,60 +182,6 @@ fn list_folder_in(
     let listing = read_listing(dir, Some(format))?;
     let sidecars = stat_sidecars(&listing.sidecars);
     Ok((listing.files, sidecars))
-}
-
-/// One `read_dir` of a folder: its RAW files (or its JPEGs, see
-/// `folders::Media`) sorted by file name, and the sidecars of the format it
-/// was listed for as `(lower-cased name, path)`, not yet statted (see
-/// `stat_sidecars`), none for a JPEG listing.
-#[derive(Debug, PartialEq)]
-pub(crate) struct Listing {
-    pub(crate) files: Vec<String>,
-    pub(crate) sidecars: Vec<(String, PathBuf)>,
-}
-
-/// Tells a RAW or JPEG file from the entry's `file_type()`, which comes with
-/// the directory listing, rather than a `stat` per entry, which under disk
-/// contention (a scan reading the same drive) costs seconds for a few hundred
-/// files. A symlinked RAW or JPEG is still listed: only a symlink pays one
-/// extra `stat` to follow it.
-pub(crate) fn read_listing(dir: &Path, format: Option<SidecarFormat>) -> Result<Listing, String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let mut media = crate::folders::Media::default();
-    let mut sidecars = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if crate::folders::is_file(&entry) && media.add(&path, path.clone()) {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if format.is_some_and(|f| f.matches(&name)) {
-            sidecars.push((name.to_lowercase(), path));
-        }
-    }
-    let (mut files, jpegs) = media.listed();
-    // A JPEG folder is view-only: nothing next to a JPEG is read or written.
-    if jpegs {
-        sidecars.clear();
-    }
-    files.sort_by(|a, b| a.file_name().cmp(&b.file_name()));
-    let files = files
-        .into_iter()
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect();
-    Ok(Listing { files, sidecars })
-}
-
-/// The stats `reconcile_sidecars_of` compares, keyed by lower-cased file
-/// name. A sidecar gone since the listing is left out.
-pub(crate) fn stat_sidecars(sidecars: &[(String, PathBuf)]) -> HashMap<String, SidecarStat> {
-    sidecars
-        .iter()
-        .filter_map(|(name, path)| {
-            let stat = index::stat(path).ok()?;
-            Some((name.clone(), (stat.path, stat.size, stat.mtime_ns)))
-        })
-        .collect()
 }
 
 /// The listing `list_arw` last produced, for the `scan_folder` that follows
@@ -3080,16 +3029,6 @@ fn move_again(
     progress: impl FnMut(usize, usize),
 ) -> (trash::Summary, Vec<trash::Trashed>) {
     trash::redo(paths, Path::exists, trash_one, progress)
-}
-
-/// Resolve symlinks and normalize a folder path so the same folder reached
-/// through different spellings (a trailing separator, a symlinked parent,
-/// `/tmp` vs `/private/tmp` on macOS) shares one row set in the index. Falls
-/// back to the original string when canonicalization fails (e.g. the folder
-/// was removed between picking and scanning).
-pub(crate) fn canonicalize(dir: &str) -> String {
-    std::fs::canonicalize(dir)
-        .map_or_else(|_| dir.to_string(), |p| p.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]

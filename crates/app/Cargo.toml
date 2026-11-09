@@ -47,16 +47,6 @@ sha2 = "0.10"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_System_Performance"] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2-foundation = { version = "0.3.2", default-features = false, features = [
-  "std",
-  "NSError",
-  "NSFileManager",
-  "NSString",
-  "NSURL",
-] }
-percent-encoding = "2.3.1"
-
 [dev-dependencies]
 mozjpeg = "0.10"
 tower = { version = "0.5", features = ["util"] }

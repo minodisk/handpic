@@ -152,7 +152,7 @@ Implementation notes:
   leading `.` (a relative path) shows up as `CurDir`. So the mapping rejects
   `..` and relative paths, and an interior `.` resolving to the same folder is
   correct. A test that expects `/a/./b` to miss is wrong. The lookup does not
-  canonicalize itself: the folder open path already does (`commands::canonicalize`
+  canonicalize itself: the folder open path already does (`listing::canonicalize`
   in `list_arw` and the scan commands), so do not add a second canonicalize.
 - The macOS database's `ZSHOULDPROCESS` does not use the `.dop`'s
   `ShouldProcess` encoding: in the database `1` is unflagged and `2` is pick;

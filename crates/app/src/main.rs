@@ -14,11 +14,10 @@ mod perf;
 mod rank;
 mod rename;
 mod sequence;
-mod trash;
 mod treewatch;
 mod update;
 mod watch;
-use riffle_backend::{exif, index, shortcuts, sidecar};
+use riffle_backend::{exif, index, shortcuts, sidecar, trash};
 
 mod app_menu {
     use tauri::image::Image;

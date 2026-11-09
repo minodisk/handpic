@@ -3766,8 +3766,6 @@ dependencies = [
  "log",
  "mozjpeg",
  "notify",
- "objc2-foundation",
- "percent-encoding",
  "reqwest",
  "rfd",
  "riffle-backend",
@@ -3800,10 +3798,13 @@ version = "1.10.0"
 dependencies = [
  "log",
  "mozjpeg",
+ "objc2-foundation",
+ "percent-encoding",
  "riffle-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "trash",
 ]
 
 [[package]]

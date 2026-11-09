@@ -1,5 +1,9 @@
+pub mod diagnostics;
 pub mod exif;
 pub mod index;
+pub mod listing;
+pub mod output;
 pub mod photolab;
 pub mod shortcuts;
 pub mod sidecar;
+pub mod trash;
