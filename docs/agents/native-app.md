@@ -81,6 +81,16 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 
 - Rule: check a backend change with both `mise run ci` and
   `mise run native:check`.
+- Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
+  backend, a helper the app's tests still use (for example `Index::row_flags`)
+  must lose its `#[cfg(test)]` or be copied into the app's test module.
+- Rule: `mise run native:check` runs clippy and tests but does not build
+  `riffle-native.exe`. Run `cargo build` before launching the exe, or you run a
+  stale binary.
+- Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
+  against 8.2.0 in the root lock). When the native app starts using `watch`,
+  re-check on its version that `configure` still queues behind `Unwatch` (see
+  `tauri-app.md`), which `watch::settle` relies on.
 
 ## GPUI
 

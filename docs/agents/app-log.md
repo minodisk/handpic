@@ -101,9 +101,11 @@ panic: thread=<name or unnamed> location=<file>:<line>:<col> payload=<text>
   it.
 - **A `panic:` line is not necessarily a crash.** The hook runs before
   `catch_unwind`, so panics the core catches on purpose and turns into an
-  `Err` are logged too: mozjpeg panics on bytes that are not a JPEG, and the
-  decode / thumbnail / sharpness paths (`scan.rs`, `decode.rs`,
-  `sharpness.rs` in `crates/core`) catch that. Treat the line as a crash only
+  `Err` are logged too. mozjpeg 0.10's decode errors are the exception: its
+  error handler ends in `std::panic::resume_unwind`, which skips the hook, so
+  a corrupt or non-JPEG preview caught by the decode / thumbnail / sharpness
+  paths (`scan.rs`, `decode.rs`, `sharpness.rs` in `crates/core`) leaves no
+  `panic:` line. Treat the line as a crash only
   when no recovery follows, for example when no scan failure for that file is
   reported and the thread's work stops (a scan that never finishes, a
   sidecar writer that writes nothing more).
