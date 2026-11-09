@@ -127,9 +127,12 @@ and `read`; on RAF `read` grew most, then `frameWait` and `decode`.
   56.93 ms (RAF), against the spike's 8.34 and 51.72 excluding vsync: 2.3 and
   5.2 ms slower, and the work of the page and not the vsync phase.
 - Why `read` and `decode` are slower than in the spike's one run is not known
-  from these numbers. The spike's conditions cannot be repeated (its code is
-  gone), and these runs shared the machine with a running Tauri app and other
-  sessions' load, as listed above.
+  from these numbers. The spike's source is gone and its one run was not
+  repeated in this first pass, and these runs shared the machine with a
+  running Tauri app and other sessions' load, as listed above. The same-session
+  re-measurement below ran the spike's own binary: it measured ARW `read` 2.52
+  and `decode` 9.00 ms and RAF 4.25 and 47.80 ms, so it does not reproduce its
+  own one-run figures either.
 
 ## Portrait files (`orient`)
 
@@ -279,8 +282,8 @@ zero; the RAF difference is positive in all three pairs.
 
 ### Is there a real difference?
 
-Between A and B, no stage shows a difference beyond run-to-run variation, with
-the one exception named below. `frameWait` p50 still moves 6.47-8.36 ms between
+Between A and B, no stage shows a difference beyond run-to-run variation; only
+RAF `keypressToPixels` is positive in all three pairs, discussed below. `frameWait` p50 still moves 6.47-8.36 ms between
 A's ARW runs (B: 6.78-9.01), and its A - B changes sign by pair, so on ARW it
 is noise, as the first pass suspected.
 
