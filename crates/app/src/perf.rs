@@ -1,5 +1,5 @@
-//! The performance overlay's CPU and disk sampler: Riffle's process CPU and
-//! the system's, each 0–100 %, Riffle's read throughput in bytes per second,
+//! The performance overlay's CPU and disk sampler: Handpic's process CPU and
+//! the system's, each 0–100 %, Handpic's read throughput in bytes per second,
 //! and the system's disk busy time, 0–100 %, emitted as `perf-sample` every
 //! 500 ms while the overlay is on, and nothing at all while it is off.
 //!
@@ -29,7 +29,7 @@ pub struct AppPerf(Mutex<Option<(Arc<AtomicBool>, JoinHandle<()>)>>);
 pub struct Sample {
     pub process: f32,
     pub system: f32,
-    /// Riffle's reads over the interval, in bytes per second.
+    /// Handpic's reads over the interval, in bytes per second.
     pub read: f64,
     /// The system's disk busy time, 0–100, `None` where it cannot be read.
     pub disk: Option<f32>,

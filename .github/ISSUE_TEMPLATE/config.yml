@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
   - name: OS works report
-    url: https://github.com/minodisk/riffle/discussions/286
-    about: Riffle works on your OS? Let us know here.
+    url: https://github.com/minodisk/handpic/discussions/286
+    about: Handpic works on your OS? Let us know here.
   - name: Camera works report
-    url: https://github.com/minodisk/riffle/discussions/287
-    about: Riffle works with your camera? Let us know here.
+    url: https://github.com/minodisk/handpic/discussions/287
+    about: Handpic works with your camera? Let us know here.
   - name: Software works report
-    url: https://github.com/minodisk/riffle/discussions/288
-    about: Riffle's judgments show up correctly in your software? Let us know here.
+    url: https://github.com/minodisk/handpic/discussions/288
+    about: Handpic's judgments show up correctly in your software? Let us know here.

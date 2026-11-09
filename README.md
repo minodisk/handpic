@@ -1,8 +1,8 @@
-<p align="center"><img src="./crates/app/icons/128x128@2x.png" alt="Riffle" width="128"></p>
+<p align="center"><img src="./crates/app/icons/128x128@2x.png" alt="Handpic" width="128"></p>
 
 <p align="center">English | <a href="./README.ja.md">日本語</a></p>
 
-# Riffle
+# Handpic
 
 A culling app for going through the RAW files you shot, fast, and deciding what
 to keep and what to throw away.
@@ -22,29 +22,31 @@ verified cameras, see [docs/humans/cameras.md](./docs/humans/cameras.md).
 ### Install
 
 Download the file for your OS from the latest release on the
-[Releases page](https://github.com/minodisk/riffle/releases):
+[Releases page](https://github.com/minodisk/handpic/releases):
 
 | OS | File |
 |----|------|
-| macOS, Apple Silicon | `Riffle_<version>_aarch64.dmg` |
-| macOS, Intel | `Riffle_<version>_x64.dmg` |
-| Windows | `Riffle_<version>_x64-setup.exe` |
-| Linux | `Riffle_<version>_amd64.AppImage` |
+| macOS, Apple Silicon | `Handpic_<version>_aarch64.dmg` |
+| macOS, Intel | `Handpic_<version>_x64.dmg` |
+| Windows | `Handpic_<version>_x64-setup.exe` |
+| Linux | `Handpic_<version>_amd64.AppImage` |
 
 The app is not signed by the OS vendors, so the first launch needs your
 permission once:
 
-- **macOS**: right-click `Riffle.app` → Open.
+- **macOS**: on macOS 15 and later, after the first launch is blocked, open
+  System Settings → Privacy & Security → Open Anyway. On macOS 14 and earlier,
+  right-click `Handpic.app` → Open.
 - **Windows**: in the SmartScreen warning, More info → Run anyway.
 
 After that, updates are downloaded automatically on launch and take effect the
-next time Riffle starts. For the other packages and the details, see
+next time Handpic starts. For the other packages and the details, see
 [docs/humans/usage.md](./docs/humans/usage.md#installing).
 
 ### First steps
 
 1. Choose your developing software (Lightroom, DxO PhotoLab, or both) in the
-   dialog Riffle shows on its first launch, and for Lightroom also the
+   dialog Handpic shows on its first launch, and for Lightroom also the
    language its menus are in, so the color labels match its names; both can
    be changed later in Settings.
 2. Drop a folder onto the window (or open one with `Cmd+O` / `Ctrl+O`). To
@@ -70,7 +72,7 @@ DxO PhotoLab.
 3. Right-click the export folder in the folder tree and choose
    `Sequence JPEG Timestamps…` to make `<folder>-sequenced/`
    ([Key features](#key-features)).
-4. Open `<folder>-sequenced/` in Riffle; it opens view-only, so you can check
+4. Open `<folder>-sequenced/` in Handpic; it opens view-only, so you can check
    the order ([Key features](#key-features)).
 5. Upload `<folder>-sequenced/` to Google Photos.
 
@@ -84,7 +86,7 @@ DxO PhotoLab.
   path or name, rename it with `Rename…` or after its photos' capture date
   with `Rename by Capture Date…` (one `YYYY-MM-DD` folder, or one sibling
   folder per date when they span several), rewrite its sidecars from
-  Riffle's index with `Rewrite Sidecars from Index…` (patching only the
+  Handpic's index with `Rewrite Sidecars from Index…` (patching only the
   judgments, so Lightroom's and PhotoLab's edits stay) or move them to the
   Trash with `Delete Sidecars…`; a slow second click on the
   open folder's name renames it too. The name is edited in place: `Enter`
@@ -133,7 +135,7 @@ DxO PhotoLab.
   it records only a point, and nothing without an AF point or on manual-focus
   shots (see [What the camera records](./docs/humans/cameras.md)). The mark's
   color judges the face nearest the AF point, or, without an AF point or on
-  manual focus, the largest face Riffle finds anywhere on the preview, so
+  manual focus, the largest face Handpic finds anywhere on the preview, so
   such a frame can be bright green or gray although it shows no crosshair. The mark is
   bright green for a good photo, one likely not a miss: the AF eyes in focus
   (an in-focus probability of 90% or more), the eyes open (an openness of 41
@@ -166,7 +168,7 @@ DxO PhotoLab.
   `Low`, with a `?` that shows their definitions) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
   `Unknown`). The mark also draws the faces
-  Riffle detects near the AF point as a cyan box with a cyan dot on each eye,
+  Handpic detects near the AF point as a cyan box with a cyan dot on each eye,
   the nose tip and the mouth corners and a label beside it (the detection
   score, the box size and the distance between the eyes, in preview pixels),
   a moment after `f`, since the detection runs when the frame is shown, and
@@ -196,7 +198,7 @@ DxO PhotoLab.
 - **Compare**: `v` shows 2–4 selected shots together, or the current shot
   beside its burst's first good frame (else the burst's first frame). Click a frame to rate, pick or
   reject only that one.
-- **Sequence JPEG Timestamps**: after culling in Riffle and exporting the keepers
+- **Sequence JPEG Timestamps**: after culling in Handpic and exporting the keepers
   as JPEGs from your RAW developer, right-click the export folder in the
   folder tree and choose `Sequence JPEG Timestamps…` to space the capture
   times of a burst one second apart, so Google
@@ -209,7 +211,7 @@ DxO PhotoLab.
   the original times.
 - **JPEG-only folders**: a folder that holds only JPEGs, such as a
   `<folder>-sequenced/` output, opens view-only, so its order and capture
-  times can be checked in Riffle: thumbnails, the preview and the EXIF rows,
+  times can be checked in Handpic: thumbnails, the preview and the EXIF rows,
   in capture-time order. Stars, flags, color labels, sidecars and the focus
   cue do not apply there.
 - **Genres (AI analysis)**: with `AI analysis of what each photo shows` on
@@ -235,7 +237,7 @@ DxO PhotoLab.
   frame), and it never changes a judgment (see
   [Recommended order](./docs/humans/usage.md#features)).
 - **MCP companion**: an MCP client, such as an AI assistant, can follow along
-  while you cull: read what Riffle shows, look at a preview, move the view and
+  while you cull: read what Handpic shows, look at a preview, move the view and
   record stars, picks / rejects and labels the way the keys do. It is off by
   default, listens on this computer only and cannot move anything to the
   Trash (see [MCP companion](#mcp-companion)).
@@ -269,24 +271,24 @@ and `FOO.DNG`) share `FOO.xmp` and are not supported: renaming one of them
 or moving it to the Trash takes the shared `FOO.xmp` with it, and the other's
 judgment along. Deleting one permanently keeps the shared `FOO.xmp`. Use the PhotoLab (.dop) format alone from the start, which writes one
 `FOO.ARW.dop` per RAW, with no `FOO.xmp` in the folder (**Both** writes the
-shared `FOO.xmp` too, and Riffle moves an existing `FOO.xmp` along whichever
+shared `FOO.xmp` too, and Handpic moves an existing `FOO.xmp` along whichever
 format is chosen), or keep such RAWs in separate folders.
 
 ### Lightroom
 
-- Lightroom (not Classic) reads the XMP Riffle wrote when the photos are
+- Lightroom (not Classic) reads the XMP Handpic wrote when the photos are
   imported.
 - A rating, flag or color label changed in Lightroom is written back to the
   `.xmp` next to the RAW by Lightroom itself; unlike Lightroom Classic, no
-  `Ctrl+S` or auto-write setting is needed. Riffle picks the change up when
+  `Ctrl+S` or auto-write setting is needed. Handpic picks the change up when
   the folder is opened.
 - Verified with Lightroom 9.5.1 on Windows.
 
 ### Lightroom Classic
 
-- Lightroom Classic reads the XMP Riffle wrote when the photos are first
+- Lightroom Classic reads the XMP Handpic wrote when the photos are first
   imported.
-- After import it does not re-read a sidecar Riffle changed, not even on
+- After import it does not re-read a sidecar Handpic changed, not even on
   restart. For the selected photos, right-click them in the Library grid and
   choose `Metadata > Read Metadata from File`. For a whole folder, right-click
   the folder, choose `Synchronize Folder...`, check
@@ -296,7 +298,7 @@ format is chosen), or keep such RAWs in separate folders.
   turn on `Catalog Settings > Metadata > Automatically write changes into XMP`.
 - Color labels are matched by name against Lightroom Classic's color label
   set (`Metadata > Color Label Set > Edit...`). Either rename that set's labels
-  to `Red`, `Yellow`, `Green`, `Blue` and `Purple`, or set Riffle's label names
+  to `Red`, `Yellow`, `Green`, `Blue` and `Purple`, or set Handpic's label names
   in the settings to the names in the set. Presets for Lightroom's localized
   default sets are provided (every UI language Lightroom Classic ships);
   adding a language is [one JSON file](./crates/core/i18n/README.md).
@@ -306,9 +308,9 @@ format is chosen), or keep such RAWs in separate folders.
 - PhotoLab recognizes an image by the identifiers in its `.dop`. Once
   PhotoLab has seen an image (opening its folder is enough, even if no `.dop`
   was written), a new `.dop` with identifiers it does not know is imported as
-  a virtual copy that carries Riffle's judgment, while the master keeps its
+  a virtual copy that carries Handpic's judgment, while the master keeps its
   own.
-- So when Riffle creates a `.dop`, it reads the image's identifiers from
+- So when Handpic creates a `.dop`, it reads the image's identifiers from
   PhotoLab's database (on Windows the newest
   `%APPDATA%\DxO\DxO PhotoLab N\Database\PhotoLab.db`, on macOS the newest
   `~/Library/DxO PhotoLab vN/DOPDatabaseVN.dopdata`) and writes them into it,
@@ -322,7 +324,7 @@ format is chosen), or keep such RAWs in separate folders.
 
 ### MCP companion
 
-Riffle can serve an [MCP](https://modelcontextprotocol.io/) endpoint for an
+Handpic can serve an [MCP](https://modelcontextprotocol.io/) endpoint for an
 MCP client (an AI assistant, say) to sit beside you while you cull. Turn on
 `Let MCP clients connect` in the `MCP` tab of the settings (it is off by
 default); the server then listens on this computer only, at:
@@ -335,7 +337,7 @@ That URL is all a client that speaks MCP over Streamable HTTP needs. Two
 examples:
 
 - **Claude Code**:
-  `claude mcp add --transport http riffle http://127.0.0.1:41917/mcp`
+  `claude mcp add --transport http handpic http://127.0.0.1:41917/mcp`
 - **Claude Desktop**: add this to `claude_desktop_config.json`. It relays
   through `npx -y mcp-remote`, so it needs Node.js; a direct `url` entry has
   not been verified.
@@ -343,7 +345,7 @@ examples:
   ```json
   {
     "mcpServers": {
-      "riffle": {
+      "handpic": {
         "command": "npx",
         "args": ["-y", "mcp-remote", "http://127.0.0.1:41917/mcp"]
       }
@@ -369,9 +371,9 @@ are very welcome.
   - [x] Ubuntu
 
 If it works, post in the
-[OS works report thread](https://github.com/minodisk/riffle/discussions/286) in
+[OS works report thread](https://github.com/minodisk/handpic/discussions/286) in
 Discussions. If it does not, open an issue from the
-[OS issue template](https://github.com/minodisk/riffle/issues/new?template=os.yml).
+[OS issue template](https://github.com/minodisk/handpic/issues/new?template=os.yml).
 
 ### RAW formats
 
@@ -393,9 +395,9 @@ listed per camera rather than per format is explained in
 
 If a camera not listed in [docs/humans/cameras.md](./docs/humans/cameras.md) works, post in
 the
-[camera works report thread](https://github.com/minodisk/riffle/discussions/287)
+[camera works report thread](https://github.com/minodisk/handpic/discussions/287)
 in Discussions. If it does not, open an issue from the
-[camera issue template](https://github.com/minodisk/riffle/issues/new?template=camera.yml).
+[camera issue template](https://github.com/minodisk/handpic/issues/new?template=camera.yml).
 A sample file is needed to look into it, so please attach one (or link to it).
 One file is enough; a landscape and a portrait shot, if possible, also let the
 rotation and the focus mark be checked.
@@ -408,11 +410,11 @@ rotation and the focus mark be checked.
 - DOP
   - [x] DxO PhotoLab
 
-If the stars, flags and color labels given in Riffle show up correctly in the
+If the stars, flags and color labels given in Handpic show up correctly in the
 software, post in the
-[software works report thread](https://github.com/minodisk/riffle/discussions/288)
+[software works report thread](https://github.com/minodisk/handpic/discussions/288)
 in Discussions. If they do not, open an issue from the
-[software issue template](https://github.com/minodisk/riffle/issues/new?template=software.yml).
+[software issue template](https://github.com/minodisk/handpic/issues/new?template=software.yml).
 
 ## For developers
 

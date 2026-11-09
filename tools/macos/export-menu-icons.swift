@@ -1,4 +1,4 @@
-// Renders the SF Symbols used by Riffle's own macOS menu items into PNGs under
+// Renders the SF Symbols used by Handpic's own macOS menu items into PNGs under
 // `crates/app/icons/menu/`. Run by a developer only, never at build or run
 // time:
 //

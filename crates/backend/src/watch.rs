@@ -207,21 +207,21 @@ mod tests {
         assert!(!triggers(&paths(&["A.XMP"])));
         assert!(!triggers(&paths(&["a.arw.dop"])));
         assert!(!triggers(&paths(&["A.ARW.dop"])));
-        assert!(!triggers(&paths(&["a.xmp.riffle-tmp"])));
+        assert!(!triggers(&paths(&["a.xmp.handpic-tmp"])));
         assert!(!triggers(&paths(&["a.xmp", "b.arw.dop"])));
     }
 
-    /// An import writes `<name>.riffle-tmp` and renames it into place: the
+    /// An import writes `<name>.handpic-tmp` and renames it into place: the
     /// writes do not trigger, the rename's event (which names both paths on
     /// some platforms) does.
     #[test]
     fn an_import_temp_file_triggers_only_once_renamed() {
-        assert!(!triggers(&paths(&["DSC00001.ARW.riffle-tmp"])));
-        assert!(!triggers(&paths(&["DSC00001.JPG.riffle-tmp"])));
-        assert!(!triggers(&paths(&["DSC00001.ARW.dop.riffle-tmp"])));
+        assert!(!triggers(&paths(&["DSC00001.ARW.handpic-tmp"])));
+        assert!(!triggers(&paths(&["DSC00001.JPG.handpic-tmp"])));
+        assert!(!triggers(&paths(&["DSC00001.ARW.dop.handpic-tmp"])));
         assert!(triggers(&paths(&["DSC00001.ARW"])));
         assert!(triggers(&paths(&[
-            "DSC00001.ARW.riffle-tmp",
+            "DSC00001.ARW.handpic-tmp",
             "DSC00001.ARW"
         ])));
     }

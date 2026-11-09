@@ -87,6 +87,21 @@ code. The debug installers stayed in `target/debug/bundle` and were not run.
   levels.
 - `dirs` 6 is the version Tauri already resolves.
 
+## Step 2: the product rename
+
+- The rename was scripted over the tracked files and then checked with a grep
+  of what still says riffle. Left on purpose: `riffle-core` / `-app` / `-cli`,
+  `riffle_*`, `RIFFLE_*` and the tests' temp dir prefixes (Step 3);
+  `LEGACY_IDENTIFIERS`, `hooks.nsh`, the `deb` / `rpm` migration values and the
+  MSI `upgradeCode`; the `Upgrading from Riffle` text; `CHANGELOG.md`,
+  `docs/plans/**` and `todo.md`.
+- The plan's Docs bullet said `app-log.md`'s table paths stay because the
+  identifier is kept. That was stale (the identifier changes), so the path
+  table did change and the bullet was corrected. Its `data migration` row
+  already existed from Step 1.
+- `lychee` runs with `--offline`, so links to `github.com/minodisk/handpic` are
+  not fetched and pass although the repository is not renamed yet.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check, Step 1 (a), Windows NSIS** (Step 1's checkbox stays
@@ -137,3 +152,27 @@ code. The debug installers stayed in `target/debug/bundle` and were not run.
   replace a file (an existing destination wins; a source gone missing is
   reported and retried), so it was left alone.
   Basis: `crates/app/src/migrate.rs`, `crates/app/src/main.rs`.
+- **Pending manual check, Step 2, first launch on real Riffle data** (Step 2's
+  checkbox stays unticked until this is done). On a machine with Riffle 1.10.0's
+  data, run this build. Expected: the data is under `com.minodisk.handpic` and no
+  `com.minodisk.riffle` folder remains, with the open folder, ratings, settings,
+  ranking, model and viewed history intact, and no data-migration error dialog.
+  The automated criteria are met; `mise run ci` passed on this step.
+- **Pending manual check, Step 2, macOS first-launch text.** On a Mac with
+  macOS 15 or later, launch an unnotarized Handpic build. Expected: the launch is
+  blocked and System Settings > Privacy & Security offers Open Anyway, as
+  `README.md` and `docs/humans/usage.md` now say; on macOS 14 or earlier,
+  right-click > Open works. The text was not verified by the agent, and the
+  landing page (Step 4) copies it.
+- **Pending manual, Step 2, before merging.** The trademark gate, Step 1's
+  criterion (a) checks above, and renaming the GitHub repository (then
+  `curl -sI https://github.com/minodisk/riffle/releases/latest/download/latest.json`
+  must show a `301`).
+- The app icon still reads `RIFFLE 60FPS CULLER`, drawn into the film border by
+  `tools/macos/app-icon/gen.py` and `icon.svg`. The plan calls the icons "not
+  name-bearing", so this step left them and the shipped PNGs alone, but the old
+  name is visible at large icon sizes. Basis: `tools/macos/app-icon/gen.py` lines
+  113 and 119, `crates/app/icons/`.
+- `crates/native` (the GPUI port's spike) still says Riffle, including its window
+  title and `struct Riffle`. The plan does not list it and nothing ships from it;
+  rename it with Step 3 or in the GPUI port. Basis: `crates/native/src/main.rs`.

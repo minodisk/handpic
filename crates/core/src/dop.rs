@@ -329,7 +329,7 @@ fn template(
     format!(
         "Sidecar = {{\n\
          Date = \"{now}\",\n\
-         Software = \"riffle\",\n\
+         Software = \"handpic\",\n\
          Source = {{\n\
          Items = {{\n\
          {{\n\
@@ -815,7 +815,7 @@ mod tests {
         let expected = concat!(
             "Sidecar = {\n",
             "Date = \"2026-09-18T11:00:00.0000000Z\",\n",
-            "Software = \"riffle\",\n",
+            "Software = \"handpic\",\n",
             "Source = {\n",
             "Items = {\n",
             "{\n",

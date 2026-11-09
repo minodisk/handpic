@@ -25,7 +25,7 @@ use riffle_core::{dop, xmp, Flag};
 use crate::index::{self, lock, Index};
 use crate::photolab;
 
-/// Which sidecar Riffle reads and writes. `Xmp` and `Dop` are one format
+/// Which sidecar Handpic reads and writes. `Xmp` and `Dop` are one format
 /// each, whose other format's files are neither read nor written; `Both`
 /// writes every judgment to both and reads back the one modified last.
 ///

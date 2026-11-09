@@ -462,7 +462,7 @@ mod app_menu {
         }
     }
 
-    /// Show the folder holding `Riffle.log` in the platform's file manager.
+    /// Show the folder holding `Handpic.log` in the platform's file manager.
     fn open_log_folder(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         let dir = app.path().app_log_dir()?;
         // The plugin creates the folder on its first write, which has happened
@@ -590,7 +590,7 @@ fn set_timing_logs(state: tauri::State<TimingLogs>, enabled: bool) {
     state.0.store(enabled, Ordering::Relaxed);
 }
 
-/// Write a frontend timing line to `Riffle.log`, so it can be read without
+/// Write a frontend timing line to `Handpic.log`, so it can be read without
 /// DevTools. It is `async` because a sync command would write the line on the
 /// main thread, and the frontend calls it on hot paths.
 #[tauri::command]
@@ -668,11 +668,11 @@ fn main() {
             .collect();
         rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Error)
-            .set_title("Riffle")
+            .set_title("Handpic")
             .set_description(format!(
-                "Riffle could not move its data to the new location, so it did not start. \
+                "Handpic could not move its data to the new location, so it did not start. \
                  Nothing was deleted; close any program that uses these files and start \
-                 Riffle again.\n\n{}",
+                 Handpic again.\n\n{}",
                 details.join("\n")
             ))
             .show();

@@ -17,7 +17,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 /// Suffix of the temp file a copy, or the app's sidecar writer, writes before
 /// renaming it into place. Not a RAW's extension, so no listing picks it up.
-pub const TEMP_SUFFIX: &str = ".riffle-tmp";
+pub const TEMP_SUFFIX: &str = ".handpic-tmp";
 
 /// One file to copy: `dst` is the final path, its folder already existing.
 #[derive(Debug, Clone)]

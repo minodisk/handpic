@@ -11,7 +11,7 @@ export const LATENCY_FLOOR_MS = 500;
 // IPC and small reads stays near the bottom instead of filling the plot.
 export const READ_FLOOR_BPS = 10_000_000;
 
-// CPU and disk busy are 0-100; `read` is Riffle's reads in bytes per second;
+// CPU and disk busy are 0-100; `read` is Handpic's reads in bytes per second;
 // `disk` is null where the system's disk busy time cannot be read.
 export interface PerfSample {
   at: number;

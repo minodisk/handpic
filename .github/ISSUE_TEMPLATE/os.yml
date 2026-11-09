@@ -1,11 +1,11 @@
 name: OS problem
-description: Riffle does not install, launch or behave correctly on your OS.
+description: Handpic does not install, launch or behave correctly on your OS.
 title: "[OS] "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. If Riffle works fine on your OS, please post in the OS works report thread in Discussions instead.
+        Thanks for reporting. If Handpic works fine on your OS, please post in the OS works report thread in Discussions instead.
   - type: input
     id: os
     attributes:
@@ -14,9 +14,9 @@ body:
     validations:
       required: true
   - type: input
-    id: riffle-version
+    id: handpic-version
     attributes:
-      label: Riffle version
+      label: Handpic version
       placeholder: 0.1.0
     validations:
       required: true
@@ -30,10 +30,10 @@ body:
   - type: textarea
     id: log
     attributes:
-      label: Riffle.log
+      label: Handpic.log
       description: |
-        Paste the contents of `Riffle.log` or attach the file. `Help > Open Log Folder` opens the folder, or find it at:
-        - Windows: `%LOCALAPPDATA%\com.minodisk.riffle\logs\`
-        - macOS: `~/Library/Logs/com.minodisk.riffle/`
-        - Linux: `~/.local/share/com.minodisk.riffle/logs/`
+        Paste the contents of `Handpic.log` or attach the file. `Help > Open Log Folder` opens the folder, or find it at:
+        - Windows: `%LOCALAPPDATA%\com.minodisk.handpic\logs\`
+        - macOS: `~/Library/Logs/com.minodisk.handpic/`
+        - Linux: `~/.local/share/com.minodisk.handpic/logs/`
       render: text

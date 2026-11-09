@@ -93,7 +93,7 @@ in "End to end on Windows, keypress to pixels" below. Reading the whole 48MB ARW
 compared with reading a bounded 1MiB prefix (`reader::read_preview`), which is
 where the metadata and the embedded preview live:
 
-| Folder | n | whole file | bounded prefix (Riffle) |
+| Folder | n | whole file | bounded prefix (Handpic) |
 |--------|---|---------------------|------------------------|
 | 5000 symlinks to one ARW, warm page cache | 300 | mean 6.6ms / p95 7.7ms | mean 0.06ms / p95 0.13ms |
 | 20 distinct 48MB copies, first read | 20 | mean 16.0ms / p95 30.0ms | mean 5.1ms / p95 7.8ms |
@@ -207,7 +207,7 @@ Measured on 2026-09-21 with the release app on Windows 11 Home, reading
 real folders of Sony ARWs from a DRAM-less QLC SATA SSD (Crucial BX500 4TB)
 with 22 extraction threads.
 The numbers come from the `scan prepare` and `scan extract` lines of
-`Riffle.log` (see "Measuring on your own folder" below). Each run used a
+`Handpic.log` (see "Measuring on your own folder" below). Each run used a
 different folder:
 
 | Run | files | prepare | extract | total | per file | files/s |
@@ -243,7 +243,7 @@ cold random reads: with no DRAM for the mapping table it needs extra NAND
 reads, QLC read latency is high (worse for data written long ago), and SATA
 has a single command queue. On one thread a file costs ~30ms, of which an
 estimated ~10ms is CPU (from the warm run) and ~20ms is waiting on the drive.
-The cause is the drive, not Riffle's code, and more threads help little.
+The cause is the drive, not Handpic's code, and more threads help little.
 
 The boot NVMe drive in the same machine (Crucial P5, TLC with DRAM) was not
 measured, so there is no NVMe-vs-SATA comparison. The expected workaround,
@@ -800,7 +800,7 @@ disk-bound regardless.
 committing, so this number is not reproducible from the committed tree.
 
 On a real folder of 2677 Sony ARWs on the same SATA SSD (Windows 11 Home,
-release app, 2026-09-21, from `Riffle.log`):
+release app, 2026-09-21, from `Handpic.log`):
 
 | Step | Target | Measured |
 |------|--------|----------|
@@ -822,10 +822,10 @@ rescan").
 
 ### Measuring on your own folder
 
-Riffle logs its own scan timings, so these numbers can be reproduced on any
-folder. Clear the cache in `Riffle > Settings...` (the `Cache` tab) so the next
+Handpic logs its own scan timings, so these numbers can be reproduced on any
+folder. Clear the cache in `Handpic > Settings...` (the `Cache` tab) so the next
 open counts as a first scan, and reopen the folder. Then quit and launch again
-to get the second open, and use `Help > Open Log Folder` to find `Riffle.log`.
+to get the second open, and use `Help > Open Log Folder` to find `Handpic.log`.
 
 Every open writes `open list`, `open entries`, `scan list` (reading the
 folder), `scan reconcile` (stat-ing the files against the index),
@@ -848,7 +848,7 @@ Per-page latency is logged the same way. Turn on `Timing logs` in the settings
 window (the item only shows in a `mise run tauri:release:devtools` or debug
 build), page through a folder with the next/previous keys, and read the
 `page wait=… read=… ipc=… post=… worker=… decode=… draw=… total=…
-keypressToPixels=… jpegKB=… px=WxH scan=… source=…` lines in `Riffle.log`. `wait` is the
+keypressToPixels=… jpegKB=… px=WxH scan=… source=…` lines in `Handpic.log`. `wait` is the
 time a key spent behind an in-flight request, `read` the Rust read (the pause
 of the scan's reads included), `ipc` the rest of the `preview` call's round
 trip, `post` the main thread's work before handing the JPEG to the worker,
@@ -974,8 +974,8 @@ neither was kept.
 `riffle-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]` copies every
 RAW and JPEG under `src-dir`, flat, into `dst-dir` through the pipeline the app
 uses and prints the files, bytes, seconds and MB/s. A real import writes the same
-figures to `Riffle.log`, as the `import:` line (`mb_per_s=`; see
-[Using Riffle](./usage.md#features)). Time an Explorer copy of the same number of
+figures to `Handpic.log`, as the `import:` line (`mb_per_s=`; see
+[Using Handpic](./usage.md#features)). Time an Explorer copy of the same number of
 files against either one, and for a fair comparison:
 
 - Use a destination faster than the card, such as an NVMe drive or an emptier

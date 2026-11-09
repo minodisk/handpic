@@ -1,6 +1,6 @@
 export type UncaughtKind = "error" | "unhandledrejection";
 
-/** One `Riffle.log` line for an uncaught error or unhandled rejection. */
+/** One `Handpic.log` line for an uncaught error or unhandled rejection. */
 export function uncaughtLine(
   kind: UncaughtKind,
   message: string,

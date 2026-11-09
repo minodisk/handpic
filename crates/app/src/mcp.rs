@@ -45,9 +45,9 @@ const PREVIEW_QUALITY: f32 = 75.0;
 /// How long `stop` waits for open connections to close before it drops them.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
-const INSTRUCTIONS: &str = "Riffle is a desktop app the user culls Sony ARW and Leica DNG \
+const INSTRUCTIONS: &str = "Handpic is a desktop app the user culls Sony ARW and Leica DNG \
 photos with. This server connects you to the running app so you can assist while they cull: \
-read what Riffle is showing (the current photo, the selection, its burst, the sharpness \
+read what Handpic is showing (the current photo, the selection, its burst, the sharpness \
 score, the AF point, the shooting settings and the current stars, pick / reject flag and \
 color label), look at a small copy of a photo's preview, move the view, and record stars, \
 picks / rejects and color labels the same way the user's keys do, so the app's undo and \
@@ -85,7 +85,7 @@ impl Bridge {
     pub fn to_main_window(app: AppHandle) -> Self {
         Bridge::new(move |request| {
             if app.get_webview_window(MAIN_WINDOW).is_none() {
-                return Err("Riffle's main window is not open".to_string());
+                return Err("Handpic's main window is not open".to_string());
             }
             app.emit_to(MAIN_WINDOW, "mcp-request", request)
                 .map_err(|e| e.to_string())
@@ -110,7 +110,7 @@ impl Bridge {
         match reply {
             Ok(Ok(reply)) => reply,
             _ => Err(format!(
-                "Riffle's main window did not answer within {timeout:?}"
+                "Handpic's main window did not answer within {timeout:?}"
             )),
         }
     }
@@ -146,12 +146,12 @@ fn tool_result(reply: Reply) -> CallToolResult {
 fn resolve(view: &Value, path: Option<String>) -> Result<PathBuf, String> {
     let folder = view["folder"]
         .as_str()
-        .ok_or_else(|| "no folder is open in Riffle".to_string())?;
+        .ok_or_else(|| "no folder is open in Handpic".to_string())?;
     let path = match path {
         Some(path) => path,
         None => view["current"]["path"]
             .as_str()
-            .ok_or_else(|| "no photo is shown in Riffle".to_string())?
+            .ok_or_else(|| "no photo is shown in Handpic".to_string())?
             .to_string(),
     };
     let outside = || format!("{path} is not in the open folder {folder}");
@@ -193,7 +193,7 @@ fn photo(index: &Mutex<Index>, path: &Path) -> Reply {
     let key = path.to_string_lossy();
     let row = index::lock(index)
         .entry(&key)?
-        .ok_or_else(|| format!("{key} is not a photo Riffle has indexed"))?;
+        .ok_or_else(|| format!("{key} is not a photo Handpic has indexed"))?;
     let photo = Photo {
         path: row.path,
         rating: row.rating,
@@ -380,7 +380,7 @@ impl Companion {
 #[tool_router]
 impl Companion {
     #[tool(
-        description = "What Riffle is showing now: the open folder, the number of photos \
+        description = "What Handpic is showing now: the open folder, the number of photos \
         visible after the filter, the current photo and its 1-based position, the selected \
         paths, the view mode (normal, zoom for the 1:1 focus check, or compare), the active \
         compare pane, the sort order, whether a filter is active, and the current photo's \
@@ -392,7 +392,7 @@ impl Companion {
         0 to 1) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
         the image's right, pitch positive up, roll positive clockwise on screen; null when it \
         could not be fitted). `eyes` is null when the photo has no face to judge (none found, \
-        too small, or a failure), and absent until Riffle has judged the photo, which it does \
+        too small, or a failure), and absent until Handpic has judged the photo, which it does \
         a moment after showing it (never in a JPEG-only folder): call again shortly."
     )]
     async fn get_view(&self) -> CallToolResult {
@@ -428,7 +428,7 @@ impl Companion {
     }
 
     #[tool(
-        description = "Show one photo in Riffle, as clicking it in the filmstrip does: it \
+        description = "Show one photo in Handpic, as clicking it in the filmstrip does: it \
         becomes the current photo and the only selected one. The path must be one `get_view` \
         can report, in the open folder and not hidden by the filter. Returns the new view, \
         as `get_view` does."
@@ -442,7 +442,7 @@ impl Companion {
     }
 
     #[tool(
-        description = "Select one or more photos in Riffle's filmstrip; the first becomes the \
+        description = "Select one or more photos in Handpic's filmstrip; the first becomes the \
         current photo. Judgments and compare apply to the selection (compare shows its first \
         four). Every path must be in the open folder and not hidden by the filter. Returns \
         the new view, as `get_view` does."
@@ -456,7 +456,7 @@ impl Companion {
     }
 
     #[tool(
-        description = "Switch Riffle's view mode: `normal` for the fitted preview, `zoom` for \
+        description = "Switch Handpic's view mode: `normal` for the fitted preview, `zoom` for \
         the 1:1 focus check of the current photo, or `compare` for the selected photos (2 to \
         4) side by side, or the current photo and its burst's first good frame (else its first \
         frame) when only one is selected. Compare fails when there are fewer than two photos \
@@ -471,7 +471,7 @@ impl Companion {
     }
 
     #[tool(
-        description = "Record stars, a pick / reject flag and a color label in Riffle, exactly \
+        description = "Record stars, a pick / reject flag and a color label in Handpic, exactly \
         as the user's judgment keys do: the change is shown at once, is one entry the user can \
         undo, and is written to each photo's sidecar. Omitted fields keep each photo's own \
         value; a rating of 0 clears the stars and a null label clears the label. Applies to \
@@ -491,7 +491,7 @@ impl Companion {
 impl ServerHandler for Companion {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("riffle", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new("handpic", env!("CARGO_PKG_VERSION")))
             .with_instructions(INSTRUCTIONS)
     }
 }
@@ -739,9 +739,9 @@ mod tests {
     }
 
     #[test]
-    fn get_info_names_riffle_and_enables_tools() {
+    fn get_info_names_handpic_and_enables_tools() {
         let info = silent().get_info();
-        assert_eq!(info.server_info.name, "riffle");
+        assert_eq!(info.server_info.name, "handpic");
         assert!(info.capabilities.tools.is_some());
         assert!(info.instructions.is_some());
     }
@@ -828,7 +828,7 @@ mod tests {
                 .await;
             assert_eq!(
                 reply,
-                Err("Riffle's main window did not answer within 20ms".to_string())
+                Err("Handpic's main window did not answer within 20ms".to_string())
             );
             assert!(bridge.pending.lock().unwrap().is_empty());
             bridge.reply(0, true, Value::Null);
@@ -838,10 +838,10 @@ mod tests {
     #[test]
     fn a_call_fails_at_once_when_the_request_cannot_be_sent() {
         tauri::async_runtime::block_on(async {
-            let bridge = Bridge::new(|_| Err("Riffle's main window is not open".to_string()));
+            let bridge = Bridge::new(|_| Err("Handpic's main window is not open".to_string()));
             assert_eq!(
                 bridge.call("get_view", Value::Null).await,
-                Err("Riffle's main window is not open".to_string())
+                Err("Handpic's main window is not open".to_string())
             );
             assert!(bridge.pending.lock().unwrap().is_empty());
         });
@@ -869,7 +869,7 @@ mod tests {
         assert_eq!(resolve(&view(&dir, Some(&current)), None), Ok(current));
         assert_eq!(
             resolve(&view(&dir, None), None),
-            Err("no photo is shown in Riffle".to_string())
+            Err("no photo is shown in Handpic".to_string())
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -912,7 +912,7 @@ mod tests {
                 &serde_json::json!({ "folder": null }),
                 Some("/a.ARW".into())
             ),
-            Err("no folder is open in Riffle".to_string())
+            Err("no folder is open in Handpic".to_string())
         );
     }
 
@@ -924,7 +924,7 @@ mod tests {
         assert_eq!(
             photo(&index, &path),
             Err(format!(
-                "{} is not a photo Riffle has indexed",
+                "{} is not a photo Handpic has indexed",
                 path.display()
             ))
         );

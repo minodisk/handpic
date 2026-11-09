@@ -85,7 +85,7 @@ bash .claude/skills/release/scripts/verify-release.sh v<version>
 ```
 
 - `STATUS=ok` (exit 0): report the Release URL
-  (`https://github.com/minodisk/riffle/releases/tag/v<version>`) and finish
+  (`https://github.com/minodisk/handpic/releases/tag/v<version>`) and finish
 - `STATUS=incomplete` (exit 1): report the `missing` lines verbatim. A missing
   installer usually means one build job failed; a missing or incomplete
   `latest.json` means installed copies will not be offered this update. Ask the

@@ -177,11 +177,11 @@ describe("metaGroups", () => {
   });
 
   test("shows the AF eye in-focus probability as a percentage", () => {
-    const riffle = (focus: FocusCue) => metaGroups(null, focus)[0]?.rows;
-    expect(riffle({ candidate: "candidate", eye_focus: 0.8701, ...noEyes })).toEqual([
+    const handpic = (focus: FocusCue) => metaGroups(null, focus)[0]?.rows;
+    expect(handpic({ candidate: "candidate", eye_focus: 0.8701, ...noEyes })).toEqual([
       { label: "AF eye in focus", value: "87%" },
     ]);
-    expect(riffle({ candidate: "not_candidate", eye_focus: 0, ...noEyes })).toEqual([
+    expect(handpic({ candidate: "not_candidate", eye_focus: 0, ...noEyes })).toEqual([
       { label: "AF eye in focus", value: "0%" },
     ]);
   });

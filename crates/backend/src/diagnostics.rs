@@ -1,4 +1,4 @@
-//! Failures that would otherwise leave no trace in `Riffle.log`: Rust panics,
+//! Failures that would otherwise leave no trace in `Handpic.log`: Rust panics,
 //! the frontend's uncaught errors and broken internal assumptions, each
 //! written under a fixed, greppable prefix.
 

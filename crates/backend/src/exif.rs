@@ -198,7 +198,7 @@ fn exposure_mode(v: u32) -> Option<&'static str> {
 
 /// Sony `MeteringMode2` (0x202c), labeled as ExifTool's Sony.pm
 /// `%Sony::Main`. It is finer than EXIF `MeteringMode` (0x9207), which
-/// Riffle does not read.
+/// Handpic does not read.
 fn metering(v: u32) -> Option<&'static str> {
     match v {
         0x100 => Some("Multi-segment"),

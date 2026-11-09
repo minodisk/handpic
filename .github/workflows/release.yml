@@ -30,7 +30,7 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
-  # Builds the installers and their updater signatures on every platform Riffle
+  # Builds the installers and their updater signatures on every platform Handpic
   # ships to. On a release they are attached to the draft by id (tauri-action
   # cannot look drafts up by tag) with latest.json; on a manual dispatch they are
   # only uploaded as workflow artifacts.
