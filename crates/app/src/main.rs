@@ -675,11 +675,10 @@ fn main() {
             .set_level(rfd::MessageLevel::Error)
             .set_title("Riffle")
             .set_description(format!(
-                "Riffle could not move its data to the new location, so it did not start.                  Nothing was deleted; close any program that uses these files and start                  Riffle again.
-
-{}",
-                details.join("
-")
+                "Riffle could not move its data to the new location, so it did not start. \
+                 Nothing was deleted; close any program that uses these files and start \
+                 Riffle again.\n\n{}",
+                details.join("\n")
             ))
             .show();
         std::process::exit(1);

@@ -62,7 +62,11 @@ is 1, so the hook's `/P` run should not stop on a dialog there.
   (an empty `index.sqlite`, a WAL, `settings.json`). The next launch resumes
   and an existing destination file always wins, which is right because it is
   either a complete file from the earlier run or Handpic's own (decision 9).
-  A WAL then always ends up next to the database it came from.
+  Accepted risk (decision 9): if `new/index.sqlite` already exists without a
+  `-wal`, the old `index.sqlite` is discarded but its `-wal` / `-shm` still move
+  next to the other database, and SQLite may replay those frames over it. The
+  scenario is rare and ordering the companions before their main file was judged
+  not worth the code.
 - The migration also removes a stale `<dest>.migrating` before moving, so a
   resumed run whose rename succeeds cannot leave one behind.
 
