@@ -10,6 +10,7 @@
       "release-type": "simple",
       "extra-files": [
         { "type": "toml", "path": "crates/app/Cargo.toml", "jsonpath": "$.package.version" },
+        { "type": "toml", "path": "crates/backend/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/core/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "crates/cli/Cargo.toml", "jsonpath": "$.package.version" },
         { "type": "toml", "path": "Cargo.lock", "jsonpath": "$.package[?(@.source === undefined)].version" },

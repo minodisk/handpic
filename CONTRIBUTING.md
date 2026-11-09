@@ -54,7 +54,9 @@ artifacts, which need the release signing key.
 `crates/native` is the GPUI port of the desktop app. It is a separate Cargo
 workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
 `mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
-the repository root never sees it.
+the repository root never sees it. It depends on `crates/backend`, the
+Tauri-free library shared with `crates/app` and a member of the root workspace,
+so a backend change is checked by both `mise run ci` and `mise run native:check`.
 
 NASM is a hard prerequisite on x86 and x86_64: the crate's `build.rs` fails
 without it. `mozjpeg-sys` otherwise falls back to a build without SIMD with

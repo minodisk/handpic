@@ -76,7 +76,14 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face `eye_focus` dump, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets and the eye window's score, the mesh's edge gap and the full-size eye sharpness),
-`crates/app`
+`crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
+a root-workspace member that `crates/native` uses by path and so compiled twice
+like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
+formatting shared by the meta pane and the filter menu, `src/photolab.rs` the
+PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
+and master Item Uuids so PhotoLab does not import it as a virtual copy (see
+`docs/agents/photolab.md`), and `src/shortcuts.rs` the keymap: the default keys
+and the user's overrides, persisted in the `shortcuts` key), `crates/app`
 (the Tauri 2 desktop app, whose `src/index.rs` is the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
 and the files shown in the preview in the separate `views` table (kept by
@@ -124,8 +131,7 @@ draws on demand through the scan's `detect_around` without touching the index,
 embeddings, and `eyes_of`, which judges with `eyes` whether the eyes of the shown file's
 AF face are closed, also on demand, a newer request superseding an older one,
 and returns the face mesh points it judged on in stored preview coordinates,
-`src/exif.rs` the shooting-settings display formatting shared by the meta pane
-and the filter menu, `src/folders.rs` the folder tree's commands (the
+`src/folders.rs` the folder tree's commands (the
 home and volume roots, one folder's subfolders and RAW count, and
 `reveal_folder`, the right-click item that reveals a folder, or from the
 strip's menu a file, in the OS file manager under the per-platform
@@ -174,15 +180,10 @@ strip's `Output` filter (which of a folder's files have an export in its
 `Output` or `Output-sequenced` subfolder, by file stem, with PhotoLab's copy
 and DeepPRIME suffixes; no answer without such a folder, an error when one
 cannot be read whole), and
-`src/photolab.rs` the PhotoLab database lookup that gives a fresh `.dop` the
-registered image's Source and master Item Uuids so PhotoLab does not import it
-as a virtual copy (see `docs/agents/photolab.md`), and
 `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 `sidecarFormat` key of the settings store, next to the configurable
-`xmp:Label` names per color persisted in the `labelNames` key, and `src/shortcuts.rs` the keymap:
-the default keys and the
-user's overrides, persisted in the `shortcuts` key, and `src/mcp.rs` the MCP
+`xmp:Label` names per color persisted in the `labelNames` key, and `src/mcp.rs` the MCP
 companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
 key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
@@ -197,7 +198,7 @@ throughput in bytes per second and the system's disk busy time, 0–100 %
 (PDH on Windows, `/sys/block` on Linux, `null` on macOS), as `perf-sample`
 every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
-`Cargo.lock` and Rust toolchain that uses `riffle-core` and must not depend on
+`Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured

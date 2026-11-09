@@ -23,6 +23,7 @@ use gpui::{
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
 use pager::{Move, Pager};
+use riffle_backend::exif::{Labeled, exif};
 use riffle_core::{reader, scan::is_raw_file};
 use timing::{Page, Summary};
 
@@ -39,6 +40,7 @@ struct Loaded {
     jpeg_kb: usize,
     px: (u32, u32),
     orientation: u16,
+    settings: String,
 }
 
 /// mozjpeg reports a corrupt JPEG by unwinding, which would otherwise lose
@@ -51,10 +53,21 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     })
 }
 
+fn label(value: Option<Labeled>) -> String {
+    value.map_or_else(|| "-".into(), |v| v.label)
+}
+
 fn load(path: &Path) -> Result<Loaded, String> {
     let started = Instant::now();
     let (arw, jpeg) = reader::read_preview(path).map_err(|e| e.to_string())?;
     let read = started.elapsed();
+    let settings = exif(&arw.shot);
+    let settings = format!(
+        "{}  {}  {}",
+        label(settings.shutter),
+        label(settings.aperture),
+        label(settings.iso),
+    );
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -79,6 +92,7 @@ fn load(path: &Path) -> Result<Loaded, String> {
         jpeg_kb: jpeg.len() / 1024,
         px: (w, h),
         orientation: arw.orientation,
+        settings,
     })
 }
 
@@ -255,12 +269,13 @@ impl Riffle {
         match result {
             Ok(loaded) => {
                 self.status = format!(
-                    "{}/{}  {name}  {}x{}  {}",
+                    "{}/{}  {name}  {}x{}  {}  {}",
                     index + 1,
                     self.files.len(),
                     loaded.px.0,
                     loaded.px.1,
                     loaded.orientation,
+                    loaded.settings,
                 )
                 .into();
                 let old = self.image.replace(loaded.image);

@@ -3770,6 +3770,7 @@ dependencies = [
  "percent-encoding",
  "reqwest",
  "rfd",
+ "riffle-backend",
  "riffle-core",
  "rmcp",
  "rusqlite",
@@ -3792,6 +3793,17 @@ dependencies = [
  "tower",
  "trash",
  "windows 0.62.2",
+]
+
+[[package]]
+name = "riffle-backend"
+version = "1.10.0"
+dependencies = [
+ "log",
+ "riffle-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
