@@ -310,9 +310,10 @@ them; their contents are deliberately coarse.
     (SQLite folder index, rusqlite), `sidecar.rs` (the writer thread and
     `SidecarFormat`), `trash.rs` (runs, undo / redo), `shortcuts.rs`,
     `exif.rs` (display formatting), `photolab.rs` — and the near-free ones
-    once their one to four `tauri` touches are abstracted behind a trait or a
-    callback (`ai.rs` 1, `diagnostics.rs` 1, `output.rs` 2, `perf.rs` 3,
-    `watch.rs` 4); `crates/app` depends on it and re-exports, with no
+    once their `tauri` touches are abstracted behind a trait or a callback
+    (`diagnostics.rs`, `output.rs`, `watch.rs`; `perf.rs` and `ai.rs` wait for
+    Step 9, by the user's decision, see
+    `../20261109-gpui-backend-crate/plan.md`); `crates/app` depends on it and re-exports, with no
     behavior change (its tests move with the code); the native crate depends
     on it (through `path = "../backend"`, compiled twice like
     `riffle-core`). This is the first milestone that edits `crates/app`, so
@@ -346,7 +347,8 @@ them; their contents are deliberately coarse.
   - Done when: the settings modal (sidecar format, label names, shortcuts,
     Import tab, `aiEnabled` with the model download), pass 3 embeddings,
     genres, the personal ranking with its refits, the recommended mark and
-    `recommended` sort, the MCP companion (loopback server and bridge), the
+    `recommended` sort, moving `perf.rs` and `ai.rs` into `crates/backend`
+    behind callback seams, the MCP companion (loopback server and bridge), the
     performance overlay (`perf.rs` sampler), `Riffle.log` with the same
     greppable prefixes (`docs/agents/app-log.md`).
 - [ ] Step 10: Packaging, the updater, the three-platform CI and the switch-over
