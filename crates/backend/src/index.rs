@@ -564,7 +564,7 @@ fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
 }
 
 pub struct Index {
-    pub(crate) conn: Connection,
+    pub conn: Connection,
 }
 
 /// Take a lock without caring whether a previous holder panicked. The scan
@@ -576,7 +576,7 @@ pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 /// Append a suffix to a path's file name, for the `-wal`/`-shm` sidecars SQLite
 /// keeps next to the main database file.
-pub(crate) fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+pub fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
     let mut name = path.file_name().unwrap_or_default().to_os_string();
     name.push(suffix);
     path.with_file_name(name)
@@ -1925,7 +1925,6 @@ impl Index {
     /// Every `ratings` row of `dir`, keyed by path: its flag, the sidecar
     /// stat it was stored with and whether it is dirty, for the tests that
     /// check what a run left in the index.
-    #[cfg(test)]
     pub fn row_flags(
         &self,
         dir: &str,
@@ -2069,7 +2068,6 @@ struct RatingRow {
 /// The part of a `ratings` row `row_flags` hands out: the flag, the stat of
 /// the sidecar it was stored with (`xmp_size`, `xmp_mtime_ns`) and whether
 /// it is still waiting to be written.
-#[cfg(test)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RowFlag {
     pub flag: Flag,

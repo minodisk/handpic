@@ -25,7 +25,7 @@ export interface Pose {
 }
 
 // The eye state the scan's second pass stored for the judged face, as `Focus`
-// and `faces-progress` carry it (`StoredEyes` in `crates/app/src/index.rs`):
+// and `faces-progress` carry it (`StoredEyes` in `crates/backend/src/index.rs`):
 // the state and the closed probability derived in Rust from the stored EAR,
 // `unknown` / `null` when nothing was stored.
 export type EyeState = "open" | "closed" | "unknown";

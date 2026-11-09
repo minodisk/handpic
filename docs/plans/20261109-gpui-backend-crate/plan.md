@@ -194,7 +194,7 @@ archived; no non-release PR is open (`#928` is release-please's).
       `riffle-app`; the handpic rename's Step 3 renames it with the others
       (that plan's Step 3 bullet should be told to include it — note it in
       this PR's description).
-- [ ] Step 2: Move `index` and `sidecar`
+- [x] Step 2: Move `index` and `sidecar`
   - Done when:
     - `crates/app/src/index.rs` and `sidecar.rs` are moved with their tests
       (89 + 31); `lib.rs` gains `pub mod index; pub mod sidecar;`; `index.rs`'s

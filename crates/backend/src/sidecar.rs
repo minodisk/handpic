@@ -181,7 +181,7 @@ impl SidecarFormat {
 /// tie (an exFAT card keeps mtimes to 2 s) the one listed first. Both the
 /// writer, picking the stat it stores, and the folder open, picking the file
 /// it compares against that stat, go through this, so the two never disagree.
-pub(crate) fn newest<T>(sidecars: impl IntoIterator<Item = (T, i64)>) -> Option<T> {
+pub fn newest<T>(sidecars: impl IntoIterator<Item = (T, i64)>) -> Option<T> {
     sidecars
         .into_iter()
         .fold(
@@ -501,7 +501,7 @@ where
 
 /// The sidecar of `arw` as it exists on disk, preferring a name that differs
 /// only in case (`FOO.XMP`) over the one `sidecar_path` would mint.
-pub(crate) fn existing_sidecar(arw: &Path, format: SidecarFormat) -> Option<PathBuf> {
+pub fn existing_sidecar(arw: &Path, format: SidecarFormat) -> Option<PathBuf> {
     let wanted = format.sidecar_path(arw);
     if wanted.exists() {
         return Some(wanted);

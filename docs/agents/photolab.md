@@ -2,7 +2,7 @@
 
 Read this before touching `crates/core/src/dop.rs`,
 `crates/backend/src/photolab.rs` or the `.dop` side of
-`crates/app/src/sidecar.rs`. It lists what PhotoLab's sidecar format and
+`crates/backend/src/sidecar.rs`. It lists what PhotoLab's sidecar format and
 database have already broken here, each with the reason.
 
 The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something

@@ -365,7 +365,7 @@ function request(index: number): void {
       requested.delete(index);
       // The index row exists but its `thumb` column is NULL only once the
       // file has actually been processed and failed (see
-      // `Index::thumbnail` in `crates/app/src/index.rs`), so this message
+      // `Index::thumbnail` in `crates/backend/src/index.rs`), so this message
       // means a permanent failure rather than "not yet scanned". Record it
       // separately so it is shown once instead of retried on every
       // `refresh`.

@@ -3773,7 +3773,6 @@ dependencies = [
  "riffle-backend",
  "riffle-core",
  "rmcp",
- "rusqlite",
  "rustls",
  "serde",
  "serde_json",
@@ -3800,6 +3799,7 @@ name = "riffle-backend"
 version = "1.10.0"
 dependencies = [
  "log",
+ "mozjpeg",
  "riffle-core",
  "rusqlite",
  "serde",

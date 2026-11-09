@@ -82,9 +82,8 @@ like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
-`docs/agents/photolab.md`), and `src/shortcuts.rs` the keymap: the default keys
-and the user's overrides, persisted in the `shortcuts` key), `crates/app`
-(the Tauri 2 desktop app, whose `src/index.rs` is the SQLite folder index,
+`docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
+and the user's overrides, persisted in the `shortcuts` key, `src/index.rs` the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
 and the files shown in the preview in the separate `views` table (kept by
 eviction, dropped by Clear Cache), which gives the ranking its negatives
@@ -106,7 +105,11 @@ the separate `embeddings` table (valid while `EMBED_VERSION` and the file's
 size / mtime match) and streams `embed-progress` / `embed-done`, without
 counting as scanning; the passes run on worker threads below normal OS
 priority (the second and third lower still) and take the on-screen files first
-through the shared `ScanFocus` handle, `src/ai.rs` the `aiEnabled` setting
+through the shared `ScanFocus` handle, and `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
+XMP, `.dop` or both setting chosen in the settings modal and persisted in the
+`sidecarFormat` key of the settings store, next to the configurable
+`xmp:Label` names per color persisted in the `labelNames` key), `crates/app`
+(the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
 (persisted in the `aiEnabled` key, set by `set_ai_enabled`) and the download
 of the embedding model into the app's local data dir on the first enable,
 checked against its size and SHA-256, `src/rank.rs` the personal ranking's
@@ -180,10 +183,7 @@ strip's `Output` filter (which of a folder's files have an export in its
 `Output` or `Output-sequenced` subfolder, by file stem, with PhotoLab's copy
 and DeepPRIME suffixes; no answer without such a folder, an error when one
 cannot be read whole), and
-`src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
-XMP, `.dop` or both setting chosen in the settings modal and persisted in the
-`sidecarFormat` key of the settings store, next to the configurable
-`xmp:Label` names per color persisted in the `labelNames` key, and `src/mcp.rs` the MCP
+`src/mcp.rs` the MCP
 companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
 key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
