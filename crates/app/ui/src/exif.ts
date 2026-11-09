@@ -1,4 +1,4 @@
-// Mirrors `Exif` in `crates/app/src/exif.rs`: `value` sorts, `label` shows.
+// Mirrors `Exif` in `crates/backend/src/exif.rs`: `value` sorts, `label` shows.
 export interface Labeled {
   value: number;
   label: string;
