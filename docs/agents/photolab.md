@@ -1,7 +1,7 @@
 # DxO PhotoLab and its `.dop` sidecar
 
 Read this before touching `crates/core/src/dop.rs`,
-`crates/app/src/photolab.rs` or the `.dop` side of
+`crates/backend/src/photolab.rs` or the `.dop` side of
 `crates/app/src/sidecar.rs`. It lists what PhotoLab's sidecar format and
 database have already broken here, each with the reason.
 
@@ -228,7 +228,7 @@ unflagged. Seen on 199 frames of one folder and about 230 of another.
 
 ## `photolab::lookup` keys on folder + file `Name`; a rename does not follow through to PhotoLab or a shared sidecar (Hit)
 
-`photolab::lookup` (`crates/app/src/photolab.rs`) finds a RAW's Uuids by its
+`photolab::lookup` (`crates/backend/src/photolab.rs`) finds a RAW's Uuids by its
 folder and file `Name`, and a `.dop` Riffle writes carries that `Name`
 inside. `rename.rs`'s `file_plan` moves a `.dop` unchanged when a RAW is
 renamed, so the sidecar's inner `Name` and PhotoLab's own database still

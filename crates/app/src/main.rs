@@ -4,7 +4,6 @@ mod ai;
 mod commands;
 mod datefolder;
 mod diagnostics;
-mod exif;
 mod folders;
 mod foldersidecars;
 mod import;
@@ -13,16 +12,15 @@ mod mcp;
 mod migrate;
 mod output;
 mod perf;
-mod photolab;
 mod rank;
 mod rename;
 mod sequence;
-mod shortcuts;
 mod sidecar;
 mod trash;
 mod treewatch;
 mod update;
 mod watch;
+use riffle_backend::{exif, photolab, shortcuts};
 
 mod app_menu {
     use tauri::image::Image;

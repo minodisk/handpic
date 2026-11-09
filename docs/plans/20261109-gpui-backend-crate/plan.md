@@ -134,7 +134,7 @@ archived; no non-release PR is open (`#928` is release-please's).
 
 ## Steps
 
-- [ ] Step 1: Scaffold `crates/backend` with `exif`, `shortcuts` and `photolab`, make both apps depend on it, and prove the native link
+- [x] Step 1: Scaffold `crates/backend` with `exif`, `shortcuts` and `photolab`, make both apps depend on it, and prove the native link
   - Done when:
     - `crates/backend/Cargo.toml`: package `riffle-backend`, `version =
       "1.10.0"` (the workspace's), `edition = "2021"`, a library (`src/lib.rs`
@@ -354,4 +354,4 @@ archived; no non-release PR is open (`#928` is release-please's).
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete

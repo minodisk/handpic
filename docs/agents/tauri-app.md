@@ -159,7 +159,7 @@ folder and race the operation's own reconcile.
 
 ### Resolve shortcut overrides order-independently, not in a single pass (Hit)
 
-`from_overrides` in `crates/app/src/shortcuts.rs` checks each stored override
+`from_overrides` in `crates/backend/src/shortcuts.rs` checks each stored override
 against the keymap built so far. A single pass in action order silently drops
 a valid override that wants a key another override in the same batch frees
 later: `{"pick": ["q"], "reject": ["p"]}` left `reject` on its default,
@@ -190,7 +190,7 @@ because `reject` comes before `pick`, so `p` still looked taken.
 
 ### An accelerator string is not validated until Tauri parses it (Inferred)
 
-`accelerator()` in `crates/app/src/shortcuts.rs` is a plain table; muda is
+`accelerator()` in `crates/backend/src/shortcuts.rs` is a plain table; muda is
 not a dependency of `crates/app`, so nothing checks the string at compile
 time. Tauri parses it with `.parse().ok()`, so an unrecognized name
 silently becomes "no accelerator" instead of an error — a typo here fails
