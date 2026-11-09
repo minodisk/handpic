@@ -98,6 +98,7 @@ and what is kept.
 
 - [ ] Step 2: Rename the product to Handpic (app, docs, repository)
   - Done when: the app, its window title, dialogs, update messages, MCP server, settings dialog, README pair, `docs/humans/*` pairs, `CLAUDE.md`, `CONTRIBUTING.md`, issue templates and `tools/stats/snapshot.sh` say Handpic; the updater endpoint and every `github.com/minodisk/riffle` link point at `minodisk/handpic`; `crates/app/tauri.conf.json` says `identifier: com.minodisk.handpic`, and a first launch of this build on a machine with Riffle 1.10.0's data moves it under `com.minodisk.handpic` and leaves no `com.minodisk.riffle` folder (Step 1's migration, now live), with the open folder, ratings, settings, ranking, model and viewed history intact; `mise run ci` passes (lychee's offline link check included).
+  - Manual (user), before merging this PR: Step 1's criterion (a), the install-over-Riffle checks listed in `learnings.md`, which the user chose on 2026-11-09 to run after merging Step 1 (Step 1 stays unticked until they pass; the Windows NSIS check is the one that must not be skipped).
   - Manual (user), right before merging this PR: rename the repository `minodisk/riffle` to `minodisk/handpic` on GitHub, then run `curl -sI https://github.com/minodisk/riffle/releases/latest/download/latest.json` and confirm a `301` to the new name. Never create a new repository named `minodisk/riffle` afterwards (that would end the redirect and strand every Riffle install). Update the local remotes (`git remote set-url`).
   - Implementation approach:
     - `crates/app/tauri.conf.json`: `productName`, window `title`, updater `endpoints`, and `identifier` → `com.minodisk.handpic`. Keep `pubkey`. The identifier change and the migration (Step 1) must ship in the same release, which this ordering guarantees: Step 1 is merged first and inert, this step makes it live.
@@ -141,15 +142,15 @@ and what is kept.
 ## Risks
 
 - **Repository rename and the redirect.** Old installs depend on `github.com/minodisk/riffle` redirecting forever. Any new repository under that name ends the redirect and strands every unupdated Riffle. GitHub Pages, Discussions links in the issue templates and `tools/stats/snapshot.sh` follow the rename through redirects, but the plan updates them anyway.
-- **Windows hook correctness.** The pre-install hook runs inside the updater's passive `/P /UPDATE` run after Riffle quit. If the old uninstaller prompts (it should not under `/P`) the update would hang silently; test on a real Riffle 1.10.0 install before merging Step 1.
+- **Windows hook correctness.** The pre-install hook runs inside the updater's passive `/P /UPDATE` run after Riffle quit. If the old uninstaller prompts (it should not under `/P`) the update would hang silently; test on a real Riffle 1.10.0 install before merging Step 2.
 - **MSI UpgradeCode.** If the pinned value does not match the Riffle MSI, MSI-installed users get a side-by-side install. The value must be read from the actual released MSI, not recomputed.
 - **Trademark gate timing.** Step 1 is safe to merge before the gate (no visible change); Steps 2–5 are not. If the search finds a conflict, Step 1's config is name-agnostic enough to reuse under another name.
 - **The migration runs before the logger.** A failure is shown only in the error dialog (and stderr, discarded on a Windows release build), and a panic inside the migration would leave no trace in `Handpic.log`.
 - **macOS folder grants reset.** TCC keys on the bundle identifier; after the update macOS asks again for the folders the user opened. No code can carry this over; the "Upgrading from Riffle" paragraph says so.
 - **Identifier must change together with the migration.** Step 1 is merged first and inert, Step 2 flips the identifier; neither may ship without the other in the release that changes the identifier.
-- **Riffle's uninstaller and the old data on Windows.** An interactive uninstall with the checkbox ticked deletes `com.minodisk.riffle`; the hook's passive run must not. Confirm on the real 1.10.0 uninstaller before merging Step 1.
+- **Riffle's uninstaller and the old data on Windows.** An interactive uninstall with the checkbox ticked deletes `com.minodisk.riffle`; the hook's passive run must not. Confirm on the real 1.10.0 uninstaller before merging Step 2.
 - **Landing page lint.** `vp check` is type-aware and may reject a plain `site/main.js`; either ignore `site/**` in `vite.config.ts` or write the file so it passes. Decide in Step 4.
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 implemented and locally reviewed; merged with criterion (a), the manual per-OS install checks, still pending and moved in front of Step 2's merge by the user's decision.
