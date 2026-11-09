@@ -3769,6 +3769,7 @@ dependencies = [
  "objc2-foundation",
  "percent-encoding",
  "reqwest",
+ "rfd",
  "riffle-core",
  "rmcp",
  "rusqlite",

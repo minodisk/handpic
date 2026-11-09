@@ -57,11 +57,12 @@ is 1, so the hook's `/P` run should not stop on a dialog there.
 - The macOS leftovers must not be removed when the old identifier equals the
   new one, so `run` filters that identifier out before anything else, and the
   deletion sits behind the filter.
-- A failed pair still lets the app start, which creates fresh files in the new
-  folder, so `migrate_pair` writes a `.migration-pending` marker there before
-  moving and removes it after the old folder is gone; a launch that finds it
-  lets the remaining source files replace the destination's. Without a marker
-  (decision 9) the destination still wins.
+- A failed pair does not let the app start: `main` shows an error dialog and
+  exits, so nothing is created in the new folder next to the only real copy
+  (an empty `index.sqlite`, a WAL, `settings.json`). The next launch resumes
+  and an existing destination file always wins, which is right because it is
+  either a complete file from the earlier run or Handpic's own (decision 9).
+  A WAL then always ends up next to the database it came from.
 - The migration also removes a stale `<dest>.migrating` before moving, so a
   resumed run whose rename succeeds cannot leave one behind.
 
@@ -128,6 +129,7 @@ code. The debug installers stayed in `target/debug/bundle` and were not run.
   in `crates/app/nsis/hooks.nsh` would remove it if wanted. Basis: Tauri's
   `installer.nsi`, `Section Uninstall`.
 - The migration runs before `tauri_plugin_single_instance`, so two processes
-  started together on the very first launch could both migrate. Neither can lose
-  a file (a source gone missing is reported and retried), so it was left alone.
+  started together on the very first launch could both migrate. Neither can
+  replace a file (an existing destination wins; a source gone missing is
+  reported and retried), so it was left alone.
   Basis: `crates/app/src/migrate.rs`, `crates/app/src/main.rs`.

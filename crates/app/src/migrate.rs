@@ -17,20 +17,31 @@ pub type Report = Vec<Result<String, String>>;
 
 type Rename = fn(&Path, &Path) -> io::Result<()>;
 
-pub fn run(identifier: &str) -> Report {
+/// `complete` is false when a folder of an earlier identifier could not be
+/// moved whole. The caller must then not start the app: it would create fresh
+/// files (an empty `index.sqlite`, `settings.json`, a WAL) in the new folder
+/// next to the only real copy of the user's data, and the next launch could
+/// no longer tell the two apart.
+pub struct Outcome {
+    pub report: Report,
+    pub complete: bool,
+}
+
+pub fn run(identifier: &str) -> Outcome {
     let mut report = Report::new();
+    let mut complete = true;
     for legacy in LEGACY_IDENTIFIERS.iter().filter(|id| **id != identifier) {
         let pairs = pairs_under(&base_dirs(), legacy, identifier);
         let moved = migrate_pairs(&pairs, |from, to| fs::rename(from, to));
-        #[cfg(target_os = "macos")]
         let all_moved = moved.iter().all(Result::is_ok);
+        complete &= all_moved;
         report.extend(moved);
         #[cfg(target_os = "macos")]
         if all_moved {
             report.extend(remove_macos_leftovers(legacy));
         }
     }
-    report
+    Outcome { report, complete }
 }
 
 fn base_dirs() -> Vec<PathBuf> {
@@ -73,33 +84,24 @@ fn migrate_pairs(pairs: &[(PathBuf, PathBuf)], rename: Rename) -> Report {
         .collect()
 }
 
-/// Present in `new` from the start of a pair's move until the move completes.
-/// A failed pair still lets the app start, and it creates fresh files in `new`
-/// (an empty `index.sqlite`, `settings.json`), so a launch that finds the
-/// marker knows the source is the only real copy and lets it replace them.
-const MARKER: &str = ".migration-pending";
-
 /// `old` is removed only when every entry under it was moved. Anything else
-/// leaves it for the next launch, which picks up where this one stopped.
+/// leaves it for the next launch, which picks up where this one stopped; the
+/// app does not run in between (see `Outcome`), so a destination that exists
+/// is either a complete file moved earlier or the data of a Handpic that ran
+/// before, and in both cases it wins.
 fn migrate_pair(old: &Path, new: &Path, rename: Rename) -> Result<(), String> {
-    let marker = new.join(MARKER);
-    let resuming = marker.exists();
-    fs::create_dir_all(new)
-        .and_then(|()| fs::write(&marker, b""))
-        .map_err(|e| format!("{}: {e}", marker.display()))?;
     let mut failures = Vec::new();
-    move_tree(old, new, rename, resuming, &mut failures);
+    move_tree(old, new, rename, &mut failures);
     if let Some(first) = failures.first() {
         return Err(match failures.len() - 1 {
             0 => first.clone(),
             more => format!("{first} (and {more} more)"),
         });
     }
-    fs::remove_dir_all(old).map_err(|e| format!("{}: {e}", old.display()))?;
-    fs::remove_file(&marker).map_err(|e| format!("{}: {e}", marker.display()))
+    fs::remove_dir_all(old).map_err(|e| format!("{}: {e}", old.display()))
 }
 
-fn move_tree(from: &Path, to: &Path, rename: Rename, replace: bool, failures: &mut Vec<String>) {
+fn move_tree(from: &Path, to: &Path, rename: Rename, failures: &mut Vec<String>) {
     if let Err(e) = fs::create_dir_all(to) {
         failures.push(format!("{}: {e}", to.display()));
         return;
@@ -122,9 +124,9 @@ fn move_tree(from: &Path, to: &Path, rename: Rename, replace: bool, failures: &m
         let source = entry.path();
         let dest = to.join(entry.file_name());
         match entry.file_type() {
-            Ok(kind) if kind.is_dir() => move_tree(&source, &dest, rename, replace, failures),
+            Ok(kind) if kind.is_dir() => move_tree(&source, &dest, rename, failures),
             Ok(_) => {
-                if let Err(e) = move_file(&source, &dest, rename, replace) {
+                if let Err(e) = move_file(&source, &dest, rename) {
                     failures.push(format!("{}: {e}", source.display()));
                 }
             }
@@ -134,10 +136,8 @@ fn move_tree(from: &Path, to: &Path, rename: Rename, replace: bool, failures: &m
 }
 
 /// A destination that already exists wins and the source is discarded, so the
-/// old folder can always go away, unless `replace` says the move is a resumed
-/// one: then the destination is whatever the app created since, and the source
-/// replaces it.
-fn move_file(source: &Path, dest: &Path, rename: Rename, replace: bool) -> io::Result<()> {
+/// old folder can always go away.
+fn move_file(source: &Path, dest: &Path, rename: Rename) -> io::Result<()> {
     let partial = partial_path(dest);
     match fs::remove_file(&partial) {
         Ok(()) => {}
@@ -145,8 +145,7 @@ fn move_file(source: &Path, dest: &Path, rename: Rename, replace: bool) -> io::R
         Err(e) => return Err(e),
     }
     match fs::symlink_metadata(dest) {
-        Ok(_) if !replace => return fs::remove_file(source),
-        Ok(_) => {}
+        Ok(_) => return fs::remove_file(source),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
@@ -334,37 +333,22 @@ mod tests {
     }
 
     #[test]
-    fn a_resumed_run_replaces_what_the_app_created_meanwhile() {
-        let root = temp_root("replace");
+    fn a_failed_pair_resumes_without_replacing_what_landed() {
+        let root = temp_root("resume-landed");
         let (old, new) = pair(&root);
+        // The copy landed but removing the source failed; nothing ran since.
+        write(&old.join("settings.json"), "old");
+        write(&new.join("settings.json"), "old");
         write(&old.join("index.sqlite"), "db");
-        write(&old.join("sub/settings.json"), "settings");
-        // What a failed first run and the app's start since leave behind.
-        write(&new.join(MARKER), "");
-        write(&new.join("index.sqlite"), "");
-        write(&new.join("sub/settings.json"), "default");
+        write(&old.join("index.sqlite-wal"), "wal");
         let report = migrate_pairs(&[(old.clone(), new.clone())], real_rename);
         assert!(all_moved(&report), "{report:?}");
         assert!(!old.exists());
-        assert!(!new.join(MARKER).exists());
         assert_eq!(fs::read_to_string(new.join("index.sqlite")).unwrap(), "db");
         assert_eq!(
-            fs::read_to_string(new.join("sub/settings.json")).unwrap(),
-            "settings"
+            fs::read_to_string(new.join("index.sqlite-wal")).unwrap(),
+            "wal"
         );
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn a_resumed_copy_replaces_the_destination_too() {
-        let root = temp_root("replace-copy");
-        let (old, new) = pair(&root);
-        write(&old.join("index.sqlite"), "db");
-        write(&new.join(MARKER), "");
-        write(&new.join("index.sqlite"), "");
-        let report = migrate_pairs(&[(old.clone(), new.clone())], cross_volume);
-        assert!(all_moved(&report), "{report:?}");
-        assert_eq!(fs::read_to_string(new.join("index.sqlite")).unwrap(), "db");
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -374,13 +358,6 @@ mod tests {
         assert!(line.contains("pair="), "{line}");
         assert!(line.contains(&*source.to_string_lossy()), "{line}");
         assert!(source.exists());
-        assert!(source
-            .ancestors()
-            .nth(2)
-            .unwrap()
-            .join("new")
-            .join(MARKER)
-            .exists());
     }
 
     #[cfg(unix)]
@@ -457,7 +434,8 @@ mod tests {
 
     #[test]
     fn the_current_identifier_is_not_a_migration() {
-        assert!(run(LEGACY_IDENTIFIERS[0]).is_empty());
+        let outcome = run(LEGACY_IDENTIFIERS[0]);
+        assert!(outcome.report.is_empty() && outcome.complete);
     }
 
     #[cfg(target_os = "macos")]

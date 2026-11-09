@@ -659,10 +659,30 @@ struct SidecarError {
 
 fn main() {
     let context = tauri::generate_context!();
-    let migration = migrate::run(&context.config().identifier);
+    let outcome = migrate::run(&context.config().identifier);
+    let migration = outcome.report;
     for line in &migration {
         let (Ok(line) | Err(line)) = line;
         eprintln!("data migration: {line}");
+    }
+    if !outcome.complete {
+        // Starting would create fresh data files next to the only real copy.
+        let details: Vec<&str> = migration
+            .iter()
+            .filter_map(|line| line.as_ref().err().map(String::as_str))
+            .collect();
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Error)
+            .set_title("Riffle")
+            .set_description(format!(
+                "Riffle could not move its data to the new location, so it did not start.                  Nothing was deleted; close any program that uses these files and start                  Riffle again.
+
+{}",
+                details.join("
+")
+            ))
+            .show();
+        std::process::exit(1);
     }
     let builder = tauri::Builder::default()
         // Registered first, as the plugin requires: a second launch would
