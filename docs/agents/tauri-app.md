@@ -2756,13 +2756,16 @@ worktree, although `node_modules/.bin/vp` already existed on disk.
 - Fix: run `pnpm install --frozen-lockfile` (it may report "Already up to
   date" and still fix it); `mise run ci` then passes. Plain `pnpm` may not be
   on the Git Bash `PATH` in a fresh worktree, so run it as
-  `mise exec -- pnpm install --frozen-lockfile`.
+  `mise exec -- pnpm install --frozen-lockfile`. The same goes for ad-hoc
+  `vp` runs: use `mise exec -- pnpm exec vp {check,fmt,test,build}` from the
+  repository root, because `crates/app/ui` is not a pnpm workspace package.
 - Order matters: if `mise run fmt` ran before `node_modules` existed it exits 1
   without formatting, and `mise run ci`'s lint then flags the unformatted files
   (a new test file, for example). After `ci`'s `pnpm install`, re-run
   `mise run fmt`, then `ci` again. Better, install first and run `fmt` after.
 - Source: `docs/plans/_archived/20260924-focus-mark-af-frame/learnings.md`,
   Step 1; `docs/plans/_archived/20261015-sequence-summary-lines/learnings.md`,
+  Step 1; `docs/plans/_archived/20261109-prefetch-useless-spread/learnings.md`,
   Step 1.
 
 ### On Windows, run `vp` through `node`, not `pnpm exec`, in mise tasks (Hit)
