@@ -33,6 +33,34 @@
   PowerShell did not reach the window; a `keybd_event` after taking the
   foreground did.
 
+## Step 2
+
+- The plan's budget for `orient` (<= 15 ms on 4000x3000) could not be met by
+  either loop it named: a plain loop took 62 ms and the tiled one about 21 ms, a
+  fixed cost of about 8 ms being the output's first touch. Tiles over 8
+  `thread::scope` threads take about 10 ms (measured numbers in
+  `docs/agents/native-app.md`). The thread pool is the one departure from
+  "the simpler loop"; the plan's other fallback (rotate after a scaled decode)
+  stays for Step 5.
+- The spike's `load` did not guard mozjpeg, which unwinds on corrupt input;
+  `guarded` catches that, or an unreadable file would leave the request in
+  flight. A garbage `.ARW` shows `error: …` and paging continued in the run.
+- Checked by running the release build on Windows: the keys (`right`, `left`,
+  `home`, `end`, `q`, plus non-extended `VK_RIGHT` / `VK_LEFT` for the keypad)
+  through injected `keybd_event` events, the wraparound, the error line, the
+  folder picker (`cx.prompt_for_paths`; Enter on a typed path navigates, a
+  second Enter selects), and 6 / 8 orientation on ARW and RAF portrait files by
+  screenshot: every file came up upright. Rapid presses (25 at 30 ms) did not
+  hang and painted only the frames that were still current.
+- Not confirmed: moire on the RAF fit view. One 1:1 crop of a 4416x2944 RAF fit
+  shows none, but it is a low-detail frame and nothing was compared with the
+  Tauri app; Step 3 owns that check. No orientation-3 sample turned up in the
+  ARW / RAF samples, so 3 rests on its unit test.
+- Timings here are from small, uncontrolled runs (n=4, cold cache for the first
+  read), so they are not the Step 3 measurement.
+- `hop` measures only `received - finished`, as the spike's did: the time a
+  background task sits queued before it starts is in neither `hop` nor `read`.
+
 ## Deferred issues (todo candidates)
 
 - **Pending check: the first `native` CI job on GitHub.** What to verify: on
@@ -42,3 +70,18 @@
   image or came from `ilammy/setup-nasm`. Record the cold run's duration and
   raise the job's timeout if it exceeds 30 minutes. Step 1's checkbox was ticked
   on the criteria verifiable locally.
+
+- **CI runs cargo directly instead of `mise run native:check`.** Issue: the CI
+  `native` job in `.github/workflows/ci.yml` runs `mise exec rust@1.98.1 -- cargo
+  clippy` and `cargo test` directly, because `nasm` was not visible to
+  `crates/native/build.rs` through `mise run native:check`'s task shell on the
+  runner (the exact point where `PATH` was lost is unconfirmed), while local
+  checks use the `native:*` tasks. Goal: find where `PATH` is lost and have CI
+  run `mise run native:check` again. Basis: Step 2's task brief. Paths:
+  `.github/workflows/ci.yml`, `mise.toml`, `crates/native/build.rs`.
+- **Pending manual check: the keypad's arrows on a physical keyboard.** What to
+  verify: on Windows, with NumLock off, the keypad's Right and Left page the
+  preview in `riffle-native`, as the main arrows do. Steps: open a folder and
+  press them; expect the status line to change file. Step 2's checkbox was
+  ticked on injected non-extended `VK_RIGHT` / `VK_LEFT` events, which gave the
+  right behaviour; no physical keypad was pressed.

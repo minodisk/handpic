@@ -70,8 +70,10 @@ GPU.
 
 ### Textures have one mip level (Inferred)
 
-A large downscale (a RAF fit to a 1600 px window) may alias; not yet confirmed
-visually.
+A large downscale (a RAF fit to a 1600 px window) may alias. Not settled: one
+captured 1:1 crop of a 4416x2944 RAF fit view, a clapboard wall without fine
+repeating texture, shows no moire, but no comparison with the Tauri app or a
+hard-case image has been made; the gpui-port plan's Step 3 makes that check.
 
 ### The image sprite cannot rotate (Inferred)
 
@@ -82,12 +84,57 @@ does. A rotation has to happen on the pixels before painting.
 
 `cx.defer` from the paint closure runs after the frame's `draw()` and
 `present()`, which is the stamp the spike's timings used. It is a workaround
-and may change with a GPUI bump.
+and may change with a GPUI bump. `crates/native` follows that pattern: the
+paint closure stamps `paint_started` and `paint_finished`, then the deferred
+callback stamps `presented`, prints the `page` line and releases the retired
+images with `cx.drop_image`. Doing the release earlier than that deferred
+callback could pull a texture out from under the frame being presented.
+
+### Rotating on the CPU needs threads for a RAF's budget (Measured)
+
+Windows, release, idle, 31 runs of synthetic BGRA buffers, p50 in ms, 90 degree
+turns (orientation 6 / 8): 1616x1080 plain loop 3.2, 64-pixel tiles 1.6, tiles
+over 8 threads 0.9; 4000x3000 plain 62, tiles 21, tiles over 8 threads 9-11;
+4416x2944 plain 70, tiles 23, tiles over 8 threads 12-13. Allocating the output
+alone costs about 8 ms at 4000x3000 (a plain copy of the buffer takes that long).
+In the app on real portrait files: 1616x1080 ARW `orient` 1.3-1.5 ms, 1920x1280
+RAF about 2.2 ms, 4000x3000 RAF (GFX 100) 7.6-8.5 ms.
+
+- Rule: `orient.rs` tiles over 8 scoped threads because the tiled loop alone
+  misses the plan's 15 ms budget on a 4000x3000 RAF; orientation 1 returns the
+  buffer without a copy and 3 reverses in place.
+
+### mozjpeg reports corrupt input by unwinding (Inferred)
+
+`mozjpeg` 0.10's decoder calls `resume_unwind` on a libjpeg fatal error, so a
+corrupt file would otherwise end the background task and leave the pager's
+request in flight forever.
+
+- Rule: wrap every decode in `catch_unwind`, as `load` does through `guarded`.
+
+### Key names on Windows are lowercase (Measured)
+
+`KeyDownEvent.keystroke.key` is `"right"`, `"left"`, `"home"`, `"end"` and `"q"`,
+checked with injected `keybd_event` key events in the running app. A non-extended
+`VK_RIGHT` / `VK_LEFT`, the keypad's, gives the same names.
 
 ### IME handling is unverified (Inferred)
 
 It exists in `gpui_windows`; nothing has exercised it yet.
 
-### The native folder picker is `cx.prompt_for_paths` (Inferred)
+### The native folder picker is `cx.prompt_for_paths` (Measured)
 
-It takes `PathPromptOptions`.
+It takes `PathPromptOptions`. With `directories: true` and `files: false` it
+is the OS folder dialog; Enter on a typed path navigates into the folder, and a
+second Enter selects it.
+
+## Timings
+
+### `keypressToPixels` differs from the Tauri app's (Inferred)
+
+The `page` line uses the Tauri line's `wait` / `read` / `decode` meanings,
+collapses `ipc + post + worker` into `hop` (the time from the background result
+to the update on the main thread), and splits `draw` into
+`frameWait + paint + present`. `keypressToPixels` includes `present`; Tauri's
+stops at `drawImage`. It starts at the latest press of the file that ended up
+shown.

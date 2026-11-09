@@ -181,7 +181,7 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
     - `cargo:warning` text from `build.rs` is the only place the SIMD
       state is visible; do not try to read `mozjpeg-sys` features from the
       native crate.
-- [ ] Step 2: Open a folder and page its RAW previews with the arrow keys, oriented, with per-page stage timings
+- [x] Step 2: Open a folder and page its RAW previews with the arrow keys, oriented, with per-page stage timings
   - Done when:
     - `riffle-native [<folder>] [--auto N] [--size WxH] [--max N]`: with a
       folder argument it lists that folder; without one it shows the native
@@ -540,3 +540,4 @@ summary and `cx.quit()` when N presses are done.
 ## Progress
 
 - (2026-11-09) Step 1 complete
+- (2026-11-09) Step 2 complete
