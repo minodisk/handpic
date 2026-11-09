@@ -4177,6 +4177,7 @@ dependencies = [
  "gpui_platform",
  "image",
  "mozjpeg",
+ "natord",
  "riffle-core",
 ]
 
