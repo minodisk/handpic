@@ -48,7 +48,7 @@ and what is kept.
 | Cargo crate names `riffle-core` / `riffle-app` / `riffle-cli`, binary `riffle-cli`, `RIFFLE_*` test env vars | **Rename (Step 3)** | Internal only, but the repository stops saying "riffle" anywhere new contributors look; the log targets and `CONTRIBUTING.md` follow. Mechanical. |
 | Updater endpoint `github.com/minodisk/riffle/...` | **Rename to `minodisk/handpic`** | GitHub redirects the old URL and `tauri-plugin-updater` uses reqwest's default redirect policy, so old installs still find `latest.json`. |
 | Updater `pubkey` | **Keep** | The signing key is unchanged; a new key would make every old install reject the update. |
-| App icons | **Keep** | Not name-bearing. A new icon is a separate piece of work. |
+| App icons | **Keep for now** | The artwork draws `RIFFLE 60FPS CULLER` in the film border, so it is name-bearing. Regenerating needs macOS (DIN Condensed Bold, Chrome), so it is deferred as a separate piece of work (see `learnings.md`, Deferred issues). |
 | `CHANGELOG.md`, `docs/plans/_archived/**`, `todo.md` history | **Keep as history** | Rewriting history helps nobody. |
 
 ### Decisions made by the user (2026-11-09)
