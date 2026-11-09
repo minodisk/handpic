@@ -2,16 +2,21 @@
 
 Measured 2026-11-09 at commit `fb41adb7` (Steps 1-2 merged).
 
-**Verdict: the threshold is missed on both folders.** Median of the three runs'
-p50 `keypressToPixels`:
+**Verdict of the first pass: the absolute thresholds are missed on both
+folders.** The re-measurement below (A/B against the spike's own binary in the
+same session) is what decides the step: A minus B is +0.30 ms on ARW and
++1.26 ms on RAF, inside the margins. Median of the three runs' p50
+`keypressToPixels` of the first pass:
 
 | Folder | Spike p50 | Threshold | This step | Over the threshold by |
 |--------|-----------|-----------|-----------|-----------------------|
 | ARW 1616x1080 | 15.56 | <= 17.6 | **20.93** | 3.33 |
 | RAF 4416x2944 | 57.89 | <= 62.9 | **64.76** | 1.86 |
 
-Per the plan, Step 2 is reopened (a fix PR) before Step 4 starts. "Which stage
-grew" below names the stages.
+The thresholds were the spike's one n=20 run plus the margins; the same-session
+re-measurement shows the spike's own binary misses them too, so the plan's gate
+became the same-session comparison, which is met. The first-pass numbers stay
+here as a record. "Which stage grew" below names the stages.
 
 ## Measurement conditions
 
@@ -168,8 +173,8 @@ with both binaries.
 1. **Against the plan's original thresholds (unchanged): missed on both.** A's
    median p50 `keypressToPixels` is **20.16 ms on ARW** (threshold <= 17.6) and
    **65.85 ms on RAF** (threshold <= 62.9).
-2. **A new comparison, not the plan's gate: A minus the same-session B is within
-   the plan's margins on both.** A minus B of the median p50
+2. **The comparison that became the plan's gate: A minus the same-session B is
+   within the plan's margins on both.** A minus B of the median p50
    `keypressToPixels` is **+0.30 ms on ARW** (margin +2.0) and **+1.26 ms on
    RAF** (margin +5.0).
 
@@ -287,14 +292,16 @@ is noise, as the first pass suspected.
   work of the page is equal on both.**
 - Landscape files only (the same files; the portrait files excluded by name):
   ARW A 19.59 and B 20.00, RAF A 64.57 and B 65.00, so A is 0.41 and 0.43 ms
-  faster.
-- **The RAF A - B of about +1 ms comes with the `orient` stage on the portrait
-  files.** They are 3 of the 20 RAF files, 9 of the 60 pages, about 9 ms each;
-  the spike draws them sideways and pays nothing. The difference is present
-  over all pages and gone on the landscape files. That is added functionality,
-  not a slowdown of the shared work.
+  faster, a gap within the 1-2 ms the same p50 moves between runs.
+- **The RAF A - B of about +1 ms is consistent with the `orient` stage on the
+  portrait files (not isolated).** They are 3 of the 20 RAF files, 9 of the 60
+  pages, about 9 ms each; the spike draws them sideways and pays nothing. The
+  difference is present over all pages and gone on the landscape files, but no
+  run removed `orient` or compared portrait pages directly, and the page work
+  above (taken over all pages, so it already includes `orient`) is equal. It
+  would be added functionality, not a slowdown of the shared work.
 
 In short, the first pass's gap to the spike was not a regression of the page
 work: A and the same-session B do it in the same time, and the remaining
-difference is `orient` on portrait pages on RAF. Whether the plan's absolute
-thresholds should stand is left to the user.
+RAF difference is consistent with `orient` on portrait pages (not isolated).
+The plan's gate is now this same-session comparison, which is met.

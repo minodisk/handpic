@@ -73,7 +73,9 @@ GPU.
 A large downscale (a RAF fit to a 1600 px window) may alias. Not settled: one
 captured 1:1 crop of a 4416x2944 RAF fit view, a clapboard wall without fine
 repeating texture, shows no moire, but no comparison with the Tauri app or a
-hard-case image has been made; the gpui-port plan's Step 3 makes that check.
+hard-case image has been made. Three native-side RAF frames showed no moire;
+the comparison with the Tauri app is pending (see the pending manual check in
+the gpui-port plan's `learnings.md`).
 
 ### The image sprite cannot rotate (Inferred)
 

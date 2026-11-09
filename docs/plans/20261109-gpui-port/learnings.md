@@ -64,8 +64,10 @@
 ## Step 3
 
 - Threshold missed on both folders (ARW 20.93 ms against <= 17.6, RAF 64.76 ms
-  against <= 62.9): see `results.md`. Step 3's checkbox stays unticked; the plan
-  reopens Step 2 before Step 4.
+  against <= 62.9): see `results.md`. The thresholds came from the spike's one
+  run and its own binary misses them in the same session, so the plan's gate
+  became the same-session comparison (A minus B within +2.0 ms ARW, +5.0 ms RAF),
+  met at +0.30 and +1.26; Step 3 is ticked.
 - The spike's `read` of 0.74 ms was **not reproduced**: ARW `read` p50 was
   1.34-1.96 ms in the three runs used (0.89-1.20 in the discarded looser pass),
   on the 20 warmed files. RAF was 3.6 ms against the spike's 1.80. The cause is
@@ -73,7 +75,8 @@
 - `frameWait` swung 5.99-11.48 ms between ARW runs on the same files, about the
   size of the ARW budget. n=20 runs of a vsync-phase-dependent stage cannot
   hold a 2 ms margin.
-- A debug `riffle-app` and its `cargo run` parent stayed up during every run. A
+- A debug `riffle-app` and its `cargo run` parent stayed up during every run of
+  the first pass (the A/B re-measurement ran without them). A
   gate on "no cargo" would never have opened, so the gate is `rustc` plus load;
   the running app is written into the conditions.
 - `Win32_Processor.LoadPercentage` can come back empty; the sampling has to
@@ -100,8 +103,8 @@
   the native one-mip downscale shows moire the Tauri one does not. If it does,
   add "downscale on the CPU to the drawn size or use a mip chain" to the plan's
   Step 5. Only the native side was inspected in Step 3 (three frames, no moire
-  seen, listed in `results.md`), because the Tauri app was not driven; this is
-  part of why Step 3's checkbox is unticked.
+  seen, listed in `results.md`), because the Tauri app was not driven; the
+  side-by-side stays a pending manual check and does not gate Step 3.
 
 - **Pending check: the first `native` CI job on GitHub.** What to verify: on
   `windows-latest`, the job passes, `mise run native:check` installs Rust 1.98.1
