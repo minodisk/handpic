@@ -356,3 +356,4 @@ archived; no non-release PR is open (`#928` is release-please's).
 
 - (2026-11-09) Step 1 complete
 - (2026-11-09) Step 2 complete
+- (2026-11-09) Step 3 complete
