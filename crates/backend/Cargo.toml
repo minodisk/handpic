@@ -9,6 +9,17 @@ rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+trash = "5.2.9"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "NSError",
+  "NSFileManager",
+  "NSString",
+  "NSURL",
+] }
+percent-encoding = "2.3.1"
 
 [dev-dependencies]
 mozjpeg = "0.10"

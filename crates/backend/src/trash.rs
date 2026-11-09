@@ -222,7 +222,7 @@ impl Restored {
 
 /// The sidecars of `format`'s kinds that exist for `path`, from the stats
 /// keyed by lowercase file name.
-pub(crate) fn sidecars_of<'a>(
+pub fn sidecars_of<'a>(
     format: SidecarFormat,
     path: &str,
     sidecars: &'a HashMap<String, SidecarStat>,
@@ -816,7 +816,7 @@ mod tests {
         Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH,
         RAW_NOT_RESTORED,
     };
-    use crate::commands::{read_listing, stat_sidecars};
+    use crate::listing::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
     use std::cell::RefCell;
     use std::path::{Path, PathBuf};

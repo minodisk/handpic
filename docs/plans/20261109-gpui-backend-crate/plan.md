@@ -228,7 +228,7 @@ archived; no non-release PR is open (`#928` is release-please's).
       the path `main.rs` computes from `app.path()`, which stays in the app.
     - `sidecar::Writer::spawn(index, log_fn)` is already callback-shaped;
       nothing to abstract.
-- [ ] Step 3: Move `trash` with the listing helpers, `output` with `canonicalize`, and `diagnostics` without its command
+- [x] Step 3: Move `trash` with the listing helpers, `output` with `canonicalize`, and `diagnostics` without its command
   - Done when:
     - New `crates/backend/src/listing.rs` holds, moved from `commands.rs`
       and `folders.rs`: `Listing`, `read_listing`, `stat_sidecars`, `Media`
@@ -356,3 +356,4 @@ archived; no non-release PR is open (`#928` is release-please's).
 
 - (2026-11-09) Step 1 complete
 - (2026-11-09) Step 2 complete
+- (2026-11-09) Step 3 complete

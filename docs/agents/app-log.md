@@ -6,8 +6,9 @@ anything that matters is written here, and the failures an agent most needs
 carry a fixed, greppable prefix (`panic:`, `uncaught-js:`, `invariant:`).
 
 The log is set up by `tauri_plugin_log` in `crates/app/src/main.rs`; the
-prefixed lines come from `crates/app/src/diagnostics.rs` and
-`crates/app/ui/src/uncaught.ts`.
+prefixed lines come from `crates/backend/src/diagnostics.rs` (the panic hook
+and the `invariant!` macro), `crates/app/src/diagnostics.rs` (`log_frontend`)
+and `crates/app/ui/src/uncaught.ts`.
 
 ## Where the file is
 
@@ -45,7 +46,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 - The time is UTC (the plugin's default `TimezoneStrategy::UseUtc`), not the
   user's local time.
 - `target` is the Rust module path that logged the line: `riffle_app::commands`,
-  `riffle_backend::index`, `riffle_app::diagnostics`, `riffle_app` (the
+  `riffle_backend::index`, `riffle_backend::diagnostics`, `riffle_app::diagnostics`, `riffle_app` (the
   frontend's timing lines), or a dependency such as
   `tauri_plugin_updater::updater`.
 - One record is one line, except a `panic:` record when a backtrace was
@@ -82,7 +83,7 @@ survived and reported in its own words (settings falling back to defaults,
 `sidecar write failed: path=<path> <message>`, an index cache that would not
 open). The three prefixed kinds follow.
 
-### `panic:` (`ERROR`, target `riffle_app::diagnostics`)
+### `panic:` (`ERROR`, target `riffle_backend::diagnostics`)
 
 ```text
 panic: thread=<name or unnamed> location=<file>:<line>:<col> payload=<text>

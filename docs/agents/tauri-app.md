@@ -1309,8 +1309,10 @@ correctly through the same path.
 - When a frontend line needs to land in `Riffle.log`, route it through a
   command like `log_timing` rather than granting `log:default` to call the
   plugin's JS API directly. `log_frontend` in `crates/app/src/diagnostics.rs`
-  is the second such command, carrying the `uncaught-js:` and `invariant:`
-  lines (see [`app-log.md`](./app-log.md)).
+  (the panic hook and the `invariant!` macro live in
+  `crates/backend/src/diagnostics.rs`) is the second such command, carrying
+  the `uncaught-js:` and `invariant:` lines (see
+  [`app-log.md`](./app-log.md)).
 - Source: `docs/plans/_archived/20260921-page-latency-timing/learnings.md`,
   Step 2.
 
@@ -1526,7 +1528,7 @@ JPEG-only (view-only) folder never lists anything.
 - **`outputs_of(dir, files)` feeds a destructive filter, so it never
   guesses.** The `No output` filter section can be piped straight into
   `Move to Trash…`, so a wrong `no` trashes a file that has an export.
-  `output.rs` therefore does not reuse `read_listing` or `folders::is_file`,
+  `output.rs` therefore does not reuse `read_listing` or `listing::is_file`,
   which swallow per-entry errors (`entries.flatten()`, `kind` returning
   `None`); it propagates every read error. A missing `dir` is `Ok(None)`, any
   other failure to read it is `Err`, and a dangling symlink named `Output` is

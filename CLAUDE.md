@@ -105,10 +105,26 @@ the separate `embeddings` table (valid while `EMBED_VERSION` and the file's
 size / mtime match) and streams `embed-progress` / `embed-done`, without
 counting as scanning; the passes run on worker threads below normal OS
 priority (the second and third lower still) and take the on-screen files first
-through the shared `ScanFocus` handle, and `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
+through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 `sidecarFormat` key of the settings store, next to the configurable
-`xmp:Label` names per color persisted in the `labelNames` key), `crates/app`
+`xmp:Label` names per color persisted in the `labelNames` key, `src/listing.rs`
+the one `read_dir` of a folder (its RAW files, or its JPEGs when it holds no
+RAW, and the sidecars next to them) and `canonicalize`, `src/trash.rs` the
+move behind the strip's `Move to Trash…` (it groups the given files of one
+folder, each RAW with the `.xmp` and `.dop` sidecars that exist for it and a
+JPEG alone, and moves them to the OS trash, RAW first, in chunks on Windows
+(`run_chunked`), reporting through a callback the app's `trash-progress`
+events come from, recording every run that moved something in `Runs`, the
+newest 100, which `trash_rejected_undo` takes one from to restore its files,
+RAW before its sidecars, never overwriting, keeping what came back for
+`trash_rejected_redo` to move to the Trash again), `src/output.rs` which of a
+folder's files have an export in its `Output` or `Output-sequenced` subfolder,
+by file stem, with PhotoLab's copy and DeepPRIME suffixes (no answer without
+such a folder, an error when one cannot be read whole), and
+`src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+those failures in `Riffle.log` under greppable prefixes (see
+`docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
 (persisted in the `aiEnabled` key, set by `set_ai_enabled`) and the download
 of the embedding model into the app's local data dir on the first enable,
@@ -126,7 +142,10 @@ collapsed into one rerun; the shared weights and the per-genre offsets stored in
 the running scan the current file and the strip's visible range, `preview`,
 which pauses the scan's reads (`ReadSlots`, capped at `READ_SLOTS`) around its
 own, `cancel_scan`, which stops the running scan short of its third pass for a
-held Move to Trash or Delete Permanently, `delete_files`, the strip's
+held Move to Trash or Delete Permanently, `trash_files`, the move of the
+backend's `trash` module behind the strip's `Move to Trash…`, with
+`trash_rejected_undo` and `trash_rejected_redo`, streaming `trash-progress`
+events, `delete_files`, the strip's
 `Delete Permanently…`, `trash_files`'s guards and grouping with
 `std::fs::remove_file` and no recorded run (`trash::delete_for_good`), `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
 draws on demand through the scan's `detect_around` without touching the index,
@@ -160,16 +179,7 @@ size, collision on another size, undated), and `import_run` /
 `src/watch.rs`
 the open folder's watcher and `src/treewatch.rs` the folder tree's watchers on
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
-`src/trash.rs` the
-move behind the strip's `Move to Trash…` and the `trash_files` command (it
-groups the given files of one folder, each RAW with the `.xmp` and `.dop`
-sidecars that exist for it and a JPEG alone, and moves them to the OS trash,
-RAW first, in chunks on Windows (`run_chunked`), streaming `trash-progress`
-events (as `trash_rejected_redo` does),
-recording every run that moved something in `Runs`, the newest
-100, which `trash_rejected_undo` takes one from to restore its files, RAW
-before its sidecars, never overwriting, keeping what came back for
-`trash_rejected_redo` to move to the Trash again), `src/foldersidecars.rs`
+`src/foldersidecars.rs`
 the folder menu's `Rewrite Sidecars from Index…` and `Delete Sidecars…`
 commands (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
 folder's index rows dirty and push them through the sidecar writer, patching
@@ -179,18 +189,13 @@ OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
 `Sequence JPEG Timestamps…` commands (`sequence_preview`,
 `sequence_run`, `sequence_cancel`) and their `sequence-progress` /
 `sequence-done` events, `src/output.rs` the `outputs_of` command behind the
-strip's `Output` filter (which of a folder's files have an export in its
-`Output` or `Output-sequenced` subfolder, by file stem, with PhotoLab's copy
-and DeepPRIME suffixes; no answer without such a folder, an error when one
-cannot be read whole), and
+strip's `Output` filter, over the backend's `output`, and
 `src/mcp.rs` the MCP
 companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
 key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
-the panic hook, the `log_frontend` command that writes the frontend's
-`uncaught-js:` and `invariant:` lines, and the `invariant!` helper, which put
-those failures in `Riffle.log` under greppable prefixes (see
-`docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
+the `log_frontend` command that writes the frontend's `uncaught-js:` and
+`invariant:` lines to `Riffle.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
 current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's CPU
 and disk sampler: `set_perf_sampling` starts or stops one thread that emits
 Riffle's process CPU and the system's, each 0–100 %, Riffle's read
