@@ -33,7 +33,24 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "nsis/hooks.nsh"
+      },
+      "wix": {
+        "upgradeCode": "15df1a23-08b6-56be-b9df-b38d92f7dd75"
+      }
+    },
+    "linux": {
+      "deb": {
+        "replaces": ["riffle"],
+        "conflicts": ["riffle"]
+      },
+      "rpm": {
+        "obsoletes": ["riffle"]
+      }
+    }
   },
   "plugins": {
     "updater": {

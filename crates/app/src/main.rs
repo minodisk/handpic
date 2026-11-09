@@ -10,6 +10,7 @@ mod foldersidecars;
 mod import;
 mod index;
 mod mcp;
+mod migrate;
 mod output;
 mod perf;
 mod photolab;
@@ -657,6 +658,31 @@ struct SidecarError {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    let outcome = migrate::run(&context.config().identifier);
+    let migration = outcome.report;
+    for line in &migration {
+        let (Ok(line) | Err(line)) = line;
+        eprintln!("data migration: {line}");
+    }
+    if !outcome.complete {
+        // Starting would create fresh data files next to the only real copy.
+        let details: Vec<&str> = migration
+            .iter()
+            .filter_map(|line| line.as_ref().err().map(String::as_str))
+            .collect();
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Error)
+            .set_title("Riffle")
+            .set_description(format!(
+                "Riffle could not move its data to the new location, so it did not start. \
+                 Nothing was deleted; close any program that uses these files and start \
+                 Riffle again.\n\n{}",
+                details.join("\n")
+            ))
+            .show();
+        std::process::exit(1);
+    }
     let builder = tauri::Builder::default()
         // Registered first, as the plugin requires: a second launch would
         // contend with this one for the SQLite index and the sidecar writer,
@@ -692,8 +718,17 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::new().build());
     builder
         .on_menu_event(app_menu::on_event)
-        .setup(|app| {
+        .setup(move |app| {
             diagnostics::install_panic_hook();
+            for line in &migration {
+                match line {
+                    Ok(line) => log::info!("data migration: {line}"),
+                    Err(line) => log::warn!(
+                        "{}",
+                        diagnostics::invariant_line("data migration", format_args!("{line}"))
+                    ),
+                }
+            }
             // The window is created hidden so the window-state plugin can
             // restore its geometry first. The plugin shows it afterwards, but
             // not when the saved state has `visible: false` (a quit while
@@ -883,7 +918,7 @@ fn main() {
             perf::set_perf_sampling,
             diagnostics::log_frontend
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // A judgment may still be inside the writer's debounce window

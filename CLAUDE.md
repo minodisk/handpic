@@ -189,7 +189,8 @@ key, its tools, and the bridge that asks the main window over the
 the panic hook, the `log_frontend` command that writes the frontend's
 `uncaught-js:` and `invariant:` lines, and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
-`docs/agents/app-log.md`), and `src/perf.rs` the performance overlay's CPU
+`docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
+current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's CPU
 and disk sampler: `set_perf_sampling` starts or stops one thread that emits
 Riffle's process CPU and the system's, each 0–100 %, Riffle's read
 throughput in bytes per second and the system's disk busy time, 0–100 %
