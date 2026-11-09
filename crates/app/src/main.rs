@@ -10,6 +10,7 @@ mod foldersidecars;
 mod import;
 mod index;
 mod mcp;
+mod migrate;
 mod output;
 mod perf;
 mod photolab;
@@ -657,6 +658,12 @@ struct SidecarError {
 }
 
 fn main() {
+    let context = tauri::generate_context!();
+    let migration = migrate::run(&context.config().identifier);
+    for line in &migration {
+        let (Ok(line) | Err(line)) = line;
+        eprintln!("data migration: {line}");
+    }
     let builder = tauri::Builder::default()
         // Registered first, as the plugin requires: a second launch would
         // contend with this one for the SQLite index and the sidecar writer,
@@ -692,8 +699,17 @@ fn main() {
         .plugin(tauri_plugin_store::Builder::new().build());
     builder
         .on_menu_event(app_menu::on_event)
-        .setup(|app| {
+        .setup(move |app| {
             diagnostics::install_panic_hook();
+            for line in &migration {
+                match line {
+                    Ok(line) => log::info!("data migration: {line}"),
+                    Err(line) => log::warn!(
+                        "{}",
+                        diagnostics::invariant_line("data migration", format_args!("{line}"))
+                    ),
+                }
+            }
             // The window is created hidden so the window-state plugin can
             // restore its geometry first. The plugin shows it afterwards, but
             // not when the saved state has `visible: false` (a quit while
@@ -883,7 +899,7 @@ fn main() {
             perf::set_perf_sampling,
             diagnostics::log_frontend
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building tauri application")
         .run(|app, event| {
             // A judgment may still be inside the writer's debounce window
