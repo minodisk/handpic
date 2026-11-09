@@ -253,7 +253,7 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
       running app, they are lowercase in GPUI.
     - Do not add a meta pane, marks, a strip or thumbnails here; this step
       is the comparable pager and nothing more.
-- [ ] Step 3: Measure the pager against the spike on the compare folders and record the verdict
+- [x] Step 3: Measure the pager against the spike on the compare folders and record the verdict
   - Done when:
     - `results.md` in this folder holds, for
       `D:\Photos\tests\20261108-gpui-compare\ARW` (`--size 1616x1080`) and
@@ -265,17 +265,25 @@ the prefetch work in `crates/app`), `../20261108-full-size-eye-check/plan.md`,
       measurement conditions" demands (build, drive, idle, warm and how
       warmth was established, display refresh rate, GPU, SIMD on — the
       `build.rs` check having passed).
-    - **Threshold**: the median of the three runs' p50 `keypressToPixels`
-      is at most the spike's p50 + 2.0 ms on ARW (≤ 17.6 ms) and + 5.0 ms on
-      RAF (≤ 62.9 ms). p95 is recorded and discussed, not gated: the spike's
-      one run had p95 − p50 of 9-10 ms, which n=20 cannot gate. A portrait
+    - **Threshold** (changed on 2026-11-09 by the user's decision): the
+      median of the three runs' p50 `keypressToPixels` is at most the p50 of
+      the spike measured alternately in the same session, + 2.0 ms on ARW
+      and + 5.0 ms on RAF (met: + 0.30 ms and + 1.26 ms). The original
+      absolute gate (≤ 17.6 ms and ≤ 62.9 ms, from the spike's one run of
+      15.56 / 57.89 ms) was missed, and the same spike binary could not meet
+      it either (19.86 / 64.59 ms), so it could not tell a regression from
+      a change of conditions. p95 is recorded and discussed, not gated: the
+      spike's one run had p95 − p50 of 9-10 ms, which n=20 cannot gate. A portrait
       file (orientation 6 or 8) from `D:\photos\samples\<FORMAT>` is paged
       10 times and its `orient` p50 written next to the Step 2 budget.
     - A one-line visual check is recorded: the RAF fit view in the native
       window next to the Tauri app's on the same file, whether the one-mip
       downscale shows aliasing (moiré on fine texture); if it does, a
       follow-up item "downscale on the CPU to the drawn size or use a mip
-      chain" is added to the Step 5 milestone below.
+      chain" is added to the Step 5 milestone below. (Not met when the step
+      closed, by the user's decision: only the native window was inspected,
+      three frames with no visible moiré. The side-by-side with the Tauri
+      app is a pending manual check in `learnings.md`.)
     - `docs/humans/performance.md` gains a short "Native preview (GPUI)"
       subsection under "Per-page preview read" with the ARW and RAF rows and
       a pointer to `results.md`, and `performance.ja.md` the same in
@@ -401,7 +409,8 @@ them; their contents are deliberately coarse.
   deliberate chore PR whenever it is needed (a fix, a feature), never a
   side effect; `docs/agents/native-app.md` records API changes met at each
   bump.
-- **Mip levels and aliasing.** Unconfirmed; Step 3 looks, Step 5 fixes if
+- **Mip levels and aliasing.** No moiré in three native-only frames (Step 3);
+  the side-by-side with the Tauri app is pending, and Step 5 fixes it if
   needed. **IME on Windows** matters only from Step 6 (rename, label
   names); unverified until then. **No after-Present hook**: the
   `cx.defer`-from-paint timing is a workaround that may change with a GPUI
@@ -541,3 +550,4 @@ summary and `cx.quit()` when N presses are done.
 
 - (2026-11-09) Step 1 complete
 - (2026-11-09) Step 2 complete
+- (2026-11-09) Step 3 complete

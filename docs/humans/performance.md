@@ -123,6 +123,35 @@ While the first pass ran only 3 presses landed, so this is a reference value and
 not a p95: p50 138.2 ms, largest 151.5 ms, with `read` up to 139.5 ms, on a
 folder never opened in the app whose files may still have been in the OS cache.
 
+### Native preview (GPUI)
+
+The experimental `crates/native` pager, from the key to the frame presented
+(including the vsync wait and `Present`, which the Tauri numbers above do not).
+In ms as the median of three runs' p50 / p95, each run n=20, timer-driven
+presses, measured on 2026-11-09: Windows 11, release build with SIMD mozjpeg,
+i7-13700, RTX 4060 Ti, 5120x1440 at 59 Hz, SATA SSD, files warmed by a throwaway
+run, load up to 15 % during the timed presses but with a Tauri app open and other work
+on the machine. The p95 is the largest of 20 samples.
+
+| Case | keypressToPixels | read | decode | frameWait | paint |
+|---|---|---|---|---|---|
+| ARW, 1616x1080 | 20.9 / 30.0 | 1.6 | 7.8 | 8.1 | 0.7 |
+| RAF, 4416x2944 | 64.8 / 75.2 | 3.6 | 47.6 | 8.5 | 3.5 |
+
+These missed the thresholds first set for the port (17.6 ms and 62.9 ms). Those
+were the throwaway spike's one n=20 run (15.56 / 57.89 ms) plus the margins, and
+the same binary measured 19.86 / 64.59 ms in the same-session re-measurement
+below, so it does not meet them either. Per-run numbers, the conditions and which stage grew are in
+[`results.md`](../plans/20261109-gpui-port/results.md).
+
+A re-measurement the same day, alternating the pager with the spike's own binary
+with the Tauri app closed (three runs each, 60 presses over the 20 files), had
+the pager at 20.2 ms on ARW and 65.9 ms on RAF and the spike's binary at 19.9 ms
+and 64.6 ms (median of the three runs' p50 `keypressToPixels`). The pager's page
+work matches the spike's; on RAF the roughly 1 ms left over is consistent with
+its `orient` stage on portrait pages, which the spike does not rotate, but was
+not isolated.
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,
