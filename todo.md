@@ -2447,16 +2447,6 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 - [ ] Add a test seam (a stub embedder or an injectable closure), and a test that holds the single permit and shows `embed_all` delivers nothing until it is dropped.
 - [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
 
-### App: real-device check that a frame soft at full size is no longer Good (full-size-eye-check)
-
-#### Background
-
-`full-size-eye-check` Step 4 takes a frame whose AF eyes are soft at full size out of Face focus `Good` (`photoTier`). CI covers the `SOFT_BELOW` parity test, the `afEyeState` and filter unit tests, and the meta row's presence and absence. The strip icon, the mark color, the `Face focus` = Good filter and the meta pane's `Eyes at full size` row were never exercised in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/meta.ts`, `crates/core/src/scan.rs`.
-
-#### TODO
-
-- [ ] On Windows, rescan `D:\Photos\2026\2026-11-07` in the real app (`FACES_VERSION` 10 re-runs pass 2), then open `_DSC1508.ARW` and `_DSC1536.ARW`. Expected: neither is Good (no face icon on the strip, a white focus mark, and filtered out by `Face focus` = Good), and the meta pane's `Eyes at full size` row reads `Soft`.
-
 ### Core: `good_photo` in the ranking leaves out the full-size eye cut that `photoTier` applies
 
 #### Background
