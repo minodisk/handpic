@@ -169,10 +169,11 @@ code. The debug installers stayed in `target/debug/bundle` and were not run.
   `curl -sI https://github.com/minodisk/riffle/releases/latest/download/latest.json`
   must show a `301`).
 - The app icon still reads `RIFFLE 60FPS CULLER`, drawn into the film border by
-  `tools/macos/app-icon/gen.py` and `icon.svg`. The plan calls the icons "not
-  name-bearing", so this step left them and the shipped PNGs alone, but the old
-  name is visible at large icon sizes. Basis: `tools/macos/app-icon/gen.py` lines
-  113 and 119, `crates/app/icons/`.
-- `crates/native` (the GPUI port's spike) still says Riffle, including its window
-  title and `struct Riffle`. The plan does not list it and nothing ships from it;
-  rename it with Step 3 or in the GPUI port. Basis: `crates/native/src/main.rs`.
+  `tools/macos/app-icon/gen.py` and `icon.svg`. The artwork is name-bearing; the
+  icons and the shipped PNGs are kept for now because regenerating needs macOS
+  (DIN Condensed Bold, Chrome), so the old name is visible at large icon sizes.
+  Basis: `tools/macos/app-icon/gen.py` lines 113 and 119, `crates/app/icons/`.
+- `crates/native` (the GPUI port's spike) keeps `struct Riffle` and the
+  `riffle-native` crate name; its window title already says Handpic. Step 3 of
+  `plan.md` renames the crate and its `riffle-core` dependency. Basis:
+  `crates/native/src/main.rs`.
