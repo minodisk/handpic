@@ -4870,16 +4870,6 @@ mod tests {
         remove_temp_dir(&root);
     }
 
-    fn jpeg(w: usize, h: usize) -> Vec<u8> {
-        let rgb = vec![128u8; w * h * 3];
-        let mut c = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_RGB);
-        c.set_size(w, h);
-        c.set_quality(80.0);
-        let mut c = c.start_compress(Vec::new()).unwrap();
-        c.write_scanlines(&rgb).unwrap();
-        c.finish().unwrap()
-    }
-
     /// A `w` x `h` JPEG with an APP1 Exif segment spliced after SOI: a
     /// little-endian TIFF whose IFD0 holds `orientation` and whose Exif IFD
     /// holds `DateTimeOriginal` (`capture_time`, 19 characters) and `iso`.
@@ -4917,7 +4907,7 @@ mod tests {
 
         let mut app1 = b"Exif\0\0".to_vec();
         app1.extend_from_slice(&tiff);
-        let body = jpeg(w, h);
+        let body = gradient_jpeg(w, h);
         let mut out = body[..2].to_vec();
         out.extend_from_slice(&[0xff, 0xe1]);
         out.extend_from_slice(&((app1.len() + 2) as u16).to_be_bytes());

@@ -45,7 +45,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 - The time is UTC (the plugin's default `TimezoneStrategy::UseUtc`), not the
   user's local time.
 - `target` is the Rust module path that logged the line: `riffle_app::commands`,
-  `riffle_app::index`, `riffle_app::diagnostics`, `riffle_app` (the
+  `riffle_backend::index`, `riffle_app::diagnostics`, `riffle_app` (the
   frontend's timing lines), or a dependency such as
   `tauri_plugin_updater::updater`.
 - One record is one line, except a `panic:` record when a backtrace was
@@ -56,7 +56,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 - Release builds log `INFO` and above.
 - Debug builds (`mise run dev`) log `DEBUG` and above, which includes a lot
   of dependency noise (`tract_core::optim` writes thousands of lines while
-  the face model loads). Filter by target (`grep '\]\[riffle_app'`) to read
+  the face model loads). Filter by target (`grep -E '\]\[riffle_(app|backend)'`) to read
   the app's own lines.
 
 ## Timing lines
@@ -64,7 +64,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 Most `INFO` lines are timing lines, `<label>: key=value ... in <N>ms`: from
 the backend `open list`, `open entries`, `scan list`, `scan prepare`,
 `scan sidecars`, `scan reconcile` (`riffle_app::commands`) and `scan extract`,
-`scan faces` (`riffle_app::index`), `import` (`riffle_app::import`, one line per run with its throughput), and from the frontend, through the
+`scan faces` (`riffle_backend::index`), `import` (`riffle_app::import`, one line per run with its throughput), and from the frontend, through the
 `log_timing` command, its timing lines (`page wait= read= ipc= post= worker= decode= draw= total= keypressToPixels= jpegKB= px=WxH scan=idle|1|2|3 source=read|prefetch`, the per-page preview timings by stage, with `wait` and `keypressToPixels` omitted for a switch no key timed and `source=prefetch` for a preview drawn from the decoded neighbours, whose stages other than `wait` and `draw` are 0.0ms; `zoom keypress`, `eyes` (the shown file's closed-eyes judgment: read, decode, detect, model, ipc) and the like) under target `riffle_app`.
 The frontend ones appear only while the settings modal's `Timing logs` item
 (development builds only) is on. They describe performance, not failures.
