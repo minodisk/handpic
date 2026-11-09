@@ -271,7 +271,7 @@ archived; no non-release PR is open (`#928` is release-please's).
       keep its body byte-identical and move its doc comment with it.
     - `trash.rs` uses `crate::index::lock` and `SidecarStat`, both in the
       backend after Step 2, so no path edits there.
-- [ ] Step 4: Put `watch` behind a callback seam and move its logic
+- [x] Step 4: Put `watch` behind a callback seam and move its logic
   - Done when:
     - `crates/backend/src/watch.rs` holds `Watch`, `State`, `set`,
       `release_under`, `release`, `triggers`, `run` and `settle` (moved from
@@ -357,3 +357,4 @@ archived; no non-release PR is open (`#928` is release-please's).
 - (2026-11-09) Step 1 complete
 - (2026-11-09) Step 2 complete
 - (2026-11-09) Step 3 complete
+- (2026-11-09) Step 4 complete

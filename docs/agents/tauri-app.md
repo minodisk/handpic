@@ -2082,12 +2082,22 @@ folder changed" event has to pick the right one.
   `resync()` itself then needs no anchor parameter.
 - Source: `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md`, Step 4 (round 2).
 
+### The backend reports through callbacks; the app owns the events (Inferred)
+
+`riffle-backend` also serves `crates/native`, so it never names a Tauri event or
+an `AppHandle`. A module of the app wraps it: `crates/app/src/watch.rs` hands
+`riffle_backend::watch::Watch::spawn` a closure that emits `folder-changed`
+`{dir}`, and its `set` / `release_under` read `app.state::<Watch>()` so the call
+sites keep passing the handle.
+
+- Rule: an event name and its payload stay in `crates/app`.
+
 ### The folder watcher cannot loop on the app's own sidecar writes (Inferred)
 
-`crates/app/src/watch.rs` watches the folder `scan_folder` canonicalizes
+`crates/backend/src/watch.rs` watches the folder `scan_folder` canonicalizes
 (non-recursively, set from inside `scan_folder` so the watched folder can never
-diverge from the indexed one) and emits `folder-changed` 500 ms after the last
-event of a burst; `main.ts` turns that into `resync()` when the payload's `dir`
+diverge from the indexed one) and `crates/app/src/watch.rs` emits
+`folder-changed` 500 ms after the last event of a burst; `main.ts` turns that into `resync()` when the payload's `dir`
 is still `openDir`. Two things keep the app's own sidecar writes from feeding
 back into it:
 
@@ -2144,7 +2154,7 @@ later on the `notify-rs windows loop` thread. So the handle is not released
 the moment `unwatch` returns or the watcher is dropped (an earlier
 measurement of 20/20 immediate renames was luck), and a rename issued at once
 fails with `PermissionDenied` now and then (about 5 in 300 test runs under
-full CPU load). `treewatch::settle` is the barrier: it calls
+full CPU load). `watch::settle` is the barrier: it calls
 `watcher.configure(notify::Config::default())`, which goes through the same
 action queue the server drains in order and blocks on its reply, so it
 returns only after every earlier `unwatch` closed its handle (about 0.02 ms

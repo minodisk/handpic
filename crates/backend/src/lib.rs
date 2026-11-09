@@ -7,3 +7,4 @@ pub mod photolab;
 pub mod shortcuts;
 pub mod sidecar;
 pub mod trash;
+pub mod watch;

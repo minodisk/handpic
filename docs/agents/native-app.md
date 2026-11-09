@@ -60,6 +60,28 @@ of non-path dependencies. RAF decode measured about 99 ms without SIMD and
 
 - Rule: put `nasm` on `PATH`; setting `NASM` does not satisfy the build.
 
+## Backend
+
+### The backend names no event and no `AppHandle` (Inferred)
+
+`riffle-backend` serves both apps, so it reports through callbacks:
+`watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
+take the `&Watch`. Each app's own thin module owns the event name and payload;
+in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`.
+
+- Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
+  take a callback or the state itself.
+
+### The backend is compiled twice (Inferred)
+
+`crates/backend` is a member of the root workspace, and `crates/native`, a
+separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
+as it does `riffle-core`. A dependency added to the backend also lands in
+`crates/native/Cargo.lock`, and clippy lints the backend only from the root.
+
+- Rule: check a backend change with both `mise run ci` and
+  `mise run native:check`.
+
 ## GPUI
 
 ### `RenderImage` holds BGRA and must be released (Inferred)
