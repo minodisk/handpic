@@ -69,4 +69,4 @@ either (verified), but that form would keep a copy nothing needs.
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete
