@@ -31,4 +31,4 @@ The user ran the manual check `full-size-eye-check` left in `todo.md` on the rea
 
 ## Progress
 
-- (none yet)
+- (2026-11-09) Step 1 complete
