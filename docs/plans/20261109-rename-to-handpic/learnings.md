@@ -50,17 +50,25 @@ is 1, so the hook's `/P` run should not stop on a dialog there.
   the shortcuts that existed.
 - The hook has to be inert while the product is still called Riffle, because
   the key it looks for would then be the app's own, and a same-name update
-  would uninstall itself. `hooks.nsh` defines its macros only under
-  `!if "${PRODUCTNAME}" != "Riffle"`.
+  would uninstall itself. Tauri's template includes `hooks.nsh` before it
+  defines `PRODUCTNAME`, so a file-level `!if` on it is always true; each
+  macro body holds the `!if "${PRODUCTNAME}" != "Riffle"` instead, evaluated
+  when `!insertmacro` expands it.
 - The macOS leftovers must not be removed when the old identifier equals the
   new one, so `run` filters that identifier out before anything else, and the
   deletion sits behind the filter.
+- A failed pair still lets the app start, which creates fresh files in the new
+  folder, so `migrate_pair` writes a `.migration-pending` marker there before
+  moving and removes it after the old folder is gone; a launch that finds it
+  lets the remaining source files replace the destination's. Without a marker
+  (decision 9) the destination still wins.
 - The migration also removes a stale `<dest>.migrating` before moving, so a
   resumed run whose rename succeeds cannot leave one behind.
 
 Compile checks, done with `pnpm tauri build --debug` and `--config`, without
-installing anything: makensis compiled the hook under the name Handpic and with
-the guard off under the name Riffle, and the WiX build succeeded with the pinned
+installing anything: a probe script (the hook included before `PRODUCTNAME` is defined, as
+in the template) with Tauri's makensis showed the hook's code present under
+the name Handpic and absent under Riffle (its `Var`s were reported unused), and the WiX build succeeded with the pinned
 code. The debug installers stayed in `target/debug/bundle` and were not run.
 
 ### Choices worth knowing

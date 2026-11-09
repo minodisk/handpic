@@ -73,21 +73,33 @@ fn migrate_pairs(pairs: &[(PathBuf, PathBuf)], rename: Rename) -> Report {
         .collect()
 }
 
+/// Present in `new` from the start of a pair's move until the move completes.
+/// A failed pair still lets the app start, and it creates fresh files in `new`
+/// (an empty `index.sqlite`, `settings.json`), so a launch that finds the
+/// marker knows the source is the only real copy and lets it replace them.
+const MARKER: &str = ".migration-pending";
+
 /// `old` is removed only when every entry under it was moved. Anything else
 /// leaves it for the next launch, which picks up where this one stopped.
 fn migrate_pair(old: &Path, new: &Path, rename: Rename) -> Result<(), String> {
+    let marker = new.join(MARKER);
+    let resuming = marker.exists();
+    fs::create_dir_all(new)
+        .and_then(|()| fs::write(&marker, b""))
+        .map_err(|e| format!("{}: {e}", marker.display()))?;
     let mut failures = Vec::new();
-    move_tree(old, new, rename, &mut failures);
+    move_tree(old, new, rename, resuming, &mut failures);
     if let Some(first) = failures.first() {
         return Err(match failures.len() - 1 {
             0 => first.clone(),
             more => format!("{first} (and {more} more)"),
         });
     }
-    fs::remove_dir_all(old).map_err(|e| format!("{}: {e}", old.display()))
+    fs::remove_dir_all(old).map_err(|e| format!("{}: {e}", old.display()))?;
+    fs::remove_file(&marker).map_err(|e| format!("{}: {e}", marker.display()))
 }
 
-fn move_tree(from: &Path, to: &Path, rename: Rename, failures: &mut Vec<String>) {
+fn move_tree(from: &Path, to: &Path, rename: Rename, replace: bool, failures: &mut Vec<String>) {
     if let Err(e) = fs::create_dir_all(to) {
         failures.push(format!("{}: {e}", to.display()));
         return;
@@ -110,9 +122,9 @@ fn move_tree(from: &Path, to: &Path, rename: Rename, failures: &mut Vec<String>)
         let source = entry.path();
         let dest = to.join(entry.file_name());
         match entry.file_type() {
-            Ok(kind) if kind.is_dir() => move_tree(&source, &dest, rename, failures),
+            Ok(kind) if kind.is_dir() => move_tree(&source, &dest, rename, replace, failures),
             Ok(_) => {
-                if let Err(e) = move_file(&source, &dest, rename) {
+                if let Err(e) = move_file(&source, &dest, rename, replace) {
                     failures.push(format!("{}: {e}", source.display()));
                 }
             }
@@ -122,8 +134,10 @@ fn move_tree(from: &Path, to: &Path, rename: Rename, failures: &mut Vec<String>)
 }
 
 /// A destination that already exists wins and the source is discarded, so the
-/// old folder can always go away.
-fn move_file(source: &Path, dest: &Path, rename: Rename) -> io::Result<()> {
+/// old folder can always go away, unless `replace` says the move is a resumed
+/// one: then the destination is whatever the app created since, and the source
+/// replaces it.
+fn move_file(source: &Path, dest: &Path, rename: Rename, replace: bool) -> io::Result<()> {
     let partial = partial_path(dest);
     match fs::remove_file(&partial) {
         Ok(()) => {}
@@ -131,7 +145,8 @@ fn move_file(source: &Path, dest: &Path, rename: Rename) -> io::Result<()> {
         Err(e) => return Err(e),
     }
     match fs::symlink_metadata(dest) {
-        Ok(_) => return fs::remove_file(source),
+        Ok(_) if !replace => return fs::remove_file(source),
+        Ok(_) => {}
         Err(e) if e.kind() == io::ErrorKind::NotFound => {}
         Err(e) => return Err(e),
     }
@@ -142,7 +157,7 @@ fn move_file(source: &Path, dest: &Path, rename: Rename) -> io::Result<()> {
 }
 
 /// The rename onto `dest` comes last, so a `dest` that exists is always a
-/// complete file and a later launch can trust it.
+/// complete file.
 fn copy_then_delete(source: &Path, dest: &Path, partial: &Path) -> io::Result<()> {
     let copied = fs::copy(source, partial)?;
     let expected = fs::symlink_metadata(source)?.len();
@@ -318,12 +333,54 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn a_resumed_run_replaces_what_the_app_created_meanwhile() {
+        let root = temp_root("replace");
+        let (old, new) = pair(&root);
+        write(&old.join("index.sqlite"), "db");
+        write(&old.join("sub/settings.json"), "settings");
+        // What a failed first run and the app's start since leave behind.
+        write(&new.join(MARKER), "");
+        write(&new.join("index.sqlite"), "");
+        write(&new.join("sub/settings.json"), "default");
+        let report = migrate_pairs(&[(old.clone(), new.clone())], real_rename);
+        assert!(all_moved(&report), "{report:?}");
+        assert!(!old.exists());
+        assert!(!new.join(MARKER).exists());
+        assert_eq!(fs::read_to_string(new.join("index.sqlite")).unwrap(), "db");
+        assert_eq!(
+            fs::read_to_string(new.join("sub/settings.json")).unwrap(),
+            "settings"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_resumed_copy_replaces_the_destination_too() {
+        let root = temp_root("replace-copy");
+        let (old, new) = pair(&root);
+        write(&old.join("index.sqlite"), "db");
+        write(&new.join(MARKER), "");
+        write(&new.join("index.sqlite"), "");
+        let report = migrate_pairs(&[(old.clone(), new.clone())], cross_volume);
+        assert!(all_moved(&report), "{report:?}");
+        assert_eq!(fs::read_to_string(new.join("index.sqlite")).unwrap(), "db");
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn assert_reported_and_kept(report: &Report, source: &Path) {
         assert_eq!(report.len(), 1);
         let line = report[0].as_ref().unwrap_err();
         assert!(line.contains("pair="), "{line}");
         assert!(line.contains(&*source.to_string_lossy()), "{line}");
         assert!(source.exists());
+        assert!(source
+            .ancestors()
+            .nth(2)
+            .unwrap()
+            .join("new")
+            .join(MARKER)
+            .exists());
     }
 
     #[cfg(unix)]

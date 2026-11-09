@@ -1,11 +1,10 @@
 ; Tauri keys the uninstall entry on the product name, and an updater run
 ; (`/UPDATE`) never uninstalls a previous version, so without this hook an
 ; update under a new product name installs next to Riffle. While the product
-; is still named Riffle the macros are left undefined and the template skips
-; them.
+; is still named Riffle the macro bodies are empty. The comparison sits inside
+; the bodies because the template includes this file before it defines
+; `PRODUCTNAME`; it is only set by the time `!insertmacro` expands them.
 !define LEGACY_PRODUCTNAME "Riffle"
-
-!if "${PRODUCTNAME}" != "${LEGACY_PRODUCTNAME}"
 
 !define LEGACY_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${LEGACY_PRODUCTNAME}"
 
@@ -26,6 +25,7 @@ Var LegacyDesktopShortcut
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
+!if "${PRODUCTNAME}" != "${LEGACY_PRODUCTNAME}"
   ReadRegStr $R0 SHCTX "${LEGACY_UNINSTKEY}" "UninstallString"
   ${If} $R0 != ""
     ReadRegStr $R1 SHCTX "${LEGACY_UNINSTKEY}" "InstallLocation"
@@ -47,9 +47,11 @@ Var LegacyDesktopShortcut
       ${EndIf}
     ${EndIf}
   ${EndIf}
+!endif
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
+!if "${PRODUCTNAME}" != "${LEGACY_PRODUCTNAME}"
   ${If} $LegacyStartMenuShortcut = 1
     CreateShortcut "$SMPROGRAMS\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
     !insertmacro SetLnkAppUserModelId "$SMPROGRAMS\${PRODUCTNAME}.lnk"
@@ -58,6 +60,5 @@ Var LegacyDesktopShortcut
     CreateShortcut "$DESKTOP\${PRODUCTNAME}.lnk" "$INSTDIR\${MAINBINARYNAME}.exe"
     !insertmacro SetLnkAppUserModelId "$DESKTOP\${PRODUCTNAME}.lnk"
   ${EndIf}
-!macroend
-
 !endif
+!macroend
