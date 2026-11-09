@@ -123,6 +123,25 @@ While the first pass ran only 3 presses landed, so this is a reference value and
 not a p95: p50 138.2 ms, largest 151.5 ms, with `read` up to 139.5 ms, on a
 folder never opened in the app whose files may still have been in the OS cache.
 
+### Native preview (GPUI)
+
+The experimental `crates/native` pager, from the key to the frame presented
+(including the vsync wait and `Present`, which the Tauri numbers above do not).
+In ms as the median of three runs' p50 / p95, each run n=20, timer-driven
+presses, measured on 2026-11-09: Windows 11, release build with SIMD mozjpeg,
+i7-13700, RTX 4060 Ti, 5120x1440 at 59 Hz, SATA SSD, files warmed by a throwaway
+run, load up to 15 % in the used runs but with a Tauri app open and other work
+on the machine. The p95 is the largest of 20 samples.
+
+| Case | keypressToPixels | read | decode | frameWait | paint |
+|---|---|---|---|---|---|
+| ARW, 1616x1080 | 20.9 / 30.0 | 1.6 | 7.8 | 8.1 | 0.7 |
+| RAF, 4416x2944 | 64.8 / 75.2 | 3.6 | 47.6 | 8.5 | 3.5 |
+
+These missed the port plan's thresholds (17.6 ms and 62.9 ms) against the
+throwaway spike. Per-run numbers, the conditions and which stage grew are in
+[`results.md`](../plans/20261109-gpui-port/results.md).
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,

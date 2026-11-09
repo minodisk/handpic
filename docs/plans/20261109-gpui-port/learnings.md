@@ -61,7 +61,35 @@
 - `hop` measures only `received - finished`, as the spike's did: the time a
   background task sits queued before it starts is in neither `hop` nor `read`.
 
+## Step 3
+
+- Threshold missed on both folders (ARW 20.93 ms against <= 17.6, RAF 64.76 ms
+  against <= 62.9): see `results.md`. Step 3's checkbox stays unticked; the plan
+  reopens Step 2 before Step 4.
+- The spike's `read` of 0.74 ms was **not reproduced**: ARW `read` p50 was
+  1.34-1.96 ms in the three runs used (0.89-1.20 in the discarded looser pass),
+  on the 20 warmed files. RAF was 3.6 ms against the spike's 1.80. The cause is
+  not known here.
+- `frameWait` swung 5.99-11.48 ms between ARW runs on the same files, about the
+  size of the ARW budget. n=20 runs of a vsync-phase-dependent stage cannot
+  hold a 2 ms margin.
+- A debug `riffle-app` and its `cargo run` parent stayed up during every run. A
+  gate on "no cargo" would never have opened, so the gate is `rustc` plus load;
+  the running app is written into the conditions.
+- `Win32_Processor.LoadPercentage` can come back empty; the sampling has to
+  retry.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check: the RAF fit view next to the Tauri app.** What to
+  verify: on Windows, one RAF with fine repeating texture from
+  `D:\Photos\tests\20261108-gpui-compare\RAF` shown in the fit view of both
+  `riffle-native` and the Tauri app at about the same drawn size, and whether
+  the native one-mip downscale shows moire the Tauri one does not. If it does,
+  add "downscale on the CPU to the drawn size or use a mip chain" to the plan's
+  Step 5. Only the native side was inspected in Step 3 (three frames, no moire
+  seen, listed in `results.md`), because the Tauri app was not driven; this is
+  part of why Step 3's checkbox is unticked.
 
 - **Pending check: the first `native` CI job on GitHub.** What to verify: on
   `windows-latest`, the job passes, `mise run native:check` installs Rust 1.98.1
