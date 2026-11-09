@@ -60,7 +60,7 @@ Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/strip.ts`, `crates/app/u
 
 The `af-eye-good-bad-cascade` plan (Step 2) judges a frame with no trusted AF point (every Leica M and Sigma BF file, and manual-focus frames) on the largest confident face YuNet finds on the whole preview (`FACES_VERSION` 9). `Focus` now carries the cue without a point, and `focusMark` draws no crosshair for it. Unit tests and `mise run ci` cover the state mapping and the stored-vs-on-demand agreement (checked by a temporary example on `2026-02-01` and 12 manual-focus ARWs). Nobody has looked at the rendered strip icon, filter result and meta pane for these frames in the running app. Plan: `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`. The `face-focus-tiers` plan (`docs/plans/_archived/20261107-face-focus-tiers/plan.md`) later renamed the states: bad is now `Low`, and a no-face frame is `Neutral`.
 
-Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/main.ts`, `crates/app/src/index.rs`.
+Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/main.ts`, `crates/backend/src/index.rs`.
 
 #### TODO
 
@@ -238,7 +238,7 @@ The strip's `Move to Trash…` (`trash-from-strip`, which replaced the folder
 tree's `Move Rejected to Trash…` family) moves files through the same mover
 and records the same `trash::Runs` runs the removed feature did, and that
 mover has never been run by a human on macOS or Linux. On macOS the mover
-is `trash::trash_file` (`crates/app/src/trash.rs`, `undo-trash-rejected`
+is `trash::trash_file` (`crates/backend/src/trash.rs`, `undo-trash-rejected`
 #547), which calls `NSFileManager.trashItemAtURL` directly rather than the
 `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically
 unverified: whether the Trash's "Put Back" entry is actually created, since
@@ -247,7 +247,7 @@ the `trash` crate documents that on some macOS systems files moved through
 the Trash still restores them. The Windows checks of the strip flow are in
 `### App: the Windows real-device checks for the filmstrip's Move to Trash are still open`.
 Files: `crates/app/src/commands.rs` (`trash_files`, `trash_one`),
-`crates/app/src/trash.rs`, `crates/app/ui/src/trash.ts`,
+`crates/backend/src/trash.rs`, `crates/app/ui/src/trash.ts`,
 `crates/app/ui/src/main.ts`. Sources:
 `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2
 (#547) and `docs/plans/_archived/20261013-trash-from-strip/plan.md`.
@@ -332,7 +332,7 @@ was likewise never run, and the first Windows TODO below covers it.
 
 Files: `crates/app/src/main.rs` (`app_menu`, `apply_panels`),
 `crates/app/src/commands.rs` (`set_panels`, `AppPanels`),
-`crates/app/src/shortcuts.rs` (defaults).
+`crates/backend/src/shortcuts.rs` (defaults).
 
 #### TODO
 
@@ -367,7 +367,7 @@ overwrite); rebinding `open` updates the menu accelerator and kills
 `Ctrl+O`; the menu shows correctly with the settings window open and steals
 no focus; a capturing shortcuts row swallows `Ctrl+O` / `Shift+Ctrl+O`;
 both File items work by mouse. Files: `crates/app/src/main.rs`
-(`app_menu`), `crates/app/src/shortcuts.rs`, `crates/app/src/commands.rs`
+(`app_menu`), `crates/backend/src/shortcuts.rs`, `crates/app/src/commands.rs`
 (`update_keymap`), `crates/app/ui/src/main.ts`.
 
 Since `undo-redo-keymap`, `Edit > Undo` / `Edit > Redo` are keymap actions
@@ -402,7 +402,7 @@ keydown sequence of `Unidentified` then `Home`.) macOS is still unrun.
       Edit menu key equivalent); rebinding `undo`/`redo` updates the Edit
       menu accelerator and kills the old key; both Edit items work via mouse
       click. Files: `crates/app/src/main.rs` (`app_menu`),
-      `crates/app/src/shortcuts.rs`, `crates/app/ui/src/main.ts`.
+      `crates/backend/src/shortcuts.rs`, `crates/app/ui/src/main.ts`.
 - [ ] On macOS, verify Select All: pressing `Cmd+A` once with the strip
       focused selects every file (the current file stays current); pressing
       it with the folder tree focused does nothing to the strip; pressing it
@@ -482,7 +482,7 @@ produced with an ARW truncated to its first 2 KB).
 - [ ] In `mise run tauri:dev`, confirm `Alt+ArrowUp` / `Alt+ArrowDown`
       reach the app on macOS, i.e. the webview does not swallow them, and
       step through a burst stopping at its ends. Files:
-      `crates/app/src/shortcuts.rs`, `crates/app/ui/src/main.ts`.
+      `crates/backend/src/shortcuts.rs`, `crates/app/ui/src/main.ts`.
 - [x] `Shift+x` reject-rest and its one-step undo exercised by hand on a
       real burst folder (Windows 11, v0.2.0, 2026-09-22).
 - [x] On Windows, the strip scrollbar is thin and dark and the thumbnail
@@ -499,7 +499,7 @@ hand on any platform: `tree-live-watch` (#517, #520, #523),
 (#519, #522, #525) and `strip-keep-scroll-on-rescan` (#528). The last one
 fixes the scroll jump-back and flicker seen on Windows on 2026-09-28 while
 copying 100 ARWs into an open folder. Files: `crates/app/src/treewatch.rs`,
-`crates/app/src/trash.rs`, `crates/app/ui/src/folders.ts`,
+`crates/backend/src/trash.rs`, `crates/app/ui/src/folders.ts`,
 `crates/app/ui/src/idle.ts`, `crates/app/ui/src/strip.ts`,
 `crates/app/ui/src/main.ts`. #518's check of the relabeled File menu item is
 not listed: that item was removed by `file-menu-folder-items` (#537). The
@@ -547,7 +547,7 @@ drive the app. The resume-selection check that used to sit here is in
 `### App: the manual GUI checks for the resume landing's selection are still open`
 (#553); the macOS undo check is in
 `### App: the macOS / Linux manual checks for Move to Trash are still open`.
-Files: `crates/app/src/trash.rs`, `crates/app/src/commands.rs`,
+Files: `crates/backend/src/trash.rs`, `crates/app/src/commands.rs`,
 `crates/app/ui/src/undo.ts`, `crates/app/ui/src/trash.ts`,
 `crates/app/ui/src/main.ts`. Source:
 `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Steps 3
@@ -663,13 +663,13 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
       "Closed-eyes judgment on demand (Windows 11)".
 - [ ] Derive the good-photo rule in the backend, next to `candidate` in
-      `crates/app/src/index.rs`, so the MCP `get_view` tool can carry it.
+      `crates/backend/src/index.rs`, so the MCP `get_view` tool can carry it.
       The rule lives only in `crates/app/ui/src/focus.ts` (`photoTier`) and
       `get_view` says nothing about it. Done when the index derives the tier
       from the stored columns with the thresholds in one place (the
       frontend reads it instead of recomputing), `get_view` carries it for
       the current file, and the boundary tests of `focus.test.ts` move with
-      the rule. Files: `crates/app/src/index.rs`, `crates/app/src/mcp.rs`,
+      the rule. Files: `crates/backend/src/index.rs`, `crates/app/src/mcp.rs`,
       `crates/app/ui/src/focus.ts`, `crates/app/ui/src/companion.ts`.
 - [ ] Measure the good-photo mark's precision on labels. Decision B rests
       on the user's stars and the mark rate; no labeled set was made. Done
@@ -795,7 +795,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       is the fallback for files with no stored value (face under 60 px, or
       a file pass 2 has not reached). Reusing the scan's mesh needs the points stored or a path that
       runs the model only while `f` is on. Files: `crates/app/src/commands.rs`
-      (`read_eyes`), `crates/app/src/index.rs`, `crates/core/src/eyes.rs`.
+      (`read_eyes`), `crates/backend/src/index.rs`, `crates/core/src/eyes.rs`.
 - [ ] Suggest the sharpest-eye frame within a burst group. Measured and not
       shipped (`docs/plans/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
       picks within a burst by timing, not by a technical feature; the
@@ -822,13 +822,13 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       focus candidate state is unknown (white), even when the camera tracked
       them. Files: `crates/core/src/candidate.rs`, `crates/core/src/faces.rs`.
 
-Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/app/src/index.rs`, `crates/app/ui/src/burst.ts`.
+Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/backend/src/index.rs`, `crates/app/ui/src/burst.ts`.
 
 ### App: real-device check of the face boxes on the whole-image detection path
 
 The face-detection-recall-cost work moved the whole-image face search (files with no trusted AF point, such as every Leica M file) to a 640x448 YuNet input on a DCT-scaled decode, and bumped `FACES_VERSION` to 5. `riffle-cli detect` / `candidates`, the unit tests and the `riffle-cli faces` PNGs cover the detector and the coordinate mapping back to stored preview pixels. The app GUI (the `f` mark drawing `faces_of` boxes after the second pass re-runs) was never exercised. Plan: `docs/plans/_archived/20261005-face-detection-recall-cost/plan.md`.
 
-Files: `crates/core/src/faces.rs` (`detect_whole_upright`, `scaled_to_stored`), `crates/app/src/commands.rs` (`faces_of`), `crates/app/src/index.rs` (`FACES_VERSION`).
+Files: `crates/core/src/faces.rs` (`detect_whole_upright`, `scaled_to_stored`), `crates/app/src/commands.rs` (`faces_of`), `crates/backend/src/index.rs` (`FACES_VERSION`).
 
 #### TODO
 
@@ -895,7 +895,7 @@ Files: `crates/core/src/scan.rs` (`extract_analysis_unless`, `whole_image_cue`, 
 
 #### TODO
 
-- [ ] Score a faced no-AF-point file from the full-size RGB decode the cue already made (its `candidate::luma`) instead of `score_preview`'s own grayscale decode. Measure the per-file saving with `riffle-cli features` on one thread over `D:\photos\2026\2026-02-01` and `2026-09-05` before and after, check that the score's ranking within bursts holds on those folders (Spearman per burst against the old score), and bump `FACES_VERSION`. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/app/src/index.rs`.
+- [ ] Score a faced no-AF-point file from the full-size RGB decode the cue already made (its `candidate::luma`) instead of `score_preview`'s own grayscale decode. Measure the per-file saving with `riffle-cli features` on one thread over `D:\photos\2026\2026-02-01` and `2026-09-05` before and after, check that the score's ranking within bursts holds on those folders (Spearman per burst against the old score), and bump `FACES_VERSION`. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/backend/src/index.rs`.
 
 ### Agents: confirm `pr-runner` waits for a child's hand-back on a real `/pr` run
 
@@ -974,7 +974,7 @@ the fixed 2/8 gives 800x600 thumbnails, about four times the pixels of the
 ~404x270 ones (`crates/core/src/orf.rs`; decided in
 `docs/plans/_archived/20260930-olympus-orf/plan.md` to leave `scan.rs`
 alone for now). Files: `crates/core/src/decode.rs` (`thumbnail_jpeg`), `crates/core/src/scan.rs`,
-`crates/app/src/index.rs`, `crates/app/src/commands.rs` (`thumbnail`),
+`crates/backend/src/index.rs`, `crates/app/src/commands.rs` (`thumbnail`),
 `crates/core/src/arw.rs` (`PREVIEW_MIN_WIDTH`, tier selection).
 
 #### TODO
@@ -1218,7 +1218,7 @@ construction with the key-press path. Files: `crates/app/src/mcp.rs`,
 
 ### App: the backend `folder_entries` read is the main cost of the remaining `refreshEntries`
 
-Now that the `scan-done` refresh is skipped when neither the scan nor the reconcile changed anything (docs/plans/_archived/20260926-scan-done-refresh-skip/plan.md), the one refresh that still runs (the open-time one) is dominated by the backend `folder_entries` read: 321 ms cold on 2134 rows in the user's Windows debug-build measurement. Files: `crates/app/src/index.rs` (`folder_entries` / `AppIndexReader`), `crates/app/ui/src/main.ts` (`refreshEntries`).
+Now that the `scan-done` refresh is skipped when neither the scan nor the reconcile changed anything (docs/plans/_archived/20260926-scan-done-refresh-skip/plan.md), the one refresh that still runs (the open-time one) is dominated by the backend `folder_entries` read: 321 ms cold on 2134 rows in the user's Windows debug-build measurement. Files: `crates/backend/src/index.rs` (`folder_entries` / `AppIndexReader`), `crates/app/ui/src/main.ts` (`refreshEntries`).
 
 docs/plans/_archived/20260928-strip-keep-scroll-on-rescan/plan.md made the frontend `set_files=true` share of the `refresh entries:` timing line cheaper (no cell teardown and reload on a kept-scroll update), but this item is about the backend read, which is untouched.
 
@@ -1279,7 +1279,7 @@ collection, a sidecar-only run's restore and redo), Vitest and `mise run ci`
 cover it; the GUI, Lightroom, PhotoLab and a real Trash were never
 exercised. See `docs/plans/_archived/20261005-folder-sidecars/plan.md` and
 its `learnings.md`. Files: `crates/app/src/foldersidecars.rs`,
-`crates/app/src/trash.rs` (`redo`), `crates/app/src/index.rs`
+`crates/backend/src/trash.rs` (`redo`), `crates/backend/src/index.rs`
 (`rows_of`, `mark_dirty`, `clear_judgments`), `crates/app/ui/src/sidecars.ts`,
 `crates/app/ui/src/context.ts`, `crates/app/ui/src/main.ts`
 (`rewriteSidecarsIn`, `deleteSidecarsIn`, `trashed`),
@@ -1344,7 +1344,7 @@ is.
 
 ### App: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
-`crates/app/src/photolab.rs` looks up the registered Uuids on macOS too
+`crates/backend/src/photolab.rs` looks up the registered Uuids on macOS too
 (`docs/plans/_archived/20261005-photolab-uuids-macos/plan.md`), verified by
 hand on macOS (PhotoLab 10, 2026-10-05; see `docs/agents/photolab.md`). Paths
 under `/Volumes` get no lookup yet, so a fresh `.dop` there still gets random
@@ -1357,11 +1357,11 @@ Uuids and may become a virtual copy.
 - [ ] External volumes: open a folder on `/Volumes/X` in PhotoLab, find how it
       records the volume (`ZTYPE`, `ZNAME`, `ZUNIQUEID` in `ZDOPFOLDER`), then
       extend `folder_names` / `query`'s macOS mapping in
-      `crates/app/src/photolab.rs`.
+      `crates/backend/src/photolab.rs`.
 
 ### App: PhotoLab after a file or folder rename
 
-From Step 3's check of the PhotoLab Uuid lookup (`crates/app/src/photolab.rs`
+From Step 3's check of the PhotoLab Uuid lookup (`crates/backend/src/photolab.rs`
 queries `Sources` by `FolderId` and `Name`; `crates/core/src/dop.rs` writes
 the RAW's `Name` into the `.dop`). `rename_file`
 (`crates/app/src/rename.rs`) moves the `.dop` unchanged, so its inner `Name`
@@ -1605,7 +1605,7 @@ Files: `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`, `crates/app/ui/s
 
 The `todo-five-more-items` feature rebased the trash runs and their undo / redo entries when a folder is renamed. On Windows / Linux, restore recreates the missing old folders, restores from the Trash, moves the file to the new place and removes only the folders it created; on macOS, `restore_recorded` renames straight to the new destination. `trash.rs` tests (`Runs::rename_dir`, `restore` with a destination, `relocate`), the `undo.test.ts` case and `mise run ci` cover it. No real Recycle Bin or macOS Trash was exercised. See `docs/plans/_archived/20260930-todo-five-more-items/plan.md` (Step 5).
 
-Files: `crates/app/src/trash.rs` (`restore_recorded`), `crates/app/src/commands.rs` (`restore_run`), `crates/app/src/rename.rs`, `crates/app/ui/src/main.ts`.
+Files: `crates/backend/src/trash.rs` (`restore_recorded`), `crates/app/src/commands.rs` (`restore_run`), `crates/app/src/rename.rs`, `crates/app/ui/src/main.ts`.
 
 #### TODO
 
@@ -1626,7 +1626,7 @@ paging, the on-screen-first order on a cold large folder, the queue's own
 overhead in wall time, and the macOS QoS branch. Steps 4 and 6 were ticked on
 the automated criteria only.
 Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`, `WorkQueue`),
-`crates/app/src/index.rs` (`run_scan`, `run_faces_scan`),
+`crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`),
 `crates/app/ui/src/main.ts` (`sendScanFocus`), `crates/app/ui/src/scanfocus.ts`,
 `crates/app/ui/src/strip.ts` (`visibleRange`), `docs/humans/performance.md` ("Which
 pass carries which cost").
@@ -1642,7 +1642,7 @@ pass carries which cost").
 
 `big-endian-dng` (`docs/plans/_archived/20261002-big-endian-dng/plan.md`) made `arw::parse` follow the TIFF header's byte order, so the `MM` DNGs of Pentax, Samsung, Ricoh, Leica M (Typ 240 / 246) and iPhone no longer fail with `not a little-endian TIFF/ARW`. It also bumped `EXTRACTOR_VERSION` from 11 to 12, so an index that cached those parse errors should re-extract the rows. The unit tests, `riffle-cli check` on the sample tree (34 of the 52 `MM` files open at every stage) and `mise run ci` cover the parser. The Riffle app was never opened on such a folder, so the re-extraction of cached failed rows and the thumbnails, preview and 1:1 view for these files were never exercised. The step was ticked on the automated criteria only.
 
-Files: `crates/core/src/arw.rs`, `crates/app/src/index.rs` (`EXTRACTOR_VERSION`).
+Files: `crates/core/src/arw.rs`, `crates/backend/src/index.rs` (`EXTRACTOR_VERSION`).
 
 #### TODO
 
@@ -1715,7 +1715,7 @@ Files: `crates/app/ui/src/main.ts` (the `refreshFolder` branch), `crates/app/ui/
 
 #### Background
 
-The folder-sidecars feature added `Delete Sidecars…`. `trash_rejected_redo` moves the sidecars to the Trash again but writes no index row. When the target folder is open, the frontend's resync clears the judgments. When another folder is open, the rows keep the judgments that the undo's rescan restored, until the folder is next opened and its reconcile clears them. A `Rewrite Sidecars from Index…` run in between would mint the sidecars again. Fixing it needs the run to remember each sidecar's RAW, for example in `trash::Trashed`. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/app/src/commands.rs` (`trash_rejected_redo`), `crates/app/src/foldersidecars.rs`, `crates/app/src/trash.rs`, `crates/app/ui/src/main.ts` (`trashed`).
+The folder-sidecars feature added `Delete Sidecars…`. `trash_rejected_redo` moves the sidecars to the Trash again but writes no index row. When the target folder is open, the frontend's resync clears the judgments. When another folder is open, the rows keep the judgments that the undo's rescan restored, until the folder is next opened and its reconcile clears them. A `Rewrite Sidecars from Index…` run in between would mint the sidecars again. Fixing it needs the run to remember each sidecar's RAW, for example in `trash::Trashed`. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/app/src/commands.rs` (`trash_rejected_redo`), `crates/app/src/foldersidecars.rs`, `crates/backend/src/trash.rs`, `crates/app/ui/src/main.ts` (`trashed`).
 
 #### TODO
 
@@ -1770,7 +1770,7 @@ Files: `crates/app/tauri.conf.json`, `crates/app/src/main.rs`.
 
 #### Background
 
-`focus-peaking` added a session-only `peaking` toggle (default key `e`, off at launch) that draws red edge highlights over the fit view and the 1:1 (`z`) crop. The edge measure is a Sobel magnitude (`|gx| + |gy|`) computed in `peakingworker.ts`. CI covers only the pure module (`peaking.test.ts`), the keymap tests and the build. Never exercised in the running app: alignment under orientations 1, 3, 6 and 8 and at several window sizes and display scalings, the 1:1 crop overlay, staleness while paging, Compare, rebinding, tuning of `PEAKING_THRESHOLD` (160, a starting value not tuned by eye), and the main-thread raster cost on a 4K / 2x display. Plan: `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/app/ui/src/peaking.ts`, `crates/app/ui/src/peakingworker.ts`, `crates/app/ui/src/main.ts` (`draw()`, `drawZoom()`, `runAction`), `crates/app/src/shortcuts.rs`.
+`focus-peaking` added a session-only `peaking` toggle (default key `e`, off at launch) that draws red edge highlights over the fit view and the 1:1 (`z`) crop. The edge measure is a Sobel magnitude (`|gx| + |gy|`) computed in `peakingworker.ts`. CI covers only the pure module (`peaking.test.ts`), the keymap tests and the build. Never exercised in the running app: alignment under orientations 1, 3, 6 and 8 and at several window sizes and display scalings, the 1:1 crop overlay, staleness while paging, Compare, rebinding, tuning of `PEAKING_THRESHOLD` (160, a starting value not tuned by eye), and the main-thread raster cost on a 4K / 2x display. Plan: `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/app/ui/src/peaking.ts`, `crates/app/ui/src/peakingworker.ts`, `crates/app/ui/src/main.ts` (`draw()`, `drawZoom()`, `runAction`), `crates/backend/src/shortcuts.rs`.
 
 #### TODO
 
@@ -1786,7 +1786,7 @@ Files: `crates/app/tauri.conf.json`, `crates/app/src/main.rs`.
 
 #### Background
 
-`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/app/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
+`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/backend/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
 
 #### TODO
 
@@ -1877,7 +1877,7 @@ The `advance-on-unflag` feature makes the `unflag` key (`u`, "Un-reject / un-pic
 - [ ] On Windows, in Settings > Culling, press `Refit Ranking`. Expected: `refitting…`, then the status. Untick AI analysis: the `Recommended` item, the meta rows and the refit block disappear, and a strip sorted by `Recommended` falls back to capture order. Tick it again: they return.
 - [ ] On Windows, at every point above, no judgment changes (stars, flags and labels as before, no sidecar written by the ranking).
 - [ ] On Windows, view a few frames of a folder, then set its `folders.opened_at` back more than 30 days (or wait) and trigger eviction. Expected: the folder's rows and embeddings stay, while a never-viewed folder without a reject of the same age is evicted; `Clear Cache` still removes it.
-- [ ] (per-file-viewed-ranking Step 1: `rank_rows` reads `views`, `fit` counts an unflagged frame only when viewed; `crates/app/src/index.rs`, `crates/core/src/rank.rs`; plan `docs/plans/_archived/20261014-per-file-viewed-ranking/plan.md`.) On Windows 11, with AI analysis on, in a fresh RAW folder whose frames all have their pass 3 embedding (a frame without one makes no pair), turn `Auto-advance after a star, reject or pick` off, click one frame of a burst in the strip and pick it without showing the others (do not page with the arrow keys), press `Refit Ranking` and note the fit line in `Riffle.log`. Then click another frame of that burst in the strip, leave it unflagged and press `Refit Ranking` again. Expected: the second fit line counts one more burst (the viewed, unpicked frame paired against the pick) and the meta pane's `Confidence` follows.
+- [ ] (per-file-viewed-ranking Step 1: `rank_rows` reads `views`, `fit` counts an unflagged frame only when viewed; `crates/backend/src/index.rs`, `crates/core/src/rank.rs`; plan `docs/plans/_archived/20261014-per-file-viewed-ranking/plan.md`.) On Windows 11, with AI analysis on, in a fresh RAW folder whose frames all have their pass 3 embedding (a frame without one makes no pair), turn `Auto-advance after a star, reject or pick` off, click one frame of a burst in the strip and pick it without showing the others (do not page with the arrow keys), press `Refit Ranking` and note the fit line in `Riffle.log`. Then click another frame of that burst in the strip, leave it unflagged and press `Refit Ranking` again. Expected: the second fit line counts one more burst (the viewed, unpicked frame paired against the pick) and the meta pane's `Confidence` follows.
 - [ ] On Windows, open a JPEG-only (view-only) folder and page through all of it, then press `Refit Ranking`. Expected: the fit line counts no folder for it.
 - [ ] (per-file-viewed-ranking Step 2: the background refit at startup and on a folder switch; `crates/app/src/rank.rs` `refit_in_background`, `crates/app/ui/src/viewed.ts` `switchesFolder`; plan `docs/plans/_archived/20261014-per-file-viewed-ranking/plan.md`; the step's checkbox was ticked on the automated criteria only.) On Windows 11, with AI analysis on, in folder A (embedded by pass 3) sorted by `Recommended`, view and pick or reject a few frames of a burst, note A's order, then open folder B without pressing `Refit Ranking`. Expected: `Riffle.log` gets a `ranking fit:` line when B opens, and reopening A shows its Recommended order and `Confidence` changed. Clicking the open folder again in the folder tree, or switching the sidecar format in Settings (which reopens it), adds no fit line.
 - [ ] On Windows, judge a few frames, quit and start Riffle again. Expected: a `ranking fit:` line at startup, and the Recommended order of the judged folder reflects the judgments without pressing `Refit Ranking`.
@@ -1933,7 +1933,7 @@ The `genre-ranking-offsets` feature kept per-genre offsets on the shared ranking
 
 #### Background
 
-`stop_embedding` only sets the cancel flag, so a worker `flush` blocked on the index lock, or the task's trailing flush, can still write after `clear()` / `rename_dir` / `rename_file`. `drop_stray_embeddings` misses rows whose folder row survives. Found in the `image-embeddings` Step 7 local review. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/app/src/index.rs`, `crates/app/src/commands.rs`.
+`stop_embedding` only sets the cancel flag, so a worker `flush` blocked on the index lock, or the task's trailing flush, can still write after `clear()` / `rename_dir` / `rename_file`. `drop_stray_embeddings` misses rows whose folder row survives. Found in the `image-embeddings` Step 7 local review. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/backend/src/index.rs`, `crates/app/src/commands.rs`.
 
 #### TODO
 
@@ -1955,7 +1955,7 @@ Three leftovers from `image-embeddings` Step 3. (1) `embed::shared` keeps the Si
 
 #### Background
 
-Two leftovers from `image-embeddings` Steps 3 and 5. (1) `embed-progress` / `embed-done` are emitted but nothing listens, so the status line shows nothing while pass 3 runs (`crates/app/src/commands.rs` `start_scan`). Now that the Genre filter and the ranking read the vectors, an `embedding N / M` status may be wanted. (2) `genres_of` reads every valid embedding blob of the folder (about 3 KB each, 6.6 MB for 2134 files) and scores 9 labels on each call, after every `folder_entries` refresh and on each `embed-progress` while a Genre item is checked. It is expected to take tens of milliseconds and was never timed on a real folder (`crates/app/src/commands.rs` `genres_of`, `crates/app/src/index.rs` `embeddings`). `aiEnabled` stays off by default: the user decided this on 2026-10-12, since on means a 378 MB download for every user. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`.
+Two leftovers from `image-embeddings` Steps 3 and 5. (1) `embed-progress` / `embed-done` are emitted but nothing listens, so the status line shows nothing while pass 3 runs (`crates/app/src/commands.rs` `start_scan`). Now that the Genre filter and the ranking read the vectors, an `embedding N / M` status may be wanted. (2) `genres_of` reads every valid embedding blob of the folder (about 3 KB each, 6.6 MB for 2134 files) and scores 9 labels on each call, after every `folder_entries` refresh and on each `embed-progress` while a Genre item is checked. It is expected to take tens of milliseconds and was never timed on a real folder (`crates/app/src/commands.rs` `genres_of`, `crates/backend/src/index.rs` `embeddings`). `aiEnabled` stays off by default: the user decided this on 2026-10-12, since on means a 378 MB download for every user. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`.
 
 #### TODO
 
@@ -2292,7 +2292,7 @@ Files: `crates/app/src/commands.rs` (`scan_folder`).
 #### Background
 
 `trash-over-scan` Step 4 moves files to the Trash in chunks of 100 on Windows (`run_chunked`), measured at about 7 ms a file against 200 ms per-file (see `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`). Tests use a fake mover and the bench used copies; the real app path was never exercised, and a locked file in a real chunk is covered only by the fake mover and the bench probe. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
-Files: `crates/app/src/trash.rs` (`run_chunked`, `move_chunk`), `crates/app/src/commands.rs` (`move_groups`, `move_again`).
+Files: `crates/backend/src/trash.rs` (`run_chunked`, `move_chunk`), `crates/app/src/commands.rs` (`move_groups`, `move_again`).
 
 #### TODO
 
@@ -2330,7 +2330,7 @@ Files: `crates/app/src/commands.rs` (`restore_run`).
 #### Background
 
 After `trash-over-scan` Step 4 chunked the move, `trash_rejected_undo` is still per-item, one shell operation each. Not timed, but if an operation costs what a move did (about 200 ms), an Undo of a large move takes far longer than the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
-Files: `crates/app/src/trash.rs` (`restore`), `crates/app/src/commands.rs` (`restore_run`).
+Files: `crates/backend/src/trash.rs` (`restore`), `crates/app/src/commands.rs` (`restore_run`).
 
 #### TODO
 
@@ -2365,7 +2365,7 @@ Files: `crates/app/src/commands.rs` (`scan_folder`, `start_scan`), `crates/app/u
 #### Background
 
 From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. Not tried.
-Files: `crates/app/src/trash.rs` (`remove_one`).
+Files: `crates/backend/src/trash.rs` (`remove_one`).
 
 #### TODO
 
@@ -2451,7 +2451,7 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 
 #### Background
 
-`full-size-eye-check` Step 4 added a full-size eye-sharpness cut to the frontend's `photoTier`. `good_photo` in `crates/core/src/rank.rs` deliberately leaves it out, so its features do not move in that feature, and its doc comment says so. The Rust copy therefore disagrees with the frontend on a demoted frame. Applying the cut to the ranking moves the ranking's features, so the prior's calibration needs a look. `rank::Frame::full_eye_sharp` is already carried through `Index::rank_rows` for this and nothing reads it yet. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/core/src/rank.rs`, `crates/app/src/index.rs`.
+`full-size-eye-check` Step 4 added a full-size eye-sharpness cut to the frontend's `photoTier`. `good_photo` in `crates/core/src/rank.rs` deliberately leaves it out, so its features do not move in that feature, and its doc comment says so. The Rust copy therefore disagrees with the frontend on a demoted frame. Applying the cut to the ranking moves the ranking's features, so the prior's calibration needs a look. `rank::Frame::full_eye_sharp` is already carried through `Index::rank_rows` for this and nothing reads it yet. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/core/src/rank.rs`, `crates/backend/src/index.rs`.
 
 #### TODO
 
@@ -2466,3 +2466,13 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 #### TODO
 
 - [ ] Time `riffle-cli features` (or a pass 2 in the app) on a freshly mounted card or after a reboot, with the same 8 threads and release build as Step 3, and compare it with the warm figures. If the second read is a noticeable share of the cost, consider reusing the first read's bytes.
+
+### App: re-check that notify 8.2.2 still queues `configure` behind `Unwatch` when the native app starts using `watch`
+
+#### Background
+
+`gpui-backend-crate` Step 4 moved the folder watcher into `crates/backend/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/native/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/tauri-app.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2, and the native app does not call `watch` yet. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`. Files: `crates/backend/src/watch.rs`, `crates/native/Cargo.lock`, `docs/agents/tauri-app.md`.
+
+#### TODO
+
+- [ ] When the native app first uses `watch` (the ports' rename path), re-check on notify 8.2.2 that `configure` still queues behind `Unwatch`, so that `watch::settle` still holds. Either pin the native lock to the version the root lock holds, or confirm the queuing behavior and note the version in `docs/agents/tauri-app.md`.
