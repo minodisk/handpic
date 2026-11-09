@@ -23,6 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+use riffle_backend::watch::settle;
 use tauri::{Emitter, Manager};
 
 /// How long after the last event under a folder its `tree-changed` is
@@ -181,19 +182,6 @@ impl State {
         }
         released
     }
-}
-
-/// Return only once `watcher` has carried out every `unwatch` sent to it
-/// before. On Windows `unwatch` (and dropping the watcher) only queues the
-/// request to notify's server thread, which closes the directory handle later,
-/// so an ancestor rename issued at once can still fail with
-/// `PermissionDenied`. notify 8.2's server handles its queued actions in
-/// order and `configure` blocks on the server's reply, so it returns after
-/// the handles of the earlier `unwatch`es are closed. Elsewhere the release is
-/// already synchronous and this is a no-op round trip. The result is ignored:
-/// it is an error only when the server is gone, and so is every handle.
-pub(crate) fn settle(watcher: &mut RecommendedWatcher) {
-    let _ = watcher.configure(notify::Config::default());
 }
 
 /// The tree paths an event over `paths` belongs to: those of each path's

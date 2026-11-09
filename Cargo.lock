@@ -3798,6 +3798,7 @@ version = "1.10.0"
 dependencies = [
  "log",
  "mozjpeg",
+ "notify",
  "objc2-foundation",
  "percent-encoding",
  "riffle-core",

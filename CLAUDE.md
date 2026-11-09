@@ -121,8 +121,9 @@ RAW before its sidecars, never overwriting, keeping what came back for
 `trash_rejected_redo` to move to the Trash again), `src/output.rs` which of a
 folder's files have an export in its `Output` or `Output-sequenced` subfolder,
 by file stem, with PhotoLab's copy and DeepPRIME suffixes (no answer without
-such a folder, an error when one cannot be read whole), and
-`src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+such a folder, an error when one cannot be read whole), `src/watch.rs` the open
+folder's watcher, which reports a settled burst through a callback and names no
+event, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -177,7 +178,7 @@ size, collision on another size, undated), and `import_run` /
 `riffle_core::copy`, stream `import-progress` / `import-done` and log one
 `import:` line per run,
 `src/watch.rs`
-the open folder's watcher and `src/treewatch.rs` the folder tree's watchers on
+the backend's watcher emitting `folder-changed` and `src/treewatch.rs` the folder tree's watchers on
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
 `src/foldersidecars.rs`
 the folder menu's `Rewrite Sidecars from Index…` and `Delete Sidecars…`
