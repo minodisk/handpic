@@ -79,6 +79,18 @@
 - `Win32_Processor.LoadPercentage` can come back empty; the sampling has to
   retry.
 
+- Step 3 re-measurement (A/B against the spike binary, results.md): the same
+  spike binary measured in the same session gives ARW 19.86 ms and RAF 64.59 ms
+  (median p50), against the 15.56 and 57.89 its one n=20 run gave, so the plan's
+  absolute thresholds do not hold for the spike itself here. A minus B is +0.30
+  and +1.26 ms.
+- The pager and the spike use different percentile indexes (`n / 2` against
+  `ceil(p * n) - 1`), one rank apart at n=60, so their printed p50s are not the
+  same statistic. The spike's per-page lines are only to 0.1 ms.
+- `measure.py` under the scratchpad goes through `mise run`, which starts
+  `mise` and `cargo` around each run; the A/B ran the built binaries directly
+  instead, so neither side paid for that.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: the RAF fit view next to the Tauri app.** What to

@@ -142,6 +142,13 @@ These missed the port plan's thresholds (17.6 ms and 62.9 ms) against the
 throwaway spike. Per-run numbers, the conditions and which stage grew are in
 [`results.md`](../plans/20261109-gpui-port/results.md).
 
+A re-measurement the same day, alternating the pager with the spike's own binary
+with the Tauri app closed (three runs each, 60 presses over the 20 files), had
+the pager at 20.2 ms on ARW and 65.9 ms on RAF and the spike's binary at 19.9 ms
+and 64.6 ms. The pager's page work matches the spike's; on RAF the roughly 1 ms
+left over comes with its `orient` stage on portrait pages, which the spike does
+not rotate.
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,

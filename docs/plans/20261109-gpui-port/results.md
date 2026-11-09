@@ -150,3 +150,151 @@ screenshots of the 1616x1039 window) the RAF fit views of
 **The comparison with the Tauri app next to it was not made**, so the plan's
 check is unfinished. See the pending manual check in `learnings.md`. The Step 5
 follow-up was not added, as no aliasing was observed.
+
+## Re-measurement 2026-11-09 (12:20-12:42 local): A/B against the spike binary
+
+The first pass above is kept as it was. This section re-measures, on a quieter
+machine, to separate noise from a real regression: same session, alternating,
+with both binaries.
+
+- **A** = the current `riffle-native` release build (`mise run native:release`
+  built at `d97a6270`, whose native code is that of `fb41adb7`, then the binary
+  run directly so that neither side has `mise` / `cargo` in front of it).
+- **B** = the original throwaway `gpui-spike.exe` from the spike (built with
+  SIMD on 2026-11-08, not rebuilt).
+
+**Verdict, two separate lines:**
+
+1. **Against the plan's original thresholds (unchanged): missed on both.** A's
+   median p50 `keypressToPixels` is **20.16 ms on ARW** (threshold <= 17.6) and
+   **65.85 ms on RAF** (threshold <= 62.9).
+2. **A new comparison, not the plan's gate: A minus the same-session B is within
+   the plan's margins on both.** A minus B of the median p50
+   `keypressToPixels` is **+0.30 ms on ARW** (margin +2.0) and **+1.26 ms on
+   RAF** (margin +5.0).
+
+Same-session B itself does not meet those thresholds either: its median p50 was
+19.86 ms on ARW and 64.59 ms on RAF, against 15.56 and 57.89 for its one run in
+the spike. The same binary differs by 4.3 ms (ARW) and 6.7 ms (RAF) between
+those two measurements. These runs do not say why. The spike's run timed n=20
+pages of a 40-file listing; this one n=60 pages over 20 files.
+
+### Conditions
+
+- As the first pass: Windows 11, i7-13700, RTX 4060 Ti, 5120x1440 at 59 Hz,
+  `D:` SATA SSD, `D:\Photos\tests\20261108-gpui-compare\{ARW,RAF}` (20 files
+  each, `--size 1616x1080` and `--size 4416x2944`), default 1600x1000 window on
+  both binaries, release builds, SIMD on for both (A: the `crates/native/build.rs`
+  check with NASM on `PATH`).
+- `--auto 60`, 1003 ms between presses after a 2 s settle, on both. Each run
+  **wraps around the 20 files three times**: n=60 per run (every file timed
+  three times).
+- Warm: one throwaway run of A with `--auto 60` before each folder's runs. Its
+  numbers are not used.
+- Order per folder: warm, then A B A B A B. A discarded run was redone in its
+  own slot, so the alternation held. Nothing else was started during the
+  sequence; the user had closed the Tauri app and left the machine.
+- A has the `orient` stage and the status text, the spike has neither. The
+  spike also draws the portrait files sideways (no rotation).
+- Percentile rule: the printed p50 / p95 are each binary's own. A takes sorted
+  index `n / 2` (30 of 60) and `n * 0.95` (57); the spike takes index
+  `ceil(p * n) - 1` (29 and 56). The two are one rank apart, so the tables
+  below are not strictly the same statistic; the same-rule check is below.
+  The spike's `frame_wait` is shown as `frameWait`.
+
+### Idle
+
+Before each run and every 3 s during it, `Win32_Processor.LoadPercentage` and
+the running `cargo` / `rustc` / `link` / `riffle*` / `gpui-spike` / `node`
+processes were recorded; the sampling PowerShell ran during the runs. A run was
+used when the sample before it was <= 15 %, no compiler or `riffle-app`
+appeared before or during it, and every sample during it after the first was
+<= 15 % (the first is during the 2 s settle, before any press).
+
+**No `riffle-app`, `cargo`, `rustc` or `link` was present before or during any
+run.** Three `node` processes (PIDs 33080, 33384, 46464) were present
+throughout, not started by this measurement and left alone; they stayed under
+the load gate.
+
+Discarded and redone (a sample after the first above 15 %):
+
+| Run | Samples over 15 % |
+|-----|-------------------|
+| ARW-A1, attempt 1 | 19 |
+| ARW-A2, attempt 1 | 16 |
+| ARW-B2, attempt 1 | 20, 17 |
+| RAF-B1, attempt 1 | 16, 20 |
+| RAF-A2, attempt 1 | 20 |
+| RAF-A3, attempt 1 | 16, 39 |
+
+The first sample of a used run was up to 20 % (ARW B2 and B3), in the settle,
+as in the first pass. ARW's warm-up run also had a 17 % sample; it is a
+throwaway and was not repeated.
+
+### Per run p50 / p95 (ms)
+
+`orient` is A only.
+
+| Run | read | decode | orient | hop | frameWait | paint | present | keypressToPixels |
+|-----|------|--------|--------|-----|-----------|-------|---------|------------------|
+| ARW A1 | 2.44 / 2.87 | 9.24 / 12.79 | 0.00 / 1.28 | 0.02 / 0.11 | 8.36 / 16.81 | 0.71 / 1.04 | 0.14 / 0.24 | 20.16 / 30.68 |
+| ARW B1 | 2.48 / 3.10 | 9.00 / 12.72 | n/a | 0.02 / 0.04 | 6.78 / 16.30 | 0.72 / 1.03 | 0.11 / 0.21 | 19.64 / 28.86 |
+| ARW A2 | 2.26 / 3.35 | 8.61 / 12.96 | 0.00 / 1.17 | 0.02 / 0.12 | 6.80 / 15.17 | 0.73 / 1.10 | 0.14 / 0.25 | 18.38 / 29.57 |
+| ARW B2 | 2.54 / 2.96 | 8.93 / 12.63 | n/a | 0.02 / 0.04 | 7.14 / 15.61 | 0.72 / 0.93 | 0.10 / 0.14 | 19.86 / 27.88 |
+| ARW A3 | 2.62 / 3.22 | 9.25 / 12.03 | 0.00 / 1.32 | 0.02 / 0.11 | 6.47 / 16.76 | 0.74 / 1.14 | 0.14 / 0.26 | 20.33 / 30.45 |
+| ARW B3 | 2.52 / 3.04 | 9.12 / 12.37 | n/a | 0.02 / 0.03 | 9.01 / 15.77 | 0.72 / 1.00 | 0.11 / 0.20 | 20.28 / 29.13 |
+| RAF A1 | 4.52 / 6.69 | 47.80 / 54.32 | 0.00 / 9.04 | 0.42 / 0.56 | 9.27 / 15.27 | 3.37 / 3.97 | 0.13 / 0.19 | 65.85 / 79.62 |
+| RAF B1 | 4.41 / 6.59 | 47.38 / 55.49 | n/a | 0.42 / 0.59 | 9.12 / 15.54 | 3.38 / 3.98 | 0.10 / 0.12 | 65.02 / 76.69 |
+| RAF A2 | 4.91 / 7.02 | 46.70 / 54.65 | 0.00 / 8.79 | 0.42 / 0.64 | 9.87 / 16.44 | 3.38 / 4.11 | 0.13 / 0.19 | 66.05 / 80.43 |
+| RAF B2 | 4.10 / 6.58 | 48.07 / 55.18 | n/a | 0.41 / 0.59 | 8.88 / 14.62 | 3.37 / 3.77 | 0.10 / 0.12 | 64.59 / 75.53 |
+| RAF A3 | 4.45 / 7.34 | 47.30 / 52.80 | 0.00 / 8.90 | 0.45 / 0.61 | 8.40 / 16.15 | 3.41 / 3.85 | 0.13 / 0.21 | 65.74 / 76.71 |
+| RAF B3 | 4.25 / 6.65 | 47.80 / 56.07 | n/a | 0.42 / 0.60 | 6.91 / 15.97 | 3.36 / 3.79 | 0.10 / 0.12 | 63.33 / 74.66 |
+
+`wait` was 0.00 / 0.00 in every run.
+
+### Median of the three p50s, and A minus B in the same session (ms)
+
+| Stage | ARW A | ARW B | ARW A - B | RAF A | RAF B | RAF A - B |
+|-------|-------|-------|-----------|-------|-------|-----------|
+| read | 2.44 | 2.52 | -0.08 | 4.52 | 4.25 | +0.27 |
+| decode | 9.24 | 9.00 | +0.24 | 47.30 | 47.80 | -0.50 |
+| orient | 0.00 | n/a | n/a | 0.00 | n/a | n/a |
+| hop | 0.02 | 0.02 | 0.00 | 0.42 | 0.42 | 0.00 |
+| frameWait | 6.80 | 7.14 | -0.34 | 9.27 | 8.88 | +0.39 |
+| paint | 0.73 | 0.72 | +0.01 | 3.38 | 3.37 | +0.01 |
+| present | 0.14 | 0.11 | +0.03 | 0.13 | 0.10 | +0.03 |
+| **keypressToPixels** | **20.16** | **19.86** | **+0.30** | **65.85** | **64.59** | **+1.26** |
+
+Median of the three p95s of `keypressToPixels`, not gated: A 30.45 and B 28.86
+on ARW, A 79.62 and B 75.53 on RAF.
+
+`keypressToPixels` per A / B pair (A1-B1, A2-B2, A3-B3), printed values: ARW
++0.52, -1.48, +0.05; RAF +0.83, +1.46, +2.41. The ARW difference straddles
+zero; the RAF difference is positive in all three pairs.
+
+### Is there a real difference?
+
+Between A and B, no stage shows a difference beyond run-to-run variation, with
+the one exception named below. `frameWait` p50 still moves 6.47-8.36 ms between
+A's ARW runs (B: 6.78-9.01), and its A - B changes sign by pair, so on ARW it
+is noise, as the first pass suspected.
+
+- Same percentile rule on both, from the per-page lines (index `n / 2`, A in
+  0.01 ms and the spike in 0.1 ms): `keypressToPixels` A minus B **+0.06 ms on
+  ARW and +1.05 ms on RAF**.
+- `keypressToPixels` minus `frameWait` per page (the page's work, not the vsync
+  phase), same rule: ARW A 12.69 and B 12.70, RAF A 56.53 and B 56.50. **The
+  work of the page is equal on both.**
+- Landscape files only (the same files; the portrait files excluded by name):
+  ARW A 19.59 and B 20.00, RAF A 64.57 and B 65.00, so A is 0.41 and 0.43 ms
+  faster.
+- **The RAF A - B of about +1 ms comes with the `orient` stage on the portrait
+  files.** They are 3 of the 20 RAF files, 9 of the 60 pages, about 9 ms each;
+  the spike draws them sideways and pays nothing. The difference is present
+  over all pages and gone on the landscape files. That is added functionality,
+  not a slowdown of the shared work.
+
+In short, the first pass's gap to the spike was not a regression of the page
+work: A and the same-session B do it in the same time, and the remaining
+difference is `orient` on portrait pages on RAF. Whether the plan's absolute
+thresholds should stand is left to the user.
