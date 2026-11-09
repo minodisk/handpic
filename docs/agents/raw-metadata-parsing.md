@@ -104,7 +104,7 @@ strip branch is not affected.
   `short_entries_ignore_the_padding_in_their_high_half` and
   `picks_dng_strip_jpegs_out_of_a_big_endian_sub_ifd_array`.
 - Consumers: only `reader::read_full` (`Kind::Full`) and the CLI `info` /
-  `bench` / `check` read `full`. `scan.rs` and `crates/app/src/index.rs` do not,
+  `bench` / `check` read `full`. `scan.rs` and `crates/backend/src/index.rs` do not,
   so this change needs no `EXTRACTOR_VERSION` bump.
 - Source: [sony-arw-coverage learnings, Step 1](../plans/_archived/20260930-sony-arw-coverage/learnings.md#step-1-sony-arw-sample-verification),
   [sony-arw-preview-full learnings, Step 1](../plans/_archived/20261005-sony-arw-preview-full/learnings.md#step-1).

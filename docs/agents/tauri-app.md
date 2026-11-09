@@ -1055,7 +1055,7 @@ that already have the column, and the `ALTER TABLE` fails.
 #376) never reached existing caches: error rows in particular were never
 retried.
 
-- Bump `EXTRACTOR_VERSION` (`crates/app/src/index.rs`) on any change to what
+- Bump `EXTRACTOR_VERSION` (`crates/backend/src/index.rs`) on any change to what
   `riffle_core::scan::extract` produces: ARW/DNG parsing or embedded JPEG tier
   selection (`crates/core/src/arw.rs`), which preview bytes are read
   (`crates/core/src/reader.rs`), thumbnail generation (`crates/core/src/decode.rs`,
@@ -1317,7 +1317,7 @@ correctly through the same path.
 ### `scan-progress` carries flushed paths, not a done-index high-water mark (Inferred)
 
 `done` cannot tell the frontend what became readable: `run_scan`
-(`crates/app/src/index.rs`) drives `extract_all` on rayon workers that finish
+(`crates/backend/src/index.rs`) drives `extract_all` on rayon workers that finish
 in no particular order, `done` is an unordered `AtomicUsize`, and rows reach
 the index in `BATCH`-sized transactions, so a file counted in `done` is not
 necessarily answerable by `Index::thumbnail` yet. The only promise the backend
