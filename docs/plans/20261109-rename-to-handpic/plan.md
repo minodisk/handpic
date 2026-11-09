@@ -112,9 +112,9 @@ and what is kept.
     - Leave `CHANGELOG.md`, `docs/plans/_archived/**`, `todo.md` as they are; the `20261010-burst-best-mark` in-flight plan too.
 
 - [ ] Step 3: Rename the Cargo crates and the CLI
-  - Done when: the workspace is `handpic-core` / `handpic-app` / `handpic-cli`, the CLI binary is `handpic-cli`, the ignored tests read `HANDPIC_*` env vars, `package.json` `name` is `handpic`, log targets are `handpic_app::…` in `docs/agents/app-log.md`, `CONTRIBUTING.md` and `tract-onnx-inference.md` follow, `release-please-config.json` `extra-files` paths still resolve (they are path-based, so unchanged), `Cargo.lock` is regenerated, `mise run ci` passes.
+  - Done when: the workspace is `handpic-core` / `handpic-app` / `handpic-cli` (and `crates/native`, its own workspace: `riffle-native` → `handpic-native` and its `riffle-core` dependency), the CLI binary is `handpic-cli`, the ignored tests read `HANDPIC_*` env vars, `package.json` `name` is `handpic`, log targets are `handpic_app::…` in `docs/agents/app-log.md`, `CONTRIBUTING.md` and `tract-onnx-inference.md` follow, `release-please-config.json` `extra-files` paths still resolve (they are path-based, so unchanged), `Cargo.lock` is regenerated, `mise run ci` passes.
   - Implementation approach:
-    - Mechanical: `Cargo.toml` of each crate and the `riffle-core` dependency lines; `use riffle_core::` → `use handpic_core::` across `crates/app`, `crates/cli`, tests; temp dir prefixes in tests (`riffle-app-…`); `crates/core/tests/*`; the `cargo test -p riffle-app` snippets in doc comments.
+    - Mechanical: `Cargo.toml` of each crate and the `riffle-core` dependency lines (including `crates/native/Cargo.toml`); `use riffle_core::` → `use handpic_core::` across `crates/app`, `crates/cli`, tests; temp dir prefixes in tests (`riffle-app-…`); `crates/core/tests/*`; the `cargo test -p riffle-app` snippets in doc comments.
     - Assumes Step 2 is merged (so one diff is "the product", the other "the crates").
     - `mise.toml` has no crate name in it; check `tools/**` and `.claude/skills/**` scripts for `riffle-cli` / `target/release/riffle-cli`.
     - Does not change `identifier`, `productName` or anything from Step 2.
