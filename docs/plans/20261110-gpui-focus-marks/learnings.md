@@ -82,6 +82,22 @@
   - `_DSC1758.ARW` (landscape, frame 350x351): Good.
   - `_DSC1760.ARW` (landscape, frame 832x740): Neutral (no face).
 
+## Step 3: the on-demand faces and eyes in the backend
+
+- The module is `crates/backend/src/ondemand.rs` (`riffle_backend::ondemand`),
+  not `faces.rs`: `read_eyes` itself does `use riffle_core::{decode, eyes,
+  faces}`, and a client importing both crates' `faces` would have to alias
+  one. No other backend module (including #973's) uses that name.
+- `raw_only` moved with them as `pub`, and the app's `set_rating` ("culling")
+  and its `culling_and_face_detection_refuse_a_jpeg` test now import it from
+  there; that test stays in the app because it guards the culling command.
+- Besides the four tests the plan names, the ignored
+  `times_eyes_of_on_real_files` and `a_preview_that_is_not_a_jpeg_is_a_faces_error`
+  moved too, since they test only `read_eyes` / `read_faces`. That left the
+  app's `arw_with_preview` unused, so it moved rather than being copied;
+  `gradient_jpeg`, `temp_dir` and `remove_temp_dir` are copied (the app's
+  remaining tests still use them).
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the side-by-side of the

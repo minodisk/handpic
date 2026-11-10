@@ -2,6 +2,7 @@ pub mod diagnostics;
 pub mod exif;
 pub mod index;
 pub mod listing;
+pub mod ondemand;
 pub mod output;
 pub mod photolab;
 pub mod shortcuts;

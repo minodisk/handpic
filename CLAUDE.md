@@ -112,7 +112,11 @@ XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 (`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
 `src/listing.rs`
 the one `read_dir` of a folder (its RAW files, or its JPEGs when it holds no
-RAW, and the sidecars next to them) and `canonicalize`, `src/trash.rs` the
+RAW, and the sidecars next to them) and `canonicalize`, `src/ondemand.rs`
+the faces and the eye judgment of the shown file, read on demand rather than
+at scan time and touching neither the index nor `ReadSlots` (`read_faces`,
+`read_eyes`, whose `current` check stops a superseded judgment, and the
+`raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
 folder, each RAW with the `.xmp` and `.dop` sidecars that exist for it and a
 JPEG alone, and moves them to the OS trash, RAW first, in chunks on Windows
