@@ -98,6 +98,62 @@
   `gradient_jpeg`, `temp_dir` and `remove_temp_dir` are copied (the app's
   remaining tests still use them).
 
+## Step 4: face boxes, landmark dots and labels
+
+- `FaceCache` is `crates/native/src/faces.rs` (the native crate has no other
+  `faces`; it imports `riffle_core::faces` nowhere). It keeps
+  `Arc<FacesResponse>` so the paint closure gets the faces without a clone:
+  the backend's `FacesResponse` derives neither `Clone` nor `PartialEq`, and
+  adding them would have been a backend diff for this alone. The tests compare
+  face counts instead of whole values.
+- `Marks::mark` no longer needs a read focus: it answers whenever the overlay
+  is on and the shown image is the current file's, with `focus` and `faces`
+  each optional, because the Tauri app draws the face boxes regardless of the
+  AF mark (a manual-focus frame, `ILCE-6400_DSC00405.ARW`, has no mark but
+  one face box). Step 2's tests now check `mark(..).focus` where they checked
+  `mark(..)`.
+- The JPEG (view-only) gate is `riffle_core::scan::is_raw_file` on the
+  current path: `scan::list` gives a folder's RAW files or, without any, its
+  JPEGs, so the file tells the folder, and `read_faces` refuses a JPEG anyway.
+- Detection is asked for when the image is shown (`loaded`), when `f` turns
+  on and after every listing (`opened`, which clears the cache first, so a
+  re-listing re-detects the current file). Not on `go`, so a held arrow key
+  does not detect the files it passes, as the Tauri app asks only from
+  `draw()` once the bitmap is the current file's.
+- The stored size the plan listed for Step 2 is not needed: the scale comes
+  from `FacesResponse`'s own `width` / `height`, the preview the detection
+  ran on.
+- `face_label` formats the score with `{:.2}` on the `f32`; the Tauri label
+  runs `toFixed(2)` on the JSON's shortest `f32` text read as an `f64`. The
+  two can differ in the last digit only on a score sitting on a rounding tie
+  (for example 0.125); not worth matching.
+- Heredocs of a hundred-plus lines with backticks failed in the Bash tool
+  (`unexpected EOF while looking for matching`); writing the patch script
+  with the Write tool and running it worked. `overlay.rs` was checked out
+  with CRLF although its attribute is `eol=lf`; normalize on read.
+- Hand check (debug build, temporary `info` lines in `overlay::detect` and
+  `paint_label` giving each detection's path and face count and each label's
+  text, its computed position and the face box; the overlay temporarily on at
+  launch, `--auto 7`; all removed before the commit) on
+  `D:\Photos\tests\20261110-gpui-pass2\marks\` with a fresh
+  `--index ..\step4-index.sqlite`. Each file was detected once per run:
+  - `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8): one face,
+    `0.92  106×139  eyes 50`;
+  - `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (orientation 8):
+    one face, `0.92  291×388  eyes 137`;
+  - `ILCE-6400_DSC01340.ARW` (orientation 6): one face,
+    `0.90  199×244  eyes 62`;
+  - `ILCE-6400_DSC00405.ARW` (landscape, manual focus): one face,
+    `0.90  133×167  eyes 62`;
+  - `_DSC1616.ARW`: four faces (0.73-0.75); `_DSC1758.ARW`: nine faces
+    (0.65-0.91), the several-faces frame;
+  - `ILCE-7M4_DSC07652.ARW` and `_DSC1760.ARW`: no face.
+  The label positions on the orientation 6 and 8 frames match a hand
+  computation through `upright_point` and `face_label_at` (for example
+  `ILCE-6400_DSC01340`'s box at (-134.30, -134.77) 128.49x104.95 on an
+  852x569.41 unrotated drawing puts the label at (29.8, -148.3)), and the
+  quarter-turn labels give the upright box's width first.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the side-by-side of the
@@ -111,6 +167,22 @@
   rest), no mark on `ILCE-6400_DSC00405.ARW`, and the arm ends keep the dark
   outline. The step's checkbox was ticked on the automated criteria (unit
   tests and the logged coordinates).
+
+- Pending manual check (Step 4, Windows, the user's): the side-by-side of the
+  face boxes, landmark dots and labels against the Tauri app could not be
+  made here (no screenshots). Open `D:\Photos\tests\20261110-gpui-pass2\marks\`
+  in the native app (`mise run native:dev -- <folder> --index <fresh file in
+  that test folder>`) and in the Tauri app (its own index), press `f` in both
+  and step through the files listed under Step 4 above, at least
+  `_DSC1758.ARW` (nine faces), `ILCE-6400_DSC01340.ARW` (orientation 6),
+  `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8) and `ILCE-6400_DSC00405.ARW`
+  (a face box without an AF mark). Expected: the same boxes, five cyan dots
+  per face and label text in both apps, each label upright above its box's
+  top-left corner (inside the box at the image's top edge, pulled left at the
+  right edge), and the labels readable over a bright face with the native
+  app's offset-copy halo (`docs/agents/native-app.md`); if they do not read,
+  switch `paint_label` to a dark quad behind the text. The step's checkbox was
+  ticked on the automated criteria (unit tests and the logged positions).
 
 
 - Stale scan state on a failed `prepare` (found while wiring Step 1). `list`

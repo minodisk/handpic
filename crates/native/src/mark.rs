@@ -1,9 +1,9 @@
 //! Where the focus mark goes and what color it takes, from the values pass 2
 //! stored for the judged face. A port of the Tauri frontend's `focus.ts`
-//! (`photoTier`, `afEyeState`, `focusMark`, `uprightPoint`); its comments say
-//! where each cut comes from.
+//! (`photoTier`, `afEyeState`, `focusMark`, `uprightPoint`, `faceMarks`,
+//! `faceLabel`, `faceLabelAt`); its comments say where each cut comes from.
 
-use riffle_backend::index::Focus;
+use riffle_backend::{index::Focus, ondemand::FaceBox};
 use riffle_core::candidate::FocusCandidate;
 
 /// The in-focus probability of the AF eyes.
@@ -132,10 +132,111 @@ pub fn upright_point((x, y): (f32, f32), orientation: u16) -> (f32, f32) {
     }
 }
 
+/// A detected face scaled onto the unrotated drawing centered on the origin.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FaceMark {
+    pub rect: Rect,
+    /// The eyes, the nose tip and the mouth corners.
+    pub points: [(f32, f32); 5],
+    pub label: String,
+}
+
+/// The faces scaled onto the unrotated preview drawn `draw_width` x
+/// `draw_height` and centered on the origin, like `focus_mark`. The scale
+/// comes from the stored preview size, not the drawn image's.
+pub fn face_marks(
+    faces: &[FaceBox],
+    preview_width: f32,
+    preview_height: f32,
+    draw_width: f32,
+    draw_height: f32,
+    orientation: u16,
+) -> Vec<FaceMark> {
+    let (sx, sy) = (draw_width / preview_width, draw_height / preview_height);
+    let at = |x: f32, y: f32| (x * sx - draw_width / 2., y * sy - draw_height / 2.);
+    faces
+        .iter()
+        .map(|face| {
+            let (x, y) = at(face.x, face.y);
+            FaceMark {
+                rect: Rect {
+                    x,
+                    y,
+                    width: face.width * sx,
+                    height: face.height * sy,
+                },
+                points: [
+                    &face.left_eye,
+                    &face.right_eye,
+                    &face.nose,
+                    &face.mouth_left,
+                    &face.mouth_right,
+                ]
+                .map(|p| at(p.x, p.y)),
+                label: face_label(face, orientation),
+            }
+        })
+        .collect()
+}
+
+/// YuNet's score, the box size and the distance between the eyes, in the
+/// stored preview's pixels, where the scan's thresholds are measured. The
+/// label is drawn upright, so a quarter turn swaps the width and height.
+pub fn face_label(face: &FaceBox, orientation: u16) -> String {
+    let eyes = (face.right_eye.x - face.left_eye.x).hypot(face.right_eye.y - face.left_eye.y);
+    let (width, height) = if matches!(orientation, 6 | 8) {
+        (face.height, face.width)
+    } else {
+        (face.width, face.height)
+    };
+    format!(
+        "{:.2}  {}×{}  eyes {}",
+        face.score,
+        width.round(),
+        height.round(),
+        eyes.round()
+    )
+}
+
+/// The height a face label takes, its 11 px text plus the halo.
+pub const FACE_LABEL_HEIGHT: f32 = 14.;
+
+/// The top-left of a face label `label_width` wide, upright, in coordinates
+/// centered on the image: above the upright box's top-left corner, or just
+/// inside the box when the box touches the image's top, and shifted left
+/// when it would run past the image's right edge.
+pub fn face_label_at(
+    rect: Rect,
+    orientation: u16,
+    draw_width: f32,
+    draw_height: f32,
+    label_width: f32,
+) -> (f32, f32) {
+    let a = upright_point((rect.x, rect.y), orientation);
+    let b = upright_point((rect.x + rect.width, rect.y + rect.height), orientation);
+    let (left, top) = (a.0.min(b.0), a.1.min(b.1));
+    let (image_width, image_height) = if matches!(orientation, 6 | 8) {
+        (draw_height, draw_width)
+    } else {
+        (draw_width, draw_height)
+    };
+    let x = (-image_width / 2.).max(left.min(image_width / 2. - label_width));
+    let above = top - FACE_LABEL_HEIGHT;
+    (
+        x,
+        if above < -image_height / 2. {
+            top + 2.
+        } else {
+            above
+        },
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use riffle_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
+    use riffle_backend::ondemand::FacePoint;
 
     const AT: FocusPoint = FocusPoint {
         sensor_w: 7008,
@@ -589,5 +690,188 @@ mod tests {
         assert_eq!(upright_point(p, 6), (-20., 10.));
         assert_eq!(upright_point(p, 8), (20., -10.));
         assert_eq!(upright_point(p, 3), (-10., -20.));
+    }
+
+    fn face(x: f32, y: f32) -> FaceBox {
+        let p = |dx: f32, dy: f32| FacePoint {
+            x: x + dx,
+            y: y + dy,
+        };
+        FaceBox {
+            x,
+            y,
+            width: 100.,
+            height: 120.,
+            score: 0.934,
+            left_eye: p(30., 40.),
+            right_eye: p(70., 40.),
+            nose: p(50., 70.),
+            mouth_left: p(35., 95.),
+            mouth_right: p(65., 95.),
+        }
+    }
+
+    const LABEL: &str = "0.93  100×120  eyes 40";
+
+    #[test]
+    fn a_face_at_the_previews_origin_sits_at_the_drawn_images_corner() {
+        assert_eq!(
+            face_marks(&[face(0., 0.)], 1600., 1080., 1600., 1080., 1),
+            vec![FaceMark {
+                rect: Rect {
+                    x: -800.,
+                    y: -540.,
+                    width: 100.,
+                    height: 120.,
+                },
+                points: [
+                    (-770., -500.),
+                    (-730., -500.),
+                    (-750., -470.),
+                    (-765., -445.),
+                    (-735., -445.),
+                ],
+                label: LABEL.into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_face_at_the_far_corner_ends_at_the_drawn_images_far_corner() {
+        assert_eq!(
+            face_marks(&[face(1500., 960.)], 1600., 1080., 1600., 1080., 1),
+            vec![FaceMark {
+                rect: Rect {
+                    x: 700.,
+                    y: 420.,
+                    width: 100.,
+                    height: 120.,
+                },
+                points: [
+                    (730., 460.),
+                    (770., 460.),
+                    (750., 490.),
+                    (735., 515.),
+                    (765., 515.),
+                ],
+                label: LABEL.into(),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_preview_drawn_smaller_scales_the_faces_by_the_preview_size() {
+        assert_eq!(
+            face_marks(&[face(400., 200.)], 1600., 1080., 800., 540., 1),
+            vec![FaceMark {
+                rect: Rect {
+                    x: -200.,
+                    y: -170.,
+                    width: 50.,
+                    height: 60.,
+                },
+                points: [
+                    (-185., -150.),
+                    (-165., -150.),
+                    (-175., -135.),
+                    (-182.5, -122.5),
+                    (-167.5, -122.5),
+                ],
+                label: LABEL.into(),
+            }]
+        );
+    }
+
+    fn labeled() -> FaceBox {
+        let p = |x: f32, y: f32| FacePoint { x, y };
+        FaceBox {
+            x: 0.,
+            y: 0.,
+            width: 211.6,
+            height: 254.4,
+            score: 0.934,
+            left_eye: p(100., 100.),
+            right_eye: p(160., 111.),
+            nose: p(130., 140.),
+            mouth_left: p(110., 180.),
+            mouth_right: p(150., 180.),
+        }
+    }
+
+    #[test]
+    fn face_label_gives_the_score_the_box_size_and_the_eye_distance_in_preview_pixels() {
+        assert_eq!(face_label(&labeled(), 1), "0.93  212×254  eyes 61");
+        let score = FaceBox {
+            score: 0.6,
+            ..labeled()
+        };
+        assert_eq!(face_label(&score, 1), "0.60  212×254  eyes 61");
+    }
+
+    #[test]
+    fn face_label_swaps_the_box_size_on_a_quarter_turn_so_it_reads_as_drawn_upright() {
+        assert_eq!(face_label(&labeled(), 6), "0.93  254×212  eyes 61");
+        assert_eq!(face_label(&labeled(), 8), "0.93  254×212  eyes 61");
+        assert_eq!(face_label(&labeled(), 3), "0.93  212×254  eyes 61");
+    }
+
+    // A 300x200 unrotated drawing: 200x300 upright on a quarter turn.
+    const LABELED: Rect = Rect {
+        x: -50.,
+        y: -40.,
+        width: 40.,
+        height: 60.,
+    };
+
+    #[test]
+    fn face_label_at_sits_above_the_upright_boxs_top_left_corner() {
+        let at = |orientation| face_label_at(LABELED, orientation, 300., 200., 80.);
+        assert_eq!(at(1), (-50., -40. - FACE_LABEL_HEIGHT));
+        assert_eq!(at(6), (-20., -50. - FACE_LABEL_HEIGHT));
+        assert_eq!(at(8), (-40., 10. - FACE_LABEL_HEIGHT));
+        assert_eq!(at(3), (10., -20. - FACE_LABEL_HEIGHT));
+    }
+
+    #[test]
+    fn face_label_at_drops_inside_the_box_when_the_box_touches_the_images_top() {
+        let at = |rect, orientation| face_label_at(rect, orientation, 300., 200., 80.).1;
+        assert_eq!(
+            at(
+                Rect {
+                    y: -100.,
+                    ..LABELED
+                },
+                1
+            ),
+            -98.
+        );
+        assert_eq!(
+            at(
+                Rect {
+                    x: -150.,
+                    ..LABELED
+                },
+                6
+            ),
+            -148.
+        );
+        assert_eq!(at(Rect { x: 110., ..LABELED }, 8), -148.);
+        assert_eq!(at(Rect { y: 40., ..LABELED }, 3), -98.);
+    }
+
+    #[test]
+    fn face_label_at_stays_inside_the_images_right_edge() {
+        let at = |rect, orientation| face_label_at(rect, orientation, 300., 200., 80.).0;
+        assert_eq!(at(Rect { x: 100., ..LABELED }, 1), 70.);
+        assert_eq!(
+            at(
+                Rect {
+                    y: -100.,
+                    ..LABELED
+                },
+                6
+            ),
+            20.
+        );
     }
 }
