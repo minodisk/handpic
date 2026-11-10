@@ -8,7 +8,7 @@ use gpui::{AppContext, Bounds, Context, Corners, Pixels, RenderImage, Window, po
 use image::{Frame, RgbaImage};
 use riffle_core::{arw::FocusLocation, partial, reader};
 
-use crate::{Riffle, guarded, orient};
+use crate::{Riffle, guarded, orient, peaking};
 
 /// The largest crop per axis, in JPEG pixels, as the Tauri app's.
 pub const CROP_MAX: usize = 1024;
@@ -396,12 +396,19 @@ fn ms(d: Duration) -> String {
 pub struct Paint {
     pub placeholder: Option<(Arc<RenderImage>, Rect)>,
     pub crop: Option<(Arc<RenderImage>, (u32, u32))>,
+    pub peaking: peaking::Paint,
 }
 
 impl Paint {
     /// The placeholder and the crop over it, one JPEG pixel per device pixel,
-    /// the point of interest at the canvas center, clipped to `bounds`.
-    pub fn paint(self, bounds: Bounds<Pixels>, window: &mut Window) {
+    /// the point of interest at the canvas center, clipped to `bounds`, and
+    /// the crop's peaking overlay. The crop and its size when the overlay is
+    /// to be asked for.
+    pub fn paint(
+        self,
+        bounds: Bounds<Pixels>,
+        window: &mut Window,
+    ) -> Option<(Arc<RenderImage>, (u32, u32))> {
         let scale = window.scale_factor();
         let center = canvas_center(
             (f32::from(bounds.origin.x), f32::from(bounds.origin.y)),
@@ -431,11 +438,13 @@ impl Paint {
                 ),
             );
         }
-        if let Some((image, p)) = self.crop {
-            let (x, y) = crop_origin(center, p);
-            let s = image.size(0);
-            draw(image, at(x, y, s.width.0 as f32, s.height.0 as f32));
-        }
+        let (image, p) = self.crop?;
+        let (x, y) = crop_origin(center, p);
+        let s = image.size(0);
+        let target = at(x, y, s.width.0 as f32, s.height.0 as f32);
+        draw(image.clone(), target);
+        let wanted = self.peaking.paint(&image, bounds, target, window)?;
+        Some((image, wanted))
     }
 }
 
