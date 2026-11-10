@@ -262,9 +262,14 @@ dots, the judged face's mesh and the upright labels over the upright image's
 bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
 a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 `load` builds next to the preview: the `EXIF` and `Maker note` groups and an
-`Analysis` group from the rows the caller passes), and `src/viewonly.rs`
+`Analysis` group from the rows the caller passes), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
-`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows.
+`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
+`crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
+upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
+one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
+the crop and the scaled-preview placeholder are painted, one JPEG pixel per
+device pixel with the focus point at the canvas center).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
