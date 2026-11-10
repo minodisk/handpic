@@ -244,14 +244,22 @@ neighbour), the strip keeping the same files in view (`strip.rs`'s
 `not_candidate`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
 `face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
 `FaceCache` (each path detected once, kept by path, a clear dropping the
-answers issued before it), and `src/overlay.rs` the
+answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
+(one judgment in flight, unknown eyes cached, a clear dropping the answers
+issued before it, and the latest ticket's id in a shared atomic the
+backend's `current` check reads, so a newer request or a clear supersedes the
+running judgment), `src/facemesh.rs` the port of `facemesh.ts` (MediaPipe's
+face parts outline and iris edges, `mesh_edges`, `mesh_points`), and
+`src/overlay.rs` the
 `f` overlay: the toggle, the current file's `Focus` read through the index's
 read-only connection (again when a pass 1 or pass 2 message names the file),
-the current RAW file's faces detected once its image is shown through the
-backend's `ondemand::read_faces` (cleared on every listing), drawn only on
-the current file's own image, and the painting of the AF mark, the face
-boxes with their landmark dots and the upright labels over the upright
-image's bounds.
+the current RAW file's faces detected and its eyes judged once its image is
+shown through the backend's `ondemand::read_faces` / `read_eyes` (one `eyes`
+timing line per judgment, the file current by then asked for once one
+settles; both cleared on every listing), drawn only on the current file's own
+image, and the painting of the AF mark, the face boxes with their landmark
+dots, the judged face's mesh and the upright labels over the upright image's
+bounds.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

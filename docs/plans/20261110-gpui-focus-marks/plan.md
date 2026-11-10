@@ -306,7 +306,7 @@ puts logic in new modules.
       on a bright face and record it in `native-app.md`.
     - The dots: a filled circle with a dark ring, by `paint_quad` with
       corner radii or a `PathBuilder` arc; whichever is simpler at this rev.
-- [ ] Step 5: The on-demand eye judgment and the face mesh overlay
+- [x] Step 5: The on-demand eye judgment and the face mesh overlay
   - Done when:
     - A pure port of `EyesCache` (`eyes.ts`) with its test cases: a cached
       path or any judgment in flight gives no ticket; a ticket carries an id
@@ -482,3 +482,4 @@ puts logic in new modules.
 - (2026-11-11) Step 2 complete
 - (2026-11-11) Step 3 complete
 - (2026-11-11) Step 4 complete
+- (2026-11-11) Step 5 complete
