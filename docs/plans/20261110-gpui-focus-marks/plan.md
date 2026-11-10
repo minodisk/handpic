@@ -182,7 +182,7 @@ puts logic in new modules.
       call.
     - Do not store the `FaceReady` values in the view here; Step 2 decides
       how the mark reads them. The strip does not change.
-- [ ] Step 2: The `f` focus mark, colored by the stored analysis
+- [x] Step 2: The `f` focus mark, colored by the stored analysis
   - Done when:
     - A new pure module (suggested `crates/native/src/mark.rs`) ports from
       `focus.ts`: the seven cut constants with their values, `photo_tier`,
@@ -479,3 +479,4 @@ puts logic in new modules.
 ## Progress
 
 - (2026-11-11) Step 1 complete
+- (2026-11-11) Step 2 complete

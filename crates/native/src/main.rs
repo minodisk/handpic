@@ -2,7 +2,9 @@ mod args;
 mod datadir;
 mod focus;
 mod logger;
+mod mark;
 mod orient;
+mod overlay;
 mod pager;
 mod resync;
 mod scan;
@@ -37,6 +39,7 @@ use gpui::{
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
+use overlay::Marks;
 use pager::{Move, Pager};
 use resync::Resync;
 use riffle_backend::{
@@ -219,6 +222,8 @@ struct Riffle {
     analyzing: Option<(usize, usize)>,
     failed: usize,
     image: Option<Arc<RenderImage>>,
+    /// The `f` overlay's toggle and what it draws.
+    marks: Marks,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
@@ -301,6 +306,7 @@ impl Riffle {
             analyzing: None,
             failed: 0,
             image: None,
+            marks: Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
             summary: Rc::default(),
@@ -478,8 +484,10 @@ impl Riffle {
             self.status = format!("no RAW files in {}", listed.dir).into();
             let old = self.image.take();
             self.retire(old);
+            self.marks.show(None);
         } else {
             self.request(Instant::now(), cx);
+            self.read_focus(cx);
         }
         match (todo, &self.index) {
             (Some(Ok(todo)), Ok(index)) => {
@@ -554,6 +562,9 @@ impl Riffle {
             } => {
                 self.progress = Some((done, total));
                 self.strip.mark_ready(&ready);
+                if self.current_path().is_some_and(|p| ready.contains(&p)) {
+                    self.read_focus(cx);
+                }
             }
             Event::Done { summary, .. } => {
                 self.progress = None;
@@ -561,8 +572,15 @@ impl Riffle {
                 self.failed = summary.errors;
                 self.strip.refresh();
             }
-            Event::FacesProgress { done, total, .. } => {
+            Event::FacesProgress {
+                done, total, ready, ..
+            } => {
                 self.analyzing = Some((done, total));
+                if let Some(current) = self.current_path()
+                    && ready.iter().any(|r| r.path == current)
+                {
+                    self.read_focus(cx);
+                }
             }
             Event::FacesDone { .. } => {
                 self.analyzing = None;
@@ -633,7 +651,28 @@ impl Riffle {
                 .scroll_into_view(self.pager.current(), self.strip_width);
             self.strip_moved(cx);
             self.request(key, cx);
+            self.read_focus(cx);
         }
+    }
+
+    fn toggle_marks(&mut self, cx: &mut Context<Self>) {
+        if self.marks.toggle() {
+            self.read_focus(cx);
+        }
+        cx.notify();
+    }
+
+    /// Read the current file's stored focus for the `f` overlay, while it is
+    /// on; an answer for a file no longer current is dropped.
+    fn read_focus(&mut self, cx: &mut Context<Self>) {
+        let (Some(reader), Some(path)) = (self.reader.clone(), self.current_path()) else {
+            return;
+        };
+        if !self.marks.is_on() {
+            return;
+        }
+        let ticket = self.marks.reading();
+        overlay::read(reader, path, ticket, cx);
     }
 
     /// After the strip scrolled, resized or changed its current cell: drop
@@ -858,6 +897,8 @@ impl Riffle {
                 .into();
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
+                let path = self.files[index].to_string_lossy().into_owned();
+                self.marks.show(Some((path, loaded.orientation)));
                 self.start_dwell(cx);
                 cx.notify();
                 if let Some(key) = key {
@@ -883,6 +924,7 @@ impl Riffle {
                 self.dwell_timer = None;
                 let old = self.image.take();
                 self.retire(old);
+                self.marks.show(None);
                 cx.notify();
             }
         }
@@ -925,6 +967,7 @@ impl Render for Riffle {
         let pending = self.pending.clone();
         let summary = self.summary.clone();
         let cells = self.strip_cells();
+        let mark = self.marks.mark(self.current_path().as_deref());
         div()
             .size_full()
             .flex()
@@ -938,6 +981,7 @@ impl Render for Riffle {
                     "left" => this.go(Move::Previous, cx),
                     "home" => this.go(Move::First, cx),
                     "end" => this.go(Move::Last, cx),
+                    "f" => this.toggle_marks(cx),
                     "q" => this.quit(cx),
                     _ => {}
                 },
@@ -955,6 +999,7 @@ impl Render for Riffle {
                             {
                                 println!("error paint: {e}");
                             }
+                            overlay::paint(mark.as_ref(), fit, window);
                         }
                         let paint_finished = Instant::now();
                         let old = retired.take();

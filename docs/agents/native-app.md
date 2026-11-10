@@ -305,6 +305,20 @@ through Direct Manipulation gives `ScrollDelta::Pixels`. `pixel_delta(window.lin
 turns either into pixels; the strip subtracts it from its offset, `x` when
 non-zero, else `y`, so a wheel toward the user scrolls right.
 
+### A stroked path has butt caps, and no cap option is reachable (Inferred)
+
+`PathBuilder::stroke(width)` builds lyon's `StrokeOptions::default()`, whose
+caps are `LineCap::Butt` and joins `Miter`. `with_style(PathStyle::Stroke(..))`
+could set square caps, but gpui re-exports `StrokeOptions` and not lyon's
+`LineCap`, so naming one would need a direct `lyon` dependency. The `f` mark's
+crosshair arms are therefore lengthened by half the stroke width at both ends
+(`overlay.rs`'s `segments`), where the Tauri mark's `lineCap = "square"`
+reaches, so each arm end keeps the 1 px dark outline. The AF frame is a closed
+polygon (`add_polygon(.., true)`) and needs no caps.
+
+- Rule: stroke an open path that must look like a canvas square cap by
+  extending its ends by half the width; do not add `lyon` for it.
+
 ### A canvas paints text through the window's text system (Inferred)
 
 A `canvas` has no child elements, so the file names are shaped with
