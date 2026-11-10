@@ -11,9 +11,12 @@ use std::{
 use futures::channel::mpsc::UnboundedSender;
 use riffle_backend::{
     index::{self, FaceReady, FileStat, Index, ScanSummary},
-    listing::{canonicalize, read_listing},
+    listing::{canonicalize, read_listing, stat_sidecars},
+    sidecar::{self, SidecarError, SidecarFormat},
 };
-use riffle_core::scan::ScanFocus;
+use riffle_core::{scan::ScanFocus, xmp::LabelNames};
+
+use crate::viewonly;
 
 /// Scan workers inside a file read at once, as the Tauri app's `READ_SLOTS`.
 pub const READ_SLOTS: usize = 2;
@@ -62,23 +65,36 @@ pub enum Event {
     Changed(String),
 }
 
-/// One folder's listing: its canonical path, the key of every index row, and
-/// its RAW files (or JPEGs when it holds no RAW) under that path.
+/// One folder's listing: its canonical path, the key of every index row, its
+/// RAW files (or JPEGs when it holds no RAW) under that path, and the
+/// sidecars of the format listed for, as `read_listing` gives them.
 pub struct Listed {
     pub dir: String,
     pub files: Vec<String>,
+    pub sidecars: Vec<(String, PathBuf)>,
 }
 
-pub fn list(folder: &Path) -> Result<Listed, String> {
+pub fn list(folder: &Path, format: SidecarFormat) -> Result<Listed, String> {
     let dir = canonicalize(&folder.to_string_lossy());
     let started = Instant::now();
-    let files = read_listing(Path::new(&dir), None)?.files;
+    let listing = read_listing(Path::new(&dir), Some(format))?;
     log::info!(
         "scan list: dir={dir} files={} in {}ms",
-        files.len(),
+        listing.files.len(),
         started.elapsed().as_millis()
     );
-    Ok(Listed { dir, files })
+    Ok(Listed {
+        dir,
+        files: listing.files,
+        sidecars: listing.sidecars,
+    })
+}
+
+/// What a folder open prepared: the files pass 1 extracts and the sidecars
+/// the open could not read.
+pub struct Prepared {
+    pub todo: Vec<FileStat>,
+    pub sidecar_errors: Vec<SidecarError>,
 }
 
 /// The files in natural file-name order, the order the pager shows them in.
@@ -105,8 +121,15 @@ pub struct Scan {
 
 impl Scan {
     /// Stat the whole listing and reconcile the index with it, which drops the
-    /// rows of files not listed. The files to extract.
-    pub fn prepare(index: &Mutex<Index>, listed: &Listed) -> Result<Vec<FileStat>, String> {
+    /// rows of files not listed, then read back the sidecars changed since the
+    /// index last saw them, as the Tauri app's `scan_folder` orders the two.
+    /// A view-only folder has no sidecar pass.
+    pub fn prepare(
+        index: &Arc<Mutex<Index>>,
+        listed: &Listed,
+        format: SidecarFormat,
+        names: &LabelNames,
+    ) -> Result<Prepared, String> {
         let started = Instant::now();
         let files: Vec<FileStat> = listed
             .files
@@ -120,7 +143,15 @@ impl Scan {
             todo.len(),
             started.elapsed().as_millis()
         );
-        Ok(todo)
+        let sidecar_errors = if viewonly::is_view_only(&listed.files) {
+            Vec::new()
+        } else {
+            reconcile_sidecars(index, listed, format, names)
+        };
+        Ok(Prepared {
+            todo,
+            sidecar_errors,
+        })
     }
 
     /// Run `index::run_scan` and then `index::run_faces_scan` on a thread of
@@ -186,6 +217,33 @@ impl Scan {
         self.cancel.store(true, Ordering::Relaxed);
         let _ = self.thread.join();
     }
+}
+
+/// `sidecar::reconcile_of` over the listing. The dirty rows it returns are
+/// only counted: nothing writes a sidecar yet. A failure is logged and leaves
+/// the open going, as in the Tauri app.
+fn reconcile_sidecars(
+    index: &Arc<Mutex<Index>>,
+    listed: &Listed,
+    format: SidecarFormat,
+    names: &LabelNames,
+) -> Vec<SidecarError> {
+    let started = Instant::now();
+    let dir = &listed.dir;
+    let sidecars = stat_sidecars(&listed.sidecars);
+    let (dirty, errors, changed) =
+        match sidecar::reconcile_of(dir, &listed.files, &sidecars, index, format, names) {
+            Ok((dirty, errors, changed)) => (dirty.len(), errors, changed),
+            Err(e) => {
+                log::error!("failed to reconcile the sidecars of {dir}: {e}");
+                (0, Vec::new(), 0)
+            }
+        };
+    log::info!(
+        "scan sidecars: dir={dir} dirty={dirty} changed={changed} in {}ms",
+        started.elapsed().as_millis()
+    );
+    errors
 }
 
 /// Pass 2 over the files `faces_todo` gives, unless canceled, as the Tauri

@@ -275,7 +275,7 @@ Tauri settings from either, so it works before and after the rename.
       it to refuse judgments and to skip the sidecar pass. The capture-time
       order of a view-only strip is port Step 7's (sort); here the strip
       keeps its natural order.
-- [ ] Step 3: Read the settings and the sidecars: the keymap bound to the window, the judgments of the open folder shown on the strip, nothing written yet
+- [x] Step 3: Read the settings and the sidecars: the keymap bound to the window, the judgments of the open folder shown on the strip, nothing written yet
   - Done when:
     - `crates/native/src/settings.rs`: `Settings { format: SidecarFormat,
       names: LabelNames, keymap: Keymap, auto_advance: bool }` and
