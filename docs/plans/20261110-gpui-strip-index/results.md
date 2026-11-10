@@ -123,7 +123,8 @@ RAF +0.51, +0.13, 0.00.
   vsync phase and moves 6.2-9.6 ms between runs of the same binary on RAF
   (B: 6.9-9.1), as in the port's Step 3. The RAF pair differences of
   `keypressToPixels` (+0.51, +0.13, 0.00) do not follow it.
-- `read` +0.19 ms on ARW is within B's own spread (0.72-0.87); RAF's read is
+- `read` +0.19 ms on ARW: the runs' ranges overlap (A 0.77-0.93, B 0.72-0.87)
+  and the difference is under 0.2 ms; RAF's read is
   equal. `decode` +0.71 ms on RAF is within the runs' spread (A 43.5-45.4,
   B 43.8-44.3). Neither is attributed to the strip.
 - B is not the spike any more: it has `orient`, so the portrait pages cost the
@@ -142,7 +143,7 @@ the `page` lines printed before the run's `scan extract` line.
 
 | Run | Folder state | Pass 1 | Pages inside pass 1 | read p50 / p95 / max | keypressToPixels p50 / p95 |
 |-----|--------------|--------|---------------------|----------------------|----------------------------|
-| A, pause on | copied with `cp` (buffered), first read | 520 files in 3.2 s | 2 | 0.39 / 0.39 | 15.03 / 15.03 |
+| A, pause on | copied with `cp` (buffered), first read | 520 files in 3.2 s | 2 | 0.39 / 0.39 / 0.39 | 15.03 / 15.03 |
 | no-pause build | the same copy, second read (cached) | 520 files in 0.41 s | 0 | (none) | (none) |
 | **A, pause on** | a fresh copy with `robocopy /J` (unbuffered, so not cached) | 520 files in 27.7 s | **26** | **0.96 / 1.22 / 1.26** | **16.95 / 21.50** |
 | no-pause build | another fresh `robocopy /J` copy (the next 520 files) | 320 of 520 when the run quit, 63 s | 60 | 0.90 / 1.27 / 336.75 | 15.07 / 22.83 |

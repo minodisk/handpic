@@ -168,6 +168,10 @@ reads the files around the current one first. Per-run numbers and the
 conditions are in
 [`results.md`](../plans/20261110-gpui-strip-index/results.md).
 
+The absolute numbers here are lower than the 2026-11-09 session's on the same
+files and machine (not explained); only the same-session difference compares.
+The p95 here is sample 57 of 60, not the largest of 20.
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,
