@@ -17,6 +17,9 @@ riffle-core = { path = "../core" }
 riffle-backend = { path = "../backend" }
 mozjpeg = "0.10"
 natord = "1"
+dirs = "6"
+futures = "0.3"
+log = "0.4"
 image = { version = "0.25", default-features = false }
 
 [profile.release]

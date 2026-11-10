@@ -4310,9 +4310,12 @@ dependencies = [
 name = "riffle-native"
 version = "0.0.0"
 dependencies = [
+ "dirs",
+ "futures",
  "gpui",
  "gpui_platform",
  "image",
+ "log",
  "mozjpeg",
  "natord",
  "riffle-backend",

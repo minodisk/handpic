@@ -1,6 +1,7 @@
 use std::{ffi::OsString, path::PathBuf};
 
-pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N]";
+pub const USAGE: &str =
+    "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>]";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {
@@ -8,6 +9,7 @@ pub struct Args {
     pub auto: Option<usize>,
     pub size: Option<(u32, u32)>,
     pub max: Option<usize>,
+    pub index: Option<PathBuf>,
 }
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -24,6 +26,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
             Some("--auto") => parsed.auto = Some(number("--auto", &value("--auto")?)?),
             Some("--max") => parsed.max = Some(number("--max", &value("--max")?)?),
             Some("--size") => parsed.size = Some(size(&value("--size")?)?),
+            Some("--index") => parsed.index = Some(PathBuf::from(value("--index")?)),
             Some(flag) if flag.starts_with("--") => return Err(format!("unknown flag {flag}")),
             _ if parsed.folder.is_none() => parsed.folder = Some(PathBuf::from(arg)),
             _ => return Err(format!("unexpected argument {}", arg.to_string_lossy())),
@@ -69,13 +72,16 @@ mod tests {
                 "--size",
                 "1616x1080",
                 "--max",
-                "5"
+                "5",
+                "--index",
+                "D:/t/index.sqlite"
             ]),
             Ok(Args {
                 folder: Some(PathBuf::from("D:/a b")),
                 auto: Some(20),
                 size: Some((1616, 1080)),
                 max: Some(5),
+                index: Some(PathBuf::from("D:/t/index.sqlite")),
             })
         );
     }
@@ -84,6 +90,7 @@ mod tests {
     fn rejects_bad_input() {
         assert!(run(&["--size", "1616"]).is_err());
         assert!(run(&["--auto"]).is_err());
+        assert!(run(&["--index"]).is_err());
         assert!(run(&["--auto", "x"]).is_err());
         assert!(run(&["--nope"]).is_err());
         assert!(run(&["a", "b"]).is_err());

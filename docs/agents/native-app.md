@@ -92,7 +92,50 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   re-check on its version that `configure` still queues behind `Unwatch` (see
   `tauri-app.md`), which `watch::settle` relies on.
 
+### The native app keeps its own index (Inferred)
+
+The index lives at `<dirs::cache_dir()>/com.minodisk.riffle.native/index.sqlite`,
+apart from the Tauri app's `com.minodisk.riffle/index.sqlite`; `--index <path>`
+overrides it. Sharing one file would put two processes on it (the Tauri
+launch's `VACUUM` against a native scan's writes), make two
+`EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's
+`reconcile` drop the user's rows. The cost is a cold pass 1 on each folder's
+first native open. An index that cannot be opened leaves the pager working
+with `no index: …` on the status line.
+
+- Rule: never point a debug or measurement run at the Tauri app's index; use
+  `--index` with a fresh file.
+- Rule: `reconcile` drops every row of the folder it was not given, so it
+  always gets the whole listing; `--size` / `--max` narrow only what is shown.
+
+### `run_scan` runs on a `std::thread` (Inferred)
+
+`index::run_scan` blocks for the whole pass and has its own rayon pool. On
+`cx.background_spawn` it would hold one of GPUI's background threads, which
+the preview decode needs, for as long as the folder takes. `scan.rs` spawns a
+thread per scan; a new open cancels and joins the previous one, and the first
+scan joins the launch's eviction thread before it reconciles, so the
+`VACUUM` never races it.
+
+### The backend logs through `log`, printed by `logger.rs` (Hit)
+
+Without a logger the backend's `scan extract` lines went nowhere. `logger.rs`
+prints `[target][LEVEL] message` to stderr at `Info`, which also shows GPUI's
+own lines (the UI font, the GPU, and an `ERROR` for the missing DXGI debug
+interface on a machine without the Graphics Tools, which is harmless).
+
 ## GPUI
+
+### Callbacks from other threads go through one channel (Inferred)
+
+`AsyncApp` is not `Send`, and a `BackgroundExecutor` task cannot update an
+entity, so a callback on a rayon or watcher thread cannot touch the view. The
+view owns one `futures::channel::mpsc::unbounded` sender; the callback only
+sends, and a `cx.spawn` task drains the receiver with `this.update(...)` per
+message. Each scan message carries the scan's id, so a stopped scan's late
+messages are dropped.
+
+- Rule: a callback from a non-GPUI thread only sends into that channel.
 
 ### `RenderImage` holds BGRA and must be released (Inferred)
 

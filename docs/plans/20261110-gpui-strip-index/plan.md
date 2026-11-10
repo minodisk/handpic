@@ -133,7 +133,7 @@ are the later milestones (port Steps 6-9) and are out of scope here.
 
 ## Steps
 
-- [ ] Step 1: Tick the port's Step 4, open the index and run pass 1 from the native app, progress on the status line
+- [x] Step 1: Tick the port's Step 4, open the index and run pass 1 from the native app, progress on the status line
   - Done when:
     - `../20261109-gpui-port/plan.md`: Step 4's checkbox is ticked, its
       `../20261109-gpui-backend-crate/plan.md` link points at

@@ -1,30 +1,45 @@
 mod args;
+mod datadir;
+mod logger;
 mod orient;
 mod pager;
+mod scan;
 mod timing;
 
 use std::{
     cell::RefCell,
-    env, fs,
+    env,
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
     process,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use args::Args;
+use futures::{
+    StreamExt,
+    channel::mpsc::{self, UnboundedSender},
+};
 use gpui::{
     App, Bounds, Context, Corners, FocusHandle, KeyDownEvent, PathPromptOptions, Pixels,
-    RenderImage, SharedString, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div,
-    point, prelude::*, px, rgb, size,
+    RenderImage, SharedString, Task, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas,
+    div, point, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
 use pager::{Move, Pager};
-use riffle_backend::exif::{Labeled, exif};
-use riffle_core::{reader, scan::is_raw_file};
+use riffle_backend::{
+    exif::{Labeled, exif},
+    index::{self, FileStat, Index},
+};
+use riffle_core::{
+    reader,
+    scan::{ReadSlots, ScanFocus},
+};
+use scan::{Event, Listed, Scan};
 use timing::{Page, Summary};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
@@ -57,9 +72,12 @@ fn label(value: Option<Labeled>) -> String {
     value.map_or_else(|| "-".into(), |v| v.label)
 }
 
-fn load(path: &Path) -> Result<Loaded, String> {
+fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let started = Instant::now();
-    let (arw, jpeg) = reader::read_preview(path).map_err(|e| e.to_string())?;
+    let paused = slots.pause();
+    let preview = reader::read_preview(path);
+    drop(paused);
+    let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
     let settings = exif(&arw.shot);
     let settings = format!(
@@ -109,24 +127,22 @@ fn file_name(path: &Path) -> String {
         .into_owned()
 }
 
-fn list(
-    folder: &Path,
-    wanted: Option<(u32, u32)>,
-    max: Option<usize>,
-) -> Result<Vec<PathBuf>, String> {
-    let mut files: Vec<PathBuf> = fs::read_dir(folder)
-        .map_err(|e| format!("{}: {e}", folder.display()))?
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
-        .map(|e| e.path())
-        .filter(|p| is_raw_file(p))
-        .collect();
-    files.sort_by(|a, b| natord::compare(&file_name(a), &file_name(b)));
-    Ok(files
+/// The files shown: the listing in natural order, narrowed by `--size` and
+/// `--max`. The index always reconciles the whole listing, so a measurement
+/// run never drops rows.
+fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Vec<PathBuf> {
+    scan::natural_order(files)
         .into_iter()
         .filter(|p| wanted.is_none_or(|size| guarded(|| preview_size(p)) == Ok(size)))
         .take(max.unwrap_or(usize::MAX))
-        .collect())
+        .collect()
+}
+
+struct Opened {
+    listed: Listed,
+    shown: Vec<PathBuf>,
+    /// `None` without an index.
+    todo: Option<Result<Vec<FileStat>, String>>,
 }
 
 struct Riffle {
@@ -134,6 +150,16 @@ struct Riffle {
     files: Vec<PathBuf>,
     pager: Pager,
     status: SharedString,
+    index: Result<Arc<Mutex<Index>>, String>,
+    /// The launch's eviction, which the first scan waits for.
+    eviction: Option<JoinHandle<()>>,
+    slots: ReadSlots,
+    scan: Option<Scan>,
+    next_scan: u64,
+    events: UnboundedSender<Event>,
+    /// `(done, total)` while pass 1 runs.
+    progress: Option<(usize, usize)>,
+    failed: usize,
     image: Option<Arc<RenderImage>>,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
@@ -145,12 +171,44 @@ struct Riffle {
 }
 
 impl Riffle {
-    fn new(focus: FocusHandle) -> Self {
+    fn new(
+        focus: FocusHandle,
+        index: Result<Arc<Mutex<Index>>, String>,
+        cx: &mut Context<Self>,
+    ) -> Self {
+        let eviction = index.as_ref().ok().map(|index| {
+            let index = index.clone();
+            thread::spawn(move || {
+                match index::lock(&index).evict(index::now_secs(), index::EVICT_POLICY) {
+                    Ok(summary) => log::info!("index eviction: {summary:?}"),
+                    Err(e) => log::error!("failed to evict stale folders from the index: {e}"),
+                }
+            })
+        });
+        // The scan's callbacks run on its own threads, which cannot touch the
+        // entity; they only send, and this task applies on the main thread.
+        let (events, mut received) = mpsc::unbounded();
+        cx.spawn(async move |this, cx| {
+            while let Some(event) = received.next().await {
+                if this.update(cx, |this, cx| this.scanned(event, cx)).is_err() {
+                    break;
+                }
+            }
+        })
+        .detach();
         Self {
             focus,
             files: Vec::new(),
             pager: Pager::new(0),
             status: "no folder".into(),
+            index,
+            eviction,
+            slots: ReadSlots::new(scan::READ_SLOTS),
+            scan: None,
+            next_scan: 0,
+            events,
+            progress: None,
+            failed: 0,
             image: None,
             retired: Rc::default(),
             pending: Rc::default(),
@@ -166,6 +224,7 @@ impl Riffle {
             auto,
             size,
             max,
+            index: _,
         } = args;
         let prompt = folder.is_none().then(|| {
             cx.prompt_for_paths(PathPromptOptions {
@@ -186,13 +245,10 @@ impl Riffle {
                     .and_then(|mut paths| paths.pop()),
                 (None, None) => None,
             };
-            if let Some(folder) = folder {
-                let listed = folder.clone();
-                let listing = cx
-                    .background_spawn(async move { list(&listed, size, max) })
-                    .await;
-                this.update(cx, |this, cx| this.opened(&folder, listing, cx))
-                    .ok();
+            if let Some(folder) = folder
+                && let Ok(opening) = this.update(cx, |this, cx| this.open(folder, size, max, cx))
+            {
+                opening.await;
             }
             let Some(presses) = auto else { return };
             cx.background_executor().timer(AUTO_SETTLE).await;
@@ -205,30 +261,115 @@ impl Riffle {
         .detach();
     }
 
-    fn opened(
+    /// List the folder and, with an index, reconcile it once the previous
+    /// scan and the launch's eviction are over, then start pass 1.
+    fn open(
         &mut self,
-        folder: &Path,
-        listing: Result<Vec<PathBuf>, String>,
+        folder: PathBuf,
+        wanted: Option<(u32, u32)>,
+        max: Option<usize>,
         cx: &mut Context<Self>,
-    ) {
-        match listing {
-            Ok(files) if files.is_empty() => {
-                self.status = format!("no RAW files in {}", folder.display()).into();
+    ) -> Task<()> {
+        let index = self.index.clone().ok();
+        let previous = self.scan.take();
+        let eviction = self.eviction.take();
+        cx.spawn(async move |this, cx| {
+            let opened = cx
+                .background_spawn(async move {
+                    if let Some(previous) = previous {
+                        previous.stop();
+                    }
+                    if let Some(eviction) = eviction {
+                        let _ = eviction.join();
+                    }
+                    let listed = scan::list(&folder)?;
+                    let todo = index.map(|index| Scan::prepare(&index, &listed));
+                    let shown = shown(&listed.files, wanted, max);
+                    Ok::<_, String>(Opened {
+                        listed,
+                        shown,
+                        todo,
+                    })
+                })
+                .await;
+            this.update(cx, |this, cx| this.opened(opened, cx)).ok();
+        })
+    }
+
+    fn opened(&mut self, opened: Result<Opened, String>, cx: &mut Context<Self>) {
+        let Opened {
+            listed,
+            shown,
+            todo,
+        } = match opened {
+            Ok(opened) => opened,
+            Err(e) => {
+                self.fail(&e);
+                cx.notify();
+                return;
             }
-            Ok(files) => {
-                self.pager = Pager::new(files.len());
-                self.files = files;
-                self.request(Instant::now(), cx);
+        };
+        self.pager = Pager::new(shown.len());
+        self.files = shown;
+        if self.files.is_empty() {
+            self.status = format!("no RAW files in {}", listed.dir).into();
+        } else {
+            self.request(Instant::now(), cx);
+        }
+        match (todo, &self.index) {
+            (Some(Ok(todo)), Ok(index)) => {
+                let id = self.next_scan;
+                self.next_scan += 1;
+                self.progress = Some((0, todo.len()));
+                self.failed = 0;
+                let scan = Scan::start(
+                    id,
+                    index.clone(),
+                    listed.dir,
+                    todo,
+                    ScanFocus::with_slots(self.slots.clone()),
+                    self.events.clone(),
+                );
+                scan.focus(self.current());
+                self.scan = Some(scan);
             }
-            Err(e) => self.fail(&e),
+            (Some(Err(e)), _) => log::error!("failed to prepare the scan of {}: {e}", listed.dir),
+            _ => {}
         }
         cx.notify();
+    }
+
+    fn scanned(&mut self, event: Event, cx: &mut Context<Self>) {
+        let (Event::Progress { scan, .. } | Event::Done { scan, .. }) = event;
+        if self.scan.as_ref().is_none_or(|s| s.id != scan) {
+            return;
+        }
+        match event {
+            Event::Progress { done, total, .. } => self.progress = Some((done, total)),
+            Event::Done { summary, .. } => {
+                self.progress = None;
+                self.failed = summary.errors;
+            }
+        }
+        cx.notify();
+    }
+
+    /// The current file alone, as the scan's hot list for now.
+    fn current(&self) -> Vec<String> {
+        self.files
+            .get(self.pager.current())
+            .map(|p| p.to_string_lossy().into_owned())
+            .into_iter()
+            .collect()
     }
 
     fn go(&mut self, to: Move, cx: &mut Context<Self>) {
         let key = Instant::now();
         if self.pager.go(to) {
             self.key = Some(key);
+            if let Some(scan) = &self.scan {
+                scan.focus(self.current());
+            }
             self.request(key, cx);
         }
     }
@@ -242,9 +383,10 @@ impl Riffle {
     fn send(&mut self, index: usize, at: Instant, cx: &mut Context<Self>) {
         self.sent = at;
         let path = self.files[index].clone();
+        let slots = self.slots.clone();
         cx.spawn(async move |this, cx| {
             let loaded = cx
-                .background_spawn(async move { guarded(|| load(&path)) })
+                .background_spawn(async move { guarded(|| load(&path, &slots)) })
                 .await;
             let received = Instant::now();
             this.update(cx, |this, cx| this.loaded(index, loaded, received, cx))
@@ -310,6 +452,19 @@ impl Riffle {
     fn fail(&mut self, message: &str) {
         println!("error {message}");
         self.status = format!("error: {message}").into();
+    }
+
+    fn status(&self) -> SharedString {
+        let mut status = self.status.to_string();
+        if let Err(e) = &self.index {
+            status.push_str(&format!("  no index: {e}"));
+        }
+        if let Some((done, total)) = self.progress {
+            status.push_str(&format!("  scanning {done}/{total}"));
+        } else if self.failed > 0 {
+            status.push_str(&format!("  {} failed", self.failed));
+        }
+        status.into()
     }
 
     fn retire(&self, image: Option<Arc<RenderImage>>) {
@@ -382,7 +537,7 @@ impl Render for Riffle {
                 .flex_1()
                 .w_full(),
             )
-            .child(div().px_2().child(self.status.clone()))
+            .child(div().px_2().child(self.status()))
     }
 }
 
@@ -399,14 +554,24 @@ fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
     Bounds::new(origin, fit)
 }
 
+fn open_index(flag: Option<PathBuf>) -> Result<Arc<Mutex<Index>>, String> {
+    let path = datadir::index_path(flag, dirs::cache_dir().as_deref())
+        .ok_or("no cache dir to keep the index in")?;
+    let index = Index::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    log::info!("index: {}", path.display());
+    Ok(Arc::new(Mutex::new(index)))
+}
+
 fn main() {
-    let args = match args::parse(env::args_os().skip(1)) {
+    logger::install();
+    let mut args = match args::parse(env::args_os().skip(1)) {
         Ok(args) => args,
         Err(e) => {
             eprintln!("{e}\n{}", args::USAGE);
             process::exit(2);
         }
     };
+    let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
@@ -424,7 +589,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus)
+                    Riffle::new(focus, index, cx)
                 })
             },
         )

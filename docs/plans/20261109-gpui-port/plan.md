@@ -304,7 +304,7 @@ The remaining steps are **milestones**. Each is re-planned as its own
 ticked here when that plan is archived. Their order is the point of listing
 them; their contents are deliberately coarse.
 
-- [ ] Step 4: Extract the Tauri-free backend into a shared `crates/backend` library
+- [x] Step 4: Extract the Tauri-free backend into a shared `crates/backend` library
   - Done when: `riffle-backend` (name to confirm) holds the modules of
     `crates/app/src` that have no `tauri` reference today — `index.rs`
     (SQLite folder index, rusqlite), `sidecar.rs` (the writer thread and
@@ -313,7 +313,7 @@ them; their contents are deliberately coarse.
     once their `tauri` touches are abstracted behind a trait or a callback
     (`diagnostics.rs`, `output.rs`, `watch.rs`; `perf.rs` and `ai.rs` wait for
     Step 9, by the user's decision, see
-    `../20261109-gpui-backend-crate/plan.md`); `crates/app` depends on it and re-exports, with no
+    `../_archived/20261109-gpui-backend-crate/plan.md`); `crates/app` depends on it and re-exports, with no
     behavior change (its tests move with the code); the native crate depends
     on it (through `path = "../backend"`, compiled twice like
     `riffle-core`). This is the first milestone that edits `crates/app`, so
@@ -553,3 +553,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-09) Step 1 complete
 - (2026-11-09) Step 2 complete
 - (2026-11-09) Step 3 complete
+- (2026-11-09) Step 4 complete, through `../_archived/20261109-gpui-backend-crate/plan.md`
