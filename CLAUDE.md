@@ -79,7 +79,7 @@ centers and nose tip, their eye and nose offsets and the eye window's score, the
 `crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
 like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
-formatting shared by the meta pane and the filter menu, `src/photolab.rs` the
+formatting shared by the meta pane (`Metadata`, `metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 `docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
@@ -108,7 +108,9 @@ priority (the second and third lower still) and take the on-screen files first
 through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 `sidecarFormat` key of the settings store, next to the configurable
-`xmp:Label` names per color persisted in the `labelNames` key, `src/listing.rs`
+`xmp:Label` names per color persisted in the `labelNames` key
+(`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
+`src/listing.rs`
 the one `read_dir` of a folder (its RAW files, or its JPEGs when it holds no
 RAW, and the sidecars next to them) and `canonicalize`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
@@ -206,8 +208,9 @@ every 500 ms, so nothing samples while the overlay is off). `crates/native` (`ri
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
-its own index at `<cache dir>/com.minodisk.riffle.native/index.sqlite` (or
-`--index <path>`), `src/logger.rs` writes the `log` lines to stderr,
+its own index at `<cache dir>/com.minodisk.handpic.native/index.sqlite` (or
+`--index <path>`) and holds the product's identifiers (`IDENTIFIER`, the
+Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr,
 `src/scan.rs` lists a folder, reconciles the index with the whole listing and
 runs pass 1 (`index::run_scan`) on a thread of its own, its progress reaching
 the view through one channel, `src/strip.rs` is the thumbnail strip's pure

@@ -13,6 +13,7 @@
 //! earliest deadline, which makes the drain on quit a plain synchronous
 //! handshake.
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
@@ -21,8 +22,9 @@ use std::time::{Duration, Instant, SystemTime};
 use riffle_core::copy::TEMP_SUFFIX;
 use riffle_core::xmp::LabelNames;
 use riffle_core::{dop, xmp, Flag};
+use serde_json::Value;
 
-use crate::index::{self, lock, Index};
+use crate::index::{self, lock, DirtyRow, Index, ParsedSidecar, SidecarStat};
 use crate::photolab;
 
 /// Which sidecar Riffle reads and writes. `Xmp` and `Dop` are one format
@@ -174,6 +176,157 @@ impl SidecarFormat {
             Self::Both => Self::Xmp.matches(&name) || Self::Dop.matches(&name),
         }
     }
+}
+
+/// The stored `labelNames` value: an object keyed by lowercase color whose
+/// missing, non-string or blank entries are the English default.
+pub fn label_names_setting(value: Option<&Value>) -> LabelNames {
+    let name = |color: &str, default: String| {
+        value
+            .and_then(|v| v.get(color))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .map_or(default, str::to_string)
+    };
+    let d = LabelNames::default();
+    LabelNames {
+        red: name("red", d.red),
+        yellow: name("yellow", d.yellow),
+        green: name("green", d.green),
+        blue: name("blue", d.blue),
+        purple: name("purple", d.purple),
+    }
+}
+
+/// `names` in the shape stored under `labelNames`.
+pub fn label_names_value(names: &LabelNames) -> Value {
+    serde_json::json!({
+        "red": names.red,
+        "yellow": names.yellow,
+        "green": names.green,
+        "blue": names.blue,
+        "purple": names.purple,
+    })
+}
+
+/// Largest sidecar the folder-open pass reads. A Lightroom sidecar is tens of
+/// KB; anything past this is not a sidecar this app should be parsing, and is
+/// left alone rather than failing the open.
+pub const MAX_SIDECAR_BYTES: i64 = 4 * 1024 * 1024;
+
+/// A sidecar the folder-open pass could not use, reported to the frontend.
+#[derive(Debug, serde::Serialize)]
+pub struct SidecarError {
+    /// The RAW file's path, not the sidecar's: it has to match the key the
+    /// `sidecar-error` event uses for a write failure so the frontend's
+    /// `ErrorList` replaces one with the other instead of showing both. The
+    /// sidecar's file name goes in `message`.
+    pub path: String,
+    pub message: String,
+}
+
+/// Bring the `ratings` rows of `dir` in line with the sidecars on disk and
+/// return the judgments that still have to be written, along with the
+/// sidecars that could not be used and the number of `ratings` rows this
+/// wrote or cleared (every parsed sidecar counts, even one whose row a
+/// `set_rating` in the parse window keeps `store_sidecar_ratings` off).
+///
+/// The sidecar is the source of truth, so anything whose stat changed since
+/// the app last saw it is read back here; a sidecar that cannot be read or
+/// parsed leaves its row as it was rather than erroring the open. Under
+/// `Both` the file's newest sidecar is the one compared and read (see
+/// `newest`).
+pub fn reconcile_of(
+    dir: &str,
+    listed: &[String],
+    sidecars: &HashMap<String, SidecarStat>,
+    index: &Arc<Mutex<Index>>,
+    format: SidecarFormat,
+    names: &LabelNames,
+) -> Result<(Vec<DirtyRow>, Vec<SidecarError>, usize), String> {
+    let pairs: Vec<(String, Option<SidecarStat>)> = listed
+        .iter()
+        .map(|path| {
+            let stats = format.kinds().iter().filter_map(|kind| {
+                let name = kind
+                    .sidecar_path(Path::new(path))
+                    .file_name()?
+                    .to_string_lossy()
+                    .to_lowercase();
+                sidecars.get(&name).map(|stat| (stat, stat.2))
+            });
+            (path.clone(), newest(stats).cloned())
+        })
+        .collect();
+
+    let (to_parse, cleared) = lock(index).reconcile_sidecars(dir, &pairs)?;
+    // An oversize sidecar is rejected outright (see `MAX_SIDECAR_BYTES`), so
+    // its row cannot be brought in line with it here. Its path is tracked
+    // separately so it can be kept out of what the writer is handed below:
+    // otherwise a dirty row for it would have the writer patch a sidecar
+    // whose external edit was never read, overwriting it unread.
+    let oversize: HashSet<&str> = to_parse
+        .iter()
+        .filter(|(_, (_, size, _), _)| *size > MAX_SIDECAR_BYTES)
+        .map(|(path, _, _)| path.as_str())
+        .collect();
+    let mut parsed: Vec<ParsedSidecar> = Vec::new();
+    let mut problems: Vec<SidecarError> = Vec::new();
+    for (path, (sidecar, size, mtime_ns), dirty) in &to_parse {
+        let problem = |message: String| SidecarError {
+            path: path.clone(),
+            message: format!(
+                "{}: {message}",
+                sidecar
+                    .file_name()
+                    .map(|n| n.to_string_lossy())
+                    .unwrap_or_else(|| sidecar.to_string_lossy())
+            ),
+        };
+        if oversize.contains(path.as_str()) {
+            problems.push(problem(format!(
+                "larger than {} MiB, not read",
+                MAX_SIDECAR_BYTES / 1024 / 1024
+            )));
+            continue;
+        }
+        let kind = if sidecar
+            .file_name()
+            .is_some_and(|n| SidecarFormat::Dop.matches(&n.to_string_lossy()))
+        {
+            SidecarFormat::Dop
+        } else {
+            SidecarFormat::Xmp
+        };
+        let read = std::fs::read(sidecar)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| {
+                Ok((
+                    kind.read_rating(&bytes)?,
+                    kind.read_flag(&bytes)?,
+                    kind.read_label(&bytes, names)?,
+                ))
+            });
+        match read {
+            Ok((rating, flag, label)) => {
+                parsed.push((path.clone(), rating, flag, label, *size, *mtime_ns, *dirty))
+            }
+            Err(e) => problems.push(problem(e)),
+        }
+    }
+    let mut index = lock(index);
+    index.store_sidecar_ratings(dir, &parsed)?;
+    // After storing, so a row the sidecar just won stays out of this: only
+    // what still has nowhere to be read back from is written out. An
+    // oversize sidecar's row is excluded too, even if still dirty, since the
+    // writer must not patch a sidecar whose contents were never read.
+    let dirty = index.dirty_rows(dir)?;
+    let dirty = dirty
+        .into_iter()
+        .filter(|(path, _, _, _, _)| !oversize.contains(path.as_str()))
+        .collect();
+    Ok((dirty, problems, cleared + parsed.len()))
 }
 
 /// The effective one of a file's existing sidecars, given as
@@ -1164,6 +1317,119 @@ mod tests {
         assert!(SidecarFormat::Both.matches("A.XMP"));
         assert!(SidecarFormat::Both.matches("a.ARW.dop"));
         assert!(!SidecarFormat::Both.matches("a.jpg.dop"));
+    }
+
+    #[test]
+    fn label_names_setting_falls_back_to_english_per_color() {
+        use serde_json::json;
+        assert_eq!(label_names_setting(None), LabelNames::default());
+        let names = label_names_setting(Some(&json!({
+            "red": " レッド ",
+            "yellow": "",
+            "green": 3,
+            "purple": "パープル",
+        })));
+        assert_eq!(
+            names,
+            LabelNames {
+                red: "レッド".to_string(),
+                purple: "パープル".to_string(),
+                ..LabelNames::default()
+            }
+        );
+        assert_eq!(
+            label_names_setting(Some(&label_names_value(&japanese()))),
+            japanese()
+        );
+    }
+
+    /// `reconcile_of` over a fresh listing of `dir`, as `scan_folder` hands it
+    /// the sidecars of its own single listing.
+    fn reconcile_listed(
+        dir: &Path,
+        index: &Arc<Mutex<Index>>,
+        format: SidecarFormat,
+    ) -> (Vec<String>, Vec<DirtyRow>, Vec<SidecarError>) {
+        let listing = crate::listing::read_listing(dir, Some(format)).unwrap();
+        let sidecars = crate::listing::stat_sidecars(&listing.sidecars);
+        let (dirty, problems, _) = reconcile_of(
+            &dir.to_string_lossy(),
+            &listing.files,
+            &sidecars,
+            index,
+            format,
+            &LabelNames::default(),
+        )
+        .unwrap();
+        (listing.files, dirty, problems)
+    }
+
+    /// The stars `entries` shows for `path` once its `files` row is stored.
+    fn stored_rating(index: &Arc<Mutex<Index>>, dir: &str, path: &str) -> Option<i8> {
+        let mut index = lock(index);
+        let file = index::stat(Path::new(path)).unwrap();
+        index.write_batch(dir, &[(file, Err("x".into()))]).unwrap();
+        index
+            .entries(dir)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.path == path)
+            .unwrap()
+            .rating
+    }
+
+    #[test]
+    fn an_oversize_dop_is_neither_read_nor_handed_to_the_writer() {
+        let root = temp_dir("dop-oversize");
+        let dir = root.to_string_lossy().into_owned();
+        std::fs::write(root.join("a.ARW"), b"x").unwrap();
+        let mut big = PHOTOLAB_0003.to_vec();
+        big.resize(MAX_SIDECAR_BYTES as usize + 1, b'\n');
+        std::fs::write(root.join("a.ARW.dop"), big).unwrap();
+        let index = index(&root);
+        let path = root.join("a.ARW").to_string_lossy().into_owned();
+        lock(&index)
+            .set_rating(&dir, &path, Some(5), Flag::None, None, true)
+            .unwrap();
+
+        let (listed, dirty, problems) = reconcile_listed(&root, &index, SidecarFormat::Dop);
+
+        assert_eq!(listed, std::slice::from_ref(&path));
+        assert!(dirty.is_empty(), "the writer must not patch it unread");
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].path, path);
+        assert!(problems[0].message.starts_with("a.ARW.dop: "));
+        assert_eq!(stored_rating(&index, &dir, &path), Some(5));
+
+        remove_temp_dir(&root);
+    }
+
+    #[test]
+    fn an_unparseable_sidecar_is_reported_on_every_open_and_leaves_the_rating() {
+        let root = temp_dir("sidecar-unparseable");
+        let dir = root.to_string_lossy().into_owned();
+        std::fs::write(root.join("a.ARW"), b"x").unwrap();
+        let index = index(&root);
+        let path = root.join("a.ARW").to_string_lossy().into_owned();
+        lock(&index)
+            .set_rating(&dir, &path, Some(2), Flag::None, None, true)
+            .unwrap();
+        std::fs::write(
+            root.join("a.xmp"),
+            r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="4"#,
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let (_, _, problems) = reconcile_listed(&root, &index, SidecarFormat::Xmp);
+            assert_eq!(problems.len(), 1);
+            assert_eq!(problems[0].path, path);
+            assert!(problems[0].message.starts_with("a.xmp: "));
+        }
+        assert_eq!(stored_rating(&index, &dir, &path), Some(2));
+
+        remove_temp_dir(&root);
     }
 
     #[test]

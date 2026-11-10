@@ -318,7 +318,7 @@ them; their contents are deliberately coarse.
     on it (through `path = "../backend"`, compiled twice like
     `riffle-core`). This is the first milestone that edits `crates/app`, so
     it starts only after the prefetch session's PRs have merged.
-- [ ] Step 5: The strip, the index and pass 1 of the scan
+- [x] Step 5: The strip, the index and pass 1 of the scan
   - Done when: opening a folder runs `index.rs`'s pass 1 (thumbnails,
     metadata, `EXTRACTOR_VERSION` re-extraction) through the same
     `scan.rs` worker pool and `ReadSlots` (the preview read pausing the
@@ -554,3 +554,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-09) Step 2 complete
 - (2026-11-09) Step 3 complete
 - (2026-11-09) Step 4 complete, through `../_archived/20261109-gpui-backend-crate/plan.md`
+- (2026-11-10) Step 5 complete, through `../_archived/20261110-gpui-strip-index/plan.md`

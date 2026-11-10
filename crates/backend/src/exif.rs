@@ -341,6 +341,80 @@ pub fn exif(shot: &Shot) -> Exif {
     }
 }
 
+/// The metadata shown in the right pane: the file name plus the shooting
+/// settings, already formatted for display so the frontend only lays them out.
+/// Fields the file does not carry are `None` and are left out of the pane.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Metadata {
+    pub name: String,
+    pub camera: Option<String>,
+    pub lens: Option<String>,
+    pub aperture: Option<String>,
+    pub shutter: Option<String>,
+    pub shutter_type: Option<String>,
+    pub focus_mode: Option<String>,
+    pub af_area: Option<String>,
+    pub af_tracking: Option<String>,
+    pub drive: Option<String>,
+    pub stabilization: Option<String>,
+    pub exposure_mode: Option<String>,
+    pub metering: Option<String>,
+    pub creative_style: Option<String>,
+    pub dro: Option<String>,
+    pub raw_type: Option<String>,
+    pub iso: Option<String>,
+    pub focal_length: Option<String>,
+    pub exposure_bias: Option<String>,
+    pub focus_distance: Option<String>,
+    pub captured_at: Option<String>,
+}
+
+/// The pane's `Metadata` of the file `name` whose shooting settings are `shot`.
+pub fn metadata(name: String, shot: &Shot) -> Metadata {
+    let exif = exif(shot);
+    let label = |l: Option<Labeled>| l.map(|l| l.label);
+    Metadata {
+        name,
+        camera: exif.camera,
+        lens: exif.lens,
+        aperture: label(exif.aperture),
+        shutter: label(exif.shutter),
+        // Sony has no shutter type tag on ILCE bodies; EFCS is assumed always
+        // enabled, so Off means the electronic shutter. A fully mechanical
+        // shutter with EFCS disabled would also read Off.
+        shutter_type: shot.electronic_front_curtain.and_then(|v| match v {
+            1 => Some("Mechanical".to_owned()),
+            0 => Some("Electronic".to_owned()),
+            _ => None,
+        }),
+        focus_mode: exif.focus_mode,
+        af_area: exif.af_area,
+        af_tracking: exif.af_tracking,
+        drive: exif.drive,
+        stabilization: exif.stabilization,
+        exposure_mode: exif.exposure_mode,
+        metering: exif.metering,
+        creative_style: exif.creative_style,
+        dro: exif.dro,
+        raw_type: exif.raw_type,
+        iso: label(exif.iso),
+        focal_length: label(exif.focal_length),
+        exposure_bias: shot.exposure_bias.and_then(|r| {
+            let v = r.value()?;
+            let text = decimal(r, 1)?;
+            Some(if v > 0.0 {
+                format!("+{text} EV")
+            } else {
+                format!("{text} EV")
+            })
+        }),
+        focus_distance: shot
+            .focus_distance_mm
+            .map(|mm| format!("{:.2} m", f64::from(mm) / 1000.0)),
+        captured_at: shot.capture_time.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,6 +465,39 @@ mod tests {
         assert_eq!(label(&e.iso), Some((800.0, "800".to_string())));
         assert_eq!(label(&e.focal_length), Some((50.0, "50 mm".to_string())));
         assert_eq!(e.lens.as_deref(), Some("FE 50mm F1.4 GM"));
+    }
+
+    #[test]
+    fn the_pane_metadata_formats_the_shot() {
+        let m = metadata(
+            "a.ARW".to_string(),
+            &Shot {
+                electronic_front_curtain: Some(0),
+                exposure_bias: Some(r(3, 10)),
+                focus_distance_mm: Some(1234),
+                capture_time: Some("2026:09:27 10:00:00".to_string()),
+                f_number: Some(r(28, 10)),
+                ..Shot::default()
+            },
+        );
+        assert_eq!(m.name, "a.ARW");
+        assert_eq!(m.shutter_type.as_deref(), Some("Electronic"));
+        assert_eq!(m.exposure_bias.as_deref(), Some("+0.3 EV"));
+        assert_eq!(m.focus_distance.as_deref(), Some("1.23 m"));
+        assert_eq!(m.captured_at.as_deref(), Some("2026:09:27 10:00:00"));
+        assert_eq!(m.aperture.as_deref(), Some("f/2.8"));
+        assert_eq!(m.iso, None);
+
+        let m = metadata(
+            String::new(),
+            &Shot {
+                electronic_front_curtain: Some(1),
+                exposure_bias: Some(r(-7, 10)),
+                ..Shot::default()
+            },
+        );
+        assert_eq!(m.shutter_type.as_deref(), Some("Mechanical"));
+        assert_eq!(m.exposure_bias.as_deref(), Some("-0.7 EV"));
     }
 
     #[test]

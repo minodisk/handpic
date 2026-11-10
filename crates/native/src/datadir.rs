@@ -1,13 +1,24 @@
 use std::path::{Path, PathBuf};
 
-/// The native app's own folder under the OS cache dir, apart from the Tauri
-/// app's `com.minodisk.riffle`, so the two never share one SQLite file.
-const APP_DIR: &str = "com.minodisk.riffle.native";
+/// The product's identifier after the Handpic rename.
+pub const IDENTIFIER: &str = "com.minodisk.handpic";
 
-/// The index file: `flag` when given, else `index.sqlite` in the app's folder
-/// under `cache`; `None` when neither is known.
+/// The identifiers the product had before `IDENTIFIER`, newest first.
+#[allow(dead_code)]
+pub const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.riffle"];
+
+/// The index file: `flag` when given, else `index.sqlite` in the native app's
+/// own `<IDENTIFIER>.native` folder under `cache`, apart from the Tauri app's
+/// `<IDENTIFIER>` so the two never share one SQLite file; `None` when neither
+/// is known.
 pub fn index_path(flag: Option<PathBuf>, cache: Option<&Path>) -> Option<PathBuf> {
-    flag.or_else(|| cache.map(|cache| cache.join(APP_DIR).join("index.sqlite")))
+    flag.or_else(|| {
+        cache.map(|cache| {
+            cache
+                .join(format!("{IDENTIFIER}.native"))
+                .join("index.sqlite")
+        })
+    })
 }
 
 #[cfg(test)]
@@ -32,7 +43,7 @@ mod tests {
             index_path(None, Some(Path::new("C:/cache"))),
             Some(
                 Path::new("C:/cache")
-                    .join("com.minodisk.riffle.native")
+                    .join("com.minodisk.handpic.native")
                     .join("index.sqlite")
             )
         );

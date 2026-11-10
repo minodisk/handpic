@@ -1202,7 +1202,7 @@ bar failing at q10 and the model-contribution bar failing at q5 and q10.
 `sidecar::newest` is the single newest-wins comparator (larger `mtime_ns`,
 ties go to whichever kind is listed first in `kinds()`, i.e. XMP). `write` uses
 it to pick the label kept when `label_known` is false and the stat handed to
-`mark_written`; `reconcile_sidecars_of` uses the same comparator to pick which
+`mark_written`; `sidecar::reconcile_of` uses the same comparator to pick which
 file's stat is compared against the stored one. Keep any future multi-file
 sidecar logic going through this one comparator rather than re-deriving
 "newest" locally, or a reopen right after writing can re-parse a file that

@@ -97,6 +97,19 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   `configure` still queues behind `Unwatch` on 8.2.2 (see `tauri-app.md`) is
   unverified; re-check it when the folder rename (port Step 8) needs it.
 
+### The judgments' Tauri-free pieces live in the backend (Inferred)
+
+The folder-open sidecar pass (`sidecar::reconcile_of`, with `SidecarError`
+and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
+`exif::metadata(name, &shot)`) and the stored `labelNames` value
+(`sidecar::label_names_setting` / `label_names_value`) moved out of
+`crates/app/src/commands.rs` so the native app can call them; the Tauri
+commands call them from there. `raw_only` stayed in `crates/app`: the native
+app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
+
+- Rule: a Tauri-free helper the native app needs moves into the backend, it is
+  not copied, so the two apps cannot drift in what they read and show.
+
 ### A folder change re-lists, never mid-scan (Measured)
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
@@ -116,9 +129,13 @@ the status line's `n/total`).
 
 ### The native app keeps its own index (Inferred)
 
-The index lives at `<dirs::cache_dir()>/com.minodisk.riffle.native/index.sqlite`,
-apart from the Tauri app's `com.minodisk.riffle/index.sqlite`; `--index <path>`
-overrides it. Sharing one file would put two processes on it (the Tauri
+The index lives at `<dirs::cache_dir()>/com.minodisk.handpic.native/index.sqlite`,
+apart from the Tauri app's `com.minodisk.riffle/index.sqlite` (or
+`com.minodisk.handpic/` after the Handpic rename); `--index <path>`
+overrides it. The folder is named after the Handpic identifier
+(`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`) and nothing is
+migrated from the earlier `com.minodisk.riffle.native`: the native app never
+shipped, so an old developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
 launch's `VACUUM` against a native scan's writes), make two
 `EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's
 `reconcile` drop the user's rows. The cost is a cold pass 1 on each folder's

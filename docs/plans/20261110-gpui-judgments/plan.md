@@ -182,7 +182,7 @@ Tauri settings from either, so it works before and after the rename.
 
 ## Steps
 
-- [ ] Step 1: Tick the port's Step 5, name the native data folder after the Handpic identifier, and move the folder-open sidecar pass, the pane's metadata formatting and the label-names setting into the backend
+- [x] Step 1: Tick the port's Step 5, name the native data folder after the Handpic identifier, and move the folder-open sidecar pass, the pane's metadata formatting and the label-names setting into the backend
   - Done when:
     - `../20261109-gpui-port/plan.md`: Step 5's checkbox is ticked and
       Progress gains `(2026-11-10) Step 5 complete, through
