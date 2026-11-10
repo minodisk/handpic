@@ -209,7 +209,8 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 its own index at `<cache dir>/com.minodisk.riffle.native/index.sqlite` (or
 `--index <path>`), `src/logger.rs` writes the `log` lines to stderr,
 `src/scan.rs` lists a folder, reconciles the index with the whole listing and
-runs pass 1 (`index::run_scan`) on a thread of its own, its progress reaching
+runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
+a thread of its own, their progress reaching
 the view through one channel, `src/strip.rs` is the thumbnail strip's pure
 model (the cell pitch, the scroll offset, the range kept with `RANGE_MARGIN`,
 hit testing and which cell to ask for next, with `strip.ts`'s `missing` /

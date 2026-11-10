@@ -129,7 +129,7 @@ puts logic in new modules.
 
 ## Steps
 
-- [ ] Step 1: Run pass 2 after pass 1 on the native scan thread
+- [x] Step 1: Run pass 2 after pass 1 on the native scan thread
   - Done when:
     - `crates/native/src/scan.rs`: after `index::run_scan` returns and
       `Event::Done` is sent, the same thread, unless canceled, takes
@@ -477,3 +477,5 @@ puts logic in new modules.
   adds the rest.
 
 ## Progress
+
+- (2026-11-11) Step 1 complete

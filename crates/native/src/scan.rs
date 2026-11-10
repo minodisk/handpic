@@ -10,7 +10,7 @@ use std::{
 
 use futures::channel::mpsc::UnboundedSender;
 use riffle_backend::{
-    index::{self, FileStat, Index, ScanSummary},
+    index::{self, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing},
 };
 use riffle_core::scan::ScanFocus;
@@ -41,6 +41,25 @@ pub enum Event {
     },
     Done {
         scan: u64,
+        summary: ScanSummary,
+    },
+    /// Pass 2's progress.
+    FacesProgress {
+        scan: u64,
+        done: usize,
+        total: usize,
+        /// The files written since the previous message.
+        #[expect(
+            dead_code,
+            reason = "the focus mark reads it (plan gpui-focus-marks Step 2)"
+        )]
+        ready: Vec<FaceReady>,
+    },
+    /// Pass 2 ended, also when it was canceled, had nothing to do or could
+    /// not list its files: the scan is over.
+    FacesDone {
+        scan: u64,
+        #[expect(dead_code, reason = "the backend's `scan faces:` line reports it")]
         summary: ScanSummary,
     },
     /// The folder watcher saw the folder change; the canonical path.
@@ -80,7 +99,7 @@ fn file_name(path: &Path) -> String {
         .into_owned()
 }
 
-/// A running pass 1 over one folder.
+/// A running scan over one folder: pass 1, then pass 2 on the same thread.
 pub struct Scan {
     pub id: u64,
     focus: ScanFocus,
@@ -108,8 +127,9 @@ impl Scan {
         Ok(todo)
     }
 
-    /// Run `index::run_scan` on a thread of its own: it blocks for as long as
-    /// the folder takes, which would hold one of GPUI's background threads.
+    /// Run `index::run_scan` and then `index::run_faces_scan` on a thread of
+    /// their own: they block for as long as the folder takes, which would hold
+    /// one of GPUI's background threads.
     pub fn start(
         id: u64,
         index: Arc<Mutex<Index>>,
@@ -140,6 +160,16 @@ impl Scan {
                     },
                 );
                 let _ = events.unbounded_send(Event::Done { scan: id, summary });
+                let summary =
+                    run_faces_pass(&index, &dir, &focus, &cancel, |done, total, ready| {
+                        let _ = events.unbounded_send(Event::FacesProgress {
+                            scan: id,
+                            done,
+                            total,
+                            ready,
+                        });
+                    });
+                let _ = events.unbounded_send(Event::FacesDone { scan: id, summary });
             })
         };
         Self {
@@ -160,6 +190,51 @@ impl Scan {
         self.cancel.store(true, Ordering::Relaxed);
         let _ = self.thread.join();
     }
+}
+
+/// Pass 2 over the files `faces_todo` gives, unless canceled, as the Tauri
+/// app's `run_faces_pass`.
+fn run_faces_pass(
+    index: &Mutex<Index>,
+    dir: &str,
+    focus: &ScanFocus,
+    cancel: &AtomicBool,
+    progress: impl Fn(usize, usize, Vec<FaceReady>) + Send + Sync,
+) -> ScanSummary {
+    let none = ScanSummary {
+        total: 0,
+        errors: 0,
+    };
+    if cancel.load(Ordering::Relaxed) {
+        return none;
+    }
+    let todo = match index::lock(index).faces_todo(dir) {
+        Ok(todo) => todo,
+        Err(e) => {
+            log::error!("failed to list the faces pass of {dir}: {e}");
+            return none;
+        }
+    };
+    let first = AtomicBool::new(true);
+    index::run_faces_scan(
+        index,
+        dir,
+        &todo,
+        scan_threads(),
+        focus,
+        cancel,
+        index::PROGRESS_INTERVAL,
+        |done, total, ready| {
+            if !ready.is_empty() && first.swap(false, Ordering::Relaxed) {
+                let names: Vec<String> = ready
+                    .iter()
+                    .map(|r| file_name(Path::new(&r.path)))
+                    .collect();
+                log::info!("scan faces first: {}", names.join(" "));
+            }
+            progress(done, total, ready);
+        },
+    )
 }
 
 #[cfg(test)]
