@@ -113,7 +113,7 @@ pub fn read_listing(dir: &Path, format: Option<SidecarFormat>) -> Result<Listing
     Ok(Listing { files, sidecars })
 }
 
-/// The stats `reconcile_sidecars_of` compares, keyed by lower-cased file
+/// The stats `sidecar::reconcile_of` compares, keyed by lower-cased file
 /// name. A sidecar gone since the listing is left out.
 pub fn stat_sidecars(sidecars: &[(String, PathBuf)]) -> HashMap<String, SidecarStat> {
     sidecars
