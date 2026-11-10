@@ -259,7 +259,12 @@ timing line per judgment, the file current by then asked for once one
 settles; both cleared on every listing), drawn only on the current file's own
 image, and the painting of the AF mark, the face boxes with their landmark
 dots, the judged face's mesh and the upright labels over the upright image's
-bounds.
+bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
+a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
+`load` builds next to the preview: the `EXIF` and `Maker note` groups and an
+`Analysis` group from the rows the caller passes), and `src/viewonly.rs`
+whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
+`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

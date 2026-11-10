@@ -387,6 +387,28 @@ to the update on the main thread), and splits `draw` into
 stops at `drawImage`. It starts at the latest press of the file that ended up
 shown.
 
+### The meta pane is `div` rows, and its cost lands in `present` (Measured)
+
+The right-hand pane (220 px, the Tauri `#info` width) lays out the file
+name, `n / total`, the `meta.rs` groups and the notes as `div`s, built from
+the `Metadata` that `load` formats on the background thread next to the
+preview, so paging reads nothing new. Release, `--auto 20` on the 20-file ARW
+compare folder, a fresh `--index` per run, before and after interleaved in one
+session with other sessions building on the machine (CPU 12-31 % before each
+run, so noisy): `paint` p50 0.70 / 0.82 ms before against 0.90 / 0.76 ms after,
+`present` p50 0.19 / 0.22 against 0.44 / 0.41 ms, `keypressToPixels` p50
+17.97 / 18.65 against 18.02 / 18.52 ms. `paint` times only the preview
+canvas's closure; the pane's `div`s paint after it in the same frame, so their
+cost shows as about +0.2 ms in `present`. The `div` rows were kept (the plan's
+rule: a canvas only when `paint` grows by more than 1 ms).
+
+- Rule: the view-only flag comes from the whole listing (`Listed.files`), not
+  the `--size` / `--max` subset, and is set on every open and re-listing
+  before the strip is built.
+- Rule: a stage that times one canvas's closure does not see the rest of the
+  element tree; look at `present` (and `frameWait` for layout) when adding
+  elements beside it.
+
 ### The strip costs the pager under 1 ms (Measured)
 
 Same-session A/B, the pager with the strip, the index and pass 1 against the

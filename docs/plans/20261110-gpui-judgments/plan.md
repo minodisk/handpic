@@ -223,7 +223,7 @@ Tauri settings from either, so it works before and after the rename.
       Name the moved functions in the PR so the Step 4 pattern is visible.
     - `raw_only` stays in `crates/app`: the native app's view-only rule is
       the frontend's (`viewonly.ts`), ported in Step 2.
-- [ ] Step 2: The meta pane, with room for the Analysis rows, and the view-only JPEG folder
+- [x] Step 2: The meta pane, with room for the Analysis rows, and the view-only JPEG folder
   - Done when:
     - `crates/native/src/meta.rs` is a pure model with unit tests: a port
       of `meta.ts`'s `metaGroups` over `riffle_backend::exif::Metadata`:
@@ -570,3 +570,4 @@ Tauri settings from either, so it works before and after the rename.
 ## Progress
 
 - (2026-11-11) Step 1 complete
+- (2026-11-11) Step 2 complete
