@@ -18,9 +18,9 @@ use riffle_backend::listing::Listing;
 pub(crate) use riffle_backend::listing::{canonicalize, read_listing, stat_sidecars};
 
 use crate::diagnostics::invariant;
-use crate::index::{self, FileStat, Index, IndexedFile, SidecarStat};
+use crate::index::{self, FileStat, Index, IndexedFile};
 use crate::shortcuts::{Binding, Keymap};
-use crate::sidecar::{SidecarFormat, Writer};
+use crate::sidecar::{label_names_setting, label_names_value, SidecarError, SidecarFormat, Writer};
 use crate::trash;
 
 /// Size of the header that precedes the JPEG bytes in a `preview` payload.
@@ -178,7 +178,7 @@ fn list_arw_in(dir: &Path) -> Result<Vec<String>, String> {
 fn list_folder_in(
     dir: &Path,
     format: SidecarFormat,
-) -> Result<(Vec<String>, HashMap<String, SidecarStat>), String> {
+) -> Result<(Vec<String>, HashMap<String, index::SidecarStat>), String> {
     let listing = read_listing(dir, Some(format))?;
     let sidecars = stat_sidecars(&listing.sidecars);
     Ok((listing.files, sidecars))
@@ -231,125 +231,6 @@ fn take_listing(
         return None;
     }
     cached.take().map(|c| c.listing)
-}
-
-/// Largest sidecar the folder-open pass reads. A Lightroom sidecar is tens of
-/// KB; anything past this is not a sidecar this app should be parsing, and is
-/// left alone rather than failing the open.
-pub(crate) const MAX_SIDECAR_BYTES: i64 = 4 * 1024 * 1024;
-
-/// A sidecar the folder-open pass could not use, reported to the frontend.
-#[derive(Debug, serde::Serialize)]
-pub struct SidecarError {
-    /// The RAW file's path, not the sidecar's: it has to match the key the
-    /// `sidecar-error` event uses for a write failure so the frontend's
-    /// `ErrorList` replaces one with the other instead of showing both. The
-    /// sidecar's file name goes in `message`.
-    path: String,
-    message: String,
-}
-
-/// Bring the `ratings` rows of `dir` in line with the sidecars on disk and
-/// return the judgments that still have to be written, along with the
-/// sidecars that could not be used and the number of `ratings` rows this
-/// wrote or cleared (every parsed sidecar counts, even one whose row a
-/// `set_rating` in the parse window keeps `store_sidecar_ratings` off).
-///
-/// The sidecar is the source of truth, so anything whose stat changed since
-/// the app last saw it is read back here; a sidecar that cannot be read or
-/// parsed leaves its row as it was rather than erroring the open. Under
-/// `Both` the file's newest sidecar is the one compared and read (see
-/// `sidecar::newest`).
-fn reconcile_sidecars_of(
-    dir: &str,
-    listed: &[String],
-    sidecars: &HashMap<String, SidecarStat>,
-    index: &Arc<Mutex<Index>>,
-    format: SidecarFormat,
-    names: &LabelNames,
-) -> Result<(Vec<index::DirtyRow>, Vec<SidecarError>, usize), String> {
-    let pairs: Vec<(String, Option<SidecarStat>)> = listed
-        .iter()
-        .map(|path| {
-            let stats = format.kinds().iter().filter_map(|kind| {
-                let name = kind
-                    .sidecar_path(Path::new(path))
-                    .file_name()?
-                    .to_string_lossy()
-                    .to_lowercase();
-                sidecars.get(&name).map(|stat| (stat, stat.2))
-            });
-            (path.clone(), crate::sidecar::newest(stats).cloned())
-        })
-        .collect();
-
-    let (to_parse, cleared) = index::lock(index).reconcile_sidecars(dir, &pairs)?;
-    // An oversize sidecar is rejected outright (see `MAX_SIDECAR_BYTES`), so
-    // its row cannot be brought in line with it here. Its path is tracked
-    // separately so it can be kept out of what the writer is handed below:
-    // otherwise a dirty row for it would have the writer patch a sidecar
-    // whose external edit was never read, overwriting it unread.
-    let oversize: std::collections::HashSet<&str> = to_parse
-        .iter()
-        .filter(|(_, (_, size, _), _)| *size > MAX_SIDECAR_BYTES)
-        .map(|(path, _, _)| path.as_str())
-        .collect();
-    let mut parsed: Vec<index::ParsedSidecar> = Vec::new();
-    let mut problems: Vec<SidecarError> = Vec::new();
-    for (path, (sidecar, size, mtime_ns), dirty) in &to_parse {
-        let problem = |message: String| SidecarError {
-            path: path.clone(),
-            message: format!(
-                "{}: {message}",
-                sidecar
-                    .file_name()
-                    .map(|n| n.to_string_lossy())
-                    .unwrap_or_else(|| sidecar.to_string_lossy())
-            ),
-        };
-        if oversize.contains(path.as_str()) {
-            problems.push(problem(format!(
-                "larger than {} MiB, not read",
-                MAX_SIDECAR_BYTES / 1024 / 1024
-            )));
-            continue;
-        }
-        let kind = if sidecar
-            .file_name()
-            .is_some_and(|n| SidecarFormat::Dop.matches(&n.to_string_lossy()))
-        {
-            SidecarFormat::Dop
-        } else {
-            SidecarFormat::Xmp
-        };
-        let read = std::fs::read(sidecar)
-            .map_err(|e| e.to_string())
-            .and_then(|bytes| {
-                Ok((
-                    kind.read_rating(&bytes)?,
-                    kind.read_flag(&bytes)?,
-                    kind.read_label(&bytes, names)?,
-                ))
-            });
-        match read {
-            Ok((rating, flag, label)) => {
-                parsed.push((path.clone(), rating, flag, label, *size, *mtime_ns, *dirty))
-            }
-            Err(e) => problems.push(problem(e)),
-        }
-    }
-    let mut index = index::lock(index);
-    index.store_sidecar_ratings(dir, &parsed)?;
-    // After storing, so a row the sidecar just won stays out of this: only
-    // what still has nowhere to be read back from is written out. An
-    // oversize sidecar's row is excluded too, even if still dirty, since the
-    // writer must not patch a sidecar whose contents were never read.
-    let dirty = index.dirty_rows(dir)?;
-    let dirty = dirty
-        .into_iter()
-        .filter(|(path, _, _, _, _)| !oversize.contains(path.as_str()))
-        .collect();
-    Ok((dirty, problems, cleared + parsed.len()))
 }
 
 /// Extract a file's IFD0 preview JPEG along with the Orientation, reading only
@@ -672,38 +553,6 @@ fn ai_enabled_setting(value: Option<&Value>) -> bool {
     value.and_then(Value::as_bool).unwrap_or(false)
 }
 
-/// The stored `labelNames` value: an object keyed by lowercase color whose
-/// missing, non-string or blank entries are the English default.
-fn label_names_setting(value: Option<&Value>) -> LabelNames {
-    let name = |color: &str, default: String| {
-        value
-            .and_then(|v| v.get(color))
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|n| !n.is_empty())
-            .map_or(default, str::to_string)
-    };
-    let d = LabelNames::default();
-    LabelNames {
-        red: name("red", d.red),
-        yellow: name("yellow", d.yellow),
-        green: name("green", d.green),
-        blue: name("blue", d.blue),
-        purple: name("purple", d.purple),
-    }
-}
-
-/// `names` in the shape stored under `labelNames`.
-fn label_names_value(names: &LabelNames) -> Value {
-    serde_json::json!({
-        "red": names.red,
-        "yellow": names.yellow,
-        "green": names.green,
-        "blue": names.blue,
-        "purple": names.purple,
-    })
-}
-
 /// Switch the sidecar format to `format`: apply the new format first so any
 /// rating set while this runs is queued in it, drain what the writer still
 /// holds queued in the old format, persist the new format, and reset the
@@ -916,33 +765,7 @@ pub async fn dropped_folder(path: String) -> Result<Option<String>, String> {
     .map_err(|e| e.to_string())
 }
 
-/// The metadata shown in the right pane: the file name plus the shooting
-/// settings, already formatted for display so the frontend only lays them out.
-/// Fields the file does not carry are `None` and are left out of the pane.
-#[derive(serde::Serialize)]
-pub struct Metadata {
-    name: String,
-    camera: Option<String>,
-    lens: Option<String>,
-    aperture: Option<String>,
-    shutter: Option<String>,
-    shutter_type: Option<String>,
-    focus_mode: Option<String>,
-    af_area: Option<String>,
-    af_tracking: Option<String>,
-    drive: Option<String>,
-    stabilization: Option<String>,
-    exposure_mode: Option<String>,
-    metering: Option<String>,
-    creative_style: Option<String>,
-    dro: Option<String>,
-    raw_type: Option<String>,
-    iso: Option<String>,
-    focal_length: Option<String>,
-    exposure_bias: Option<String>,
-    focus_distance: Option<String>,
-    captured_at: Option<String>,
-}
+pub(crate) use crate::exif::Metadata;
 
 pub(crate) fn read_metadata(path: &Path) -> Result<Metadata, String> {
     let name = path
@@ -950,49 +773,7 @@ pub(crate) fn read_metadata(path: &Path) -> Result<Metadata, String> {
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
     let arw =
         riffle_core::reader::read_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let shot = arw.shot;
-    let exif = crate::exif::exif(&shot);
-    let label = |l: Option<crate::exif::Labeled>| l.map(|l| l.label);
-    Ok(Metadata {
-        name,
-        camera: exif.camera,
-        lens: exif.lens,
-        aperture: label(exif.aperture),
-        shutter: label(exif.shutter),
-        // Sony has no shutter type tag on ILCE bodies; EFCS is assumed always
-        // enabled, so Off means the electronic shutter. A fully mechanical
-        // shutter with EFCS disabled would also read Off.
-        shutter_type: shot.electronic_front_curtain.and_then(|v| match v {
-            1 => Some("Mechanical".to_owned()),
-            0 => Some("Electronic".to_owned()),
-            _ => None,
-        }),
-        focus_mode: exif.focus_mode,
-        af_area: exif.af_area,
-        af_tracking: exif.af_tracking,
-        drive: exif.drive,
-        stabilization: exif.stabilization,
-        exposure_mode: exif.exposure_mode,
-        metering: exif.metering,
-        creative_style: exif.creative_style,
-        dro: exif.dro,
-        raw_type: exif.raw_type,
-        iso: label(exif.iso),
-        focal_length: label(exif.focal_length),
-        exposure_bias: shot.exposure_bias.and_then(|r| {
-            let v = r.value()?;
-            let text = crate::exif::decimal(r, 1)?;
-            Some(if v > 0.0 {
-                format!("+{text} EV")
-            } else {
-                format!("{text} EV")
-            })
-        }),
-        focus_distance: shot
-            .focus_distance_mm
-            .map(|mm| format!("{:.2} m", f64::from(mm) / 1000.0)),
-        captured_at: shot.capture_time,
-    })
+    Ok(crate::exif::metadata(name, &arw.shot))
 }
 
 /// The metadata of one file, read from the same bounded prefix as `preview`.
@@ -1093,7 +874,7 @@ pub(crate) struct ScansState {
     running: Option<RunningScan>,
     pending: HashMap<u64, PendingScan>,
     /// The number of `scan_folder` calls currently past minting their id but
-    /// not yet done (listing, `reconcile`, `reconcile_sidecars_of`), i.e.
+    /// not yet done (listing, `reconcile`, `sidecar::reconcile_of`), i.e.
     /// past the point where `running` is invisible for them. `clear_index`
     /// refuses while this is nonzero, or it could run against a folder that
     /// is mid-open with no scan indicated by `running`. See `Preparing`.
@@ -1204,7 +985,7 @@ struct PendingScan {
 }
 
 /// Marks one `scan_folder` call as being in its prepare phase (listing,
-/// `reconcile`, `reconcile_sidecars_of`) by holding `ScansState::preparing`
+/// `reconcile`, `sidecar::reconcile_of`) by holding `ScansState::preparing`
 /// above zero for as long as it is alive. `scan_folder` mints its id, takes
 /// `running` and spends this whole phase with no lock held and `running ==
 /// None`, so without this, a `clear_index` issued while a folder is opening
@@ -1314,7 +1095,7 @@ fn embed_threads() -> usize {
 /// an older, still-draining one for the same folder. `sidecar_errors` lists
 /// the sidecars the open could not read. `changed` counts the index rows the
 /// prepare phase changed: the `files` rows `Index::reconcile` dropped plus
-/// the `ratings` rows `reconcile_sidecars_of` wrote or cleared, plus 1 when a
+/// the `ratings` rows `sidecar::reconcile_of` wrote or cleared, plus 1 when a
 /// previous scan was still running and got joined here, whatever folder it
 /// was scanning (its `dir` is not compared): a cancelled scan's in-flight
 /// batch can still land after this scan's reconcile read, so if it was
@@ -1446,7 +1227,7 @@ pub async fn scan_folder(app: tauri::AppHandle, dir: String) -> Result<ScanStart
         let (dir, index) = (dir.clone(), index);
         let names = names.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            reconcile_sidecars_of(&dir, &listed, &sidecars, &index, format, &names)
+            crate::sidecar::reconcile_of(&dir, &listed, &sidecars, &index, format, &names)
         })
         .await
         .map_err(|e| e.to_string())?
@@ -3588,7 +3369,7 @@ mod tests {
                 .filter_map(|p| index::stat(Path::new(p)).ok())
                 .collect();
             let (todo, _) = index::lock(&index).reconcile(&dir, &files).unwrap();
-            reconcile_sidecars_of(
+            crate::sidecar::reconcile_of(
                 &dir,
                 &listed,
                 &sidecars,
@@ -3765,30 +3546,6 @@ mod tests {
     }
 
     #[test]
-    fn label_names_setting_falls_back_to_english_per_color() {
-        use serde_json::json;
-        assert_eq!(super::label_names_setting(None), LabelNames::default());
-        let names = super::label_names_setting(Some(&json!({
-            "red": " レッド ",
-            "yellow": "",
-            "green": 3,
-            "purple": "パープル",
-        })));
-        assert_eq!(
-            names,
-            LabelNames {
-                red: "レッド".to_string(),
-                purple: "パープル".to_string(),
-                ..LabelNames::default()
-            }
-        );
-        assert_eq!(
-            super::label_names_setting(Some(&super::label_names_value(&japanese()))),
-            japanese()
-        );
-    }
-
-    #[test]
     fn label_names_payload_lists_the_presets_english_first() {
         use serde_json::json;
         let payload = super::label_names_payload(&japanese());
@@ -3908,7 +3665,7 @@ mod tests {
         riffle_core::i18n::preset("ja").unwrap().names.clone()
     }
 
-    /// `reconcile_sidecars_of` over a fresh listing of `dir`, as `scan_folder`
+    /// `sidecar::reconcile_of` over a fresh listing of `dir`, as `scan_folder`
     /// hands it the sidecars of its own single listing.
     fn reconcile_listed(
         dir: &str,
@@ -3926,7 +3683,7 @@ mod tests {
         format: SidecarFormat,
     ) -> Result<(Vec<index::DirtyRow>, Vec<SidecarError>, usize), String> {
         let (_, sidecars) = list_folder_in(Path::new(dir), format)?;
-        reconcile_sidecars_of(
+        crate::sidecar::reconcile_of(
             dir,
             listed,
             &sidecars,
@@ -4334,8 +4091,15 @@ mod tests {
             let listed = list_arw_in(&root).unwrap();
             let (_, sidecars) = list_folder_in(&root, SidecarFormat::Xmp).unwrap();
 
-            reconcile_sidecars_of(&dir, &listed, &sidecars, &index, SidecarFormat::Xmp, &names)
-                .unwrap();
+            crate::sidecar::reconcile_of(
+                &dir,
+                &listed,
+                &sidecars,
+                &index,
+                SidecarFormat::Xmp,
+                &names,
+            )
+            .unwrap();
             index_files(&index, &dir, &listed);
             assert_eq!(label_of(&index, &dir, &listed[0]).as_deref(), Some(want));
 
@@ -4515,64 +4279,6 @@ mod tests {
     }
 
     #[test]
-    fn an_oversize_dop_is_neither_read_nor_handed_to_the_writer() {
-        let root = temp_dir("dop-oversize");
-        let dir = root.to_string_lossy().into_owned();
-        std::fs::write(root.join("a.ARW"), b"x").unwrap();
-        let mut big = PHOTOLAB_THREE.to_vec();
-        big.resize(MAX_SIDECAR_BYTES as usize + 1, b'\n');
-        std::fs::write(root.join("a.ARW.dop"), big).unwrap();
-        let index = sidecar_index(&root);
-        let listed = list_arw_in(&root).unwrap();
-        index::lock(&index)
-            .set_rating(&dir, &listed[0], Some(5), Flag::None, None, true)
-            .unwrap();
-
-        let (dirty, problems, _) =
-            reconcile_listed_with_errors(&dir, &listed, &index, SidecarFormat::Dop).unwrap();
-
-        assert!(dirty.is_empty(), "the writer must not patch it unread");
-        assert_eq!(problems.len(), 1);
-        assert_eq!(problems[0].path, listed[0]);
-        assert!(problems[0].message.starts_with("a.ARW.dop: "));
-        index_files(&index, &dir, &listed);
-        assert_eq!(rating_of(&index, &dir, &listed[0]), Some(5));
-
-        remove_temp_dir(&root);
-    }
-
-    #[test]
-    fn an_unparseable_sidecar_is_reported_on_every_open_and_leaves_the_rating() {
-        let root = temp_dir("sidecar-unparseable");
-        let dir = root.to_string_lossy().into_owned();
-        std::fs::write(root.join("a.ARW"), b"x").unwrap();
-        let index = sidecar_index(&root);
-        let listed = list_arw_in(&root).unwrap();
-        index::lock(&index)
-            .set_rating(&dir, &listed[0], Some(2), Flag::None, None, true)
-            .unwrap();
-        let xmp = root.join("a.xmp");
-        std::fs::write(
-            &xmp,
-            r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">
- <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-  <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="4"#,
-        )
-        .unwrap();
-        for _ in 0..2 {
-            let (_, problems, _) =
-                reconcile_listed_with_errors(&dir, &listed, &index, SidecarFormat::Xmp).unwrap();
-            assert_eq!(problems.len(), 1);
-            assert_eq!(problems[0].path, listed[0]);
-            assert!(problems[0].message.starts_with("a.xmp: "));
-        }
-        index_files(&index, &dir, &listed);
-        assert_eq!(rating_of(&index, &dir, &listed[0]), Some(2));
-
-        remove_temp_dir(&root);
-    }
-
-    #[test]
     fn scan_started_serializes_the_fields_the_frontend_reads() {
         let started = ScanStarted {
             total: 3,
@@ -4700,7 +4406,7 @@ mod tests {
             let (files, sidecars) = list_folder_in(&dir, format).unwrap();
             assert_eq!(files, list_arw_in(&dir).unwrap());
 
-            let expected: HashMap<String, SidecarStat> = std::fs::read_dir(&dir)
+            let expected: HashMap<String, index::SidecarStat> = std::fs::read_dir(&dir)
                 .unwrap()
                 .flatten()
                 .filter(|e| format.matches(&e.file_name().to_string_lossy()))
