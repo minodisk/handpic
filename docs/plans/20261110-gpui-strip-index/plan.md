@@ -435,3 +435,4 @@ are the later milestones (port Steps 6-9) and are out of scope here.
 
 - (2026-11-10) Step 1 complete
 - (2026-11-10) Step 2 complete
+- (2026-11-10) Step 3 complete
