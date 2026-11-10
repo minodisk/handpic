@@ -86,7 +86,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   must lose its `#[cfg(test)]` or be copied into the app's test module.
 - Rule: `mise run native:check` runs clippy and tests but does not build
   `riffle-native.exe`. Run `cargo build` before launching the exe, or you run a
-  stale binary.
+  stale binary. A still-running older `riffle-native.exe` locks
+  `target/debug/riffle-native.exe` and `cargo build` fails with `os error 5`;
+  rename the running exe aside (for example `riffle-native.stale-<pid>.exe`)
+  instead of killing it, or ask the user to close it.
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
@@ -126,6 +129,11 @@ with `no index: …` on the status line.
   `--index` with a fresh file.
 - Rule: `reconcile` drops every row of the folder it was not given, so it
   always gets the whole listing; `--size` / `--max` narrow only what is shown.
+- Rule: on Windows `canonicalize` gives `\\?\D:\...`, and every index key and
+  listed path in the native app carries that prefix, as in the Tauri app. Key
+  anything compared with the index or the scan's `ready` paths (strip cells,
+  thumbnails, the watcher's owner string) on `FileStat.path.to_string_lossy()`
+  or the canonical `PathBuf`, never on a path rebuilt from the user's argument.
 
 ### `run_scan` runs on a `std::thread` (Inferred)
 
@@ -300,7 +308,7 @@ Same-session A/B, the pager with the strip, the index and pass 1 against the
 pre-strip pager (`fb7fcdf4`), three runs each, 60 presses, warm index: median
 p50 `keypressToPixels` +0.80 ms on ARW and +0.51 ms on RAF. `paint` did not
 move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
-[the plan's results](../plans/20261110-gpui-strip-index/results.md).
+[the plan's results](../plans/_archived/20261110-gpui-strip-index/results.md).
 
 - Rule: compare against a binary built in the same session, alternating; the
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's

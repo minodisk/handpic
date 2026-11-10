@@ -166,7 +166,7 @@ The strip adds 0.8 ms on ARW and 0.5 ms on RAF at p50, and nothing to `paint`.
 While the first pass runs, the preview read stays near 1 ms, since the scan
 reads the files around the current one first. Per-run numbers and the
 conditions are in
-[`results.md`](../plans/20261110-gpui-strip-index/results.md).
+[`results.md`](../plans/_archived/20261110-gpui-strip-index/results.md).
 
 The absolute numbers here are lower than the 2026-11-09 session's on the same
 files and machine (not explained); only the same-session difference compares.
