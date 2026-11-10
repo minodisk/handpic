@@ -569,4 +569,4 @@ Tauri settings from either, so it works before and after the rename.
 
 ## Progress
 
-- (none yet)
+- (2026-11-11) Step 1 complete
