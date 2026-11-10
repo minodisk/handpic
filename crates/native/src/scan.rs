@@ -49,10 +49,6 @@ pub enum Event {
         done: usize,
         total: usize,
         /// The files written since the previous message.
-        #[expect(
-            dead_code,
-            reason = "the focus mark reads it (plan gpui-focus-marks Step 2)"
-        )]
         ready: Vec<FaceReady>,
     },
     /// Pass 2 ended, also when it was canceled, had nothing to do or could

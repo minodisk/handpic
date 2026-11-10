@@ -235,7 +235,13 @@ or scan under way ends, a burst collapsing into one) and where the current
 file lands (`carried_current`: the same file, else its nearest listed
 neighbour), the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
-(`carried_indices`).
+(`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
+(`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being Rust's
+`not_candidate`), `focus_mark` and `upright_point`, and `src/overlay.rs` the
+`f` overlay: the toggle, the current file's `Focus` read through the index's
+read-only connection (again when a pass 1 or pass 2 message names the file),
+drawn only on the current file's own image, and the painting of the AF mark
+over the upright image's bounds.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
