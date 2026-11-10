@@ -196,7 +196,7 @@ are the later milestones (port Steps 6-9) and are out of scope here.
       first scan waits for the eviction instead of racing it (both take the
       writer `Mutex`).
     - Measure nothing here beyond a sanity `page` line: Step 5 owns the gate.
-- [ ] Step 2: The thumbnail strip, in sync with the preview
+- [x] Step 2: The thumbnail strip, in sync with the preview
   - Done when:
     - `crates/native/src/strip.rs` is a pure model with unit tests: cell
       pitch (154 px, 144x96 image box + a one-line name, as the Tauri strip),
@@ -434,3 +434,4 @@ are the later milestones (port Steps 6-9) and are out of scope here.
 ## Progress
 
 - (2026-11-10) Step 1 complete
+- (2026-11-10) Step 2 complete

@@ -4,6 +4,8 @@ mod logger;
 mod orient;
 mod pager;
 mod scan;
+mod strip;
+mod thumbs;
 mod timing;
 
 use std::{
@@ -24,9 +26,10 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    App, Bounds, Context, Corners, FocusHandle, KeyDownEvent, PathPromptOptions, Pixels,
-    RenderImage, SharedString, Task, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas,
-    div, point, prelude::*, px, rgb, size,
+    App, Bounds, ContentMask, Context, Corners, FocusHandle, KeyDownEvent, MouseButton,
+    MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString, Task,
+    TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill, outline,
+    point, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
@@ -40,6 +43,8 @@ use riffle_core::{
     scan::{ReadSlots, ScanFocus},
 };
 use scan::{Event, Listed, Scan};
+use strip::{Answer, Strip};
+use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
@@ -151,6 +156,13 @@ struct Riffle {
     pager: Pager,
     status: SharedString,
     index: Result<Arc<Mutex<Index>>, String>,
+    /// The index's read-only connection the strip's thumbnails come through,
+    /// so they never wait behind a scan's write transaction.
+    reader: Option<Arc<Mutex<Index>>>,
+    strip: Strip,
+    thumbs: Thumbs,
+    /// The strip spans the window, so this is the window's width.
+    strip_width: f32,
     /// The launch's eviction, which the first scan waits for.
     eviction: Option<JoinHandle<()>>,
     slots: ReadSlots,
@@ -173,9 +185,20 @@ struct Riffle {
 impl Riffle {
     fn new(
         focus: FocusHandle,
-        index: Result<Arc<Mutex<Index>>, String>,
+        index: Result<Indexes, String>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        let (index, reader) = match index {
+            Ok((writer, reader)) => (Ok(writer), Some(reader)),
+            Err(e) => (Err(e), None),
+        };
+        cx.observe_window_bounds(window, |this, window, cx| {
+            this.strip_width = f32::from(window.viewport_size().width);
+            this.strip.clamp(this.strip_width);
+            this.strip_moved(cx);
+        })
+        .detach();
         let eviction = index.as_ref().ok().map(|index| {
             let index = index.clone();
             thread::spawn(move || {
@@ -202,6 +225,10 @@ impl Riffle {
             pager: Pager::new(0),
             status: "no folder".into(),
             index,
+            reader,
+            strip: Strip::default(),
+            thumbs: Thumbs::default(),
+            strip_width: f32::from(window.viewport_size().width),
             eviction,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: None,
@@ -311,6 +338,15 @@ impl Riffle {
         };
         self.pager = Pager::new(shown.len());
         self.files = shown;
+        let paths: Vec<String> = self
+            .files
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect();
+        self.strip = Strip::new(&paths);
+        let old = self.thumbs.reset();
+        self.retire(old);
+        self.strip_moved(cx);
         if self.files.is_empty() {
             self.status = format!("no RAW files in {}", listed.dir).into();
         } else {
@@ -345,12 +381,19 @@ impl Riffle {
             return;
         }
         match event {
-            Event::Progress { done, total, .. } => self.progress = Some((done, total)),
+            Event::Progress {
+                done, total, ready, ..
+            } => {
+                self.progress = Some((done, total));
+                self.strip.mark_ready(&ready);
+            }
             Event::Done { summary, .. } => {
                 self.progress = None;
                 self.failed = summary.errors;
+                self.strip.refresh();
             }
         }
+        self.pump(cx);
         cx.notify();
     }
 
@@ -370,8 +413,97 @@ impl Riffle {
             if let Some(scan) = &self.scan {
                 scan.focus(self.current());
             }
+            self.strip
+                .scroll_into_view(self.pager.current(), self.strip_width);
+            self.strip_moved(cx);
             self.request(key, cx);
         }
+    }
+
+    /// After the strip scrolled, resized or changed its current cell: drop
+    /// the thumbnails that left its range and ask for the ones that entered.
+    fn strip_moved(&mut self, cx: &mut Context<Self>) {
+        let released = self.strip.release_outside(self.strip_width);
+        let old = self.thumbs.release(&released);
+        self.retire(old);
+        self.pump(cx);
+        cx.notify();
+    }
+
+    fn pump(&mut self, cx: &mut Context<Self>) {
+        let Some(reader) = &self.reader else { return };
+        while self.strip.in_flight() < MAX_IN_FLIGHT {
+            let Some(index) = self.strip.next_to_request(self.strip_width) else {
+                return;
+            };
+            self.strip.request(index);
+            let path = self.files[index].to_string_lossy().into_owned();
+            self.thumbs.request(reader.clone(), index, path, cx);
+        }
+    }
+
+    fn thumbnail(&mut self, generation: u64, index: usize, read: Read, cx: &mut Context<Self>) {
+        if !self.thumbs.is_current(generation) {
+            if let Read::Thumbnail(image) = read {
+                self.retire(Some(image));
+            }
+            return;
+        }
+        match read {
+            Read::Thumbnail(image) => {
+                if self.strip.answer(index, Answer::Thumbnail) {
+                    let old = self.thumbs.insert(index, image);
+                    self.retire(old);
+                } else {
+                    self.retire(Some(image));
+                }
+            }
+            Read::NotScanned => {
+                self.strip.answer(index, Answer::NotScanned);
+            }
+            Read::Failed(reason) => {
+                self.strip.answer(index, Answer::Failed);
+                self.thumbs.fail(index, reason);
+            }
+        }
+        self.pump(cx);
+        cx.notify();
+    }
+
+    fn strip_clicked(&mut self, x: f32, cx: &mut Context<Self>) {
+        if let Some(index) = self.strip.hit_test(x) {
+            self.go(Move::To(index), cx);
+        }
+    }
+
+    /// A vertical wheel scrolls the strip sideways too, as the Tauri strip's.
+    fn strip_scrolled(&mut self, e: &ScrollEvent, window: &Window, cx: &mut Context<Self>) {
+        let delta = e.delta.pixel_delta(window.line_height());
+        let delta = if delta.x != px(0.) { delta.x } else { delta.y };
+        if self.strip.scroll_by(-f32::from(delta), self.strip_width) {
+            self.strip_moved(cx);
+        }
+    }
+
+    /// What the strip's canvas paints: the cells on screen.
+    fn strip_cells(&self) -> Vec<StripCell> {
+        let current = self.pager.current();
+        self.strip
+            .on_screen(self.strip_width)
+            .map(|index| StripCell {
+                x: index as f32 * strip::CELL_PITCH - self.strip.offset(),
+                image: self.thumbs.image(index).cloned(),
+                name: file_name(&self.files[index]).into(),
+                failure: self.strip.is_failed(index).then(|| {
+                    self.thumbs
+                        .failure(index)
+                        .unwrap_or_default()
+                        .to_string()
+                        .into()
+                }),
+                current: index == current,
+            })
+            .collect()
     }
 
     fn request(&mut self, at: Instant, cx: &mut Context<Self>) {
@@ -467,8 +599,8 @@ impl Riffle {
         status.into()
     }
 
-    fn retire(&self, image: Option<Arc<RenderImage>>) {
-        self.retired.borrow_mut().extend(image);
+    fn retire(&self, images: impl IntoIterator<Item = Arc<RenderImage>>) {
+        self.retired.borrow_mut().extend(images);
     }
 
     fn quit(&mut self, cx: &mut Context<Self>) {
@@ -483,6 +615,7 @@ impl Render for Riffle {
         let retired = self.retired.clone();
         let pending = self.pending.clone();
         let summary = self.summary.clone();
+        let cells = self.strip_cells();
         div()
             .size_full()
             .flex()
@@ -537,8 +670,137 @@ impl Render for Riffle {
                 .flex_1()
                 .w_full(),
             )
+            .child(
+                div()
+                    .w_full()
+                    .h(px(strip::STRIP_HEIGHT))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                            // The strip spans the window from its left edge.
+                            this.strip_clicked(f32::from(e.position.x), cx);
+                        }),
+                    )
+                    .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
+                        this.strip_scrolled(e, window, cx);
+                    }))
+                    .child(
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds, _, window, cx| paint_strip(&cells, bounds, window, cx),
+                        )
+                        .size_full(),
+                    ),
+            )
             .child(div().px_2().child(self.status()))
     }
+}
+
+struct StripCell {
+    /// From the strip's left edge.
+    x: f32,
+    image: Option<Arc<RenderImage>>,
+    name: SharedString,
+    /// `Some` on a cell the scan failed on, with why.
+    failure: Option<SharedString>,
+    current: bool,
+}
+
+const PLACEHOLDER: u32 = 0x262626;
+const CURRENT_OUTLINE: u32 = 0xe5e5e5;
+const NAME_COLOR: u32 = 0xd4d4d4;
+const FAILURE_COLOR: u32 = 0xa3a3a3;
+
+fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+    use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
+    for cell in cells {
+        let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
+        let cell_bounds = Bounds::new(origin, size(px(CELL_WIDTH), px(CELL_HEIGHT)));
+        let image_box = Bounds::new(
+            origin + point(px(1.), px(1.)),
+            size(px(BOX_WIDTH), px(BOX_HEIGHT)),
+        );
+        if cell.current {
+            window.paint_quad(outline(
+                cell_bounds,
+                rgb(CURRENT_OUTLINE),
+                Default::default(),
+            ));
+        }
+        window.with_content_mask(
+            Some(ContentMask {
+                bounds: cell_bounds,
+            }),
+            |window| {
+                match &cell.image {
+                    Some(image) => {
+                        let fit = fit_centered(image, image_box);
+                        if let Err(e) = window.paint_image(
+                            fit,
+                            fit,
+                            Corners::default(),
+                            image.clone(),
+                            0,
+                            false,
+                        ) {
+                            println!("error paint: {e}");
+                        }
+                    }
+                    None => window.paint_quad(fill(image_box, rgb(PLACEHOLDER))),
+                }
+                if let Some(failure) = &cell.failure {
+                    paint_failure(failure, image_box, window, cx);
+                }
+                let mut run = window.text_style().to_run(cell.name.len());
+                run.color = rgb(NAME_COLOR).into();
+                let name =
+                    window
+                        .text_system()
+                        .shape_line(cell.name.clone(), px(11.), &[run], None);
+                let at = point(origin.x, image_box.bottom());
+                let _ = name.paint(
+                    at,
+                    px(NAME_HEIGHT),
+                    TextAlign::Center,
+                    Some(px(CELL_WIDTH)),
+                    window,
+                    cx,
+                );
+            },
+        );
+    }
+}
+
+/// Why the scan failed, wrapped inside the image box.
+fn paint_failure(
+    text: &SharedString,
+    image_box: Bounds<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let inner = Bounds::new(
+        image_box.origin + point(px(6.), px(6.)),
+        image_box.size - size(px(12.), px(12.)),
+    );
+    let mut run = window.text_style().to_run(text.len());
+    run.color = rgb(FAILURE_COLOR).into();
+    let line_height = px(12.);
+    let Ok(lines) = window.text_system().shape_text(
+        text.clone(),
+        px(10.),
+        &[run],
+        Some(inner.size.width),
+        None,
+    ) else {
+        return;
+    };
+    window.with_content_mask(Some(ContentMask { bounds: inner }), |window| {
+        let mut at = inner.origin;
+        for line in lines {
+            let _ = line.paint(at, line_height, TextAlign::Left, Some(inner), window, cx);
+            at.y += line.size(line_height).height;
+        }
+    });
 }
 
 fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
@@ -554,12 +816,24 @@ fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
     Bounds::new(origin, fit)
 }
 
-fn open_index(flag: Option<PathBuf>) -> Result<Arc<Mutex<Index>>, String> {
+/// The writer and the read-only connection; the writer stands in for a
+/// reader that does not open, as in the Tauri app.
+type Indexes = (Arc<Mutex<Index>>, Arc<Mutex<Index>>);
+
+fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
     let path = datadir::index_path(flag, dirs::cache_dir().as_deref())
         .ok_or("no cache dir to keep the index in")?;
     let index = Index::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     log::info!("index: {}", path.display());
-    Ok(Arc::new(Mutex::new(index)))
+    let index = Arc::new(Mutex::new(index));
+    let reader = match Index::open_reader(&path) {
+        Ok(reader) => Arc::new(Mutex::new(reader)),
+        Err(e) => {
+            log::error!("failed to open the index reader at {}: {e}", path.display());
+            index.clone()
+        }
+    };
+    Ok((index, reader))
 }
 
 fn main() {
@@ -589,7 +863,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, cx)
+                    Riffle::new(focus, index, window, cx)
                 })
             },
         )
