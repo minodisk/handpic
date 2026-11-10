@@ -243,9 +243,8 @@ mod tests {
     #[test]
     fn no_stale_mark_from_a_read_in_flight_when_toggled_off() {
         let mut marks = shown("a");
-        marks.toggle();
         let ticket = marks.reading();
-        marks.toggle();
+        assert!(!marks.toggle());
         assert!(!marks.answer(ticket, "a".into(), Some(focus())));
         assert!(marks.toggle());
         assert!(marks.mark(Some("a")).is_none());
