@@ -217,7 +217,14 @@ hit testing and which cell to ask for next, with `strip.ts`'s `missing` /
 a `canvas`, and `src/thumbs.rs` the thumbnails of the strip's range, read
 `MAX_IN_FLIGHT` at a time through the index's read-only connection, decoded
 and turned upright, released into the view's `retired` list when their cell
-leaves the range.
+leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
+port of `scanfocus.ts`: the current file, then the strip's range nearest
+first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
+after the current file or the range last changed, and `src/viewed.rs` the
+pure parts of remembering the folder: the coalescing `set_last_viewed` writer
+(`Latest`, which the next open resumes at), the per-folder `mark_viewed`
+batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
+(`Dwell`).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
