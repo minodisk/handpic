@@ -20,9 +20,10 @@ mod thumbs;
 mod timing;
 mod viewed;
 mod viewonly;
+mod zoom;
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     env,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -59,7 +60,9 @@ use riffle_backend::{
     watch::{self, Watch},
 };
 use riffle_core::{
-    Flag, reader,
+    Flag,
+    arw::FocusLocation,
+    reader,
     scan::{ReadSlots, ScanFocus},
 };
 use scan::{Event, Listed, Prepared, Scan};
@@ -68,6 +71,7 @@ use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
+use zoom::{Arrived, Zoom};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// Out of phase with 60 Hz vsync.
@@ -83,6 +87,7 @@ struct Loaded {
     px: (u32, u32),
     orientation: u16,
     meta: Metadata,
+    focus: Option<FocusLocation>,
 }
 
 /// mozjpeg reports a corrupt JPEG by unwinding, which would otherwise lose
@@ -128,6 +133,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         px: (w, h),
         orientation: arw.orientation,
         meta,
+        focus: arw.shot.focus,
     })
 }
 
@@ -262,6 +268,13 @@ struct Riffle {
     summary: Rc<RefCell<Summary>>,
     key: Option<Instant>,
     sent: Instant,
+    zoom: Zoom<zoom::Crop>,
+    /// The pending re-cut after a resize; dropping it cancels it.
+    zoom_timer: Option<Task<()>>,
+    /// The preview canvas's size in device pixels, as last painted.
+    viewport: Rc<Cell<(u32, u32)>>,
+    /// The keyed crop the next presented frame shows.
+    zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
 }
 
 impl Riffle {
@@ -280,6 +293,7 @@ impl Riffle {
             this.strip_width = f32::from(window.viewport_size().width);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
+            this.zoom_resized(cx);
         })
         .detach();
         let eviction = index.as_ref().ok().map(|index| {
@@ -350,6 +364,10 @@ impl Riffle {
             summary: Rc::default(),
             key: None,
             sent: Instant::now(),
+            zoom: Zoom::default(),
+            zoom_timer: None,
+            viewport: Rc::default(),
+            zoom_pending: Rc::default(),
         }
     }
 
@@ -506,7 +524,16 @@ impl Riffle {
         self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
         let paths = path_strings(&shown);
+        // A re-listing that leaves the same file current keeps its crop.
+        let mut same_file = false;
         if carry {
+            same_file = !paths.is_empty()
+                && path_strings(&self.files).get(self.pager.current())
+                    == paths.get(resync::carried_current(
+                        &path_strings(&self.files),
+                        &paths,
+                        self.pager.current(),
+                    ));
             self.carry(&paths);
         } else {
             self.pager = Pager::new(paths.len());
@@ -540,6 +567,9 @@ impl Riffle {
             self.analyze_current(cx);
         }
         self.notes.clear();
+        if !same_file {
+            self.zoom_page(cx);
+        }
         match (todo, &self.index) {
             (
                 Some(Ok(Prepared {
@@ -703,6 +733,7 @@ impl Riffle {
             (_, Some("previous")) => self.go(Move::Previous, cx),
             (_, Some("next")) => self.go(Move::Next, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
+            (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some(action)) => log::debug!("key: {action} is not handled yet"),
             (_, None) => {}
         }
@@ -768,6 +799,7 @@ impl Riffle {
             self.strip_moved(cx);
             self.request(key, cx);
             self.read_focus(cx);
+            self.zoom_page(cx);
         }
     }
 
@@ -1034,6 +1066,7 @@ impl Riffle {
                 self.retire(old);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
+                self.zoom.shown(loaded.focus, loaded.orientation);
                 self.analyze_current(cx);
                 self.start_dwell(cx);
                 cx.notify();
@@ -1074,6 +1107,9 @@ impl Riffle {
 
     fn status(&self) -> SharedString {
         let mut status = self.status.to_string();
+        if self.zoom.is_on() {
+            status.push_str("  1:1");
+        }
         if let Err(e) = &self.index {
             status.push_str(&format!("  no index: {e}"));
         }
@@ -1085,6 +1121,105 @@ impl Riffle {
             status.push_str(&format!("  {} failed", self.failed));
         }
         status.into()
+    }
+
+    fn toggle_zoom(&mut self, cx: &mut Context<Self>) {
+        let request = self
+            .zoom
+            .toggle(!self.files.is_empty(), self.viewport.get(), Instant::now());
+        self.send_crop(request, cx);
+        cx.notify();
+    }
+
+    /// Another file or listing is current: drop the held crop and, zoomed,
+    /// read the new one.
+    fn zoom_page(&mut self, cx: &mut Context<Self>) {
+        let (old, request) = self.zoom.page(!self.files.is_empty(), self.viewport.get());
+        self.retire(old.map(|crop| crop.image));
+        self.zoom_timer = None;
+        self.send_crop(request, cx);
+    }
+
+    fn send_crop(&self, request: Option<zoom::Request>, cx: &mut Context<Self>) {
+        if let Some(request) = request {
+            zoom::send(request, self.files[self.pager.current()].clone(), cx);
+        }
+    }
+
+    fn crop_arrived(
+        &mut self,
+        seq: u64,
+        crop: Result<(zoom::Crop, (u32, u32)), String>,
+        keypress: Option<Instant>,
+        cx: &mut Context<Self>,
+    ) {
+        let timed = crop
+            .as_ref()
+            .ok()
+            .zip(keypress)
+            .map(|((c, _), key)| zoom::Timed {
+                key,
+                read: c.read,
+                decode: c.decode,
+                orient: c.orient,
+            });
+        match self.zoom.arrived(seq, crop, self.viewport.get()) {
+            Arrived::Shown { release, resized } => {
+                self.retire(release.map(|crop| crop.image));
+                *self.zoom_pending.borrow_mut() = timed;
+                if resized {
+                    self.zoom_resized(cx);
+                }
+            }
+            Arrived::Stale { release, request } => {
+                self.retire(release.map(|crop| crop.image));
+                self.send_crop(request, cx);
+            }
+            Arrived::Failed(e) => {
+                let name = file_name(&self.files[self.pager.current()]);
+                self.fail(&format!("{name}: {e}"));
+            }
+        }
+        cx.notify();
+    }
+
+    /// Re-cut the crop once the viewport has settled for
+    /// `CROP_RESIZE_DEBOUNCE`.
+    fn zoom_resized(&mut self, cx: &mut Context<Self>) {
+        let Some(seq) = self.zoom.resized() else {
+            return;
+        };
+        self.zoom_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(zoom::CROP_RESIZE_DEBOUNCE)
+                .await;
+            this.update(cx, |this, cx| {
+                let request = this.zoom.settled(seq, this.viewport.get());
+                this.send_crop(request, cx);
+            })
+            .ok();
+        }));
+    }
+
+    /// What the preview canvas paints while zoomed: the crop, over the
+    /// scaled preview when the file has a focus point.
+    fn zoom_paint(&self) -> Option<zoom::Paint> {
+        if !self.zoom.is_on() {
+            return None;
+        }
+        let crop = self.zoom.crop();
+        let placeholder = self.image.clone().zip(self.zoom.preview()).and_then(
+            |(image, (focus, orientation))| {
+                let s = image.size(0);
+                let preview = (s.width.0 as u32, s.height.0 as u32);
+                let rect = zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
+                Some((image, rect))
+            },
+        );
+        Some(zoom::Paint {
+            placeholder,
+            crop: crop.map(|c| (c.image.clone(), c.point)),
+        })
     }
 
     fn retire(&self, images: impl IntoIterator<Item = Arc<RenderImage>>) {
@@ -1184,6 +1319,9 @@ impl Render for Riffle {
         let summary = self.summary.clone();
         let cells = self.strip_cells();
         let mark = self.marks.mark(self.current_path().as_deref());
+        let zoom_paint = self.zoom_paint();
+        let viewport = self.viewport.clone();
+        let zoom_pending = self.zoom_pending.clone();
         div()
             .size_full()
             .flex()
@@ -1204,8 +1342,16 @@ impl Render for Riffle {
                             |_, _, _| {},
                             move |bounds: Bounds<Pixels>, _, window, cx| {
                                 let page = pending.borrow_mut().take();
+                                let zoomed = zoom_pending.borrow_mut().take();
                                 let paint_started = Instant::now();
-                                if let Some(image) = image {
+                                let scale = window.scale_factor();
+                                viewport.set((
+                                    (f32::from(bounds.size.width) * scale).round() as u32,
+                                    (f32::from(bounds.size.height) * scale).round() as u32,
+                                ));
+                                if let Some(zoom_paint) = zoom_paint {
+                                    zoom_paint.paint(bounds, window);
+                                } else if let Some(image) = image {
                                     let fit = fit_centered(&image, bounds);
                                     if let Err(e) = window.paint_image(
                                         fit,
@@ -1221,7 +1367,7 @@ impl Render for Riffle {
                                 }
                                 let paint_finished = Instant::now();
                                 let old = retired.take();
-                                if page.is_none() && old.is_empty() {
+                                if page.is_none() && zoomed.is_none() && old.is_empty() {
                                     return;
                                 }
                                 // `defer` runs when the update holding the frame's
@@ -1233,6 +1379,9 @@ impl Render for Riffle {
                                             page.stages(paint_started, paint_finished, presented);
                                         println!("{}", page.line(&stages));
                                         summary.borrow_mut().record(stages);
+                                    }
+                                    if let Some(zoomed) = zoomed {
+                                        println!("{}", zoomed.line(presented));
                                     }
                                     for image in old {
                                         cx.drop_image(image, None);
