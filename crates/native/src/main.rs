@@ -1245,9 +1245,14 @@ impl Render for Riffle {
                                     zoom_paint.paint(bounds, window);
                                 } else if let Some(image) = image {
                                     let fit = fit_centered(&image, bounds);
-                                    if let Err(e) =
-                                        window.paint_image(fit, fit, Corners::default(), image, 0, false)
-                                    {
+                                    if let Err(e) = window.paint_image(
+                                        fit,
+                                        fit,
+                                        Corners::default(),
+                                        image,
+                                        0,
+                                        false,
+                                    ) {
                                         println!("error paint: {e}");
                                     }
                                     overlay::paint(mark.as_ref(), fit, window, cx);
@@ -1262,7 +1267,8 @@ impl Render for Riffle {
                                 cx.defer(move |cx| {
                                     let presented = Instant::now();
                                     if let Some(page) = page {
-                                        let stages = page.stages(paint_started, paint_finished, presented);
+                                        let stages =
+                                            page.stages(paint_started, paint_finished, presented);
                                         println!("{}", page.line(&stages));
                                         summary.borrow_mut().record(stages);
                                     }
