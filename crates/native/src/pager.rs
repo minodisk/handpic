@@ -23,6 +23,10 @@ impl Pager {
         }
     }
 
+    pub fn current(&self) -> usize {
+        self.index
+    }
+
     /// Move the current file, wrapping around. Whether it changed.
     pub fn go(&mut self, to: Move) -> bool {
         if self.len == 0 {

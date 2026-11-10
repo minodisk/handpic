@@ -205,7 +205,12 @@ throughput in bytes per second and the system's disk busy time, 0–100 %
 every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
-`crates/app` (see `docs/agents/native-app.md`).
+`crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
+its own index at `<cache dir>/com.minodisk.riffle.native/index.sqlite` (or
+`--index <path>`), `src/logger.rs` writes the `log` lines to stderr, and
+`src/scan.rs` lists a folder, reconciles the index with the whole listing and
+runs pass 1 (`index::run_scan`) on a thread of its own, its progress reaching
+the view through one channel.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
