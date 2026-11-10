@@ -112,7 +112,11 @@ XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 (`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
 `src/listing.rs`
 the one `read_dir` of a folder (its RAW files, or its JPEGs when it holds no
-RAW, and the sidecars next to them) and `canonicalize`, `src/trash.rs` the
+RAW, and the sidecars next to them) and `canonicalize`, `src/ondemand.rs`
+the faces and the eye judgment of the shown file, read on demand rather than
+at scan time and touching neither the index nor `ReadSlots` (`read_faces`,
+`read_eyes`, whose `current` check stops a superseded judgment, and the
+`raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
 folder, each RAW with the `.xmp` and `.dop` sidecars that exist for it and a
 JPEG alone, and moves them to the OS trash, RAW first, in chunks on Windows
@@ -235,7 +239,27 @@ or scan under way ends, a burst collapsing into one) and where the current
 file lands (`carried_current`: the same file, else its nearest listed
 neighbour), the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
-(`carried_indices`), `src/meta.rs` the right-hand meta pane's rows (`groups`,
+(`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
+(`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being Rust's
+`not_candidate`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
+`face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
+`FaceCache` (each path detected once, kept by path, a clear dropping the
+answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
+(one judgment in flight, unknown eyes cached, a clear dropping the answers
+issued before it, and the latest ticket's id in a shared atomic the
+backend's `current` check reads, so a newer request or a clear supersedes the
+running judgment), `src/facemesh.rs` the port of `facemesh.ts` (MediaPipe's
+face parts outline and iris edges, `mesh_edges`, `mesh_points`), and
+`src/overlay.rs` the
+`f` overlay: the toggle, the current file's `Focus` read through the index's
+read-only connection (again when a pass 1 or pass 2 message names the file),
+the current RAW file's faces detected and its eyes judged once its image is
+shown through the backend's `ondemand::read_faces` / `read_eyes` (one `eyes`
+timing line per judgment, the file current by then asked for once one
+settles; both cleared on every listing), drawn only on the current file's own
+image, and the painting of the AF mark, the face boxes with their landmark
+dots, the judged face's mesh and the upright labels over the upright image's
+bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
 a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 `load` builds next to the preview: the `EXIF` and `Maker note` groups and an
 `Analysis` group from the rows the caller passes), and `src/viewonly.rs`

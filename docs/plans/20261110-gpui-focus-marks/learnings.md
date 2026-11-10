@@ -36,7 +36,220 @@
 - The quick `--auto 20` sanity run was skipped: it is a timed run and Step 6
   waits for the user's go signal.
 
+## Step 2: the `f` focus mark
+
+- No folder-wide entries store existed in `crates/native` on `main` at
+  `f14e49ac` (Step 6's #973 moved the sidecar pass and the pane metadata into
+  the backend but added no store to the view), so the mark reads one row with
+  `Index::entry` on the read-only connection, as the plan's default.
+- `index::Focus` has no `PartialEq`, so `overlay::Mark` cannot derive it; the
+  tests compare its fields.
+- `photo_tier` returns `bool`: `focus.ts`'s `PhotoTier` has the one value
+  `good`, so `Option<PhotoTier>` would be a one-variant enum.
+- Not ported from `focus.test.ts` (out of this step's scope, listed for the
+  PR): `FOCUS_MARK_ICONS`, `stripState`, `AF_EYE_HELP`, `eyesOpenness`,
+  `applyFaceReady`, `applySharpnessReady`, and `faceMarks` / `faceLabel` /
+  `faceLabelAt` (Step 4). Every case of the ported functions was ported.
+- The focus is read only while `f` is on (a toggle on reads at once), so
+  paging with the overlay off does no extra index read. Reads carry a ticket
+  so an older answer cannot overwrite a newer one for the same file.
+- `PathBuilder::stroke` gives butt caps and lyon's `LineCap` is not
+  re-exported; the arms are lengthened by half the stroke width instead (see
+  `native-app.md`).
+- The plan listed the shown image's stored size among the view's fields; the
+  mark does not need it (the draw size comes from the fit bounds, the scale
+  from the sensor size), so it is left for Step 4's face boxes.
+- Python's text mode on Windows writes CRLF; edit files with
+  `newline=''` (or strip `\r` afterwards), else `cargo fmt --check` and the
+  diff show every line changed.
+- Hand check (debug build with a temporary `info` line in `overlay::paint`
+  giving the mark's window coordinates and state, removed before the
+  commit; overlay temporarily on at launch, `--auto 7`) on
+  `D:\Photos\tests\20261110-gpui-pass2\marks\` with a fresh
+  `--index ..\marks-index.sqlite`. Files and what the log showed:
+  - `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8, AF frame 702x703): the
+    first read came back `None` (pass 1 not there yet), the pass 1 message
+    re-read it, then Neutral (no face); the point at (808.30, 268.91) on a
+    569x852 fit matches the hand computation through `upright_point`.
+  - `ILCE-7M4_DSC07652.ARW` (orientation 6, AF frame 205x205): Neutral,
+    re-read when pass 2's batch named it.
+  - `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (orientation 8,
+    no frame): Neutral, a candidate with closed eyes (EAR 0.036).
+  - `ILCE-6400_DSC01340.ARW` (orientation 6, no frame): Neutral, a candidate
+    turned past the yaw cut (-36.2).
+  - `ILCE-6400_DSC00405.ARW` (manual focus): no mark.
+  - `_DSC1616.ARW` (landscape, frame 350x351): Low (`eye_focus` 0.708).
+  - `_DSC1758.ARW` (landscape, frame 350x351): Good.
+  - `_DSC1760.ARW` (landscape, frame 832x740): Neutral (no face).
+
+## Step 3: the on-demand faces and eyes in the backend
+
+- The module is `crates/backend/src/ondemand.rs` (`riffle_backend::ondemand`),
+  not `faces.rs`: `read_eyes` itself does `use riffle_core::{decode, eyes,
+  faces}`, and a client importing both crates' `faces` would have to alias
+  one. No other backend module (including #973's) uses that name.
+- `raw_only` moved with them as `pub`, and the app's `set_rating` ("culling")
+  and its `culling_and_face_detection_refuse_a_jpeg` test now import it from
+  there; that test stays in the app because it guards the culling command.
+- Besides the four tests the plan names, the ignored
+  `times_eyes_of_on_real_files` and `a_preview_that_is_not_a_jpeg_is_a_faces_error`
+  moved too, since they test only `read_eyes` / `read_faces`. That left the
+  app's `arw_with_preview` unused, so it moved rather than being copied;
+  `gradient_jpeg`, `temp_dir` and `remove_temp_dir` are copied (the app's
+  remaining tests still use them).
+
+## Step 4: face boxes, landmark dots and labels
+
+- `FaceCache` is `crates/native/src/faces.rs` (the native crate has no other
+  `faces`; it imports `riffle_core::faces` nowhere). It keeps
+  `Arc<FacesResponse>` so the paint closure gets the faces without a clone:
+  the backend's `FacesResponse` derives neither `Clone` nor `PartialEq`, and
+  adding them would have been a backend diff for this alone. The tests compare
+  face counts instead of whole values.
+- `Marks::mark` no longer needs a read focus: it answers whenever the overlay
+  is on and the shown image is the current file's, with `focus` and `faces`
+  each optional, because the Tauri app draws the face boxes regardless of the
+  AF mark (a manual-focus frame, `ILCE-6400_DSC00405.ARW`, has no mark but
+  one face box). Step 2's tests now check `mark(..).focus` where they checked
+  `mark(..)`.
+- The JPEG (view-only) gate is `riffle_core::scan::is_raw_file` on the
+  current path: `scan::list` gives a folder's RAW files or, without any, its
+  JPEGs, so the file tells the folder, and `read_faces` refuses a JPEG anyway.
+- Detection is asked for when the image is shown (`loaded`), when `f` turns
+  on and after every listing (`opened`, which clears the cache first, so a
+  re-listing re-detects the current file). Not on `go`, so a held arrow key
+  does not detect the files it passes, as the Tauri app asks only from
+  `draw()` once the bitmap is the current file's.
+- The stored size the plan listed for Step 2 is not needed: the scale comes
+  from `FacesResponse`'s own `width` / `height`, the preview the detection
+  ran on.
+- `face_label` formats the score with `{:.2}` on the `f32`; the Tauri label
+  runs `toFixed(2)` on the JSON's shortest `f32` text read as an `f64`. The
+  two can differ in the last digit only on a score sitting on a rounding tie
+  (for example 0.125); not worth matching.
+- Heredocs of a hundred-plus lines with backticks failed in the Bash tool
+  (`unexpected EOF while looking for matching`); writing the patch script
+  with the Write tool and running it worked. `overlay.rs` was checked out
+  with CRLF although its attribute is `eol=lf`; normalize on read.
+- Hand check (debug build, temporary `info` lines in `overlay::detect` and
+  `paint_label` giving each detection's path and face count and each label's
+  text, its computed position and the face box; the overlay temporarily on at
+  launch, `--auto 7`; all removed before the commit) on
+  `D:\Photos\tests\20261110-gpui-pass2\marks\` with a fresh
+  `--index ..\step4-index.sqlite`. Each file was detected once per run:
+  - `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8): one face,
+    `0.92  106×139  eyes 50`;
+  - `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (orientation 8):
+    one face, `0.92  291×388  eyes 137`;
+  - `ILCE-6400_DSC01340.ARW` (orientation 6): one face,
+    `0.90  199×244  eyes 62`;
+  - `ILCE-6400_DSC00405.ARW` (landscape, manual focus): one face,
+    `0.90  133×167  eyes 62`;
+  - `_DSC1616.ARW`: four faces (0.73-0.75); `_DSC1758.ARW`: nine faces
+    (0.65-0.91), the several-faces frame;
+  - `ILCE-7M4_DSC07652.ARW` and `_DSC1760.ARW`: no face.
+  The label positions on the orientation 6 and 8 frames match a hand
+  computation through `upright_point` and `face_label_at` (for example
+  `ILCE-6400_DSC01340`'s box at (-134.30, -134.77) 128.49x104.95 on an
+  852x569.41 unrotated drawing puts the label at (29.8, -148.3)), and the
+  quarter-turn labels give the upright box's width first.
+
+## Step 5: the on-demand eye judgment and the face mesh
+
+- `EyesCache` is `crates/native/src/eyes.rs` and `facemesh.ts` is
+  `crates/native/src/facemesh.rs`. The edges are `[[usize; 2]; N]` rather than
+  a flat list, so the counts (149, 8) are in the types and the tests still
+  check them along with the index ranges and duplicates. The MediaPipe
+  notice is carried over word for word, but as a plain `/* */` comment: Rust
+  reads `/*!` as an inner doc comment, allowed only at the top of the module.
+- The latest ticket's id is an `Arc<AtomicU64>` inside `EyesCache`;
+  `current(ticket)` hands out the closure `read_eyes` asks. Besides a newer
+  request (the plan's rule), `clear` stores `0`, so a folder switch or a
+  re-listing stops the running judgment at once instead of only when the new
+  folder's first image is shown and asks for its own judgment. The native
+  app asks only once the image is shown (as for the faces), not on `go` as
+  the Tauri `show()` does, so without this a switch would often let the old
+  judgment run its model to the end.
+- `EyesJudgment` derives neither `Clone` nor `Default`; the cache keeps
+  `Option<Arc<EyesJudgment>>` per path, as `FaceCache` keeps
+  `Arc<FacesResponse>`. `settle` takes `Option<Option<EyesJudgment>>`:
+  `None` superseded, `Some(None)` unknown eyes (no face, a failure).
+- `main.rs`'s `detect_faces` became `analyze_current` (faces and eyes, the
+  same four call sites) and `Marks::clear_faces` became `clear`. The judgment's
+  callback calls `analyze_current` once it settles, which asks for the file
+  current by then.
+- `paint` no longer returns early without faces: the mesh is drawn whenever
+  a judgment exists, then the labels, as the Tauri `draw()` order (mark,
+  boxes, mesh, labels).
+- The `eyes` line is `info` (the logger prints `Info`), with the file name;
+  the Tauri line's `ipc` has no counterpart.
+- Hand check (debug build, temporary `info` lines in `overlay::paint` giving
+  the face eyes' and the mesh's iris centers' window positions, the overlay
+  temporarily on at launch, a temporary folder switch after the `--auto`
+  presses; all removed before the commit) under
+  `D:\Photos\tests\20261110-gpui-pass2\` with fresh indexes there:
+  - `marks`, `--auto 7`: `ILCE-6300_..._DSC03068.arw` (orientation 8)
+    came back `closed` with 149 edges and no dot, the iris centers at
+    (783.8, 332.0) / (858.1, 327.2) against YuNet's eyes at (785.0, 332.1) /
+    (857.1, 325.9); `_DSC1758.ARW` `open`, 157 edges, two dots,
+    (888.9, 331.6) / (915.3, 339.8) against (884.5, 333.3) / (914.0, 335.0);
+    `ILCE-6400_DSC01340.ARW` (orientation 6) `open`, the left iris at
+    (849.7, 336.0) against YuNet's (846.0, 332.3). Files with no judged face
+    (`ILCE-7M4_DSC07652`, `_DSC1760`, `_DSC1616`) logged `model` under 1 ms
+    and drew no mesh. A judgment taking longer than the 1 s between presses
+    (`ILCE-1M2_sony_a1_ii_03`, 2 s in the debug build) settled after the
+    page turned and was not drawn.
+  - `ARW` (300 files), `--auto 60` with the presses 30 ms apart: 7 `eyes`
+    lines for the 60 files passed.
+  - `marks` then `ARW` opened 250 ms after the second press: the judgment of
+    `ILCE-6300_..._DSC03068.arw` logged `model=0.0ms superseded`, in both of
+    two runs.
+
 ## Deferred issues (todo candidates)
+
+- Pending manual check (Step 2, Windows, the user's): the side-by-side of the
+  `f` mark against the Tauri app could not be made here (no screenshots).
+  Open `D:\Photos\tests\20261110-gpui-pass2\marks\` in the native app
+  (`mise run native:dev -- <folder> --index <fresh file in that test folder>`)
+  and in the Tauri app (its own index), press `f` in both and step through
+  the eight files listed under Step 2 above. Expected: on each file the
+  crosshair and the AF frame sit on the same spot of the picture, with the
+  same color (bright green on `_DSC1758`, gray on `_DSC1616`, white on the
+  rest), no mark on `ILCE-6400_DSC00405.ARW`, and the arm ends keep the dark
+  outline. The step's checkbox was ticked on the automated criteria (unit
+  tests and the logged coordinates).
+
+- Pending manual check (Step 4, Windows, the user's): the side-by-side of the
+  face boxes, landmark dots and labels against the Tauri app could not be
+  made here (no screenshots). Open `D:\Photos\tests\20261110-gpui-pass2\marks\`
+  in the native app (`mise run native:dev -- <folder> --index <fresh file in
+  that test folder>`) and in the Tauri app (its own index), press `f` in both
+  and step through the files listed under Step 4 above, at least
+  `_DSC1758.ARW` (nine faces), `ILCE-6400_DSC01340.ARW` (orientation 6),
+  `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8) and `ILCE-6400_DSC00405.ARW`
+  (a face box without an AF mark). Expected: the same boxes, five cyan dots
+  per face and label text in both apps, each label upright above its box's
+  top-left corner (inside the box at the image's top edge, pulled left at the
+  right edge), and the labels readable over a bright face with the native
+  app's offset-copy halo (`docs/agents/native-app.md`); if they do not read,
+  switch `paint_label` to a dark quad behind the text. The step's checkbox was
+  ticked on the automated criteria (unit tests and the logged positions).
+
+- Pending manual check (Step 5, Windows, the user's): the side-by-side of the
+  face mesh against the Tauri app could not be made here (no screenshots).
+  Open `D:\Photos\tests\20261110-gpui-pass2\marks\` in the native app
+  (`mise run native:dev -- <folder> --index <fresh file in that test folder>`)
+  and in the Tauri app (its own index), press `f` in both and stop on
+  `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (closed eyes,
+  orientation 8), `_DSC1758.ARW` (open eyes) and `ILCE-6400_DSC01340.ARW`
+  (portrait, orientation 6), waiting for the judgment (up to 2 s in a debug
+  build). Expected: the magenta mesh (face oval, eyes, brows, nose, lips) on
+  the same face with the same lines in both apps, over a dark outline; the
+  iris rings and two iris dots on the open-eyed frames only. Also hold `→`
+  with `f` on and check that the log's `eyes` lines name only files the paging
+  stopped on or passed slowly. The step's checkbox was ticked on the automated
+  criteria (unit tests, the logged positions and the `--auto` runs above).
+
 
 - Stale scan state on a failed `prepare` (found while wiring Step 1). `list`
   takes and stops the previous `Scan`, but `opened` clears `progress` /

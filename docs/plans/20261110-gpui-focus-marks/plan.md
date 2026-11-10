@@ -182,7 +182,7 @@ puts logic in new modules.
       call.
     - Do not store the `FaceReady` values in the view here; Step 2 decides
       how the mark reads them. The strip does not change.
-- [ ] Step 2: The `f` focus mark, colored by the stored analysis
+- [x] Step 2: The `f` focus mark, colored by the stored analysis
   - Done when:
     - A new pure module (suggested `crates/native/src/mark.rs`) ports from
       `focus.ts`: the seven cut constants with their values, `photo_tier`,
@@ -246,7 +246,7 @@ puts logic in new modules.
       overlay call a single line after the image is painted, and take the
       image bounds as an argument so a later 1:1 view can pass its own or
       skip the call.
-- [ ] Step 3: Move the on-demand face detection and eye judgment into `riffle-backend`
+- [x] Step 3: Move the on-demand face detection and eye judgment into `riffle-backend`
   - Done when:
     - A new backend module (suggested `crates/backend/src/faces.rs`; name to
       confirm, it must not be confused with `riffle_core::faces`) holds
@@ -268,7 +268,7 @@ puts logic in new modules.
       (`docs/agents/native-app.md`), which these functions already satisfy.
     - The alternative (reimplement in `crates/native`, no `crates/app` diff)
       was considered and not chosen; see "Trade-offs and risks".
-- [ ] Step 4: Face boxes with their landmark dots and labels
+- [x] Step 4: Face boxes with their landmark dots and labels
   - Done when:
     - Pure code in new or Step 2's modules ports `FaceCache` (`faces.ts`:
       never detect a path twice, a generation that drops answers issued
@@ -306,7 +306,7 @@ puts logic in new modules.
       on a bright face and record it in `native-app.md`.
     - The dots: a filled circle with a dark ring, by `paint_quad` with
       corner radii or a `PathBuilder` arc; whichever is simpler at this rev.
-- [ ] Step 5: The on-demand eye judgment and the face mesh overlay
+- [x] Step 5: The on-demand eye judgment and the face mesh overlay
   - Done when:
     - A pure port of `EyesCache` (`eyes.ts`) with its test cases: a cached
       path or any judgment in flight gives no ticket; a ticket carries an id
@@ -479,3 +479,7 @@ puts logic in new modules.
 ## Progress
 
 - (2026-11-11) Step 1 complete
+- (2026-11-11) Step 2 complete
+- (2026-11-11) Step 3 complete
+- (2026-11-11) Step 4 complete
+- (2026-11-11) Step 5 complete

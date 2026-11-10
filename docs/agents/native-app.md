@@ -305,6 +305,20 @@ through Direct Manipulation gives `ScrollDelta::Pixels`. `pixel_delta(window.lin
 turns either into pixels; the strip subtracts it from its offset, `x` when
 non-zero, else `y`, so a wheel toward the user scrolls right.
 
+### A stroked path has butt caps, and no cap option is reachable (Inferred)
+
+`PathBuilder::stroke(width)` builds lyon's `StrokeOptions::default()`, whose
+caps are `LineCap::Butt` and joins `Miter`. `with_style(PathStyle::Stroke(..))`
+could set square caps, but gpui re-exports `StrokeOptions` and not lyon's
+`LineCap`, so naming one would need a direct `lyon` dependency. The `f` mark's
+crosshair arms are therefore lengthened by half the stroke width at both ends
+(`overlay.rs`'s `segments`), where the Tauri mark's `lineCap = "square"`
+reaches, so each arm end keeps the 1 px dark outline. The AF frame is a closed
+polygon (`add_polygon(.., true)`) and needs no caps.
+
+- Rule: stroke an open path that must look like a canvas square cap by
+  extending its ends by half the width; do not add `lyon` for it.
+
 ### A canvas paints text through the window's text system (Inferred)
 
 A `canvas` has no child elements, so the file names are shaped with
@@ -312,6 +326,39 @@ A `canvas` has no child elements, so the file names are shaped with
 `TextAlign::Center` over the cell width) and the failure text with
 `shape_text` and a wrap width, each clipped with `with_content_mask` to its
 cell. The run's font comes from `window.text_style().to_run(len)`.
+
+### Text has no stroke; a label's halo is dark copies (Inferred)
+
+GPUI shapes and paints glyphs filled only; there is no text stroke like the
+canvas `strokeText` the Tauri face labels use for their 3 px dark halo. A
+dark quad behind the label was the other option; it hides more of the face
+than the Tauri halo does. `overlay.rs`'s `paint_label` instead paints the
+label in `rgba(0, 0, 0, 0.8)` at the eight 1 px offsets and then in the
+label color on top, a ring about as wide as the Tauri stroke's outer
+1.5 px, which keeps the look close to the Tauri app's. That it reads on a
+bright face is not yet checked by eye. A dot is a `paint_quad` whose corner radii are
+half its side, with no `PathBuilder` arc. The label's line height is the
+shaped line's `ascent + descent`, so its origin is the text's top, as the
+canvas's `textBaseline = "top"`.
+
+- Rule: halo text over a picture with offset dark copies; do not paint a box
+  behind it.
+
+### An on-demand judgment is superseded through a shared atomic (Measured)
+
+`ondemand::read_eyes` runs on `cx.background_spawn` and asks its `current`
+closure before the detection and before the model. The view cannot answer
+from another thread, so `eyes.rs`'s `EyesCache` keeps the latest ticket's id
+in an `Arc<AtomicU64>` the closure compares its own id with; a newer request
+stores its id and a clear (another folder, a re-listing) stores `0`, which no
+ticket has. Opening another folder while a judgment was in its detection
+logged `eyes ... model=0.0ms superseded` on the `marks` hand-check folder,
+twice out of two runs. Only one judgment runs at a time and the file current
+when it settles is asked for next, so 60 presses 30 ms apart over a 300-ARW
+folder logged 7 judgments, not 60.
+
+- Rule: hand a background job a cheap `Fn() -> bool` over a shared atomic to
+  stop it; do not try to reach the view from the worker thread.
 
 ### Key names on Windows are lowercase (Measured)
 
