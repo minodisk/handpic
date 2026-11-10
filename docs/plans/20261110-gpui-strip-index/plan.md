@@ -254,7 +254,7 @@ are the later milestones (port Steps 6-9) and are out of scope here.
       judgment feature, Step 6+).
     - Thumbnail orientation: 6 / 8 turn the 404x270 box into 270x404; fit
       inside the 144x96 box as Tauri's `object-fit: contain` does.
-- [ ] Step 3: Steer the scan from the strip, resume at the last viewed file, record the viewed files
+- [x] Step 3: Steer the scan from the strip, resume at the last viewed file, record the viewed files
   - Done when:
     - `crates/native/src/focus.rs`: a port of `scanFocusPaths(files, current,
       first, last)` with the same unit cases (current first, then alternating
@@ -435,3 +435,4 @@ are the later milestones (port Steps 6-9) and are out of scope here.
 
 - (2026-11-10) Step 1 complete
 - (2026-11-10) Step 2 complete
+- (2026-11-10) Step 3 complete

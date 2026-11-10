@@ -1,5 +1,6 @@
 mod args;
 mod datadir;
+mod focus;
 mod logger;
 mod orient;
 mod pager;
@@ -7,9 +8,11 @@ mod scan;
 mod strip;
 mod thumbs;
 mod timing;
+mod viewed;
 
 use std::{
     cell::RefCell,
+    collections::HashSet,
     env,
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
@@ -46,6 +49,7 @@ use scan::{Event, Listed, Scan};
 use strip::{Answer, Strip};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
+use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// Out of phase with 60 Hz vsync.
@@ -148,6 +152,25 @@ struct Opened {
     shown: Vec<PathBuf>,
     /// `None` without an index.
     todo: Option<Result<Vec<FileStat>, String>>,
+    /// The file the folder was left at, to resume at.
+    last_viewed: Option<String>,
+    /// The folder's files the index has as viewed.
+    viewed: HashSet<String>,
+}
+
+/// The folder's resume point and viewed files from the index; nothing when
+/// a read fails, which only costs resuming at the first file.
+fn remembered(reader: &Mutex<Index>, dir: &str) -> (Option<String>, HashSet<String>) {
+    let index = index::lock(reader);
+    let last_viewed = index.last_viewed(dir).unwrap_or_else(|e| {
+        log::warn!("failed to read the last viewed file: {e}");
+        None
+    });
+    let viewed = index.viewed_files(dir).unwrap_or_else(|e| {
+        log::warn!("failed to read the viewed files: {e}");
+        Vec::new()
+    });
+    (last_viewed, viewed.into_iter().collect())
 }
 
 struct Riffle {
@@ -167,7 +190,16 @@ struct Riffle {
     eviction: Option<JoinHandle<()>>,
     slots: ReadSlots,
     scan: Option<Scan>,
+    /// The pending `ScanFocus` update, replaced on every change.
+    scan_focus: Option<Task<()>>,
     next_scan: u64,
+    /// The open folder's canonical path, the key of its index rows.
+    dir: Option<String>,
+    last_viewed: Latest<(String, String)>,
+    viewed: Batches,
+    dwell: Dwell,
+    /// The running dwell clock; dropping it stops it.
+    dwell_timer: Option<Task<()>>,
     events: UnboundedSender<Event>,
     /// `(done, total)` while pass 1 runs.
     progress: Option<(usize, usize)>,
@@ -232,7 +264,13 @@ impl Riffle {
             eviction,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: None,
+            scan_focus: None,
             next_scan: 0,
+            dir: None,
+            last_viewed: Latest::default(),
+            viewed: Batches::default(),
+            dwell: Dwell::default(),
+            dwell_timer: None,
             events,
             progress: None,
             failed: 0,
@@ -298,6 +336,7 @@ impl Riffle {
         cx: &mut Context<Self>,
     ) -> Task<()> {
         let index = self.index.clone().ok();
+        let reader = self.reader.clone();
         let previous = self.scan.take();
         let eviction = self.eviction.take();
         cx.spawn(async move |this, cx| {
@@ -311,11 +350,16 @@ impl Riffle {
                     }
                     let listed = scan::list(&folder)?;
                     let todo = index.map(|index| Scan::prepare(&index, &listed));
+                    let (last_viewed, viewed) = reader
+                        .map(|reader| remembered(&reader, &listed.dir))
+                        .unwrap_or_default();
                     let shown = shown(&listed.files, wanted, max);
                     Ok::<_, String>(Opened {
                         listed,
                         shown,
                         todo,
+                        last_viewed,
+                        viewed,
                     })
                 })
                 .await;
@@ -328,6 +372,8 @@ impl Riffle {
             listed,
             shown,
             todo,
+            last_viewed,
+            viewed,
         } = match opened {
             Ok(opened) => opened,
             Err(e) => {
@@ -343,7 +389,15 @@ impl Riffle {
             .iter()
             .map(|p| p.to_string_lossy().into_owned())
             .collect();
+        if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
+            self.pager.go(Move::To(at));
+        }
+        self.dir = Some(listed.dir.clone());
+        self.dwell.reset(viewed);
+        self.dwell_timer = None;
         self.strip = Strip::new(&paths);
+        self.strip
+            .scroll_into_view(self.pager.current(), self.strip_width);
         let old = self.thumbs.reset();
         self.retire(old);
         self.strip_moved(cx);
@@ -358,15 +412,18 @@ impl Riffle {
                 self.next_scan += 1;
                 self.progress = Some((0, todo.len()));
                 self.failed = 0;
+                // Set before the workers start, so their first files are
+                // already the ones on screen.
+                let focus = ScanFocus::with_slots(self.slots.clone());
+                focus.set(self.scan_focus_paths());
                 let scan = Scan::start(
                     id,
                     index.clone(),
                     listed.dir,
                     todo,
-                    ScanFocus::with_slots(self.slots.clone()),
+                    focus,
                     self.events.clone(),
                 );
-                scan.focus(self.current());
                 self.scan = Some(scan);
             }
             (Some(Err(e)), _) => log::error!("failed to prepare the scan of {}: {e}", listed.dir),
@@ -397,22 +454,56 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The current file alone, as the scan's hot list for now.
-    fn current(&self) -> Vec<String> {
+    fn current_path(&self) -> Option<String> {
         self.files
             .get(self.pager.current())
             .map(|p| p.to_string_lossy().into_owned())
-            .into_iter()
-            .collect()
+    }
+
+    /// The current file and the strip's range, nearest first.
+    fn scan_focus_paths(&self) -> Vec<String> {
+        let range = self.strip.visible_range(self.strip_width);
+        focus::scan_focus_paths(
+            &self.files,
+            self.pager.current(),
+            *range.start(),
+            *range.end(),
+        )
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+    }
+
+    /// Hand the running scan the current file and the strip's range.
+    fn focus_scan(&self) {
+        if let Some(scan) = &self.scan
+            && self.progress.is_some()
+        {
+            scan.focus(self.scan_focus_paths());
+        }
+    }
+
+    /// `focus_scan` once the current file and the strip's range have stayed
+    /// put for `SCAN_FOCUS_DELAY`.
+    fn focus_scan_soon(&mut self, cx: &mut Context<Self>) {
+        if self.progress.is_none() {
+            return;
+        }
+        self.scan_focus = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(focus::SCAN_FOCUS_DELAY)
+                .await;
+            this.update(cx, |this, _| this.focus_scan()).ok();
+        }));
     }
 
     fn go(&mut self, to: Move, cx: &mut Context<Self>) {
         let key = Instant::now();
         if self.pager.go(to) {
             self.key = Some(key);
-            if let Some(scan) = &self.scan {
-                scan.focus(self.current());
-            }
+            self.dwell.cancel();
+            self.dwell_timer = None;
+            self.remember(cx);
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
             self.strip_moved(cx);
@@ -427,7 +518,86 @@ impl Riffle {
         let old = self.thumbs.release(&released);
         self.retire(old);
         self.pump(cx);
+        self.focus_scan_soon(cx);
         cx.notify();
+    }
+
+    /// Record the current file as the one to resume the folder at.
+    fn remember(&mut self, cx: &mut Context<Self>) {
+        let (Some(dir), Some(path)) = (self.dir.clone(), self.current_path()) else {
+            return;
+        };
+        if let Some(value) = self.last_viewed.push((dir, path)) {
+            self.write_last_viewed(value, cx);
+        }
+    }
+
+    fn write_last_viewed(&self, (dir, path): (String, String), cx: &mut Context<Self>) {
+        let Ok(index) = self.index.clone() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let written = cx
+                .background_spawn(async move { index::lock(&index).set_last_viewed(&dir, &path) })
+                .await;
+            if let Err(e) = written {
+                log::warn!("failed to remember the last viewed file: {e}");
+            }
+            this.update(cx, |this, cx| {
+                if let Some(value) = this.last_viewed.settled() {
+                    this.write_last_viewed(value, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The current file's preview is on screen: start its dwell.
+    fn start_dwell(&mut self, cx: &mut Context<Self>) {
+        let Some(path) = self.current_path() else {
+            return;
+        };
+        let Some(ticket) = self.dwell.shown(&path) else {
+            self.dwell_timer = None;
+            return;
+        };
+        self.dwell_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(VIEW_DWELL_MS))
+                .await;
+            this.update(cx, |this, cx| this.dwelt(ticket, cx)).ok();
+        }));
+    }
+
+    fn dwelt(&mut self, ticket: u64, cx: &mut Context<Self>) {
+        let (Some(path), Some(dir)) = (self.dwell.elapsed(ticket), &self.dir) else {
+            return;
+        };
+        if let Some(batch) = self.viewed.push(dir, &path) {
+            self.write_viewed(batch, cx);
+        }
+    }
+
+    fn write_viewed(&self, Batch { dir, paths }: Batch, cx: &mut Context<Self>) {
+        let Ok(index) = self.index.clone() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let written = cx
+                .background_spawn(async move { index::lock(&index).mark_viewed(&dir, &paths) })
+                .await;
+            if let Err(e) = written {
+                log::warn!("failed to mark files viewed: {e}");
+            }
+            this.update(cx, |this, cx| {
+                if let Some(batch) = this.viewed.settled() {
+                    this.write_viewed(batch, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn pump(&mut self, cx: &mut Context<Self>) {
@@ -554,6 +724,7 @@ impl Riffle {
                 .into();
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
+                self.start_dwell(cx);
                 cx.notify();
                 if let Some(key) = key {
                     *self.pending.borrow_mut() = Some(Page {
@@ -574,6 +745,8 @@ impl Riffle {
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
+                self.dwell.cancel();
+                self.dwell_timer = None;
                 let old = self.image.take();
                 self.retire(old);
                 cx.notify();

@@ -97,6 +97,54 @@ same frame but outside that stamp); its p50 stays within 1 ms of port Step 3's
 0.72 ms. No A/B against the pre-strip build was run here; that is Step 5's
 gate.
 
+## Step 3
+
+- `focus::scan_focus_paths` takes `first` / `last` as `usize`, so the Tauri
+  test's negative `first` (`-4`) became `0`; the other cases are the same.
+  It is generic over the element, so the view passes its `PathBuf`s.
+- The hot list is set on the `ScanFocus` handle before `Scan::start` spawns
+  the thread instead of right after it, as the Tauri frontend does: with it
+  sent after, the first wave of the 22 workers took files 0-10 in listing
+  order before the hot list arrived (see the order run below). Later changes
+  go through `focus_scan_soon`, a `cx.spawn` timer task of
+  `SCAN_FOCUS_DELAY` replaced on each strip move (which every page, scroll and
+  resize goes through); it does nothing once the scan is done.
+- `viewed.rs` is three pure state machines: `Latest` (`lastViewedWriter`),
+  `Batches` (`viewedWriter`, folders in first-pushed order, paths in pushed
+  order, each once) and `Dwell` (`dwellTimer` without the timer: `shown`
+  hands out a ticket, `elapsed(ticket)` gives the path to record only if no
+  later `shown` / `cancel` voided it; it also holds the folder's viewed set
+  loaded at open). The view holds the dwell's timer as a `Task` and drops it
+  to stop it.
+- `set_last_viewed` is written on every page change (Tauri's `show()`), not
+  at open; the dwell starts when a preview is decoded and shown, and is
+  cancelled by a page change, a failed preview and an open.
+- `last_viewed` and `viewed_files` are read through the reader connection in
+  the open's background task, after `reconcile`.
+- Seeding a test index by hand with `opened_at = 0` lost the row: the
+  launch's eviction dropped the 30-day-old folder with its `last_viewed`
+  before the open read it.
+
+### Hand-run (debug build, 2026-11-10)
+
+- Resume: `riffle-native.exe D:\Photos\tests\20261108-gpui-compare\ARW --auto 6
+  --index D:\Photos\tests\20261110-gpui-strip-index\step3.sqlite` (fresh
+  file) paged from the 1st to the 7th file (`DSC-RX100M2_Sony_RX100M2.ARW`).
+  A second run with `--auto 1` on the same index printed one `page` line for
+  `DSC-RX100M3_20210527_0205.ARW`, the 8th: it opened at the 7th. The index
+  then held that 8th file as `last_viewed` and `views` rows for the 1st-8th
+  files (each was on screen about 1 s, over the 500 ms dwell).
+- Scan order: a fresh index with a `folders` row for
+  `\\?\D:\Photos\2026\2026-06-27` (373 ARW) whose `last_viewed` is
+  `_DSC9141.ARW` (the 200th, index 199), then `--auto 0` on that folder with a
+  temporary `eprintln!` of each `Progress` message's `ready` paths as listing
+  indices (removed before the commit). With the hot list set after the start:
+  the first batch was 185-203 interleaved with 0-10. With it set before: the
+  first 22 files committed (`200, 198, 194, 202, 1, 189, 197, 199, 185, ...`)
+  were 185-204 and 0, 1, then the listing order went on from 2; 185-204 is
+  the strip's range around 199 (the 1600 px window, 199 at its right edge,
+  `RANGE_MARGIN` 4), and 0, 1 are the two of the 22 workers left over.
+
 ## Deferred issues (todo candidates)
 
 - The strip's image box is 144x96 per this plan, but the Tauri strip's is
@@ -146,3 +194,25 @@ gate.
   was ticked on the automated criteria and the stderr / `1 failed` checks
   above. Basis: Step 1's Done-when "the first run shows the progress climb to
   20/20"; files: `crates/native/src/main.rs` (`Riffle::status`).
+
+- Pending manual check (Windows, the user's eyes; Step 3 was ticked on the
+  unit tests and the two stderr / index runs above): the resume and the
+  steered scan in the running app. Build with
+  `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build --release`
+  in `crates/native`, then:
+  1. Run `crates\native\target\release\riffle-native.exe <a folder of 1000+ RAW files under D:\Photos\> --index D:\Photos\tests\20261110-gpui-strip-index\manual3.sqlite`
+     (a fresh file), wait for the scan to end, press `End`, then `←` a few
+     times and wait a second, and quit with `q`.
+  2. Run it again with the same arguments: the preview, the outlined strip
+     cell and the status line open at the file left at in step 1, and the
+     strip is scrolled to it.
+  3. Run it on the same folder with another fresh file,
+     `--index D:\Photos\tests\20261110-gpui-strip-index\manual3b.sqlite`, and
+     right after the window opens press `End`: the thumbnails near the last
+     cell appear within a second or so, before the cells in the middle of
+     the folder are scanned (`scanning N/total` still climbing), and wheeling
+     the strip to the middle and stopping fills the cells there next.
+  Basis: Step 3's Done-when "Manual check: ... thumbnails near the cursor
+  appear before the far ones"; files: `crates/native/src/main.rs`
+  (`focus_scan_soon`, `remember`, `start_dwell`), `crates/native/src/focus.rs`,
+  `crates/native/src/viewed.rs`.

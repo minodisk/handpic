@@ -117,6 +117,25 @@ thread per scan; a new open cancels and joins the previous one, and the first
 scan joins the launch's eviction thread before it reconciles, so the
 `VACUUM` never races it.
 
+### The hot list is set before the scan's workers start (Measured)
+
+`run_scan`'s workers take the first file of the hot list not yet taken, else
+the next in listing order. With the hot list sent right after `Scan::start`
+(as the Tauri frontend does after `start_scan`), the first wave of the 22
+workers had already taken files 0-10 of a 373-file folder opened at file 199;
+with `ScanFocus::set` called on the handle before `Scan::start`, the first
+committed batch was the 20 files of the strip's range around 199 plus 0 and 1
+(the two workers left over). Later updates are debounced by
+`SCAN_FOCUS_DELAY` (a `cx.spawn` timer task replaced on each change; dropping
+a GPUI `Task` cancels it).
+
+- Rule: an index write from the view (`set_last_viewed`, `mark_viewed`) goes
+  through the writer on `cx.background_spawn`, one in flight (`viewed.rs`);
+  a failure is logged, never shown.
+- Rule: `Index::evict` drops a folder whose `opened_at` is over 30 days old
+  with its `last_viewed`; seeding a test index by hand needs a current
+  `opened_at`.
+
 ### The backend logs through `log`, printed by `logger.rs` (Hit)
 
 Without a logger the backend's `scan extract` lines went nowhere. `logger.rs`
