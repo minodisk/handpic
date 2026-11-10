@@ -4,6 +4,7 @@ mod focus;
 mod logger;
 mod orient;
 mod pager;
+mod resync;
 mod scan;
 mod strip;
 mod thumbs;
@@ -37,9 +38,12 @@ use gpui::{
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
 use pager::{Move, Pager};
+use resync::Resync;
 use riffle_backend::{
     exif::{Labeled, exif},
     index::{self, FileStat, Index},
+    listing::canonicalize,
+    watch::{self, Watch},
 };
 use riffle_core::{
     reader,
@@ -195,6 +199,14 @@ struct Riffle {
     next_scan: u64,
     /// The open folder's canonical path, the key of its index rows.
     dir: Option<String>,
+    /// `--size` and `--max`, which a re-listing applies again.
+    wanted: Option<(u32, u32)>,
+    max: Option<usize>,
+    /// Bumped by every listing, so a preview read for the previous one is
+    /// dropped.
+    listing: u64,
+    watch: Arc<Watch>,
+    resync: Resync,
     last_viewed: Latest<(String, String)>,
     viewed: Batches,
     dwell: Dwell,
@@ -251,6 +263,12 @@ impl Riffle {
             }
         })
         .detach();
+        let watch = {
+            let events = events.clone();
+            Watch::spawn(move |dir| {
+                let _ = events.unbounded_send(Event::Changed(dir));
+            })
+        };
         Self {
             focus,
             files: Vec::new(),
@@ -267,6 +285,11 @@ impl Riffle {
             scan_focus: None,
             next_scan: 0,
             dir: None,
+            wanted: None,
+            max: None,
+            listing: 0,
+            watch: Arc::new(watch),
+            resync: Resync::default(),
             last_viewed: Latest::default(),
             viewed: Batches::default(),
             dwell: Dwell::default(),
@@ -326,8 +349,6 @@ impl Riffle {
         .detach();
     }
 
-    /// List the folder and, with an index, reconcile it once the previous
-    /// scan and the launch's eviction are over, then start pass 1.
     fn open(
         &mut self,
         folder: PathBuf,
@@ -335,10 +356,48 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
+        self.wanted = wanted;
+        self.max = max;
+        self.resync.open();
+        self.list(folder, false, cx)
+    }
+
+    /// The watcher saw the open folder change: re-list it now, or once the
+    /// listing or scan under way is over.
+    fn changed(&mut self, dir: &str, cx: &mut Context<Self>) {
+        if self.dir.as_ref().is_some_and(|open| open != dir) {
+            return;
+        }
+        if self.resync.changed() {
+            self.relist(cx);
+        } else {
+            log::info!("resync: dir={dir} deferred");
+        }
+    }
+
+    /// The listing and its scan are over: run the re-listing that waited.
+    fn finished(&mut self, cx: &mut Context<Self>) {
+        if self.resync.finished() {
+            self.relist(cx);
+        }
+    }
+
+    fn relist(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self.dir.clone() else { return };
+        log::info!("resync: dir={dir}");
+        self.list(PathBuf::from(dir), true, cx).detach();
+    }
+
+    /// Watch and list the folder and, with an index, reconcile it once the
+    /// previous scan and the launch's eviction are over, then start pass 1.
+    /// `carry` re-lists the open folder, keeping the view on the same files.
+    fn list(&mut self, folder: PathBuf, carry: bool, cx: &mut Context<Self>) -> Task<()> {
+        let (wanted, max) = (self.wanted, self.max);
         let index = self.index.clone().ok();
         let reader = self.reader.clone();
         let previous = self.scan.take();
         let eviction = self.eviction.take();
+        let watching = self.watch.clone();
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
@@ -348,11 +407,16 @@ impl Riffle {
                     if let Some(eviction) = eviction {
                         let _ = eviction.join();
                     }
-                    let listed = scan::list(&folder)?;
+                    // Watched before the listing, so a change during it is
+                    // not missed.
+                    let dir = canonicalize(&folder.to_string_lossy());
+                    watch::set(&watching, &dir, &dir);
+                    let listed = scan::list(Path::new(&dir))?;
                     let todo = index.map(|index| Scan::prepare(&index, &listed));
-                    let (last_viewed, viewed) = reader
-                        .map(|reader| remembered(&reader, &listed.dir))
-                        .unwrap_or_default();
+                    let (last_viewed, viewed) = match reader {
+                        Some(reader) if !carry => remembered(&reader, &listed.dir),
+                        _ => Default::default(),
+                    };
                     let shown = shown(&listed.files, wanted, max);
                     Ok::<_, String>(Opened {
                         listed,
@@ -363,11 +427,12 @@ impl Riffle {
                     })
                 })
                 .await;
-            this.update(cx, |this, cx| this.opened(opened, cx)).ok();
+            this.update(cx, |this, cx| this.opened(opened, carry, cx))
+                .ok();
         })
     }
 
-    fn opened(&mut self, opened: Result<Opened, String>, cx: &mut Context<Self>) {
+    fn opened(&mut self, opened: Result<Opened, String>, carry: bool, cx: &mut Context<Self>) {
         let Opened {
             listed,
             shown,
@@ -378,31 +443,38 @@ impl Riffle {
             Ok(opened) => opened,
             Err(e) => {
                 self.fail(&e);
+                self.finished(cx);
                 cx.notify();
                 return;
             }
         };
-        self.pager = Pager::new(shown.len());
-        self.files = shown;
-        let paths: Vec<String> = self
-            .files
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect();
-        if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
-            self.pager.go(Move::To(at));
+        self.listing += 1;
+        let paths = path_strings(&shown);
+        if carry {
+            self.carry(&paths);
+        } else {
+            self.pager = Pager::new(paths.len());
+            if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
+                self.pager.go(Move::To(at));
+            }
+            self.dwell.reset(viewed);
+            self.dwell_timer = None;
+            self.strip = Strip::new(&paths);
+            self.strip
+                .scroll_into_view(self.pager.current(), self.strip_width);
+            let old = self.thumbs.reset();
+            self.retire(old);
         }
+        self.files = shown;
         self.dir = Some(listed.dir.clone());
-        self.dwell.reset(viewed);
-        self.dwell_timer = None;
-        self.strip = Strip::new(&paths);
-        self.strip
-            .scroll_into_view(self.pager.current(), self.strip_width);
-        let old = self.thumbs.reset();
-        self.retire(old);
+        if carry {
+            self.remember(cx);
+        }
         self.strip_moved(cx);
         if self.files.is_empty() {
             self.status = format!("no RAW files in {}", listed.dir).into();
+            let old = self.image.take();
+            self.retire(old);
         } else {
             self.request(Instant::now(), cx);
         }
@@ -426,14 +498,46 @@ impl Riffle {
                 );
                 self.scan = Some(scan);
             }
-            (Some(Err(e)), _) => log::error!("failed to prepare the scan of {}: {e}", listed.dir),
-            _ => {}
+            (Some(Err(e)), _) => {
+                log::error!("failed to prepare the scan of {}: {e}", listed.dir);
+                self.finished(cx);
+            }
+            _ => self.finished(cx),
         }
         cx.notify();
     }
 
+    /// Move the pager, the strip and the loaded thumbnails from the shown
+    /// files onto their re-listing `paths`: the current file stays current
+    /// (or gives way to its nearest listed neighbour) and the strip keeps the
+    /// same files in view.
+    fn carry(&mut self, paths: &[String]) {
+        let previous = path_strings(&self.files);
+        let was = self.pager.current();
+        let current = resync::carried_current(&previous, paths, was);
+        let offset =
+            strip::carried_offset(&previous, paths, self.strip.offset(), self.strip_width, was);
+        let loaded: Vec<usize> = self.thumbs.loaded().collect();
+        let moves = strip::carried_indices(&previous, paths, loaded);
+        let old = self.thumbs.carry(&moves);
+        self.retire(old);
+        self.pager = Pager::new(paths.len());
+        self.pager.go(Move::To(current));
+        self.strip = Strip::new(paths);
+        self.strip.scroll_to(offset, self.strip_width);
+        self.strip.keep(moves.into_values());
+        if previous.get(was) != paths.get(current) {
+            self.dwell.cancel();
+            self.dwell_timer = None;
+            self.strip.scroll_into_view(current, self.strip_width);
+        }
+    }
+
     fn scanned(&mut self, event: Event, cx: &mut Context<Self>) {
-        let (Event::Progress { scan, .. } | Event::Done { scan, .. }) = event;
+        let scan = match &event {
+            Event::Progress { scan, .. } | Event::Done { scan, .. } => *scan,
+            Event::Changed(dir) => return self.changed(dir, cx),
+        };
         if self.scan.as_ref().is_none_or(|s| s.id != scan) {
             return;
         }
@@ -448,7 +552,9 @@ impl Riffle {
                 self.progress = None;
                 self.failed = summary.errors;
                 self.strip.refresh();
+                self.finished(cx);
             }
+            Event::Changed(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -686,13 +792,22 @@ impl Riffle {
         self.sent = at;
         let path = self.files[index].clone();
         let slots = self.slots.clone();
+        let listing = self.listing;
         cx.spawn(async move |this, cx| {
             let loaded = cx
                 .background_spawn(async move { guarded(|| load(&path, &slots)) })
                 .await;
             let received = Instant::now();
-            this.update(cx, |this, cx| this.loaded(index, loaded, received, cx))
-                .ok();
+            this.update(cx, |this, cx| {
+                if listing != this.listing {
+                    if let Ok(loaded) = loaded {
+                        this.retire(Some(loaded.image));
+                    }
+                    return;
+                }
+                this.loaded(index, loaded, received, cx);
+            })
+            .ok();
         })
         .detach();
     }
@@ -974,6 +1089,13 @@ fn paint_failure(
             at.y += line.size(line_height).height;
         }
     });
+}
+
+fn path_strings(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
 }
 
 fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {

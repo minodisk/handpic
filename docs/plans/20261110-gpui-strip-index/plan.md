@@ -286,7 +286,7 @@ are the later milestones (port Steps 6-9) and are out of scope here.
       dropped (Tauri logs a warning), never shown.
     - `ScanFocus::set` only takes the focus lock, so it can be called from
       the main thread directly; no channel needed in that direction.
-- [ ] Step 4: Resync the open folder from the folder watcher
+- [x] Step 4: Resync the open folder from the folder watcher
   - Done when:
     - `main.rs` creates one `riffle_backend::watch::Watch::spawn(on_changed)`
       whose callback sends the folder string into the Step 1 channel; opening

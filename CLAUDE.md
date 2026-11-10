@@ -224,7 +224,14 @@ after the current file or the range last changed, and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
-(`Dwell`).
+(`Dwell`), and `src/resync.rs` when a change the backend's folder watcher
+(`watch::Watch`, its callback sending into the same channel) reports
+re-lists the open folder (`Resync`: at once when idle, else once the listing
+or scan under way ends, a burst collapsing into one) and where the current
+file lands (`carried_current`: the same file, else its nearest listed
+neighbour), the strip keeping the same files in view (`strip.rs`'s
+`carried_offset`) and the loaded thumbnails of files still listed
+(`carried_indices`).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

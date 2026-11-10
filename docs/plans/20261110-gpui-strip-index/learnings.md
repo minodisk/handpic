@@ -145,6 +145,56 @@ gate.
   the strip's range around 199 (the 1600 px window, 199 at its right edge,
   `RANGE_MARGIN` 4), and 0, 1 are the two of the 22 workers left over.
 
+## Step 4
+
+- The watcher's callback sends a new `Event::Changed(dir)` into the Step 1
+  channel; `watch::set` runs in the listing's background task, after the
+  previous scan is joined and before `read_listing`, with the canonical path as
+  both the watched dir and the owner string, so the event's string compares
+  with `self.dir` directly.
+- `resync.rs`'s `Resync` is two booleans (`busy`, `pending`): `open` sets busy
+  and drops a pending change, `changed` re-lists when idle else marks pending,
+  `finished` (the scan's `Done`, or a listing that started no scan: no index,
+  a failed `reconcile`, a failed listing) runs the pending re-listing or goes
+  idle. The current file's neighbour rule (`carried_current`) sits there too;
+  `carriedOffset` / `carriedIndices` became `strip.rs`'s `carried_offset` /
+  `carried_indices` with the Tauri cases (in `CELL_PITCH` units).
+- A re-listing needs a guard the open did not: a preview read for the
+  previous listing names an index into the old `files`, so `send` tags it with
+  a `listing` counter and a stale result only retires its image. The
+  re-listing always requests the current preview again; that keeps the
+  pager's in-flight state consistent and refreshes the status line's `n/total`
+  at the cost of one read per change.
+- `opened` now takes `carry`: the initial open resumes at `last_viewed` and
+  resets the strip and thumbnails; a re-listing skips the `last_viewed` /
+  `viewed_files` reads and carries the pager, the strip's offset and the
+  loaded thumbnails (`Thumbs::carry`, `Strip::keep` so they are not asked
+  again). When the current file changed (deleted), the dwell is cancelled and
+  the strip scrolls it into view; `set_last_viewed` is written either way.
+
+### Hand-run (debug build, 2026-11-10)
+
+Temporary `eprintln!`s in `carry` (and, for the second run, a 3 s sleep before
+`run_scan`) were removed before the commit. Fresh `--index` files under
+`D:\Photos\tests\20261110-gpui-strip-index\`, no `--auto`, the exe killed by
+the script at the end.
+
+- `step4` (10 ARW of the compare folder): a copy 0.3 s after launch landed
+  before the listing (`files=11`). Copying in `AAA_first.ARW` (sorting first)
+  gave `resync` → `files=12`, `todo=1`, the current file kept by path (index
+  0 → 1, the same `DSC-RX0M2_sony_rx0_ii_40.arw`), the offset carried to
+  154 px (one cell) and all 11 thumbnails kept at their shifted indices. That
+  `cp` of a 21 MB file took about 11 s, and each debounced event in between
+  re-listed with `todo=1 removed=1` (its size changed between stats), about
+  one per second, then `todo=0 removed=0` once it was whole. Deleting the
+  current file: `files=11`, `removed=1`, current index 1 stayed 1, now
+  `DSC-RX0_DSC00009.ARW` (the next neighbour), offset clamped to 94 px. Two
+  copies at once: one re-listing, `files=13`, `todo=2`.
+- `step4b` (5 ARW, 3 s sleep before each scan): the copy at 2 s logged
+  `resync: ... deferred` while scan 0 slept, and its re-listing ran right
+  after scan 0's `scan extract` (`files=7`, `todo=1`); deleting a non-current
+  file re-listed to `files=6`, `removed=1`, the current file unchanged.
+
 ## Deferred issues (todo candidates)
 
 - The strip's image box is 144x96 per this plan, but the Tauri strip's is
@@ -216,3 +266,25 @@ gate.
   appear before the far ones"; files: `crates/native/src/main.rs`
   (`focus_scan_soon`, `remember`, `start_dwell`), `crates/native/src/focus.rs`,
   `crates/native/src/viewed.rs`.
+
+- Pending manual check (Windows, the user's eyes; Step 4 was ticked on the
+  unit tests and the two stderr-instrumented runs above): the resync in the
+  running app. Build with
+  `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build --release`
+  in `crates/native`, copy a few ARW files into a new folder under
+  `D:\Photos\tests\` (for example `D:\Photos\tests\20261110-gpui-strip-index\manual4`),
+  and run `crates\native\target\release\riffle-native.exe D:\Photos\tests\20261110-gpui-strip-index\manual4 --index D:\Photos\tests\20261110-gpui-strip-index\manual4.sqlite`
+  (a fresh file). Then:
+  1. Page to the second file. From Explorer, copy another ARW into the
+     folder: within about a second its cell appears in the strip at its
+     name's place and gets a thumbnail; the outlined cell, the preview and
+     the status line still name the same file, the status line's total grows
+     by one, and the other thumbnails do not flash back to gray.
+  2. From Explorer, delete a file that is not the current one: its cell
+     disappears and the current file stays current.
+  3. Delete the current file: the preview, the outline and the status line
+     move to the file after it (the one before it when it was the last).
+  Basis: Step 4's Done-when "Manual check (Windows): copy a RAW into the open
+  folder from Explorer ..."; files: `crates/native/src/main.rs` (`changed`,
+  `relist`, `carry`), `crates/native/src/resync.rs`,
+  `crates/native/src/strip.rs` (`carried_offset`, `carried_indices`).
