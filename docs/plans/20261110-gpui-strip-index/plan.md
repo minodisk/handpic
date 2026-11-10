@@ -316,7 +316,7 @@ are the later milestones (port Steps 6-9) and are out of scope here.
       resync flow.
     - `watch::set` on the same canonical dir is a no-op, so calling it on
       every open is safe.
-- [ ] Step 5: Measure the pager with the strip against the pre-strip pager and record the verdict
+- [x] Step 5: Measure the pager with the strip against the pre-strip pager and record the verdict
   - Done when:
     - `results.md` in this folder holds a same-session A/B as the port's
       Step 3 re-measurement: **A** = this plan's `riffle-native` release
