@@ -1,5 +1,6 @@
 mod args;
 mod datadir;
+mod faces;
 mod focus;
 mod logger;
 mod mark;
@@ -458,6 +459,7 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.marks.clear_faces();
         let paths = path_strings(&shown);
         if carry {
             self.carry(&paths);
@@ -488,6 +490,7 @@ impl Riffle {
         } else {
             self.request(Instant::now(), cx);
             self.read_focus(cx);
+            self.detect_faces(cx);
         }
         match (todo, &self.index) {
             (Some(Ok(todo)), Ok(index)) => {
@@ -658,6 +661,7 @@ impl Riffle {
     fn toggle_marks(&mut self, cx: &mut Context<Self>) {
         if self.marks.toggle() {
             self.read_focus(cx);
+            self.detect_faces(cx);
         }
         cx.notify();
     }
@@ -673,6 +677,14 @@ impl Riffle {
         }
         let ticket = self.marks.reading();
         overlay::read(reader, path, ticket, cx);
+    }
+
+    /// Detect the faces of the current file for the `f` overlay, once its
+    /// image is shown and unless they are known or being detected.
+    fn detect_faces(&mut self, cx: &mut Context<Self>) {
+        if let Some((path, token)) = self.marks.wanted_faces(self.current_path().as_deref()) {
+            overlay::detect(path, token, cx);
+        }
     }
 
     /// After the strip scrolled, resized or changed its current cell: drop
@@ -899,6 +911,7 @@ impl Riffle {
                 self.retire(old);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
+                self.detect_faces(cx);
                 self.start_dwell(cx);
                 cx.notify();
                 if let Some(key) = key {
@@ -999,7 +1012,7 @@ impl Render for Riffle {
                             {
                                 println!("error paint: {e}");
                             }
-                            overlay::paint(mark.as_ref(), fit, window);
+                            overlay::paint(mark.as_ref(), fit, window, cx);
                         }
                         let paint_finished = Instant::now();
                         let old = retired.take();

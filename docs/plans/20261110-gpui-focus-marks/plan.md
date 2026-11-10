@@ -268,7 +268,7 @@ puts logic in new modules.
       (`docs/agents/native-app.md`), which these functions already satisfy.
     - The alternative (reimplement in `crates/native`, no `crates/app` diff)
       was considered and not chosen; see "Trade-offs and risks".
-- [ ] Step 4: Face boxes with their landmark dots and labels
+- [x] Step 4: Face boxes with their landmark dots and labels
   - Done when:
     - Pure code in new or Step 2's modules ports `FaceCache` (`faces.ts`:
       never detect a path twice, a generation that drops answers issued
@@ -481,3 +481,4 @@ puts logic in new modules.
 - (2026-11-11) Step 1 complete
 - (2026-11-11) Step 2 complete
 - (2026-11-11) Step 3 complete
+- (2026-11-11) Step 4 complete

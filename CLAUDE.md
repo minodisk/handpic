@@ -241,11 +241,17 @@ neighbour), the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
 (`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
 (`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being Rust's
-`not_candidate`), `focus_mark` and `upright_point`, and `src/overlay.rs` the
+`not_candidate`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
+`face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
+`FaceCache` (each path detected once, kept by path, a clear dropping the
+answers issued before it), and `src/overlay.rs` the
 `f` overlay: the toggle, the current file's `Focus` read through the index's
 read-only connection (again when a pass 1 or pass 2 message names the file),
-drawn only on the current file's own image, and the painting of the AF mark
-over the upright image's bounds.
+the current RAW file's faces detected once its image is shown through the
+backend's `ondemand::read_faces` (cleared on every listing), drawn only on
+the current file's own image, and the painting of the AF mark, the face
+boxes with their landmark dots and the upright labels over the upright
+image's bounds.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

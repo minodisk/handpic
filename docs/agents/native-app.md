@@ -327,6 +327,23 @@ A `canvas` has no child elements, so the file names are shaped with
 `shape_text` and a wrap width, each clipped with `with_content_mask` to its
 cell. The run's font comes from `window.text_style().to_run(len)`.
 
+### Text has no stroke; a label's halo is dark copies (Inferred)
+
+GPUI shapes and paints glyphs filled only; there is no text stroke like the
+canvas `strokeText` the Tauri face labels use for their 3 px dark halo. A
+dark quad behind the label was the other option; it hides more of the face
+than the Tauri halo does. `overlay.rs`'s `paint_label` instead paints the
+label in `rgba(0, 0, 0, 0.8)` at the eight 1 px offsets and then in the
+label color on top, a ring about as wide as the Tauri stroke's outer
+1.5 px, which keeps the look close to the Tauri app's. That it reads on a
+bright face is not yet checked by eye. A dot is a `paint_quad` whose corner radii are
+half its side, with no `PathBuilder` arc. The label's line height is the
+shaped line's `ascent + descent`, so its origin is the text's top, as the
+canvas's `textBaseline = "top"`.
+
+- Rule: halo text over a picture with offset dark copies; do not paint a box
+  behind it.
+
 ### Key names on Windows are lowercase (Measured)
 
 `KeyDownEvent.keystroke.key` is `"right"`, `"left"`, `"home"`, `"end"` and `"q"`,
