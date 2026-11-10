@@ -189,6 +189,46 @@ request in flight forever.
 
 - Rule: wrap every decode in `catch_unwind`, as `load` does through `guarded`.
 
+### The strip is a `canvas` over a pure model, not a `uniform_list` (Inferred)
+
+`uniform_list` is vertical-first; its horizontal mode
+(`ListHorizontalSizingBehavior::Unconstrained`) is about item width, not a
+horizontal virtual list. A flex `div` with one child per file lays out every
+cell each frame. The strip is one `canvas` that paints only the cells on
+screen, fed by `strip.rs` (offset, range, hit test, request order), whose
+range can go to `ScanFocus` as it is. Its thumbnails come from
+`thumbs.rs`, four reads at a time through the index's read-only connection,
+and every image a cell drops goes through `retired`, like the preview's.
+
+### A `canvas` gets no input; its wrapping `div` does (Inferred)
+
+`canvas` registers no hitbox and takes no listeners. The strip's canvas sits in
+a `div` with `on_mouse_down` and `on_scroll` (`on_scroll_wheel` is a deprecated
+alias at this rev, and `ScrollWheelEvent` of `ScrollEvent`). The events carry
+window coordinates; the strip spans the window from its left edge, so the
+event's `x` is the strip's `x` and `strip::hit_test` takes it as is. The div's
+hitbox already keeps clicks and wheels above the strip out.
+
+- Rule: a canvas that needs input sits in a `div` that owns the listeners, and
+  maps the event position against where the canvas is laid out.
+
+### A Windows mouse wheel arrives in lines (Inferred)
+
+`gpui_windows` turns `WM_MOUSEWHEEL` into `ScrollDelta::Lines`, the notch
+times the system's wheel-scroll lines (3 by default), positive away from the
+user; Shift moves it to `x` (`wheel_scroll_chars`). A precision touchpad
+through Direct Manipulation gives `ScrollDelta::Pixels`. `pixel_delta(window.line_height())`
+turns either into pixels; the strip subtracts it from its offset, `x` when
+non-zero, else `y`, so a wheel toward the user scrolls right.
+
+### A canvas paints text through the window's text system (Inferred)
+
+A `canvas` has no child elements, so the file names are shaped with
+`window.text_system().shape_line` (one line, centered with
+`TextAlign::Center` over the cell width) and the failure text with
+`shape_text` and a wrap width, each clipped with `with_content_mask` to its
+cell. The run's font comes from `window.text_style().to_run(len)`.
+
 ### Key names on Windows are lowercase (Measured)
 
 `KeyDownEvent.keystroke.key` is `"right"`, `"left"`, `"home"`, `"end"` and `"q"`,

@@ -35,6 +35,8 @@ pub enum Event {
         scan: u64,
         done: usize,
         total: usize,
+        /// The files committed since the previous message.
+        ready: Vec<String>,
     },
     Done {
         scan: u64,
@@ -125,11 +127,12 @@ impl Scan {
                     &focus,
                     &cancel,
                     index::PROGRESS_INTERVAL,
-                    |done, total, _ready| {
+                    |done, total, ready| {
                         let _ = events.unbounded_send(Event::Progress {
                             scan: id,
                             done,
                             total,
+                            ready,
                         });
                     },
                 );

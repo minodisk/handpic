@@ -4,6 +4,8 @@ pub enum Move {
     Previous,
     First,
     Last,
+    /// A file picked by index, clamped to the list.
+    To(usize),
 }
 
 /// Which file is current and whether a preview request is out. One request is
@@ -38,6 +40,7 @@ impl Pager {
             Move::Previous => (self.index + self.len - 1) % self.len,
             Move::First => 0,
             Move::Last => self.len - 1,
+            Move::To(index) => index.min(self.len - 1),
         };
         self.index != before
     }
@@ -84,6 +87,15 @@ mod tests {
         assert!(p.go(Move::Last));
         assert_eq!(p.index, 2);
         assert!(!p.go(Move::Last));
+    }
+
+    #[test]
+    fn a_picked_file_becomes_current_clamped_to_the_list() {
+        let mut p = Pager::new(3);
+        assert!(p.go(Move::To(1)));
+        assert!(!p.go(Move::To(1)));
+        assert!(p.go(Move::To(9)));
+        assert_eq!(p.index, 2);
     }
 
     #[test]
