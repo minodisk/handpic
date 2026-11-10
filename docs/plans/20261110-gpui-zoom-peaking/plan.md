@@ -358,3 +358,5 @@ and the MCP view mode.
   app has none either).
 
 ## Progress
+
+- (2026-11-11) Step 1 complete

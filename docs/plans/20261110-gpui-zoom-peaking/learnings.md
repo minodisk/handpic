@@ -47,9 +47,12 @@ page (review round 1).
 
 ## Deferred issues (todo candidates)
 
-- **Pending manual check (Step 1, by eye, Windows):** the step's checkbox was
-  ticked on the automated criteria; these need the user's eyes (no
-  screenshots). Launch the release build:
+- None for Step 1. The by-eye checks below were done by the user on
+  2026-11-11 and all held (the Windows display scale was not reported; the
+  automated run recorded scale 1.0 / 96 dpi). The run printed three `zoom`
+  lines at `keypressToPixels` 16-42 ms with no errors.
+- **Manual check (Step 1, by eye, Windows; done 2026-11-11):** the checks the
+  user ran (no screenshots). Launch the release build:
   `C:\Users\daisu\.herdr\worktrees\riffle\worktree-green-cloud-634b\crates\native\target\release\riffle-native.exe D:\Photos\tests\20261110-gpui-zoom-peaking --index D:\Photos\tests\20261110-gpui-zoom-peaking\index.sqlite`
   and check, recording the window's scale factor (Windows display scale):
   1. On `ILCE-7M3_PPR10K_1283_0.ARW`, `z` shows the crop sharp (no resampling
