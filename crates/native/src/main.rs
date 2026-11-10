@@ -195,6 +195,7 @@ impl Riffle {
         };
         cx.observe_window_bounds(window, |this, window, cx| {
             this.strip_width = f32::from(window.viewport_size().width);
+            this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
         })
         .detach();

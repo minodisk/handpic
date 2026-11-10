@@ -89,6 +89,11 @@ impl Strip {
         self.scroll_to(self.offset + delta, width)
     }
 
+    /// Re-clamp the offset after the strip's width changed. Whether it moved.
+    pub fn clamp(&mut self, width: f32) -> bool {
+        self.scroll_to(self.offset, width)
+    }
+
     fn scroll_to(&mut self, offset: f32, width: f32) -> bool {
         let offset = offset.clamp(0., self.max_offset(width));
         let moved = offset != self.offset;
@@ -240,6 +245,17 @@ mod tests {
         let mut short = strip(2);
         assert!(!short.scroll_by(100., 500.));
         assert_eq!(short.offset(), 0.);
+    }
+
+    #[test]
+    fn a_wider_strip_pulls_the_offset_back() {
+        let mut s = strip(10);
+        s.scroll_by(1e6, 500.);
+        assert!(s.clamp(800.));
+        assert_eq!(s.offset(), 10. * CELL_PITCH - 800.);
+        assert!(!s.clamp(800.));
+        assert!(s.clamp(5000.));
+        assert_eq!(s.offset(), 0.);
     }
 
     #[test]
