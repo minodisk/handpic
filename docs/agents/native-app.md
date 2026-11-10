@@ -163,6 +163,27 @@ a GPUI `Task` cancels it).
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
 
+### Pass 2 runs on pass 1's thread (Inferred)
+
+`Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
+after `run_scan`, with the same `ScanFocus`, cancel flag and
+`scan_threads()`, as the Tauri app's `run_faces_pass` does on its one task.
+One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
+running, and the hot list reaches both passes through the one handle
+(`focus_scan` gates on either pass running). The thread starts on every open
+with an index, even when pass 1 has nothing to do, so rows below
+`FACES_VERSION` still get pass 2; a no-op pass costs one `faces_todo` query.
+`Event::FacesDone` is sent also when the pass was canceled, had nothing to do
+or `faces_todo` failed, so the view always learns the scan is over. The first
+non-empty batch's file names go to the log as `scan faces first:`.
+
+- Rule: the deferred resync (`finished`) runs at `FacesDone`, not at pass 1's
+  `Done`, as the Tauri frontend drains its deferred rescan at `faces-done`. A
+  re-listing during pass 2 would be harmless (a canceled file keeps its old
+  `faces_extractor`, so the next scan resumes it) but would restart the pass;
+  waiting for its end keeps a burst of changes from restarting it over and
+  over.
+
 ### The backend logs through `log`, printed by `logger.rs` (Hit)
 
 Without a logger the backend's `scan extract` lines went nowhere. `logger.rs`

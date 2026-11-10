@@ -215,6 +215,8 @@ struct Riffle {
     events: UnboundedSender<Event>,
     /// `(done, total)` while pass 1 runs.
     progress: Option<(usize, usize)>,
+    /// `(done, total)` while pass 2 runs.
+    analyzing: Option<(usize, usize)>,
     failed: usize,
     image: Option<Arc<RenderImage>>,
     /// Shown images that the next presented frame no longer uses.
@@ -296,6 +298,7 @@ impl Riffle {
             dwell_timer: None,
             events,
             progress: None,
+            analyzing: None,
             failed: 0,
             image: None,
             retired: Rc::default(),
@@ -483,6 +486,7 @@ impl Riffle {
                 let id = self.next_scan;
                 self.next_scan += 1;
                 self.progress = Some((0, todo.len()));
+                self.analyzing = None;
                 self.failed = 0;
                 // Set before the workers start, so their first files are
                 // already the ones on screen.
@@ -535,7 +539,10 @@ impl Riffle {
 
     fn scanned(&mut self, event: Event, cx: &mut Context<Self>) {
         let scan = match &event {
-            Event::Progress { scan, .. } | Event::Done { scan, .. } => *scan,
+            Event::Progress { scan, .. }
+            | Event::Done { scan, .. }
+            | Event::FacesProgress { scan, .. }
+            | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
         };
         if self.scan.as_ref().is_none_or(|s| s.id != scan) {
@@ -550,8 +557,15 @@ impl Riffle {
             }
             Event::Done { summary, .. } => {
                 self.progress = None;
+                self.analyzing = Some((0, 0));
                 self.failed = summary.errors;
                 self.strip.refresh();
+            }
+            Event::FacesProgress { done, total, .. } => {
+                self.analyzing = Some((done, total));
+            }
+            Event::FacesDone { .. } => {
+                self.analyzing = None;
                 self.finished(cx);
             }
             Event::Changed(_) => {}
@@ -580,10 +594,15 @@ impl Riffle {
         .collect()
     }
 
+    /// Pass 1 or pass 2 is running.
+    fn scanning(&self) -> bool {
+        self.progress.is_some() || self.analyzing.is_some()
+    }
+
     /// Hand the running scan the current file and the strip's range.
     fn focus_scan(&self) {
         if let Some(scan) = &self.scan
-            && self.progress.is_some()
+            && self.scanning()
         {
             scan.focus(self.scan_focus_paths());
         }
@@ -592,7 +611,7 @@ impl Riffle {
     /// `focus_scan` once the current file and the strip's range have stayed
     /// put for `SCAN_FOCUS_DELAY`.
     fn focus_scan_soon(&mut self, cx: &mut Context<Self>) {
-        if self.progress.is_none() {
+        if !self.scanning() {
             return;
         }
         self.scan_focus = Some(cx.spawn(async move |this, cx| {
@@ -881,6 +900,8 @@ impl Riffle {
         }
         if let Some((done, total)) = self.progress {
             status.push_str(&format!("  scanning {done}/{total}"));
+        } else if let Some((done, total)) = self.analyzing {
+            status.push_str(&format!("  analyzing {done}/{total}"));
         } else if self.failed > 0 {
             status.push_str(&format!("  {} failed", self.failed));
         }
