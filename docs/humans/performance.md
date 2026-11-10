@@ -152,6 +152,26 @@ work matches the spike's; on RAF the roughly 1 ms left over is consistent with
 its `orient` stage on portrait pages, which the spike does not rotate, but was
 not isolated.
 
+With the thumbnail strip, the index and the folder scan's first pass added
+(2026-11-10, alternating with the pager from before them in the same session,
+three runs each, 60 presses over the 20 files, the index already filled,
+the median of the three runs' p50 / p95 `keypressToPixels`):
+
+| Case | With the strip | Before the strip |
+|---|---|---|
+| ARW, 1616x1080 | 17.4 / 25.4 | 16.6 / 24.4 |
+| RAF, 4416x2944 | 60.3 / 71.8 | 59.8 / 72.3 |
+
+The strip adds 0.8 ms on ARW and 0.5 ms on RAF at p50, and nothing to `paint`.
+While the first pass runs, the preview read stays near 1 ms, since the scan
+reads the files around the current one first. Per-run numbers and the
+conditions are in
+[`results.md`](../plans/20261110-gpui-strip-index/results.md).
+
+The absolute numbers here are lower than the 2026-11-09 session's on the same
+files and machine (not explained); only the same-session difference compares.
+The p95 here is sample 57 of 60, not the largest of 20.
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,

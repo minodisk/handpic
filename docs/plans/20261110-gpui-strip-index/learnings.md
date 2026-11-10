@@ -195,7 +195,52 @@ the script at the end.
   after scan 0's `scan extract` (`files=7`, `todo=1`); deleting a non-current
   file re-listed to `files=6`, `removed=1`, the current file unchanged.
 
+## Step 5
+
+- Gate met: median p50 `keypressToPixels` A - B +0.80 ms on ARW, +0.51 ms on
+  RAF (see `results.md`). The user gave the go-ahead to measure and closed the
+  Tauri app; the stale debug `riffle-native` (PID 58260) had exited.
+- The ad-hoc script (scratch, not committed) ran each binary directly with
+  stdout and stderr merged into one file, so the `page` lines and the
+  backend's `scan extract` line keep their order; that order is how
+  "inside pass 1" was counted. One long-lived PowerShell sampler printed a
+  JSON line every 3 s (load retried while empty, the watched processes), so
+  the sampling cost was the same for every run.
+- B at `fb7fcdf4` already has `orient` and the same `timing.rs` as A, so the
+  two print the same percentile rule; the port's Step 3 had to reconcile the
+  spike's different rule.
+- A resumes at `last_viewed`; with 60 presses over 20 files that does not
+  change which pages are timed. Each folder got its own fresh `--index`, made
+  warm by the throwaway run.
+- The first during-scan copy was made with `cp`: its first pass 1 took 3.2 s
+  (2 presses inside) and the second 0.41 s (cached). Two fresh `robocopy /J`
+  copies gave a cold pass 1 (27.7 s with the pause; the no-pause build's ran
+  on a disk still slowed by the 40 GB just written: 320 files in 63 s). The
+  second `robocopy /J` set wrote at 51 MB/s against 177 MB/s for the first,
+  the SATA SSD's write cache running out.
+- During pass 1 the preview `read` is a cache hit (about 1 ms) because the hot
+  list makes the scan read the next file first, so these runs cannot show the
+  pause's effect; Tauri's 14-16 ms is a read of an unscanned file.
+- B's worktree was a detached `git worktree` in the scratch directory, removed
+  after the runs; the no-pause build edited `crates/native/src/main.rs` in
+  place for the build only and was reverted with `git checkout` before
+  anything else.
+
 ## Deferred issues (todo candidates)
+
+- Measure the scan pause (`ReadSlots::pause` in `load`) with presses that land
+  on files pass 1 has not read yet (a jump such as `End`, or `--auto` with a
+  stride), on equal cold copies (`robocopy /J`, one per run) and a settled
+  disk, pause on against off. Step 5's runs stepped to the next file, which
+  the hot list had already read, so the pause showed no effect at p50 / p95;
+  the one 336.75 ms read without the pause came on a slower disk. Basis:
+  Step 5's during-scan figure (`results.md`); files: `crates/native/src/main.rs`
+  (`load`), `crates/native/src/focus.rs`, `crates/native/src/args.rs`
+  (`--auto`).
+- `present`'s p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
+  (RAF unchanged). Not gated and under 1 ms; worth a look if a later strip
+  change (marks, badges) grows it. Basis: Step 5's per-run table
+  (`results.md`); files: `crates/native/src/main.rs` (`paint_strip`).
 
 - The strip's image box is 144x96 per this plan, but the Tauri strip's is
   144x144 (`crates/app/ui/style.css` `.cell img`, `object-fit: contain`

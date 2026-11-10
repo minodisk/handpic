@@ -293,3 +293,30 @@ to the update on the main thread), and splits `draw` into
 `frameWait + paint + present`. `keypressToPixels` includes `present`; Tauri's
 stops at `drawImage`. It starts at the latest press of the file that ended up
 shown.
+
+### The strip costs the pager under 1 ms (Measured)
+
+Same-session A/B, the pager with the strip, the index and pass 1 against the
+pre-strip pager (`fb7fcdf4`), three runs each, 60 presses, warm index: median
+p50 `keypressToPixels` +0.80 ms on ARW and +0.51 ms on RAF. `paint` did not
+move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
+[the plan's results](../plans/20261110-gpui-strip-index/results.md).
+
+- Rule: compare against a binary built in the same session, alternating; the
+  pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
+  in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
+
+### During pass 1 the preview reads what the scan already read (Measured)
+
+Stepping with the arrow through 520 cold ARW files while pass 1 ran (27.7 s),
+the preview `read` was 0.96 ms p50 and 1.22 ms p95, against Tauri's 14-16 ms
+p50 at `READ_SLOTS` 2. The hot list puts the current file and the strip's range
+first, so the next file's head is usually cached before the press. A build
+without the pause read the same at p50 / p95; its one 336 ms read came on a
+slower disk and is not attributed.
+
+- Rule: copying test files with `cp` leaves them in the OS cache (the second
+  pass 1 over a 520-file copy took 0.41 s). For a cold pass 1 copy them with
+  `robocopy /J` (unbuffered) and use each copy once.
+- Rule: to measure the pause itself, press onto files the scan has not read
+  (a jump, not the next file); `--auto` only steps to the next file.
