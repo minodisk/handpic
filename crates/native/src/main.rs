@@ -2,6 +2,7 @@ mod args;
 mod datadir;
 mod focus;
 mod logger;
+mod meta;
 mod orient;
 mod pager;
 mod resync;
@@ -10,6 +11,7 @@ mod strip;
 mod thumbs;
 mod timing;
 mod viewed;
+mod viewonly;
 
 use std::{
     cell::RefCell,
@@ -30,17 +32,18 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    App, Bounds, ContentMask, Context, Corners, FocusHandle, KeyDownEvent, MouseButton,
+    App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight, KeyDownEvent, MouseButton,
     MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString, Task,
     TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill, outline,
     point, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
+use meta::Shown;
 use pager::{Move, Pager};
 use resync::Resync;
 use riffle_backend::{
-    exif::{Labeled, exif},
+    exif::{self, Metadata},
     index::{self, FileStat, Index},
     listing::canonicalize,
     watch::{self, Watch},
@@ -68,7 +71,7 @@ struct Loaded {
     jpeg_kb: usize,
     px: (u32, u32),
     orientation: u16,
-    settings: String,
+    meta: Metadata,
 }
 
 /// mozjpeg reports a corrupt JPEG by unwinding, which would otherwise lose
@@ -81,10 +84,6 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     })
 }
 
-fn label(value: Option<Labeled>) -> String {
-    value.map_or_else(|| "-".into(), |v| v.label)
-}
-
 fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
@@ -92,13 +91,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     drop(paused);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
-    let settings = exif(&arw.shot);
-    let settings = format!(
-        "{}  {}  {}",
-        label(settings.shutter),
-        label(settings.aperture),
-        label(settings.iso),
-    );
+    let meta = exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -123,7 +116,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         jpeg_kb: jpeg.len() / 1024,
         px: (w, h),
         orientation: arw.orientation,
-        settings,
+        meta,
     })
 }
 
@@ -219,6 +212,11 @@ struct Riffle {
     analyzing: Option<(usize, usize)>,
     failed: usize,
     image: Option<Arc<RenderImage>>,
+    /// The meta pane's file, the one whose preview is on screen, with its
+    /// index.
+    shown: Option<(usize, Shown)>,
+    /// The open folder holds only JPEGs.
+    view_only: bool,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
@@ -301,6 +299,8 @@ impl Riffle {
             analyzing: None,
             failed: 0,
             image: None,
+            shown: None,
+            view_only: false,
             retired: Rc::default(),
             pending: Rc::default(),
             summary: Rc::default(),
@@ -452,6 +452,7 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.view_only = viewonly::is_view_only(&listed.files);
         let paths = path_strings(&shown);
         if carry {
             self.carry(&paths);
@@ -478,6 +479,7 @@ impl Riffle {
             self.status = format!("no RAW files in {}", listed.dir).into();
             let old = self.image.take();
             self.retire(old);
+            self.shown = None;
         } else {
             self.request(Instant::now(), cx);
         }
@@ -846,16 +848,20 @@ impl Riffle {
         let name = file_name(&self.files[index]);
         match result {
             Ok(loaded) => {
+                let m = &loaded.meta;
                 self.status = format!(
-                    "{}/{}  {name}  {}x{}  {}  {}",
+                    "{}/{}  {name}  {}x{}  {}  {}  {}  {}",
                     index + 1,
                     self.files.len(),
                     loaded.px.0,
                     loaded.px.1,
                     loaded.orientation,
-                    loaded.settings,
+                    dash(&m.shutter),
+                    dash(&m.aperture),
+                    dash(&m.iso),
                 )
                 .into();
+                self.shown = Some((index, Shown::Read(Box::new(loaded.meta))));
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
                 self.start_dwell(cx);
@@ -879,6 +885,7 @@ impl Riffle {
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
+                self.shown = Some((index, Shown::Failed { name, error: e }));
                 self.dwell.cancel();
                 self.dwell_timer = None;
                 let old = self.image.take();
@@ -912,6 +919,80 @@ impl Riffle {
         self.retired.borrow_mut().extend(images);
     }
 
+    /// The right-hand pane: the file on screen with its metadata, or why its
+    /// preview failed, and the folder's notes at the bottom.
+    fn meta_pane(&self) -> impl IntoElement {
+        let mut body = div()
+            .id("meta")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_3();
+        if let Some((at, shown)) = &self.shown {
+            let (name, meta, error) = match shown {
+                Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
+                Shown::Failed { name, error } => (name, None, Some(error)),
+            };
+            body = body.child(
+                div()
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()))
+                    .child(div().text_color(rgb(MUTED_COLOR)).child(format!(
+                        "{} / {}",
+                        at + 1,
+                        self.files.len()
+                    ))),
+            );
+            if let Some(error) = error {
+                body = body.child(div().text_color(rgb(ERROR_COLOR)).child(error.clone()));
+            }
+            for group in meta::groups(meta, &[]) {
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(rgb(MUTED_COLOR))
+                                .child(group.heading),
+                        )
+                        .children(group.rows.into_iter().map(|row| {
+                            div()
+                                .flex()
+                                .justify_between()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .text_color(rgb(MUTED_COLOR))
+                                        .child(row.label.to_owned()),
+                                )
+                                .child(div().min_w_0().text_right().child(row.value.to_owned()))
+                        })),
+                );
+            }
+        }
+        div()
+            .w(px(PANE_WIDTH))
+            .flex_none()
+            .h_full()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_3()
+            .bg(rgb(PANE_COLOR))
+            .text_size(px(13.))
+            .child(body)
+            .children(self.view_only.then(|| {
+                div()
+                    .text_color(rgb(MUTED_COLOR))
+                    .child(viewonly::VIEW_ONLY_NOTE)
+            }))
+    }
+
     fn quit(&mut self, cx: &mut Context<Self>) {
         println!("{}", self.summary.borrow().table());
         cx.quit();
@@ -943,41 +1024,54 @@ impl Render for Riffle {
                 },
             ))
             .child(
-                canvas(
-                    |_, _, _| {},
-                    move |bounds: Bounds<Pixels>, _, window, cx| {
-                        let page = pending.borrow_mut().take();
-                        let paint_started = Instant::now();
-                        if let Some(image) = image {
-                            let fit = fit_centered(&image, bounds);
-                            if let Err(e) =
-                                window.paint_image(fit, fit, Corners::default(), image, 0, false)
-                            {
-                                println!("error paint: {e}");
-                            }
-                        }
-                        let paint_finished = Instant::now();
-                        let old = retired.take();
-                        if page.is_none() && old.is_empty() {
-                            return;
-                        }
-                        // `defer` runs when the update holding the frame's
-                        // draw and present ends.
-                        cx.defer(move |cx| {
-                            let presented = Instant::now();
-                            if let Some(page) = page {
-                                let stages = page.stages(paint_started, paint_finished, presented);
-                                println!("{}", page.line(&stages));
-                                summary.borrow_mut().record(stages);
-                            }
-                            for image in old {
-                                cx.drop_image(image, None);
-                            }
-                        });
-                    },
-                )
-                .flex_1()
-                .w_full(),
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds: Bounds<Pixels>, _, window, cx| {
+                                let page = pending.borrow_mut().take();
+                                let paint_started = Instant::now();
+                                if let Some(image) = image {
+                                    let fit = fit_centered(&image, bounds);
+                                    if let Err(e) = window.paint_image(
+                                        fit,
+                                        fit,
+                                        Corners::default(),
+                                        image,
+                                        0,
+                                        false,
+                                    ) {
+                                        println!("error paint: {e}");
+                                    }
+                                }
+                                let paint_finished = Instant::now();
+                                let old = retired.take();
+                                if page.is_none() && old.is_empty() {
+                                    return;
+                                }
+                                // `defer` runs when the update holding the frame's
+                                // draw and present ends.
+                                cx.defer(move |cx| {
+                                    let presented = Instant::now();
+                                    if let Some(page) = page {
+                                        let stages =
+                                            page.stages(paint_started, paint_finished, presented);
+                                        println!("{}", page.line(&stages));
+                                        summary.borrow_mut().record(stages);
+                                    }
+                                    for image in old {
+                                        cx.drop_image(image, None);
+                                    }
+                                });
+                            },
+                        )
+                        .flex_1()
+                        .h_full(),
+                    )
+                    .child(self.meta_pane()),
             )
             .child(
                 div()
@@ -1015,6 +1109,11 @@ struct StripCell {
     current: bool,
 }
 
+/// In the Tauri info pane's range (`#info`, 220 px).
+const PANE_WIDTH: f32 = 220.;
+const PANE_COLOR: u32 = 0x171717;
+const MUTED_COLOR: u32 = 0xa1a1a1;
+const ERROR_COLOR: u32 = 0xff6467;
 const PLACEHOLDER: u32 = 0x262626;
 const CURRENT_OUTLINE: u32 = 0xe5e5e5;
 const NAME_COLOR: u32 = 0xd4d4d4;
@@ -1110,6 +1209,10 @@ fn paint_failure(
             at.y += line.size(line_height).height;
         }
     });
+}
+
+fn dash(value: &Option<String>) -> &str {
+    value.as_deref().unwrap_or("-")
 }
 
 fn path_strings(paths: &[PathBuf]) -> Vec<String> {
