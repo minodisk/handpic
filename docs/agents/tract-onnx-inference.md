@@ -20,7 +20,7 @@ Step 1 and "App binary size"; they are not repeated here.
 ### Ignore the model's fixed-size shape annotations and pin the input (Hit)
 
 The YuNet ONNX file carries `value_info` and output shapes for a 640 px input.
-Riffle feeds it 320x320 (`INPUT`) and 640x448 / 448x640 (`WHOLE_INPUT`), and
+Handpic feeds it 320x320 (`INPUT`) and 640x448 / 448x640 (`WHOLE_INPUT`), and
 with a different input fact tract fails to unify the annotated shapes against
 the inferred ones. `build` therefore loads with
 `tract_onnx::onnx().with_ignore_value_info(true)

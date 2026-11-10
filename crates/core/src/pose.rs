@@ -82,7 +82,7 @@ const BASIS: [(usize, f64, [f64; 3]); 33] = [
 type V3 = [f64; 3];
 type M3 = [[f64; 3]; 3];
 
-/// The orientation of a face, in degrees, as Riffle reads the rotation `R`
+/// The orientation of a face, in degrees, as Handpic reads the rotation `R`
 /// that takes MediaPipe's canonical face (looking at the camera) onto the
 /// face, in its camera space (x toward the image's right, y up, z toward the
 /// camera): `R = Ry(yaw) * Rx(-pitch) * Rz(-roll)`, yaw applied last.

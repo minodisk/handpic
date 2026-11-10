@@ -1,4 +1,4 @@
-# Riffle
+# Handpic
 
 A culling app for Sony ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System / Olympus ORF and DNG files. See [README.md](./README.md)
 for what it is and the current status.
@@ -202,10 +202,10 @@ companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
 key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
 the `log_frontend` command that writes the frontend's `uncaught-js:` and
-`invariant:` lines to `Riffle.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
+`invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
 current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's CPU
 and disk sampler: `set_perf_sampling` starts or stops one thread that emits
-Riffle's process CPU and the system's, each 0–100 %, Riffle's read
+Handpic's process CPU and the system's, each 0–100 %, Handpic's read
 throughput in bytes per second and the system's disk busy time, 0–100 %
 (PDH on Windows, `/sys/block` on Linux, `null` on macOS), as `perf-sample`
 every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)

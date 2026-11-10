@@ -307,7 +307,7 @@ fn template(props: &[(&Ns, &str, &str)]) -> String {
     }
     format!(
         "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n\
-         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"riffle\">\n\
+         <x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"handpic\">\n\
          \x20<rdf:RDF xmlns:rdf=\"{RDF_NS}\">\n\
          \x20 <rdf:Description rdf:about=\"\"{attrs}/>\n\
          \x20</rdf:RDF>\n\
@@ -786,7 +786,7 @@ mod tests {
             String::from_utf8(write_rating(None, Some(3), Flag::None).unwrap()).unwrap(),
             concat!(
                 "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n",
-                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"riffle\">\n",
+                "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"handpic\">\n",
                 " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n",
                 "  <rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\" xmp:Rating=\"3\"/>\n",
                 " </rdf:RDF>\n",
@@ -810,7 +810,7 @@ mod tests {
             format!(
                 concat!(
                     "<?xpacket begin=\"\" id=\"W5M0MpCehiHzreSzNTczkc9d\"?>\n",
-                    "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"riffle\">\n",
+                    "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\" x:xmptk=\"handpic\">\n",
                     " <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n",
                     "  <rdf:Description rdf:about=\"\" xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\"{}/>\n",
                     " </rdf:RDF>\n",

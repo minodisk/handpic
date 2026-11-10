@@ -24,7 +24,7 @@ pub const THUMBNAIL_QUALITY: f32 = 80.0;
 /// thumbnail's.
 const JPEG_THUMBNAIL_LONG_EDGE: usize = 404;
 
-/// Whether `path` has a RAW extension Riffle lists: `.ARW`, `.CR3`, `.DNG`,
+/// Whether `path` has a RAW extension Handpic lists: `.ARW`, `.CR3`, `.DNG`,
 /// `.NEF`, `.ORF` or `.RAF`, in any case.
 pub fn is_raw_file(path: &Path) -> bool {
     path.extension().is_some_and(|e| {

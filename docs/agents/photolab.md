@@ -34,7 +34,7 @@ sample into it: the preset overrides the user's default one.
 
 PhotoLab 10 also displays the image by the item's `Orientation`, not by the
 RAW's EXIF: an item without the key shows unrotated, and an `Orientation`
-copied from another file rotates it wrongly. So Riffle writes the file's own
+copied from another file rotates it wrongly. So Handpic writes the file's own
 EXIF Orientation (IFD0 tag 0x0112) as `Orientation = n,` between `Name` and
 `Rating`: in the fresh template, and, for an item lacking the key, at the
 start of the `Rating` line (before the item's closing brace without one). The
@@ -54,7 +54,7 @@ writes no line at all. An existing `Orientation` is never touched.
   or write it through the app. If the RAW was copied into a folder PhotoLab
   already views, PhotoLab registers the image first, and the fresh `.dop`'s
   random Uuids then show up as an extra item. That is a race in the test
-  procedure, not a Riffle bug.
+  procedure, not a Handpic bug.
 - Edits queued at the same splice offset apply in the reverse of their push
   order. `write_rating` pushes the `Settings` edit after `ShouldProcess` (so
   `Settings` ends up before it); `write_label` pushes it before `ColorLabel`
@@ -86,7 +86,7 @@ without writing a `.dop`. Hand-run with PhotoLab 10.0.1 on Windows:
 - registered image + fresh `.dop` carrying the database's Source Uuid and
   master Item Uuid: applied to the master, no virtual copy, provided `Date` /
   `CreationDate` / `ModificationDate` are newer than the database item's
-  `ModificationDate` (older ones make PhotoLab ignore the sidecar; Riffle
+  `ModificationDate` (older ones make PhotoLab ignore the sidecar; Handpic
   stamps "now").
 - registered image + fresh `.dop` with the `Items[0].Uuid` and `Source.Uuid`
   lines omitted (dates newer than the database item's `ModificationDate`):
@@ -107,13 +107,13 @@ Hand-run with PhotoLab 10 on macOS, 2026-10-05, a dev build with PR #687's
 lookup:
 
 - registered image (PhotoLab had opened the folder, no `.dop`) + fresh `.dop`
-  from Riffle: its Source / Item Uuids equal `ZDOPSOURCE.ZUUID` /
+  from Handpic: its Source / Item Uuids equal `ZDOPSOURCE.ZUUID` /
   `ZDOPINPUTITEM.ZUUID`; the pick shows on the master (`ZSHOULDPROCESS = 2`),
   still one `ZDOPINPUTITEM` row, no virtual copy.
-- folder PhotoLab never opened + Riffle pick first, then opened in PhotoLab:
+- folder PhotoLab never opened + Handpic pick first, then opened in PhotoLab:
   imported as one picked master, no virtual copy.
 - registered image + patching a PhotoLab-written `.dop` with PhotoLab quit
-  (Riffle wrote `Rating = 4`, `ShouldProcess = 0`, fresh `Date` /
+  (Handpic wrote `Rating = 4`, `ShouldProcess = 0`, fresh `Date` /
   `ModificationDate`): on reopening, both applied to the master (`ZRANK 4`,
   `ZSHOULDPROCESS 2`), no virtual copy.
 
@@ -145,7 +145,7 @@ Implementation notes:
   no children is ignored. Paths under `/Volumes` are not mapped (external
   volumes were not observed), so they get no lookup.
 - macOS names are `COLLATE BINARY`, so they compare case-sensitively, unlike
-  Windows' `NOCASE`. Riffle's paths come from `read_dir` and canonicalized
+  Windows' `NOCASE`. Handpic's paths come from `read_dir` and canonicalized
   folders, so they carry the on-disk case PhotoLab stored.
 - The macOS path-to-folder mapping walks `Path::components()`, which drops
   interior `.` components (`/Users/./mino` equals `/Users/mino`); only a
@@ -159,13 +159,13 @@ Implementation notes:
   in the `.dop` `0` is pick, `1` reject and `2` unflagged. Do not read one as
   the other when checking the database by hand.
 - macOS PhotoLab 10 writes a rating change to the `.dop` only when leaving
-  the folder, not at once, so Riffle shows the old rating until then.
+  the folder, not at once, so Handpic shows the old rating until then.
 - Unexplained, not reproduced and not pursued: with PhotoLab running on
-  another folder while Riffle set rating 4 + pick on a registered image whose
+  another folder while Handpic set rating 4 + pick on a registered image whose
   `.dop` PhotoLab had written, PhotoLab later wrote that `.dop` back with
   `Rating = 4` but `ShouldProcess = 2` (pick lost). PhotoLab's
   `ModificationDate` / `Date` in it (12:42:07 / 12:42:17 local) were after
-  Riffle's last write (12:41:52).
+  Handpic's last write (12:41:52).
 - The macOS database path comes from scanning `~/Library`, not from the
   `DOPDatabasePath` key of the `com.dxo.PhotoLabN` preferences (a binary
   plist). If a user with a relocated database reports a miss, read that key
@@ -207,7 +207,7 @@ Implementation notes:
 `dop::read_flag` (`crates/core/src/dop.rs`, `locate`) reads the first `Items`
 entry only, as the app does. When the user picks a PhotoLab virtual copy, the
 `.dop`'s second item has `ShouldProcess = 0`, the master item stays `2`
-(unflagged), and `Output/` holds `<stem>_<n>.jpg`. Riffle then shows the frame
+(unflagged), and `Output/` holds `<stem>_<n>.jpg`. Handpic then shows the frame
 unflagged. Seen on 199 frames of one folder and about 230 of another.
 
 - When reading a user's `.dop` folders for an analysis, do not trust the
@@ -216,7 +216,7 @@ unflagged. Seen on 199 frames of one folder and about 230 of another.
   `BF_00634` already ends in `_<digits>`). Checked on every sidecar folder of
   the data set: the frames with a pick on any item equal `Output/`'s frames
   exactly.
-- Whether Riffle should read any item's flag, and which item it writes, is an
+- Whether Handpic should read any item's flag, and which item it writes, is an
   open product decision.
 - DeepPRIME exports (`<stem>-DxO_DeepPRIME 3.dng`) are listed as RAWs by
   `scan::is_raw_file`. When counting frames against `Output/`, group by the
@@ -229,7 +229,7 @@ unflagged. Seen on 199 frames of one folder and about 230 of another.
 ## `photolab::lookup` keys on folder + file `Name`; a rename does not follow through to PhotoLab or a shared sidecar (Hit)
 
 `photolab::lookup` (`crates/backend/src/photolab.rs`) finds a RAW's Uuids by its
-folder and file `Name`, and a `.dop` Riffle writes carries that `Name`
+folder and file `Name`, and a `.dop` Handpic writes carries that `Name`
 inside. `rename.rs`'s `file_plan` moves a `.dop` unchanged when a RAW is
 renamed, so the sidecar's inner `Name` and PhotoLab's own database still
 say the old name until PhotoLab re-indexes — check this against a real

@@ -1,9 +1,9 @@
-//! The Tauri command that writes the frontend's failures to `Riffle.log`, and
+//! The Tauri command that writes the frontend's failures to `Handpic.log`, and
 //! the backend's diagnostics under the path the app calls them by.
 
 pub use riffle_backend::diagnostics::{install_panic_hook, invariant, invariant_line};
 
-/// Write a frontend failure line to `Riffle.log`. It is `async` with owned
+/// Write a frontend failure line to `Handpic.log`. It is `async` with owned
 /// arguments so it does not run on the main thread.
 #[tauri::command]
 pub async fn log_frontend(kind: String, line: String) {

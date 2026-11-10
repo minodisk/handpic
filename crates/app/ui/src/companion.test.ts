@@ -271,7 +271,7 @@ describe("show_photo", () => {
   test("refuses a path the strip does not show", async () => {
     const { calls, view } = driven(["/d/a"]);
     await expect(handleRequest("show_photo", { path: "/d/x" }, view)).rejects.toThrow(
-      "/d/x is not shown in Riffle: not in the open folder, or hidden by the filter",
+      "/d/x is not shown in Handpic: not in the open folder, or hidden by the filter",
     );
     await expect(handleRequest("show_photo", {}, view)).rejects.toThrow("path must be a string");
     expect(calls).toEqual([]);
@@ -298,7 +298,7 @@ describe("select_photos", () => {
       "paths must be an array of strings",
     );
     await expect(handleRequest("select_photos", { paths: ["/d/a", "/d/x"] }, view)).rejects.toThrow(
-      "/d/x is not shown in Riffle",
+      "/d/x is not shown in Handpic",
     );
     expect(calls).toEqual([]);
   });
@@ -336,7 +336,7 @@ describe("set_view", () => {
       "mode must be one of normal, zoom, compare",
     );
     await expect(handleRequest("set_view", { mode: "zoom" }, view)).rejects.toThrow(
-      "no photo is shown in Riffle",
+      "no photo is shown in Handpic",
     );
     expect(calls).toEqual([]);
   });
@@ -448,7 +448,7 @@ describe("set_judgment", () => {
     const { changes, view } = judging(["/d/a"]);
     await expect(
       handleRequest("set_judgment", { paths: ["/d/hidden"], rating: 1 }, view),
-    ).rejects.toThrow("/d/hidden is not shown in Riffle");
+    ).rejects.toThrow("/d/hidden is not shown in Handpic");
     await expect(handleRequest("set_judgment", { rating: 6 }, view)).rejects.toThrow(
       "rating must be an integer from 0 to 5",
     );
@@ -462,7 +462,7 @@ describe("set_judgment", () => {
       "set at least one of rating, flag, label",
     );
     await expect(handleRequest("set_judgment", { rating: 1 }, judging([]).view)).rejects.toThrow(
-      "no photo is shown in Riffle",
+      "no photo is shown in Handpic",
     );
     expect(changes).toEqual([]);
   });

@@ -171,7 +171,7 @@ fn forbidden(key: &str, macos: bool) -> Option<&'static str> {
     }
 }
 
-/// The muda accelerator string for a Riffle key name, or `None` when muda
+/// The muda accelerator string for a Handpic key name, or `None` when muda
 /// has no accelerator for it. A key held with no `ctrl`, `alt` or `meta` is
 /// `None` too: a modifier-less key equivalent would fire on every such key
 /// typed anywhere, text fields included, and double with the webview.

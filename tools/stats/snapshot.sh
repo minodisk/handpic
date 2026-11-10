@@ -14,7 +14,7 @@ if [ $# -ne 1 ]; then
 fi
 
 dir="$1"
-repo="${GH_REPO:-minodisk/riffle}"
+repo="${GH_REPO:-minodisk/handpic}"
 today="$(date -u +%F)"
 
 # Fetch everything before touching a file, so a failed call (a missing or

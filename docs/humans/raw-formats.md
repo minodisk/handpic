@@ -7,7 +7,7 @@ more JPEGs the camera rendered, the sensor data, and a maker-specific
 MakerNote. Each layer depends on something different: the container on the
 file format, Exif on nobody (it is shared), the JPEGs on the maker, and the
 MakerNote on the maker, the generation and often the body. This page explains
-those layers for the formats Riffle reads (ARW, DNG, NEF, CR3, RAF, ORF), which of them
+those layers for the formats Handpic reads (ARW, DNG, NEF, CR3, RAF, ORF), which of them
 each feature uses, and why the camera list names bodies rather than formats.
 That list, with what each tested body records, is
 [What the camera records](./cameras.md).
@@ -21,7 +21,7 @@ flowchart TB
     exif["Standard Exif<br/>Make, Model, Orientation, capture time,<br/>exposure, lens<br/><i>shared across makers</i>"]
     jpegs["Embedded JPEGs<br/>preview and full-size<br/><i>depends on the maker; sizes vary by body</i>"]
     note["MakerNote<br/>AF point, focus mode, face tracking<br/><i>depends on the maker, the generation and the body</i>"]
-    sensor["Sensor data<br/><i>not read by Riffle</i>"]
+    sensor["Sensor data<br/><i>not read by Handpic</i>"]
     file --> container
     jpegs -->|RAF| exif
     container --> exif
@@ -38,9 +38,9 @@ flowchart TB
 | Embedded JPEGs | The maker | Where the JPEGs sit, how many there are, and their sizes, which change by body |
 | MakerNote | The maker, the generation and the body | Its header, its offsets, which tags exist, and their layout per version. Exif IFD tag 0x927c on ARW, DNG, NEF and ORF (where it also holds the preview JPEG), and in the embedded JPEG's Exif IFD on RAF; its own `CMT3` box on CR3 |
 
-## What Riffle reads for each feature
+## What Handpic reads for each feature
 
-Riffle never decodes the sensor data. Everything it shows comes from the
+Handpic never decodes the sensor data. Everything it shows comes from the
 embedded JPEGs, and everything it knows about a shot comes from Exif and, for
 the AF point, the focus mode and the eye-AF frame, the MakerNote.
 
@@ -70,7 +70,7 @@ flowchart LR
 | Focus mark and AF-based sharpness | ✓ | – | ✓ | the AF point |
 | Eye-AF-frame sharpness (Sony) | ✓ | – | ✓ | the AF tracking frame |
 
-So a body whose container Riffle reads gets the preview, the 1:1 view, the
+So a body whose container Handpic reads gets the preview, the 1:1 view, the
 EXIF rows and bursts. The AF point needs its MakerNote to be decoded as well;
 without it, the focus mark is not drawn and sharpness falls back to the eyes
 of a detected face or the sharpest region (see
@@ -85,7 +85,7 @@ of a detected face or the sharpest region (see
 | MakerNote | Exif IFD tag 0x927c | Exif IFD tag 0x927c | Exif IFD tag 0x927c | Its own `CMT3` box | Exif IFD tag 0x927c of the embedded JPEG, with a `FUJIFILM` header and offsets relative to the note | Exif IFD tag 0x927c, with an `OLYMPUS` or `OM SYSTEM` header and offsets relative to the note |
 | Preview JPEG | IFD0's JPEG (1616x1080 on the α7 V) | The smallest JPEG at least 1600 px wide, from the JPEG strips in no fixed order | The last JPEG SubIFD (1620x1080) | The `PRVW` box (1620x1080) | The one embedded JPEG (4416x2944 on the recent X bodies, 4000x3000 on the GFX bodies, 1920x1280 on the older X bodies) | Inside the MakerNote, pointed at by its CameraSettings IFD (3200x2400) |
 | Full-size JPEG | The largest JPEG in the other IFDs, or the preview when nothing larger is embedded | The largest JPEG strip | The first JPEG SubIFD | The JPEG track in the movie structure | The same JPEG, below the sensor's resolution | None: the preview serves as the 1:1 view |
-| AF point read by Riffle | Sony MakerNote `FocusLocation` | SIGMA BF MakerNote only | Nikon MakerNote `AFInfo2` (Z bodies) | Canon MakerNote `AFInfo2` (EOS bodies) | Fujifilm MakerNote `FocusPixel` | Not read |
+| AF point read by Handpic | Sony MakerNote `FocusLocation` | SIGMA BF MakerNote only | Nikon MakerNote `AFInfo2` (Z bodies) | Canon MakerNote `AFInfo2` (EOS bodies) | Fujifilm MakerNote `FocusPixel` | Not read |
 
 ### ARW: no full-size JPEG on older bodies
 
@@ -93,7 +93,7 @@ Recent Sony bodies (the α1, α9 III, α7 IV, α7R V, α7S III, α7C II, α7CR,
 α6700 and ZV-E1 samples) write a 1616x1080 preview in IFD0, a 160x120
 thumbnail in IFD1 and the full-size JPEG in IFD2. Older bodies (the α9 II,
 α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10 samples) write no IFD2, so the
-largest JPEG besides the preview is the 160x120 thumbnail. Riffle skips any
+largest JPEG besides the preview is the 160x120 thumbnail. Handpic skips any
 JPEG smaller than the preview and uses the preview as the 1:1 view, so on
 these bodies the 1:1 view shows the 1616x1080 preview (1920x1080 on the
 ZV-E10) at its own size, and they are listed as supported.
@@ -105,7 +105,7 @@ A NEF carries a 160x120 thumbnail in IFD0 on some bodies, a small preview
 its SubIFDs. Bodies from about 2012 on (D800, Df and later, every Z body)
 write two JPEG SubIFDs: the full-size one first and a 1620x1080 one after it
 (1632x1080 on the D800).
-Riffle takes the later one as the preview, since the thumbnail and the
+Handpic takes the later one as the preview, since the thumbnail and the
 MakerNote preview are too small for the preview pane. The SubIFD JPEGs carry
 no width, and a full-size JPEG can be smaller in bytes than the 1620x1080
 one, so only their order tells them apart. Bodies older than that write one
@@ -119,7 +119,7 @@ after it, and the
 full-size JPEG is the first track of the movie structure, next to the tracks
 holding the sensor data. With HDR PQ turned on, the camera writes HEIF: the
 `PRVW` preview, the thumbnail and that first track hold HEVC images instead of
-JPEGs. Riffle decodes the HEVC preview and thumbnail and tone-maps them to
+JPEGs. Handpic decodes the HEVC preview and thumbnail and tone-maps them to
 sRGB; it does not decode the full-size HEVC image, so the 1:1 view of such a
 file shows a crop of the 1620x1080 preview.
 
@@ -160,7 +160,7 @@ The MakerNote has no standard layout. Each maker defines its own, and changes
 it between generations and even between bodies:
 
 - **Sony**: a TIFF-style IFD, with a `SONY` header on older bodies and none
-  on recent ones. Some tags move between generations: the focus mode Riffle
+  on recent ones. Some tags move between generations: the focus mode Handpic
   reads is at one tag on recent bodies and at others on older ones.
 - **SIGMA**: two bodies writing DNG differ. The BF records its AF point in
   its MakerNote; the fp L records none. Even the `Make` string is spelled
@@ -178,12 +178,12 @@ it between generations and even between bodies:
 - **Fujifilm**: a `FUJIFILM` header, then an IFD whose offsets count from the
   start of the note rather than from a TIFF header. It records the AF point as
   `FocusPixel`, a point in the embedded JPEG's pixels, even for manual-focus
-  shots, so Riffle also reads the focus mode to drop it on those.
+  shots, so Handpic also reads the focus mode to drop it on those.
 - **OM System / Olympus**: an `OLYMPUS` or `OM SYSTEM` header, then an IFD
   whose offsets count from the start of the note, with its own byte order and
   sub-IFDs (Equipment, CameraSettings, FocusInfo, ...). The AF point is in
   CameraSettings, as `AFTargetInfo` on the OM bodies and `AFPointSelected`;
-  Riffle does not read it yet.
+  Handpic does not read it yet.
 
 The container and Exif are the same for every body of a format, but the
 embedded JPEG sizes and, above all, the MakerNote are not. A new body can move

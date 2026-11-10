@@ -1,4 +1,4 @@
-# Draws Riffle's app icon as an SVG and renders it into
+# Draws the app icon (its edge print still reads RIFFLE) as an SVG and renders it into
 # `crates/app/icons/source.png`, the 1024x1024 image `tauri icon` derives the
 # bundled icon set from. Run by a developer only, never at build or run time:
 #

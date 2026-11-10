@@ -8,15 +8,15 @@ below lists every body verified on a real file; for the RAW formats, see
 [usage.md](./usage.md); for why these differ by body even within one RAW
 format, see [How RAW files differ](./raw-formats.md).
 
-Riffle culls from the JPEG preview embedded in the RAW file. A RAW with no
+Handpic culls from the JPEG preview embedded in the RAW file. A RAW with no
 embedded JPEG preview is outside that purpose and is not supported: `no
-embedded preview` is the intended outcome, and Riffle does not decode the
+embedded preview` is the intended outcome, and Handpic does not decode the
 sensor data or render a tiny uncompressed thumbnail instead. A body released
 more than ten years before the current year (as of 2026, released
 before 2016), or whose largest embedded JPEG is under 1280 px on the long
 edge, too small to judge focus with, is not actively supported: it is not
 listed here or in [Compatibility](../../README.md#compatibility) and gets no
-new work. Files from such a body that already open keep opening, since Riffle
+new work. Files from such a body that already open keep opening, since Handpic
 does not block them. Once a year, re-read the table against the new cutoff
 and delist the bodies that fell below it, as a docs-only change.
 
@@ -121,21 +121,21 @@ and delist the bodies that fell below it, as a docs-only change.
 | Olympus PEN E-P7 | – | – | – | – |
 | Olympus PEN-F | – | – | – | – |
 
-On the Canon and Nikon bodies, Riffle reads the AF point from the MakerNote
+On the Canon and Nikon bodies, Handpic reads the AF point from the MakerNote
 (`AFInfo2`); with several AF points in focus, the mark covers them all. The
 Nikon Z 8 and Canon EOS R6 samples carried no AF position (an automatic area
 that never locked, and manual focus), so those two are unconfirmed; the Nikon
-D850 and D500 write an older `AFInfo2` that Riffle does not read.
+D850 and D500 write an older `AFInfo2` that Handpic does not read.
 
 CR3 files shot with HDR PQ on (HEIF) hold HEVC images instead of JPEGs.
-Riffle decodes their 1620x1080 HEVC preview and tone-maps it to sRGB, so
+Handpic decodes their 1620x1080 HEVC preview and tone-maps it to sRGB, so
 they get a thumbnail, a preview and a sharpness score like any other file.
 The full-size image is not decoded: the 1:1 view (`z`) on such a file shows
 a crop of that 1620x1080 preview, not the sensor's pixels.
 
-On the Fujifilm bodies, Riffle reads the AF point from the MakerNote
+On the Fujifilm bodies, Handpic reads the AF point from the MakerNote
 (`FocusPixel`), a point without a frame size. The X-T3 and GFX 100 samples
-were all shot in manual focus, which Riffle treats as having no AF point, so
+were all shot in manual focus, which Handpic treats as having no AF point, so
 those two are unconfirmed; the same holds for the X-E3, X100F, XF10 and
 GFX 50S samples. Sub-second capture time is marked as the samples recorded
 it; none of the older X bodies at 1920x1280 records it.
@@ -156,18 +156,18 @@ An ORF holds one embedded JPEG, 3200x2400 on every body listed here, below
 the sensor's resolution. The 1:1 view on ORF shows that JPEG at its own size,
 not the sensor's pixels.
 
-On the OM System and Olympus bodies, Riffle does not read the AF point yet:
+On the OM System and Olympus bodies, Handpic does not read the AF point yet:
 the MakerNote records it as `AFTargetInfo` (OM bodies) and `AFPointSelected`,
 which are left for later. None of the samples of these bodies records a
 sub-second capture time, so their bursts group by whole seconds; a burst at a
 high frame rate cannot be split within one second.
 
-The Sony α9 III and α7CR samples were all shot in manual focus, which Riffle
+The Sony α9 III and α7CR samples were all shot in manual focus, which Handpic
 treats as having no AF point, so those two are unconfirmed. On the remaining
 Sony bodies, `–` under Face tracking means no sample of that body recorded
 face tracking; it does not mean the body lacks it. A recorded face tracking
 does not guarantee a face under the frame: two α6700 samples record it with
-the frame on an empty background and on bread on a market stall. Riffle also
+the frame on an empty background and on bread on a market stall. Handpic also
 ignores the frame when the AF point sits at the exact sensor center, where
 tracking never locked.
 
@@ -186,10 +186,10 @@ does, not the sensor's pixels.
 - **AF frame size and face tracking**: with both, sharpness is scored on the
   camera's eye-AF frame, which is the most reliable because it does not rely
   on face detection: the score is measured on the eye the camera focused on,
-  even when Riffle's own face detection misses the face. Face tracking without an AF
+  even when Handpic's own face detection misses the face. Face tracking without an AF
   frame size gives no such benefit: sharpness is scored around the AF point as
   usual. Neither changes the focus mark's color, whose AF eye in-focus
-  probability comes from Riffle's face detection. On the α7 V, `Face tracking` is also recorded when the
+  probability comes from Handpic's face detection. On the α7 V, `Face tracking` is also recorded when the
   AF sits on the back of a head: it means the camera recognized a person's
   head, not strictly a face or an eye. The meta pane's `AF tracking` row
   shows this value.

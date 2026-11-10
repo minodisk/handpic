@@ -1,11 +1,11 @@
 name: Software compatibility problem
-description: Another application does not show the judgments Riffle wrote as expected.
+description: Another application does not show the judgments Handpic wrote as expected.
 title: "[Software] "
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. If the software shows Riffle's judgments correctly, please post in the software works report thread in Discussions instead.
+        Thanks for reporting. If the software shows Handpic's judgments correctly, please post in the software works report thread in Discussions instead.
   - type: input
     id: software
     attributes:
@@ -25,8 +25,8 @@ body:
   - type: textarea
     id: judgment
     attributes:
-      label: Judgment applied in Riffle
-      description: The stars, pick, reject or color label you set in Riffle.
+      label: Judgment applied in Handpic
+      description: The stars, pick, reject or color label you set in Handpic.
     validations:
       required: true
   - type: textarea
