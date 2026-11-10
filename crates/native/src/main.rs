@@ -481,7 +481,16 @@ impl Riffle {
         self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
         let paths = path_strings(&shown);
+        // A re-listing that leaves the same file current keeps its crop.
+        let mut same_file = false;
         if carry {
+            same_file = !paths.is_empty()
+                && path_strings(&self.files).get(self.pager.current())
+                    == paths.get(resync::carried_current(
+                        &path_strings(&self.files),
+                        &paths,
+                        self.pager.current(),
+                    ));
             self.carry(&paths);
         } else {
             self.pager = Pager::new(paths.len());
@@ -513,7 +522,9 @@ impl Riffle {
             self.read_focus(cx);
             self.analyze_current(cx);
         }
-        self.zoom_page(cx);
+        if !same_file {
+            self.zoom_page(cx);
+        }
         match (todo, &self.index) {
             (Some(Ok(todo)), Ok(index)) => {
                 let id = self.next_scan;

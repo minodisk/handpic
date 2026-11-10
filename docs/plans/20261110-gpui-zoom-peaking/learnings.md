@@ -40,6 +40,11 @@
   `X-H2S_fujifilm_x_h2s_30.raf` (RAF, orientation 8), and `jpeg\` with three
   JPEGs (orientations 1, 6 and 8), all copies from `D:\photos\samples\`.
 
+A carry re-listing (the folder watcher) that leaves the same file current
+does not call `zoom_page`: the held crop stays on screen, as in the Tauri app's
+`mustReshow` false case. Only a new folder or a changed current file bumps the
+page (review round 1).
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 1, by eye, Windows):** the step's checkbox was
