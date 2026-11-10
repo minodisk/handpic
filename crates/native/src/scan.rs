@@ -28,8 +28,9 @@ fn threads_for(cores: usize) -> usize {
     cores.saturating_sub(2).max(1)
 }
 
-/// What a scan tells the view, tagged with the scan it came from so a
-/// stopped scan's late messages can be told apart.
+/// What the scan and the folder watcher tell the view, a scan's messages
+/// tagged with the scan they came from so a stopped scan's late messages can
+/// be told apart.
 pub enum Event {
     Progress {
         scan: u64,
@@ -42,6 +43,8 @@ pub enum Event {
         scan: u64,
         summary: ScanSummary,
     },
+    /// The folder watcher saw the folder change; the canonical path.
+    Changed(String),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, and

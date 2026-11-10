@@ -88,9 +88,28 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   `riffle-native.exe`. Run `cargo build` before launching the exe, or you run a
   stale binary.
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
-  against 8.2.0 in the root lock). When the native app starts using `watch`,
-  re-check on its version that `configure` still queues behind `Unwatch` (see
-  `tauri-app.md`), which `watch::settle` relies on.
+  against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
+  works on 8.2.2: copying into and deleting from the open folder resynced it.
+  The native app does not call `release_under` / `settle` yet, so that
+  `configure` still queues behind `Unwatch` on 8.2.2 (see `tauri-app.md`) is
+  unverified; re-check it when the folder rename (port Step 8) needs it.
+
+### A folder change re-lists, never mid-scan (Measured)
+
+`main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
+the scan's channel; each listing calls `watch::set` before `read_listing`, so a
+change during the listing is not missed. `resync.rs` defers a change that
+arrives while a listing or its scan runs to that scan's end, one pending at
+most, as the Tauri frontend's `resyncPending`: a re-listing mid-scan would
+cancel and restart it. A re-listing carries the current file by path, the
+strip's offset (`carried_offset`) and the loaded thumbnails
+(`carried_indices`), bumps a listing counter that drops the previous listing's
+preview reads, and always reads the current preview again (it also refreshes
+the status line's `n/total`).
+
+- Rule: a file still being copied in changes size between events, so each
+  debounced event re-extracts it (`todo=1 removed=1`) until the copy ends;
+  that is expected, not a loop.
 
 ### The native app keeps its own index (Inferred)
 

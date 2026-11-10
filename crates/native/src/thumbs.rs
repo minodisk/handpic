@@ -38,6 +38,29 @@ impl Thumbs {
         self.images.drain().map(|(_, image)| image).collect()
     }
 
+    /// A re-listing: keep the images of the cells in `moves` (old index to
+    /// new), forget the rest, and drop the reads still out. The images to
+    /// retire.
+    pub fn carry(&mut self, moves: &HashMap<usize, usize>) -> Vec<Arc<RenderImage>> {
+        self.generation += 1;
+        self.failures.clear();
+        let mut retired = Vec::new();
+        for (index, image) in std::mem::take(&mut self.images) {
+            match moves.get(&index) {
+                Some(&to) => {
+                    self.images.insert(to, image);
+                }
+                None => retired.push(image),
+            }
+        }
+        retired
+    }
+
+    /// The cells holding an image.
+    pub fn loaded(&self) -> impl Iterator<Item = usize> + '_ {
+        self.images.keys().copied()
+    }
+
     pub fn is_current(&self, generation: u64) -> bool {
         generation == self.generation
     }
@@ -141,5 +164,18 @@ mod tests {
         assert!(t.is_current(0));
         assert_eq!(t.reset().len(), 1);
         assert!(!t.is_current(0) && t.failure(3).is_none());
+    }
+
+    #[test]
+    fn carried_images_move_and_the_rest_come_back_to_retire() {
+        let mut t = Thumbs::default();
+        t.insert(0, image());
+        t.insert(1, image());
+        t.fail(2, "bad".into());
+        let retired = t.carry(&[(1, 0)].into());
+        assert_eq!(retired.len(), 1);
+        assert!(t.image(0).is_some() && t.image(1).is_none());
+        assert_eq!(t.loaded().collect::<Vec<_>>(), [0]);
+        assert!(!t.is_current(0) && t.failure(2).is_none());
     }
 }
