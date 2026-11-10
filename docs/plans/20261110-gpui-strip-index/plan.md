@@ -433,4 +433,4 @@ are the later milestones (port Steps 6-9) and are out of scope here.
 
 ## Progress
 
-- (none yet)
+- (2026-11-10) Step 1 complete
