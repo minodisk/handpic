@@ -246,7 +246,7 @@ puts logic in new modules.
       overlay call a single line after the image is painted, and take the
       image bounds as an argument so a later 1:1 view can pass its own or
       skip the call.
-- [ ] Step 3: Move the on-demand face detection and eye judgment into `riffle-backend`
+- [x] Step 3: Move the on-demand face detection and eye judgment into `riffle-backend`
   - Done when:
     - A new backend module (suggested `crates/backend/src/faces.rs`; name to
       confirm, it must not be confused with `riffle_core::faces`) holds
@@ -480,3 +480,4 @@ puts logic in new modules.
 
 - (2026-11-11) Step 1 complete
 - (2026-11-11) Step 2 complete
+- (2026-11-11) Step 3 complete
