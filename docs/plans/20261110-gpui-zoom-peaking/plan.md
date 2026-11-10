@@ -125,7 +125,7 @@ and the MCP view mode.
 
 ## Steps
 
-- [ ] Step 1: The 1:1 view on `z`
+- [x] Step 1: The 1:1 view on `z`
   - Done when:
     - `crates/native/src/zoom.rs` exists with unit tests and holds:
       - `CROP_MAX` (1024) and `crop_size(orientation, width, height)`, ported

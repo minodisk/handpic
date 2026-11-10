@@ -366,6 +366,49 @@ folder logged 7 judgments, not 60.
 checked with injected `keybd_event` key events in the running app. A non-extended
 `VK_RIGHT` / `VK_LEFT`, the keypad's, gives the same names.
 
+### The canvas's size reaches the view through a shared cell (Inferred)
+
+The preview canvas's bounds are known only inside its paint closure. The
+closure writes the size in device pixels (`bounds.size * window.scale_factor()`,
+rounded) into an `Rc<Cell<(u32, u32)>>` the view also holds, as `retired` and
+`pending` are shared; the 1:1 view reads it when it asks for a crop. A deferred
+entity update from the closure was the other option and needs more of
+`main.rs`. The value is the last painted frame's: a resize is seen by
+`observe_window_bounds` before the next paint, so the crop is re-cut only
+after `zoom::CROP_RESIZE_DEBOUNCE` (150 ms), by when the new size has been
+painted.
+
+- Rule: read the cell after at least one paint; before that it is `(0, 0)`
+  (`crop_size` clamps it to 1).
+
+### 1:1 is one JPEG pixel per device pixel (Inferred)
+
+`paint_image` snaps the visible bounds to device pixels (`snap_bounds`) and,
+when the image runs past the clip bounds, cuts the atlas sub-tile by the
+visible fraction, rounded. `zoom::Paint` therefore places the upright crop with
+its point of interest on a whole device pixel (`canvas_center` floors the
+canvas center in device pixels) and gives it its own size divided by
+`scale_factor`, so both edges land on whole device pixels and the sub-tile is
+cut on whole texels. The window ran at scale 1.0 (96 dpi, a 1600x1000 client)
+during the check; that the crop shows without resampling blur by eye is
+pending the user (see the zoom-peaking plan's `learnings.md`).
+
+- Rule: anything meant to be 1:1 is placed in device pixels and divided by
+  `scale_factor` at the end, never laid out in logical pixels.
+
+### A crop is on screen 8-112 ms after `z` on a busy machine (Measured)
+
+Release build, `zoom` lines of `z` presses on the zoom-peaking test folder,
+not idle (other sessions ran), the file cache warm, 25 lines at scale 1.0
+(crops of 1024 px per axis at most): four ARW files `read` 0.7-4.7 ms,
+`decode` 3-27 ms, `orient` 0-20 ms on the portrait ones, `keypressToPixels`
+8-43 ms (112 ms with the outlier below); two RAF files (X-E5, X-H2S) `read`
+1.6-5.2 ms, `decode` 14-33 ms, `keypressToPixels` 19-89 ms; two JPEG-only
+files `decode` 21 and 47 ms.
+`decode` includes the RGBA to BGRA swap. Two `orient` outliers of 36 and 76 ms
+(a 1024 px crop over 8 scoped threads, 1-2 ms otherwise) are attributed to the
+load, not measured apart.
+
 ### IME handling is unverified (Inferred)
 
 It exists in `gpui_windows`; nothing has exercised it yet.
