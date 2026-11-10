@@ -1,5 +1,7 @@
 mod args;
 mod datadir;
+mod eyes;
+mod facemesh;
 mod faces;
 mod focus;
 mod logger;
@@ -459,7 +461,7 @@ impl Riffle {
             }
         };
         self.listing += 1;
-        self.marks.clear_faces();
+        self.marks.clear();
         let paths = path_strings(&shown);
         if carry {
             self.carry(&paths);
@@ -490,7 +492,7 @@ impl Riffle {
         } else {
             self.request(Instant::now(), cx);
             self.read_focus(cx);
-            self.detect_faces(cx);
+            self.analyze_current(cx);
         }
         match (todo, &self.index) {
             (Some(Ok(todo)), Ok(index)) => {
@@ -661,7 +663,7 @@ impl Riffle {
     fn toggle_marks(&mut self, cx: &mut Context<Self>) {
         if self.marks.toggle() {
             self.read_focus(cx);
-            self.detect_faces(cx);
+            self.analyze_current(cx);
         }
         cx.notify();
     }
@@ -679,11 +681,16 @@ impl Riffle {
         overlay::read(reader, path, ticket, cx);
     }
 
-    /// Detect the faces of the current file for the `f` overlay, once its
-    /// image is shown and unless they are known or being detected.
-    fn detect_faces(&mut self, cx: &mut Context<Self>) {
-        if let Some((path, token)) = self.marks.wanted_faces(self.current_path().as_deref()) {
+    /// Detect the faces and judge the eyes of the current file for the `f`
+    /// overlay, once its image is shown and unless they are known or being
+    /// worked on.
+    fn analyze_current(&mut self, cx: &mut Context<Self>) {
+        let current = self.current_path();
+        if let Some((path, token)) = self.marks.wanted_faces(current.as_deref()) {
             overlay::detect(path, token, cx);
+        }
+        if let Some((path, ticket, still)) = self.marks.wanted_eyes(current.as_deref()) {
+            overlay::judge(path, ticket, still, cx);
         }
     }
 
@@ -911,7 +918,7 @@ impl Riffle {
                 self.retire(old);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
-                self.detect_faces(cx);
+                self.analyze_current(cx);
                 self.start_dwell(cx);
                 cx.notify();
                 if let Some(key) = key {

@@ -344,6 +344,22 @@ canvas's `textBaseline = "top"`.
 - Rule: halo text over a picture with offset dark copies; do not paint a box
   behind it.
 
+### An on-demand judgment is superseded through a shared atomic (Measured)
+
+`ondemand::read_eyes` runs on `cx.background_spawn` and asks its `current`
+closure before the detection and before the model. The view cannot answer
+from another thread, so `eyes.rs`'s `EyesCache` keeps the latest ticket's id
+in an `Arc<AtomicU64>` the closure compares its own id with; a newer request
+stores its id and a clear (another folder, a re-listing) stores `0`, which no
+ticket has. Opening another folder while a judgment was in its detection
+logged `eyes ... model=0.0ms superseded` on the `marks` hand-check folder,
+twice out of two runs. Only one judgment runs at a time and the file current
+when it settles is asked for next, so 60 presses 30 ms apart over a 300-ARW
+folder logged 7 judgments, not 60.
+
+- Rule: hand a background job a cheap `Fn() -> bool` over a shared atomic to
+  stop it; do not try to reach the view from the worker thread.
+
 ### Key names on Windows are lowercase (Measured)
 
 `KeyDownEvent.keystroke.key` is `"right"`, `"left"`, `"home"`, `"end"` and `"q"`,

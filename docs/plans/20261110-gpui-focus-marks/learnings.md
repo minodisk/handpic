@@ -154,6 +154,57 @@
   852x569.41 unrotated drawing puts the label at (29.8, -148.3)), and the
   quarter-turn labels give the upright box's width first.
 
+## Step 5: the on-demand eye judgment and the face mesh
+
+- `EyesCache` is `crates/native/src/eyes.rs` and `facemesh.ts` is
+  `crates/native/src/facemesh.rs`. The edges are `[[usize; 2]; N]` rather than
+  a flat list, so the counts (149, 8) are in the types and the tests still
+  check them along with the index ranges and duplicates. The MediaPipe
+  notice is carried over word for word, but as a plain `/* */` comment: Rust
+  reads `/*!` as an inner doc comment, allowed only at the top of the module.
+- The latest ticket's id is an `Arc<AtomicU64>` inside `EyesCache`;
+  `current(ticket)` hands out the closure `read_eyes` asks. Besides a newer
+  request (the plan's rule), `clear` stores `0`, so a folder switch or a
+  re-listing stops the running judgment at once instead of only when the new
+  folder's first image is shown and asks for its own judgment. The native
+  app asks only once the image is shown (as for the faces), not on `go` as
+  the Tauri `show()` does, so without this a switch would often let the old
+  judgment run its model to the end.
+- `EyesJudgment` derives neither `Clone` nor `Default`; the cache keeps
+  `Option<Arc<EyesJudgment>>` per path, as `FaceCache` keeps
+  `Arc<FacesResponse>`. `settle` takes `Option<Option<EyesJudgment>>`:
+  `None` superseded, `Some(None)` unknown eyes (no face, a failure).
+- `main.rs`'s `detect_faces` became `analyze_current` (faces and eyes, the
+  same four call sites) and `Marks::clear_faces` became `clear`. The judgment's
+  callback calls `analyze_current` once it settles, which asks for the file
+  current by then.
+- `paint` no longer returns early without faces: the mesh is drawn whenever
+  a judgment exists, then the labels, as the Tauri `draw()` order (mark,
+  boxes, mesh, labels).
+- The `eyes` line is `info` (the logger prints `Info`), with the file name;
+  the Tauri line's `ipc` has no counterpart.
+- Hand check (debug build, temporary `info` lines in `overlay::paint` giving
+  the face eyes' and the mesh's iris centers' window positions, the overlay
+  temporarily on at launch, a temporary folder switch after the `--auto`
+  presses; all removed before the commit) under
+  `D:\Photos\tests\20261110-gpui-pass2\` with fresh indexes there:
+  - `marks`, `--auto 7`: `ILCE-6300_..._DSC03068.arw` (orientation 8)
+    came back `closed` with 149 edges and no dot, the iris centers at
+    (783.8, 332.0) / (858.1, 327.2) against YuNet's eyes at (785.0, 332.1) /
+    (857.1, 325.9); `_DSC1758.ARW` `open`, 157 edges, two dots,
+    (888.9, 331.6) / (915.3, 339.8) against (884.5, 333.3) / (914.0, 335.0);
+    `ILCE-6400_DSC01340.ARW` (orientation 6) `open`, the left iris at
+    (849.7, 336.0) against YuNet's (846.0, 332.3). Files with no judged face
+    (`ILCE-7M4_DSC07652`, `_DSC1760`, `_DSC1616`) logged `model` under 1 ms
+    and drew no mesh. A judgment taking longer than the 1 s between presses
+    (`ILCE-1M2_sony_a1_ii_03`, 2 s in the debug build) settled after the
+    page turned and was not drawn.
+  - `ARW` (300 files), `--auto 60` with the presses 30 ms apart: 7 `eyes`
+    lines for the 60 files passed.
+  - `marks` then `ARW` opened 250 ms after the second press: the judgment of
+    `ILCE-6300_..._DSC03068.arw` logged `model=0.0ms superseded`, in both of
+    two runs.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the side-by-side of the
@@ -183,6 +234,21 @@
   app's offset-copy halo (`docs/agents/native-app.md`); if they do not read,
   switch `paint_label` to a dark quad behind the text. The step's checkbox was
   ticked on the automated criteria (unit tests and the logged positions).
+
+- Pending manual check (Step 5, Windows, the user's): the side-by-side of the
+  face mesh against the Tauri app could not be made here (no screenshots).
+  Open `D:\Photos\tests\20261110-gpui-pass2\marks\` in the native app
+  (`mise run native:dev -- <folder> --index <fresh file in that test folder>`)
+  and in the Tauri app (its own index), press `f` in both and stop on
+  `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (closed eyes,
+  orientation 8), `_DSC1758.ARW` (open eyes) and `ILCE-6400_DSC01340.ARW`
+  (portrait, orientation 6), waiting for the judgment (up to 2 s in a debug
+  build). Expected: the magenta mesh (face oval, eyes, brows, nose, lips) on
+  the same face with the same lines in both apps, over a dark outline; the
+  iris rings and two iris dots on the open-eyed frames only. Also hold `→`
+  with `f` on and check that the log's `eyes` lines name only files the paging
+  stopped on or passed slowly. The step's checkbox was ticked on the automated
+  criteria (unit tests, the logged positions and the `--auto` runs above).
 
 
 - Stale scan state on a failed `prepare` (found while wiring Step 1). `list`

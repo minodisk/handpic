@@ -1,9 +1,11 @@
 //! The `f` overlay over the preview: what it draws for the current file and
-//! the painting of the AF focus mark and the detected faces.
+//! the painting of the AF focus mark, the detected faces and the face mesh
+//! of the eye judgment.
 
 use std::{
     path::Path,
     sync::{Arc, Mutex},
+    time::Instant,
 };
 
 use gpui::{
@@ -12,13 +14,15 @@ use gpui::{
 };
 use riffle_backend::{
     index::{self, Focus, Index},
-    ondemand::{self, FacesResponse},
+    ondemand::{self, EyesJudgment, FacesResponse},
 };
 
 use crate::{
     Riffle,
+    eyes::{EyesCache, EyesTicket},
+    facemesh,
     faces::{self, FaceCache},
-    guarded,
+    file_name, guarded,
     mark::{self, FaceMark, FocusMark},
 };
 
@@ -32,6 +36,11 @@ const LINE_WIDTH: f32 = 2.;
 /// `FACE_MARK_COLOR` / `FACE_MARK_EYE_RADIUS`.
 const FACE_COLOR: u32 = 0x33ffff;
 const DOT_RADIUS: f32 = 2.5;
+/// The face mesh's color and line widths, as the Tauri app's
+/// `FACE_MESH_COLOR` / `FACE_MESH_OUTLINE_WIDTH` / `FACE_MESH_LINE_WIDTH`.
+const MESH_COLOR: u32 = 0xff33ff;
+const MESH_OUTLINE_WIDTH: f32 = 3.;
+const MESH_LINE_WIDTH: f32 = 1.5;
 const LABEL_SIZE: f32 = 11.;
 /// The offsets of the label's dark copies under it, standing in for the
 /// Tauri label's 3 px stroke, which GPUI cannot draw.
@@ -58,10 +67,12 @@ pub struct Mark {
     pub orientation: u16,
     /// `None` until detected, or on a JPEG.
     pub faces: Option<Arc<FacesResponse>>,
+    /// `None` until judged, for unknown eyes, or on a JPEG.
+    pub eyes: Option<Arc<EyesJudgment>>,
 }
 
 /// The toggle, the current file's stored `Focus`, the file the shown image
-/// belongs to and the faces detected so far.
+/// belongs to and the faces detected and eyes judged so far.
 #[derive(Default)]
 pub struct Marks {
     on: bool,
@@ -73,6 +84,7 @@ pub struct Marks {
     /// The file the shown image belongs to and its orientation.
     shown: Option<(String, u16)>,
     faces: FaceCache,
+    eyes: EyesCache,
 }
 
 impl Marks {
@@ -114,7 +126,8 @@ impl Marks {
     }
 
     /// What to draw while the overlay is on and the shown image belongs to
-    /// `current`: the focus once read for `current`, the faces once detected.
+    /// `current`: the focus once read for `current`, the faces once detected,
+    /// the eyes once judged.
     pub fn mark(&self, current: Option<&str>) -> Option<Mark> {
         let current = current.filter(|_| self.on)?;
         let (shown, orientation) = self.shown.as_ref()?;
@@ -124,11 +137,18 @@ impl Marks {
             .as_ref()
             .filter(|(read, _)| read == current)
             .and_then(|(_, focus)| *focus);
-        let faces = self.faces.get(current).filter(|_| is_raw(current)).cloned();
+        let raw = is_raw(current);
+        let faces = self.faces.get(current).filter(|_| raw).cloned();
+        let eyes = self
+            .eyes
+            .get(current)
+            .filter(|_| raw)
+            .and_then(|eyes| eyes.clone());
         Some(Mark {
             focus,
             orientation: *orientation,
             faces,
+            eyes,
         })
     }
 
@@ -148,10 +168,36 @@ impl Marks {
         self.faces.settle(path, token, faces)
     }
 
-    /// Forget the detected faces: another folder opened, or the open one was
-    /// re-listed and its files may have changed.
-    pub fn clear_faces(&mut self) {
+    /// The file whose eyes to judge, its ticket and the `current` check that
+    /// supersedes it: `current`, under the same gates as `wanted_faces`,
+    /// unless it is judged or any judgment is in flight.
+    pub fn wanted_eyes(
+        &mut self,
+        current: Option<&str>,
+    ) -> Option<(String, EyesTicket, impl Fn() -> bool + Send + 'static)> {
+        let current = current.filter(|_| self.on)?;
+        let (shown, _) = self.shown.as_ref()?;
+        (shown == current && is_raw(current)).then_some(())?;
+        let ticket = self.eyes.request(current)?;
+        Some((current.to_owned(), ticket, self.eyes.current(ticket)))
+    }
+
+    /// A judgment came back, `None` when superseded; whether it was kept.
+    pub fn judged_eyes(
+        &mut self,
+        path: String,
+        ticket: EyesTicket,
+        eyes: Option<Option<EyesJudgment>>,
+    ) -> bool {
+        self.eyes.settle(path, ticket, eyes)
+    }
+
+    /// Forget the detected faces and the judged eyes, stopping a judgment in
+    /// flight: another folder opened, or the open one was re-listed and its
+    /// files may have changed.
+    pub fn clear(&mut self) {
         self.faces.clear();
+        self.eyes.clear();
     }
 }
 
@@ -214,8 +260,60 @@ pub fn detect(path: String, token: u64, cx: &mut Context<Riffle>) {
     .detach();
 }
 
+/// Judge `path`'s eyes through the backend on the background executor and
+/// log one line of stage timings; a failure is logged and kept as unknown
+/// eyes. Once it settles the file current by then is asked for, so a held
+/// key never queues a judgment per file passed.
+pub fn judge(
+    path: String,
+    ticket: EyesTicket,
+    current: impl Fn() -> bool + Send + 'static,
+    cx: &mut Context<Riffle>,
+) {
+    cx.spawn(async move |this, cx| {
+        let started = Instant::now();
+        let judged = {
+            let path = path.clone();
+            cx.background_spawn(async move {
+                guarded(|| ondemand::read_eyes(Path::new(&path), current))
+            })
+            .await
+        };
+        let eyes = match judged {
+            Ok(found) => {
+                let ms = |us: u32| f64::from(us) / 1000.;
+                log::info!(
+                    "eyes {} total={:.1}ms read={:.1}ms decode={:.1}ms detect={:.1}ms model={:.1}ms{}",
+                    file_name(Path::new(&path)),
+                    started.elapsed().as_secs_f64() * 1000.,
+                    ms(found.read_us),
+                    ms(found.decode_us),
+                    ms(found.detect_us),
+                    ms(found.model_us),
+                    if found.superseded { " superseded" } else { "" },
+                );
+                (!found.superseded).then_some(found.eyes)
+            }
+            Err(e) => {
+                log::warn!("failed to judge the eyes of {path}: {e}");
+                Some(None)
+            }
+        };
+        this.update(cx, |this, cx| {
+            let current = this.current_path().as_deref() == Some(path.as_str());
+            if this.marks.judged_eyes(path, ticket, eyes) && current {
+                cx.notify();
+            }
+            this.analyze_current(cx);
+        })
+        .ok();
+    })
+    .detach();
+}
+
 /// Paint `mark` over the image drawn upright into `image`: the AF mark, the
-/// face boxes with their landmark dots, then the face labels upright.
+/// face boxes with their landmark dots, the face mesh of the eye judgment,
+/// then the face labels upright.
 pub fn paint(mark: Option<&Mark>, image: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     let Some(mark) = mark else {
         return;
@@ -231,18 +329,23 @@ pub fn paint(mark: Option<&Mark>, image: Bounds<Pixels>, window: &mut Window, cx
     if let Some(focus_mark) = mark::focus_mark(mark.focus.as_ref(), draw_width, draw_height) {
         paint_focus(&focus_mark, orientation, center, window);
     }
-    let Some(found) = mark.faces.as_ref().filter(|f| !f.faces.is_empty()) else {
-        return;
+    let faces = match mark.faces.as_ref() {
+        Some(found) => mark::face_marks(
+            &found.faces,
+            found.width as f32,
+            found.height as f32,
+            draw_width,
+            draw_height,
+            orientation,
+        ),
+        None => Vec::new(),
     };
-    let faces = mark::face_marks(
-        &found.faces,
-        found.width as f32,
-        found.height as f32,
-        draw_width,
-        draw_height,
-        orientation,
-    );
-    paint_faces(&faces, orientation, center, window);
+    if !faces.is_empty() {
+        paint_faces(&faces, orientation, center, window);
+    }
+    if let Some(eyes) = &mark.eyes {
+        paint_mesh(eyes, (draw_width, draw_height), orientation, center, window);
+    }
     for face in &faces {
         paint_label(
             face,
@@ -300,6 +403,51 @@ fn paint_faces(faces: &[FaceMark], orientation: u16, center: Point<Pixels>, wind
             for p in face.points {
                 window.paint_quad(dot(at(p, orientation, center), radius, color));
             }
+        }
+    }
+}
+
+/// The judged face's mesh, its edges stroked like the face boxes but
+/// thinner, and for open eyes the iris centers as dots with a dark ring as
+/// wide as the lines.
+fn paint_mesh(
+    eyes: &EyesJudgment,
+    (draw_width, draw_height): (f32, f32),
+    orientation: u16,
+    center: Point<Pixels>,
+    window: &mut Window,
+) {
+    let mesh = &eyes.mesh;
+    let points = facemesh::mesh_points(
+        &mesh.points,
+        mesh.width as f32,
+        mesh.height as f32,
+        draw_width,
+        draw_height,
+    );
+    let point_at = |i: usize| points.get(i).map(|&p| at(p, orientation, center));
+    let (edges, dots) = facemesh::mesh_edges(eyes.state);
+    let color: Hsla = rgb(MESH_COLOR).into();
+    for (width, color) in [
+        (MESH_OUTLINE_WIDTH, outline_color()),
+        (MESH_LINE_WIDTH, color),
+    ] {
+        let mut path = PathBuilder::stroke(px(width));
+        for &[a, b] in &edges {
+            if let (Some(a), Some(b)) = (point_at(a), point_at(b)) {
+                path.move_to(a);
+                path.line_to(b);
+            }
+        }
+        match path.build() {
+            Ok(path) => window.paint_path(path, color),
+            Err(e) => log::warn!("failed to build the face mesh: {e}"),
+        }
+    }
+    let ring = DOT_RADIUS + MESH_LINE_WIDTH / 2.;
+    for (radius, color) in [(ring, outline_color()), (DOT_RADIUS, color)] {
+        for p in dots.iter().filter_map(|&i| point_at(i)) {
+            window.paint_quad(dot(p, radius, color));
         }
     }
 }
@@ -538,10 +686,70 @@ mod tests {
     fn a_detection_from_before_a_clear_is_dropped_and_the_file_is_detected_again() {
         let mut marks = shown("a.arw");
         let (path, stale) = marks.wanted_faces(Some("a.arw")).unwrap();
-        marks.clear_faces();
+        marks.clear();
         assert!(!marks.found_faces(path, stale, one_face()));
         assert_eq!(faces_on(&marks, "a.arw"), None);
         assert!(marks.wanted_faces(Some("a.arw")).is_some());
+    }
+
+    fn judgment() -> EyesJudgment {
+        EyesJudgment {
+            state: "open",
+            probability: 0.07,
+            ear: 0.3,
+            pose: None,
+            mesh: ondemand::EyesMesh {
+                width: 100,
+                height: 100,
+                points: vec![[50., 50.]],
+            },
+        }
+    }
+
+    fn eyes_on(marks: &Marks, current: &str) -> Option<&'static str> {
+        marks
+            .mark(Some(current))
+            .and_then(|m| m.eyes)
+            .map(|e| e.state)
+    }
+
+    #[test]
+    fn the_eyes_are_judged_one_file_at_a_time_and_then_the_current_one() {
+        let mut marks = shown("a.arw");
+        let (path, ticket, _) = marks.wanted_eyes(Some("a.arw")).unwrap();
+        marks.show(Some(("b.arw".into(), 1)));
+        assert!(marks.wanted_eyes(Some("b.arw")).is_none());
+        assert!(marks.judged_eyes(path, ticket, Some(Some(judgment()))));
+        assert_eq!(eyes_on(&marks, "b.arw"), None);
+        let (path, _, _) = marks.wanted_eyes(Some("b.arw")).unwrap();
+        assert_eq!(path, "b.arw");
+        marks.show(Some(("a.arw".into(), 6)));
+        assert_eq!(eyes_on(&marks, "a.arw"), Some("open"));
+    }
+
+    #[test]
+    fn no_eyes_are_judged_or_drawn_while_off_or_on_a_jpeg() {
+        let mut marks = shown("a.jpg");
+        assert!(marks.wanted_eyes(Some("a.jpg")).is_none());
+        let mut marks = shown("a.arw");
+        marks.toggle();
+        assert!(marks.wanted_eyes(Some("a.arw")).is_none());
+        marks.toggle();
+        let (path, ticket, _) = marks.wanted_eyes(Some("a.arw")).unwrap();
+        marks.judged_eyes(path, ticket, Some(Some(judgment())));
+        marks.toggle();
+        assert!(marks.mark(Some("a.arw")).is_none());
+    }
+
+    #[test]
+    fn a_clear_stops_the_judgment_in_flight_and_drops_its_answer() {
+        let mut marks = shown("a.arw");
+        let (path, ticket, still) = marks.wanted_eyes(Some("a.arw")).unwrap();
+        marks.clear();
+        assert!(!still());
+        assert!(!marks.judged_eyes(path, ticket, Some(Some(judgment()))));
+        assert_eq!(eyes_on(&marks, "a.arw"), None);
+        assert!(marks.wanted_eyes(Some("a.arw")).is_some());
     }
 
     #[test]
