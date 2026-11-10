@@ -2471,8 +2471,45 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 
 #### Background
 
-`gpui-backend-crate` Step 4 moved the folder watcher into `crates/backend/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/native/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/tauri-app.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2, and the native app does not call `watch` yet. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`. Files: `crates/backend/src/watch.rs`, `crates/native/Cargo.lock`, `docs/agents/tauri-app.md`.
+`gpui-backend-crate` Step 4 moved the folder watcher into `crates/backend/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/native/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/tauri-app.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The native app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/native/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/backend/src/watch.rs`, `crates/native/Cargo.lock`, `docs/agents/tauri-app.md`.
 
 #### TODO
 
 - [ ] When the native app first uses `watch` (the ports' rename path), re-check on notify 8.2.2 that `configure` still queues behind `Unwatch`, so that `watch::settle` still holds. Either pin the native lock to the version the root lock holds, or confirm the queuing behavior and note the version in `docs/agents/tauri-app.md`.
+
+### Native: real-device checks of the strip, the scan progress, the resume and the resync
+
+`gpui-strip-index` added the thumbnail strip, pass 1 of the scan, the resume at the last viewed file and the folder-watcher resync to the GPUI app (`crates/native`). CI and the unit tests cover the pure models (`strip.rs`, `focus.rs`, `viewed.rs`, `resync.rs`); stderr-instrumented debug runs covered the scan, the resume and the resync. Nobody has watched the running window: the strip's drawing, the status line's `scanning done/total` climb, the memory behavior while scrolling, the resume and steered scan on a 1000+ file folder, and the resync from Explorer copies and deletes are all unchecked. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/native/src/main.rs`, `crates/native/src/strip.rs`, `crates/native/src/thumbs.rs`, `crates/native/src/focus.rs`, `crates/native/src/viewed.rs`, `crates/native/src/resync.rs`.
+
+Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build --release` in `crates/native`, and use a fresh `--index <file under D:\Photos\tests\>` for each run so pass 1 runs.
+
+#### TODO
+
+- [ ] On Windows, open a folder of a few hundred RAW files under `D:\Photos\` with `riffle-native.exe <folder> --index <fresh file>`. Expect `scanning N/total` after the file info, N rising about every 100 ms, replaced at the end by nothing (or `N failed`).
+- [ ] On Windows, open a folder of 1000+ RAW files under `D:\Photos\` with a fresh index. Expect, in order: (1) while `scanning N/total` climbs, the gray placeholders turn into thumbnails from the current cell outward, the middle of the strip first, each cell with its file name and the current cell outlined; (2) holding `→` for a few seconds moves the outlined cell and the preview together, the strip scrolls just enough to keep the cell in view, and on release the preview, the outline and the status line name the same file, with `Home` / `End` jumping both to the first / last file; (3) wheeling the strip (toward you scrolls right) to a far cell and clicking it shows that file and moves the outline, while a click in the 8 px gap between cells does nothing; (4) with Task Manager's Details tab showing the `riffle-native.exe` row's private working set (or Commit size), wheeling the strip from one end to the other and back several times raises the value while scrolling and lets it settle to about the same level, not climbing run after run; (5) on a folder holding a corrupt RAW (e.g. `D:\Photos\tests\20261110-gpui-strip-index\ARW`, file `DSC-RX100M3_corrupt.ARW`) its cell shows `invalid TIFF byte order` in the gray box instead of a thumbnail.
+- [ ] On Windows, on a 1000+ RAW folder with a fresh index (`manual3.sqlite`), wait for the scan to end, press `End`, then `←` a few times, wait a second and quit with `q`. (a) Run again with the same arguments: the preview, the outlined strip cell and the status line open at the file left at, and the strip is scrolled to it. (b) Run on the same folder with another fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next.
+- [ ] On Windows, copy a few ARW files into a new folder under `D:\Photos\tests\` (e.g. `D:\Photos\tests\20261110-gpui-strip-index\manual4`) and run `riffle-native.exe <that folder> --index <fresh file>`. Page to the second file. (1) From Explorer, copy another ARW into the folder: within about a second its cell appears in the strip at its name's place and gets a thumbnail, the outlined cell, the preview and the status line still name the same file, the status line's total grows by one, and the other thumbnails do not flash back to gray. (2) From Explorer, delete a file that is not the current one: its cell disappears and the current file stays current. (3) Delete the current file: the preview, the outline and the status line move to the file after it (the one before it when it was the last).
+
+### Native: measure the scan pause in `load` with presses on files pass 1 has not read yet
+
+`gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. The one 336.75 ms read without the pause came on a disk slowed by 40 GB of just-written copies, so it proves nothing. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md` (`results.md` in the same folder). Files: `crates/native/src/main.rs` (`load`), `crates/native/src/focus.rs`, `crates/native/src/args.rs` (`--auto`).
+
+#### TODO
+
+- [ ] Run `--auto` with presses that land on unread files (a jump such as `End`, or a stride), on equal cold copies (`robocopy /J`, one per run) and a settled disk, pause on against off, and record `read` p50 / p95 next to Tauri's. Done when `docs/agents/native-app.md` says whether the pause shortens the read.
+
+### Native: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
+
+`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` is 144x144 (`crates/app/ui/style.css` `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the native strip against 96x144 in the Tauri one. Growing it makes the strip about 50 px taller. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/native/src/strip.rs` (`BOX_HEIGHT`, `CELL_HEIGHT`), `crates/native/src/main.rs` (`paint_strip`).
+
+#### TODO
+
+- [ ] Decide when the strip gains its marks (port Steps 6-8) whether the native cell grows to the Tauri size, and change `BOX_HEIGHT` / `CELL_HEIGHT` if so.
+
+### Native: `present` p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
+
+In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW compare folder rose with the strip while RAF was unchanged. It is not gated and stays under 1 ms. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/native/src/main.rs` (`paint_strip`).
+
+#### TODO
+
+- [ ] When a later strip change (marks, badges) lands, re-run the same-session A/B and check that `present` p95 has not grown past 1 ms; if it has, look at `paint_strip` first.
