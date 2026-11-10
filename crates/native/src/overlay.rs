@@ -46,9 +46,14 @@ pub struct Marks {
 }
 
 impl Marks {
-    /// Flip the overlay; whether it is now on.
+    /// Flip the overlay; whether it is now on. Turning it off drops the read
+    /// focus, which nothing refreshes while off, so turning it on draws
+    /// nothing until a fresh read answers.
     pub fn toggle(&mut self) -> bool {
         self.on = !self.on;
+        if !self.on {
+            self.focus = None;
+        }
         self.on
     }
 
@@ -221,6 +226,17 @@ mod tests {
         let mut marks = shown("a");
         assert!(!marks.toggle());
         assert!(marks.mark(Some("a")).is_none());
+    }
+
+    #[test]
+    fn no_stale_mark_after_toggling_off_and_on() {
+        let mut marks = shown("a");
+        marks.toggle();
+        assert!(marks.toggle());
+        assert!(marks.mark(Some("a")).is_none());
+        let ticket = marks.reading();
+        marks.answer(ticket, "a".into(), Some(focus()));
+        assert!(marks.mark(Some("a")).is_some());
     }
 
     #[test]
