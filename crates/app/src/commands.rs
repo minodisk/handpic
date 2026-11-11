@@ -846,6 +846,17 @@ fn scan_threads() -> usize {
     cores.saturating_sub(2).max(1)
 }
 
+/// Threads the second pass runs on: a quarter of the cores, as the third
+/// pass's `embed_threads`, since it too runs while the user pages. In the GPUI
+/// app on 24 logical cores, paging while pass 2 ran on `scan_threads()` (22)
+/// took +9.4 ms on ARW 1616x1080 and +89 ms on RAF 4416x2944 at p50 against a
+/// finished index, `decode` about doubled and `paint` 4-6x, its workers'
+/// lowest priority notwithstanding.
+fn faces_threads() -> usize {
+    let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
+    (cores / 4).max(1)
+}
+
 /// Scan workers inside a file read at once. A preview read waits behind the
 /// reads already queued, about the reads in flight x ms/file (without a cap, threads x ms/file). On a cold first pass of ARW
 /// files on a SATA SSD (22 threads, the app closed), a preview read waited a
@@ -1349,7 +1360,7 @@ pub async fn start_scan(app: tauri::AppHandle, scan_id: u64) -> Result<(), Strin
                 let summary = run_faces_pass(
                     &index,
                     &dir,
-                    scan_threads(),
+                    faces_threads(),
                     &focus,
                     &cancel,
                     |done, total, ready| {

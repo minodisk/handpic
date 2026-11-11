@@ -28,6 +28,17 @@ fn threads_for(cores: usize) -> usize {
     cores.saturating_sub(2).max(1)
 }
 
+/// Pass 2's workers: a quarter of the cores, at least one, as the Tauri app's
+/// `faces_threads`. At two fewer than the cores, paging during pass 2 took
+/// +9.4 ms (ARW) and +89 ms (RAF) at p50, `decode` and `paint` starved.
+pub fn faces_threads() -> usize {
+    faces_threads_for(thread::available_parallelism().map_or(4, |n| n.get()))
+}
+
+fn faces_threads_for(cores: usize) -> usize {
+    (cores / 4).max(1)
+}
+
 /// What the scan and the folder watcher tell the view, a scan's messages
 /// tagged with the scan they came from so a stopped scan's late messages can
 /// be told apart.
@@ -216,7 +227,7 @@ fn run_faces_pass(
         index,
         dir,
         &todo,
-        scan_threads(),
+        faces_threads(),
         focus,
         cancel,
         index::PROGRESS_INTERVAL,
@@ -235,7 +246,7 @@ fn run_faces_pass(
 
 #[cfg(test)]
 mod tests {
-    use super::{natural_order, threads_for};
+    use super::{faces_threads_for, natural_order, threads_for};
     use std::path::PathBuf;
 
     #[test]
@@ -253,5 +264,13 @@ mod tests {
         assert_eq!(threads_for(3), 1);
         assert_eq!(threads_for(2), 1);
         assert_eq!(threads_for(1), 1);
+    }
+
+    #[test]
+    fn pass_two_takes_a_quarter_of_the_cores_and_keeps_one_thread() {
+        assert_eq!(faces_threads_for(24), 6);
+        assert_eq!(faces_threads_for(8), 2);
+        assert_eq!(faces_threads_for(3), 1);
+        assert_eq!(faces_threads_for(1), 1);
     }
 }

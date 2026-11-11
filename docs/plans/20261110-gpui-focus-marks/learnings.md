@@ -205,6 +205,41 @@
     `ILCE-6300_..._DSC03068.arw` logged `model=0.0ms superseded`, in both of
     two runs.
 
+## Step 6: key-navigation latency while pass 2 runs
+
+- The gate is missed: A - B is +9.44 ms on ARW and +88.86 ms on RAF
+  (`results.md`). `decode` about doubles and `paint` grows 4-6x while pass 2's
+  22 workers hold every logical processor near 100 % at `Priority::Lowest`.
+  The step stays open until a fix PR (the plan's first candidate: fewer pass 2
+  threads) is re-measured.
+- The fix: pass 2 now runs on `faces_threads()`, a quarter of the cores (6 on
+  24 logical), in both apps, mirroring the Tauri app's `embed_threads`;
+  pass 1 keeps `scan_threads()` and `READ_SLOTS` stays 2. The Tauri app's
+  `faces_threads` is a copy of `embed_threads`'s body rather than a call to it,
+  so either can move on its own measurement.
+- `--auto`'s quit, and closing the window, call `cx.quit()` without
+  `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
+  A runs' pass 2 progress came from each run's index copy (rows with
+  `faces_extractor > 0`).
+- Pass 2 runs about 4.6 ms per file on ARW and 15-16 ms on RAF at 22 threads
+  (5420 RAF in 79.6-85.1 s, 18,620 ARW in 85.7-87.8 s). A 60-press run needs
+  about 13k ARW or 4.5k RAF files to stay inside pass 2.
+- Hardlinks (`os.link`) make a large test folder that costs no disk space and
+  keeps every copy warm in the page cache. Name the padding to sort after the
+  compare files (`zzNNN_`), so `--size` / `--max 20` page only the 20.
+- Turning `f` on in an `--auto` run without a code change: post
+  WM_KEYDOWN / WM_CHAR / WM_KEYUP for `F` to the process's `MainWindowHandle`
+  (`sendf.ps1`). WScript.Shell `AppActivate` + `SendKeys` did not reach the app,
+  and the keystroke probably went to whatever window had focus, so never use
+  it.
+- Closing a window by PID with `CloseMainWindow` is allowed; doing it for every
+  `riffle-native` process was refused (other sessions run their own).
+- Other sessions ran `mise run ci`, `cargo test` and their own `riffle-native`
+  through the whole session despite the go signal. 17 of 25 B attempts and
+  1 of 11 A attempts were discarded. A pre-run wait for two clean samples and
+  no `mise run` / `cargo` / `rustc` / `link` / Vite+ process (`next.sh`,
+  `busy.ps1`) helped but did not prevent load arriving mid-run.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the side-by-side of the
@@ -259,3 +294,10 @@
   stays true. Pre-existing for `progress`; `analyzing` follows the same path.
   Fix: clear both in that arm (or whenever `list` stops a scan).
   `crates/native/src/main.rs` (`list`, `opened`).
+
+- `--auto`'s quit (and closing the window) does not stop the scan
+  (`Riffle::quit` in `crates/native/src/main.rs` calls `cx.quit()` with no
+  `Scan::stop`), so a quit mid-pass 2 logs no `scan faces:` summary and leaves
+  the workers to die with the process. Found while measuring Step 6. Fix: stop
+  (cancel and join) the scan in `quit` and on window close, so the summary is
+  logged and the index is closed cleanly.

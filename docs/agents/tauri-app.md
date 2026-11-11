@@ -1418,7 +1418,8 @@ least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
 Every scan read goes through one process-wide `riffle_core::scan::ReadSlots`
 (`AppReadSlots`, app state): at most `READ_SLOTS` (2) workers are inside a
 file read at once, on any of the three passes, while decoding and the models
-stay on `scan_threads()` threads. `preview` holds `pause()` across its
+stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`
+and `embed_threads()`, a quarter of the cores, for passes 2 and 3). `preview` holds `pause()` across its
 `read_preview`, so no worker starts a new read until it returns. The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
 so `docs/humans/performance.md`'s numbers stay comparable.
@@ -1615,8 +1616,10 @@ JPEG-only (view-only) folder never lists anything.
   `set_opened_at`) survives a `clear`; and to show that eviction keeps `views`,
   evict through the size cap (`max_bytes: 0`), since the age rule now spares a
   folder holding a `views` row.
-- **Threads: a quarter of the cores** (`embed_threads()`), not pass 2's
-  `scan_threads()` (Measured). Priority does not keep the viewer's reads
+- **Threads: a quarter of the cores** (`embed_threads()`), not pass 1's
+  `scan_threads()` (Measured; pass 2 has run on a quarter too, `faces_threads()`,
+  since the GPUI port measured it costing paging +9.4 ms on ARW and +89 ms on RAF
+  at `scan_threads()`, see `native-app.md`). Priority does not keep the viewer's reads
   fast against 22 busy workers on 24 logical cores: shared physical cores
   (SMT) and an all-core clock do not care about thread priority. On
   `2026-09-19` (2134 ARW), a preview read + full decode on a

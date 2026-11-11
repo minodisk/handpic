@@ -1,0 +1,224 @@
+# Step 6 results: paging while pass 2 runs against paging on a finished index
+
+## First run (22 pass 2 threads): gate missed
+
+Measured 2026-11-11, 08:11-09:20 local, with `riffle-native` built at `397ad733`
+(Steps 1-5 merged).
+
+**Verdict: the gate is missed on both folders, by far.** Median of the three
+runs' p50 `keypressToPixels`, A (pass 2 running) minus the same-session B (both
+passes complete):
+
+| Folder | A | B | A - B | Gate |
+|--------|---|---|-------|------|
+| ARW 1616x1080 | 26.57 | 17.13 | **+9.44** | <= +2.0 (missed) |
+| RAF 4416x2944 | 151.31 | 62.45 | **+88.86** | <= +5.0 (missed) |
+
+Per pair (A1-B1, A2-B2, A3-B3): ARW +8.96, +9.50, +9.92; RAF +92.07, +86.10,
++88.86. Every pair misses the gate, so the miss does not come from one noisy
+run.
+
+Not gated: the median p95 `keypressToPixels` is A 39.33 and B 25.06 on ARW
+(+14.27), and A 224.40 and B 73.78 on RAF (+150.62).
+
+**The stages that grew are `decode` and `paint`**, then `read` (see "What the
+stages say"). Per the plan, a fix PR lands before this step closes. The first
+candidate is fewer pass 2 threads in the native app.
+
+## Measurement conditions
+
+- **A** = paging while pass 2 runs over the whole folder. Each run opens a fresh
+  copy of a template index where pass 1 is done and every row has
+  `faces_extractor = 0`. **B** = paging the same files on a fresh copy of the
+  index both passes completed, so its pass 2 logs `files=0` before the first
+  press.
+- Binary: one `riffle-native.exe` from `cargo build --release` in
+  `crates/native` at `397ad733`, run directly (a byte-identical copy in the test
+  folder, so the build output was never locked). Rust 1.98.1, NASM 3.02 on
+  `PATH`. SIMD is on: the `mozjpeg-sys` build output holds `jsimd.o` and
+  `jsimdcpu.o`, and `crates/native/build.rs` fails the build without NASM.
+- Machine: Windows 11, i7-13700 (24 logical processors), RTX 4060 Ti, 5120x1440
+  at 59 Hz, the app's default 1600x1000 window. Drive `D:`, a SATA SSD (Crucial
+  BX500 4 TB).
+- Folders under `D:\Photos\tests\20261111-gpui-pass2-measure\`. Every file is an
+  NTFS hardlink, so the copies share their data and their page cache:
+  - `ARW`: 18,620 files. The 20 files of `20261108-gpui-compare\ARW` under their
+    own names, plus 62 rounds of the 300 `_DSC*.ARW` of
+    `20261110-gpui-pass2\ARW` (a real shoot with faces), named
+    `zzNNN_<name>`.
+  - `RAF`: 5,420 files. The 20 files of `20261108-gpui-compare\RAF`, plus 270
+    rounds of the same 20, since there are not enough RAFs. The padding is
+    renamed copies, as the plan allows.
+  - The `zz` prefix sorts after the compare files, so
+    `--size 1616x1080 --max 20` (ARW) and `--size 4416x2944 --max 20` (RAF)
+    page exactly the 20 compare files while the scan covers the whole folder.
+- `--auto 60`: 1003 ms between presses after a 2 s settle, so each run wraps
+  around the 20 files three times, n=60. p50 is the sorted value at index
+  `n / 2` and p95 at `int(n * 0.95)`, as in `timing.rs`.
+- Pass 2 outlasted every A run. With no paging it takes 85.7 s (ARW) and
+  79.6 s (RAF) on the A template. `--auto`'s quit does not stop the scan, so a
+  run whose pass 2 is still running logs no `scan faces:` line. No A run logged
+  one, so all 60 presses of every A run fell while pass 2 ran. The rows pass 2
+  had written at quit, read from each run's index copy:
+
+| Run | ARW (of 18,620) | RAF (of 5,420) |
+|-----|-----------------|----------------|
+| A1 | 13,860 | 4,090 |
+| A2 | 13,220 | 4,130 |
+| A3 | 13,190 | 4,150 |
+| A, `f` on | 13,580 | 4,140 |
+
+- Pass 2 ran with its defaults: `scan_threads()` = 22 workers at
+  `Priority::Lowest`, with the hot list first. The hot list puts the 20 paged
+  files first, so after the first seconds the presses contend with pass 2 on
+  the padding files. That CPU contention is what this A/B measures.
+- Warmth: both indexes were built by scanning the folders just before the
+  session (untimed). One throwaway A run per folder (`warm`) read every file
+  again through pass 2, so the reads of both A and B hit the page cache. The
+  difference is CPU contention, not I/O.
+- Order per folder: the throwaway A, then B A B A B A, then the `f`-on pair (B
+  then A). A run that failed the idle rule was redone in its own slot, so the
+  alternation held.
+
+### Idle
+
+A PowerShell sampler, running throughout, recorded `Win32_Processor.LoadPercentage`
+every 3-4 s, along with:
+- the running `cargo`, `rustc`, `link`, `riffle*`, `node` and `mise` processes;
+- any `mise run` / `mise exec`, `cargo`, `rustc`, `link` or Vite+ / vitest /
+  pnpm `node` process, as `busy:`.
+
+The rules:
+- **B** runs were used when the sample before the run was <= 15 % and every
+  sample during the run after the first was <= 15 % (the first falls in the 2 s
+  settle).
+- **A** runs, whose own pass 2 loads the cores, were used when the sample before
+  was <= 15 %.
+- Both: no compiler, no `busy:` process, no Tauri app and no second
+  `riffle-native` before or during the run.
+
+The user had closed the Tauri app. **The machine was not idle otherwise.** Other
+sessions ran `mise run ci` / `mise run test`, `cargo test` and their own
+`riffle-native` (another worktree's `20261110-gpui-zoom-peaking`) in bursts
+throughout. Before each run the script waited until two consecutive samples were
+<= 15 % with none of those processes. Even so, 17 B runs and 1 A run were
+discarded:
+
+| Slot | Discarded attempts | Why |
+|------|--------------------|-----|
+| ARW B1 | 2 | a compile just before; samples 19-31 % |
+| ARW A1 | 1 | another session's `cargo` during |
+| ARW B2 | 4 | samples 17-34 %; another session's build during |
+| ARW B3 | 4 | samples 17-55 %; other builds and a second `riffle-native` |
+| ARW B, `f` on | 1 | the sample before was 21 % |
+| RAF B1 | 2 | samples 19-35 % |
+| RAF B2 | 1 | a sample of 24 % |
+| RAF B, `f` on | 3 | samples 16-20 % |
+
+The used B runs' samples after the first were 0-15 %. Two used runs started on
+an earlier sample above 15 % that the rule allows: RAF B2r1's first sample was
+28 % (in the settle), and its before-sample was 8 %.
+
+Used runs, by their labels in `runs/`: ARW B1r1, A1r1, B2r4, A2, B3r4, A3,
+Bfr1, Af; RAF B1r2, A1, B2r1, A2, B3, A3, Bfr3, Af. Unrelated to this
+measurement and left alone: two `node` processes (PIDs 33080, 33384) present
+throughout.
+
+## Per run p50 / p95 (ms)
+
+`wait` was 0.00 / 0.00 and `orient`'s p50 0.00 in every run.
+
+| Run | read | decode | orient p95 | hop | frameWait | paint | present | keypressToPixels |
+|-----|------|--------|------------|-----|-----------|-------|---------|------------------|
+| ARW B1 | 0.81 / 1.17 | 6.22 / 8.41 | 1.21 | 0.02 / 0.08 | 8.47 / 16.10 | 0.72 / 0.94 | 0.18 / 0.59 | 17.33 / 25.15 |
+| ARW A1 | 1.32 / 2.37 | 11.58 / 16.57 | 4.97 | 0.09 / 0.95 | 9.40 / 16.09 | 3.10 / 4.68 | 0.51 / 1.18 | 26.29 / 39.33 |
+| ARW B2 | 0.83 / 1.46 | 6.21 / 8.46 | 1.25 | 0.02 / 0.08 | 8.75 / 16.31 | 0.69 / 0.92 | 0.18 / 0.42 | 17.07 / 25.06 |
+| ARW A2 | 1.22 / 2.01 | 11.99 / 18.16 | 9.33 | 0.10 / 0.49 | 8.47 / 17.85 | 3.10 / 4.40 | 0.55 / 0.99 | 26.57 / 38.91 |
+| ARW B3 | 0.79 / 1.11 | 6.10 / 8.27 | 1.04 | 0.02 / 0.05 | 7.86 / 16.71 | 0.70 / 0.98 | 0.18 / 0.69 | 17.13 / 23.51 |
+| ARW A3 | 1.38 / 2.30 | 12.29 / 19.07 | 6.12 | 0.09 / 0.23 | 9.39 / 16.41 | 2.74 / 4.48 | 0.48 / 1.64 | 27.05 / 40.52 |
+| RAF B1 | 2.02 / 2.56 | 47.44 / 55.18 | 11.52 | 0.32 / 0.49 | 9.55 / 16.09 | 3.46 / 3.99 | 0.16 / 0.20 | 64.02 / 76.99 |
+| RAF A1 | 5.97 / 10.03 | 114.15 / 136.74 | 75.30 | 0.12 / 0.85 | 10.22 / 17.07 | 21.26 / 27.90 | 0.68 / 1.01 | 156.09 / 240.20 |
+| RAF B2 | 1.83 / 2.53 | 45.77 / 54.13 | 9.65 | 0.44 / 0.75 | 10.76 / 15.92 | 3.43 / 3.91 | 0.16 / 0.20 | 62.24 / 73.69 |
+| RAF A2 | 4.98 / 9.36 | 106.53 / 135.42 | 71.21 | 0.13 / 1.15 | 10.77 / 17.05 | 20.83 / 30.04 | 0.65 / 0.97 | 148.34 / 206.55 |
+| RAF B3 | 1.99 / 2.66 | 45.42 / 53.54 | 9.22 | 0.43 / 0.67 | 8.85 / 16.10 | 3.52 / 3.86 | 0.15 / 0.20 | 62.45 / 73.78 |
+| RAF A3 | 5.26 / 10.20 | 110.02 / 135.93 | 67.89 | 0.11 / 1.12 | 9.87 / 16.66 | 19.90 / 43.13 | 0.61 / 0.96 | 151.31 / 224.40 |
+
+## Median of the three p50s, and A minus B (ms)
+
+| Stage | ARW A | ARW B | ARW A - B | RAF A | RAF B | RAF A - B |
+|-------|-------|-------|-----------|-------|-------|-----------|
+| read | 1.32 | 0.81 | +0.51 | 5.26 | 1.99 | +3.27 |
+| decode | 11.99 | 6.21 | **+5.78** | 110.02 | 45.77 | **+64.25** |
+| orient | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| hop | 0.09 | 0.02 | +0.07 | 0.12 | 0.43 | -0.31 |
+| frameWait | 9.39 | 8.47 | +0.92 | 10.22 | 9.55 | +0.67 |
+| paint | 3.10 | 0.70 | **+2.40** | 20.83 | 3.46 | **+17.37** |
+| present | 0.51 | 0.18 | +0.33 | 0.65 | 0.16 | +0.49 |
+| **keypressToPixels** | **26.57** | **17.13** | **+9.44** | **151.31** | **62.45** | **+88.86** |
+
+For context only, from other sessions (not compared): the archived strip
+plan's 17.44 ms (ARW) and 60.29 ms (RAF) with no scan running. This session's
+B (17.13 / 62.45) is in the same range.
+
+### What the stages say
+
+- **`decode` about doubles** (ARW 6.2 to 12.0 ms, RAF 45.8 to 110.0 ms). It
+  runs on a background executor thread, and while the 22 pass 2 workers keep
+  every logical processor at 96-100 %, it gets about half the CPU it gets on an
+  idle machine. The workers' `Priority::Lowest` does not prevent this (Inferred):
+  priority decides who runs on a logical processor, not the SMT sibling or the
+  memory bandwidth they share. The i7-13700's E-cores are also slower if the
+  decode lands there.
+- **`paint` grows about 4.4x on ARW (0.70 to 3.10 ms) and 6x on RAF (3.46 to
+  20.83 ms)**. That is main-thread work, the image upload inside the paint
+  window, contended the same way. On RAF its p95 reaches 27.9-43.1 ms.
+- **`read` grows** (ARW +0.51 ms, RAF +3.27 ms) although the files are cached:
+  the copy out of the page cache is CPU work too.
+- `orient`'s p95 (the portrait pages' rotation) grows from about 1 ms to
+  5-9 ms on ARW and from 9-12 ms to 68-75 ms on RAF, for the same reason.
+- `frameWait` (+0.9 / +0.7 ms) and `present` (+0.3 / +0.5 ms) barely move. The
+  vsync and the GPU are not where the time goes.
+- Pass 2's throughput while paging stayed close to its no-paging throughput
+  (ARW about 13,200-13,900 rows in about 63 s, against 18,620 in 85.7 s with no
+  paging). The pass does not yield to the preview; it shares the CPU with it.
+
+## Not gated: `f` on
+
+One A/B pair with the overlay on (`f` posted to the app's own window during the
+settle). Each log has 20 `eyes` lines: the on-demand detection and judgment ran
+once per file, and the later laps answered from the cache.
+
+| Run | read | decode | frameWait | paint | keypressToPixels p50 / p95 |
+|-----|------|--------|-----------|-------|----------------------------|
+| ARW B, `f` on | 0.95 | 6.37 | 7.99 | 0.79 | 16.53 / 24.91 |
+| ARW A, `f` on | 1.43 | 12.18 | 10.77 | 3.07 | 28.01 / 38.45 |
+| RAF B, `f` on | 2.02 | 44.49 | 8.68 | 3.55 | 61.20 / 71.29 |
+| RAF A, `f` on | 5.66 | 106.61 | 10.79 | 21.95 | 156.02 / 204.46 |
+
+A - B with `f` on: ARW +11.48 ms, RAF +94.82 ms, in line with the `f`-off
+pairs. On B, `f` on did not move `keypressToPixels` (ARW 16.53 against the off
+runs' 17.07-17.33, RAF 61.20 against 62.24-64.02).
+
+## Not gated: `read` during pass 2
+
+`read` p50 during pass 2: ARW 1.22-1.38 ms, RAF 4.98-5.97 ms. Against it, during
+pass 1, `native-app.md` has 0.96 ms (ARW, cold, 520 files). Pass 1 is mostly
+I/O and leaves CPU free; pass 2 saturates the CPU, so a cached read costs more
+during pass 2 than an I/O-bound one during pass 1.
+
+## Method notes
+
+- The A template is the B index with `UPDATE files SET faces_extractor = 0`
+  (Python `sqlite3`), with `folders.last_viewed` cleared and `views` emptied in
+  both templates, so every run starts at the first compare file. Opening the A
+  template ran `scan extract files=0` and then pass 2 over the whole folder
+  (`scan faces: files=18620` / `files=5420`, untimed). Each run got its own copy,
+  staged ahead of the session so the copy's write-back did not fall into a
+  run.
+- stdout (`page` lines) and stderr (the log) went to one file. In B the
+  `scan faces: files=0` line precedes the first `page` line. No A run logged
+  the line, so how the two streams interleave did not decide any cut.
+- Scripts and raw logs: `D:\Photos\tests\20261111-gpui-pass2-measure\`
+  (`run.sh`, `slot.sh`, `next.sh`, `stage.sh`, `sampler.ps1`, `busy.ps1`,
+  `sendf.ps1`, `idle.py`, `analyze.py`, `templates.py`, `runs\`,
+  `sampler.csv`).
