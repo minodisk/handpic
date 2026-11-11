@@ -222,9 +222,13 @@ into the sidecar format, the label names, the keymap and auto-advance,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
-`IndexedFile`), `src/scan.rs` lists a folder with its sidecars, reconciles the
+`IndexedFile`) and what a judgment key makes of it (`Command`, `apply`,
+`label_known`, `advances_after`, a port of the Tauri `judge` and `advance.ts`)
+and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
+window spawns at startup and drains in `App::on_app_quit`, `src/scan.rs` lists a folder with its sidecars, reconciles the
 index with the whole listing, reads back the changed sidecars
-(`sidecar::reconcile_of`, skipped in a view-only folder) and
+(`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
+to the writer with no debounce) and
 runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
 a thread of its own, their progress reaching
 the view through one channel, `src/strip.rs` is the thumbnail strip's pure

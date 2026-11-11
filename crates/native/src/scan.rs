@@ -12,7 +12,7 @@ use futures::channel::mpsc::UnboundedSender;
 use riffle_backend::{
     index::{self, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing, stat_sidecars},
-    sidecar::{self, SidecarError, SidecarFormat},
+    sidecar::{self, SidecarError, SidecarFormat, Writer},
 };
 use riffle_core::{scan::ScanFocus, xmp::LabelNames};
 
@@ -63,6 +63,11 @@ pub enum Event {
     },
     /// The folder watcher saw the folder change; the canonical path.
     Changed(String),
+    /// The sidecar writer failed to write `path`'s sidecar.
+    SidecarError {
+        path: String,
+        message: String,
+    },
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its
@@ -122,10 +127,12 @@ pub struct Scan {
 impl Scan {
     /// Stat the whole listing and reconcile the index with it, which drops the
     /// rows of files not listed, then read back the sidecars changed since the
-    /// index last saw them, as the Tauri app's `scan_folder` orders the two.
-    /// A view-only folder has no sidecar pass.
+    /// index last saw them, as the Tauri app's `scan_folder` orders the two,
+    /// handing the rows still dirty to `writer`. A view-only folder has no
+    /// sidecar pass.
     pub fn prepare(
         index: &Arc<Mutex<Index>>,
+        writer: Option<&Writer>,
         listed: &Listed,
         format: SidecarFormat,
         names: &LabelNames,
@@ -146,7 +153,7 @@ impl Scan {
         let sidecar_errors = if viewonly::is_view_only(&listed.files) {
             Vec::new()
         } else {
-            reconcile_sidecars(index, listed, format, names)
+            reconcile_sidecars(index, writer, listed, format, names)
         };
         Ok(Prepared {
             todo,
@@ -219,11 +226,15 @@ impl Scan {
     }
 }
 
-/// `sidecar::reconcile_of` over the listing. The dirty rows it returns are
-/// only counted: nothing writes a sidecar yet. A failure is logged and leaves
-/// the open going, as in the Tauri app.
+/// `sidecar::reconcile_of` over the listing, its dirty rows queued with no
+/// debounce, as the Tauri `scan_folder` does: a judgment an earlier session
+/// stored but did not write (a crash inside the debounce) is written now. Each
+/// row carries its own `label_known`, so a row made before its label was
+/// known does not clear the sidecar's. A failure is logged and leaves the open
+/// going, as in the Tauri app.
 fn reconcile_sidecars(
     index: &Arc<Mutex<Index>>,
+    writer: Option<&Writer>,
     listed: &Listed,
     format: SidecarFormat,
     names: &LabelNames,
@@ -233,16 +244,32 @@ fn reconcile_sidecars(
     let sidecars = stat_sidecars(&listed.sidecars);
     let (dirty, errors, changed) =
         match sidecar::reconcile_of(dir, &listed.files, &sidecars, index, format, names) {
-            Ok((dirty, errors, changed)) => (dirty.len(), errors, changed),
+            Ok((dirty, errors, changed)) => (dirty, errors, changed),
             Err(e) => {
                 log::error!("failed to reconcile the sidecars of {dir}: {e}");
-                (0, Vec::new(), 0)
+                (Vec::new(), Vec::new(), 0)
             }
         };
     log::info!(
-        "scan sidecars: dir={dir} dirty={dirty} changed={changed} in {}ms",
+        "scan sidecars: dir={dir} dirty={} changed={changed} in {}ms",
+        dirty.len(),
         started.elapsed().as_millis()
     );
+    if let Some(writer) = writer {
+        for (path, rating, flag, label, label_known) in dirty {
+            if let Err(e) = writer.set_now(
+                PathBuf::from(path),
+                rating,
+                flag,
+                label,
+                label_known,
+                format,
+                names.clone(),
+            ) {
+                log::error!("failed to queue a pending sidecar: {e}");
+            }
+        }
+    }
     errors
 }
 
@@ -293,8 +320,54 @@ fn run_faces_pass(
 
 #[cfg(test)]
 mod tests {
-    use super::{natural_order, threads_for};
-    use std::path::PathBuf;
+    use super::{Scan, list, natural_order, threads_for};
+    use riffle_backend::{
+        index::Index,
+        sidecar::{DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
+    };
+    use riffle_core::Flag;
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+
+    #[test]
+    fn an_open_writes_the_judgment_a_crash_left_unwritten() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("photos");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("DSC1.ARW"), b"").unwrap();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        let names = label_names_setting(None);
+        let listed = list(&folder, SidecarFormat::Xmp).unwrap();
+        let arw = &listed.files[0];
+        // The row a key stored before the process died inside the debounce.
+        index
+            .lock()
+            .unwrap()
+            .set_rating(&listed.dir, arw, Some(4), Flag::None, None, false)
+            .unwrap();
+        let writer = Writer::spawn(index.clone(), |path, message| {
+            panic!("sidecar write failed: {} {message}", path.display())
+        });
+        let prepared =
+            Scan::prepare(&index, Some(&writer), &listed, SidecarFormat::Xmp, &names).unwrap();
+        assert!(prepared.sidecar_errors.is_empty());
+        assert!(writer.flush(DRAIN_TIMEOUT));
+        let xmp = fs::read_to_string(folder.join("DSC1.xmp")).unwrap();
+        assert!(xmp.contains(r#"xmp:Rating="4""#), "{xmp}");
+        assert!(
+            index
+                .lock()
+                .unwrap()
+                .dirty_rows(&listed.dir)
+                .unwrap()
+                .is_empty()
+        );
+    }
 
     #[test]
     fn orders_by_natural_file_name() {

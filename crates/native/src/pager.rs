@@ -2,6 +2,8 @@
 pub enum Move {
     Next,
     Previous,
+    /// The next file, staying on the last one: Auto-advance.
+    NextClamped,
     First,
     Last,
     /// A file picked by index, clamped to the list.
@@ -38,6 +40,7 @@ impl Pager {
         self.index = match to {
             Move::Next => (self.index + 1) % self.len,
             Move::Previous => (self.index + self.len - 1) % self.len,
+            Move::NextClamped => (self.index + 1).min(self.len - 1),
             Move::First => 0,
             Move::Last => self.len - 1,
             Move::To(index) => index.min(self.len - 1),
@@ -78,6 +81,16 @@ mod tests {
         assert_eq!(p.index, 2);
         assert!(p.go(Move::Next));
         assert_eq!(p.index, 0);
+    }
+
+    #[test]
+    fn the_clamped_next_stays_on_the_last_file() {
+        let mut p = Pager::new(2);
+        assert!(p.go(Move::NextClamped));
+        assert_eq!(p.index, 1);
+        assert!(!p.go(Move::NextClamped));
+        assert_eq!(p.index, 1);
+        assert!(!Pager::new(0).go(Move::NextClamped));
     }
 
     #[test]

@@ -351,7 +351,7 @@ Tauri settings from either, so it works before and after the rename.
       after `reconcile`, before the scan thread starts, exactly as
       `scan_folder` orders them.
     - Keep `judgment.rs` small in this step: `State` and its `From<&IndexedFile>`.
-- [ ] Step 4: The judgment keys write the index and the sidecars through the backend's writer, with auto-advance and the drain on quit
+- [x] Step 4: The judgment keys write the index and the sidecars through the backend's writer, with auto-advance and the drain on quit
   - Done when:
     - `judgment.rs` gains the pure part of `judge`: `Command` (`Rate(1..=5)`,
       `Reject`, `Pick`, `Unflag`, `ClearRating`, `Label(color)`,
@@ -572,3 +572,4 @@ Tauri settings from either, so it works before and after the rename.
 - (2026-11-11) Step 1 complete
 - (2026-11-11) Step 2 complete
 - (2026-11-11) Step 3 complete
+- (2026-11-11) Step 4 complete
