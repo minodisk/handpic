@@ -167,6 +167,15 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   which make the label known) apart from `judgments`, and `touched` (the
   paths judged since the open), whose state a later `entries` read, such as
   the one at pass 1's `Done`, does not replace, as the Tauri `touched` set.
+- Rule: undo and redo go through the same path. A judgment that writes
+  records its file's state before it as one `history::Undo` entry (a batch,
+  for the selection of port Step 8) and clears the redo history; `Ctrl+Z` /
+  `Ctrl+Shift+Z` pop an entry, push the files' current states onto the other
+  history, apply the popped states as a key would (view, row, writer) and
+  move to the file. Each entry has an id, so a failed store drops its file
+  from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
+  Another folder's open clears both histories; a re-listing keeps them and a
+  step drops the files no longer listed.
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
@@ -449,8 +458,8 @@ its action once at startup. The window's handler takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
-`judgment::Command::from_action`, and any other action (`rejectRest`, `undo`,
-`redo`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
+`judgment::Command::from_action`, `undo` / `redo` to `history::Undo`, and any
+other action (`rejectRest`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
 its keymap action in that `match`, not as a literal key.
 
 Read from `gpui_windows` at the pinned rev, not yet seen in the running app
