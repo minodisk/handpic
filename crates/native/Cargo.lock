@@ -4320,6 +4320,8 @@ dependencies = [
  "natord",
  "riffle-backend",
  "riffle-core",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

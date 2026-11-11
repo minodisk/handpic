@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 pub const IDENTIFIER: &str = "com.minodisk.handpic";
 
 /// The identifiers the product had before `IDENTIFIER`, newest first.
-#[allow(dead_code)]
 pub const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.riffle"];
 
 /// The index file: `flag` when given, else `index.sqlite` in the native app's
