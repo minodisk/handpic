@@ -7,6 +7,7 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex, mpsc},
     thread,
+    time::Duration,
 };
 
 use futures::channel::oneshot;
@@ -155,8 +156,15 @@ pub fn store(
     )
 }
 
+/// What the store thread runs: one key's `store`, or a barrier that
+/// answers once every job before it has run.
+enum Job {
+    Store(Box<Store>),
+    Barrier(mpsc::Sender<()>),
+}
+
 /// One key's `store`, with where its outcome goes.
-struct Job {
+struct Store {
     index: Arc<Mutex<Index>>,
     writer: Arc<Writer>,
     dir: String,
@@ -171,6 +179,7 @@ struct Job {
 /// The stores in the order the keys were pressed: each carries the file's
 /// whole state, so the last one to run decides the row and the sidecar, and
 /// a pool of tasks would let an earlier key win. One thread runs them.
+#[derive(Clone)]
 pub struct Queue {
     jobs: mpsc::Sender<Job>,
 }
@@ -182,6 +191,13 @@ impl Queue {
             .name("judgment-store".into())
             .spawn(move || {
                 for job in queued {
+                    let job = match job {
+                        Job::Store(job) => job,
+                        Job::Barrier(done) => {
+                            done.send(()).ok();
+                            continue;
+                        }
+                    };
                     let stored = store(
                         &job.index,
                         &job.writer,
@@ -213,7 +229,7 @@ impl Queue {
         names: LabelNames,
     ) -> oneshot::Receiver<Result<(), String>> {
         let (reply, outcome) = oneshot::channel();
-        let job = Job {
+        let job = Store {
             index,
             writer,
             dir,
@@ -224,12 +240,24 @@ impl Queue {
             names,
             reply,
         };
-        if let Err(mpsc::SendError(job)) = self.jobs.send(job) {
+        if let Err(mpsc::SendError(Job::Store(job))) = self.jobs.send(Job::Store(Box::new(job))) {
             job.reply
                 .send(Err("the judgment store thread is not running".into()))
                 .ok();
         }
         outcome
+    }
+
+    /// Waits until every store queued so far has run, at most `timeout`;
+    /// the quit hook calls it before the writer's flush, since a store
+    /// reaches the writer only after its row. `false` when the wait timed
+    /// out or the thread is gone.
+    pub fn drain(&self, timeout: Duration) -> bool {
+        let (done, reached) = mpsc::channel();
+        if self.jobs.send(Job::Barrier(done)).is_err() {
+            return false;
+        }
+        reached.recv_timeout(timeout).is_ok()
     }
 }
 
@@ -610,5 +638,37 @@ mod tests {
             (row.1, row.2),
             (picked.rating.map(|r| r as i8), picked.flag)
         );
+    }
+
+    #[test]
+    fn the_quit_drain_waits_for_a_store_held_on_the_index() {
+        let folder = Folder::new();
+        let names = label_names_setting(None);
+        let queue = Queue::new();
+        let writer = Arc::new(Writer::spawn(folder.index.clone(), |path, message| {
+            panic!("sidecar write failed: {} {message}", path.display())
+        }));
+        let own = State::default();
+        let picked = apply(&own, &own, Command::Pick);
+        let held = folder.index.lock().unwrap();
+        let _outcome = queue.submit(
+            folder.index.clone(),
+            writer.clone(),
+            folder.dir.clone(),
+            folder.arw.clone(),
+            picked.clone(),
+            true,
+            SidecarFormat::Xmp,
+            names,
+        );
+        assert!(!queue.drain(std::time::Duration::from_millis(100)));
+        drop(held);
+        assert!(queue.drain(DRAIN_TIMEOUT));
+        assert!(writer.flush(DRAIN_TIMEOUT));
+        let xmp = folder.sidecar("DSC1.xmp");
+        assert!(xmp.contains(r#"xmpDM:good="True""#), "{xmp}");
+        let rows = folder.index.lock().unwrap().rows_of(&folder.dir).unwrap();
+        let row = rows.iter().find(|r| r.0 == folder.arw).unwrap();
+        assert_eq!((row.1, row.2), (None, picked.flag));
     }
 }

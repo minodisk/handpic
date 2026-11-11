@@ -347,10 +347,15 @@ impl Riffle {
         // Held by the app, not the view: closing the window may release the
         // view before the quit handlers run. The drain runs as the handler is
         // called, so GPUI's 200 ms bound on the returned future does not cut it.
+        let stores = judgment::Queue::new();
         if let Some(writer) = writer.clone() {
+            let stores = stores.clone();
             App::on_app_quit(cx, move |_| {
+                let stored = stores.drain(sidecar::DRAIN_TIMEOUT);
                 let drained = writer.flush(sidecar::DRAIN_TIMEOUT);
-                log::info!("quit: sidecar writer drained={drained}");
+                log::info!(
+                    "quit: judgment stores drained={stored} sidecar writer drained={drained}"
+                );
                 async {}
             })
             .detach();
@@ -393,7 +398,7 @@ impl Riffle {
             seen: HashSet::new(),
             touched: HashSet::new(),
             writer,
-            stores: judgment::Queue::new(),
+            stores,
             notes: Vec::new(),
             write_errors: Vec::new(),
             marks: overlay::Marks::default(),
