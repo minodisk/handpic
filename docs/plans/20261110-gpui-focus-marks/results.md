@@ -1,5 +1,59 @@
 # Step 6 results: paging while pass 2 runs against paging on a finished index
 
+## Third run (3 pass 2 threads): invalid, the frames were throttled
+
+Measured 2026-11-11, 21:10-21:48 local, with `riffle-native` built at
+`4aefeb14`. That commit runs pass 2 on an eighth of the cores (3 of 24
+logical). This session **cannot decide the gate**.
+
+- `frameWait` was 120-145 ms at p50 in both A and B, against 8-10 ms in the
+  first two runs.
+- Its per-page sequence climbs from about 8 ms to about 260 ms and drops back
+  each time, for example `9 26 56 69 86 102 121 ... 258 9`. That is what a
+  present every about 250 ms looks like: the window was presented at about
+  4 Hz.
+- The throttling stopped partway through RAF B with `f` on (at about 21:47).
+  The last run, RAF A with `f` on, is back at 0-16 ms.
+- Inferred cause: the display slept, or the window was occluded, once the
+  user left the machine idle, and DWM throttled the presents. Not verified.
+- `keypressToPixels` (ARW A − B −0.20 ms, RAF +2.36 ms at the median p50)
+  includes that wait, so it is not a measurement of the pass.
+
+The stages before the frame are not affected by the throttle. Median of three
+p50s, A minus B (ms):
+
+| Stage | ARW A | ARW B | ARW A - B | RAF A | RAF B | RAF A - B |
+|-------|-------|-------|-----------|-------|-------|-----------|
+| read | 0.52 | 2.77 | -2.25 | 1.75 | 4.73 | -2.98 |
+| decode | 6.62 | 8.62 | -2.00 | 49.59 | 46.86 | +2.73 |
+| paint | 0.86 | 1.04 | -0.18 | 4.07 | 4.95 | -0.88 |
+| present | 0.23 | 0.43 | -0.20 | 0.22 | 0.26 | -0.04 |
+
+Against the second run, RAF's `decode` growth falls from +8.61 to +2.73 ms
+and `paint`'s from +5.45 to -0.88 ms. B's `read` and `decode` are again slower
+than A's, as in the second run.
+
+**Pass 2 alone, untimed, at 3 threads:**
+
+| Folder | 3 threads | 6 threads | 22 threads |
+|--------|-----------|-----------|------------|
+| ARW, 18,620 files | 301.2 s | 198.7 s | 85.7 s |
+| RAF, 5,420 files | 225.8 s | 146.7 s | 79.6 s |
+
+Rows written at quit: ARW 3,910-4,050 and RAF 1,410-1,420. No A run logged
+`scan faces:`.
+
+- Used runs: ARW B1, A1, B2r3, A2, B3r1, A3, Bfr3, Af; RAF B1r2, A1, B2r2, A2,
+  B3, A3, Bf, Af. Discarded B attempts (a sample over 15 %): 3 ARW B2, 1 ARW B3,
+  3 ARW Bf, 2 RAF B1 and 2 RAF B2. No compiler, `mise run` or other
+  `riffle-native` appeared.
+- The A runs' system load was 0-40 % (pass 2 on 3 threads).
+- Raw data: `runs\` and `analyze-*.txt` in the test folder. The second run's
+  data is in `runs-6t\` and the `*-6t.*` files.
+- For a valid rerun: keep the display awake and the window unoccluded for the
+  whole session (for example, the user present, or display sleep off). Then
+  check every run's `frameWait` p50 is near 8-10 ms before reading the gate.
+
 ## Second run (6 pass 2 threads): ARW met, RAF missed
 
 Measured 2026-11-11, 18:04-18:36 local, with `riffle-native` built at

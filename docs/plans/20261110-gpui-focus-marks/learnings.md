@@ -228,6 +228,17 @@
 - The user then chose an eighth of the cores for pass 2 (3 on 24 logical) in
   both apps, to be re-measured the same way; the 6-thread binary and its runs
   are kept as `riffle-native-6t.exe` and `runs-6t\` in the test folder.
+- Third run at 3 threads (`4aefeb14`) is invalid: `frameWait` climbed to a
+  120-145 ms p50 in A and B alike, a sawtooth of presents at about 4 Hz,
+  probably the display sleeping or the window occluded once the user left the
+  machine idle. Rule for the next session: check that every run's
+  `frameWait` p50 sits near 8-10 ms before reading the gate. The pre-frame
+  stages did improve: RAF `decode` +2.73 ms, `paint` -0.88 ms. Pass 2 alone
+  took 301.2 s (ARW) and 225.8 s (RAF).
+- Writing a path into a heredoc through the Bash tool collapsed a doubled
+  backslash to a single one, so the backslash before `$F` escaped it, the
+  folder argument held a literal `$F`, and the app opened a path that did not
+  exist. Use forward slashes in Windows paths in scripts.
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with
