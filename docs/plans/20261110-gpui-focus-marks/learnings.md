@@ -239,6 +239,13 @@
   backslash to a single one, so the backslash before `$F` escaped it, the
   folder argument held a literal `$F`, and the app opened a path that did not
   exist. Use forward slashes in Windows paths in scripts.
+- Rerun at 3 threads, once through with no redos (the user's call): ARW
+  A - B -3.03 ms (met), RAF +5.08 ms (missed by 0.08; `paint` +2.85,
+  `decode` +2.34). Most B runs had a load sample over 15 %, which can only
+  slow B, and the ARW runs' `frameWait` p50 was 9.8-15.9 ms, so ARW carries
+  vsync noise. One run (ARW B1) did not exit after `--auto`'s quit and was
+  closed with `CloseMainWindow`. A watchdog (`watchdog.ps1`) then closed any
+  run's window still open after 100 s; it never fired.
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with

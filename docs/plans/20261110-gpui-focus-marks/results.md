@@ -1,6 +1,78 @@
 # Step 6 results: paging while pass 2 runs against paging on a finished index
 
-## Third run (3 pass 2 threads): invalid, the frames were throttled
+## Third run, rerun (3 pass 2 threads): ARW met, RAF missed by 0.08 ms
+
+Measured 2026-11-11, 23:06-23:36 local, with the same `4aefeb14` binary. That
+build runs pass 2 on an eighth of the cores (3 of 24 logical). At the user's
+request this rerun went through once, with no runs discarded and redone: each
+run's idle status and `frameWait` p50 are listed next to its numbers instead.
+
+**Verdict: the gate is met on ARW and missed on RAF by 0.08 ms.** Median of the
+three runs' p50 `keypressToPixels`, A minus B:
+
+| Folder | A | B | A - B | Gate |
+|--------|---|---|-------|------|
+| ARW 1616x1080 | 21.25 | 24.28 | **-3.03** | <= +2.0 (met) |
+| RAF 4416x2944 | 69.82 | 64.74 | **+5.08** | <= +5.0 (missed by 0.08) |
+
+- **Per pair:** ARW -7.66, +3.13, -3.03; RAF +5.09, +5.08, +3.96.
+- **p95, not gated:** ARW -4.35, RAF +5.72.
+- **On RAF the growth is `paint` +2.85 ms (3.49 to 6.34) and `decode` +2.34 ms
+  (47.34 to 49.68).** At 6 threads they were +5.45 and +8.61; at 22 threads,
+  +17.37 and +64.25.
+- **Contamination:**
+  - Every B run here except RAF B with `f` on had at least one sample over
+    15 % during it. Load during B can only slow B, so it biases A - B
+    downward.
+  - The ARW runs' `frameWait` p50 was 9.8-15.9 ms, above the 8-10 ms of
+    clean runs, so the ARW numbers carry several ms of vsync noise. The ARW
+    pass rests on them.
+  - The RAF runs' `frameWait` p50 was 8.0-9.4 ms (normal).
+- ARW B1's process did not exit after `--auto`'s quit: it printed its summary
+  at 23:09:00 and was still running at 23:15, until its window was closed
+  (`CloseMainWindow`, not killed). Its pages were all recorded before that.
+  From then on, a watchdog closed the run's window once it had run 100 s; it
+  never had to.
+
+### Per run p50 / p95 (ms), with idle status and `frameWait` p50
+
+| Run | Idle | read | decode | frameWait | paint | keypressToPixels |
+|-----|------|------|--------|-----------|-------|------------------|
+| ARW B1 | contaminated (16-46 %; quit hung) | 1.34 / 3.57 | 7.73 / 11.54 | **15.46** / 33.78 | 0.79 / 1.74 | 28.16 / 46.88 |
+| ARW A1 | ok | 0.57 / 0.93 | 6.97 / 10.68 | 11.49 / 16.85 | 1.29 / 1.61 | 20.50 / 28.48 |
+| ARW B2 | one sample 32 % | 1.41 / 3.48 | 8.39 / 15.11 | 9.76 / 16.49 | 0.77 / 1.56 | 21.86 / 31.46 |
+| ARW A2 | ok | 0.63 / 1.21 | 6.26 / 11.17 | **15.88** / 32.05 | 1.50 / 1.95 | 24.99 / 44.52 |
+| ARW B3 | two samples 18 % | 1.10 / 3.93 | 7.39 / 12.79 | **13.92** / 35.03 | 0.77 / 1.55 | 24.28 / 48.59 |
+| ARW A3 | ok | 0.51 / 1.30 | 6.59 / 10.61 | **12.61** / 30.88 | 1.26 / 1.87 | 21.25 / 42.53 |
+| RAF B1 | contaminated (16-34 %) | 2.38 / 5.73 | 47.34 / 53.64 | 8.00 / 15.94 | 3.53 / 4.53 | 65.24 / 74.43 |
+| RAF A1 | ok | 2.25 / 3.12 | 49.68 / 66.61 | 9.21 / 18.34 | 6.34 / 11.44 | 70.33 / 89.98 |
+| RAF B2 | one sample 18 % | 2.49 / 7.09 | 47.42 / 54.35 | 9.27 / 16.43 | 3.49 / 4.11 | 64.74 / 79.62 |
+| RAF A2 | ok | 2.16 / 3.81 | 50.40 / 63.28 | 8.60 / 16.05 | 6.35 / 9.43 | 69.82 / 85.34 |
+| RAF B3 | one sample 25 % | 2.47 / 6.24 | 46.77 / 55.04 | 9.42 / 16.49 | 3.43 / 4.36 | 64.16 / 80.58 |
+| RAF A3 | ok | 2.19 / 3.48 | 48.61 / 57.15 | 8.48 / 16.07 | 6.24 / 10.72 | 68.12 / 79.16 |
+
+`wait` 0.00, `orient` p50 0.00, `hop` under 0.5 ms and `present` under 0.3 ms
+at p50 in every run.
+
+Median of the three p50s, A minus B: ARW `read` -0.77, `decode` -1.14,
+`frameWait` -1.31, `paint` +0.52; RAF `read` -0.28, `decode` +2.34,
+`frameWait` -0.67, `paint` +2.85, `hop` -0.38.
+
+Not gated, `f` on:
+- ARW: A 35.53 against B 22.70 (+12.83). A's `frameWait` p50 was 24.30 ms
+  against B's 12.90 and B had a 23 % sample, so this pair is contaminated.
+- RAF: A 68.20 against B 62.46 (+5.74), both clean, `frameWait` 8.26 / 8.45.
+- Each `f` log has 20 `eyes` lines, so the overlay was on.
+
+**Pass 2 at 3 threads:**
+- Alone, untimed: 301.2 s for ARW (18,620 files) and 225.8 s for RAF (5,420
+  files).
+- Rows written by quit: ARW 3,800-4,060, RAF 1,400-1,490. No A run logged
+  `scan faces:`.
+
+Raw data: `runs\`, `analyze-*.txt`, `idle-report.txt`, `watchdog.log`.
+
+## Third run, first attempt (3 pass 2 threads): invalid, the frames were throttled
 
 Measured 2026-11-11, 21:10-21:48 local, with `riffle-native` built at
 `4aefeb14`. That commit runs pass 2 on an eighth of the cores (3 of 24
@@ -48,7 +120,7 @@ Rows written at quit: ARW 3,910-4,050 and RAF 1,410-1,420. No A run logged
   3 ARW Bf, 2 RAF B1 and 2 RAF B2. No compiler, `mise run` or other
   `riffle-native` appeared.
 - The A runs' system load was 0-40 % (pass 2 on 3 threads).
-- Raw data: `runs\` and `analyze-*.txt` in the test folder. The second run's
+- Raw data: `runs-3t-throttled\` and `analyze-*-3t-throttled.txt` in the test folder. The second run's
   data is in `runs-6t\` and the `*-6t.*` files.
 - For a valid rerun: keep the display awake and the window unoccluded for the
   whole session (for example, the user present, or display sleep off). Then
