@@ -5,8 +5,11 @@
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, mpsc},
+    thread,
 };
+
+use futures::channel::oneshot;
 
 use riffle_backend::{
     index::{self, Index, IndexedFile},
@@ -152,9 +155,89 @@ pub fn store(
     )
 }
 
+/// One key's `store`, with where its outcome goes.
+struct Job {
+    index: Arc<Mutex<Index>>,
+    writer: Arc<Writer>,
+    dir: String,
+    path: String,
+    state: State,
+    label_known: bool,
+    format: SidecarFormat,
+    names: LabelNames,
+    reply: oneshot::Sender<Result<(), String>>,
+}
+
+/// The stores in the order the keys were pressed: each carries the file's
+/// whole state, so the last one to run decides the row and the sidecar, and
+/// a pool of tasks would let an earlier key win. One thread runs them.
+pub struct Queue {
+    jobs: mpsc::Sender<Job>,
+}
+
+impl Queue {
+    pub fn new() -> Self {
+        let (jobs, queued) = mpsc::channel::<Job>();
+        thread::Builder::new()
+            .name("judgment-store".into())
+            .spawn(move || {
+                for job in queued {
+                    let stored = store(
+                        &job.index,
+                        &job.writer,
+                        &job.dir,
+                        &job.path,
+                        &job.state,
+                        job.label_known,
+                        job.format,
+                        job.names,
+                    );
+                    job.reply.send(stored).ok();
+                }
+            })
+            .expect("spawn the judgment store thread");
+        Self { jobs }
+    }
+
+    /// Queues a `store`; the receiver gets its outcome.
+    #[allow(clippy::too_many_arguments)]
+    pub fn submit(
+        &self,
+        index: Arc<Mutex<Index>>,
+        writer: Arc<Writer>,
+        dir: String,
+        path: String,
+        state: State,
+        label_known: bool,
+        format: SidecarFormat,
+        names: LabelNames,
+    ) -> oneshot::Receiver<Result<(), String>> {
+        let (reply, outcome) = oneshot::channel();
+        let job = Job {
+            index,
+            writer,
+            dir,
+            path,
+            state,
+            label_known,
+            format,
+            names,
+            reply,
+        };
+        if let Err(mpsc::SendError(job)) = self.jobs.send(job) {
+            job.reply
+                .send(Err("the judgment store thread is not running".into()))
+                .ok();
+        }
+        outcome
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Command, State, advances_after, apply, changed, label_known, store, writes};
+    use super::{
+        Command, Queue, State, advances_after, apply, changed, label_known, store, writes,
+    };
     use riffle_backend::{
         index::{Index, IndexedFile},
         sidecar::{DEBOUNCE, DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
@@ -484,5 +567,48 @@ mod tests {
         press(&folder, &[Command::Rate(5)], SidecarFormat::Xmp, &names);
         assert!(folder.writer.flush(DRAIN_TIMEOUT));
         assert!(folder.sidecar("DSC1.xmp").contains(r#"xmp:Rating="5""#));
+    }
+
+    #[test]
+    fn stores_run_in_key_order_while_the_index_is_held() {
+        let folder = Folder::new();
+        let names = label_names_setting(None);
+        let queue = Queue::new();
+        let writer = Arc::new(Writer::spawn(folder.index.clone(), |path, message| {
+            panic!("sidecar write failed: {} {message}", path.display())
+        }));
+        let own = State::default();
+        let rated = apply(&own, &own, Command::Rate(3));
+        let picked = apply(&rated, &rated, Command::Pick);
+        let held = folder.index.lock().unwrap();
+        let outcomes: Vec<_> = [rated, picked.clone()]
+            .into_iter()
+            .map(|state| {
+                queue.submit(
+                    folder.index.clone(),
+                    writer.clone(),
+                    folder.dir.clone(),
+                    folder.arw.clone(),
+                    state,
+                    true,
+                    SidecarFormat::Xmp,
+                    names.clone(),
+                )
+            })
+            .collect();
+        drop(held);
+        for outcome in outcomes {
+            assert_eq!(futures::executor::block_on(outcome), Ok(Ok(())));
+        }
+        assert!(writer.flush(DRAIN_TIMEOUT));
+        let xmp = folder.sidecar("DSC1.xmp");
+        assert!(xmp.contains(r#"xmp:Rating="3""#), "{xmp}");
+        assert!(xmp.contains(r#"xmpDM:good="True""#), "{xmp}");
+        let rows = folder.index.lock().unwrap().rows_of(&folder.dir).unwrap();
+        let row = rows.iter().find(|r| r.0 == folder.arw).unwrap();
+        assert_eq!(
+            (row.1, row.2),
+            (picked.rating.map(|r| r as i8), picked.flag)
+        );
     }
 }

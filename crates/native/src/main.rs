@@ -264,6 +264,8 @@ struct Riffle {
     touched: HashSet<String>,
     /// `None` without an index.
     writer: Option<Arc<Writer>>,
+    /// The judgment stores, run in the order of the keys.
+    stores: judgment::Queue,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
     /// The judgments that failed to be stored or written, one per path, the
@@ -391,6 +393,7 @@ impl Riffle {
             seen: HashSet::new(),
             touched: HashSet::new(),
             writer,
+            stores: judgment::Queue::new(),
             notes: Vec::new(),
             write_errors: Vec::new(),
             marks: overlay::Marks::default(),
@@ -838,26 +841,26 @@ impl Riffle {
         cx: &mut Context<Self>,
     ) {
         let Some(dir) = self.dir.clone() else { return };
-        let (index, writer) = (self.index.clone(), self.writer.clone());
-        let (format, names) = (self.settings.format, self.settings.names.clone());
+        let submitted = match (self.index.clone(), self.writer.clone()) {
+            (Ok(index), Some(writer)) => Ok(self.stores.submit(
+                index,
+                writer,
+                dir.clone(),
+                path.clone(),
+                after,
+                label_known,
+                self.settings.format,
+                self.settings.names.clone(),
+            )),
+            (Err(_), _) => Err("no index cache available".to_string()),
+            (_, None) => Err("the sidecar writer is not running".to_string()),
+        };
         cx.spawn(async move |this, cx| {
-            let stored = {
-                let (dir, path) = (dir.clone(), path.clone());
-                cx.background_spawn(async move {
-                    let index = index.map_err(|_| "no index cache available".to_string())?;
-                    let writer = writer.ok_or("the sidecar writer is not running")?;
-                    judgment::store(
-                        &index,
-                        &writer,
-                        &dir,
-                        &path,
-                        &after,
-                        label_known,
-                        format,
-                        names,
-                    )
-                })
-                .await
+            let stored = match submitted {
+                Ok(outcome) => outcome
+                    .await
+                    .unwrap_or_else(|_| Err("the judgment store stopped".to_string())),
+                Err(e) => Err(e),
             };
             let Err(e) = stored else { return };
             log::error!("failed to store the judgment of {path}: {e}");
