@@ -846,15 +846,16 @@ fn scan_threads() -> usize {
     cores.saturating_sub(2).max(1)
 }
 
-/// Threads the second pass runs on: a quarter of the cores, as the third
-/// pass's `embed_threads`, since it too runs while the user pages. In the GPUI
-/// app on 24 logical cores, paging while pass 2 ran on `scan_threads()` (22)
-/// took +9.4 ms on ARW 1616x1080 and +89 ms on RAF 4416x2944 at p50 against a
-/// finished index, `decode` about doubled and `paint` 4-6x, its workers'
-/// lowest priority notwithstanding.
+/// Threads the second pass runs on: an eighth of the cores, fewer than the
+/// third pass's `embed_threads`, since it too runs while the user pages. In
+/// the GPUI app on 24 logical cores, paging while pass 2 ran on
+/// `scan_threads()` (22) took +9.4 ms on ARW 1616x1080 and +89 ms on RAF
+/// 4416x2944 at p50 against a finished index, `decode` about doubled and
+/// `paint` 4-6x, its workers' lowest priority notwithstanding; on a quarter
+/// (6), RAF still took +13 ms.
 fn faces_threads() -> usize {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    (cores / 4).max(1)
+    (cores / 8).max(1)
 }
 
 /// Scan workers inside a file read at once. A preview read waits behind the

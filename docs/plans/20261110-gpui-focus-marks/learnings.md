@@ -225,6 +225,9 @@
   Possible causes, not measured: an idle machine clocking down, or the paged
   files dropping out of the page cache without pass 2's hot-list reads. The
   step stays open until the plan decides on the RAF gap.
+- The user then chose an eighth of the cores for pass 2 (3 on 24 logical) in
+  both apps, to be re-measured the same way; the 6-thread binary and its runs
+  are kept as `riffle-native-6t.exe` and `runs-6t\` in the test folder.
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with

@@ -184,9 +184,10 @@ a GPUI `Task` cancels it).
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
 after `run_scan`, with the same `ScanFocus` and cancel flag, as the Tauri
-app's `run_faces_pass` does on its one task, but on `faces_threads()` (a
-quarter of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
-cost paging +9.4 ms on ARW and +89 ms on RAF at p50
+app's `run_faces_pass` does on its one task, but on `faces_threads()` (an
+eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
+cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
+still +13 ms on RAF
 ([results](../plans/20261110-gpui-focus-marks/results.md)).
 One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
 running, and the hot list reaches both passes through the one handle
