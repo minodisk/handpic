@@ -217,6 +217,14 @@
   pass 1 keeps `scan_threads()` and `READ_SLOTS` stays 2. The Tauri app's
   `faces_threads` is a copy of `embed_threads`'s body rather than a call to it,
   so either can move on its own measurement.
+- Second run at 6 pass 2 threads (`8c91bef2`): ARW A - B -1.70 ms (met),
+  RAF +13.08 ms (missed; `decode` +8.61, `paint` +5.45). Pass 2 alone took
+  198.7 s on 18,620 ARW and 146.7 s on 5,420 RAF (85.7 / 79.6 s at 22). This
+  session's B was 3-5 ms slower than the first session's on ARW (`read` 2.5
+  against 0.8 ms, `decode` 8.4 against 6.2), so A came out faster than B.
+  Possible causes, not measured: an idle machine clocking down, or the paged
+  files dropping out of the page cache without pass 2's hot-list reads. The
+  step stays open until the plan decides on the RAF gap.
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with

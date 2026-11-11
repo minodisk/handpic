@@ -1,5 +1,121 @@
 # Step 6 results: paging while pass 2 runs against paging on a finished index
 
+## Second run (6 pass 2 threads): ARW met, RAF missed
+
+Measured 2026-11-11, 18:04-18:36 local, with `riffle-native` built at
+`8c91bef2`. That commit runs pass 2 on `faces_threads()`, a quarter of the
+cores (6 of 24 logical), instead of `scan_threads()` (22).
+
+**Verdict: the gate is met on ARW and missed on RAF.** Median of the three runs'
+p50 `keypressToPixels`, A minus the same-session B:
+
+| Folder | A | B | A - B | Gate |
+|--------|---|---|-------|------|
+| ARW 1616x1080 | 18.55 | 20.25 | **-1.70** | <= +2.0 (met) |
+| RAF 4416x2944 | 77.32 | 64.24 | **+13.08** | <= +5.0 (missed) |
+
+- Per pair: ARW -1.63, -4.18, -1.15; RAF +11.82, +18.14, +11.11.
+- p95, not gated: ARW A 26.24 against B 31.62 (-5.38); RAF A 93.25 against
+  B 77.47 (+15.78).
+- On RAF the stages that grew are **`decode` (+8.61 ms, 45.70 to 54.31)** and
+  **`paint` (+5.45 ms, 3.39 to 8.84)**. Both are about 7x smaller than at
+  22 threads (+64.25 / +17.37), but together they still exceed the 5 ms
+  budget.
+
+### Conditions (what differs from the first run)
+
+- Binary: `cargo build --release` in `crates/native` at `8c91bef2`. SIMD is on
+  (`jsimd.o` and `jsimdcpu.o` in the `mozjpeg-sys` build output). The first
+  run's binary is kept as `riffle-native-22t.exe`.
+- Pass 2 alone, untimed, with no paging, on the A template: **ARW 18,620 files
+  in 198.7 s** (85.7 s at 22 threads) and **RAF 5,420 files in 146.7 s**
+  (79.6 s). Each run outlasted the 60 presses by far. Rows written at quit:
+
+| Run | ARW (of 18,620) | RAF (of 5,420) |
+|-----|-----------------|----------------|
+| A1 | 7,780 | 2,470 |
+| A2 | 7,640 | 2,630 |
+| A3 | 7,710 | 2,630 |
+| A, `f` on | 7,610 | 2,630 |
+
+  No A run logged `scan faces:`, so all 60 presses of every A run counted.
+- The same folders, templates, scripts, order (a throwaway A, B A B A B A, then
+  the `f` pair) and idle rule as the first run. The run indexes were fresh
+  copies of the same templates.
+- Idle: the user had just given the go signal, and no compiler, `mise run`,
+  Tauri app or second `riffle-native` appeared in any used run. The A runs'
+  system load was 25-73 % (pass 2 on 6 threads), against 96-100 % at 22.
+  Discarded B attempts (a sample over 15 %): ARW B2 twice (26 %, 18 %), RAF B1
+  once (20-32 %), RAF B3 three times (16-33 %). Used runs: ARW B1, A1, B2r2,
+  A2, B3, A3, Bf, Af; RAF B1r1, A1, B2, A2, B3r3, A3, Bf, Af.
+- Raw data: `D:\Photos\tests\20261111-gpui-pass2-measure\runs\`,
+  `sampler.csv`, `idle-report.txt`, `analyze-*.txt`. The first run's data is
+  in `runs-22t\` and the `*-22t.*` files.
+
+### Per run p50 / p95 (ms)
+
+`wait` was 0.00 / 0.00 and `orient`'s p50 0.00 in every run.
+
+| Run | read | decode | hop | frameWait | paint | present | keypressToPixels |
+|-----|------|--------|-----|-----------|-------|---------|------------------|
+| ARW B1 | 2.54 / 4.14 | 8.42 / 11.88 | 0.02 / 0.04 | 9.29 / 16.88 | 0.72 / 1.10 | 0.15 / 0.40 | 20.25 / 31.62 |
+| ARW A1 | 0.64 / 1.18 | 6.98 / 9.64 | 0.04 / 0.18 | 9.14 / 16.61 | 1.44 / 2.34 | 0.24 / 0.53 | 18.62 / 27.97 |
+| ARW B2 | 2.70 / 3.59 | 9.00 / 12.92 | 0.02 / 0.03 | 9.24 / 15.85 | 0.71 / 1.22 | 0.17 / 0.41 | 22.18 / 33.02 |
+| ARW A2 | 0.71 / 1.39 | 7.06 / 9.80 | 0.04 / 0.15 | 7.93 / 16.68 | 1.48 / 2.96 | 0.23 / 0.78 | 18.00 / 26.24 |
+| ARW B3 | 1.92 / 3.54 | 8.10 / 12.44 | 0.02 / 0.03 | 8.51 / 15.94 | 0.71 / 0.97 | 0.18 / 0.44 | 19.70 / 29.11 |
+| ARW A3 | 0.62 / 1.37 | 6.94 / 10.22 | 0.04 / 0.10 | 8.05 / 15.88 | 1.59 / 2.08 | 0.24 / 0.94 | 18.55 / 26.22 |
+| RAF B1 | 4.41 / 6.88 | 45.70 / 53.11 | 0.38 / 0.59 | 8.92 / 15.97 | 3.38 / 4.07 | 0.15 / 0.21 | 64.24 / 75.46 |
+| RAF A1 | 2.39 / 3.92 | 53.32 / 65.63 | 0.05 / 0.81 | 9.07 / 15.27 | 7.55 / 14.45 | 0.22 / 0.67 | 76.06 / 93.25 |
+| RAF B2 | 2.75 / 6.17 | 44.21 / 53.05 | 0.40 / 0.54 | 8.69 / 15.61 | 3.39 / 3.91 | 0.15 / 0.21 | 62.13 / 77.47 |
+| RAF A2 | 2.45 / 3.27 | 55.08 / 63.96 | 0.08 / 0.73 | 10.86 / 16.61 | 8.92 / 13.69 | 0.23 / 0.40 | 80.27 / 93.84 |
+| RAF B3 | 4.87 / 7.28 | 47.91 / 55.78 | 0.31 / 0.54 | 8.44 / 16.29 | 3.41 / 3.82 | 0.15 / 0.22 | 66.21 / 80.66 |
+| RAF A3 | 2.47 / 3.77 | 54.31 / 63.63 | 0.28 / 0.90 | 8.36 / 15.42 | 8.84 / 13.65 | 0.22 / 0.48 | 77.32 / 91.03 |
+
+### Median of the three p50s, and A minus B (ms)
+
+| Stage | ARW A | ARW B | ARW A - B | RAF A | RAF B | RAF A - B |
+|-------|-------|-------|-----------|-------|-------|-----------|
+| read | 0.64 | 2.54 | -1.90 | 2.45 | 4.41 | -1.96 |
+| decode | 6.98 | 8.42 | -1.44 | 54.31 | 45.70 | **+8.61** |
+| hop | 0.04 | 0.02 | +0.02 | 0.08 | 0.38 | -0.30 |
+| frameWait | 8.05 | 9.24 | -1.19 | 9.07 | 8.69 | +0.38 |
+| paint | 1.48 | 0.71 | +0.77 | 8.84 | 3.39 | **+5.45** |
+| present | 0.24 | 0.17 | +0.07 | 0.22 | 0.15 | +0.07 |
+| **keypressToPixels** | **18.55** | **20.25** | **-1.70** | **77.32** | **64.24** | **+13.08** |
+
+### What the stages say
+
+- **`paint` still grows on both folders** (ARW 0.71 to 1.48, RAF 3.39 to 8.84),
+  and on RAF its p95 is 13.7-14.5 ms against B's 3.8-4.1. The main-thread
+  image upload still contends with pass 2's 6 workers.
+- **`decode` grows on RAF (+8.61)** but not on ARW (-1.44).
+- **This session's B is slower than the first run's B** (ARW B `read`
+  1.9-2.7 ms against 0.8, `decode` 8.1-9.0 against 6.2, `keypressToPixels`
+  19.7-22.2 against 17.1-17.3; RAF B `read` 2.8-4.9 against 1.8-2.0), while A's
+  `read` is 0.6-0.7 (ARW) and 2.4-2.5 (RAF). So the ARW A - B comes out
+  negative. Not measured; two candidates:
+  - (a) the cores clocking down on an otherwise idle machine, which pass 2's
+    load in A prevents;
+  - (b) the paged files' heads dropping out of the page cache between
+    presses in B, while A's pass 2 re-reads them through the hot list.
+  Either way, B's own `keypressToPixels` moved by 3-5 ms between sessions on
+  the same binary family. On ARW the gate's 2 ms is within that, so the ARW
+  pass is a pass under this session's conditions only.
+- With `f` on, not gated: ARW A 20.60 against B 21.70 (-1.10); RAF A 79.70
+  against B 63.74 (+15.96). Each log has 20 `eyes` lines.
+
+### Next candidate (not done)
+
+On RAF the gap left is the main-thread `paint` (+5.45) and the decode thread's
+`decode` (+8.61) while 6 workers run, about 13 ms over a 62-66 ms page. Options
+for the plan's decision:
+- fewer pass 2 threads still (for example a sixth or an eighth of the cores),
+  which lengthens pass 2 further (it is already 2.3x longer on ARW and 1.8x on
+  RAF);
+- pausing pass 2's compute, not only its reads, while a preview decode and
+  paint are in flight (the reads already pause through `ReadSlots`);
+- accepting a RAF-specific budget.
+
 ## First run (22 pass 2 threads): gate missed
 
 Measured 2026-11-11, 08:11-09:20 local, with `riffle-native` built at `397ad733`
