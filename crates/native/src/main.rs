@@ -48,7 +48,7 @@ use gpui::{
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
-use judgment::State;
+use judgment::{Command, State};
 use keys::Bindings;
 use meta::Shown;
 use pager::{Move, Pager};
@@ -57,6 +57,7 @@ use riffle_backend::{
     exif::{self, Metadata},
     index::{self, Index},
     listing::canonicalize,
+    sidecar::{self, Writer},
     watch::{self, Watch},
 };
 use riffle_core::{
@@ -254,11 +255,20 @@ struct Riffle {
     view_only: bool,
     settings: Settings,
     bindings: Bindings,
-    /// The open folder's judgments by listed path, one per file the index
-    /// returned, so its keys are also the paths whose label is known.
+    /// The open folder's judgments by listed path.
     judgments: HashMap<String, State>,
+    /// The paths the index last returned an entry for, whose label is known.
+    seen: HashSet<String>,
+    /// The paths judged since the folder opened, whose state in the view a
+    /// later read of the index does not replace.
+    touched: HashSet<String>,
+    /// `None` without an index.
+    writer: Option<Arc<Writer>>,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
+    /// The judgments that failed to be stored or written, one per path, the
+    /// newest message replacing the older.
+    write_errors: Vec<(String, String)>,
     /// The `f` overlay's toggle and what it draws.
     marks: overlay::Marks,
     /// Shown images that the next presented frame no longer uses.
@@ -322,6 +332,27 @@ impl Riffle {
                 let _ = events.unbounded_send(Event::Changed(dir));
             })
         };
+        let writer = index.as_ref().ok().map(|index| {
+            let events = events.clone();
+            Arc::new(Writer::spawn(index.clone(), move |path, message| {
+                log::warn!("sidecar write failed: path={} {message}", path.display());
+                let _ = events.unbounded_send(Event::SidecarError {
+                    path: path.to_string_lossy().into_owned(),
+                    message: message.to_string(),
+                });
+            }))
+        });
+        // Held by the app, not the view: closing the window may release the
+        // view before the quit handlers run. The drain runs as the handler is
+        // called, so GPUI's 200 ms bound on the returned future does not cut it.
+        if let Some(writer) = writer.clone() {
+            App::on_app_quit(cx, move |_| {
+                let drained = writer.flush(sidecar::DRAIN_TIMEOUT);
+                log::info!("quit: sidecar writer drained={drained}");
+                async {}
+            })
+            .detach();
+        }
         Self {
             focus,
             files: Vec::new(),
@@ -357,7 +388,11 @@ impl Riffle {
             bindings: Bindings::new(&settings.keymap),
             settings,
             judgments: HashMap::new(),
+            seen: HashSet::new(),
+            touched: HashSet::new(),
+            writer,
             notes: Vec::new(),
+            write_errors: Vec::new(),
             marks: overlay::Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
@@ -464,6 +499,7 @@ impl Riffle {
         let previous = self.scan.take();
         let eviction = self.eviction.take();
         let watching = self.watch.clone();
+        let writer = self.writer.clone();
         let (format, names) = (self.settings.format, self.settings.names.clone());
         cx.spawn(async move |this, cx| {
             let opened = cx
@@ -479,7 +515,9 @@ impl Riffle {
                     let dir = canonicalize(&folder.to_string_lossy());
                     watch::set(&watching, &dir, &dir);
                     let listed = scan::list(Path::new(&dir), format)?;
-                    let todo = index.map(|index| Scan::prepare(&index, &listed, format, &names));
+                    let todo = index.map(|index| {
+                        Scan::prepare(&index, writer.as_deref(), &listed, format, &names)
+                    });
                     let judgments = reader
                         .as_ref()
                         .and_then(|reader| judgments_of(reader, &listed.dir));
@@ -542,6 +580,8 @@ impl Riffle {
             }
             self.dwell.reset(viewed);
             self.dwell_timer = None;
+            self.touched.clear();
+            self.write_errors.clear();
             self.strip = Strip::new(&paths);
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
@@ -643,6 +683,11 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::SidecarError { path, message } => {
+                self.write_failed(path.clone(), message.clone());
+                cx.notify();
+                return;
+            }
         };
         if self.scan.as_ref().is_none_or(|s| s.id != scan) {
             return;
@@ -678,14 +723,22 @@ impl Riffle {
                 self.analyzing = None;
                 self.finished(cx);
             }
-            Event::Changed(_) => {}
+            Event::Changed(_) | Event::SidecarError { .. } => {}
         }
         self.pump(cx);
         cx.notify();
     }
 
-    /// Keep the folder's judgments and hand the shown files' to the strip.
-    fn set_judgments(&mut self, judgments: HashMap<String, State>) {
+    /// Keep the folder's judgments, the view's own for a file judged since
+    /// the open, and hand the shown files' to the strip.
+    fn set_judgments(&mut self, mut judgments: HashMap<String, State>) {
+        self.seen = judgments.keys().cloned().collect();
+        for path in &self.touched {
+            match self.judgments.get(path) {
+                Some(state) => judgments.insert(path.clone(), state.clone()),
+                None => judgments.remove(path),
+            };
+        }
         self.judgments = judgments;
         for (index, path) in self.files.iter().enumerate() {
             let state = self.judgments.get(path.to_string_lossy().as_ref()).cloned();
@@ -734,8 +787,97 @@ impl Riffle {
             (_, Some("next")) => self.go(Move::Next, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
-            (_, Some(action)) => log::debug!("key: {action} is not handled yet"),
+            (_, Some(action)) => match Command::from_action(action) {
+                Some(cmd) => self.judge(cmd, cx),
+                None => log::debug!("key: {action} is not handled yet"),
+            },
             (_, None) => {}
+        }
+    }
+
+    /// A judgment key on the current file: the view and the strip first, then
+    /// the row and the writer in the background. Auto-advance moves on after
+    /// the stars and the flags, also when the file already held the value.
+    fn judge(&mut self, cmd: Command, cx: &mut Context<Self>) {
+        if self.view_only {
+            return;
+        }
+        let Some(path) = self.current_path() else {
+            return;
+        };
+        let own = self.judgments.get(&path).cloned().unwrap_or_default();
+        let after = judgment::apply(&own, &own, cmd);
+        let seen = self.seen.contains(&path);
+        if judgment::writes(seen, &own, &after, cmd) {
+            let label_known = judgment::label_known(seen, &own, &after, cmd);
+            self.touched.insert(path.clone());
+            self.set_state(&path, after.clone());
+            self.store(path, own, after, label_known, cx);
+        }
+        if self.settings.auto_advance && judgment::advances_after(cmd) {
+            self.go(Move::NextClamped, cx);
+        }
+        cx.notify();
+    }
+
+    fn set_state(&mut self, path: &str, state: State) {
+        if let Some(index) = self.files.iter().position(|p| p.to_string_lossy() == path) {
+            self.strip.set_judgment(index, Some(state.clone()));
+        }
+        self.judgments.insert(path.to_owned(), state);
+    }
+
+    /// `judgment::store` in the background; a failure puts `before` back
+    /// while the folder is still open.
+    fn store(
+        &self,
+        path: String,
+        before: State,
+        after: State,
+        label_known: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dir) = self.dir.clone() else { return };
+        let (index, writer) = (self.index.clone(), self.writer.clone());
+        let (format, names) = (self.settings.format, self.settings.names.clone());
+        cx.spawn(async move |this, cx| {
+            let stored = {
+                let (dir, path) = (dir.clone(), path.clone());
+                cx.background_spawn(async move {
+                    let index = index.map_err(|_| "no index cache available".to_string())?;
+                    let writer = writer.ok_or("the sidecar writer is not running")?;
+                    judgment::store(
+                        &index,
+                        &writer,
+                        &dir,
+                        &path,
+                        &after,
+                        label_known,
+                        format,
+                        names,
+                    )
+                })
+                .await
+            };
+            let Err(e) = stored else { return };
+            log::error!("failed to store the judgment of {path}: {e}");
+            this.update(cx, |this, cx| {
+                if this.dir.as_deref() == Some(dir.as_str()) {
+                    this.touched.remove(&path);
+                    this.set_state(&path, before);
+                    this.write_failed(path, e);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn write_failed(&mut self, path: String, message: String) {
+        match self.write_errors.iter_mut().find(|(p, _)| *p == path) {
+            Some(entry) => entry.1 = message,
+            None => self.write_errors.push((path, message)),
         }
     }
 
@@ -1301,7 +1443,11 @@ impl Riffle {
             .children(
                 self.notes
                     .iter()
-                    .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note.clone())),
+                    .cloned()
+                    .chain(self.write_errors.iter().map(|(path, message)| {
+                        format!("{}: {message}", file_name(Path::new(path)))
+                    }))
+                    .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
             )
     }
 
