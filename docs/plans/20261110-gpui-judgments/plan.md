@@ -572,3 +572,4 @@ Tauri settings from either, so it works before and after the rename.
 - (2026-11-11) Step 1 complete
 - (2026-11-11) Step 2 complete
 - (2026-11-11) Step 3 complete
+- (2026-11-11) Step 4 complete
