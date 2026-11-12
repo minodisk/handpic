@@ -154,6 +154,67 @@
   edits went in through the Edit tool instead. One Edit left `main.rs` with
   CRLF line ends; `sed -i 's/\r$//'` restored LF before the diff.
 
+## Step 5
+
+- Split in two runs: this commit is the undo / redo part; the gate's
+  measurement waits for the user to leave the machine idle, so the step's
+  checkbox stays unticked until `results.md` and the performance docs land.
+- Undo entries carry an id (`history::Batch { id, judged }`) because a Rust
+  `History` cannot remove a batch by identity as `forgetOnFail` does; a failed
+  store calls `Undo::forget(id, path)` on both histories (the ids are unique,
+  so only the entry it belongs to matches). The Tauri `step` passes no
+  `onFail` for the entry it pushes; the plan asks for one, so a failed undo
+  store also drops its file from the redo entry.
+- `label_known` for an undo / redo store is the Tauri `send` rule without a
+  command: the entry was seen, or the restored label differs from the
+  current one.
+- The `Undid <name>` / `Redid <name>` note sits in the pane's notes area in the
+  muted color and goes when the view moves (`go` clears it before `step` sets
+  it, so the step's own move keeps it), on a judgment and on another folder's
+  open. It is transient, like the Tauri status line, not a sidecar error.
+- `History::peek` has no caller until the trash entries of port Step 8, so it
+  carries `#[allow(dead_code)]`.
+- Measurement preparation (no timed run made):
+  - B = a detached `git worktree` at `de249218` under the session scratchpad
+    (`judgments-ab\wt-b`), `cargo build --release -vv` with
+    `CARGO_TARGET_DIR=judgments-ab\target-b`, NASM 3.02 on `PATH`, Rust
+    1.98.1. Its `build.rs` ran and passed: the build output holds only its two
+    lines `[riffle-native 0.0.0] cargo:rerun-if-env-changed=PATH` and
+    `...=RIFFLE_NATIVE_ALLOW_NO_SIMD`, no `cargo:warning` at all, and the
+    `mozjpeg-sys` build output holds `jsimd.o` and `jsimdcpu.o`.
+  - A = `cargo build --release` in `crates/native` on this branch (its
+    `mozjpeg-sys` output holds the same two objects). `timing.rs` is
+    byte-identical between `de249218` and this branch, so both print the same
+    `page` line and percentile rule.
+  - The script is the strip plan's, copied to `judgments-ab\measure.py` with
+    its `sampler.ps1` (the empty `LoadPercentage` retry): both binaries get a
+    fresh `--index` under `D:\Photos\tests\20261110-gpui-judgments\ab\` named
+    with the run's timestamp, A also `--settings ...\settings\xmp.json`. B at
+    `de249218` accepts `--index`, so unlike the strip plan's B it no longer
+    uses its default cache; that is why the script warms both indexes with one
+    throwaway run each (A, then B) before A B A B A B, rather than A alone.
+    It prints each folder's gate line against +2.0 ms (ARW) / +5.0 ms (RAF).
+    `selftest` passed (parsing, the idle gate, the arguments, the gate line).
+  - A includes what other plans merged into `main` since `de249218` (the 1:1
+    view on `z`, the `f` overlay and pass 2), not only this plan's pane and
+    marks; `results.md` has to say so, and a miss names the stage before
+    blaming Step 2 or Step 3.
+- Measurement (2026-11-13): the gate is met, ARW +0.85 ms (bound +2.0), RAF
+  -1.45 ms (bound +5.0); see `results.md`. Each warm run finished its last
+  scan pass (A's `scan faces:`, B's `scan extract:`) in one run.
+- The first ARW session (05:52) was void: another session's `cargo` build ran
+  through its first half and A1 used up its 4 tries at the idle gate. ARW was
+  rerun at 06:19 with no build running. Checking for other sessions' builds
+  before starting would have saved the session.
+- `present`'s p50 was 0.07-0.10 ms higher in every A run on both folders, the
+  only stage to move consistently; the `keypressToPixels` deltas sit inside
+  the run-to-run spread (B's ARW runs span 18.75-21.96 ms).
+- The absolute numbers were higher than the strip plan's session (ARW B 21.6
+  against 16.6, `read` 2.6 against 0.7-0.9), near the port's 2026-11-09
+  levels; same files and machine, not explained.
+- The step's checkbox was ticked on the gate and the unit tests; the undo /
+  redo hand check below stays pending.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows, the user's eyes).** The step's
@@ -249,3 +310,34 @@
   Also look at the pane's notes for a failure line (none expected) and record
   what was seen in `docs/agents/native-app.md`'s "The writer drains in
   `App::on_app_quit`" section.
+
+- **Pending manual check (Step 5 undo / redo, Windows, the user's hands and
+  eyes).** The undo part was committed on its unit tests (`history.rs`);
+  the step's checkbox was ticked once the gate was measured (`results.md`),
+  on the automated criteria, with this check still to do. The copy
+  is prepared at `D:\Photos\tests\20261110-gpui-judgments\undo\` (four ARWs
+  copied from `D:\Photos\tests\20261108-gpui-compare\ARW`, no sidecars:
+  `DSC-RX0M2_sony_rx0_ii_40.arw`, `DSC-RX0_DSC00009.ARW`,
+  `DSC-RX0_sony_rx0_07.arw`, `DSC-RX100M2_DSC00416.ARW`). Build with
+  `mise exec -- cargo build` in `crates/native` (NASM on `PATH`) and run
+  `target\debug\riffle-native.exe D:\Photos\tests\20261110-gpui-judgments\undo
+  --index D:\Photos\tests\20261110-gpui-judgments\index\undo-1.sqlite
+  --settings D:\Photos\tests\20261110-gpui-judgments\settings\xmp.json`.
+  Wait for pass 1 to end, press `Home` (file 1).
+  1. `3` on file 1: three stars on its cell, the view moves to file 2. `p` on
+     file 2: a green dot, the view moves to file 3. After a second, `cat` both
+     `.xmp`: file 1 `xmp:Rating="3"`, file 2 `xmpDM:good="True"`.
+  2. `Ctrl+Z`: file 2's dot goes, the view is on file 2, the pane's notes say
+     `Undid DSC-RX0_DSC00009.ARW`; its `.xmp` loses `good` within a second.
+  3. `Ctrl+Z` again: the view is back on file 1, its stars go, the note says
+     `Undid DSC-RX0M2_sony_rx0_ii_40.arw`; its `.xmp` holds `Rating="0"`.
+  4. `Ctrl+Shift+Z`: file 1's stars come back (`Rating="3"`), the note says
+     `Redid ...`.
+  5. A new key (`1` on any file), then `Ctrl+Shift+Z`: nothing changes, no
+     note.
+  6. Quit with `q`, reopen with a new `--index` name: `Ctrl+Z` does nothing
+     (the history is the session's). Open
+     `D:\Photos\tests\20261110-gpui-judgments\write\jpeg` the same way:
+     `Ctrl+Z` does nothing there either.
+  Record what was seen in `docs/agents/native-app.md`'s "A judgment goes view,
+  row, writer" section.
