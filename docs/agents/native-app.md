@@ -575,6 +575,23 @@ move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
   in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
 
+### The pane and the judgments cost the pager under 1 ms (Measured)
+
+Same-session A/B, `eb46913b` (the judgments plan's Steps 1-5, plus the 1:1
+view, the focus-marks overlay and pass 2 merged meanwhile) against the
+pre-plan pager (`de249218`), three runs each, 60 presses, warm index: median
+p50 `keypressToPixels` +0.85 ms on ARW and -1.45 ms on RAF, inside the
+run-to-run spread (B's ARW runs alone span 18.75-21.96 ms). `paint` did not
+move; `present`'s p50 was 0.07-0.10 ms higher in every A run. See
+[the plan's results](../plans/20261110-gpui-judgments/results.md).
+
+- Rule: a warm run must end the binary's last scan pass uncanceled (A's
+  `scan faces:` line once pass 2 exists, not only `scan extract:`), so no
+  timed run carries pass 2.
+- Rule: check that no other session's `cargo` build is running before a
+  measurement session; the first ARW session was void because one ran through
+  its first half and A1 used up its retries.
+
 ### During pass 1 the preview reads what the scan already read (Measured)
 
 Stepping with the arrow through 520 cold ARW files while pass 1 ran (27.7 s),

@@ -172,6 +172,23 @@ The absolute numbers here are lower than the 2026-11-09 session's on the same
 files and machine (not explained); only the same-session difference compares.
 The p95 here is sample 57 of 60, not the largest of 20.
 
+With the meta pane and the judgments (stars, flags, labels, the sidecar writer,
+undo / redo) added, together with what other plans merged meanwhile (the 1:1
+view, the focus-marks overlay and the scan's second pass), against the pager
+from before all of them (2026-11-13, the same method, the index already
+filled):
+
+| Case | With the pane and the judgments | Before them |
+|---|---|---|
+| ARW, 1616x1080 | 22.4 / 32.0 | 21.6 / 31.6 |
+| RAF, 4416x2944 | 64.0 / 78.9 | 65.5 / 76.3 |
+
+The difference is +0.9 ms on ARW and -1.5 ms on RAF at p50, inside the
+run-to-run spread; only `present` rose in every run, by under 0.1 ms. Per-run
+numbers and the conditions are in
+[`results.md`](../plans/20261110-gpui-judgments/results.md). This session's
+absolute numbers are higher than the 2026-11-10 one's, again not explained.
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,

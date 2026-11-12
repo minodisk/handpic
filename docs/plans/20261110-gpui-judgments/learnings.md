@@ -199,6 +199,21 @@
     view on `z`, the `f` overlay and pass 2), not only this plan's pane and
     marks; `results.md` has to say so, and a miss names the stage before
     blaming Step 2 or Step 3.
+- Measurement (2026-11-13): the gate is met, ARW +0.85 ms (bound +2.0), RAF
+  -1.45 ms (bound +5.0); see `results.md`. Each warm run finished its last
+  scan pass (A's `scan faces:`, B's `scan extract:`) in one run.
+- The first ARW session (05:52) was void: another session's `cargo` build ran
+  through its first half and A1 used up its 4 tries at the idle gate. ARW was
+  rerun at 06:19 with no build running. Checking for other sessions' builds
+  before starting would have saved the session.
+- `present`'s p50 was 0.07-0.10 ms higher in every A run on both folders, the
+  only stage to move consistently; the `keypressToPixels` deltas sit inside
+  the run-to-run spread (B's ARW runs span 18.75-21.96 ms).
+- The absolute numbers were higher than the strip plan's session (ARW B 21.6
+  against 16.6, `read` 2.6 against 0.7-0.9), near the port's 2026-11-09
+  levels; same files and machine, not explained.
+- The step's checkbox was ticked on the gate and the unit tests; the undo /
+  redo hand check below stays pending.
 
 ## Deferred issues (todo candidates)
 
@@ -298,7 +313,8 @@
 
 - **Pending manual check (Step 5 undo / redo, Windows, the user's hands and
   eyes).** The undo part was committed on its unit tests (`history.rs`);
-  the step's checkbox stays unticked until the gate is measured too. The copy
+  the step's checkbox was ticked once the gate was measured (`results.md`),
+  on the automated criteria, with this check still to do. The copy
   is prepared at `D:\Photos\tests\20261110-gpui-judgments\undo\` (four ARWs
   copied from `D:\Photos\tests\20261108-gpui-compare\ARW`, no sidecars:
   `DSC-RX0M2_sony_rx0_ii_40.arw`, `DSC-RX0_DSC00009.ARW`,
