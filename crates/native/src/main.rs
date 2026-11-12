@@ -4,8 +4,8 @@ mod eyes;
 mod facemesh;
 mod faces;
 mod focus;
-mod hold;
 mod history;
+mod hold;
 mod judgment;
 mod keys;
 mod logger;
@@ -49,8 +49,8 @@ use gpui::{
     outline, point, prelude::*, px, rgb, rgba, size,
 };
 use gpui_platform::application;
-use hold::PaintHold;
 use history::{Judged, Undo};
+use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
 use keys::Bindings;
