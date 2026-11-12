@@ -184,7 +184,7 @@ filled):
 | RAF, 4416x2944 | 64.0 / 78.9 | 65.5 / 76.3 |
 
 The difference is +0.9 ms on ARW and -1.5 ms on RAF at p50, inside the
-run-to-run spread; only `present` rose in every run, by under 0.1 ms. Per-run
+run-to-run spread; only `present` rose in every run, by at most about 0.1 ms. Per-run
 numbers and the conditions are in
 [`results.md`](../plans/20261110-gpui-judgments/results.md). This session's
 absolute numbers are higher than the 2026-11-10 one's, again not explained.

@@ -102,7 +102,7 @@ RAF -1.39, -1.65, -1.01.
   0.10 ms higher on ARW (0.28 against 0.17-0.18) and 0.07 ms higher on RAF
   (0.22 against 0.15). The frame now carries the meta pane's `div` rows, the
   strip's marks and the overlay's layers; the pane alone was seen at about
-  +0.2 ms in `present` in Step 2. Under 0.1 ms, well within the gate.
+  +0.2 ms in `present` in Step 2. At most about 0.1 ms, well within the gate.
 - `paint` did not move (-0.03 / -0.02 ms): the preview canvas's own work is
   the same.
 - `frameWait`, the vsync phase, carries the rest and changes sign between the
