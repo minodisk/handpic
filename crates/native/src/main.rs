@@ -4,6 +4,8 @@ mod eyes;
 mod facemesh;
 mod faces;
 mod focus;
+mod judgment;
+mod keys;
 mod logger;
 mod mark;
 mod meta;
@@ -13,6 +15,7 @@ mod pager;
 mod peaking;
 mod resync;
 mod scan;
+mod settings;
 mod strip;
 mod thumbs;
 mod timing;
@@ -22,7 +25,7 @@ mod zoom;
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env,
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
@@ -39,31 +42,35 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight, KeyDownEvent, MouseButton,
-    MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString, Task,
-    TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill, outline,
-    point, prelude::*, px, rgb, size,
+    App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight, KeyDownEvent, Keystroke,
+    MouseButton, MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString,
+    Task, TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill,
+    outline, point, prelude::*, px, rgb, rgba, size,
 };
 use gpui_platform::application;
 use image::{Frame, RgbaImage};
+use judgment::{Command, State};
+use keys::Bindings;
 use meta::Shown;
-use overlay::Marks;
 use pager::{Move, Pager};
 use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::{self, Metadata},
-    index::{self, FileStat, Index},
+    index::{self, Index},
     listing::canonicalize,
+    sidecar::{self, Writer},
     watch::{self, Watch},
 };
 use riffle_core::{
+    Flag,
     arw::FocusLocation,
     reader,
     scan::{ReadSlots, ScanFocus},
 };
-use scan::{Event, Listed, Scan};
-use strip::{Answer, Strip};
+use scan::{Event, Listed, Prepared, Scan};
+use settings::Settings;
+use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
@@ -161,7 +168,10 @@ struct Opened {
     listed: Listed,
     shown: Vec<PathBuf>,
     /// `None` without an index.
-    todo: Option<Result<Vec<FileStat>, String>>,
+    todo: Option<Result<Prepared, String>>,
+    /// The listed files' judgments; `None` without an index or when the read
+    /// failed.
+    judgments: Option<HashMap<String, State>>,
     /// The file the folder was left at, to resume at.
     last_viewed: Option<String>,
     /// The folder's files the index has as viewed.
@@ -181,6 +191,21 @@ fn remembered(reader: &Mutex<Index>, dir: &str) -> (Option<String>, HashSet<Stri
         Vec::new()
     });
     (last_viewed, viewed.into_iter().collect())
+}
+
+/// The judgment of each of the folder's files the index has, after the
+/// sidecar pass; `None` when the read fails.
+fn judgments_of(reader: &Mutex<Index>, dir: &str) -> Option<HashMap<String, State>> {
+    let entries = index::lock(reader)
+        .entries(dir)
+        .inspect_err(|e| log::warn!("failed to read the judgments of {dir}: {e}"))
+        .ok()?;
+    Some(
+        entries
+            .iter()
+            .map(|file| (file.path.clone(), State::from(file)))
+            .collect(),
+    )
 }
 
 struct Riffle {
@@ -230,8 +255,26 @@ struct Riffle {
     shown: Option<(usize, Shown)>,
     /// The open folder holds only JPEGs.
     view_only: bool,
+    settings: Settings,
+    bindings: Bindings,
+    /// The open folder's judgments by listed path.
+    judgments: HashMap<String, State>,
+    /// The paths the index last returned an entry for, whose label is known.
+    seen: HashSet<String>,
+    /// The paths judged since the folder opened, whose state in the view a
+    /// later read of the index does not replace.
+    touched: HashSet<String>,
+    /// `None` without an index.
+    writer: Option<Arc<Writer>>,
+    /// The judgment stores, run in the order of the keys.
+    stores: judgment::Queue,
+    /// The sidecars the open could not read, as `<name>: <message>`.
+    notes: Vec<String>,
+    /// The judgments that failed to be stored or written, one per path, the
+    /// newest message replacing the older.
+    write_errors: Vec<(String, String)>,
     /// The `f` overlay's toggle and what it draws.
-    marks: Marks,
+    marks: overlay::Marks,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
@@ -253,6 +296,7 @@ impl Riffle {
     fn new(
         focus: FocusHandle,
         index: Result<Indexes, String>,
+        settings: Settings,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -293,6 +337,32 @@ impl Riffle {
                 let _ = events.unbounded_send(Event::Changed(dir));
             })
         };
+        let writer = index.as_ref().ok().map(|index| {
+            let events = events.clone();
+            Arc::new(Writer::spawn(index.clone(), move |path, message| {
+                log::warn!("sidecar write failed: path={} {message}", path.display());
+                let _ = events.unbounded_send(Event::SidecarError {
+                    path: path.to_string_lossy().into_owned(),
+                    message: message.to_string(),
+                });
+            }))
+        });
+        // Held by the app, not the view: closing the window may release the
+        // view before the quit handlers run. The drain runs as the handler is
+        // called, so GPUI's 200 ms bound on the returned future does not cut it.
+        let stores = judgment::Queue::new();
+        if let Some(writer) = writer.clone() {
+            let stores = stores.clone();
+            App::on_app_quit(cx, move |_| {
+                let stored = stores.drain(sidecar::DRAIN_TIMEOUT);
+                let drained = writer.flush(sidecar::DRAIN_TIMEOUT);
+                log::info!(
+                    "quit: judgment stores drained={stored} sidecar writer drained={drained}"
+                );
+                async {}
+            })
+            .detach();
+        }
         Self {
             focus,
             files: Vec::new(),
@@ -325,7 +395,16 @@ impl Riffle {
             image: None,
             shown: None,
             view_only: false,
-            marks: Marks::default(),
+            bindings: Bindings::new(&settings.keymap),
+            settings,
+            judgments: HashMap::new(),
+            seen: HashSet::new(),
+            touched: HashSet::new(),
+            writer,
+            stores,
+            notes: Vec::new(),
+            write_errors: Vec::new(),
+            marks: overlay::Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
             summary: Rc::default(),
@@ -346,6 +425,7 @@ impl Riffle {
             size,
             max,
             index: _,
+            settings: _,
         } = args;
         let prompt = folder.is_none().then(|| {
             cx.prompt_for_paths(PathPromptOptions {
@@ -431,6 +511,8 @@ impl Riffle {
         let previous = self.scan.take();
         let eviction = self.eviction.take();
         let watching = self.watch.clone();
+        let writer = self.writer.clone();
+        let (format, names) = (self.settings.format, self.settings.names.clone());
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
@@ -444,8 +526,13 @@ impl Riffle {
                     // not missed.
                     let dir = canonicalize(&folder.to_string_lossy());
                     watch::set(&watching, &dir, &dir);
-                    let listed = scan::list(Path::new(&dir))?;
-                    let todo = index.map(|index| Scan::prepare(&index, &listed));
+                    let listed = scan::list(Path::new(&dir), format)?;
+                    let todo = index.map(|index| {
+                        Scan::prepare(&index, writer.as_deref(), &listed, format, &names)
+                    });
+                    let judgments = reader
+                        .as_ref()
+                        .and_then(|reader| judgments_of(reader, &listed.dir));
                     let (last_viewed, viewed) = match reader {
                         Some(reader) if !carry => remembered(&reader, &listed.dir),
                         _ => Default::default(),
@@ -455,6 +542,7 @@ impl Riffle {
                         listed,
                         shown,
                         todo,
+                        judgments,
                         last_viewed,
                         viewed,
                     })
@@ -470,6 +558,7 @@ impl Riffle {
             listed,
             shown,
             todo,
+            judgments,
             last_viewed,
             viewed,
         } = match opened {
@@ -503,6 +592,8 @@ impl Riffle {
             }
             self.dwell.reset(viewed);
             self.dwell_timer = None;
+            self.touched.clear();
+            self.write_errors.clear();
             self.strip = Strip::new(&paths);
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
@@ -511,6 +602,7 @@ impl Riffle {
         }
         self.files = shown;
         self.dir = Some(listed.dir.clone());
+        self.set_judgments(judgments.unwrap_or_default());
         if carry {
             self.remember(cx);
         }
@@ -526,11 +618,22 @@ impl Riffle {
             self.read_focus(cx);
             self.analyze_current(cx);
         }
+        self.notes.clear();
         if !same_file {
             self.zoom_page(cx);
         }
         match (todo, &self.index) {
-            (Some(Ok(todo)), Ok(index)) => {
+            (
+                Some(Ok(Prepared {
+                    todo,
+                    sidecar_errors,
+                })),
+                Ok(index),
+            ) => {
+                self.notes = sidecar_errors
+                    .iter()
+                    .map(|e| format!("{}: {}", file_name(Path::new(&e.path)), e.message))
+                    .collect();
                 let id = self.next_scan;
                 self.next_scan += 1;
                 self.progress = Some((0, todo.len()));
@@ -592,6 +695,11 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::SidecarError { path, message } => {
+                self.write_failed(path.clone(), message.clone());
+                cx.notify();
+                return;
+            }
         };
         if self.scan.as_ref().is_none_or(|s| s.id != scan) {
             return;
@@ -611,6 +719,7 @@ impl Riffle {
                 self.analyzing = Some((0, 0));
                 self.failed = summary.errors;
                 self.strip.refresh();
+                self.read_judgments(cx);
             }
             Event::FacesProgress {
                 done, total, ready, ..
@@ -626,10 +735,163 @@ impl Riffle {
                 self.analyzing = None;
                 self.finished(cx);
             }
-            Event::Changed(_) => {}
+            Event::Changed(_) | Event::SidecarError { .. } => {}
         }
         self.pump(cx);
         cx.notify();
+    }
+
+    /// Keep the folder's judgments, the view's own for a file judged since
+    /// the open, and hand the shown files' to the strip.
+    fn set_judgments(&mut self, mut judgments: HashMap<String, State>) {
+        self.seen = judgments.keys().cloned().collect();
+        for path in &self.touched {
+            match self.judgments.get(path) {
+                Some(state) => judgments.insert(path.clone(), state.clone()),
+                None => judgments.remove(path),
+            };
+        }
+        self.judgments = judgments;
+        for (index, path) in self.files.iter().enumerate() {
+            let state = self.judgments.get(path.to_string_lossy().as_ref()).cloned();
+            self.strip.set_judgment(index, state);
+        }
+    }
+
+    /// Read the judgments again once pass 1 has written the files' rows: the
+    /// index returns a file only once pass 1 has extracted it, so on a fresh
+    /// index the open's read has nothing.
+    fn read_judgments(&mut self, cx: &mut Context<Self>) {
+        let (Some(reader), Some(dir)) = (self.reader.clone(), self.dir.clone()) else {
+            return;
+        };
+        let listing = self.listing;
+        cx.spawn(async move |this, cx| {
+            let judgments = cx
+                .background_spawn(async move { judgments_of(&reader, &dir) })
+                .await;
+            this.update(cx, |this, cx| {
+                if let Some(judgments) = judgments
+                    && listing == this.listing
+                {
+                    this.set_judgments(judgments);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
+    /// native app's own keys; an action not handled yet is only logged.
+    fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        let Some(name) = keys::key_name(keystroke) else {
+            return;
+        };
+        let action = self.bindings.action_for(&name);
+        log::debug!("key: {name} action={action:?}");
+        match (name.as_str(), action) {
+            ("home", _) => self.go(Move::First, cx),
+            ("end", _) => self.go(Move::Last, cx),
+            ("q", _) => self.quit(cx),
+            (_, Some("previous")) => self.go(Move::Previous, cx),
+            (_, Some("next")) => self.go(Move::Next, cx),
+            (_, Some("focus")) => self.toggle_marks(cx),
+            (_, Some("zoom")) => self.toggle_zoom(cx),
+            (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some(action)) => match Command::from_action(action) {
+                Some(cmd) => self.judge(cmd, cx),
+                None => log::debug!("key: {action} is not handled yet"),
+            },
+            (_, None) => {}
+        }
+    }
+
+    /// A judgment key on the current file: the view and the strip first, then
+    /// the row and the writer in the background. Auto-advance moves on after
+    /// the stars and the flags, also when the file already held the value.
+    fn judge(&mut self, cmd: Command, cx: &mut Context<Self>) {
+        if self.view_only {
+            return;
+        }
+        let Some(path) = self.current_path() else {
+            return;
+        };
+        let own = self.judgments.get(&path).cloned().unwrap_or_default();
+        let after = judgment::apply(&own, &own, cmd);
+        let seen = self.seen.contains(&path);
+        if judgment::writes(seen, &own, &after, cmd) {
+            let label_known = judgment::label_known(seen, &own, &after, cmd);
+            self.touched.insert(path.clone());
+            self.set_state(&path, after.clone());
+            self.store(path, own, after, label_known, cx);
+        }
+        if self.settings.auto_advance && judgment::advances_after(cmd) {
+            self.go(Move::NextClamped, cx);
+        }
+        cx.notify();
+    }
+
+    fn set_state(&mut self, path: &str, state: State) {
+        if let Some(index) = self.files.iter().position(|p| p.to_string_lossy() == path) {
+            self.strip.set_judgment(index, Some(state.clone()));
+        }
+        self.judgments.insert(path.to_owned(), state);
+    }
+
+    /// `judgment::store` in the background; a failure puts `before` back
+    /// while the folder is still open.
+    fn store(
+        &self,
+        path: String,
+        before: State,
+        after: State,
+        label_known: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dir) = self.dir.clone() else { return };
+        let submitted = match (self.index.clone(), self.writer.clone()) {
+            (Ok(index), Some(writer)) => Ok(self.stores.submit(
+                index,
+                writer,
+                dir.clone(),
+                path.clone(),
+                after,
+                label_known,
+                self.settings.format,
+                self.settings.names.clone(),
+            )),
+            (Err(_), _) => Err("no index cache available".to_string()),
+            (_, None) => Err("the sidecar writer is not running".to_string()),
+        };
+        cx.spawn(async move |this, cx| {
+            let stored = match submitted {
+                Ok(outcome) => outcome
+                    .await
+                    .unwrap_or_else(|_| Err("the judgment store stopped".to_string())),
+                Err(e) => Err(e),
+            };
+            let Err(e) = stored else { return };
+            log::error!("failed to store the judgment of {path}: {e}");
+            this.update(cx, |this, cx| {
+                if this.dir.as_deref() == Some(dir.as_str()) {
+                    this.touched.remove(&path);
+                    this.set_state(&path, before);
+                    this.write_failed(path, e);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn write_failed(&mut self, path: String, message: String) {
+        match self.write_errors.iter_mut().find(|(p, _)| *p == path) {
+            Some(entry) => entry.1 = message,
+            None => self.write_errors.push((path, message)),
+        }
     }
 
     fn current_path(&self) -> Option<String> {
@@ -891,6 +1153,7 @@ impl Riffle {
                         .into()
                 }),
                 current: index == current,
+                marks: self.strip.marks(index),
             })
             .collect()
     }
@@ -1228,6 +1491,15 @@ impl Riffle {
                     .text_color(rgb(MUTED_COLOR))
                     .child(viewonly::VIEW_ONLY_NOTE)
             }))
+            .children(
+                self.notes
+                    .iter()
+                    .cloned()
+                    .chain(self.write_errors.iter().map(|(path, message)| {
+                        format!("{}: {message}", file_name(Path::new(path)))
+                    }))
+                    .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
+            )
     }
 
     fn quit(&mut self, cx: &mut Context<Self>) {
@@ -1256,19 +1528,9 @@ impl Render for Riffle {
             .bg(rgb(0x000000))
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(
-                |this, e: &KeyDownEvent, _, cx| match e.keystroke.key.as_str() {
-                    "right" => this.go(Move::Next, cx),
-                    "left" => this.go(Move::Previous, cx),
-                    "home" => this.go(Move::First, cx),
-                    "end" => this.go(Move::Last, cx),
-                    "f" => this.toggle_marks(cx),
-                    "q" => this.quit(cx),
-                    "z" => this.toggle_zoom(cx),
-                    "e" => this.toggle_peaking(cx),
-                    _ => {}
-                },
-            ))
+            .on_key_down(
+                cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(&e.keystroke, cx)),
+            )
             .child(
                 div()
                     .flex_1()
@@ -1381,6 +1643,7 @@ struct StripCell {
     /// `Some` on a cell the scan failed on, with why.
     failure: Option<SharedString>,
     current: bool,
+    marks: Marks,
 }
 
 /// In the Tauri info pane's range (`#info`, 220 px).
@@ -1392,6 +1655,29 @@ const PLACEHOLDER: u32 = 0x262626;
 const CURRENT_OUTLINE: u32 = 0xe5e5e5;
 const NAME_COLOR: u32 = 0xd4d4d4;
 const FAILURE_COLOR: u32 = 0xa3a3a3;
+/// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
+/// `--foreground`, and its `--label-*` tokens in `tint_color`.
+const STARS_COLOR: u32 = 0xffd050;
+const PICK_COLOR: u32 = 0x6bdc8a;
+const REJECT_COLOR: u32 = 0xff6b6b;
+const LABELED_NAME_COLOR: u32 = 0xfafafa;
+/// `.cell.rejected`'s `opacity: 0.45` over the strip's black.
+const REJECTED_DIM: u32 = 0x0000008c;
+const MARK_SIZE: f32 = 11.;
+const FLAG_DOT: f32 = 7.;
+
+fn tint_color(tint: Tint) -> u32 {
+    match tint {
+        Tint::Red => 0xd9453f,
+        Tint::Orange => 0xe8892c,
+        Tint::Yellow => 0xd8c032,
+        Tint::Green => 0x4fa84f,
+        Tint::Blue => 0x3f7fd9,
+        Tint::Pink => 0xd95fa8,
+        Tint::Purple => 0x8a5fd0,
+        Tint::Other => 0x808080,
+    }
+}
 
 fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
@@ -1433,13 +1719,22 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 if let Some(failure) = &cell.failure {
                     paint_failure(failure, image_box, window, cx);
                 }
+                paint_marks(&cell.marks, image_box, window, cx);
+                let at = point(origin.x, image_box.bottom());
+                let name_color = match cell.marks.label {
+                    Some(tint) => {
+                        let band = Bounds::new(at, size(px(CELL_WIDTH), px(NAME_HEIGHT)));
+                        window.paint_quad(fill(band, rgb(tint_color(tint))));
+                        LABELED_NAME_COLOR
+                    }
+                    None => NAME_COLOR,
+                };
                 let mut run = window.text_style().to_run(cell.name.len());
-                run.color = rgb(NAME_COLOR).into();
+                run.color = rgb(name_color).into();
                 let name =
                     window
                         .text_system()
                         .shape_line(cell.name.clone(), px(11.), &[run], None);
-                let at = point(origin.x, image_box.bottom());
                 let _ = name.paint(
                     at,
                     px(NAME_HEIGHT),
@@ -1448,9 +1743,55 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     window,
                     cx,
                 );
+                if cell.marks.dimmed() {
+                    window.paint_quad(fill(cell_bounds, rgba(REJECTED_DIM)));
+                }
             },
         );
     }
+}
+
+/// The stars at the image box's top-right over a 1 px dark copy, and the pick
+/// or reject dot at its top-left, as the Tauri cell's badges.
+fn paint_marks(marks: &Marks, image_box: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+    let inset = px(2.);
+    if marks.stars > 0 {
+        let stars: SharedString = "\u{2605}".repeat(marks.stars.into()).into();
+        let shape = |color: u32, window: &mut Window| {
+            let mut run = window.text_style().to_run(stars.len());
+            run.color = rgb(color).into();
+            window
+                .text_system()
+                .shape_line(stars.clone(), px(MARK_SIZE), &[run], None)
+        };
+        let width = Some(image_box.size.width - inset * 2.);
+        let at = image_box.origin + point(inset, inset);
+        let line_height = px(MARK_SIZE + 3.);
+        let _ = shape(0x000000, window).paint(
+            at + point(px(1.), px(1.)),
+            line_height,
+            TextAlign::Right,
+            width,
+            window,
+            cx,
+        );
+        let _ =
+            shape(STARS_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
+    }
+    let color = match marks.flag {
+        Flag::Pick => PICK_COLOR,
+        Flag::Reject => REJECT_COLOR,
+        Flag::None => return,
+    };
+    let r = px(FLAG_DOT / 2.);
+    let center = image_box.origin + point(inset + px(3.) + r, inset + px(3.) + r);
+    window.paint_quad(
+        fill(
+            Bounds::new(center - point(r, r), size(r * 2., r * 2.)),
+            rgb(color),
+        )
+        .corner_radii(r),
+    );
 }
 
 /// Why the scan failed, wrapped inside the image box.
@@ -1539,6 +1880,12 @@ fn main() {
         }
     };
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
+    let settings = settings::load(args.settings.take().as_deref());
+    log::info!(
+        "settings: sidecarFormat={} autoAdvance={}",
+        settings.format.setting(),
+        settings.auto_advance
+    );
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
@@ -1556,7 +1903,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, window, cx)
+                    Riffle::new(focus, index, settings, window, cx)
                 })
             },
         )

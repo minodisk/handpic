@@ -3,6 +3,10 @@ use std::{
     ops::RangeInclusive,
 };
 
+use riffle_core::Flag;
+
+use crate::judgment::State;
+
 /// The distance from one cell's left edge to the next's, the Tauri strip's
 /// `--cell-width`.
 pub const CELL_PITCH: f32 = 154.;
@@ -53,6 +57,53 @@ pub struct Strip {
     ready: HashSet<usize>,
     /// Processed and failed: shown once, never retried.
     failed: HashSet<usize>,
+    /// The judged cells' stars, flag and label.
+    judgments: HashMap<usize, State>,
+}
+
+/// The color a label tints the cell's name band with: one of the seven
+/// Lightroom colors, any other name a neutral gray, as `strip.ts`'s
+/// `paintRating`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tint {
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Pink,
+    Purple,
+    Other,
+}
+
+impl Tint {
+    pub fn of(label: &str) -> Self {
+        match label.to_lowercase().as_str() {
+            "red" => Self::Red,
+            "orange" => Self::Orange,
+            "yellow" => Self::Yellow,
+            "green" => Self::Green,
+            "blue" => Self::Blue,
+            "pink" => Self::Pink,
+            "purple" => Self::Purple,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// What a cell draws of its judgment: the stars at the box's top-right, the
+/// pick or reject dot, the rejected cell dimmed, the label's name band.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Marks {
+    pub stars: u8,
+    pub flag: Flag,
+    pub label: Option<Tint>,
+}
+
+impl Marks {
+    pub fn dimmed(&self) -> bool {
+        self.flag == Flag::Reject
+    }
 }
 
 impl Strip {
@@ -228,6 +279,24 @@ impl Strip {
     pub fn refresh(&mut self) {
         self.missing.clear();
     }
+
+    /// Record the judgment of a cell; `None` is none at all.
+    pub fn set_judgment(&mut self, index: usize, state: Option<State>) {
+        match state {
+            Some(state) => self.judgments.insert(index, state),
+            None => self.judgments.remove(&index),
+        };
+    }
+
+    pub fn marks(&self, index: usize) -> Marks {
+        self.judgments
+            .get(&index)
+            .map_or_else(Marks::default, |state| Marks {
+                stars: state.rating.unwrap_or(0),
+                flag: state.flag,
+                label: state.label.as_deref().map(Tint::of),
+            })
+    }
 }
 
 /// The strip's offset after `previous` is re-listed as `next`, the Tauri
@@ -280,7 +349,10 @@ pub fn carried_indices(
 mod tests {
     use std::collections::HashMap;
 
-    use super::{Answer, CELL_PITCH, Strip, carried_indices, carried_offset};
+    use riffle_core::Flag;
+
+    use super::{Answer, CELL_PITCH, Marks, Strip, Tint, carried_indices, carried_offset};
+    use crate::judgment::State;
 
     fn strip(len: usize) -> Strip {
         Strip::new(
@@ -493,5 +565,40 @@ mod tests {
             HashMap::from([(0, 1), (1, 2)])
         );
         assert_eq!(carried_indices(&a, &a, [1]), HashMap::from([(1, 1)]));
+    }
+
+    #[test]
+    fn a_judged_cell_draws_its_stars_flag_and_label() {
+        let mut s = strip(3);
+        s.set_judgment(
+            1,
+            Some(State {
+                rating: Some(3),
+                flag: Flag::Reject,
+                label: Some("Red".into()),
+            }),
+        );
+        let marks = s.marks(1);
+        assert_eq!(
+            marks,
+            Marks {
+                stars: 3,
+                flag: Flag::Reject,
+                label: Some(Tint::Red),
+            }
+        );
+        assert!(marks.dimmed());
+        assert_eq!(s.marks(0), Marks::default());
+        assert!(!s.marks(0).dimmed());
+        s.set_judgment(1, None);
+        assert_eq!(s.marks(1), Marks::default());
+    }
+
+    #[test]
+    fn a_label_outside_the_seven_colors_is_other() {
+        assert_eq!(Tint::of("pink"), Tint::Pink);
+        assert_eq!(Tint::of("ORANGE"), Tint::Orange);
+        assert_eq!(Tint::of("Rot"), Tint::Other);
+        assert_eq!(Tint::of(""), Tint::Other);
     }
 }
