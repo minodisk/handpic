@@ -4,6 +4,7 @@ mod eyes;
 mod facemesh;
 mod faces;
 mod focus;
+mod history;
 mod judgment;
 mod keys;
 mod logger;
@@ -48,6 +49,7 @@ use gpui::{
     outline, point, prelude::*, px, rgb, rgba, size,
 };
 use gpui_platform::application;
+use history::{Judged, Undo};
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
 use keys::Bindings;
@@ -268,6 +270,10 @@ struct Riffle {
     writer: Option<Arc<Writer>>,
     /// The judgment stores, run in the order of the keys.
     stores: judgment::Queue,
+    /// The open folder's undo and redo histories.
+    undo: Undo,
+    /// `Undid <name>` / `Redid <name>` until the view moves on.
+    step_note: Option<String>,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
     /// The judgments that failed to be stored or written, one per path, the
@@ -402,6 +408,8 @@ impl Riffle {
             touched: HashSet::new(),
             writer,
             stores,
+            undo: Undo::new(),
+            step_note: None,
             notes: Vec::new(),
             write_errors: Vec::new(),
             marks: overlay::Marks::default(),
@@ -593,6 +601,8 @@ impl Riffle {
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
+            self.undo.clear();
+            self.step_note = None;
             self.write_errors.clear();
             self.strip = Strip::new(&paths);
             self.strip
@@ -800,6 +810,8 @@ impl Riffle {
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some("undo")) => self.step(false, cx),
+            (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
                 Some(cmd) => self.judge(cmd, cx),
                 None => log::debug!("key: {action} is not handled yet"),
@@ -818,18 +830,67 @@ impl Riffle {
         let Some(path) = self.current_path() else {
             return;
         };
+        self.step_note = None;
         let own = self.judgments.get(&path).cloned().unwrap_or_default();
         let after = judgment::apply(&own, &own, cmd);
         let seen = self.seen.contains(&path);
         if judgment::writes(seen, &own, &after, cmd) {
             let label_known = judgment::label_known(seen, &own, &after, cmd);
+            let entry = self.undo.record(vec![Judged {
+                path: path.clone(),
+                state: own.clone(),
+            }]);
             self.touched.insert(path.clone());
             self.set_state(&path, after.clone());
-            self.store(path, own, after, label_known, cx);
+            self.store(path, own, after, label_known, entry, cx);
         }
         if self.settings.auto_advance && judgment::advances_after(cmd) {
             self.go(Move::NextClamped, cx);
         }
+        cx.notify();
+    }
+
+    /// Undo (or with `redo`, redo) the newest judgment through the same
+    /// view-row-writer path as a key, moving to its file.
+    fn step(&mut self, redo: bool, cx: &mut Context<Self>) {
+        if self.view_only {
+            return;
+        }
+        let (files, judgments) = (&self.files, &self.judgments);
+        let listed = |p: &str| files.iter().any(|f| f.to_string_lossy() == p);
+        let current = |p: &str| judgments.get(p).cloned().unwrap_or_default();
+        let stepped = if redo {
+            self.undo.redo(listed, current)
+        } else {
+            self.undo.undo(listed, current)
+        };
+        let Some(stepped) = stepped else { return };
+        let count = stepped.changes.len();
+        for change in stepped.changes {
+            let label_known =
+                self.seen.contains(&change.path) || change.before.label != change.after.label;
+            self.touched.insert(change.path.clone());
+            self.set_state(&change.path, change.after.clone());
+            self.store(
+                change.path,
+                change.before,
+                change.after,
+                label_known,
+                stepped.id,
+                cx,
+            );
+        }
+        let verb = if redo { "Redid" } else { "Undid" };
+        let note = match stepped.move_to {
+            Some(path) => {
+                if let Some(at) = self.files.iter().position(|f| f.to_string_lossy() == path) {
+                    self.go(Move::To(at), cx);
+                }
+                format!("{verb} {}", file_name(Path::new(&path)))
+            }
+            None => format!("{verb} {count} files"),
+        };
+        self.step_note = Some(note);
         cx.notify();
     }
 
@@ -841,13 +902,15 @@ impl Riffle {
     }
 
     /// `judgment::store` in the background; a failure puts `before` back
-    /// while the folder is still open.
+    /// and drops the file from undo entry `entry` while the folder is still
+    /// open.
     fn store(
         &self,
         path: String,
         before: State,
         after: State,
         label_known: bool,
+        entry: u64,
         cx: &mut Context<Self>,
     ) {
         let Some(dir) = self.dir.clone() else { return };
@@ -877,6 +940,7 @@ impl Riffle {
             this.update(cx, |this, cx| {
                 if this.dir.as_deref() == Some(dir.as_str()) {
                     this.touched.remove(&path);
+                    this.undo.forget(entry, &path);
                     this.set_state(&path, before);
                     this.write_failed(path, e);
                     cx.notify();
@@ -946,6 +1010,7 @@ impl Riffle {
         let key = Instant::now();
         if self.pager.go(to) {
             self.key = Some(key);
+            self.step_note = None;
             self.dwell.cancel();
             self.dwell_timer = None;
             self.remember(cx);
@@ -1491,6 +1556,11 @@ impl Riffle {
                     .text_color(rgb(MUTED_COLOR))
                     .child(viewonly::VIEW_ONLY_NOTE)
             }))
+            .children(
+                self.step_note
+                    .clone()
+                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+            )
             .children(
                 self.notes
                     .iter()

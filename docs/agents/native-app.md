@@ -167,6 +167,15 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   which make the label known) apart from `judgments`, and `touched` (the
   paths judged since the open), whose state a later `entries` read, such as
   the one at pass 1's `Done`, does not replace, as the Tauri `touched` set.
+- Rule: undo and redo go through the same path. A judgment that writes
+  records its file's state before it as one `history::Undo` entry (a batch,
+  for the selection of port Step 8) and clears the redo history; `Ctrl+Z` /
+  `Ctrl+Shift+Z` pop an entry, push the files' current states onto the other
+  history, apply the popped states as a key would (view, row, writer) and
+  move to the file. Each entry has an id, so a failed store drops its file
+  from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
+  Another folder's open clears both histories; a re-listing keeps them and a
+  step drops the files no longer listed.
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
@@ -449,8 +458,8 @@ its action once at startup. The window's handler takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
-`judgment::Command::from_action`, and any other action (`rejectRest`, `undo`,
-`redo`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
+`judgment::Command::from_action`, `undo` / `redo` to `history::Undo`, and any
+other action (`rejectRest`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
 its keymap action in that `match`, not as a literal key.
 
 Read from `gpui_windows` at the pinned rev, not yet seen in the running app
@@ -594,6 +603,23 @@ move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
 - Rule: compare against a binary built in the same session, alternating; the
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
   in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
+
+### The pane and the judgments cost the pager under 1 ms (Measured)
+
+Same-session A/B, `eb46913b` (the judgments plan's Steps 1-5, plus the 1:1
+view, the focus-marks overlay and pass 2 merged meanwhile) against the
+pre-plan pager (`de249218`), three runs each, 60 presses, warm index: median
+p50 `keypressToPixels` +0.85 ms on ARW and -1.45 ms on RAF, inside the
+run-to-run spread (B's ARW runs alone span 18.75-21.96 ms). `paint` did not
+move; `present`'s p50 was 0.07-0.10 ms higher in every A run. See
+[the plan's results](../plans/20261110-gpui-judgments/results.md).
+
+- Rule: a warm run must end the binary's last scan pass uncanceled (A's
+  `scan faces:` line once pass 2 exists, not only `scan extract:`), so no
+  timed run carries pass 2.
+- Rule: check that no other session's `cargo` build is running before a
+  measurement session; the first ARW session was void because one ran through
+  its first half and A1 used up its retries.
 
 ### During pass 1 the preview reads what the scan already read (Measured)
 

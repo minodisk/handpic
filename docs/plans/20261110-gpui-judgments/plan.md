@@ -431,7 +431,7 @@ Tauri settings from either, so it works before and after the rename.
       frontend does not await the write for anything visible either.
     - `rejectRest` (`shift+x`) stays a no-op logged at `debug` until the
       bursts exist (port Step 7).
-- [ ] Step 5: Undo and redo of a judgment, and the same-session latency gate
+- [x] Step 5: Undo and redo of a judgment, and the same-session latency gate
   - Done when:
     - `crates/native/src/history.rs`: a port of `undo.ts`'s bounded
       `History<T>` (`push` dropping the oldest past the limit, `pop`,
@@ -573,3 +573,4 @@ Tauri settings from either, so it works before and after the rename.
 - (2026-11-11) Step 2 complete
 - (2026-11-11) Step 3 complete
 - (2026-11-11) Step 4 complete
+- (2026-11-13) Step 5 complete
