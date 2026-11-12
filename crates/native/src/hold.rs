@@ -5,8 +5,10 @@ use riffle_core::scan::Paused;
 /// The scan's pause a preview holds from its read until its image is
 /// painted, so pass 2's workers leave the cores to the decode, the orient and
 /// the paint as well as the disk to the read (`ReadSlots::wait_unpaused` at
-/// their stage boundaries). `MAX_PAUSE` still bounds what the workers honour,
-/// so a hold that is never released only slows the scan.
+/// their stage boundaries). `MAX_PAUSE` still bounds what the workers honour
+/// (about 1 s for a pass 2 file's stages in all, and 1 s per `acquire`, 3 s
+/// per file at worst), so a hold that is never released, for instance when no
+/// frame is painted, only slows the scan.
 #[derive(Clone, Default)]
 pub struct PaintHold(Rc<RefCell<Option<Paused>>>);
 

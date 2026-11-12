@@ -195,8 +195,10 @@ pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
 
 thread_local! {
     /// The read slots of the pass 2 file this thread is analyzing, which
-    /// `yield_to_pause` waits on; none outside `extract_analysis_unless`.
-    static PASS_SLOTS: std::cell::RefCell<Option<ReadSlots>> =
+    /// `yield_to_pause` waits on, with the instant its stage waits first saw a
+    /// pause (one budget for the whole file); none outside
+    /// `extract_analysis_unless`.
+    static PASS_SLOTS: std::cell::RefCell<Option<(ReadSlots, Option<Instant>)>> =
         const { std::cell::RefCell::new(None) };
 }
 
@@ -205,7 +207,7 @@ struct PassSlots;
 
 impl PassSlots {
     fn set(slots: &ReadSlots) -> Self {
-        PASS_SLOTS.with(|s| *s.borrow_mut() = Some(slots.clone()));
+        PASS_SLOTS.with(|s| *s.borrow_mut() = Some((slots.clone(), None)));
         PassSlots
     }
 }
@@ -217,12 +219,13 @@ impl Drop for PassSlots {
 }
 
 /// A stage boundary of pass 2: wait out a pause held on the slots of the file
-/// this thread analyzes (`ReadSlots::wait_unpaused`). A no-op outside pass 2,
+/// this thread analyzes (`ReadSlots::wait_unpaused_since`). All of a file's
+/// stage waits share one `MAX_PAUSE` budget. A no-op outside pass 2,
 /// so `candidate`'s stages call it whoever runs them.
 pub fn yield_to_pause(cancel: &AtomicBool) {
     PASS_SLOTS.with(|s| {
-        if let Some(slots) = &*s.borrow() {
-            slots.wait_unpaused(cancel);
+        if let Some((slots, since)) = &mut *s.borrow_mut() {
+            slots.wait_unpaused_since(cancel, since);
         }
     });
 }
@@ -543,9 +546,11 @@ impl ScanFocus {
     }
 }
 
-/// How long `ReadSlots::acquire` honours a pause. A stuck or leaked pause
-/// slows a scan to one file per worker per `MAX_PAUSE` at worst and never
-/// stalls it; a preview read normally ends the pause long before this.
+/// How long `ReadSlots::acquire` honours a pause, and how long all of one pass 2
+/// file's stage waits together do. A stuck or leaked pause costs a worker at
+/// most about `MAX_PAUSE` per `acquire` (one for pass 1's read, two for pass
+/// 2's) plus `MAX_PAUSE` for pass 2's stages per file, so it slows a scan and
+/// never stalls it; a preview normally ends the pause long before this.
 const MAX_PAUSE: Duration = Duration::from_secs(1);
 
 /// How often a worker waiting in `ReadSlots::acquire` looks at its cancel
@@ -625,11 +630,23 @@ impl ReadSlots {
     }
 
     /// Wait while a pause is held, for at most `MAX_PAUSE`, or until `cancel`
-    /// is set. Takes no permit: pass 2 calls it between its compute stages so
-    /// a preview's decode and paint get the cores, not only the disk.
+    /// is set. Takes no permit.
     pub fn wait_unpaused(&self, cancel: &AtomicBool) {
-        let started = Instant::now();
+        self.wait_unpaused_since(cancel, &mut None);
+    }
+
+    /// `wait_unpaused` measuring from `since`, the instant a wait first saw
+    /// the pause, set here when empty and cleared once a wait sees no pause.
+    /// Pass 2 calls it between its compute stages with one `since` per file,
+    /// so a preview's decode and paint get the cores, not only the disk, and a
+    /// pause that stays held costs the file `MAX_PAUSE` in all, not per stage.
+    fn wait_unpaused_since(&self, cancel: &AtomicBool, since: &mut Option<Instant>) {
         let mut gate = self.lock();
+        if gate.paused == 0 {
+            *since = None;
+            return;
+        }
+        let started = *since.get_or_insert_with(Instant::now);
         while gate.paused > 0 && started.elapsed() < self.max_pause && !canceled(cancel) {
             gate = self
                 .gate
@@ -637,6 +654,9 @@ impl ReadSlots {
                 .wait_timeout(gate, CANCEL_TICK)
                 .unwrap_or_else(|e| e.into_inner())
                 .0;
+        }
+        if gate.paused == 0 {
+            *since = None;
         }
     }
 

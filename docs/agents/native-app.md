@@ -187,8 +187,14 @@ a GPUI `Task` cancels it).
 canvas's paint releases it right after painting the image. Pass 2's workers
 wait out a held pause at every stage boundary (`scan::yield_to_pause`), not
 only before a read, so the read, the decode, the orient and the paint get the
-cores. `MAX_PAUSE` (1 s) still bounds what a worker honours, so a hold never
-released only slows the scan. Holding the pause through the decode (not
+cores. `MAX_PAUSE` (1 s) still bounds what a worker honours: one budget for all of a
+pass 2 file's stage waits, and one per `acquire` (two per pass 2 file, one per
+pass 1 file), so a hold never released (no frame painted, say a minimized
+window) costs a worker about 3 s per pass 2 file or 1 s per pass 1 file at
+worst and only slows the scan. The longer hold also blocks pass 1's `acquire`
+from the read through the decode, orient and paint; its effect on pass 1's
+throughput was not measured (the pass 1 paging measurement below assumed a
+pause around the read only). Holding the pause through the decode (not
 yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 `decode` growth gone, without fewer pass 2 rows per run
 ([results](../plans/20261110-gpui-focus-marks/results.md)).
