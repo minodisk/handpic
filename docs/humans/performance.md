@@ -187,7 +187,7 @@ each, 60 presses over the 20 files, the median of the three runs' p50 / p95
 On all the cores, pausing only its reads, the second pass had added 9.4 ms on
 ARW and 89 ms on RAF. The pass now takes about 5 minutes on 18,620 ARW and
 4 minutes on 5,420 RAF files on 24 logical cores. Per-run numbers and the
-conditions are in [`results.md`](../plans/20261110-gpui-focus-marks/results.md).
+conditions are in [`results.md`](../plans/_archived/20261110-gpui-focus-marks/results.md).
 
 With the meta pane and the judgments (stars, flags, labels, the sidecar writer,
 undo / redo) added, together with what other plans merged meanwhile (the 1:1

@@ -284,7 +284,7 @@ throughput was not measured (the pass 1 paging measurement below assumed a
 pause around the read only). Holding the pause through the decode (not
 yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 `decode` growth gone, without fewer pass 2 rows per run
-([results](../plans/20261110-gpui-focus-marks/results.md)).
+([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
 
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
@@ -297,7 +297,7 @@ app's `run_faces_pass` does on its one task, but on `faces_threads()` (an
 eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
 cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
 still +13 ms on RAF
-([results](../plans/20261110-gpui-focus-marks/results.md)).
+([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
 One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
 running, and the hot list reaches both passes through the one handle
 (`focus_scan` gates on either pass running). The thread starts on every open
@@ -649,7 +649,7 @@ the scan's pause from its read until its image is painted. The median p50
 `keypressToPixels` A - B was -2.10 ms on ARW 1616x1080 and -0.30 ms on RAF
 4416x2944 (gate +2.0 / +5.0). At 22 pass 2 threads with only the read paused
 it was +9.44 / +88.86 ms: `decode` about doubled and `paint` grew 4-6x.
-See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
+See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md).
 
 - Rule: check every run's `frameWait` p50 before reading an A/B. One session
   ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
