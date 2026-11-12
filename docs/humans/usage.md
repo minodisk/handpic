@@ -1,13 +1,13 @@
 <p align="center">English | <a href="./usage.ja.md">日本語</a></p>
 
-# Using Riffle
+# Using Handpic
 
-The detailed behavior of Riffle. For a quick start, see [README.md](../../README.md).
+The detailed behavior of Handpic. For a quick start, see [README.md](../../README.md).
 
 ## Features
 
 Open a folder from the picker, or drop a folder or any file in it onto the
-window. Riffle lists the RAW files (ARW, CR3, DNG, NEF, ORF and RAF) in it and
+window. Handpic lists the RAW files (ARW, CR3, DNG, NEF, ORF and RAF) in it and
 pages through their embedded previews, rotated by each file's Orientation. With no folder open the
 viewer shows a prompt in its center; click it to open the folder picker.
 
@@ -15,11 +15,11 @@ viewer shows a prompt in its center; click it to open the folder picker.
   the mounted volumes (`/Volumes/*` on macOS, the drive letters on Windows,
   `/mnt/*`, `/media/*/*` and `/run/media/*/*` on Linux; the list of these
   root volumes is read again each time the window gains focus, so one
-  mounted after launch appears once you switch back to Riffle). A folder's
+  mounted after launch appears once you switch back to Handpic). A folder's
   arrow lists its subfolders (but for one already at the top level, so home
   is not repeated under the volume it lives on), and an expanded folder
   follows the disk: a subfolder created, deleted or renamed under it, by
-  the file manager, another app or Riffle itself, appears or goes within
+  the file manager, another app or Handpic itself, appears or goes within
   about a second (a folder the app cannot watch, a network share say, is
   re-listed only when it is expanded again). On
   Windows, while a folder is expanded, the file manager cannot rename the
@@ -92,7 +92,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `Collapse All` collapses every folder below it, leaving the folder itself
   open or closed as it was; neither is offered on home or a volume at the
   top level. Then `Rewrite Sidecars from Index…` writes
-  the judgments Riffle holds for that folder back into its sidecars, and
+  the judgments Handpic holds for that folder back into its sidecars, and
   `Delete Sidecars…` moves its sidecars to the Trash (see
   **Rewrite Sidecars from Index… and Delete Sidecars…**). Then
   `Sequence JPEG Timestamps…` previews and sequences the capture times of
@@ -184,7 +184,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   the M11-P, and manual-focus shots show no mark (see
   [What the camera records](./cameras.md)). The mark's color says how the
   judged face came out: the face nearest the AF point, or, on a frame with no
-  AF point or in manual focus, the largest face Riffle finds anywhere on the
+  AF point or in manual focus, the largest face Handpic finds anywhere on the
   preview, so such a frame can be bright green or gray although it shows no crosshair
   (the strip's icon, the meta pane and the filter carry its state; a group
   photo without an AF point is judged on that one face). Bright green marks a good photo, a
@@ -226,7 +226,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   under about 60 pixels on the embedded preview is never good,
   and neither is a strongly turned face, even when the turn was intended.
   The camera's face tracking no longer colors the mark: a Sony eye-AF frame
-  is judged by the faces Riffle detects like any other. The state is computed
+  is judged by the faces Handpic detects like any other. The state is computed
   in a second pass that starts right after the thumbnails and metadata of the
   folder are in, so the marks turn from white to their color, the files on
   screen first, while the status shows `analyzing N / M`. The strip marks
@@ -240,7 +240,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   was not fitted on, 89% and 96%. It is a cue, not a verdict: AF on a person in the
   background gives a sharp face and a false candidate, and the back of a
   head or an upturned face finds no face and stays white. The mark also
-  draws the faces Riffle detects near the AF point (anywhere on the preview
+  draws the faces Handpic detects near the AF point (anywhere on the preview
   when there is no AF point) as a cyan box with a cyan dot on each eye, the
   nose tip and the mouth corners, and a label beside the box with the
   detection score, the box size and the distance between the eyes, both in
@@ -272,18 +272,18 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `decode` and `draw` (a preview already read ahead has only `draw`: the
   files on both sides of the current one, the next in the paging direction
   first, are read and decoded ahead while no scan runs, so turning to one
-  draws at once); Riffle's own CPU
+  draws at once); Handpic's own CPU
   usage (the thick solid blue line) and the whole system's (the thin dashed
-  blue line), both 0–100 % of all cores; Riffle's own reads (the thick solid
+  blue line), both 0–100 % of all cores; Handpic's own reads (the thick solid
   green line, on an MB/s scale at the right of the legend, at least 10 MB/s
   tall); and how busy the busiest of the system's disks is (the thin dashed green
-  line, 0–100 % of the time). When the bars grow, look at the lines: Riffle's CPU
-  line high means Riffle itself is busy (a running scan, including its
-  analysis pass, counts as Riffle's CPU); the system CPU line pegged while
-  Riffle's stays low means another process is taking the CPU; both CPU lines
+  line, 0–100 % of the time). When the bars grow, look at the lines: Handpic's CPU
+  line high means Handpic itself is busy (a running scan, including its
+  analysis pass, counts as Handpic's CPU); the system CPU line pegged while
+  Handpic's stays low means another process is taking the CPU; both CPU lines
   low while the disk lines rise means the preview is waiting on the disk,
-  often behind a scan reading RAW files. On Windows Riffle's read line counts
-  every read Riffle makes, not only from disk, so it never sits quite at
+  often behind a scan reading RAW files. On Windows Handpic's read line counts
+  every read Handpic makes, not only from disk, so it never sits quite at
   zero. The disk busy line is absent on macOS. Everything is sampled only
   while the graph is shown, so it starts empty each time; `d` again hides it,
   and the overlay is off at every launch.
@@ -318,14 +318,14 @@ viewer shows a prompt in its center; click it to open the folder picker.
   focus distance. The focus mode and AF tracking are left out on the older
   RX and HX compacts, where ExifTool reads them as not applying. The Sony
   MakerNote does not record the recognized subject type (human, animal, bird
-  or vehicle) or whether the AF sat on an eye or a face, so Riffle does not
+  or vehicle) or whether the AF sat on an eye or a face, so Handpic does not
   show them, and enciphered values (shutter count, picture profile) are not
   read. When a lens reports no f-number (the M11-P with an M-mount
   lens), the aperture is the camera's estimate, marked `(est.)`. **Analysis**
-  holds what Riffle computes itself: `AF eye in
+  holds what Handpic computes itself: `AF eye in
   focus`, the in-focus probability (a percentage) of the eyes of the judged
   face (nearest the AF point; without an AF point or in manual focus, the
-  largest face Riffle is confident of) that the focus candidate state is
+  largest face Handpic is confident of) that the focus candidate state is
   decided from (left out when there is none). It comes from the scan's second pass, so it
   appears a little after the file's thumbnail on a folder's first scan.
   `Eyes at full size` is the sharpness of those same eyes on the file's
@@ -333,10 +333,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
   is the verdict that takes a frame out of good. It is left out when nothing
   was measured (for example a file with no JPEG larger than the preview).
   `Eyes` says whether the eyes of the face nearest the AF point (without an
-  AF point, the largest face Riffle is confident of) are open or closed and
+  AF point, the largest face Handpic is confident of) are open or closed and
   how open they are, from 0 to 100, as in `Open · 82` or `Closed · 0`. The
   openness is read from the eye aspect ratio (the eyelid gap over the eye's
-  width) of the more closed eye: 0 at the ratio Riffle counts as closed and
+  width) of the more closed eye: 0 at the ratio Handpic counts as closed and
   below, 100 at a wide-open eye (the 90th percentile of the author's faces)
   and above, linear between. It says how open the eyes are, not how sure the
   judgment is; an eye just past the closed point shows `Open · 0`. For that
@@ -429,7 +429,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   the `open` key. It is rebindable: the menu shows the first key of `open`
   that can be an accelerator, and none when the action holds no such key.
 - **Reload Folder**: the open folder keeps up with the disk on its own: a file
-  copied in or deleted outside Riffle shows up in the strip about a second
+  copied in or deleted outside Handpic shows up in the strip about a second
   later. On volumes that send no change notifications, such as network shares,
   bring the window back to the front or choose `File > Reload Folder`
   (`CmdOrCtrl+R`) to do the same. Only what changed is read again; the stars,
@@ -493,7 +493,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `DateTimeOriginal` the camera wrote, its local date with no time-zone
   handling, so a shoot across midnight goes to two folders. The source is only
   read: nothing on the card is changed or deleted.
-  - **Settings**: the `Import` tab of `Riffle > Settings...`
+  - **Settings**: the `Import` tab of `Handpic > Settings...`
     (`File > Settings...` on Windows and Linux) holds two values, both
     remembered across launches. `Destination root` is the folder imports go
     under, set with `Choose…`; until it is set, the dialog says so and `Run`
@@ -514,7 +514,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
     shows where today's photos would go, or the reason in red, in which case
     the stored pattern stays. Reserved names such as `CON` are not checked;
     one fails when the folder is created, with the OS's error.
-  - **What is copied**: the RAW files Riffle supports and the JPEGs in the
+  - **What is copied**: the RAW files Handpic supports and the JPEGs in the
     folder and every folder below it, hidden folders left out, and each RAW's
     existing `.xmp` and `.dop` sidecars. Videos and everything else stay
     behind. A JPEG next to a RAW is copied as a file of its own; the strip
@@ -539,11 +539,11 @@ viewer shows a prompt in its center; click it to open the folder picker.
     compared, with no hash, so a file edited in place to the same length
     counts as imported. A sidecar follows its RAW: next to a colliding RAW it
     collides too, and next to a skipped RAW it is copied when missing and left
-    alone otherwise, whatever its size, since Riffle has likely rewritten it.
+    alone otherwise, whatever its size, since Handpic has likely rewritten it.
     The check is repeated just before each file is written: a file that
     appeared since the preview is skipped at the planned size, else that file
     fails, and either way what is there stays.
-  - **Partial files**: each file is written to `<name>.riffle-tmp` in its date
+  - **Partial files**: each file is written to `<name>.handpic-tmp` in its date
     folder, flushed, given the source's modified time and only then renamed to
     its name, so neither the strip nor a scan ever sees a partial file.
   - **Cull while importing**: `Run` creates the date folders and opens the
@@ -574,10 +574,10 @@ viewer shows a prompt in its center; click it to open the folder picker.
     `Delete Sidecars…` and `Sequence JPEG Timestamps…` are refused until the
     run ends, a rename with `Rename… is unavailable while an import runs` on
     the status line.
-  - **Throughput**: every run writes one line to `Riffle.log` (see
+  - **Throughput**: every run writes one line to `Handpic.log` (see
     **Open Log Folder**) with the throughput, MB being 10^6 bytes:
     `import: files=120 bytes=5280000000 mb_per_s=41.2 skipped=3 failed=0 canceled=false source=E:\DCIM root=D:\Photos in 128155ms`.
-    Riffle does not claim to copy faster than the file manager; see
+    Handpic does not claim to copy faster than the file manager; see
     [Copying from a memory card](./performance.md#copying-from-a-memory-card)
     for what was measured and how to compare the two.
 - **Rename by Capture Date…**: right-click a folder in the folder tree (not
@@ -623,7 +623,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
     the original folder was removed the undo fails and lists them as errors,
     leaving them in the Trash.
 - **Rewrite Sidecars from Index… and Delete Sidecars…**: right-click a
-  folder in the folder tree to push Riffle's judgments of its files back out to their
+  folder in the folder tree to push Handpic's judgments of its files back out to their
   sidecars, or to remove the sidecars altogether, for instance after a write
   that failed, a sidecar another program overwrote, or a switch of sidecar
   format. Both act only on the sidecars of the currently selected format
@@ -634,7 +634,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   scan runs, either waits for the scan, the status line saying so, and asks
   when the scan ends.
   - `Rewrite Sidecars from Index…` writes what the folder index holds, so
-    the folder must have been opened in Riffle once; on one never opened
+    the folder must have been opened in Handpic once; on one never opened
     the status line says `No judgments indexed for <name>; open the folder
     first`. The dialog counts the files with a judgment, those without one
     (whose existing sidecar is cleared to unrated, unflagged and unlabeled;
@@ -654,7 +654,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
     moves them to the OS Trash and the status line says `Moved N sidecars
     to the Trash`, with how many failed (each failure is listed in the meta
     pane's errors under its RAW file). A sidecar whose RAW file is gone is
-    left alone. Riffle forgets the judgments of those files, so when the
+    left alone. Handpic forgets the judgments of those files, so when the
     folder is open the strip drops their stars, flags and color labels at
     once. When the folder holds no sidecar of the format the status line
     says so (`No XMP sidecars in <name>`). Like **Move to Trash…**,
@@ -664,7 +664,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
 - **Sequence JPEG Timestamps…**: right-click a folder in the folder tree and
   choose `Sequence JPEG Timestamps…` to make the capture times of the exported
   JPEGs in it unique at second granularity, so Google Photos, which ignores
-  `SubSecTimeOriginal`, keeps a burst in shooting order. Cull in Riffle,
+  `SubSecTimeOriginal`, keeps a burst in shooting order. Cull in Handpic,
   export the keepers as JPEGs from your RAW developer, then right-click the
   export folder in the tree (derived from
   [lapse](https://github.com/minodisk/lapse) v0.4.0).
@@ -772,21 +772,21 @@ viewer shows a prompt in its center; click it to open the folder picker.
   judge a file again, and like the undo history its judgments are cleared
   when another folder opens or the sidecar format changes.
 - **Open Log Folder**: `Help > Open Log Folder` reveals the folder holding
-  `Riffle.log`, the app's log file (capped at 1 MB; on rotation the previous
+  `Handpic.log`, the app's log file (capped at 1 MB; on rotation the previous
   contents are discarded, not kept as a separate file). It lives in the app
   log directory:
-  `%LOCALAPPDATA%\com.minodisk.riffle\logs\` on Windows,
-  `~/Library/Logs/com.minodisk.riffle/` on macOS and
-  `~/.local/share/com.minodisk.riffle/logs/` on Linux.
+  `%LOCALAPPDATA%\com.minodisk.handpic\logs\` on Windows,
+  `~/Library/Logs/com.minodisk.handpic/` on macOS and
+  `~/.local/share/com.minodisk.handpic/logs/` on Linux.
 - **Auto-advance**: when `Auto-advance after a star, reject or pick` is on in
-  `Riffle > Settings...` (on by default), `1`-`5`, reject, pick and un-reject / un-pick move to the
+  `Handpic > Settings...` (on by default), `1`-`5`, reject, pick and un-reject / un-pick move to the
   next file, also when the file already has the value pressed (which leaves
   it as it is and writes nothing), so a run of files that are already right
   can be confirmed with the same key. The last file stays selected. A file the judgment
   drops out of the active filter already hands the cursor to the next file, so
   it is not skipped twice. A judgment on more than one selected
   file does not advance.
-- **Clear Cache**: the `Cache` tab of `Riffle > Settings...` shows how much disk
+- **Clear Cache**: the `Cache` tab of `Handpic > Settings...` shows how much disk
   the folder index takes, and `Clear Cache` empties it after a confirmation. It
   removes the cached thumbnails and metadata of every folder ever opened; your
   judgments are not touched, because they live in the sidecars. The size is in
@@ -797,7 +797,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   modal stays open until the scan ends. The size figure refreshes each time a
   scan ends.
 - **AI analysis and genres**: `AI analysis of what each photo shows` in the
-  `Culling` tab of `Riffle > Settings...` (off by default) turns on a third
+  `Culling` tab of `Handpic > Settings...` (off by default) turns on a third
   background pass after a folder's scan. It embeds each RAW file's preview
   with SigLIP 2 ViT-B/32 (Apache-2.0, notice in
   `crates/core/models/LICENSE-siglip2`), locally; turning the setting on the
@@ -855,7 +855,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   (`2 of 5 in its burst · +0.31 · as sports`). While AI analysis is on, the
   model relearns from your judgments so far in the background at startup
   and each time you move to another folder; `Refit Ranking` in the
-  `Culling` tab of `Riffle > Settings...` relearns it now, for example
+  `Culling` tab of `Handpic > Settings...` relearns it now, for example
   after a culling session. The fit is stored as `ranking.json` in the app's
   local data dir. `Confidence` reads
   `Built-in only, nothing learned yet` until a pick shares a burst with a
@@ -871,7 +871,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `Clear Cache`, or the cache's 1 GB size limit, which drops the folders
   opened longest ago first, forgets it (the fit already made stays until the
   next refit).
-- **Sharpness score**: Riffle scores each RAW file's sharpness from the embedded
+- **Sharpness score**: Handpic scores each RAW file's sharpness from the embedded
   preview on the camera's eye-AF frame when the camera recorded face
   tracking, else around the AF focus point when the camera recorded one, even
   when a face is found elsewhere in the frame. Only when there is no AF point
@@ -955,7 +955,7 @@ everything else.
 | purple | `Ctrl+Alt+7` |
 | clear the label | `Ctrl+Alt+0` |
 
-Keys can be changed from `Riffle > Settings...` (`CmdOrCtrl+,`):
+Keys can be changed from `Handpic > Settings...` (`CmdOrCtrl+,`):
 click a row's `+` and press a key to add it (`Escape` cancels), or click the
 `×` on a key to remove it. The last key of an action cannot be removed (use
 Reset). A key already used by another action is refused, and a modifier pressed alone is ignored. Any combination of
@@ -989,7 +989,7 @@ These keys are fixed and cannot be changed:
 | `Escape` | close the filter, sort or right-click menu, or leave Compare; in Settings, cancel adding a key, or close the settings; in the folder tree, hand the keyboard back to culling |
 | `Tab` / `Shift+Tab` | while the first-launch developing-software dialog or the settings are open, move between the dialog's visible buttons and language list or the settings' controls (otherwise `Tab` is the side-pane toggle above, which can be rebound) |
 | `CmdOrCtrl+R` | reload the folder (`File > Reload Folder`) |
-| `CmdOrCtrl+,` | open the settings (`Riffle > Settings...`, `File > Settings...` on Windows and Linux) |
+| `CmdOrCtrl+,` | open the settings (`Handpic > Settings...`, `File > Settings...` on Windows and Linux) |
 | `ArrowLeft` / `ArrowRight` / `Home` / `End` | in the settings tab strip, the previous / next / first / last tab |
 | `ArrowUp` / `ArrowDown` / `Home` / `End` | in the folder tree, move the cursor to the previous / next / first / last visible folder (without opening it) |
 | `ArrowRight` | in the folder tree, expand the cursor's folder, or move to its first subfolder when already expanded |
@@ -1000,9 +1000,9 @@ These keys are fixed and cannot be changed:
 ## Ratings and sidecars
 
 The RAW file is never written. Judgments go into a sidecar next to it, in one
-of two formats or in both. Riffle asks which on its first launch, before any
+of two formats or in both. Handpic asks which on its first launch, before any
 folder can be opened, and the choice can be changed later in
-`Riffle > Settings...` (`File > Settings...` on Windows and Linux):
+`Handpic > Settings...` (`File > Settings...` on Windows and Linux):
 
 - **Lightroom (XMP)**: `FOO.ARW` gets `FOO.xmp`, holding `xmp:Rating` (`0`-`5`),
   the pick / reject flag as `xmpDM:good` (`True` for a pick, `False` for a
@@ -1062,17 +1062,17 @@ only a version it cannot migrate is dropped and rebuilt from the sidecars.
 
 ## MCP companion
 
-Riffle can serve an [MCP](https://modelcontextprotocol.io/) (Model Context
+Handpic can serve an [MCP](https://modelcontextprotocol.io/) (Model Context
 Protocol) endpoint, so an MCP client, such as an AI assistant, can follow
-along while you cull: see what Riffle shows, look at a small preview, move the
+along while you cull: see what Handpic shows, look at a small preview, move the
 view and record judgments. It is off by default; turn it on with
-`Let MCP clients connect` in the `MCP` tab of `Riffle > Settings...`
+`Let MCP clients connect` in the `MCP` tab of `Handpic > Settings...`
 (`File > Settings...` on Windows and Linux). The choice is remembered across
 launches.
 
 - **Endpoint**: `http://127.0.0.1:41917/mcp`, served over Streamable HTTP.
   The tab shows the URL, whether the server is listening, and the error when
-  it could not start (say, another program holds port 41917); Riffle itself
+  it could not start (say, another program holds port 41917); Handpic itself
   keeps running either way.
 - **Local only**: the server listens on the loopback address, so only programs
   on this computer reach it, and it refuses any request carrying an `Origin`
@@ -1087,7 +1087,7 @@ launches.
 
 | Tool | What it does |
 |------|--------------|
-| `get_view` | What Riffle is showing: the open folder, how many photos the filter leaves, the current photo and its position, the selection, the view mode (`normal`, `zoom` or `compare`) and the active compare frame, the sort and whether a filter is on, the current photo's burst with each frame's sharpness score, stars, flag and label, and the current photo's `eyes`: whether its eyes are open or closed, the probability they are closed (0 to 1), and the head pose (yaw, pitch and roll in degrees, signed as the meta pane's `Yaw`, `Pitch` and `Roll`, null when it could not be fitted); `eyes` is null when there is no face to judge, and absent until the photo has been judged a moment after it is shown (never in a JPEG-only folder) |
+| `get_view` | What Handpic is showing: the open folder, how many photos the filter leaves, the current photo and its position, the selection, the view mode (`normal`, `zoom` or `compare`) and the active compare frame, the sort and whether a filter is on, the current photo's burst with each frame's sharpness score, stars, flag and label, and the current photo's `eyes`: whether its eyes are open or closed, the probability they are closed (0 to 1), and the head pose (yaw, pitch and roll in degrees, signed as the meta pane's `Yaw`, `Pitch` and `Roll`, null when it could not be fitted); `eyes` is null when there is no face to judge, and absent until the photo has been judged a moment after it is shown (never in a JPEG-only folder) |
 | `get_photo` | One photo's stars, flag and label, sharpness score, AF point and frame, manual focus, orientation, capture time and shooting settings (camera, lens, aperture, shutter, ISO, focal length, exposure bias, focus distance); the current photo when no path is given |
 | `get_preview` | A small upright JPEG of one photo, scaled from the embedded preview (never the RAW) to a long edge of 1024 pixels, or of the requested size from 256 to 1616 |
 | `show_photo` | Show one photo, as clicking it in the filmstrip does |
@@ -1107,7 +1107,7 @@ Any client that speaks MCP over Streamable HTTP connects to the endpoint
 above. Two examples, which the `MCP` tab also shows with Copy buttons:
 
 - **Claude Code**:
-  `claude mcp add --transport http riffle http://127.0.0.1:41917/mcp`
+  `claude mcp add --transport http handpic http://127.0.0.1:41917/mcp`
 - **Claude Desktop**: add the following to `claude_desktop_config.json`. It
   relays through `npx -y mcp-remote`, so it needs Node.js; whether Claude
   Desktop takes a direct `url` entry for a local server has not been
@@ -1116,7 +1116,7 @@ above. Two examples, which the `MCP` tab also shows with Copy buttons:
   ```json
   {
     "mcpServers": {
-      "riffle": {
+      "handpic": {
         "command": "npx",
         "args": ["-y", "mcp-remote", "http://127.0.0.1:41917/mcp"]
       }
@@ -1127,28 +1127,29 @@ above. Two examples, which the `MCP` tab also shows with Copy buttons:
 ## Installing
 
 Download the installer for your OS from the latest release on the
-[Releases page](https://github.com/minodisk/riffle/releases):
+[Releases page](https://github.com/minodisk/handpic/releases):
 
 | OS | File |
 |----|------|
-| macOS, Apple Silicon | `Riffle_<version>_aarch64.dmg` |
-| macOS, Intel | `Riffle_<version>_x64.dmg` |
-| Windows | `Riffle_<version>_x64-setup.exe` (or `Riffle_<version>_x64_en-US.msi`) |
-| Linux | `Riffle_<version>_amd64.AppImage` (or `Riffle_<version>_amd64.deb` / `Riffle-<version>-1.x86_64.rpm`) |
+| macOS, Apple Silicon | `Handpic_<version>_aarch64.dmg` |
+| macOS, Intel | `Handpic_<version>_x64.dmg` |
+| Windows | `Handpic_<version>_x64-setup.exe` (or `Handpic_<version>_x64_en-US.msi`) |
+| Linux | `Handpic_<version>_amd64.AppImage` (or `Handpic_<version>_amd64.deb` / `Handpic-<version>-1.x86_64.rpm`) |
 
 The builds are not OS-signed (no Apple notarization, no Authenticode), so the
 first launch needs one extra step:
 
-- **macOS**: Gatekeeper blocks the first launch. Right-click `Riffle.app` →
-  Open, or System Settings → Privacy & Security → Open Anyway, or run
-  `xattr -d com.apple.quarantine /Applications/Riffle.app`.
+- **macOS**: Gatekeeper blocks the first launch. On macOS 15 and later, after
+  that blocked attempt, open System Settings → Privacy & Security → Open Anyway.
+  On macOS 14 and earlier, right-click `Handpic.app` → Open. On any version you
+  can instead run `xattr -d com.apple.quarantine /Applications/Handpic.app`.
 - **Windows**: SmartScreen warns. More info → Run anyway.
 - **Linux**: nothing extra.
 
 Updating: the app checks for a newer release on launch and, when there is one,
 downloads and installs it quietly in the background; the new version is used the
-next time Riffle launches. On Windows the download still happens quietly in the
-background, and the installer runs when Riffle quits, so the next launch is the
+next time Handpic launches. On Windows the download still happens quietly in the
+background, and the installer runs when Handpic quits, so the next launch is the
 new version. **Check for Updates…** in the app menu (the File menu
 on Windows and Linux) runs the same check by hand and reports the outcome; when
 it finds a new version it offers **Restart Now**, which quits (saving pending
@@ -1157,5 +1158,21 @@ keeps the behavior above. The update itself is signed with the
 project's updater key and verified before it is installed. On Linux only the
 AppImage updates itself; a `.deb` / `.rpm` install is updated by installing the
 newer package.
+
+### Upgrading from Riffle
+
+Handpic was called Riffle up to version 1.10.0, and a Riffle install updates to
+Handpic through the usual update. Your ratings, settings, index, ranking, model
+and viewed history come with it:
+
+- The first Handpic launch moves your data to the new location and removes the
+  old `com.minodisk.riffle` folders. The old `Riffle.log` is carried along and
+  sits beside `Handpic.log`.
+- **macOS**: the system asks once more for access to your folders, because the
+  grant is tied to the app's identifier. The app folder stays `Riffle.app`; the
+  Dock and the menu bar say Handpic, and you may rename the folder in Finder.
+- **Windows**: the installer removes the old Riffle entry, so one app remains.
+- **Linux**: the AppImage keeps its old file name. The `.deb` / `.rpm` package
+  replaces the old one.
 
 To build from source, see [CONTRIBUTING.md](../../CONTRIBUTING.md).

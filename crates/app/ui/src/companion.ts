@@ -148,7 +148,7 @@ function visiblePath(view: ViewApi, path: unknown): string {
   if (typeof path !== "string") throw new Error("path must be a string");
   if (!view.files.includes(path)) {
     throw new Error(
-      `${path} is not shown in Riffle: not in the open folder, or hidden by the filter`,
+      `${path} is not shown in Handpic: not in the open folder, or hidden by the filter`,
     );
   }
   return path;
@@ -175,7 +175,7 @@ function setView(view: ViewApi, args: unknown): ViewState {
   if (typeof mode !== "string" || !MODES.includes(mode)) {
     throw new Error(`mode must be one of ${MODES.join(", ")}`);
   }
-  if (mode !== "normal" && view.files.length === 0) throw new Error("no photo is shown in Riffle");
+  if (mode !== "normal" && view.files.length === 0) throw new Error("no photo is shown in Handpic");
   view.setMode(mode as ViewMode);
   if (mode === "compare" && !view.comparing) throw new Error(COMPARE_NEEDS_FRAMES);
   return getView(view);
@@ -190,7 +190,7 @@ const LABELS: readonly string[] = ["Red", "Orange", "Yellow", "Green", "Blue", "
 // picks them: the active pane in compare, else the selection.
 function defaultTargets(view: ViewApi): string[] {
   const current = view.files[view.index] as string | undefined;
-  if (current === undefined) throw new Error("no photo is shown in Riffle");
+  if (current === undefined) throw new Error("no photo is shown in Handpic");
   if (view.comparing) return [view.compareActive ?? current];
   return targets({ selected: new Set(view.selection), anchor: undefined }, view.files, view.index);
 }

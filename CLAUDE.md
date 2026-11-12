@@ -1,4 +1,4 @@
-# Riffle
+# Handpic
 
 A culling app for Sony ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System / Olympus ORF and DNG files. See [README.md](./README.md)
 for what it is and the current status.
@@ -202,10 +202,10 @@ companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
 key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
 the `log_frontend` command that writes the frontend's `uncaught-js:` and
-`invariant:` lines to `Riffle.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
+`invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
 current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's CPU
 and disk sampler: `set_perf_sampling` starts or stops one thread that emits
-Riffle's process CPU and the system's, each 0–100 %, Riffle's read
+Handpic's process CPU and the system's, each 0–100 %, Handpic's read
 throughput in bytes per second and the system's disk busy time, 0–100 %
 (PDH on Windows, `/sys/block` on Linux, `null` on macOS), as `perf-sample`
 every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)
@@ -214,14 +214,28 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
 its own index at `<cache dir>/com.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and holds the product's identifiers (`IDENTIFIER`, the
-Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr,
-`src/scan.rs` lists a folder, reconciles the index with the whole listing and
+Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
+(this crate's `debug` lines too under `RUST_LOG=debug`), `src/settings.rs`
+reads the Tauri app's `settings.json` read-only (`--settings <path>`, else the
+`IDENTIFIER` folder's under the config dir, else a `LEGACY_IDENTIFIERS` one's)
+into the sidecar format, the label names, the keymap and auto-advance,
+`src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
+`keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
+`src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
+`IndexedFile`) and what a judgment key makes of it (`Command`, `apply`,
+`label_known`, `advances_after`, a port of the Tauri `judge` and `advance.ts`)
+and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
+window spawns at startup and drains in `App::on_app_quit`, `src/scan.rs` lists a folder with its sidecars, reconciles the
+index with the whole listing, reads back the changed sidecars
+(`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
+to the writer with no debounce) and
 runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
 a thread of its own, their progress reaching
 the view through one channel, `src/strip.rs` is the thumbnail strip's pure
 model (the cell pitch, the scroll offset, the range kept with `RANGE_MARGIN`,
 hit testing and which cell to ask for next, with `strip.ts`'s `missing` /
-`ready` / `failed` bookkeeping), which the window draws along its bottom edge on
+`ready` / `failed` bookkeeping, and each cell's judgment `Marks`: the stars,
+the flag dot, the dimmed reject and the label's `Tint`), which the window draws along its bottom edge on
 a `canvas`, and `src/thumbs.rs` the thumbnails of the strip's range, read
 `MAX_IN_FLIGHT` at a time through the index's read-only connection, decoded
 and turned upright, released into the view's `retired` list when their cell
@@ -259,7 +273,17 @@ timing line per judgment, the file current by then asked for once one
 settles; both cleared on every listing), drawn only on the current file's own
 image, and the painting of the AF mark, the face boxes with their landmark
 dots, the judged face's mesh and the upright labels over the upright image's
-bounds.
+bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
+a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
+`load` builds next to the preview: the `EXIF` and `Maker note` groups and an
+`Analysis` group from the rows the caller passes), `src/viewonly.rs`
+whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
+`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
+`crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
+upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
+one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
+the crop and the scaled-preview placeholder are painted, one JPEG pixel per
+device pixel with the focus point at the canvas center).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

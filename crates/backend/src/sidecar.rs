@@ -27,7 +27,7 @@ use serde_json::Value;
 use crate::index::{self, lock, DirtyRow, Index, ParsedSidecar, SidecarStat};
 use crate::photolab;
 
-/// Which sidecar Riffle reads and writes. `Xmp` and `Dop` are one format
+/// Which sidecar Handpic reads and writes. `Xmp` and `Dop` are one format
 /// each, whose other format's files are neither read nor written; `Both`
 /// writes every judgment to both and reads back the one modified last.
 ///

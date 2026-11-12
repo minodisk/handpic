@@ -469,7 +469,7 @@ lock, before it emits `faces-done`.
 - `scanning()` turns false a moment before the frontend's `scanRunning`; a
   `clear_index` already in flight can proceed slightly earlier, which it
   re-checks itself, so nothing new becomes possible.
-- Verified on Windows (2026-10-04, `Riffle.log` with Timing logs on, a
+- Verified on Windows (2026-10-04, `Handpic.log` with Timing logs on, a
   1050-file folder cold for the extractor version): after
   `rescan deferred: trigger=focus` during the scan, the rescan drained off
   `faces-done` logged `rescan: trigger=focus deferred=true` with `todo=0` and
@@ -956,7 +956,7 @@ re-parse the spliced text, then patch the other, so each splice's byte
 offsets are never computed against stale text.
 
 - Clearing a property this way removes only the attribute or element itself;
-  any `xmlns:xmpDM` / `xmlns:photoshop` declaration Riffle had added earlier
+  any `xmlns:xmpDM` / `xmlns:photoshop` declaration Handpic had added earlier
   is left in place. A sidecar that is labeled (or rated via `xmpDM:good`)
   and then cleared is therefore not byte-identical to one that was never
   touched — assert on the specific properties, not full-file equality, after
@@ -973,7 +973,7 @@ configured name for that color is empty — callers don't need a separate
 "is this customized" check. Reads match a sidecar's `xmp:Label` against the
 configured name first, then against the English name, so a sidecar written
 by an English-locale Lightroom still reads as the right color even when
-Riffle's settings hold Japanese (or other) names.
+Handpic's settings hold Japanese (or other) names.
 
 - Source: `docs/plans/_archived/20260922-lightroom-label-names/learnings.md`, Step 1.
 
@@ -1298,7 +1298,7 @@ have is more machinery than it's worth).
 ### Forward frontend timing lines through a command, not the log plugin's JS API (Inferred)
 
 The preview path's per-page timing line is sent from the frontend to
-`Riffle.log` via a dedicated `log_timing` Tauri command, not
+`Handpic.log` via a dedicated `log_timing` Tauri command, not
 `tauri-plugin-log`'s JS API (`window.__TAURI__.log`). That global also needs
 the `log:default` capability, which `crates/app/capabilities/default.json`
 does not grant, so calling it directly from the frontend would fail silently
@@ -1306,7 +1306,7 @@ or need a capability change. `debugLog` joins its arguments with `String`, so
 a line built from a label plus a number (e.g. `zoom keypress`) forwards
 correctly through the same path.
 
-- When a frontend line needs to land in `Riffle.log`, route it through a
+- When a frontend line needs to land in `Handpic.log`, route it through a
   command like `log_timing` rather than granting `log:default` to call the
   plugin's JS API directly. `log_frontend` in `crates/app/src/diagnostics.rs`
   (the panic hook and the `invariant!` macro live in
@@ -2115,7 +2115,7 @@ back into it:
 - `triggers()` drops an event whose paths are *all* sidecars (`*.xmp`,
   `*.arw.dop`, either format, case-insensitive) or `riffle_core::copy::TEMP_SUFFIX`
   temporaries, which is exactly what `sidecar::write` produces and what the
-  import's copies produce (`<name>.riffle-tmp` in the date folder, renamed to
+  import's copies produce (`<name>.handpic-tmp` in the date folder, renamed to
   `<name>` when complete). So a rating
   does not cost a rescan at all while culling.
 - Even unfiltered it would terminate: `reconcile_sidecars` reparses a sidecar
@@ -2127,7 +2127,7 @@ picked up live; it lands on the next focus / `Reload Folder` rescan, as it did
 on reopen before.
 
 On Windows, `ReadDirectoryChangesW` keeps a handle on the watched directory,
-which pins the watched folder's ancestors against rename while Riffle has it
+which pins the watched folder's ancestors against rename while Handpic has it
 open; renaming the open folder itself succeeds (measured in the next entry).
 Whether the watch blocks deleting the folder was not measured (an open item in
 `todo.md`). `set` drops the previous watcher before creating the new one, so

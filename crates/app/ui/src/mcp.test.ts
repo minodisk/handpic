@@ -28,7 +28,7 @@ describe("mcpExamples", () => {
   test("adds the endpoint to Claude Code over HTTP", () => {
     expect(mcpExamples(41917)[0]).toEqual({
       client: "Claude Code",
-      text: "claude mcp add --transport http riffle http://127.0.0.1:41917/mcp",
+      text: "claude mcp add --transport http handpic http://127.0.0.1:41917/mcp",
     });
   });
 
@@ -37,7 +37,7 @@ describe("mcpExamples", () => {
     expect(desktop?.client).toBe("Claude Desktop (claude_desktop_config.json)");
     expect(JSON.parse(desktop?.text ?? "")).toEqual({
       mcpServers: {
-        riffle: {
+        handpic: {
           command: "npx",
           args: ["-y", "mcp-remote", "http://127.0.0.1:41917/mcp"],
         },

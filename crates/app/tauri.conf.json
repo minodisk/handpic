@@ -1,8 +1,8 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
-  "productName": "Riffle",
+  "productName": "Handpic",
   "version": "1.10.0",
-  "identifier": "com.minodisk.riffle",
+  "identifier": "com.minodisk.handpic",
   "build": {
     "devUrl": "http://localhost:1420",
     "frontendDist": "ui/dist",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Riffle",
+        "title": "Handpic",
         "width": 1280,
         "height": 800,
         "visible": false
@@ -56,7 +56,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2MUFERThGN0EzNDM2RTMKUldUak5qUjZqOTRhSm0xQ0RwOUJvSjBIUmhmbkFvdU93SWlqNkRWTmIyQktheFNZS2ZERzZiWnQK",
       "endpoints": [
-        "https://github.com/minodisk/riffle/releases/latest/download/latest.json"
+        "https://github.com/minodisk/handpic/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

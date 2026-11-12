@@ -87,7 +87,7 @@ export interface RefreshTiming {
   total: number;
 }
 
-// One `Riffle.log` line per `refreshEntries` run, times in milliseconds.
+// One `Handpic.log` line per `refreshEntries` run, times in milliseconds.
 export function refreshTimingLine(t: RefreshTiming): string {
   const ms = (value: number): string => `${value.toFixed(1)}ms`;
   return [
@@ -120,7 +120,7 @@ export type RescanTrigger =
   | "import"
   | "scan-canceled";
 
-// One `Riffle.log` line per `resync()` call: `defer` when a scan (or a
+// One `Handpic.log` line per `resync()` call: `defer` when a scan (or a
 // listing, or a deferred operation's invoke) holds it off, `start` when it
 // lists the folder now, `drained` when a deferred one runs at last, still
 // naming the trigger that was deferred.

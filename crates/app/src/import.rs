@@ -738,7 +738,7 @@ fn run_plan(
     }
 }
 
-/// The `import:` line a run leaves in `Riffle.log`, so its throughput can be
+/// The `import:` line a run leaves in `Handpic.log`, so its throughput can be
 /// compared with Explorer's.
 fn log_line(source: &str, root: &str, ran: &Ran) -> String {
     let seconds = ran.elapsed_ms as f64 / 1000.0;

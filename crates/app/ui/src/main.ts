@@ -201,7 +201,7 @@ import {
 import { type Direction, type Held, PrefetchRing } from "./prefetch.js";
 
 // Registered before anything else runs so an early throw still reaches
-// `Riffle.log`. Not gated by `debugLogging`, and the default console output is
+// `Handpic.log`. Not gated by `debugLogging`, and the default console output is
 // left alone.
 const uncaughtGate = new UncaughtGate();
 
@@ -1113,11 +1113,11 @@ function renderMeta(): void {
 }
 
 // The window title last sent, so paging only crosses IPC when it changes.
-let shownTitle = "Riffle";
+let shownTitle = "Handpic";
 
 // Show the open folder and the current file in the title bar.
 function renderTitle(): void {
-  const parts = ["Riffle"];
+  const parts = ["Handpic"];
   if (openDir !== null) {
     parts.push(baseName(openDir));
   }
@@ -2158,7 +2158,7 @@ function draw(): void {
 const PERF_REDRAW_MS = 500;
 const PERF_HEADER = 16;
 const PERF_SWATCH = 14;
-// CPU lines are blue and disk lines green; within each pair Riffle's is thick
+// CPU lines are blue and disk lines green; within each pair Handpic's is thick
 // and solid, the system's thin and dashed, and the legend draws each label's
 // line so the series can be told apart. `value` is the series' height as a
 // fraction of the plot, null where it has no reading.
@@ -2171,7 +2171,7 @@ interface PerfLine {
 }
 const PERF_LINES: readonly PerfLine[] = [
   {
-    label: "Riffle CPU",
+    label: "Handpic CPU",
     color: THEME.chartCpu,
     width: 2,
     dash: [],
@@ -2185,7 +2185,7 @@ const PERF_LINES: readonly PerfLine[] = [
     value: (sample) => sample.system / 100,
   },
   {
-    label: "Riffle disk",
+    label: "Handpic disk",
     color: THEME.chartDisk,
     width: 2,
     dash: [],
@@ -2238,7 +2238,7 @@ function perfStageAlpha(at: number): number {
   return 1 - at * 0.11;
 }
 
-// The CPU and disk busy series on a 0-100 % scale, Riffle's reads on a
+// The CPU and disk busy series on a 0-100 % scale, Handpic's reads on a
 // 0-`readMax` scale and the latency bars on a 0-`latencyMax` scale share the
 // plot below a one-line legend, the newest at the right edge.
 function drawPerf(): void {
@@ -3271,7 +3271,7 @@ function drawFocusMark(drawWidth: number, drawHeight: number): void {
   context.restore();
 }
 
-// The faces Riffle detects on the current file's preview, in the same
+// The faces Handpic detects on the current file's preview, in the same
 // unrotated coordinates as the AF mark: a box per face and a dot on each of
 // its five landmarks (the eyes, the nose tip, the mouth corners). They are
 // detected when first drawn and appear once `faces_of`

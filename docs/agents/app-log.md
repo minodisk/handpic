@@ -1,6 +1,6 @@
-# Reading `Riffle.log`
+# Reading `Handpic.log`
 
-Read this before diagnosing a report about the running app. `Riffle.log` is
+Read this before diagnosing a report about the running app. `Handpic.log` is
 the only trace a session leaves: stderr is not captured in a bundled app, so
 anything that matters is written here, and the failures an agent most needs
 carry a fixed, greppable prefix (`panic:`, `uncaught-js:`, `invariant:`).
@@ -14,15 +14,17 @@ and `crates/app/ui/src/uncaught.ts`.
 
 | OS      | Path                                                     |
 | ------- | -------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\com.minodisk.riffle\logs\Riffle.log`     |
-| macOS   | `~/Library/Logs/com.minodisk.riffle/Riffle.log`          |
-| Linux   | `~/.local/share/com.minodisk.riffle/logs/Riffle.log`     |
+| Windows | `%LOCALAPPDATA%\com.minodisk.handpic\logs\Handpic.log`     |
+| macOS   | `~/Library/Logs/com.minodisk.handpic/Handpic.log`          |
+| Linux   | `~/.local/share/com.minodisk.handpic/logs/Handpic.log`     |
 
 - The Windows path was checked against the running app. The macOS and Linux
   paths are taken from `app_log_dir` in tauri 2.11.6's
   `src/path/desktop.rs` (macOS: `~/Library/Logs/<identifier>`, elsewhere:
   `dirs::data_local_dir()/<identifier>/logs`; on Linux that honors
   `$XDG_DATA_HOME`).
+- After an upgrade from Riffle, the old `Riffle.log` sits beside `Handpic.log`
+  in this folder: the first launch's data migration carried it over.
 - `Help > Open Log Folder` opens the folder in the OS file manager.
 - The same lines also go to stdout, which only a `mise run dev` terminal
   shows.
@@ -31,9 +33,9 @@ and `crates/app/ui/src/uncaught.ts`.
 
 The cap is 1 MB (`max_file_size(1_000_000)`) with the plugin's default
 `RotationStrategy::KeepOne`. In tauri-plugin-log 2.9.2 `KeepOne` **deletes**
-`Riffle.log` when the next write would pass the cap and starts a new one; no
-rotated copy (no `Riffle_<date>.log`) is left beside it, and only
-`Riffle.log` is ever on disk. So the file holds the latest stretch of the
+`Handpic.log` when the next write would pass the cap and starts a new one; no
+rotated copy (no `Handpic_<date>.log`) is left beside it, and only
+`Handpic.log` is ever on disk. So the file holds the latest stretch of the
 session, and the early lines of a long session may be gone. A failure that
 happened before the deletion cannot be recovered; ask for a reproduction.
 
@@ -75,7 +77,7 @@ The frontend ones appear only while the settings modal's `Timing logs` item
 Grep for everything that signals a problem:
 
 ```sh
-grep -E '\[(ERROR|WARN)\]|panic:|uncaught-js:|invariant:' Riffle.log
+grep -E '\[(ERROR|WARN)\]|panic:|uncaught-js:|invariant:' Handpic.log
 ```
 
 Plain `[WARN]` / `[ERROR]` lines without a prefix are failures the app

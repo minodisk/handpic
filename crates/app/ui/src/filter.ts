@@ -27,7 +27,7 @@ export type Flag = "picked" | "untagged" | "rejected";
 export type AfEye = MarkState;
 
 // The displayed shape, decided by the EXIF Orientation tag alone: every
-// sensor Riffle reads is landscape, so a quarter turn (6 or 8) is portrait.
+// sensor Handpic reads is landscape, so a quarter turn (6 or 8) is portrait.
 export type Orientation = "portrait" | "landscape";
 
 // One item of the `Output` section: whether a file has an export.

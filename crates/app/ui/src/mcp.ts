@@ -26,11 +26,11 @@ export function mcpExamples(port: number): McpExample[] {
   const endpoint = mcpEndpoint(port);
   const desktop = {
     mcpServers: {
-      riffle: { command: "npx", args: ["-y", "mcp-remote", endpoint] },
+      handpic: { command: "npx", args: ["-y", "mcp-remote", endpoint] },
     },
   };
   return [
-    { client: "Claude Code", text: `claude mcp add --transport http riffle ${endpoint}` },
+    { client: "Claude Code", text: `claude mcp add --transport http handpic ${endpoint}` },
     {
       client: "Claude Desktop (claude_desktop_config.json)",
       text: JSON.stringify(desktop, null, 2),

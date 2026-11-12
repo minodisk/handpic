@@ -47,7 +47,7 @@ jobs:
       - name: Run the lints
         run: mise run lint
 
-  # Riffle ships on all three desktop platforms, so the build and the tests run
+  # Handpic ships on all three desktop platforms, so the build and the tests run
   # on all three. fail-fast stays off: when something is platform-specific we
   # want to see every platform's verdict in one run, not just the first to fail.
   test:

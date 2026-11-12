@@ -71,7 +71,7 @@ async fn run(app: AppHandle, interactive: bool) {
     match result {
         Ok(None) => {
             if interactive {
-                message(&app, "Riffle is up to date.", MessageDialogKind::Info);
+                message(&app, "Handpic is up to date.", MessageDialogKind::Info);
             }
         }
         Ok(Some(version)) => {
@@ -111,32 +111,32 @@ async fn check_and_update(app: &AppHandle) -> Result<Option<String>, tauri_plugi
 #[cfg(windows)]
 fn installed_text(version: &str) -> String {
     format!(
-        "Riffle {version} was downloaded. Restart now to install it, or later to install it when Riffle quits."
+        "Handpic {version} was downloaded. Restart now to install it, or later to install it when Handpic quits."
     )
 }
 
 #[cfg(not(windows))]
 fn installed_text(version: &str) -> String {
     format!(
-        "Riffle {version} was installed. Restart now to use it, or later to use it the next time Riffle launches."
+        "Handpic {version} was installed. Restart now to use it, or later to use it the next time Handpic launches."
     )
 }
 
 #[cfg(windows)]
 fn installed_log(version: &str) -> String {
-    format!("downloaded Riffle {version}; it is installed when Riffle quits")
+    format!("downloaded Handpic {version}; it is installed when Handpic quits")
 }
 
 #[cfg(not(windows))]
 fn installed_log(version: &str) -> String {
-    format!("installed Riffle {version}; it is used on the next launch")
+    format!("installed Handpic {version}; it is used on the next launch")
 }
 
 fn offer_restart(app: &AppHandle, version: &str) {
     let app = app.clone();
     app.dialog()
         .message(installed_text(version))
-        .title("Riffle")
+        .title("Handpic")
         .kind(MessageDialogKind::Info)
         .buttons(MessageDialogButtons::OkCancelCustom(
             "Restart Now".into(),
@@ -174,7 +174,7 @@ fn restart(app: &AppHandle) {
 fn message(app: &AppHandle, text: &str, kind: MessageDialogKind) {
     app.dialog()
         .message(text)
-        .title("Riffle")
+        .title("Handpic")
         .kind(kind)
         .show(|_| {});
 }

@@ -160,7 +160,7 @@ function group(heading: string, rows: [string, string | null][]): MetaGroup {
 }
 
 // The meta pane's rows grouped by where each value comes from: standard
-// EXIF/TIFF tags, the vendor MakerNote (itself an EXIF tag), and Riffle's own
+// EXIF/TIFF tags, the vendor MakerNote (itself an EXIF tag), and Handpic's own
 // analysis. The analysis group needs no `meta`, so a file whose metadata could
 // not be read still shows its analysis. The AF eye's in-focus probability gets a
 // row, as a percentage, only when there is one, and so do the open / closed

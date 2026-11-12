@@ -223,7 +223,7 @@ Tauri settings from either, so it works before and after the rename.
       Name the moved functions in the PR so the Step 4 pattern is visible.
     - `raw_only` stays in `crates/app`: the native app's view-only rule is
       the frontend's (`viewonly.ts`), ported in Step 2.
-- [ ] Step 2: The meta pane, with room for the Analysis rows, and the view-only JPEG folder
+- [x] Step 2: The meta pane, with room for the Analysis rows, and the view-only JPEG folder
   - Done when:
     - `crates/native/src/meta.rs` is a pure model with unit tests: a port
       of `meta.ts`'s `metaGroups` over `riffle_backend::exif::Metadata`:
@@ -275,7 +275,7 @@ Tauri settings from either, so it works before and after the rename.
       it to refuse judgments and to skip the sidecar pass. The capture-time
       order of a view-only strip is port Step 7's (sort); here the strip
       keeps its natural order.
-- [ ] Step 3: Read the settings and the sidecars: the keymap bound to the window, the judgments of the open folder shown on the strip, nothing written yet
+- [x] Step 3: Read the settings and the sidecars: the keymap bound to the window, the judgments of the open folder shown on the strip, nothing written yet
   - Done when:
     - `crates/native/src/settings.rs`: `Settings { format: SidecarFormat,
       names: LabelNames, keymap: Keymap, auto_advance: bool }` and
@@ -351,7 +351,7 @@ Tauri settings from either, so it works before and after the rename.
       after `reconcile`, before the scan thread starts, exactly as
       `scan_folder` orders them.
     - Keep `judgment.rs` small in this step: `State` and its `From<&IndexedFile>`.
-- [ ] Step 4: The judgment keys write the index and the sidecars through the backend's writer, with auto-advance and the drain on quit
+- [x] Step 4: The judgment keys write the index and the sidecars through the backend's writer, with auto-advance and the drain on quit
   - Done when:
     - `judgment.rs` gains the pure part of `judge`: `Command` (`Rate(1..=5)`,
       `Reject`, `Pick`, `Unflag`, `ClearRating`, `Label(color)`,
@@ -570,3 +570,6 @@ Tauri settings from either, so it works before and after the rename.
 ## Progress
 
 - (2026-11-11) Step 1 complete
+- (2026-11-11) Step 2 complete
+- (2026-11-11) Step 3 complete
+- (2026-11-11) Step 4 complete

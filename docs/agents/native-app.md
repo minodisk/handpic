@@ -110,6 +110,77 @@ app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
 - Rule: a Tauri-free helper the native app needs moves into the backend, it is
   not copied, so the two apps cannot drift in what they read and show.
 
+### The settings are the Tauri app's, read-only (Inferred)
+
+`settings.rs` reads the Tauri app's `settings.json` (`sidecarFormat`,
+`labelNames`, `shortcuts`, `autoAdvance`) with the backend's rules
+(`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
+`Keymap::from_overrides`, `autoAdvance` on unless a boolean says off), so a
+native judgment writes the same sidecars with the same label names and keys
+as the Tauri app on the same folder (the user's store says `"both"`). The
+file is `--settings <path>`, else the first that exists of
+`<config dir>/<IDENTIFIER>/settings.json` and each
+`<config dir>/<LEGACY_IDENTIFIERS[i]>/settings.json`, so it is found before
+and after the Handpic rename's migration. A missing, unreadable or non-object
+file is logged once with the paths tried and gives the defaults (`Xmp`, the
+English names, the default keymap, auto-advance on). The native app never
+writes it; its settings UI is port Step 9.
+
+- Rule: every debug or hand-check run passes `--settings` with a test file,
+  or it picks up the user's real format.
+
+### The folder open reads the sidecars before pass 1 (Measured)
+
+`scan::list` lists with `read_listing(dir, Some(format))`, and
+`Scan::prepare` runs `stat_sidecars` and `sidecar::reconcile_of` right after
+`reconcile`, on the open's background task and before the scan thread starts,
+as the Tauri `scan_folder` orders them, logging `scan sidecars: dir=…
+dirty=N changed=N in …ms`; a view-only folder skips it. The sidecars it could
+not read go to the pane's notes as `<name>: <message>`. On a copied folder of
+8 DNGs with XMP and `.dop` sidecars and a fresh index, the first open logged
+`changed=8` and the second `changed=0`, under `"xmp"` and under `"both"`, and
+no sidecar's mtime moved.
+
+- Rule: `Index::entries` joins `files`, so on a fresh index it returns nothing
+  until pass 1 has written the files' rows; the view reads the judgments at
+  the open and again at pass 1's `Done`. The `ratings` rows exist right after
+  `reconcile_of`, so a ratings-only read (`Index::rows_of`) would show the
+  marks before pass 1, at the cost of the "entry seen" set Step 4's
+  `label_known` follows.
+
+### A judgment goes view, row, writer (Measured)
+
+A judgment key on the current file (none in a view-only folder) applies
+`judgment::apply` to the view's map and the strip's cell at once, then on
+`cx.background_spawn` runs `judgment::store`: `Index::set_rating` on the
+writer connection, then `Writer::set`, the Tauri `set_rating`'s order, so a
+crash between the two leaves the row dirty. A failure of either puts the
+file's previous state back (while the folder is still open) and goes to the
+pane's notes, as does the writer's `on_error` through `Event::SidecarError`,
+one line per path. The writer is spawned in `Riffle::new` when the index
+opened; `Scan::prepare` hands `reconcile_of`'s dirty rows to `Writer::set_now`,
+so a judgment lost to a crash inside the 300 ms debounce is written on the
+next open (checked on the real exe by seeding a dirty row into a test index:
+the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
+
+- Rule: the view keeps `seen` (the paths the index last returned an entry for,
+  which make the label known) apart from `judgments`, and `touched` (the
+  paths judged since the open), whose state a later `entries` read, such as
+  the one at pass 1's `Done`, does not replace, as the Tauri `touched` set.
+
+### The writer drains in `App::on_app_quit` (Measured)
+
+`Riffle::new` registers `App::on_app_quit` (the app-level one, holding an
+`Arc<Writer>`, not the entity-level `Context::on_app_quit`: closing the window
+can release the view before the quit handlers run) and calls
+`writer.flush(DRAIN_TIMEOUT)` inside the handler itself, returning a ready
+future. GPUI gives the returned futures only `SHUTDOWN_TIMEOUT` (200 ms), but
+the handler is called synchronously from `App::shutdown`, which on Windows
+runs once the message loop ends, after `cx.quit()` (`q`, `--auto`) and after
+`on_window_closed`'s `cx.quit()` alike. An `--auto 1` run logged `quit: sidecar
+writer drained=true` after its summary; the window-close path and a key
+inside the debounce are the user's hand check.
+
 ### A folder change re-lists, never mid-scan (Measured)
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
@@ -233,6 +304,8 @@ Without a logger the backend's `scan extract` lines went nowhere. `logger.rs`
 prints `[target][LEVEL] message` to stderr at `Info`, which also shows GPUI's
 own lines (the UI font, the GPU, and an `ERROR` for the missing DXGI debug
 interface on a machine without the Graphics Tools, which is harmless).
+`RUST_LOG=debug` (or `trace`) adds this crate's own lines of that level, such
+as `key: <name> action=…` for every keystroke, and not GPUI's.
 
 ## GPUI
 
@@ -392,6 +465,78 @@ folder logged 7 judgments, not 60.
 checked with injected `keybd_event` key events in the running app. A non-extended
 `VK_RIGHT` / `VK_LEFT`, the keypad's, gives the same names.
 
+### Every keystroke goes through the keymap (Inferred)
+
+`keys.rs`'s `key_name` names a keystroke as the keymap does: the modifiers
+held in `ctrl+alt+shift+meta+` order (`platform` is `meta`), then the key
+lower-cased, GPUI's `left` / `right` / `up` / `down` as `arrowleft` ...
+`arrowdown`; a lone modifier has no name. `Bindings` maps each bound key to
+its action once at startup. The window's handler takes `home`, `end` and `q`
+literally first (the native app's own keys, bound to no action), then the
+actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
+user's override of those keys applies; a judgment action goes to
+`judgment::Command::from_action`, and any other action (`rejectRest`, `undo`,
+`redo`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
+its keymap action in that `match`, not as a literal key.
+
+Read from `gpui_windows` at the pinned rev, not yet seen in the running app
+(the pending manual check in the gpui-judgments plan's `learnings.md`):
+
+- A shifted letter arrives as the lower-case letter with `shift` set
+  (`shift+x`). A shifted digit or punctuation key arrives as the character it
+  types with `shift` cleared (`!` for Shift+1, from `get_shifted_key`),
+  where `keys.ts` names it from `event.code` (`shift+1`); no default key is
+  one, but a user override such as `shift+1` would not match.
+- With Ctrl or Alt held, a digit is `MapVirtualKeyW`'s unshifted character,
+  `1` on a US or JIS layout (`ctrl+alt+1`), but `&` on AZERTY, where the
+  Tauri app's `event.code` still says `1`. Windows reports AltGr as Ctrl+Alt,
+  so on a layout with AltGr `ctrl+alt+<digit>` is also what AltGr+digit
+  sends; the default color keys are the Tauri app's, so both apps behave the
+  same there.
+
+### The canvas's size reaches the view through a shared cell (Inferred)
+
+The preview canvas's bounds are known only inside its paint closure. The
+closure writes the size in device pixels (`bounds.size * window.scale_factor()`,
+rounded) into an `Rc<Cell<(u32, u32)>>` the view also holds, as `retired` and
+`pending` are shared; the 1:1 view reads it when it asks for a crop. A deferred
+entity update from the closure was the other option and needs more of
+`main.rs`. The value is the last painted frame's: a resize is seen by
+`observe_window_bounds` before the next paint, so the crop is re-cut only
+after `zoom::CROP_RESIZE_DEBOUNCE` (150 ms), by when the new size has been
+painted.
+
+- Rule: read the cell after at least one paint; before that it is `(0, 0)`
+  (`crop_size` clamps it to 1).
+
+### 1:1 is one JPEG pixel per device pixel (Inferred)
+
+`paint_image` snaps the visible bounds to device pixels (`snap_bounds`) and,
+when the image runs past the clip bounds, cuts the atlas sub-tile by the
+visible fraction, rounded. `zoom::Paint` therefore places the upright crop with
+its point of interest on a whole device pixel (`canvas_center` floors the
+canvas center in device pixels) and gives it its own size divided by
+`scale_factor`, so both edges land on whole device pixels and the sub-tile is
+cut on whole texels. The window ran at scale 1.0 (96 dpi, a 1600x1000 client)
+during the check; that the crop shows without resampling blur by eye is
+pending the user (see the zoom-peaking plan's `learnings.md`).
+
+- Rule: anything meant to be 1:1 is placed in device pixels and divided by
+  `scale_factor` at the end, never laid out in logical pixels.
+
+### A crop is on screen 8-112 ms after `z` on a busy machine (Measured)
+
+Release build, `zoom` lines of `z` presses on the zoom-peaking test folder,
+not idle (other sessions ran), the file cache warm, 25 lines at scale 1.0
+(crops of 1024 px per axis at most): four ARW files `read` 0.7-4.7 ms,
+`decode` 3-27 ms, `orient` 0-20 ms on the portrait ones, `keypressToPixels`
+8-43 ms (112 ms with the outlier below); two RAF files (X-E5, X-H2S) `read`
+1.6-5.2 ms, `decode` 14-33 ms, `keypressToPixels` 19-89 ms; two JPEG-only
+files `decode` 21 and 47 ms.
+`decode` includes the RGBA to BGRA swap. Two `orient` outliers of 36 and 76 ms
+(a 1024 px crop over 8 scoped threads, 1-2 ms otherwise) are attributed to the
+load, not measured apart.
+
 ### IME handling is unverified (Inferred)
 
 It exists in `gpui_windows`; nothing has exercised it yet.
@@ -412,6 +557,28 @@ to the update on the main thread), and splits `draw` into
 `frameWait + paint + present`. `keypressToPixels` includes `present`; Tauri's
 stops at `drawImage`. It starts at the latest press of the file that ended up
 shown.
+
+### The meta pane is `div` rows, and its cost lands in `present` (Measured)
+
+The right-hand pane (220 px, the Tauri `#info` width) lays out the file
+name, `n / total`, the `meta.rs` groups and the notes as `div`s, built from
+the `Metadata` that `load` formats on the background thread next to the
+preview, so paging reads nothing new. Release, `--auto 20` on the 20-file ARW
+compare folder, a fresh `--index` per run, before and after interleaved in one
+session with other sessions building on the machine (CPU 12-31 % before each
+run, so noisy): `paint` p50 0.70 / 0.82 ms before against 0.90 / 0.76 ms after,
+`present` p50 0.19 / 0.22 against 0.44 / 0.41 ms, `keypressToPixels` p50
+17.97 / 18.65 against 18.02 / 18.52 ms. `paint` times only the preview
+canvas's closure; the pane's `div`s paint after it in the same frame, so their
+cost shows as about +0.2 ms in `present`. The `div` rows were kept (the plan's
+rule: a canvas only when `paint` grows by more than 1 ms).
+
+- Rule: the view-only flag comes from the whole listing (`Listed.files`), not
+  the `--size` / `--max` subset, and is set on every open and re-listing
+  before the strip is built.
+- Rule: a stage that times one canvas's closure does not see the rest of the
+  element tree; look at `present` (and `frameWait` for layout) when adding
+  elements beside it.
 
 ### The strip costs the pager under 1 ms (Measured)
 

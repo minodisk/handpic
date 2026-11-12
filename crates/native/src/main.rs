@@ -5,21 +5,27 @@ mod facemesh;
 mod faces;
 mod focus;
 mod hold;
+mod judgment;
+mod keys;
 mod logger;
 mod mark;
+mod meta;
 mod orient;
 mod overlay;
 mod pager;
 mod resync;
 mod scan;
+mod settings;
 mod strip;
 mod thumbs;
 mod timing;
 mod viewed;
+mod viewonly;
+mod zoom;
 
 use std::{
-    cell::RefCell,
-    collections::HashSet,
+    cell::{Cell, RefCell},
+    collections::{HashMap, HashSet},
     env,
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
@@ -36,32 +42,39 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    App, Bounds, ContentMask, Context, Corners, FocusHandle, KeyDownEvent, MouseButton,
-    MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString, Task,
-    TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill, outline,
-    point, prelude::*, px, rgb, size,
+    App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight, KeyDownEvent, Keystroke,
+    MouseButton, MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString,
+    Task, TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill,
+    outline, point, prelude::*, px, rgb, rgba, size,
 };
 use gpui_platform::application;
 use hold::PaintHold;
 use image::{Frame, RgbaImage};
-use overlay::Marks;
+use judgment::{Command, State};
+use keys::Bindings;
+use meta::Shown;
 use pager::{Move, Pager};
 use resync::Resync;
 use riffle_backend::{
-    exif::{Labeled, exif},
-    index::{self, FileStat, Index},
+    exif::{self, Metadata},
+    index::{self, Index},
     listing::canonicalize,
+    sidecar::{self, Writer},
     watch::{self, Watch},
 };
 use riffle_core::{
+    Flag,
+    arw::FocusLocation,
     reader,
     scan::{Paused, ReadSlots, ScanFocus},
 };
-use scan::{Event, Listed, Scan};
-use strip::{Answer, Strip};
+use scan::{Event, Listed, Prepared, Scan};
+use settings::Settings;
+use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
+use zoom::{Arrived, Zoom};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// Out of phase with 60 Hz vsync.
@@ -76,7 +89,8 @@ struct Loaded {
     jpeg_kb: usize,
     px: (u32, u32),
     orientation: u16,
-    settings: String,
+    meta: Metadata,
+    focus: Option<FocusLocation>,
     /// The scan's pause, held until the image is painted (`hold.rs`).
     paused: Paused,
 }
@@ -91,23 +105,13 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     })
 }
 
-fn label(value: Option<Labeled>) -> String {
-    value.map_or_else(|| "-".into(), |v| v.label)
-}
-
 fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
     let preview = reader::read_preview(path);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
-    let settings = exif(&arw.shot);
-    let settings = format!(
-        "{}  {}  {}",
-        label(settings.shutter),
-        label(settings.aperture),
-        label(settings.iso),
-    );
+    let meta = exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -132,7 +136,8 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         jpeg_kb: jpeg.len() / 1024,
         px: (w, h),
         orientation: arw.orientation,
-        settings,
+        meta,
+        focus: arw.shot.focus,
         paused,
     })
 }
@@ -165,7 +170,10 @@ struct Opened {
     listed: Listed,
     shown: Vec<PathBuf>,
     /// `None` without an index.
-    todo: Option<Result<Vec<FileStat>, String>>,
+    todo: Option<Result<Prepared, String>>,
+    /// The listed files' judgments; `None` without an index or when the read
+    /// failed.
+    judgments: Option<HashMap<String, State>>,
     /// The file the folder was left at, to resume at.
     last_viewed: Option<String>,
     /// The folder's files the index has as viewed.
@@ -185,6 +193,21 @@ fn remembered(reader: &Mutex<Index>, dir: &str) -> (Option<String>, HashSet<Stri
         Vec::new()
     });
     (last_viewed, viewed.into_iter().collect())
+}
+
+/// The judgment of each of the folder's files the index has, after the
+/// sidecar pass; `None` when the read fails.
+fn judgments_of(reader: &Mutex<Index>, dir: &str) -> Option<HashMap<String, State>> {
+    let entries = index::lock(reader)
+        .entries(dir)
+        .inspect_err(|e| log::warn!("failed to read the judgments of {dir}: {e}"))
+        .ok()?;
+    Some(
+        entries
+            .iter()
+            .map(|file| (file.path.clone(), State::from(file)))
+            .collect(),
+    )
 }
 
 struct Riffle {
@@ -229,8 +252,31 @@ struct Riffle {
     analyzing: Option<(usize, usize)>,
     failed: usize,
     image: Option<Arc<RenderImage>>,
+    /// The meta pane's file, the one whose preview is on screen, with its
+    /// index.
+    shown: Option<(usize, Shown)>,
+    /// The open folder holds only JPEGs.
+    view_only: bool,
+    settings: Settings,
+    bindings: Bindings,
+    /// The open folder's judgments by listed path.
+    judgments: HashMap<String, State>,
+    /// The paths the index last returned an entry for, whose label is known.
+    seen: HashSet<String>,
+    /// The paths judged since the folder opened, whose state in the view a
+    /// later read of the index does not replace.
+    touched: HashSet<String>,
+    /// `None` without an index.
+    writer: Option<Arc<Writer>>,
+    /// The judgment stores, run in the order of the keys.
+    stores: judgment::Queue,
+    /// The sidecars the open could not read, as `<name>: <message>`.
+    notes: Vec<String>,
+    /// The judgments that failed to be stored or written, one per path, the
+    /// newest message replacing the older.
+    write_errors: Vec<(String, String)>,
     /// The `f` overlay's toggle and what it draws.
-    marks: Marks,
+    marks: overlay::Marks,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
@@ -240,12 +286,20 @@ struct Riffle {
     summary: Rc<RefCell<Summary>>,
     key: Option<Instant>,
     sent: Instant,
+    zoom: Zoom<zoom::Crop>,
+    /// The pending re-cut after a resize; dropping it cancels it.
+    zoom_timer: Option<Task<()>>,
+    /// The preview canvas's size in device pixels, as last painted.
+    viewport: Rc<Cell<(u32, u32)>>,
+    /// The keyed crop the next presented frame shows.
+    zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
 }
 
 impl Riffle {
     fn new(
         focus: FocusHandle,
         index: Result<Indexes, String>,
+        settings: Settings,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -257,6 +311,7 @@ impl Riffle {
             this.strip_width = f32::from(window.viewport_size().width);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
+            this.zoom_resized(cx);
         })
         .detach();
         let eviction = index.as_ref().ok().map(|index| {
@@ -285,6 +340,32 @@ impl Riffle {
                 let _ = events.unbounded_send(Event::Changed(dir));
             })
         };
+        let writer = index.as_ref().ok().map(|index| {
+            let events = events.clone();
+            Arc::new(Writer::spawn(index.clone(), move |path, message| {
+                log::warn!("sidecar write failed: path={} {message}", path.display());
+                let _ = events.unbounded_send(Event::SidecarError {
+                    path: path.to_string_lossy().into_owned(),
+                    message: message.to_string(),
+                });
+            }))
+        });
+        // Held by the app, not the view: closing the window may release the
+        // view before the quit handlers run. The drain runs as the handler is
+        // called, so GPUI's 200 ms bound on the returned future does not cut it.
+        let stores = judgment::Queue::new();
+        if let Some(writer) = writer.clone() {
+            let stores = stores.clone();
+            App::on_app_quit(cx, move |_| {
+                let stored = stores.drain(sidecar::DRAIN_TIMEOUT);
+                let drained = writer.flush(sidecar::DRAIN_TIMEOUT);
+                log::info!(
+                    "quit: judgment stores drained={stored} sidecar writer drained={drained}"
+                );
+                async {}
+            })
+            .detach();
+        }
         Self {
             focus,
             files: Vec::new(),
@@ -315,13 +396,28 @@ impl Riffle {
             analyzing: None,
             failed: 0,
             image: None,
-            marks: Marks::default(),
+            shown: None,
+            view_only: false,
+            bindings: Bindings::new(&settings.keymap),
+            settings,
+            judgments: HashMap::new(),
+            seen: HashSet::new(),
+            touched: HashSet::new(),
+            writer,
+            stores,
+            notes: Vec::new(),
+            write_errors: Vec::new(),
+            marks: overlay::Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
             hold: PaintHold::default(),
             summary: Rc::default(),
             key: None,
             sent: Instant::now(),
+            zoom: Zoom::default(),
+            zoom_timer: None,
+            viewport: Rc::default(),
+            zoom_pending: Rc::default(),
         }
     }
 
@@ -332,6 +428,7 @@ impl Riffle {
             size,
             max,
             index: _,
+            settings: _,
         } = args;
         let prompt = folder.is_none().then(|| {
             cx.prompt_for_paths(PathPromptOptions {
@@ -417,6 +514,8 @@ impl Riffle {
         let previous = self.scan.take();
         let eviction = self.eviction.take();
         let watching = self.watch.clone();
+        let writer = self.writer.clone();
+        let (format, names) = (self.settings.format, self.settings.names.clone());
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
@@ -430,8 +529,13 @@ impl Riffle {
                     // not missed.
                     let dir = canonicalize(&folder.to_string_lossy());
                     watch::set(&watching, &dir, &dir);
-                    let listed = scan::list(Path::new(&dir))?;
-                    let todo = index.map(|index| Scan::prepare(&index, &listed));
+                    let listed = scan::list(Path::new(&dir), format)?;
+                    let todo = index.map(|index| {
+                        Scan::prepare(&index, writer.as_deref(), &listed, format, &names)
+                    });
+                    let judgments = reader
+                        .as_ref()
+                        .and_then(|reader| judgments_of(reader, &listed.dir));
                     let (last_viewed, viewed) = match reader {
                         Some(reader) if !carry => remembered(&reader, &listed.dir),
                         _ => Default::default(),
@@ -441,6 +545,7 @@ impl Riffle {
                         listed,
                         shown,
                         todo,
+                        judgments,
                         last_viewed,
                         viewed,
                     })
@@ -456,6 +561,7 @@ impl Riffle {
             listed,
             shown,
             todo,
+            judgments,
             last_viewed,
             viewed,
         } = match opened {
@@ -468,9 +574,19 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
         let paths = path_strings(&shown);
+        // A re-listing that leaves the same file current keeps its crop.
+        let mut same_file = false;
         if carry {
+            same_file = !paths.is_empty()
+                && path_strings(&self.files).get(self.pager.current())
+                    == paths.get(resync::carried_current(
+                        &path_strings(&self.files),
+                        &paths,
+                        self.pager.current(),
+                    ));
             self.carry(&paths);
         } else {
             self.pager = Pager::new(paths.len());
@@ -479,6 +595,8 @@ impl Riffle {
             }
             self.dwell.reset(viewed);
             self.dwell_timer = None;
+            self.touched.clear();
+            self.write_errors.clear();
             self.strip = Strip::new(&paths);
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
@@ -487,6 +605,7 @@ impl Riffle {
         }
         self.files = shown;
         self.dir = Some(listed.dir.clone());
+        self.set_judgments(judgments.unwrap_or_default());
         if carry {
             self.remember(cx);
         }
@@ -495,14 +614,29 @@ impl Riffle {
             self.status = format!("no RAW files in {}", listed.dir).into();
             let old = self.image.take();
             self.retire(old);
+            self.shown = None;
             self.marks.show(None);
         } else {
             self.request(Instant::now(), cx);
             self.read_focus(cx);
             self.analyze_current(cx);
         }
+        self.notes.clear();
+        if !same_file {
+            self.zoom_page(cx);
+        }
         match (todo, &self.index) {
-            (Some(Ok(todo)), Ok(index)) => {
+            (
+                Some(Ok(Prepared {
+                    todo,
+                    sidecar_errors,
+                })),
+                Ok(index),
+            ) => {
+                self.notes = sidecar_errors
+                    .iter()
+                    .map(|e| format!("{}: {}", file_name(Path::new(&e.path)), e.message))
+                    .collect();
                 let id = self.next_scan;
                 self.next_scan += 1;
                 self.progress = Some((0, todo.len()));
@@ -564,6 +698,11 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::SidecarError { path, message } => {
+                self.write_failed(path.clone(), message.clone());
+                cx.notify();
+                return;
+            }
         };
         if self.scan.as_ref().is_none_or(|s| s.id != scan) {
             return;
@@ -583,6 +722,7 @@ impl Riffle {
                 self.analyzing = Some((0, 0));
                 self.failed = summary.errors;
                 self.strip.refresh();
+                self.read_judgments(cx);
             }
             Event::FacesProgress {
                 done, total, ready, ..
@@ -598,10 +738,162 @@ impl Riffle {
                 self.analyzing = None;
                 self.finished(cx);
             }
-            Event::Changed(_) => {}
+            Event::Changed(_) | Event::SidecarError { .. } => {}
         }
         self.pump(cx);
         cx.notify();
+    }
+
+    /// Keep the folder's judgments, the view's own for a file judged since
+    /// the open, and hand the shown files' to the strip.
+    fn set_judgments(&mut self, mut judgments: HashMap<String, State>) {
+        self.seen = judgments.keys().cloned().collect();
+        for path in &self.touched {
+            match self.judgments.get(path) {
+                Some(state) => judgments.insert(path.clone(), state.clone()),
+                None => judgments.remove(path),
+            };
+        }
+        self.judgments = judgments;
+        for (index, path) in self.files.iter().enumerate() {
+            let state = self.judgments.get(path.to_string_lossy().as_ref()).cloned();
+            self.strip.set_judgment(index, state);
+        }
+    }
+
+    /// Read the judgments again once pass 1 has written the files' rows: the
+    /// index returns a file only once pass 1 has extracted it, so on a fresh
+    /// index the open's read has nothing.
+    fn read_judgments(&mut self, cx: &mut Context<Self>) {
+        let (Some(reader), Some(dir)) = (self.reader.clone(), self.dir.clone()) else {
+            return;
+        };
+        let listing = self.listing;
+        cx.spawn(async move |this, cx| {
+            let judgments = cx
+                .background_spawn(async move { judgments_of(&reader, &dir) })
+                .await;
+            this.update(cx, |this, cx| {
+                if let Some(judgments) = judgments
+                    && listing == this.listing
+                {
+                    this.set_judgments(judgments);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
+    /// native app's own keys; an action not handled yet is only logged.
+    fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+        let Some(name) = keys::key_name(keystroke) else {
+            return;
+        };
+        let action = self.bindings.action_for(&name);
+        log::debug!("key: {name} action={action:?}");
+        match (name.as_str(), action) {
+            ("home", _) => self.go(Move::First, cx),
+            ("end", _) => self.go(Move::Last, cx),
+            ("q", _) => self.quit(cx),
+            (_, Some("previous")) => self.go(Move::Previous, cx),
+            (_, Some("next")) => self.go(Move::Next, cx),
+            (_, Some("focus")) => self.toggle_marks(cx),
+            (_, Some("zoom")) => self.toggle_zoom(cx),
+            (_, Some(action)) => match Command::from_action(action) {
+                Some(cmd) => self.judge(cmd, cx),
+                None => log::debug!("key: {action} is not handled yet"),
+            },
+            (_, None) => {}
+        }
+    }
+
+    /// A judgment key on the current file: the view and the strip first, then
+    /// the row and the writer in the background. Auto-advance moves on after
+    /// the stars and the flags, also when the file already held the value.
+    fn judge(&mut self, cmd: Command, cx: &mut Context<Self>) {
+        if self.view_only {
+            return;
+        }
+        let Some(path) = self.current_path() else {
+            return;
+        };
+        let own = self.judgments.get(&path).cloned().unwrap_or_default();
+        let after = judgment::apply(&own, &own, cmd);
+        let seen = self.seen.contains(&path);
+        if judgment::writes(seen, &own, &after, cmd) {
+            let label_known = judgment::label_known(seen, &own, &after, cmd);
+            self.touched.insert(path.clone());
+            self.set_state(&path, after.clone());
+            self.store(path, own, after, label_known, cx);
+        }
+        if self.settings.auto_advance && judgment::advances_after(cmd) {
+            self.go(Move::NextClamped, cx);
+        }
+        cx.notify();
+    }
+
+    fn set_state(&mut self, path: &str, state: State) {
+        if let Some(index) = self.files.iter().position(|p| p.to_string_lossy() == path) {
+            self.strip.set_judgment(index, Some(state.clone()));
+        }
+        self.judgments.insert(path.to_owned(), state);
+    }
+
+    /// `judgment::store` in the background; a failure puts `before` back
+    /// while the folder is still open.
+    fn store(
+        &self,
+        path: String,
+        before: State,
+        after: State,
+        label_known: bool,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(dir) = self.dir.clone() else { return };
+        let submitted = match (self.index.clone(), self.writer.clone()) {
+            (Ok(index), Some(writer)) => Ok(self.stores.submit(
+                index,
+                writer,
+                dir.clone(),
+                path.clone(),
+                after,
+                label_known,
+                self.settings.format,
+                self.settings.names.clone(),
+            )),
+            (Err(_), _) => Err("no index cache available".to_string()),
+            (_, None) => Err("the sidecar writer is not running".to_string()),
+        };
+        cx.spawn(async move |this, cx| {
+            let stored = match submitted {
+                Ok(outcome) => outcome
+                    .await
+                    .unwrap_or_else(|_| Err("the judgment store stopped".to_string())),
+                Err(e) => Err(e),
+            };
+            let Err(e) = stored else { return };
+            log::error!("failed to store the judgment of {path}: {e}");
+            this.update(cx, |this, cx| {
+                if this.dir.as_deref() == Some(dir.as_str()) {
+                    this.touched.remove(&path);
+                    this.set_state(&path, before);
+                    this.write_failed(path, e);
+                    cx.notify();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    fn write_failed(&mut self, path: String, message: String) {
+        match self.write_errors.iter_mut().find(|(p, _)| *p == path) {
+            Some(entry) => entry.1 = message,
+            None => self.write_errors.push((path, message)),
+        }
     }
 
     fn current_path(&self) -> Option<String> {
@@ -664,6 +956,7 @@ impl Riffle {
             self.strip_moved(cx);
             self.request(key, cx);
             self.read_focus(cx);
+            self.zoom_page(cx);
         }
     }
 
@@ -862,6 +1155,7 @@ impl Riffle {
                         .into()
                 }),
                 current: index == current,
+                marks: self.strip.marks(index),
             })
             .collect()
     }
@@ -911,21 +1205,26 @@ impl Riffle {
         let name = file_name(&self.files[index]);
         match result {
             Ok(loaded) => {
+                let m = &loaded.meta;
                 self.status = format!(
-                    "{}/{}  {name}  {}x{}  {}  {}",
+                    "{}/{}  {name}  {}x{}  {}  {}  {}  {}",
                     index + 1,
                     self.files.len(),
                     loaded.px.0,
                     loaded.px.1,
                     loaded.orientation,
-                    loaded.settings,
+                    dash(&m.shutter),
+                    dash(&m.aperture),
+                    dash(&m.iso),
                 )
                 .into();
+                self.shown = Some((index, Shown::Read(Box::new(loaded.meta))));
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
                 self.hold.hold(loaded.paused);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
+                self.zoom.shown(loaded.focus, loaded.orientation);
                 self.analyze_current(cx);
                 self.start_dwell(cx);
                 cx.notify();
@@ -948,6 +1247,7 @@ impl Riffle {
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
+                self.shown = Some((index, Shown::Failed { name, error: e }));
                 self.dwell.cancel();
                 self.dwell_timer = None;
                 let old = self.image.take();
@@ -965,6 +1265,9 @@ impl Riffle {
 
     fn status(&self) -> SharedString {
         let mut status = self.status.to_string();
+        if self.zoom.is_on() {
+            status.push_str("  1:1");
+        }
         if let Err(e) = &self.index {
             status.push_str(&format!("  no index: {e}"));
         }
@@ -978,8 +1281,190 @@ impl Riffle {
         status.into()
     }
 
+    fn toggle_zoom(&mut self, cx: &mut Context<Self>) {
+        let request = self
+            .zoom
+            .toggle(!self.files.is_empty(), self.viewport.get(), Instant::now());
+        self.send_crop(request, cx);
+        cx.notify();
+    }
+
+    /// Another file or listing is current: drop the held crop and, zoomed,
+    /// read the new one.
+    fn zoom_page(&mut self, cx: &mut Context<Self>) {
+        let (old, request) = self.zoom.page(!self.files.is_empty(), self.viewport.get());
+        self.retire(old.map(|crop| crop.image));
+        self.zoom_timer = None;
+        self.send_crop(request, cx);
+    }
+
+    fn send_crop(&self, request: Option<zoom::Request>, cx: &mut Context<Self>) {
+        if let Some(request) = request {
+            zoom::send(request, self.files[self.pager.current()].clone(), cx);
+        }
+    }
+
+    fn crop_arrived(
+        &mut self,
+        seq: u64,
+        crop: Result<(zoom::Crop, (u32, u32)), String>,
+        keypress: Option<Instant>,
+        cx: &mut Context<Self>,
+    ) {
+        let timed = crop
+            .as_ref()
+            .ok()
+            .zip(keypress)
+            .map(|((c, _), key)| zoom::Timed {
+                key,
+                read: c.read,
+                decode: c.decode,
+                orient: c.orient,
+            });
+        match self.zoom.arrived(seq, crop, self.viewport.get()) {
+            Arrived::Shown { release, resized } => {
+                self.retire(release.map(|crop| crop.image));
+                *self.zoom_pending.borrow_mut() = timed;
+                if resized {
+                    self.zoom_resized(cx);
+                }
+            }
+            Arrived::Stale { release, request } => {
+                self.retire(release.map(|crop| crop.image));
+                self.send_crop(request, cx);
+            }
+            Arrived::Failed(e) => {
+                let name = file_name(&self.files[self.pager.current()]);
+                self.fail(&format!("{name}: {e}"));
+            }
+        }
+        cx.notify();
+    }
+
+    /// Re-cut the crop once the viewport has settled for
+    /// `CROP_RESIZE_DEBOUNCE`.
+    fn zoom_resized(&mut self, cx: &mut Context<Self>) {
+        let Some(seq) = self.zoom.resized() else {
+            return;
+        };
+        self.zoom_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(zoom::CROP_RESIZE_DEBOUNCE)
+                .await;
+            this.update(cx, |this, cx| {
+                let request = this.zoom.settled(seq, this.viewport.get());
+                this.send_crop(request, cx);
+            })
+            .ok();
+        }));
+    }
+
+    /// What the preview canvas paints while zoomed: the crop, over the
+    /// scaled preview when the file has a focus point.
+    fn zoom_paint(&self) -> Option<zoom::Paint> {
+        if !self.zoom.is_on() {
+            return None;
+        }
+        let crop = self.zoom.crop();
+        let placeholder = self.image.clone().zip(self.zoom.preview()).and_then(
+            |(image, (focus, orientation))| {
+                let s = image.size(0);
+                let preview = (s.width.0 as u32, s.height.0 as u32);
+                let rect = zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
+                Some((image, rect))
+            },
+        );
+        Some(zoom::Paint {
+            placeholder,
+            crop: crop.map(|c| (c.image.clone(), c.point)),
+        })
+    }
+
     fn retire(&self, images: impl IntoIterator<Item = Arc<RenderImage>>) {
         self.retired.borrow_mut().extend(images);
+    }
+
+    /// The right-hand pane: the file on screen with its metadata, or why its
+    /// preview failed, and the folder's notes at the bottom.
+    fn meta_pane(&self) -> impl IntoElement {
+        let mut body = div()
+            .id("meta")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .flex()
+            .flex_col()
+            .gap_3();
+        if let Some((at, shown)) = &self.shown {
+            let (name, meta, error) = match shown {
+                Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
+                Shown::Failed { name, error } => (name, None, Some(error)),
+            };
+            body = body.child(
+                div()
+                    .child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()))
+                    .child(div().text_color(rgb(MUTED_COLOR)).child(format!(
+                        "{} / {}",
+                        at + 1,
+                        self.files.len()
+                    ))),
+            );
+            if let Some(error) = error {
+                body = body.child(div().text_color(rgb(ERROR_COLOR)).child(error.clone()));
+            }
+            for group in meta::groups(meta, &[]) {
+                body = body.child(
+                    div()
+                        .flex()
+                        .flex_col()
+                        .gap_0p5()
+                        .child(
+                            div()
+                                .text_size(px(11.))
+                                .text_color(rgb(MUTED_COLOR))
+                                .child(group.heading),
+                        )
+                        .children(group.rows.into_iter().map(|row| {
+                            div()
+                                .flex()
+                                .justify_between()
+                                .gap_2()
+                                .child(
+                                    div()
+                                        .flex_none()
+                                        .text_color(rgb(MUTED_COLOR))
+                                        .child(row.label.to_owned()),
+                                )
+                                .child(div().min_w_0().text_right().child(row.value.to_owned()))
+                        })),
+                );
+            }
+        }
+        div()
+            .w(px(PANE_WIDTH))
+            .flex_none()
+            .h_full()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .p_3()
+            .bg(rgb(PANE_COLOR))
+            .text_size(px(13.))
+            .child(body)
+            .children(self.view_only.then(|| {
+                div()
+                    .text_color(rgb(MUTED_COLOR))
+                    .child(viewonly::VIEW_ONLY_NOTE)
+            }))
+            .children(
+                self.notes
+                    .iter()
+                    .cloned()
+                    .chain(self.write_errors.iter().map(|(path, message)| {
+                        format!("{}: {message}", file_name(Path::new(path)))
+                    }))
+                    .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
+            )
     }
 
     fn quit(&mut self, cx: &mut Context<Self>) {
@@ -997,6 +1482,9 @@ impl Render for Riffle {
         let summary = self.summary.clone();
         let cells = self.strip_cells();
         let mark = self.marks.mark(self.current_path().as_deref());
+        let zoom_paint = self.zoom_paint();
+        let viewport = self.viewport.clone();
+        let zoom_pending = self.zoom_pending.clone();
         div()
             .size_full()
             .flex()
@@ -1004,55 +1492,71 @@ impl Render for Riffle {
             .bg(rgb(0x000000))
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
-            .on_key_down(cx.listener(
-                |this, e: &KeyDownEvent, _, cx| match e.keystroke.key.as_str() {
-                    "right" => this.go(Move::Next, cx),
-                    "left" => this.go(Move::Previous, cx),
-                    "home" => this.go(Move::First, cx),
-                    "end" => this.go(Move::Last, cx),
-                    "f" => this.toggle_marks(cx),
-                    "q" => this.quit(cx),
-                    _ => {}
-                },
-            ))
+            .on_key_down(
+                cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(&e.keystroke, cx)),
+            )
             .child(
-                canvas(
-                    |_, _, _| {},
-                    move |bounds: Bounds<Pixels>, _, window, cx| {
-                        let page = pending.borrow_mut().take();
-                        let paint_started = Instant::now();
-                        if let Some(image) = image {
-                            let fit = fit_centered(&image, bounds);
-                            if let Err(e) =
-                                window.paint_image(fit, fit, Corners::default(), image, 0, false)
-                            {
-                                println!("error paint: {e}");
-                            }
-                            overlay::paint(mark.as_ref(), fit, window, cx);
-                        }
-                        hold.release();
-                        let paint_finished = Instant::now();
-                        let old = retired.take();
-                        if page.is_none() && old.is_empty() {
-                            return;
-                        }
-                        // `defer` runs when the update holding the frame's
-                        // draw and present ends.
-                        cx.defer(move |cx| {
-                            let presented = Instant::now();
-                            if let Some(page) = page {
-                                let stages = page.stages(paint_started, paint_finished, presented);
-                                println!("{}", page.line(&stages));
-                                summary.borrow_mut().record(stages);
-                            }
-                            for image in old {
-                                cx.drop_image(image, None);
-                            }
-                        });
-                    },
-                )
-                .flex_1()
-                .w_full(),
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .child(
+                        canvas(
+                            |_, _, _| {},
+                            move |bounds: Bounds<Pixels>, _, window, cx| {
+                                let page = pending.borrow_mut().take();
+                                let zoomed = zoom_pending.borrow_mut().take();
+                                let paint_started = Instant::now();
+                                let scale = window.scale_factor();
+                                viewport.set((
+                                    (f32::from(bounds.size.width) * scale).round() as u32,
+                                    (f32::from(bounds.size.height) * scale).round() as u32,
+                                ));
+                                if let Some(zoom_paint) = zoom_paint {
+                                    zoom_paint.paint(bounds, window);
+                                } else if let Some(image) = image {
+                                    let fit = fit_centered(&image, bounds);
+                                    if let Err(e) = window.paint_image(
+                                        fit,
+                                        fit,
+                                        Corners::default(),
+                                        image,
+                                        0,
+                                        false,
+                                    ) {
+                                        println!("error paint: {e}");
+                                    }
+                                    overlay::paint(mark.as_ref(), fit, window, cx);
+                                }
+                                hold.release();
+                                let paint_finished = Instant::now();
+                                let old = retired.take();
+                                if page.is_none() && zoomed.is_none() && old.is_empty() {
+                                    return;
+                                }
+                                // `defer` runs when the update holding the frame's
+                                // draw and present ends.
+                                cx.defer(move |cx| {
+                                    let presented = Instant::now();
+                                    if let Some(page) = page {
+                                        let stages =
+                                            page.stages(paint_started, paint_finished, presented);
+                                        println!("{}", page.line(&stages));
+                                        summary.borrow_mut().record(stages);
+                                    }
+                                    if let Some(zoomed) = zoomed {
+                                        println!("{}", zoomed.line(presented));
+                                    }
+                                    for image in old {
+                                        cx.drop_image(image, None);
+                                    }
+                                });
+                            },
+                        )
+                        .flex_1()
+                        .h_full(),
+                    )
+                    .child(self.meta_pane()),
             )
             .child(
                 div()
@@ -1088,12 +1592,41 @@ struct StripCell {
     /// `Some` on a cell the scan failed on, with why.
     failure: Option<SharedString>,
     current: bool,
+    marks: Marks,
 }
 
+/// In the Tauri info pane's range (`#info`, 220 px).
+const PANE_WIDTH: f32 = 220.;
+const PANE_COLOR: u32 = 0x171717;
+const MUTED_COLOR: u32 = 0xa1a1a1;
+const ERROR_COLOR: u32 = 0xff6467;
 const PLACEHOLDER: u32 = 0x262626;
 const CURRENT_OUTLINE: u32 = 0xe5e5e5;
 const NAME_COLOR: u32 = 0xd4d4d4;
 const FAILURE_COLOR: u32 = 0xa3a3a3;
+/// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
+/// `--foreground`, and its `--label-*` tokens in `tint_color`.
+const STARS_COLOR: u32 = 0xffd050;
+const PICK_COLOR: u32 = 0x6bdc8a;
+const REJECT_COLOR: u32 = 0xff6b6b;
+const LABELED_NAME_COLOR: u32 = 0xfafafa;
+/// `.cell.rejected`'s `opacity: 0.45` over the strip's black.
+const REJECTED_DIM: u32 = 0x0000008c;
+const MARK_SIZE: f32 = 11.;
+const FLAG_DOT: f32 = 7.;
+
+fn tint_color(tint: Tint) -> u32 {
+    match tint {
+        Tint::Red => 0xd9453f,
+        Tint::Orange => 0xe8892c,
+        Tint::Yellow => 0xd8c032,
+        Tint::Green => 0x4fa84f,
+        Tint::Blue => 0x3f7fd9,
+        Tint::Pink => 0xd95fa8,
+        Tint::Purple => 0x8a5fd0,
+        Tint::Other => 0x808080,
+    }
+}
 
 fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
@@ -1135,13 +1668,22 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 if let Some(failure) = &cell.failure {
                     paint_failure(failure, image_box, window, cx);
                 }
+                paint_marks(&cell.marks, image_box, window, cx);
+                let at = point(origin.x, image_box.bottom());
+                let name_color = match cell.marks.label {
+                    Some(tint) => {
+                        let band = Bounds::new(at, size(px(CELL_WIDTH), px(NAME_HEIGHT)));
+                        window.paint_quad(fill(band, rgb(tint_color(tint))));
+                        LABELED_NAME_COLOR
+                    }
+                    None => NAME_COLOR,
+                };
                 let mut run = window.text_style().to_run(cell.name.len());
-                run.color = rgb(NAME_COLOR).into();
+                run.color = rgb(name_color).into();
                 let name =
                     window
                         .text_system()
                         .shape_line(cell.name.clone(), px(11.), &[run], None);
-                let at = point(origin.x, image_box.bottom());
                 let _ = name.paint(
                     at,
                     px(NAME_HEIGHT),
@@ -1150,9 +1692,55 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     window,
                     cx,
                 );
+                if cell.marks.dimmed() {
+                    window.paint_quad(fill(cell_bounds, rgba(REJECTED_DIM)));
+                }
             },
         );
     }
+}
+
+/// The stars at the image box's top-right over a 1 px dark copy, and the pick
+/// or reject dot at its top-left, as the Tauri cell's badges.
+fn paint_marks(marks: &Marks, image_box: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
+    let inset = px(2.);
+    if marks.stars > 0 {
+        let stars: SharedString = "\u{2605}".repeat(marks.stars.into()).into();
+        let shape = |color: u32, window: &mut Window| {
+            let mut run = window.text_style().to_run(stars.len());
+            run.color = rgb(color).into();
+            window
+                .text_system()
+                .shape_line(stars.clone(), px(MARK_SIZE), &[run], None)
+        };
+        let width = Some(image_box.size.width - inset * 2.);
+        let at = image_box.origin + point(inset, inset);
+        let line_height = px(MARK_SIZE + 3.);
+        let _ = shape(0x000000, window).paint(
+            at + point(px(1.), px(1.)),
+            line_height,
+            TextAlign::Right,
+            width,
+            window,
+            cx,
+        );
+        let _ =
+            shape(STARS_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
+    }
+    let color = match marks.flag {
+        Flag::Pick => PICK_COLOR,
+        Flag::Reject => REJECT_COLOR,
+        Flag::None => return,
+    };
+    let r = px(FLAG_DOT / 2.);
+    let center = image_box.origin + point(inset + px(3.) + r, inset + px(3.) + r);
+    window.paint_quad(
+        fill(
+            Bounds::new(center - point(r, r), size(r * 2., r * 2.)),
+            rgb(color),
+        )
+        .corner_radii(r),
+    );
 }
 
 /// Why the scan failed, wrapped inside the image box.
@@ -1185,6 +1773,10 @@ fn paint_failure(
             at.y += line.size(line_height).height;
         }
     });
+}
+
+fn dash(value: &Option<String>) -> &str {
+    value.as_deref().unwrap_or("-")
 }
 
 fn path_strings(paths: &[PathBuf]) -> Vec<String> {
@@ -1237,13 +1829,19 @@ fn main() {
         }
     };
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
+    let settings = settings::load(args.settings.take().as_deref());
+    log::info!(
+        "settings: sidecarFormat={} autoAdvance={}",
+        settings.format.setting(),
+        settings.auto_advance
+    );
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
         cx.open_window(
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
-                    title: Some("Riffle".into()),
+                    title: Some("Handpic".into()),
                     ..Default::default()
                 }),
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
@@ -1254,7 +1852,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, window, cx)
+                    Riffle::new(focus, index, settings, window, cx)
                 })
             },
         )
