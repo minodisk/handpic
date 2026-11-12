@@ -267,11 +267,37 @@ a GPUI `Task` cancels it).
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
 
+### A preview holds the scan's pause until its image is painted (Measured)
+
+`load` takes `ReadSlots::pause` before the read and hands the guard back in
+`Loaded`; the view keeps it in `PaintHold` (`hold.rs`) and the preview
+canvas's paint releases it right after painting the image. Pass 2's workers
+wait out a held pause at every stage boundary (`scan::yield_to_pause`), not
+only before a read, so the read, the decode, the orient and the paint get the
+cores. `MAX_PAUSE` (1 s) still bounds what a worker honours: one budget for all of a
+pass 2 file's stage waits, and one per `acquire` (two per pass 2 file, one per
+pass 1 file), so a hold never released (no frame painted, say a minimized
+window) costs a worker about 3 s per pass 2 file or 1 s per pass 1 file at
+worst and only slows the scan. The longer hold also blocks pass 1's `acquire`
+from the read through the decode, orient and paint; its effect on pass 1's
+throughput was not measured (the pass 1 paging measurement below assumed a
+pause around the read only). Holding the pause through the decode (not
+yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
+`decode` growth gone, without fewer pass 2 rows per run
+([results](../plans/20261110-gpui-focus-marks/results.md)).
+
+- Rule: anything new on the preview's path between the read and the paint
+  runs while the pause is held; keep it there rather than after the release.
+
 ### Pass 2 runs on pass 1's thread (Inferred)
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
-after `run_scan`, with the same `ScanFocus`, cancel flag and
-`scan_threads()`, as the Tauri app's `run_faces_pass` does on its one task.
+after `run_scan`, with the same `ScanFocus` and cancel flag, as the Tauri
+app's `run_faces_pass` does on its one task, but on `faces_threads()` (an
+eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
+cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
+still +13 ms on RAF
+([results](../plans/20261110-gpui-focus-marks/results.md)).
 One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
 running, and the hot list reaches both passes through the one handle
 (`focus_scan` gates on either pass running). The thread starts on every open
@@ -530,6 +556,35 @@ files `decode` 21 and 47 ms.
 (a 1024 px crop over 8 scoped threads, 1-2 ms otherwise) are attributed to the
 load, not measured apart.
 
+### Peaking runs off the main thread, one job at a time (Measured)
+
+`peaking.rs`'s job (resize to the drawn size, then the Sobel) takes 25-60 ms on
+a fit view, several frames, so it runs on `cx.background_spawn`, reading the
+shown `RenderImage`'s bytes through its `Arc` without a copy. One job is in
+flight, as the Tauri worker holds one request: under a held key each page
+would otherwise queue a job on the executor the next preview decode runs on.
+A layer replaced while a job is out is never computed; the reply takes the
+newest unsent layer next. The fit view's drawn size is known only in the paint
+closure, so the closure compares it with the layer the view rendered with and,
+when they differ, asks for the new layer through a `WeakEntity` update in the
+`cx.defer` it already runs after paint; while the layer matches nothing is
+deferred.
+
+- Rule: an overlay is drawn only for the `ImageId` and device size it was
+  computed for (`peaking::Paint`), so another file's or another size's never
+  shows; replaced and cleared overlays go through `retired`.
+
+### The fit view's overlay is resized bilinearly (Measured)
+
+The overlay is computed at the drawn device size, as the Tauri app rasterises
+the bitmap at that size first. `image::imageops::resize` with
+`FilterType::Triangle`, the nearest to a canvas `drawImage`, was kept: at
+scale 1.0 it takes about 22-25 ms for a 1616x1080 ARW to 1275x852 and 47-67 ms
+for a 4416x2944 RAF to 1278x852, the Sobel 5-7 ms on top. So on a RAF the
+overlay comes about 50-60 ms after the image; the held-key measurement showed
+no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
+resize (Sobel 4-6 ms).
+
 ### IME handling is unverified (Inferred)
 
 It exists in `gpui_windows`; nothing has exercised it yet.
@@ -585,6 +640,30 @@ move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
   in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
 
+### Pass 2 costs paging nothing once it yields and runs small (Measured)
+
+Same-session A/B, paging while pass 2 runs over the folder against paging on a
+finished index, three runs each, 60 presses, pass 2 on `faces_threads()` (3 of
+24 logical cores) and pausing at its stage boundaries while the preview holds
+the scan's pause from its read until its image is painted. The median p50
+`keypressToPixels` A - B was -2.10 ms on ARW 1616x1080 and -0.30 ms on RAF
+4416x2944 (gate +2.0 / +5.0). At 22 pass 2 threads with only the read paused
+it was +9.44 / +88.86 ms: `decode` about doubled and `paint` grew 4-6x.
+See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
+
+- Rule: check every run's `frameWait` p50 before reading an A/B. One session
+  ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
+  and the display slept. Hold `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` from a helper process for the
+  session; that changes no power setting.
+- Rule: the B runs' `read` and `decode` came out slower than A's in every
+  session after the first (ARW `read` about 2.2 against 0.5 ms). A's pass 2
+  keeps the cores clocked up and re-reads the paged files through the hot
+  list. So A - B can go negative; compare pairs, not one run.
+- Rule: `--auto`'s quit does not stop the scan, so an A run whose pass 2
+  outlasts the presses logs no `scan faces:` line. Read pass 2's progress from
+  the run's index copy instead.
+
 ### The pane and the judgments cost the pager under 1 ms (Measured)
 
 Same-session A/B, `eb46913b` (the judgments plan's Steps 1-5, plus the 1:1
@@ -621,3 +700,20 @@ slower disk and is not attributed.
   `robocopy /J` (unbuffered) and use each copy once.
 - Rule: to measure the pause itself, press onto files the scan has not read
   (a jump, not the next file); `--auto` only steps to the next file.
+
+### Peaking costs a held key nothing measurable (Measured)
+
+Release, `→` held 5 s as injected key-downs every 33 ms, peaking off and on
+alternated three times each in one idle session, fit view at 1275x852 / 1278x852:
+median p50 `keypressToPixels` -1.75 ms on ARW (18.55 off, 16.80 on, n of
+about 105 per run) and +1.11 ms on RAF (52.70 off, 53.81 on), against the plan's
++2.0 / +5.0 ms gate. ARW was faster with peaking on in every pair, through
+`read` and `decode`, not investigated (presumably the busy core keeps the clock
+up). On RAF a held key shows only 4-6 pages in 5 s whether peaking is on or off:
+a preview load (about 40-45 ms) outlasts the key repeat, so the pager keeps
+re-reading the newest file, and the overlay has few pages to compete with. See
+[the plan's results](../plans/20261110-gpui-zoom-peaking/results.md).
+
+- Rule: measure a background job's cost with a held key, not `--auto`, whose
+  1003 ms interval lets every job finish before the next press; and check how
+  many pages the hold actually showed before reading a p50.

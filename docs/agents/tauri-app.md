@@ -1418,8 +1418,15 @@ least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
 Every scan read goes through one process-wide `riffle_core::scan::ReadSlots`
 (`AppReadSlots`, app state): at most `READ_SLOTS` (2) workers are inside a
 file read at once, on any of the three passes, while decoding and the models
-stay on `scan_threads()` threads. `preview` holds `pause()` across its
-`read_preview`, so no worker starts a new read until it returns. The CLI and
+stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`,
+an eighth of the cores, for pass 2 and `embed_threads()`, a quarter, for
+pass 3). `preview` holds `pause()` across its
+`read_preview`, so no worker starts a new read until it returns. Pass 2's
+workers also wait out a held pause at their stage boundaries (after the read,
+the decode, YuNet, the face mesh, the sharpness score and the full-size read;
+`scan::yield_to_pause`, one `MAX_PAUSE` budget per file),
+which in the Tauri app covers only `preview`'s read; the GPUI app holds the
+pause until its image is painted (`native-app.md`). The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
 so `docs/humans/performance.md`'s numbers stay comparable.
 
@@ -1450,8 +1457,10 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   cap of 2 such a folder pays a calculated 33-63 ms/file, and `preview` on such
   a file pauses the scan for the decode as well.
 - `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
-  it first sees one, then reads anyway, so a stuck or leaked pause slows the
-  scan to one file per worker per `MAX_PAUSE` and never stalls it. A wait for a
+  it first sees one, then reads anyway, so a stuck or leaked pause never stalls
+  the scan. The worst case is about 1 s per `acquire` (one per pass 1 file, two
+  per pass 2 file) plus 1 s for all of a pass 2 file's stage waits, so about
+  3 s per pass 2 file. A wait for a
   permit alone does not use that clock, or a small cap would let workers read
   through a live pause.
 - Cancel is polled inside the wait (`CANCEL_TICK`, 50 ms) because the cancel
@@ -1615,8 +1624,10 @@ JPEG-only (view-only) folder never lists anything.
   `set_opened_at`) survives a `clear`; and to show that eviction keeps `views`,
   evict through the size cap (`max_bytes: 0`), since the age rule now spares a
   folder holding a `views` row.
-- **Threads: a quarter of the cores** (`embed_threads()`), not pass 2's
-  `scan_threads()` (Measured). Priority does not keep the viewer's reads
+- **Threads: a quarter of the cores** (`embed_threads()`), not pass 1's
+  `scan_threads()` (Measured; pass 2 runs on fewer still, an eighth, `faces_threads()`,
+  since the GPUI port measured it costing paging +9.4 ms on ARW and +89 ms on RAF
+  at `scan_threads()` and +13 ms on RAF at a quarter, see `native-app.md`). Priority does not keep the viewer's reads
   fast against 22 busy workers on 24 logical cores: shared physical cores
   (SMT) and an all-core clock do not care about thread priority. On
   `2026-09-19` (2134 ARW), a preview read + full decode on a

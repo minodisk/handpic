@@ -64,7 +64,7 @@ pulled toward zero `OFFSET_SHRINK` times harder, `rank` the place, the score
 and the reasons of each frame within its burst by the shared weights plus its
 burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
-holds new reads back while a `Paused` is held, `src/fullsharp.rs` the eye
+holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
 sharpness of the judged face on the full-size embedded JPEG (a crop around each
 eye resized to 154 px, the gradient's 99th percentile over the contrast, the
 sharper eye counting, a frame under `SOFT_BELOW` being soft), and
@@ -245,7 +245,7 @@ and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
 port of `scanfocus.ts`: the current file, then the strip's range nearest
 first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
-after the current file or the range last changed, and `src/viewed.rs` the
+after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
@@ -286,7 +286,11 @@ whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
 one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
 the crop and the scaled-preview placeholder are painted, one JPEG pixel per
-device pixel with the focus point at the canvas center).
+device pixel with the focus point at the canvas center), and `src/peaking.rs`
+the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
+Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
+keyed by the source image and its drawn device size, one job in flight on the
+background executor, the fit view's image resized to its drawn size first).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

@@ -45,6 +45,82 @@ does not call `zoom_page`: the held crop stays on screen, as in the Tauri app's
 `mustReshow` false case. Only a new folder or a changed current file bumps the
 page (review round 1).
 
+## Step 2
+
+- Phase A (implementation, smoke run) only; the held-key measurement, the
+  by-eye checks and the docs (`native-app.md`, `CLAUDE.md`, the port plan's
+  Progress) are left for phase B, so the checkbox stays open.
+- The fit view's drawn device size is known only in the paint closure, so the
+  closure compares it with the layer the view rendered with
+  (`peaking::Paint`, its source's `ImageId` and size) and, when they differ,
+  asks for the layer through a `WeakEntity` update in the `cx.defer` it already
+  runs after paint (`want_peaking`). The size cell of Step 1 would have needed
+  the fit rectangle recomputed in the view from a size one frame old; the
+  deferred update has the exact drawn size and costs nothing while the layer
+  matches (no defer; the closure's early return is still taken).
+- `RenderImage` is `PartialEq` by its id, so the model's source type in the
+  app is the `Arc<RenderImage>` itself: the layer holds the source the next
+  job reads, and the tests use `u32`.
+- `Peaking::is_on` and an `overlay(view, source, size)` lookup were written
+  first and failed clippy's dead-code lint: nothing outside the tests used
+  them. The lookup moved into the tests (it is what `Paint::paint` checks).
+- The crop's overlay is asked for through `zoom::Paint::paint`, which now
+  returns the crop and its size when the crop layer is another's.
+- Smoke run (release build, scale 1.0, default 1600x1000 window, canvas 852
+  device px high; `D:\Photos\tests\20261110-gpui-zoom-peaking\` with its
+  `index.sqlite`; keys injected by
+  `D:\Photos\tests\20261110-gpui-zoom-peaking-tools\drive.ps1`; the PC was not
+  idle, load 31 % before the runs):
+  - `e`, `→`, `z`, `e` off / on while zoomed and held `→` printed one
+    `peaking` line per computed layer, no `error` line, no injected key
+    skipped.
+  - Fit view `resize` (bilinear `Triangle`): 12-14 ms for a 1616x1080 ARW
+    (portrait, upright 1080x1616) to 569x852, 22-24 ms for a landscape ARW to
+    1275x852, 35-38 ms for a RAF portrait (upright 2944x4416) to 568x852,
+    47-57 ms for a 4416x2944 RAF to 1278x852. `compute` (the Sobel)
+    2-7.5 ms. The crop needs no resize: `compute` 3.7-5.0 ms on 1024x852-864.
+  - So on a RAF the overlay lands about 50-60 ms after the image, the resize
+    being most of it. Whether that is visibly late is the by-eye check; a
+    cheaper filter or another resizer is the fallback, decided with the
+    measurement.
+  - While a key is held, a layer replaced before its job ran is skipped
+    (fewer `peaking` lines than pages), as planned.
+  - Private bytes with `→` held 4 s at a time (about 85 key-downs each): with
+    peaking on, 147 -> 414 -> 423 MB over two fit-view holds (settles), then
+    549 -> 593 MB over two zoomed holds and 581 MB after `e` off. The same
+    sequence without peaking: 262 -> 424 -> 401 -> 418 MB fit, then 511 -> 557
+    MB zoomed. The zoomed growth shows without peaking too, so it is not the
+    overlays (deferred below).
+- Phase B (2026-11-12): the held-key measurement ran on the user's go-ahead,
+  from the release build of `f35d4151`, and met the gate (ARW -1.75 ms, RAF
+  +1.11 ms; `results.md`). Then `native-app.md`, `CLAUDE.md` and the port
+  plan's Progress were written. The checkbox stays open for the user's by-eye
+  checks.
+- The worktree's `.git` file pointed at the old repository path
+  (`.../minodisk/riffle/.git/worktrees/...`) after the repository folder was
+  renamed to `handpic`; git was run with `GIT_DIR` / `GIT_WORK_TREE` set to the
+  new path at first. That leaked into `mise run ci`: the merge-settings
+  skill's `merge.test.sh` runs `git -C <tmp> init` / `commit` / `worktree add`,
+  which `GIT_DIR` redirected into this branch (an empty `init` commit by
+  `t@example.com`, a branch `other` and a worktree entry `hooks-other`). All
+  three were removed, and the links were then fixed with
+  `git worktree repair <this worktree>` from the renamed repository, which
+  also rewrote the 14 other worktrees' `.git` files that the rename had broken.
+  Rule: never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`.
+- Other sessions started `cargo` builds during the first ARW runs; three ARW
+  slots failed the idle gate three times each, so the whole ARW alternation
+  was run again (`measure.ps1 -Only ARW`), all of it idle. `measure.ps1` now
+  redoes a failing run in its slot up to three times and checks `handpic*`
+  processes too.
+- `--size 4416x2944` RAF under a held key showed only 4-6 pages per 5 s hold,
+  peaking on or off (see below), so the RAF verdict is weak.
+- In one (gate-failed) ARW zoomed attempt the injected `z` had no visible
+  effect (no `zoom` line, fit-sized overlays only); the repeat showed the
+  crop. Not explained; the driver reported no skipped key.
+- The 1:1 crop is a little taller than the canvas (852 high canvas, crops of
+  861-864): `decode_focus_crop` grows it to whole MCUs. It is clipped; noted
+  because the `peaking` line shows it.
+
 ## Deferred issues (todo candidates)
 
 - None for Step 1. The by-eye checks below were done by the user on
@@ -72,3 +148,47 @@ page (review round 1).
      folder argument) behaves the same.
   Expected: all hold. Basis: plan Step 1's "Manual check on the test folder";
   files `crates/native/src/zoom.rs`, `crates/native/src/main.rs`.
+- **Private bytes grow while `→` is held zoomed (pre-existing, seen without
+  peaking).** In the Step 2 smoke run, two 4 s zoomed holds took private bytes
+  from 418 to 511 to 557 MB without peaking (549 -> 593 MB with it), while the
+  fit-view holds settled near 400-425 MB. Each zoomed page reads the full JPEG
+  (`reader::read_full`) and decodes a crop; whether this is allocator retention
+  that plateaus or a crop or texture not released is unknown. Check with longer
+  zoomed holds whether it plateaus. Basis: Step 2 smoke run; files
+  `crates/native/src/zoom.rs`, `crates/native/src/main.rs` (`zoom_page`,
+  `crop_arrived`).
+- **Manual check (Step 2, by eye, Windows; done 2026-11-13).** The user ran
+  these by-eye checks on 2026-11-13 and all held (including the Tauri
+  comparison, the RAF overlay delay and private bytes); the measurement (gate
+  met, see `results.md`) and the docs were done before. Launch
+  the release build:
+  `C:\Users\daisu\.herdr\worktrees\riffle\worktree-green-cloud-634b\crates\native\target\release\riffle-native.exe D:\Photos\tests\20261110-gpui-zoom-peaking --index D:\Photos\tests\20261110-gpui-zoom-peaking\index.sqlite`
+  and check:
+  1. `e` lights the in-focus edges in red on the fit view, a moment after the
+     image; with `z`, on the crop too.
+  2. Paging (`→` / `←`) shows each file's own edges, never another file's over
+     the new image.
+  3. Dragging the window edge recomputes them for the new size (no overlay of
+     the old size stretched over the image).
+  4. `e` again removes them at once, on the fit view and on the crop.
+  5. On one ARW (`ILCE-7M3_PPR10K_1283_0.ARW`) and one RAF
+     (`X-E5_DSCF1008.RAF`), the lit regions look like the Tauri app's (`e`) on
+     the same file at a similar window size; note any difference in density.
+  6. On the RAF, whether the overlay arriving about 50-60 ms after the image
+     looks late.
+  7. Private bytes settle while holding `→` with peaking on in the fit view
+     (Task Manager, Details, Commit size).
+  Expected: all hold. Basis: plan Step 2's "Manual check on the Step 1 test
+  folder"; files `crates/native/src/peaking.rs`, `crates/native/src/main.rs`,
+  `crates/native/src/zoom.rs`.
+- **A held `→` on RAF previews barely draws (pre-existing pager behaviour).**
+  In the Step 2 measurement, 5 s of key-downs every 33 ms showed only 4-6 RAF
+  pages (`--size 4416x2944`), peaking off as well as on, against about 105 on
+  ARW. A RAF preview load (40-45 ms) outlasts the key repeat, so when it lands
+  the pager has moved and `Pager::finish` re-reads the newest file; a page
+  shows only when a gap between key-downs is longer than a load. The Tauri app
+  may behave the same (not compared). Showing the landed preview while the next
+  one loads would let a held key draw. Basis: Step 2 measurement
+  (`docs/plans/20261110-gpui-zoom-peaking/results.md`, "RAF pages under a held
+  key"); files `crates/native/src/pager.rs`, `crates/native/src/main.rs`
+  (`loaded`).

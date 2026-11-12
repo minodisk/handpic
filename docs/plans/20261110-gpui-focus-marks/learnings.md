@@ -205,6 +205,88 @@
     `ILCE-6300_..._DSC03068.arw` logged `model=0.0ms superseded`, in both of
     two runs.
 
+## Step 6: key-navigation latency while pass 2 runs
+
+- The gate is missed: A - B is +9.44 ms on ARW and +88.86 ms on RAF
+  (`results.md`). `decode` about doubles and `paint` grows 4-6x while pass 2's
+  22 workers hold every logical processor near 100 % at `Priority::Lowest`.
+  The step stays open until a fix PR (the plan's first candidate: fewer pass 2
+  threads) is re-measured.
+- The fix: pass 2 now runs on `faces_threads()`, a quarter of the cores (6 on
+  24 logical), in both apps, mirroring the Tauri app's `embed_threads`;
+  pass 1 keeps `scan_threads()` and `READ_SLOTS` stays 2. The Tauri app's
+  `faces_threads` is a copy of `embed_threads`'s body rather than a call to it,
+  so either can move on its own measurement.
+- Second run at 6 pass 2 threads (`8c91bef2`): ARW A - B -1.70 ms (met),
+  RAF +13.08 ms (missed; `decode` +8.61, `paint` +5.45). Pass 2 alone took
+  198.7 s on 18,620 ARW and 146.7 s on 5,420 RAF (85.7 / 79.6 s at 22). This
+  session's B was 3-5 ms slower than the first session's on ARW (`read` 2.5
+  against 0.8 ms, `decode` 8.4 against 6.2), so A came out faster than B.
+  Possible causes, not measured: an idle machine clocking down, or the paged
+  files dropping out of the page cache without pass 2's hot-list reads. The
+  step stays open until the plan decides on the RAF gap.
+- The user then chose an eighth of the cores for pass 2 (3 on 24 logical) in
+  both apps, to be re-measured the same way; the 6-thread binary and its runs
+  are kept as `riffle-native-6t.exe` and `runs-6t\` in the test folder.
+- Third run at 3 threads (`4aefeb14`) is invalid: `frameWait` climbed to a
+  120-145 ms p50 in A and B alike, a sawtooth of presents at about 4 Hz,
+  probably the display sleeping or the window occluded once the user left the
+  machine idle. Rule for the next session: check that every run's
+  `frameWait` p50 sits near 8-10 ms before reading the gate. The pre-frame
+  stages did improve: RAF `decode` +2.73 ms, `paint` -0.88 ms. Pass 2 alone
+  took 301.2 s (ARW) and 225.8 s (RAF).
+- Writing a path into a heredoc through the Bash tool collapsed a doubled
+  backslash to a single one, so the backslash before `$F` escaped it, the
+  folder argument held a literal `$F`, and the app opened a path that did not
+  exist. Use forward slashes in Windows paths in scripts.
+- Rerun at 3 threads, once through with no redos (the user's call): ARW
+  A - B -3.03 ms (met), RAF +5.08 ms (missed by 0.08; `paint` +2.85,
+  `decode` +2.34). Most B runs had a load sample over 15 %, which can only
+  slow B, and the ARW runs' `frameWait` p50 was 9.8-15.9 ms, so ARW carries
+  vsync noise. One run (ARW B1) did not exit after `--auto`'s quit and was
+  closed with `CloseMainWindow`. A watchdog (`watchdog.ps1`) then closed any
+  run's window still open after 100 s; it never fired.
+- Pausing pass 2's compute, not only its reads, while a RAF preview loads
+  took RAF's A - B from +5.08 to +1.94 ms without slowing pass 2 (rows per run
+  unchanged). The landed version adds `ReadSlots::wait_unpaused` and
+  `scan::yield_to_pause` at pass 2's stage boundaries. The stage functions in
+  `candidate.rs` take only `cancel`, so the file's slots reach them through a
+  thread-local set per file (`PassSlots`) rather than a signature change. The
+  native preview's `Paused` now travels in `Loaded` into `PaintHold`
+  (`hold.rs`), which the canvas releases after painting the image.
+- This worktree's `.git` still points at the old
+  `C:/Users/daisu/ws/github.com/minodisk/riffle` path. The repo moved to
+  `.../handpic`, so git runs here with an explicit `--git-dir` (the
+  worktree's admin dir under `handpic/.git/worktrees/`) and `--work-tree=.`.
+- Final run (`d7292b00`: 3 pass 2 threads, the pass yielding at its stage
+  boundaries, the preview holding the pause through the paint) met the gate:
+  ARW A - B -2.10 ms, RAF -0.30 ms, every `frameWait` p50 7.2-10.3 ms. A
+  helper held `SetThreadExecutionState` with `ES_DISPLAY_REQUIRED` for the
+  session, so the display could not sleep. Three B runs had one sample over
+  15 % and were kept (no redos, the user's call).
+- `--auto`'s quit, and closing the window, call `cx.quit()` without
+  `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
+  A runs' pass 2 progress came from each run's index copy (rows with
+  `faces_extractor > 0`).
+- Pass 2 runs about 4.6 ms per file on ARW and 15-16 ms on RAF at 22 threads
+  (5420 RAF in 79.6-85.1 s, 18,620 ARW in 85.7-87.8 s). A 60-press run needs
+  about 13k ARW or 4.5k RAF files to stay inside pass 2.
+- Hardlinks (`os.link`) make a large test folder that costs no disk space and
+  keeps every copy warm in the page cache. Name the padding to sort after the
+  compare files (`zzNNN_`), so `--size` / `--max 20` page only the 20.
+- Turning `f` on in an `--auto` run without a code change: post
+  WM_KEYDOWN / WM_CHAR / WM_KEYUP for `F` to the process's `MainWindowHandle`
+  (`sendf.ps1`). WScript.Shell `AppActivate` + `SendKeys` did not reach the app,
+  and the keystroke probably went to whatever window had focus, so never use
+  it.
+- Closing a window by PID with `CloseMainWindow` is allowed; doing it for every
+  `riffle-native` process was refused (other sessions run their own).
+- Other sessions ran `mise run ci`, `cargo test` and their own `riffle-native`
+  through the whole session despite the go signal. 17 of 25 B attempts and
+  1 of 11 A attempts were discarded. A pre-run wait for two clean samples and
+  no `mise run` / `cargo` / `rustc` / `link` / Vite+ process (`next.sh`,
+  `busy.ps1`) helped but did not prevent load arriving mid-run.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the side-by-side of the
@@ -259,3 +341,10 @@
   stays true. Pre-existing for `progress`; `analyzing` follows the same path.
   Fix: clear both in that arm (or whenever `list` stops a scan).
   `crates/native/src/main.rs` (`list`, `opened`).
+
+- `--auto`'s quit (and closing the window) does not stop the scan
+  (`Riffle::quit` in `crates/native/src/main.rs` calls `cx.quit()` with no
+  `Scan::stop`), so a quit mid-pass 2 logs no `scan faces:` summary and leaves
+  the workers to die with the process. Found while measuring Step 6. Fix: stop
+  (cancel and join) the scan in `quit` and on window close, so the summary is
+  logged and the index is closed cleanly.
