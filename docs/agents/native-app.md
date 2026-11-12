@@ -176,6 +176,13 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
   Another folder's open clears both histories; a re-listing keeps them and a
   step drops the files no longer listed.
+- Rule: `label_known` for a store follows the Tauri `send` rule: the entry was
+  seen, or (for an undo / redo, which has no command) the restored label
+  differs from the current one. A `ClearAll` on a file whose entry was not seen
+  still goes out when it changes nothing (`forceLabel`), so `judgment.rs` has
+  `writes` next to `changed`; do not fold the two into one test. A failed
+  undo / redo store also drops its file from the entry it pushed onto the
+  other history (the Tauri `step` passes no `onFail` for that entry).
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
@@ -459,8 +466,11 @@ literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
 `judgment::Command::from_action`, `undo` / `redo` to `history::Undo`, and any
-other action (`rejectRest`, ...) is logged at `debug` until its step lands. A later step's key (zoom `z`, peaking `e`) is added as
-its keymap action in that `match`, not as a literal key.
+other action (`rejectRest`, ...) is logged at `debug` until its step lands. A
+later step's key (peaking `e`) is added as its keymap action (`peaking`) in
+that `match`, not as a literal key: a literal `"e"` arm placed after the action
+arms never fires with the default keymap, because the catch-all
+`(_, Some(action))` arm takes the key first.
 
 Read from `gpui_windows` at the pinned rev, not yet seen in the running app
 (the pending manual check in the gpui-judgments plan's `learnings.md`):
@@ -583,7 +593,7 @@ pre-plan pager (`de249218`), three runs each, 60 presses, warm index: median
 p50 `keypressToPixels` +0.85 ms on ARW and -1.45 ms on RAF, inside the
 run-to-run spread (B's ARW runs alone span 18.75-21.96 ms). `paint` did not
 move; `present`'s p50 was 0.07-0.10 ms higher in every A run. See
-[the plan's results](../plans/20261110-gpui-judgments/results.md).
+[the plan's results](../plans/_archived/20261110-gpui-judgments/results.md).
 
 - Rule: a warm run must end the binary's last scan pass uncanceled (A's
   `scan faces:` line once pass 2 exists, not only `scan extract:`), so no
@@ -591,6 +601,11 @@ move; `present`'s p50 was 0.07-0.10 ms higher in every A run. See
 - Rule: check that no other session's `cargo` build is running before a
   measurement session; the first ARW session was void because one ran through
   its first half and A1 used up its retries.
+- Rule: in a measurement script, write Windows paths with forward slashes.
+  `"$I\\$b-$round.sqlite"` made bash turn `\$` into a literal `$`, so every
+  run of a round shared one index file (`index$b-1.sqlite`) and the "after"
+  runs were warm; check that each cold run's `--index` file name is distinct
+  before trusting a table.
 
 ### During pass 1 the preview reads what the scan already read (Measured)
 
