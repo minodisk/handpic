@@ -409,6 +409,35 @@ files `decode` 21 and 47 ms.
 (a 1024 px crop over 8 scoped threads, 1-2 ms otherwise) are attributed to the
 load, not measured apart.
 
+### Peaking runs off the main thread, one job at a time (Measured)
+
+`peaking.rs`'s job (resize to the drawn size, then the Sobel) takes 25-60 ms on
+a fit view, several frames, so it runs on `cx.background_spawn`, reading the
+shown `RenderImage`'s bytes through its `Arc` without a copy. One job is in
+flight, as the Tauri worker holds one request: under a held key each page
+would otherwise queue a job on the executor the next preview decode runs on.
+A layer replaced while a job is out is never computed; the reply takes the
+newest unsent layer next. The fit view's drawn size is known only in the paint
+closure, so the closure compares it with the layer the view rendered with and,
+when they differ, asks for the new layer through a `WeakEntity` update in the
+`cx.defer` it already runs after paint; while the layer matches nothing is
+deferred.
+
+- Rule: an overlay is drawn only for the `ImageId` and device size it was
+  computed for (`peaking::Paint`), so another file's or another size's never
+  shows; replaced and cleared overlays go through `retired`.
+
+### The fit view's overlay is resized bilinearly (Measured)
+
+The overlay is computed at the drawn device size, as the Tauri app rasterises
+the bitmap at that size first. `image::imageops::resize` with
+`FilterType::Triangle`, the nearest to a canvas `drawImage`, was kept: at
+scale 1.0 it takes about 22-25 ms for a 1616x1080 ARW to 1275x852 and 47-67 ms
+for a 4416x2944 RAF to 1278x852, the Sobel 5-7 ms on top. So on a RAF the
+overlay comes about 50-60 ms after the image; the held-key measurement showed
+no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
+resize (Sobel 4-6 ms).
+
 ### IME handling is unverified (Inferred)
 
 It exists in `gpui_windows`; nothing has exercised it yet.
@@ -478,3 +507,20 @@ slower disk and is not attributed.
   `robocopy /J` (unbuffered) and use each copy once.
 - Rule: to measure the pause itself, press onto files the scan has not read
   (a jump, not the next file); `--auto` only steps to the next file.
+
+### Peaking costs a held key nothing measurable (Measured)
+
+Release, `→` held 5 s as injected key-downs every 33 ms, peaking off and on
+alternated three times each in one idle session, fit view at 1275x852 / 1278x852:
+median p50 `keypressToPixels` -1.75 ms on ARW (18.55 off, 16.80 on, n of
+about 105 per run) and +1.11 ms on RAF (52.70 off, 53.81 on), against the plan's
++2.0 / +5.0 ms gate. ARW was faster with peaking on in every pair, through
+`read` and `decode`, not investigated (presumably the busy core keeps the clock
+up). On RAF a held key shows only 4-6 pages in 5 s whether peaking is on or off:
+a preview load (about 40-45 ms) outlasts the key repeat, so the pager keeps
+re-reading the newest file, and the overlay has few pages to compete with. See
+[the plan's results](../plans/20261110-gpui-zoom-peaking/results.md).
+
+- Rule: measure a background job's cost with a held key, not `--auto`, whose
+  1003 ms interval lets every job finish before the next press; and check how
+  many pages the hold actually showed before reading a p50.

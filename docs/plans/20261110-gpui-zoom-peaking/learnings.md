@@ -91,6 +91,32 @@ page (review round 1).
     sequence without peaking: 262 -> 424 -> 401 -> 418 MB fit, then 511 -> 557
     MB zoomed. The zoomed growth shows without peaking too, so it is not the
     overlays (deferred below).
+- Phase B (2026-11-12): the held-key measurement ran on the user's go-ahead,
+  from the release build of `f35d4151`, and met the gate (ARW -1.75 ms, RAF
+  +1.11 ms; `results.md`). Then `native-app.md`, `CLAUDE.md` and the port
+  plan's Progress were written. The checkbox stays open for the user's by-eye
+  checks.
+- The worktree's `.git` file pointed at the old repository path
+  (`.../minodisk/riffle/.git/worktrees/...`) after the repository folder was
+  renamed to `handpic`; git was run with `GIT_DIR` / `GIT_WORK_TREE` set to the
+  new path at first. That leaked into `mise run ci`: the merge-settings
+  skill's `merge.test.sh` runs `git -C <tmp> init` / `commit` / `worktree add`,
+  which `GIT_DIR` redirected into this branch (an empty `init` commit by
+  `t@example.com`, a branch `other` and a worktree entry `hooks-other`). All
+  three were removed, and the links were then fixed with
+  `git worktree repair <this worktree>` from the renamed repository, which
+  also rewrote the 14 other worktrees' `.git` files that the rename had broken.
+  Rule: never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`.
+- Other sessions started `cargo` builds during the first ARW runs; three ARW
+  slots failed the idle gate three times each, so the whole ARW alternation
+  was run again (`measure.ps1 -Only ARW`), all of it idle. `measure.ps1` now
+  redoes a failing run in its slot up to three times and checks `handpic*`
+  processes too.
+- `--size 4416x2944` RAF under a held key showed only 4-6 pages per 5 s hold,
+  peaking on or off (see below), so the RAF verdict is weak.
+- In one (gate-failed) ARW zoomed attempt the injected `z` had no visible
+  effect (no `zoom` line, fit-sized overlays only); the repeat showed the
+  crop. Not explained; the driver reported no skipped key.
 - The 1:1 crop is a little taller than the canvas (852 high canvas, crops of
   861-864): `decode_focus_crop` grows it to whole MCUs. It is clipped; noted
   because the `peaking` line shows it.
@@ -154,16 +180,14 @@ page (review round 1).
   Expected: all hold. Basis: plan Step 2's "Manual check on the Step 1 test
   folder"; files `crates/native/src/peaking.rs`, `crates/native/src/main.rs`,
   `crates/native/src/zoom.rs`.
-- **Pending measurement (Step 2, needs an idle PC and the user's go-ahead).**
-  `powershell -ExecutionPolicy Bypass -File D:\Photos\tests\20261110-gpui-zoom-peaking-tools\measure.ps1 -Exe <release riffle-native.exe>`
-  runs, per folder (ARW `--size 1616x1080`, RAF `--size 4416x2944`, from
-  `D:\Photos\tests\20261108-gpui-compare\`), one throwaway run, then peaking
-  off / on alternated three times and one zoomed run with peaking on. Each run
-  is a 3 s settle, `e` (and `z`), then `→` held 5 s as injected key-downs
-  every 33 ms, against a fresh `measure.sqlite` in the test folder, with the
-  load and the compilers sampled for the port's idle gate into `runs.csv`;
-  `summarize.ps1` writes `summary.csv` (p50 / p95 per stage and of the
-  `peaking` line's `resize` / `compute`). Gate: the median of three p50
-  `keypressToPixels` with peaking on minus off is at most +2.0 ms on ARW and
-  +5.0 ms on RAF; results go in `results.md` in this folder, then the docs
-  figures. Basis: plan Step 2's "Measurement".
+- **A held `→` on RAF previews barely draws (pre-existing pager behaviour).**
+  In the Step 2 measurement, 5 s of key-downs every 33 ms showed only 4-6 RAF
+  pages (`--size 4416x2944`), peaking off as well as on, against about 105 on
+  ARW. A RAF preview load (40-45 ms) outlasts the key repeat, so when it lands
+  the pager has moved and `Pager::finish` re-reads the newest file; a page
+  shows only when a gap between key-downs is longer than a load. The Tauri app
+  may behave the same (not compared). Showing the landed preview while the next
+  one loads would let a held key draw. Basis: Step 2 measurement
+  (`docs/plans/20261110-gpui-zoom-peaking/results.md`, "RAF pages under a held
+  key"); files `crates/native/src/pager.rs`, `crates/native/src/main.rs`
+  (`loaded`).
