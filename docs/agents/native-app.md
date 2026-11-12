@@ -474,6 +474,14 @@ folder logged 7 judgments, not 60.
 checked with injected `keybd_event` key events in the running app. A non-extended
 `VK_RIGHT` / `VK_LEFT`, the keypad's, gives the same names.
 
+Injecting keys with `keybd_event` needs the app window in the foreground for
+every key; in a long injected sequence most keys went missing once focus moved
+away. Re-assert and check the foreground before each key (skip the key
+otherwise), and pick the process by its path in this worktree, since another
+worktree's `riffle-native.exe` may be running or exiting. Report a skipped key
+rather than counting it as a page. Held-key measurements also need an idle
+machine: another session's `cargo` build fails the gate, so redo the slot.
+
 ### Every keystroke goes through the keymap (Inferred)
 
 `keys.rs`'s `key_name` names a keystroke as the keymap does: the modifiers

@@ -123,6 +123,17 @@ page (review round 1).
 
 ## Deferred issues (todo candidates)
 
+- **Never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`.** After the
+  repository folder was renamed, a worktree's `.git` pointed at a stale path; a
+  session worked around it with `GIT_DIR` / `GIT_WORK_TREE`, which leaked into
+  `mise run ci`, where the merge-settings skill's `merge.test.sh` runs
+  `git -C <tmp> init`, `commit` and `worktree add`; they landed in the real
+  repository (an empty commit, a branch `other`, a worktree entry
+  `hooks-other`). The fix was `git worktree repair <worktree>` from the renamed
+  repository. Change: add a line to `CLAUDE.md`'s Development section, or make
+  `merge.test.sh` unset both variables (fixing the cause). Done when the line
+  is in `CLAUDE.md`, or the test script unsets them and a test shows it cannot
+  touch the outer repository. Basis: Step 2 Phase B above.
 - None for Step 1. The by-eye checks below were done by the user on
   2026-11-11 and all held (the Windows display scale was not reported; the
   automated run recorded scale 1.0 / 96 dpi). The run printed three `zoom`
