@@ -158,7 +158,8 @@ page (review round 1).
   `crates/native/src/zoom.rs`, `crates/native/src/main.rs` (`zoom_page`,
   `crop_arrived`).
 - **Pending manual check (Step 2, by eye, Windows; the user's).** The step's
-  checkbox is left open for these, the measurement and the docs; the automated
+  checkbox stays open only for these by-eye checks; the measurement (gate met,
+  see `results.md`) and the docs are done, and the automated
   criteria (unit tests, `mise run ci`, `mise run native:check`) pass. Launch
   the release build:
   `C:\Users\daisu\.herdr\worktrees\riffle\worktree-green-cloud-634b\crates\native\target\release\riffle-native.exe D:\Photos\tests\20261110-gpui-zoom-peaking --index D:\Photos\tests\20261110-gpui-zoom-peaking\index.sqlite`
