@@ -286,7 +286,11 @@ whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
 one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
 the crop and the scaled-preview placeholder are painted, one JPEG pixel per
-device pixel with the focus point at the canvas center).
+device pixel with the focus point at the canvas center), and `src/peaking.rs`
+the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
+Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
+keyed by the source image and its drawn device size, one job in flight on the
+background executor, the fit view's image resized to its drawn size first).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is

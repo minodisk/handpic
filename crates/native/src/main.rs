@@ -14,6 +14,7 @@ mod meta;
 mod orient;
 mod overlay;
 mod pager;
+mod peaking;
 mod resync;
 mod scan;
 mod settings;
@@ -56,6 +57,7 @@ use judgment::{Command, State};
 use keys::Bindings;
 use meta::Shown;
 use pager::{Move, Pager};
+use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::{self, Metadata},
@@ -299,6 +301,7 @@ struct Riffle {
     viewport: Rc<Cell<(u32, u32)>>,
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
+    peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
 }
 
 impl Riffle {
@@ -426,6 +429,7 @@ impl Riffle {
             zoom_timer: None,
             viewport: Rc::default(),
             zoom_pending: Rc::default(),
+            peaking: Peaking::default(),
         }
     }
 
@@ -812,6 +816,7 @@ impl Riffle {
             (_, Some("next")) => self.go(Move::Next, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
+            (_, Some("peaking")) => self.toggle_peaking(cx),
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
@@ -1442,7 +1447,45 @@ impl Riffle {
         Some(zoom::Paint {
             placeholder,
             crop: crop.map(|c| (c.image.clone(), c.point)),
+            peaking: self.peaking.paint(View::Crop),
         })
+    }
+
+    fn toggle_peaking(&mut self, cx: &mut Context<Self>) {
+        let old = self.peaking.toggle();
+        self.retire(old);
+        cx.notify();
+    }
+
+    /// The preview canvas draws `source` in `view` at `size` device pixels
+    /// without its overlay.
+    fn want_peaking(
+        &mut self,
+        view: View,
+        source: Arc<RenderImage>,
+        size: (u32, u32),
+        cx: &mut Context<Self>,
+    ) {
+        let (old, job) = self.peaking.want(view, source, size);
+        self.send_peaking(job, cx);
+        if old.is_some() {
+            self.retire(old);
+            cx.notify();
+        }
+    }
+
+    fn send_peaking(&self, job: Option<peaking::Job<Arc<RenderImage>>>, cx: &mut Context<Self>) {
+        if let Some(job) = job {
+            peaking::send(job, cx);
+        }
+    }
+
+    fn peaking_arrived(&mut self, tag: u64, overlay: peaking::Overlay, cx: &mut Context<Self>) {
+        println!("{}", overlay.line());
+        let (old, job) = self.peaking.arrived(tag, overlay.image);
+        self.retire(old);
+        self.send_peaking(job, cx);
+        cx.notify();
     }
 
     fn retire(&self, images: impl IntoIterator<Item = Arc<RenderImage>>) {
@@ -1555,6 +1598,8 @@ impl Render for Riffle {
         let zoom_paint = self.zoom_paint();
         let viewport = self.viewport.clone();
         let zoom_pending = self.zoom_pending.clone();
+        let fit_peaking = self.peaking.paint(View::Fit);
+        let this = cx.entity().downgrade();
         div()
             .size_full()
             .flex()
@@ -1582,26 +1627,36 @@ impl Render for Riffle {
                                     (f32::from(bounds.size.width) * scale).round() as u32,
                                     (f32::from(bounds.size.height) * scale).round() as u32,
                                 ));
+                                let mut want = None;
                                 if let Some(zoom_paint) = zoom_paint {
-                                    zoom_paint.paint(bounds, window);
+                                    want = zoom_paint
+                                        .paint(bounds, window)
+                                        .map(|(image, size)| (View::Crop, image, size));
                                 } else if let Some(image) = image {
                                     let fit = fit_centered(&image, bounds);
                                     if let Err(e) = window.paint_image(
                                         fit,
                                         fit,
                                         Corners::default(),
-                                        image,
+                                        image.clone(),
                                         0,
                                         false,
                                     ) {
                                         println!("error paint: {e}");
                                     }
+                                    want = fit_peaking
+                                        .paint(&image, fit, fit, window)
+                                        .map(|size| (View::Fit, image, size));
                                     overlay::paint(mark.as_ref(), fit, window, cx);
                                 }
                                 hold.release();
                                 let paint_finished = Instant::now();
                                 let old = retired.take();
-                                if page.is_none() && zoomed.is_none() && old.is_empty() {
+                                if page.is_none()
+                                    && zoomed.is_none()
+                                    && old.is_empty()
+                                    && want.is_none()
+                                {
                                     return;
                                 }
                                 // `defer` runs when the update holding the frame's
@@ -1619,6 +1674,12 @@ impl Render for Riffle {
                                     }
                                     for image in old {
                                         cx.drop_image(image, None);
+                                    }
+                                    if let Some((view, image, size)) = want {
+                                        this.update(cx, |this, cx| {
+                                            this.want_peaking(view, image, size, cx);
+                                        })
+                                        .ok();
                                     }
                                 });
                             },
