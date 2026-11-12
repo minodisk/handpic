@@ -663,6 +663,26 @@ See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
 - Rule: `--auto`'s quit does not stop the scan, so an A run whose pass 2
   outlasts the presses logs no `scan faces:` line. Read pass 2's progress from
   the run's index copy instead.
+- Rule: to page while pass 2 runs, a 60-press run needs about 13k ARW or 4.5k
+  RAF files to stay inside pass 2 (4.6 ms per ARW file, 15-16 ms per RAF file
+  at 22 threads). Build the padding with hardlinks (`os.link`): no disk cost,
+  and every copy stays warm in the page cache. Name the padding to sort after
+  the compare files (`zzNNN_`) so `--size` / `--max 20` page only the 20.
+- Rule: to turn `f` on in an `--auto` run without a code change, post
+  WM_KEYDOWN / WM_CHAR / WM_KEYUP for `F` to the process's `MainWindowHandle`.
+  `AppActivate` + `SendKeys` does not reach the app and may type into whatever
+  window has focus, so never use it. Close a run by PID with
+  `CloseMainWindow`; never for every `riffle-native` process, because other
+  sessions run their own.
+- Rule: other sessions' `mise run ci`, `cargo` and `riffle-native` processes
+  spoil runs (17 of 25 B attempts and 1 of 11 A attempts were discarded in the
+  Step 6 session of
+  `docs/plans/_archived/20261110-gpui-focus-marks/learnings.md`). Wait for two
+  clean load samples and no build process before each run, and discard a run
+  with a load sample over 15 %. This reduces but does not prevent load
+  arriving mid-run.
+- Use forward slashes in Windows paths in Bash-tool scripts. A doubled
+  backslash in a heredoc collapses to one and can escape the next `$`.
 
 ### The pane and the judgments cost the pager under 1 ms (Measured)
 
