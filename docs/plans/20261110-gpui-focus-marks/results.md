@@ -1,5 +1,121 @@
 # Step 6 results: paging while pass 2 runs against paging on a finished index
 
+## Final run (pause through paint, 3 threads): the gate is met
+
+Measured 2026-11-13, 07:18-07:38 local, with `riffle-native` built at
+`d7292b00`:
+- pass 2 runs on an eighth of the cores (3 of 24 logical);
+- its workers wait out the preview's pause at every stage boundary;
+- the preview holds the pause from its read until its image is painted.
+
+**Verdict: the gate is met on both folders.** Median of the three runs' p50
+`keypressToPixels`, A (pass 2 running) minus the same-session B (both passes
+complete):
+
+| Folder | A | B | A - B | Gate |
+|--------|---|---|-------|------|
+| ARW 1616x1080 | 18.37 | 20.47 | **-2.10** | <= +2.0 (met) |
+| RAF 4416x2944 | 63.59 | 63.89 | **-0.30** | <= +5.0 (met) |
+
+- **Per pair:** ARW -4.61, -2.10, -0.56; RAF -0.30, +1.27, -1.61.
+- **p95, not gated:** ARW A 25.01 against B 29.40 (-4.39); RAF A 74.85
+  against B 76.48 (-1.63).
+- **For context only, other sessions:** the archived strip plan's 17.44 ms
+  (ARW) and 60.29 ms (RAF) with no scan running.
+
+### Conditions
+
+- **Binary:** `cargo build --release` in `crates/native` at `d7292b00`, run
+  directly, SIMD on (`jsimd.o` and `jsimdcpu.o` in the `mozjpeg-sys` build
+  output). Rust 1.98.1, NASM 3.02.
+- **Machine:** Windows 11, i7-13700 (24 logical), RTX 4060 Ti, 5120x1440 at
+  59 Hz, the app's default 1600x1000 window. Drive `D:`, a SATA SSD (Crucial
+  BX500 4 TB).
+- **Folders and indexes:** the folders, templates and scripts of the runs
+  below (`D:\Photos\tests\20261111-gpui-pass2-measure\`):
+  - ARW: 18,620 hardlinked files, the 20 compare files paged with
+    `--size 1616x1080 --max 20`;
+  - RAF: 5,420 files, `--size 4416x2944 --max 20`;
+  - a fresh copy of the A template (`faces_extractor = 0`) or the B template
+    (both passes done) per run.
+- **Presses:** `--auto 60` (1003 ms apart after a 2 s settle), n=60 per run.
+- **Order:** B A B A B A, then the `f` pair, ARW then RAF, once through, with
+  no warm-up and no redos (the user's call). The files were warm from the
+  session's earlier runs.
+- **Display:** a helper held `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` for the whole session, so the
+  display could not sleep. Every run's `frameWait` p50 was 7.2-10.3 ms, so no
+  run was throttled.
+- **Pass 2 outlasted every A run** (no `scan faces:` line). Rows written by
+  quit: ARW 4,220, 4,280 and 3,760; RAF 1,480, 1,460 and 1,480. Without the
+  pause it was 3,800-4,060 and 1,400-1,490, so the pause did not slow pass 2.
+  Pass 2 alone, untimed, at 3 threads takes 301.2 s (ARW) and 225.8 s (RAF).
+- **Idle:**
+  - The sampler and the rule are those of the runs below. No compiler,
+    `mise run`, Tauri app or second `riffle-native` appeared.
+  - Three B runs had one sample over 15 % after the first: ARW B3 (25 %),
+    ARW B with `f` on (42 %, 16 %) and RAF B2 (27 %). They were kept, as the
+    user asked for no redos. Load during B can only slow B.
+  - The other runs met the rule.
+
+### Per run p50 / p95 (ms), with idle status and `frameWait` p50
+
+`wait` 0.00, `orient` p50 0.00 and `hop` under 0.5 ms at p50 in every run.
+
+| Run | Idle | read | decode | frameWait | paint | present | keypressToPixels |
+|-----|------|------|--------|-----------|-------|---------|------------------|
+| ARW B1 | ok | 2.40 / 3.83 | 9.18 / 12.77 | 7.42 / 16.36 | 0.71 / 1.00 | 0.17 / 0.35 | 20.79 / 31.21 |
+| ARW A1 | ok | 0.54 / 0.99 | 6.09 / 8.54 | 8.27 / 16.25 | 1.06 / 1.34 | 0.20 / 0.74 | 16.18 / 25.01 |
+| ARW B2 | ok | 2.20 / 4.36 | 8.17 / 10.82 | 8.62 / 15.93 | 0.73 / 1.03 | 0.17 / 0.31 | 20.47 / 27.93 |
+| ARW A2 | ok | 0.52 / 0.98 | 6.46 / 9.08 | 9.67 / 16.03 | 1.05 / 1.33 | 0.21 / 0.51 | 18.37 / 24.69 |
+| ARW B3 | one sample 25 % | 1.33 / 3.42 | 7.67 / 10.94 | 9.01 / 15.58 | 0.72 / 0.94 | 0.17 / 0.56 | 19.32 / 29.40 |
+| ARW A3 | ok | 0.50 / 0.98 | 6.51 / 8.67 | 10.31 / 15.91 | 1.03 / 1.27 | 0.18 / 0.50 | 18.76 / 25.66 |
+| RAF B1 | ok | 4.61 / 6.36 | 46.17 / 51.95 | 7.74 / 16.25 | 3.37 / 3.90 | 0.15 / 0.22 | 63.89 / 75.29 |
+| RAF A1 | ok | 1.76 / 2.66 | 45.64 / 53.44 | 9.56 / 16.49 | 4.73 / 6.43 | 0.18 / 0.24 | 63.59 / 75.54 |
+| RAF B2 | one sample 27 % | 4.04 / 6.53 | 44.91 / 52.40 | 9.19 / 15.67 | 3.38 / 3.87 | 0.15 / 0.21 | 63.58 / 76.48 |
+| RAF A2 | ok | 1.60 / 2.81 | 45.24 / 52.13 | 9.07 / 16.23 | 4.89 / 8.59 | 0.17 / 0.30 | 64.85 / 74.01 |
+| RAF B3 | ok | 3.99 / 7.19 | 46.15 / 53.65 | 7.61 / 15.57 | 3.37 / 4.07 | 0.15 / 0.20 | 64.59 / 76.60 |
+| RAF A3 | ok | 1.86 / 3.16 | 46.50 / 53.47 | 7.15 / 16.13 | 4.84 / 6.32 | 0.18 / 0.32 | 62.98 / 74.85 |
+
+### Median of the three p50s, and A minus B (ms)
+
+| Stage | ARW A | ARW B | ARW A - B | RAF A | RAF B | RAF A - B |
+|-------|-------|-------|-----------|-------|-------|-----------|
+| read | 0.52 | 2.20 | -1.68 | 1.76 | 4.04 | -2.28 |
+| decode | 6.46 | 8.17 | -1.71 | 45.64 | 46.15 | -0.51 |
+| frameWait | 9.67 | 8.62 | +1.05 | 9.07 | 7.74 | +1.33 |
+| paint | 1.05 | 0.72 | +0.33 | 4.84 | 3.37 | +1.47 |
+| present | 0.20 | 0.17 | +0.03 | 0.18 | 0.15 | +0.03 |
+| **keypressToPixels** | **18.37** | **20.47** | **-2.10** | **63.59** | **63.89** | **-0.30** |
+
+### What the stages say
+
+- **`decode` no longer grows** (ARW -1.71, RAF -0.51). RAF's `decode` growth was
+  +64.25 ms at 22 threads, +8.61 at 6, +2.34 at 3 without the pause, and -0.23
+  with the pause through the decode.
+- **`paint` still grows a little** (ARW +0.33, RAF +1.47; RAF +2.63 with the
+  pause released before the paint), so holding the pause to the paint helped
+  but did not remove it all.
+- **B's `read` and `decode` are again slower than A's** (ARW `read` 2.2 against
+  0.5 ms, `decode` 8.2 against 6.5), as in every session since the second.
+  That is why A - B comes out negative.
+  - Not measured; the two candidates of the second run's notes still stand:
+    the cores clocking down while B leaves the machine idle, and the paged
+    files' heads dropping out of the page cache without pass 2's hot-list
+    reads.
+  - Either way the gate is met with margin: RAF's per-pair worst is +1.27
+    against +5.0.
+
+### Not gated
+
+- **`f` on:** ARW A 17.94 against B 21.00 (-3.06); RAF A 63.36 against B 64.92
+  (-1.56). `frameWait` p50 was 9.5 / 9.9 (ARW) and 8.2 / 8.5 (RAF). Each log
+  has 20 `eyes` lines.
+- **`read` during pass 2:** p50 ARW 0.50-0.54 ms and RAF 1.60-1.86 ms, against
+  0.96 ms during pass 1 (`native-app.md`).
+
+Raw data: `runs\`, `analyze-*.txt`, `idle-report.txt`.
+
 ## Pause experiment (3 pass 2 threads, pass 2 pausing between stages): RAF +1.94 ms
 
 Measured 2026-11-12, 08:19-08:27 local, RAF only, with an uncommitted

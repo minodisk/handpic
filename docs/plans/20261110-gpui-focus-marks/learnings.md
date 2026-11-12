@@ -258,6 +258,12 @@
   `C:/Users/daisu/ws/github.com/minodisk/riffle` path. The repo moved to
   `.../handpic`, so git runs here with an explicit `--git-dir` (the
   worktree's admin dir under `handpic/.git/worktrees/`) and `--work-tree=.`.
+- Final run (`d7292b00`: 3 pass 2 threads, the pass yielding at its stage
+  boundaries, the preview holding the pause through the paint) met the gate:
+  ARW A - B -2.10 ms, RAF -0.30 ms, every `frameWait` p50 7.2-10.3 ms. A
+  helper held `SetThreadExecutionState` with `ES_DISPLAY_REQUIRED` for the
+  session, so the display could not sleep. Three B runs had one sample over
+  15 % and were kept (no redos, the user's call).
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with

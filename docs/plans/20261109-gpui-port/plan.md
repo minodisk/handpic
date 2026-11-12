@@ -337,6 +337,8 @@ them; their contents are deliberately coarse.
     (`run_faces_scan`: `eye_focus`, sharpness, EAR, pose) with the `f`
     mark, face boxes, the face mesh overlay, the 1:1 crop through
     `partial.rs`, focus peaking (`e`), and the `eyes_of` on-demand path.
+  - Pass 2, the `f` overlays (mark, face boxes, face mesh) and `eyes_of`
+    were done by `../20261110-gpui-focus-marks/plan.md`.
 - [ ] Step 8: Dialogs, folder tree and folder operations
   - Done when: the folder tree with its watchers and volume roots, the
     strip's right-click menu (reveal, copy path / name, Move to Trash…,

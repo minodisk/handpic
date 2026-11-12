@@ -419,6 +419,30 @@ move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
   in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
 
+### Pass 2 costs paging nothing once it yields and runs small (Measured)
+
+Same-session A/B, paging while pass 2 runs over the folder against paging on a
+finished index, three runs each, 60 presses, pass 2 on `faces_threads()` (3 of
+24 logical cores) and pausing at its stage boundaries while the preview holds
+the scan's pause from its read until its image is painted. The median p50
+`keypressToPixels` A - B was -2.10 ms on ARW 1616x1080 and -0.30 ms on RAF
+4416x2944 (gate +2.0 / +5.0). At 22 pass 2 threads with only the read paused
+it was +9.44 / +88.86 ms: `decode` about doubled and `paint` grew 4-6x.
+See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
+
+- Rule: check every run's `frameWait` p50 before reading an A/B. One session
+  ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
+  and the display slept. Hold `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` from a helper process for the
+  session; that changes no power setting.
+- Rule: the B runs' `read` and `decode` came out slower than A's in every
+  session after the first (ARW `read` about 2.2 against 0.5 ms). A's pass 2
+  keeps the cores clocked up and re-reads the paged files through the hot
+  list. So A - B can go negative; compare pairs, not one run.
+- Rule: `--auto`'s quit does not stop the scan, so an A run whose pass 2
+  outlasts the presses logs no `scan faces:` line. Read pass 2's progress from
+  the run's index copy instead.
+
 ### During pass 1 the preview reads what the scan already read (Measured)
 
 Stepping with the arrow through 520 cold ARW files while pass 1 ran (27.7 s),

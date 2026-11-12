@@ -348,7 +348,7 @@ puts logic in new modules.
       is out of scope here. See "Trade-offs and risks".
     - Do not write the judgment to the index; `eyes_of` touches neither the
       index nor the stored state.
-- [ ] Step 6: Measure key-navigation latency while pass 2 runs, and record it
+- [x] Step 6: Measure key-navigation latency while pass 2 runs, and record it
   - Done when:
     - **Before any timed run the agent stops and waits for the user's go
       signal**: other sessions measure on the same machine, and the runs

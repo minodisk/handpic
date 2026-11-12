@@ -172,6 +172,23 @@ The absolute numbers here are lower than the 2026-11-09 session's on the same
 files and machine (not explained); only the same-session difference compares.
 The p95 here is sample 57 of 60, not the largest of 20.
 
+While the folder scan's second pass (faces, focus, eyes) runs, paging costs
+nothing measurable. That holds once the pass runs on an eighth of the cores
+and pauses its work while a preview is read, decoded and painted (2026-11-13,
+alternating with paging on a finished index in the same session, three runs
+each, 60 presses over the 20 files, the median of the three runs' p50 / p95
+`keypressToPixels`):
+
+| Case | While the second pass runs | Second pass finished |
+|---|---|---|
+| ARW, 1616x1080 | 18.4 / 25.0 | 20.5 / 29.4 |
+| RAF, 4416x2944 | 63.6 / 74.9 | 63.9 / 76.5 |
+
+On all the cores, pausing only its reads, the second pass had added 9.4 ms on
+ARW and 89 ms on RAF. The pass now takes about 5 minutes on 18,620 ARW and
+4 minutes on 5,420 RAF files on 24 logical cores. Per-run numbers and the
+conditions are in [`results.md`](../plans/20261110-gpui-focus-marks/results.md).
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,
