@@ -64,7 +64,7 @@ pulled toward zero `OFFSET_SHRINK` times harder, `rank` the place, the score
 and the reasons of each frame within its burst by the shared weights plus its
 burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
-holds new reads back while a `Paused` is held, `src/fullsharp.rs` the eye
+holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
 sharpness of the judged face on the full-size embedded JPEG (a crop around each
 eye resized to 154 px, the gradient's 99th percentile over the contrast, the
 sharper eye counting, a frame under `SOFT_BELOW` being soft), and
@@ -245,7 +245,7 @@ and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
 port of `scanfocus.ts`: the current file, then the strip's range nearest
 first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
-after the current file or the range last changed, and `src/viewed.rs` the
+after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview

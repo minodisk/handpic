@@ -31,6 +31,18 @@ fn threads_for(cores: usize) -> usize {
     cores.saturating_sub(2).max(1)
 }
 
+/// Pass 2's workers: an eighth of the cores, at least one, as the Tauri app's
+/// `faces_threads`. Paging during pass 2 took +9.4 ms (ARW) and +89 ms (RAF)
+/// at p50 on two fewer than the cores and still +13 ms on RAF at a quarter,
+/// `decode` and `paint` starved.
+pub fn faces_threads() -> usize {
+    faces_threads_for(thread::available_parallelism().map_or(4, |n| n.get()))
+}
+
+fn faces_threads_for(cores: usize) -> usize {
+    (cores / 8).max(1)
+}
+
 /// What the scan and the folder watcher tell the view, a scan's messages
 /// tagged with the scan they came from so a stopped scan's late messages can
 /// be told apart.
@@ -301,7 +313,7 @@ fn run_faces_pass(
         index,
         dir,
         &todo,
-        scan_threads(),
+        faces_threads(),
         focus,
         cancel,
         index::PROGRESS_INTERVAL,
@@ -320,7 +332,7 @@ fn run_faces_pass(
 
 #[cfg(test)]
 mod tests {
-    use super::{Scan, list, natural_order, threads_for};
+    use super::{Scan, faces_threads_for, list, natural_order, threads_for};
     use riffle_backend::{
         index::Index,
         sidecar::{DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
@@ -384,5 +396,13 @@ mod tests {
         assert_eq!(threads_for(3), 1);
         assert_eq!(threads_for(2), 1);
         assert_eq!(threads_for(1), 1);
+    }
+
+    #[test]
+    fn pass_two_takes_an_eighth_of_the_cores_and_keeps_one_thread() {
+        assert_eq!(faces_threads_for(24), 3);
+        assert_eq!(faces_threads_for(16), 2);
+        assert_eq!(faces_threads_for(7), 1);
+        assert_eq!(faces_threads_for(1), 1);
     }
 }

@@ -193,13 +193,52 @@ pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
         .expect("a never-set flag never abandons")
 }
 
+thread_local! {
+    /// The read slots of the pass 2 file this thread is analyzing, which
+    /// `yield_to_pause` waits on, with the instant its stage waits first saw a
+    /// pause (one budget for the whole file); none outside
+    /// `extract_analysis_unless`.
+    static PASS_SLOTS: std::cell::RefCell<Option<(ReadSlots, Option<Instant>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Sets `PASS_SLOTS` for one file and clears it on drop, an unwind included.
+struct PassSlots;
+
+impl PassSlots {
+    fn set(slots: &ReadSlots) -> Self {
+        PASS_SLOTS.with(|s| *s.borrow_mut() = Some((slots.clone(), None)));
+        PassSlots
+    }
+}
+
+impl Drop for PassSlots {
+    fn drop(&mut self) {
+        PASS_SLOTS.with(|s| *s.borrow_mut() = None);
+    }
+}
+
+/// A stage boundary of pass 2: wait out a pause held on the slots of the file
+/// this thread analyzes (`ReadSlots::wait_unpaused_since`). All of a file's
+/// stage waits share one `MAX_PAUSE` budget. A no-op outside pass 2,
+/// so `candidate`'s stages call it whoever runs them.
+pub fn yield_to_pause(cancel: &AtomicBool) {
+    PASS_SLOTS.with(|s| {
+        if let Some((slots, since)) = &mut *s.borrow_mut() {
+            slots.wait_unpaused_since(cancel, since);
+        }
+    });
+}
+
 /// `extract_analysis`, abandoned (`None`) once `cancel` is set between its
-/// stages, its read going through `slots`.
+/// stages, its reads going through `slots` and its stages yielding to a pause
+/// of them.
 fn extract_analysis_unless(
     path: &Path,
     cancel: &AtomicBool,
     slots: &ReadSlots,
 ) -> Option<Result<Analysis, String>> {
+    let _pass = PassSlots::set(slots);
     if is_jpeg_file(path) {
         return Some(Ok(Analysis::default()));
     }
@@ -211,6 +250,7 @@ fn extract_analysis_unless(
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
+    yield_to_pause(cancel);
     if canceled(cancel) {
         return None;
     }
@@ -223,6 +263,7 @@ fn extract_analysis_unless(
         Some(_) => (cue(&preview, arw.orientation, focus, cancel)?, Vec::new()),
         None => {
             let detection = whole_image_detection(&preview, arw.orientation);
+            yield_to_pause(cancel);
             if canceled(cancel) {
                 return None;
             }
@@ -236,7 +277,9 @@ fn extract_analysis_unless(
     if canceled(cancel) {
         return None;
     }
+    yield_to_pause(cancel);
     let sharpness = score(&preview, &arw.shot, focus, &faces);
+    yield_to_pause(cancel);
     let full_eye_sharp = full_eye_sharp(path, &arw, &cue, cancel, slots)?;
     Some(Ok(Analysis {
         cue,
@@ -273,6 +316,7 @@ fn full_eye_sharp(
         let _slot = slots.acquire(cancel)?;
         read_full(path)
     };
+    yield_to_pause(cancel);
     if canceled(cancel) {
         return None;
     }
@@ -502,9 +546,11 @@ impl ScanFocus {
     }
 }
 
-/// How long `ReadSlots::acquire` honours a pause. A stuck or leaked pause
-/// slows a scan to one file per worker per `MAX_PAUSE` at worst and never
-/// stalls it; a preview read normally ends the pause long before this.
+/// How long `ReadSlots::acquire` honours a pause, and how long all of one pass 2
+/// file's stage waits together do. A stuck or leaked pause costs a worker at
+/// most about `MAX_PAUSE` per `acquire` (one for pass 1's read, two for pass
+/// 2's) plus `MAX_PAUSE` for pass 2's stages per file, so it slows a scan and
+/// never stalls it; a preview normally ends the pause long before this.
 const MAX_PAUSE: Duration = Duration::from_secs(1);
 
 /// How often a worker waiting in `ReadSlots::acquire` looks at its cancel
@@ -580,6 +626,37 @@ impl ReadSlots {
                 .wait_timeout(gate, CANCEL_TICK)
                 .unwrap_or_else(|e| e.into_inner())
                 .0;
+        }
+    }
+
+    /// Wait while a pause is held, for at most `MAX_PAUSE`, or until `cancel`
+    /// is set. Takes no permit.
+    pub fn wait_unpaused(&self, cancel: &AtomicBool) {
+        self.wait_unpaused_since(cancel, &mut None);
+    }
+
+    /// `wait_unpaused` measuring from `since`, the instant a wait first saw
+    /// the pause, set here when empty and cleared once a wait sees no pause.
+    /// Pass 2 calls it between its compute stages with one `since` per file,
+    /// so a preview's decode and paint get the cores, not only the disk, and a
+    /// pause that stays held costs the file `MAX_PAUSE` in all, not per stage.
+    fn wait_unpaused_since(&self, cancel: &AtomicBool, since: &mut Option<Instant>) {
+        let mut gate = self.lock();
+        if gate.paused == 0 {
+            *since = None;
+            return;
+        }
+        let started = *since.get_or_insert_with(Instant::now);
+        while gate.paused > 0 && started.elapsed() < self.max_pause && !canceled(cancel) {
+            gate = self
+                .gate
+                .1
+                .wait_timeout(gate, CANCEL_TICK)
+                .unwrap_or_else(|e| e.into_inner())
+                .0;
+        }
+        if gate.paused == 0 {
+            *since = None;
         }
     }
 
@@ -1465,6 +1542,97 @@ mod tests {
     fn a_cancel_is_answered_before_a_free_permit() {
         let slots = ReadSlots::default();
         assert!(slots.acquire(&AtomicBool::new(true)).is_none());
+    }
+
+    #[test]
+    fn a_wait_for_no_pause_returns_at_once() {
+        let slots = ReadSlots::with_max_pause(1, Duration::from_secs(5));
+        let started = Instant::now();
+        slots.wait_unpaused(&AtomicBool::new(false));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn a_wait_ends_when_the_pause_does() {
+        let slots = ReadSlots::with_max_pause(1, Duration::from_secs(5));
+        let paused = slots.pause();
+        let started = Instant::now();
+        std::thread::scope(|s| {
+            let waiter = s.spawn(|| slots.wait_unpaused(&AtomicBool::new(false)));
+            std::thread::sleep(Duration::from_millis(100));
+            assert!(!waiter.is_finished(), "the wait honours the pause");
+            drop(paused);
+            waiter.join().unwrap();
+        });
+        assert!(started.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn a_wait_is_bounded_by_the_maximum_pause() {
+        let max_pause = Duration::from_millis(100);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let _paused = slots.pause();
+        let started = Instant::now();
+        slots.wait_unpaused(&AtomicBool::new(false));
+        let took = started.elapsed();
+        assert!(took >= max_pause, "took {took:?}");
+        assert!(took < Duration::from_secs(2), "took {took:?}");
+    }
+
+    #[test]
+    fn a_wait_stops_on_cancel() {
+        let slots = ReadSlots::with_max_pause(1, Duration::from_secs(5));
+        let _paused = slots.pause();
+        let started = Instant::now();
+        slots.wait_unpaused(&AtomicBool::new(true));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn a_yield_outside_pass_two_ignores_a_pause() {
+        let slots = ReadSlots::with_max_pause(1, Duration::from_secs(5));
+        let _paused = slots.pause();
+        let started = Instant::now();
+        yield_to_pause(&AtomicBool::new(false));
+        drop(PassSlots::set(&slots));
+        yield_to_pause(&AtomicBool::new(false));
+        assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[test]
+    fn a_yield_inside_pass_two_honours_a_pause() {
+        let max_pause = Duration::from_millis(100);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let _paused = slots.pause();
+        let _pass = PassSlots::set(&slots);
+        let started = Instant::now();
+        yield_to_pause(&AtomicBool::new(false));
+        assert!(started.elapsed() >= max_pause);
+    }
+
+    #[test]
+    fn a_files_stage_waits_share_one_pause_budget() {
+        let max_pause = Duration::from_millis(100);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let _pass = PassSlots::set(&slots);
+        let cancel = AtomicBool::new(false);
+        let paused = slots.pause();
+        let started = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(started.elapsed() >= max_pause);
+        let second = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(
+            second.elapsed() < max_pause / 2,
+            "took {:?}",
+            second.elapsed()
+        );
+        drop(paused);
+        yield_to_pause(&cancel);
+        let _again = slots.pause();
+        let third = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(third.elapsed() >= max_pause, "took {:?}", third.elapsed());
     }
 
     #[test]

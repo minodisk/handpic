@@ -5,6 +5,7 @@ mod facemesh;
 mod faces;
 mod focus;
 mod history;
+mod hold;
 mod judgment;
 mod keys;
 mod logger;
@@ -49,6 +50,7 @@ use gpui::{
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
+use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
 use keys::Bindings;
@@ -66,7 +68,7 @@ use riffle_core::{
     Flag,
     arw::FocusLocation,
     reader,
-    scan::{ReadSlots, ScanFocus},
+    scan::{Paused, ReadSlots, ScanFocus},
 };
 use scan::{Event, Listed, Prepared, Scan};
 use settings::Settings;
@@ -91,6 +93,8 @@ struct Loaded {
     orientation: u16,
     meta: Metadata,
     focus: Option<FocusLocation>,
+    /// The scan's pause, held until the image is painted (`hold.rs`).
+    paused: Paused,
 }
 
 /// mozjpeg reports a corrupt JPEG by unwinding, which would otherwise lose
@@ -107,7 +111,6 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
     let preview = reader::read_preview(path);
-    drop(paused);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
     let meta = exif::metadata(file_name(path), &arw.shot);
@@ -137,6 +140,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         orientation: arw.orientation,
         meta,
         focus: arw.shot.focus,
+        paused,
     })
 }
 
@@ -283,6 +287,8 @@ struct Riffle {
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
     pending: Rc<RefCell<Option<Page>>>,
+    /// The shown image's scan pause, released once it is painted.
+    hold: PaintHold,
     summary: Rc<RefCell<Summary>>,
     key: Option<Instant>,
     sent: Instant,
@@ -412,6 +418,7 @@ impl Riffle {
             marks: overlay::Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
+            hold: PaintHold::default(),
             summary: Rc::default(),
             key: None,
             sent: Instant::now(),
@@ -1279,6 +1286,7 @@ impl Riffle {
                 self.shown = Some((index, Shown::Read(Box::new(loaded.meta))));
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
+                self.hold.hold(loaded.paused);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
                 self.zoom.shown(loaded.focus, loaded.orientation);
@@ -1540,6 +1548,7 @@ impl Render for Riffle {
         let image = self.image.clone();
         let retired = self.retired.clone();
         let pending = self.pending.clone();
+        let hold = self.hold.clone();
         let summary = self.summary.clone();
         let cells = self.strip_cells();
         let mark = self.marks.mark(self.current_path().as_deref());
@@ -1589,6 +1598,7 @@ impl Render for Riffle {
                                     }
                                     overlay::paint(mark.as_ref(), fit, window, cx);
                                 }
+                                hold.release();
                                 let paint_finished = Instant::now();
                                 let old = retired.take();
                                 if page.is_none() && zoomed.is_none() && old.is_empty() {
