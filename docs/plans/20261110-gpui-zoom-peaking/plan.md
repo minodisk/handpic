@@ -208,7 +208,7 @@ and the MCP view mode.
       pixels before painting if the canvas center is fractional).
     - `z` is matched by name next to the existing keys; the keymap of
       `shortcuts.rs` arrives with another milestone.
-- [ ] Step 2: Focus peaking on `e`, on the fit view and on the 1:1 crop, with the held-key measurement
+- [x] Step 2: Focus peaking on `e`, on the fit view and on the 1:1 crop, with the held-key measurement
   - Done when:
     - `crates/native/src/peaking.rs` exists with unit tests and holds:
       - `PEAKING_THRESHOLD` (160) and `PEAKING_COLOR` (`[255, 32, 32]` as
@@ -360,3 +360,4 @@ and the MCP view mode.
 ## Progress
 
 - (2026-11-11) Step 1 complete
+- (2026-11-13) Step 2 complete
