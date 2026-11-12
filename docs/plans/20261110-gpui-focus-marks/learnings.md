@@ -246,6 +246,18 @@
   vsync noise. One run (ARW B1) did not exit after `--auto`'s quit and was
   closed with `CloseMainWindow`. A watchdog (`watchdog.ps1`) then closed any
   run's window still open after 100 s; it never fired.
+- Pausing pass 2's compute, not only its reads, while a RAF preview loads
+  took RAF's A - B from +5.08 to +1.94 ms without slowing pass 2 (rows per run
+  unchanged). The landed version adds `ReadSlots::wait_unpaused` and
+  `scan::yield_to_pause` at pass 2's stage boundaries. The stage functions in
+  `candidate.rs` take only `cancel`, so the file's slots reach them through a
+  thread-local set per file (`PassSlots`) rather than a signature change. The
+  native preview's `Paused` now travels in `Loaded` into `PaintHold`
+  (`hold.rs`), which the canvas releases after painting the image.
+- This worktree's `.git` still points at the old
+  `C:/Users/daisu/ws/github.com/minodisk/riffle` path. The repo moved to
+  `.../handpic`, so git runs here with an explicit `--git-dir` (the
+  worktree's admin dir under `handpic/.git/worktrees/`) and `--work-tree=.`.
 - `--auto`'s quit, and closing the window, call `cx.quit()` without
   `Scan::stop`. A pass 2 still running then logs no `scan faces:` line, so the
   A runs' pass 2 progress came from each run's index copy (rows with

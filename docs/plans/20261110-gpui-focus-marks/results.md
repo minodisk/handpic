@@ -1,5 +1,52 @@
 # Step 6 results: paging while pass 2 runs against paging on a finished index
 
+## Pause experiment (3 pass 2 threads, pass 2 pausing between stages): RAF +1.94 ms
+
+Measured 2026-11-12, 08:19-08:27 local, RAF only, with an uncommitted
+experimental build on top of `4913a737` (the patch is
+`pause-experiment.patch` in the test folder). In that build:
+- pass 2's workers wait out the preview's pause at their stage boundaries
+  (after the read, the decode, YuNet, the face mesh, the sharpness score and
+  the full-size read), not only before a read;
+- the native preview holds the pause across its read, decode and orient (not
+  yet the paint);
+- pass 2 still runs on 3 threads.
+
+The runs were B A B A B A once, with no warm-up, no `f` pair and no redos.
+Every run passed the idle rule, and every `frameWait` p50 was 7.8-10.7 ms.
+
+Median of the three runs' p50, A minus B (ms), against the 3-thread rerun
+without the pause:
+
+| Stage | A | B | A - B | Without the pause |
+|-------|---|---|-------|-------------------|
+| read | 1.79 | 3.43 | -1.64 | -0.28 |
+| decode | 46.47 | 46.70 | **-0.23** | +2.34 |
+| frameWait | 9.73 | 8.66 | +1.07 | -0.67 |
+| paint | 6.07 | 3.44 | +2.63 | +2.85 |
+| **keypressToPixels** | **66.62** | **64.68** | **+1.94** | +5.08 |
+| keypressToPixels p95 | 78.28 | 76.76 | +1.52 | +5.72 |
+
+- Per pair: +2.71, +0.21, +2.55.
+- The `decode` growth is gone. `paint` still grows, since this build released
+  the pause before the paint.
+- Pass 2's rows written per A run were 1,440, 1,470 and 1,460, against
+  1,400-1,490 without the pause, so pausing did not measurably slow pass 2
+  while paging.
+
+| Run | Idle | frameWait p50 | read | decode | paint | keypressToPixels |
+|-----|------|---------------|------|--------|-------|------------------|
+| B1 | ok | 8.66 | 2.07 / 6.16 | 46.70 / 53.87 | 3.49 / 4.30 | 63.91 / 76.76 |
+| A1 | ok | 9.73 | 1.84 / 2.65 | 46.44 / 55.18 | 6.07 / 10.58 | 66.62 / 78.28 |
+| B2 | ok | 7.78 | 3.92 / 6.53 | 47.26 / 53.63 | 3.43 / 4.15 | 64.68 / 75.59 |
+| A2 | ok | 7.76 | 1.76 / 3.16 | 46.47 / 55.19 | 6.15 / 9.73 | 64.89 / 76.78 |
+| B3 | ok | 9.32 | 3.43 / 6.59 | 46.33 / 53.36 | 3.44 / 3.83 | 65.27 / 78.86 |
+| A3 | ok | 10.68 | 1.79 / 3.01 | 48.36 / 54.86 | 5.87 / 8.88 | 67.82 / 80.78 |
+
+A3 started a minute late: `run.sh` refused to start on a 24 % sample, and the
+slot then ran once. The landed change also holds the pause until the image is
+painted; it is measured in the next A/B.
+
 ## Third run, rerun (3 pass 2 threads): ARW met, RAF missed by 0.08 ms
 
 Measured 2026-11-11, 23:06-23:36 local, with the same `4aefeb14` binary. That

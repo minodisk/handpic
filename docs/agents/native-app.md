@@ -180,6 +180,22 @@ a GPUI `Task` cancels it).
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
 
+### A preview holds the scan's pause until its image is painted (Measured)
+
+`load` takes `ReadSlots::pause` before the read and hands the guard back in
+`Loaded`; the view keeps it in `PaintHold` (`hold.rs`) and the preview
+canvas's paint releases it right after painting the image. Pass 2's workers
+wait out a held pause at every stage boundary (`scan::yield_to_pause`), not
+only before a read, so the read, the decode, the orient and the paint get the
+cores. `MAX_PAUSE` (1 s) still bounds what a worker honours, so a hold never
+released only slows the scan. Holding the pause through the decode (not
+yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
+`decode` growth gone, without fewer pass 2 rows per run
+([results](../plans/20261110-gpui-focus-marks/results.md)).
+
+- Rule: anything new on the preview's path between the read and the paint
+  runs while the pause is held; keep it there rather than after the release.
+
 ### Pass 2 runs on pass 1's thread (Inferred)
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right

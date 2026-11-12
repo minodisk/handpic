@@ -4,6 +4,7 @@ mod eyes;
 mod facemesh;
 mod faces;
 mod focus;
+mod hold;
 mod logger;
 mod mark;
 mod orient;
@@ -41,6 +42,7 @@ use gpui::{
     point, prelude::*, px, rgb, size,
 };
 use gpui_platform::application;
+use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use overlay::Marks;
 use pager::{Move, Pager};
@@ -53,7 +55,7 @@ use riffle_backend::{
 };
 use riffle_core::{
     reader,
-    scan::{ReadSlots, ScanFocus},
+    scan::{Paused, ReadSlots, ScanFocus},
 };
 use scan::{Event, Listed, Scan};
 use strip::{Answer, Strip};
@@ -75,6 +77,8 @@ struct Loaded {
     px: (u32, u32),
     orientation: u16,
     settings: String,
+    /// The scan's pause, held until the image is painted (`hold.rs`).
+    paused: Paused,
 }
 
 /// mozjpeg reports a corrupt JPEG by unwinding, which would otherwise lose
@@ -95,7 +99,6 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
     let preview = reader::read_preview(path);
-    drop(paused);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
     let settings = exif(&arw.shot);
@@ -130,6 +133,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         px: (w, h),
         orientation: arw.orientation,
         settings,
+        paused,
     })
 }
 
@@ -231,6 +235,8 @@ struct Riffle {
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
     /// The keyed page the next presented frame completes.
     pending: Rc<RefCell<Option<Page>>>,
+    /// The shown image's scan pause, released once it is painted.
+    hold: PaintHold,
     summary: Rc<RefCell<Summary>>,
     key: Option<Instant>,
     sent: Instant,
@@ -312,6 +318,7 @@ impl Riffle {
             marks: Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
+            hold: PaintHold::default(),
             summary: Rc::default(),
             key: None,
             sent: Instant::now(),
@@ -916,6 +923,7 @@ impl Riffle {
                 .into();
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
+                self.hold.hold(loaded.paused);
                 let path = self.files[index].to_string_lossy().into_owned();
                 self.marks.show(Some((path, loaded.orientation)));
                 self.analyze_current(cx);
@@ -985,6 +993,7 @@ impl Render for Riffle {
         let image = self.image.clone();
         let retired = self.retired.clone();
         let pending = self.pending.clone();
+        let hold = self.hold.clone();
         let summary = self.summary.clone();
         let cells = self.strip_cells();
         let mark = self.marks.mark(self.current_path().as_deref());
@@ -1021,6 +1030,7 @@ impl Render for Riffle {
                             }
                             overlay::paint(mark.as_ref(), fit, window, cx);
                         }
+                        hold.release();
                         let paint_finished = Instant::now();
                         let old = retired.take();
                         if page.is_none() && old.is_empty() {

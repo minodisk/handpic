@@ -609,6 +609,7 @@ fn scored_face(
     let mesh = meshes_face(face)
         .then(|| mesh_of(rgb, width, height, orientation, face))
         .flatten();
+    crate::scan::yield_to_pause(cancel);
     if cancel.load(Ordering::Relaxed) {
         return None;
     }
@@ -670,6 +671,7 @@ pub fn focus_cue_unless(
         Ok(decoded) => decoded,
         Err(e) => return Some(Err(e)),
     };
+    crate::scan::yield_to_pause(cancel);
     if canceled() {
         return None;
     }
@@ -681,6 +683,7 @@ pub fn focus_cue_unless(
         .point
         .and_then(|p| nearest_face(&detection.faces, p))
         .copied();
+    crate::scan::yield_to_pause(cancel);
     if canceled() {
         return None;
     }

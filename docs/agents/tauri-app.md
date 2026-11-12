@@ -1421,7 +1421,12 @@ file read at once, on any of the three passes, while decoding and the models
 stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`,
 an eighth of the cores, for pass 2 and `embed_threads()`, a quarter, for
 pass 3). `preview` holds `pause()` across its
-`read_preview`, so no worker starts a new read until it returns. The CLI and
+`read_preview`, so no worker starts a new read until it returns. Pass 2's
+workers also wait out a held pause at their stage boundaries (after the read,
+the decode, YuNet, the face mesh, the sharpness score and the full-size read;
+`scan::yield_to_pause`, `ReadSlots::wait_unpaused`, bounded by `MAX_PAUSE`),
+which in the Tauri app covers only `preview`'s read; the GPUI app holds the
+pause until its image is painted (`native-app.md`). The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
 so `docs/humans/performance.md`'s numbers stay comparable.
 
