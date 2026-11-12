@@ -1424,7 +1424,7 @@ pass 3). `preview` holds `pause()` across its
 `read_preview`, so no worker starts a new read until it returns. Pass 2's
 workers also wait out a held pause at their stage boundaries (after the read,
 the decode, YuNet, the face mesh, the sharpness score and the full-size read;
-`scan::yield_to_pause`, `ReadSlots::wait_unpaused`, bounded by `MAX_PAUSE`),
+`scan::yield_to_pause`, one `MAX_PAUSE` budget per file),
 which in the Tauri app covers only `preview`'s read; the GPUI app holds the
 pause until its image is painted (`native-app.md`). The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
@@ -1457,8 +1457,10 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   cap of 2 such a folder pays a calculated 33-63 ms/file, and `preview` on such
   a file pauses the scan for the decode as well.
 - `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
-  it first sees one, then reads anyway, so a stuck or leaked pause slows the
-  scan to one file per worker per `MAX_PAUSE` and never stalls it. A wait for a
+  it first sees one, then reads anyway, so a stuck or leaked pause never stalls
+  the scan. The worst case is about 1 s per `acquire` (one per pass 1 file, two
+  per pass 2 file) plus 1 s for all of a pass 2 file's stage waits, so about
+  3 s per pass 2 file. A wait for a
   permit alone does not use that clock, or a small cap would let workers read
   through a live pause.
 - Cancel is polled inside the wait (`CANCEL_TICK`, 50 ms) because the cancel

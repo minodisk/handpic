@@ -1611,6 +1611,31 @@ mod tests {
     }
 
     #[test]
+    fn a_files_stage_waits_share_one_pause_budget() {
+        let max_pause = Duration::from_millis(100);
+        let slots = ReadSlots::with_max_pause(1, max_pause);
+        let _pass = PassSlots::set(&slots);
+        let cancel = AtomicBool::new(false);
+        let paused = slots.pause();
+        let started = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(started.elapsed() >= max_pause);
+        let second = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(
+            second.elapsed() < max_pause / 2,
+            "took {:?}",
+            second.elapsed()
+        );
+        drop(paused);
+        yield_to_pause(&cancel);
+        let _again = slots.pause();
+        let third = Instant::now();
+        yield_to_pause(&cancel);
+        assert!(third.elapsed() >= max_pause, "took {:?}", third.elapsed());
+    }
+
+    #[test]
     fn a_pause_held_throughout_only_slows_the_scan() {
         let (dir, paths) = fixtures("pause-held", 6);
         let max_pause = Duration::from_millis(20);
