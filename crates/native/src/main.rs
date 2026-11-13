@@ -781,6 +781,14 @@ impl Riffle {
             && let Some(to) = next.iter().position(|p| p == path)
         {
             *at = to;
+            // The status line's `n/total` follows the shown file's new place.
+            if let Some((head, rest)) = self.status.split_once("  ")
+                && let Some((a, b)) = head.split_once('/')
+                && a.parse::<usize>().is_ok()
+                && b.parse::<usize>().is_ok()
+            {
+                self.status = format!("{}/{}  {rest}", to + 1, next.len()).into();
+            }
         }
         self.files = next.iter().map(PathBuf::from).collect();
         self.mark_strip();
@@ -1082,7 +1090,7 @@ impl Riffle {
                     this.touched.remove(&path);
                     this.undo.forget(entry, &path);
                     this.set_state(&path, before);
-                    this.refilter(this.current_path(), true, None, cx);
+                    this.refilter(this.current_path(), false, None, cx);
                     this.write_failed(path, e);
                     cx.notify();
                 }

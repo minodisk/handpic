@@ -261,7 +261,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   gone), and `refilter` re-requests the current preview whenever the image on
   screen is not the current file's. `listing` still guards the index reads,
   so a judgment's reorder does not drop the entries read of pass 1's `Done`.
-- Rule: a judgment's and a step's `refilter` scroll the current file into view
+- Rule: a judgment's, a failed store's revert and a step's `refilter` scroll the current file into view
   (the Tauri `keepScroll` false); `Done` and a re-listing keep the same files in
   view (`carried_offset`).
 - Measured: `order_files` over 1,000 paths takes 0.4-0.5 ms in a release
