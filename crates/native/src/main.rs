@@ -2170,6 +2170,11 @@ impl Riffle {
             if moved {
                 self.remember(cx);
             }
+            if moved {
+                // Before `request`: a ring hit stamps `zoom.shown` with this
+                // page's `seq`.
+                self.zoom_page(cx);
+            }
             // The order's bump dropped a preview read still out.
             if moved || shown != self.current_path() {
                 self.request(Instant::now(), cx);
@@ -2179,7 +2184,6 @@ impl Riffle {
             }
             if moved {
                 self.read_focus(cx);
-                self.zoom_page(cx);
             }
         }
         moved
@@ -2758,9 +2762,11 @@ impl Riffle {
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
             self.strip_moved(cx);
+            // Before `request`: a ring hit shows the image at once and
+            // `zoom.shown` stamps the facts with this page's `seq`.
+            self.zoom_page(cx);
             self.request(key, cx);
             self.read_focus(cx);
-            self.zoom_page(cx);
         }
         moved
     }

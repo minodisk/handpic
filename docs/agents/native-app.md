@@ -888,6 +888,9 @@ prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
   with the paths that no longer name what the ring read.
 - Rule: a prefetch's result is dropped by the ring's own stale mark, not by
   `order`; its `Paused` ends when it lands, never held for a paint.
+- Rule: the page bump (`zoom_page`) comes before `request` in `go` and in
+  `refilter`'s `moved` branch: a hit shows the image synchronously, and
+  `zoom.shown` stamps the facts with the `seq` current then.
 - Rule: what the ring gives up is retired with a `cx.notify()`: `retired`
   drains only in the preview canvas's paint, so an eviction on `settle` with
   nothing else to draw would otherwise hold the images past the cap.
