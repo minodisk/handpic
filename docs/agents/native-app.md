@@ -859,8 +859,9 @@ strip needed one because `uniform_list` is vertical only.
   later open owns the tree. An open before the roots have been read waits in
   `reveal_wanted`.
 - Rule: the same counter guards the listing of the open: its background task
-  sets the folder watcher under the counter's lock only while its open is
-  still the latest, and its result is dropped otherwise, so a quick second
+  sets the folder watcher under a separate lock (never taken by the UI
+  thread, which bumps the atomic counter without locking) only while its
+  open is still the latest, and its result is dropped otherwise, so a quick second
   open is never overwritten by the first's late listing, nor left with the
   first folder's watcher.
 - Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x

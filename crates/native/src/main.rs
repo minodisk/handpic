@@ -38,7 +38,10 @@ use std::{
     path::{Path, PathBuf},
     process,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -285,9 +288,12 @@ struct Riffle {
     next_scan: u64,
     /// The open folder's canonical path, the key of its index rows.
     dir: Option<String>,
-    /// Bumped by every open, under the lock its listing's watcher is set
-    /// under: a listing or a reveal of an earlier open is dropped.
-    opens: Arc<Mutex<u64>>,
+    /// Bumped by every open, without a lock: a listing or a reveal of an
+    /// earlier open is dropped.
+    opens: Arc<AtomicU64>,
+    /// Taken by a listing's background task around "the counter still equals
+    /// my token, then set the watcher", never by the UI thread.
+    watching_lock: Arc<Mutex<()>>,
     /// The left-hand folder tree and its drawn rows, rebuilt when it changes.
     tree: Tree,
     tree_rows: Vec<tree::Row>,
@@ -488,6 +494,7 @@ impl Riffle {
             next_scan: 0,
             dir: None,
             opens: Arc::default(),
+            watching_lock: Arc::default(),
             tree: Tree::default(),
             tree_rows: Vec::new(),
             tree_open: None,
@@ -574,7 +581,7 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
-        *index::lock(&self.opens) += 1;
+        self.opens.fetch_add(1, Ordering::SeqCst);
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
         self.reveal(shown.to_string_lossy().into_owned(), cx);
@@ -585,7 +592,7 @@ impl Riffle {
     }
 
     fn opens(&self) -> u64 {
-        *index::lock(&self.opens)
+        self.opens.load(Ordering::SeqCst)
     }
 
     /// A click on a folder's name in the tree: open it whole, without the
@@ -785,7 +792,8 @@ impl Riffle {
         let watching = self.watch.clone();
         let writer = self.writer.clone();
         let (format, names) = (self.settings.format, self.settings.names.clone());
-        let (opens, token) = (self.opens.clone(), self.opens());
+        let (opens, watching_lock, token) =
+            (self.opens.clone(), self.watching_lock.clone(), self.opens());
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
@@ -796,12 +804,12 @@ impl Riffle {
                         let _ = eviction.join();
                     }
                     // Watched before the listing, so a change during it is
-                    // not missed; under the open's lock, so a later open's
+                    // not missed; under `watching_lock`, so a later open's
                     // watcher is never replaced by this one's.
                     let dir = canonicalize(&folder.to_string_lossy());
                     {
-                        let opens = index::lock(&opens);
-                        if *opens != token {
+                        let _guard = index::lock(&watching_lock);
+                        if opens.load(Ordering::SeqCst) != token {
                             return Ok(None);
                         }
                         watch::set(&watching, &dir, &dir);

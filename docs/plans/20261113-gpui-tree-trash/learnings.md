@@ -47,7 +47,7 @@
   Steps 3 and 4 and carry `#[allow(dead_code)]` (the `history.rs` precedent).
   `rebase` is private, used by `respell`; its four cases are ported anyway.
   `descendants` / `collapseAll` were left for Step 4 with the keyboard.
-- The folder token is a new `opens: Arc<Mutex<u64>>`, bumped by `open`, not
+- The folder token is a new `opens: Arc<AtomicU64>`, bumped by `open`, not
   `listing`: `listing` is bumped by every re-listing of the open folder too,
   which would cut the reveal short on a watcher resync. The plan's text says
   "the `listing` counter"; this is the deviation.
@@ -55,8 +55,9 @@
   opens from the tree, a quick second open could be overwritten by the
   first's late listing and could be left with the first folder's watcher (its
   background task may still be stopping the previous scan when the second
-  sets its watch). The listing now sets the watcher under the `opens` lock
-  only while its open is still the latest, and `opened` is dropped otherwise.
+  sets its watch). The listing now sets the watcher under a separate
+  `watching_lock` (the UI thread only bumps the atomic, so it never waits on a
+  watcher) only while its open is still the latest, and `opened` is dropped otherwise.
 - The second-open reset (`opened`'s non-`carry` branch) already cleared the
   judgments, `touched`, notes, write errors, the `f` overlay's caches
   (`marks.clear()`, both branches), zoom (`zoom_page`), the dwell and its

@@ -293,7 +293,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       the chain from its root (adding a root for a folder no root holds),
       respell the chain from the listings, highlight it and scroll it into
       view; a second open while the chain is still listing owns the tree
-      (the `listing` counter is the folder token).
+      (the `opens` counter is the folder token, not `listing`, which every watcher re-listing bumps and would cut a reveal short).
     - A launch without a folder argument opens nothing: `start` no longer
       calls `cx.prompt_for_paths`. With no folder open the window shows the
       tree, an empty preview, an empty strip and `no folder` on the status
