@@ -186,7 +186,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let config = dir.path().join("config");
         write(
-            &config.join("com.minodisk.handpic").join("settings.json"),
+            &config.join("dev.minodisk.handpic").join("settings.json"),
             r#"{"sidecarFormat":"dop"}"#,
         );
         let file = dir.path().join("s.json");
@@ -198,7 +198,29 @@ mod tests {
     }
 
     #[test]
-    fn the_current_identifier_wins_over_the_legacy_one() {
+    fn the_current_identifier_wins_over_the_legacy_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &dir.path()
+                .join("dev.minodisk.handpic")
+                .join("settings.json"),
+            r#"{"sidecarFormat":"dop"}"#,
+        );
+        write(
+            &dir.path()
+                .join("com.minodisk.handpic")
+                .join("settings.json"),
+            r#"{"sidecarFormat":"xmp"}"#,
+        );
+        write(
+            &dir.path().join("com.minodisk.riffle").join("settings.json"),
+            r#"{"sidecarFormat":"both"}"#,
+        );
+        assert_eq!(load_from(None, Some(dir.path())).format, SidecarFormat::Dop);
+    }
+
+    #[test]
+    fn the_newer_legacy_file_wins_when_the_current_one_is_absent() {
         let dir = tempfile::tempdir().unwrap();
         write(
             &dir.path()
@@ -214,7 +236,7 @@ mod tests {
     }
 
     #[test]
-    fn the_legacy_file_is_used_when_only_it_exists() {
+    fn the_riffle_file_is_used_when_only_it_exists() {
         let dir = tempfile::tempdir().unwrap();
         write(
             &dir.path().join("com.minodisk.riffle").join("settings.json"),

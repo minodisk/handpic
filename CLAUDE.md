@@ -129,7 +129,12 @@ folder's files have an export in its `Output` or `Output-sequenced` subfolder,
 by file stem, with PhotoLab's copy and DeepPRIME suffixes (no answer without
 such a folder, an error when one cannot be read whole), `src/watch.rs` the open
 folder's watcher, which reports a settled burst through a callback and names no
-event, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+event, `src/perf.rs` the performance overlay's CPU and disk sampler (`Sampler`,
+whose `start` runs one thread that hands a `Sample` every 500 ms to a callback:
+Handpic's process CPU and the system's, each 0–100 %, Handpic's read
+throughput in bytes per second and the system's disk busy time, 0–100 %, PDH
+on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
+and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -203,16 +208,14 @@ key, its tools, and the bridge that asks the main window over the
 `mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
 the `log_frontend` command that writes the frontend's `uncaught-js:` and
 `invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
-current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's CPU
-and disk sampler: `set_perf_sampling` starts or stops one thread that emits
-Handpic's process CPU and the system's, each 0–100 %, Handpic's read
-throughput in bytes per second and the system's disk busy time, 0–100 %
-(PDH on Windows, `/sys/block` on Linux, `null` on macOS), as `perf-sample`
-every 500 ms, so nothing samples while the overlay is off). `crates/native` (`riffle-native`)
+current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's
+`set_perf_sampling`, which starts or stops the backend's `perf::Sampler` and
+emits each sample as `perf-sample`, so nothing samples while the overlay is
+off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
-its own index at `<cache dir>/com.minodisk.handpic.native/index.sqlite` (or
+its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or

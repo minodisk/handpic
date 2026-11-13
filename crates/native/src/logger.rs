@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn the_default_is_the_native_folder_in_the_tauri_log_dir_shape() {
-        let dir = Path::new("C:/d").join("com.minodisk.handpic.native");
+        let dir = Path::new("C:/d").join("dev.minodisk.handpic.native");
         let dir = if cfg!(target_os = "macos") {
             dir
         } else {

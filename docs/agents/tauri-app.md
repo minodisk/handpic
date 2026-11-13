@@ -3018,3 +3018,19 @@ otherwise the read returns nothing regardless of whether the write
 succeeded.
 
 - Source: `docs/plans/_archived/20260920-robustness-cleanup/learnings.md`, Step 4.
+
+### Data-migration tests never call `migrate::run` (Inferred)
+
+`crates/app/src/migrate.rs` `run` acts on the real OS data and cache folders.
+With more than one `LEGACY_IDENTIFIERS` entry, a test that calls `run` would
+move a developer's real legacy folder (for example `com.minodisk.riffle`) into
+the current identifier's.
+
+- Rule: test migration through `migrate_under(bases, identifier, rename,
+  leftovers)` on temp bases only. This includes the "current identifier is not
+  a migration" case. `run` is only the thin caller of `migrate_under`.
+- Rule: platform leftover removal (macOS) is the `leftovers` hook, run under the
+  `all_moved` condition. Tests pass a stub rather than touching real folders.
+- Clippy's `cloned_ref_to_slice_refs` flags `&[root.clone()]` in such tests; use
+  `std::slice::from_ref(&root)`.
+- Source: `docs/plans/_archived/20261113-identifier-dev-minodisk/learnings.md`, Step 1.

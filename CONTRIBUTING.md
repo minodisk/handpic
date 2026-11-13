@@ -102,8 +102,8 @@ file per language in `crates/core/i18n/`. See
 The folder index is a SQLite cache, one row per file keyed by absolute path,
 in the app cache directory:
 
-- **macOS**: `~/Library/Caches/com.minodisk.handpic/index.sqlite`
-- **Windows**: `%LOCALAPPDATA%\com.minodisk.handpic\index.sqlite`
+- **macOS**: `~/Library/Caches/dev.minodisk.handpic/index.sqlite`
+- **Windows**: `%LOCALAPPDATA%\dev.minodisk.handpic\index.sqlite`
 
 Deleting it only costs one more scan (plus any judgments not yet written to
 a sidecar). Nothing runs `VACUUM`, so renaming a folder leaves its old rows
