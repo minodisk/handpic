@@ -141,7 +141,87 @@
   output, `set_output_known`) and the backend's `output.rs` tests for the
   matching; the log lines above show the answer reaching the view.
 
+## Step 4 (the two menus)
+
+- The GPUI API at the pinned rev compiled as the plan assumed, so no
+  fallback: `deferred`, `anchored` (`anchor`, `offset`, `snap_to_window`),
+  `Anchor` (not `Corner` at this rev), `on_mouse_down_out` and `occlude` on a
+  `div`. `anchored().position(..)` was not needed: an `anchored` without a
+  position places itself where it is laid out, so the popover sits in an
+  absolute zero-size `div` at the button's top-right with
+  `Anchor::BottomRight` and opens upward without reading any bounds back.
+- `on_mouse_down_out` runs in the capture phase, before every bubble-phase
+  `on_mouse_down`, and fires for a press on the menu's own button too (the
+  button is outside the popover's hitbox). Toggling on the button would then
+  reopen the menu the same press closed. `Menus::dismiss` keeps the closed
+  menu and the press position, and `Menus::toggle` on the same menu at the
+  same position leaves it closed (consuming the record), the Tauri toggle
+  living inside `#filter` / `#sort`, which its `mousedown` listener spares.
+  The buttons use `on_mouse_down` so both handlers see the same press.
+- Labels follow `index.html`, not the plan's paraphrase: the label section's
+  last item is `No label` (the plan said `None`) and the stars run `0`
+  (five dim stars, unrated) up to `5`, as the HTML does. `Face focus`'s
+  `Neutral` keeps an empty icon slot as in the Tauri menu; `Good` and `Low` get
+  a dot in `MarkState::color` in place of the face SVG.
+- `escape` is only taken while a menu is open (the plan said literally like
+  `home` / `end`): no default binding uses `escape` (`shortcuts.rs`'s
+  `DEFAULTS`; only `ctrl+escape` / `alt+meta+escape` are reserved system
+  keys), so this only matters for a user binding, which keeps working while
+  no menu is open.
+- `FilterState::is_active` lost its `expect(dead_code)`: the lit button reads
+  it.
+- The preview canvas height is unchanged: a temporary `eprintln!` of the
+  canvas bounds (removed) logged 1380 x 852 with the two buttons and with the
+  old plain status line, in the default 1600 x 1000 window.
+- Headless checks (debug exe, fresh `--index` per run in the scratchpad,
+  copies under `D:\Photos\tests\20261113-filter-sort\menu\`: `raw` from
+  `sort\raw`, `jpg-sequenced` from `sort\jpg-sequenced`, `faces` from
+  `faces`): `raw` with `settings-name.json`, `--auto 4`, paged in name order
+  with no panic; `jpg-sequenced`, `--auto 4`, paged in capture order (C2000Z,
+  C960Z, COOLPIX, A065); `raw` with `settings-filter-untagged.json`,
+  `--auto 6`, cycled the 5 unflagged files. A click cannot be driven by
+  `--auto`, so the menus themselves are the pending manual check below; the
+  item model, its order and labels, `apply` and the open / close rules are
+  `menu.rs`'s unit tests.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check (Step 4, Windows, the user's):** the two menus.
+  Basis: plan Step 4's manual check and its "whether a `div` `on_click` inside
+  a `deferred` element receives the click before the strip's
+  `on_mouse_down`"; mouse clicks cannot be driven headless. Steps: build
+  `crates/native` (`cargo build`, NASM on `PATH`), run `riffle-native
+  D:\Photos\tests\20261113-filter-sort\menu\raw --index <fresh path>
+  --settings D:\Photos\tests\20261113-filter-sort\settings-name.json`.
+  Expected: `Sort ▾` and `Filter ▾` sit at the status row's right end and the
+  preview is the same size as before. Click `Filter ▾`: the menu opens upward
+  over the strip, its right edge on the button's; check `Picked`, then `Red`:
+  the menu stays open, each gets a check mark, the strip narrows (no picked or
+  red file in `raw`: `No files match the current filter.`; use `menu\faces`
+  after picking one with `p` to see a narrowed strip) and the button lights;
+  a click on an item does not also select a strip cell under it. `Escape`
+  closes it; reopen and click the preview: it closes; reopen and click a strip
+  cell: it closes (record whether the cell is also selected); click
+  `Filter ▾` while open: it closes and stays closed. `Reset` unchecks all and
+  shows every file, the button no longer lit. `Sort ▾` then `Rating`: the strip
+  reorders (HX99, RX0, RX0M2, RX100M2, RX100M3, HX95), the menu closes and
+  the current file stays current and in view. With the filter menu open, hold
+  `→`: the pager pages; `e`, `z`, `f` still toggle peaking, 1:1 and the focus
+  mark. On `menu\jpg-sequenced`: `Sort ▾` is dimmed and does nothing, the strip
+  is in capture order. On `menu\faces` the filter menu shows the `Output`
+  section (`Output`: DSC00405, _DSC1616, _DSC1758; `No output`: the other 5);
+  on `menu\raw` (no `Output\`) it does not. Settings: `settings.json` is
+  untouched. Step 4's checkbox was ticked on the automated criteria and the
+  headless runs.
+- **Reset from an empty filtered list lands on the first file (Step 4, not
+  acted on):** when the filter hides every file, `current_path()` is `None`,
+  so the next menu change's `refilter` has no anchor and lands on index 0; the
+  file shown before the filter emptied the list is not remembered. The Tauri
+  `refilter` keeps its `current` path across an empty list. Fix: keep the last
+  current path in the view and pass it as the anchor while `files` is empty.
+  Files: `crates/native/src/main.rs` (`menu_action`, `refilter`).
+
+
 
 - **The pane's `n / total` lags a refilter that hides the shown file
   (Step 2 local review, round 1, not acted on):** until the new current

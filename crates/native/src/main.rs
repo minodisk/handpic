@@ -11,6 +11,7 @@ mod judgment;
 mod keys;
 mod logger;
 mod mark;
+mod menu;
 mod meta;
 mod orient;
 mod overlay;
@@ -47,10 +48,11 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight, KeyDownEvent, Keystroke,
-    MouseButton, MouseDownEvent, PathPromptOptions, Pixels, RenderImage, ScrollEvent, SharedString,
-    Task, TextAlign, TitlebarOptions, Window, WindowBounds, WindowOptions, canvas, div, fill,
-    outline, point, prelude::*, px, rgb, rgba, size,
+    Anchor, AnyElement, App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, PathPromptOptions, Pixels, Point,
+    RenderImage, ScrollEvent, SharedString, Task, TextAlign, TitlebarOptions, Window, WindowBounds,
+    WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, rgb,
+    rgba, size,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
@@ -58,6 +60,7 @@ use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
 use keys::Bindings;
+use menu::{Lead, Menus, Row, Which};
 use meta::Shown;
 use pager::{Move, Pager};
 use peaking::{Peaking, View};
@@ -244,6 +247,8 @@ struct Riffle {
     sort: SortKey,
     /// The strip's filter; a change lives for the session only.
     filter: FilterState,
+    /// The status row's sort or filter menu, while one is open.
+    menus: Menus,
     /// The listed files with an export, `None` while the folder gives no
     /// answer, and the listing the answer is about (`filter::output_of`).
     outputs: Option<HashSet<String>>,
@@ -428,6 +433,7 @@ impl Riffle {
                 filter.apply_stored(&settings.filter);
                 filter
             },
+            menus: Menus::default(),
             outputs: None,
             outputs_listing: HashSet::new(),
             outputs_failure: None,
@@ -646,6 +652,9 @@ impl Riffle {
         self.pending_faces.clear();
         self.order += 1;
         self.view_only = viewonly::is_view_only(&listed.files);
+        if self.view_only && self.menus.open() == Some(Which::Sort) {
+            self.menus.close();
+        }
         self.marks.clear();
         self.dir = Some(listed.dir.clone());
         self.filter.set_output_known(outputs.found.is_some());
@@ -999,7 +1008,8 @@ impl Riffle {
     }
 
     /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
-    /// native app's own keys; an action not handled yet is only logged.
+    /// native app's own keys, and `escape` while a menu is open; an action
+    /// not handled yet is only logged.
     fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
         let Some(name) = keys::key_name(keystroke) else {
             return;
@@ -1010,6 +1020,10 @@ impl Riffle {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
             ("q", _) => self.quit(cx),
+            ("escape", _) if self.menus.is_open() => {
+                self.menus.close();
+                cx.notify();
+            }
             (_, Some("previous")) => self.go(Move::Previous, cx),
             (_, Some("next")) => self.go(Move::Next, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
@@ -1795,6 +1809,146 @@ impl Riffle {
             )
     }
 
+    /// A press on a menu's button.
+    fn menu_pressed(&mut self, which: Which, at: Point<Pixels>, cx: &mut Context<Self>) {
+        self.menus.toggle(which, (f32::from(at.x), f32::from(at.y)));
+        cx.notify();
+    }
+
+    /// A press outside the open menu's popover.
+    /// Only a left press is recorded: no toggle listens to another button, so
+    /// a record of it would swallow the next left press on the button.
+    fn menu_dismissed(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) {
+        if e.button == MouseButton::Left {
+            self.menus
+                .dismiss((f32::from(e.position.x), f32::from(e.position.y)));
+        } else {
+            self.menus.close();
+        }
+        cx.notify();
+    }
+
+    /// A click on a menu item: the sort or the filter changes for the
+    /// session only, and the strip is rebuilt on the current file.
+    fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
+        menu::apply(&mut self.filter, &mut self.sort, action);
+        self.menus.acted(action);
+        self.refilter(self.current_path(), false, None, cx);
+        cx.notify();
+    }
+
+    /// The status line with the sort and filter buttons at its right end.
+    fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .items_center()
+            .gap_1()
+            .px_2()
+            .child(div().flex_1().min_w_0().child(self.status()))
+            .child(self.menu_button(
+                Which::Sort,
+                "Sort \u{25be}",
+                false,
+                !self.view_only,
+                max_menu_height,
+                cx,
+            ))
+            .child(self.menu_button(
+                Which::Filter,
+                "Filter \u{25be}",
+                self.filter.is_active(),
+                true,
+                max_menu_height,
+                cx,
+            ))
+    }
+
+    /// A menu's button, lit while `lit`, with its popover above it while
+    /// open; laid out only then.
+    fn menu_button(
+        &self,
+        which: Which,
+        text: &'static str,
+        lit: bool,
+        enabled: bool,
+        max_menu_height: Pixels,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let id = match which {
+            Which::Sort => "sort-toggle",
+            Which::Filter => "filter-toggle",
+        };
+        let mut button = div()
+            .id(id)
+            .px_1p5()
+            .rounded_sm()
+            .border_1()
+            .border_color(rgba(if lit {
+                PRIMARY_COLOR << 8 | 0xff
+            } else {
+                INPUT_BORDER
+            }))
+            .bg(rgba(BUTTON_FILL))
+            .text_size(px(12.))
+            .text_color(rgb(if lit { PRIMARY_COLOR } else { FOREGROUND_COLOR }))
+            .child(text);
+        if enabled {
+            button = button
+                .cursor_pointer()
+                .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                        this.menu_pressed(which, e.position, cx);
+                    }),
+                );
+        } else {
+            button = button.opacity(0.5);
+        }
+        let popover = (self.menus.open() == Some(which)).then(|| {
+            let rows = match which {
+                Which::Sort => menu::sort_rows(viewonly::sort_for(self.view_only, self.sort)),
+                Which::Filter => menu::filter_rows(&self.filter, self.outputs.is_some()),
+            };
+            // Drawn after the rest of the window and over it, its right edge
+            // on the button's, opening upward.
+            div().absolute().top_0().right_0().child(deferred(
+                anchored()
+                    .anchor(Anchor::BottomRight)
+                    .offset(point(px(0.), px(-4.)))
+                    .snap_to_window()
+                    .child(self.popover(rows, max_menu_height, cx)),
+            ))
+        });
+        div().relative().child(button).children(popover)
+    }
+
+    fn popover(&self, rows: Vec<Row>, max_height: Pixels, cx: &mut Context<Self>) -> AnyElement {
+        div()
+            .id("menu")
+            .occlude()
+            .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                this.menu_dismissed(e, cx);
+            }))
+            .flex()
+            .flex_col()
+            .min_w(px(180.))
+            .max_h(max_height)
+            .overflow_y_scroll()
+            .p_1()
+            .bg(rgb(PANE_COLOR))
+            .border_1()
+            .border_color(rgba(BORDER_COLOR))
+            .rounded_md()
+            .text_size(px(13.))
+            .children(
+                rows.into_iter()
+                    .enumerate()
+                    .map(|(at, row)| menu_row(at, row, cx)),
+            )
+            .into_any_element()
+    }
+
     fn quit(&mut self, cx: &mut Context<Self>) {
         println!("{}", self.summary.borrow().table());
         cx.quit();
@@ -1802,7 +1956,7 @@ impl Riffle {
 }
 
 impl Render for Riffle {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let image = self.image.clone();
         let retired = self.retired.clone();
         let pending = self.pending.clone();
@@ -1926,8 +2080,96 @@ impl Render for Riffle {
                         .size_full(),
                     ),
             )
-            .child(div().px_2().child(self.status()))
+            .child(self.status_row(window.viewport_size().height - px(40.), cx))
     }
+}
+
+/// One row of an open menu: an item's check mark, swatch and text, or a
+/// section's separator or heading.
+fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
+    let item = match row {
+        Row::Separator => {
+            return div()
+                .h(px(1.))
+                .my_1()
+                .bg(rgba(BORDER_COLOR))
+                .into_any_element();
+        }
+        Row::Heading(text) => {
+            return div()
+                .pl(px(MENU_INDENT))
+                .py(px(3.))
+                .text_size(px(11.))
+                .text_color(rgb(MUTED_COLOR))
+                .child(text)
+                .into_any_element();
+        }
+        Row::Item(item) => item,
+    };
+    let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(rgb(color));
+    let lead = match item.lead {
+        Lead::None => None,
+        Lead::Flag(flag) => Some(dot(match flag {
+            Some(filter::FilterFlag::Picked) => PICK_COLOR,
+            Some(filter::FilterFlag::Rejected) => REJECT_COLOR,
+            _ => MUTED_COLOR,
+        })),
+        Lead::Label(Some(tint)) => Some(dot(tint_color(tint))),
+        Lead::Label(None) => Some(
+            div()
+                .size(px(7.))
+                .flex_none()
+                .rounded_full()
+                .border_1()
+                .border_color(rgba(BORDER_COLOR)),
+        ),
+        Lead::Face(state) => Some(
+            div()
+                .size(px(12.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .children(state.map(|state| dot(state.color()).size(px(9.)))),
+        ),
+    };
+    let label = match item.label {
+        menu::Label::Text(text) => div().child(text),
+        menu::Label::Stars(on) => div()
+            .flex()
+            .child(
+                div()
+                    .text_color(rgb(STARS_COLOR))
+                    .child("\u{2605}".repeat(on.into())),
+            )
+            .child(
+                div()
+                    .text_color(rgba(MUTED_COLOR << 8 | 0x66))
+                    .child("\u{2605}".repeat((5 - on).into())),
+            ),
+    };
+    let action = item.action;
+    div()
+        .id(("menu-item", at))
+        .flex()
+        .items_center()
+        .gap_2()
+        .pr_3()
+        .py(px(3.))
+        .rounded_sm()
+        .cursor_pointer()
+        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+        .child(
+            div()
+                .w(px(MENU_INDENT))
+                .flex_none()
+                .text_center()
+                .child(if item.checked { "\u{2713}" } else { "" }),
+        )
+        .children(lead)
+        .child(label)
+        .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action, cx)))
+        .into_any_element()
 }
 
 struct StripCell {
@@ -1960,6 +2202,16 @@ const LABELED_NAME_COLOR: u32 = 0xfafafa;
 const REJECTED_DIM: u32 = 0x0000008c;
 const MARK_SIZE: f32 = 11.;
 const FLAG_DOT: f32 = 7.;
+/// `style.css`'s `--primary`, `--foreground`, `--accent`, `--border` and
+/// `--input`, and `.button.outline`'s fill.
+const PRIMARY_COLOR: u32 = 0xe5e5e5;
+const FOREGROUND_COLOR: u32 = 0xfafafa;
+const ACCENT_COLOR: u32 = 0x262626;
+const BORDER_COLOR: u32 = 0xffffff1a;
+const INPUT_BORDER: u32 = 0xffffff26;
+const BUTTON_FILL: u32 = 0xffffff0b;
+/// The leading column a checked item's check mark sits in.
+const MENU_INDENT: f32 = 20.;
 
 fn tint_color(tint: Tint) -> u32 {
     match tint {

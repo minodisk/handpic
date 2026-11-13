@@ -229,6 +229,11 @@ orientation, `Face focus`, `Eyes` and `Output`; `Stored`, the
 `filter_setting` rule over the stored `filter`; `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,
+`src/menu.rs` the status row's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
+`filter_rows`, a port of `index.html`'s `#sort-menu` and `#filter-menu`
+without the `Face focus` help; `apply`, what a click on an item does, for the
+session only; `Menus`, which one is open), which the window draws as
+`deferred` / `anchored` popovers above their buttons,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
