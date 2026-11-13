@@ -29,7 +29,7 @@ marks alone.
   directly, no `mise` / `cargo` in front. Rust 1.98.1 (`crates/native/mise.toml`),
   NASM on `PATH`.
 - Machine and drive: those of the strip plan's
-  [results](../_archived/20261110-gpui-strip-index/results.md) (Windows 11,
+  [results](../20261110-gpui-strip-index/results.md) (Windows 11,
   i7-13700, RTX 4060 Ti, 5120x1440 at 59 Hz, the SATA SSD `D:`), the app's
   default window on both.
 - Files: `D:\Photos\tests\20261108-gpui-compare\ARW` at `--size 1616x1080` and

@@ -327,7 +327,7 @@ them; their contents are deliberately coarse.
     first (`ScanFocus`), `last_viewed` / `views` are kept, and the folder
     watcher (`watch.rs`) resyncs the list. Includes the Step 3 aliasing
     follow-up if it was raised.
-- [ ] Step 6: The meta pane and the judgments with their sidecars
+- [x] Step 6: The meta pane and the judgments with their sidecars
   - Done when: the EXIF / Maker note rows (`exif.rs` formatting), rating,
     the tri-state flag and the color label with their keys from
     `shortcuts.rs`, the coalescing sidecar writer (XMP, `.dop`, both; the
@@ -557,4 +557,5 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-09) Step 3 complete
 - (2026-11-09) Step 4 complete, through `../_archived/20261109-gpui-backend-crate/plan.md`
 - (2026-11-10) Step 5 complete, through `../_archived/20261110-gpui-strip-index/plan.md`
+- (2026-11-13) Step 6 complete, through `../_archived/20261110-gpui-judgments/plan.md`
 - (2026-11-12) Step 7's 1:1 zoom and focus peaking slice done, through `../_archived/20261110-gpui-zoom-peaking/plan.md` (Step 7 stays open)
