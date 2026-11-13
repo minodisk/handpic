@@ -169,7 +169,7 @@ before going on.
       `crates/app/Cargo.toml` only what this move leaves unused.
     - `crates/native` gains nothing but the lock entries.
 
-- [ ] Step 3: Move the `aiEnabled` state and the model download into `crates/backend`
+- [x] Step 3: Move the `aiEnabled` state and the model download into `crates/backend`
   - Done when: `crates/backend/src/ai.rs` holds the enabled / download state,
     `AiState`, the switch that starts or cancels the download, the part-file
     cleanup, `fetch` and `install` with the size and SHA-256 check, and

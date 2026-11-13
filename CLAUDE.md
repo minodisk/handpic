@@ -134,13 +134,17 @@ whose `start` runs one thread that hands a `Sample` every 500 ms to a callback:
 Handpic's process CPU and the system's, each 0–100 %, Handpic's read
 throughput in bytes per second and the system's disk busy time, 0–100 %, PDH
 on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
-and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+`src/ai.rs` the `aiEnabled` state and the embedding model's download (`Ai`:
+the switch, which starts the download on an enable with the model not in
+place and cancels it on a disable, the leftover part files removed at
+start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
+handed to a callback), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
-(persisted in the `aiEnabled` key, set by `set_ai_enabled`) and the download
-of the embedding model into the app's local data dir on the first enable,
-checked against its size and SHA-256, `src/rank.rs` the personal ranking's
+(persisted in the `aiEnabled` key, set by `set_ai_enabled`) over the
+backend's `ai`, placing the embedding model in the app's local data dir and
+emitting its state as `ai-state`, `src/rank.rs` the personal ranking's
 commands (`ranking_of`, the rank of a folder's files from `Index::rank_rows`
 and the weights in use; `refit_ranking`, the settings' refit on the
 folders `Index::rank_dirs` lists, the picks against the rejects and the
