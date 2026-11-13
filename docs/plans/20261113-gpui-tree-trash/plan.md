@@ -342,7 +342,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - A canceled picker already left the view with `dir: None`, so most
       paths tolerate it; the step walks every handler once rather than
       trusting that.
-- [ ] Step 3: The tree follows the disk, and its right-click menu
+- [x] Step 3: The tree follows the disk, and its right-click menu
   - Done when:
     - The view holds one `riffle_backend::treewatch::TreeWatch` whose
       callback sends a new `Event::TreeChanged(String)` into the scan's

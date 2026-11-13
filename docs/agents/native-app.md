@@ -110,9 +110,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
-  The native app does not call `release_under` / `settle` yet, so that
-  `configure` still queues behind `Unwatch` on 8.2.2 (see `tauri-app.md`) is
-  unverified; re-check it when the folder rename (port Step 8) needs it.
+  The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
+  "The tree follows the disk through one `TreeWatch`"); `release_under` is
+  not called yet, so re-check the rename path when part 2's folder rename
+  needs it.
 
 ### The judgments' Tauri-free pieces live in the backend (Inferred)
 
@@ -965,6 +966,66 @@ strip needed one because `uniform_list` is vertical only.
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
   with it hidden by `toggleLeft`. Not measured in the running app. The toggle
   lasts for the session only and re-cuts a 1:1 crop through `zoom_resized`.
+
+### The tree follows the disk through one `TreeWatch` (Measured)
+
+The view holds one `riffle_backend::treewatch::TreeWatch` whose callback sends
+`Event::TreeChanged(path)` (the tree's spelling) into the scan's channel.
+`tree_changed`, which every change of the tree runs, computes
+`Tree::watched_folders` and, when it differs from the set last handed over,
+hands the whole set to `TreeWatch::set` on `background_spawn`, each hand-over
+awaiting the one before it (the Tauri `set_tree_watches` chain), so two sets
+never apply out of order. `TreeChanged` re-lists the node only while it is
+still expanded and drawn (the event and a collapse can cross); a failed
+re-list is logged and leaves the node as it was, since deleting a folder
+usually fails its own re-list before its parent's removes the row. The
+menu's `Refresh` re-lists the folder expanded or not and forgets the set
+last handed over, so the next change sends it again and a watch that failed
+is retried; on the open folder it also re-lists the folder as a watcher
+change would (through `Resync`). The roots are read again whenever the
+window becomes active (`observe_window_activation`, once the first read has
+answered); `add_roots` skips the roots already shown.
+
+- Measured (a throwaway test against `crates/native/Cargo.lock`'s `notify`
+  8.2.2 on Windows): `set` of one folder took 0.4-0.6 ms, a collapse
+  (`unwatch` then `settle`) 0.1-0.3 ms, five collapse / expand rounds each
+  stopped and resumed the events (none for a change while collapsed, one
+  ~500 ms after a change once expanded again), and renaming the folder's
+  parent after the last collapse succeeded, so the handle was released. The
+  `configure` that queued behind `Unwatch` (`tauri-app.md`) does not stall
+  here. `TreeWatch` is a backend test, which cannot run from the native
+  workspace (a path dependency with dev-dependencies is not testable there),
+  hence the throwaway.
+- Rule: on Windows a watch pins its folder's ancestors against a rename;
+  nothing in the native app renames yet, so `with_released` is not called.
+
+### The right-click menu is a deferred popover at the pointer (Inferred)
+
+`context.rs` holds the menus' items and the open menu (`Menu`: where it was
+opened, in window coordinates, and its target); `main.rs` maps them to
+`div`s. A right press (`on_mouse_down(MouseButton::Right, ..)`) on a tree row
+opens the folder menu, closing the status row's menus. The popover is
+`div().absolute()` holding `deferred(anchored().position(at)
+.snap_to_window())`: `anchored`'s default `AnchoredPositionMode::Window`
+takes the `MouseDownEvent`'s window position as is, and `snap_to_window`
+keeps it inside near an edge (the Tauri `menuPosition` flips instead). It is
+`occlude()`d with `on_mouse_down_out` closing it on any press outside, of
+any button, so a right press on another row closes the menu in the capture
+phase and opens that row's in the bubble phase; `escape` closes it before the
+status row's menus. Items use `on_click`; a disabled item is dimmed with no
+handler.
+
+- Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
+  item in its parent through the desktop folder's `ParseDisplayName` (`open_target_in_explorer`)
+  and only logs a failure. A root (`D:\`) has no parent, so the menu opens it
+  with `cx.open_with_system` instead. The tree's paths never carry the
+  verbatim `\\?\` prefix; whether the shell accepts a prefixed index path
+  (the strip's files, Step 6 of the tree-trash plan) is unverified, so strip
+  it there (`trash.ts`'s `shownPath`) unless a check shows it works.
+- Rule: the copy items write the tree's spelling of the path and the row's
+  name through `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
+- Not verified headless: the hand check is pending in
+  `../plans/20261113-gpui-tree-trash/learnings.md`.
 
 ## Timings
 

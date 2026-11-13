@@ -52,7 +52,7 @@ fn faces_threads_for(cores: usize) -> usize {
     (cores / 8).max(1)
 }
 
-/// What the scan and the folder watcher tell the view, a scan's messages
+/// What the scan and the folder watchers tell the view, a scan's messages
 /// tagged with the scan they came from so a stopped scan's late messages can
 /// be told apart.
 pub enum Event {
@@ -84,6 +84,9 @@ pub enum Event {
     },
     /// The folder watcher saw the folder change; the canonical path.
     Changed(String),
+    /// The folder tree's watcher saw an expanded folder change; the tree's
+    /// spelling of its path.
+    TreeChanged(String),
     /// The sidecar writer failed to write `path`'s sidecar.
     SidecarError {
         path: String,
