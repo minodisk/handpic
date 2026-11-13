@@ -230,7 +230,7 @@ so port Step 7 stays open after this plan with only those sections left.
       list change, not per page. If `order_files` over 1 000 paths is over
       1 ms in a unit-test timing, say so in `learnings.md`; otherwise leave
       it.
-- [ ] Step 2: The filter model and the judgment sections, wired through every move of the current file
+- [x] Step 2: The filter model and the judgment sections, wired through every move of the current file
   - Done when:
     - `crates/native/src/filter.rs` is a pure model with unit tests, a 1:1
       port of `filter.ts` less the genres and the EXIF sections (the

@@ -250,12 +250,35 @@ order from there, `"rating"` put the rated files first and the rejected one
 last, and a JPEG folder under `"name"` paged in capture order.
 
 - Rule: only the open and `refilter` rebuild `files`. `refilter` orders `all`,
-  returns early when the list is unchanged (unless a re-listing passes its
-  previous listing), else carries the pager, the strip and the loaded
-  thumbnails onto the new list (`carry`), landing on the anchor, else the
-  current file or its nearest neighbour still listed. It runs after a
-  judgment, an undo / redo, a failed store's revert, pass 1's `Done` and a
-  re-listing; it never runs per page.
+  keeps what `filter::passes` lets through (the view's judgment, `facts` and
+  `mark::af_eye_state` of each path), returns early when the list is
+  unchanged (`filter_list_changed`, forced by a re-listing), else carries the
+  pager, the strip and the loaded thumbnails onto the new list (`carry`),
+  landing on `anchor_after_filter`'s file over the ordered `all`: the anchor
+  when it passes, else the next passing file after it, else the last before
+  it. It runs after a judgment, an undo / redo, a failed store's revert, pass
+  1's `Done` and a re-listing; it never runs per page. An empty result clears
+  the image and the pane's file and shows `FILTERED_TEXT` on the status line
+  and in the pane.
+- Rule: a re-listing passes the list shown before it (the old `files`, not
+  the old `all`) as `previous`: an anchor gone from the listing gives way to
+  its next surviving passing neighbour in that list, else its previous one.
+  This replaced `resync::carried_current`, the same rule with every file
+  passing. The open resumes at `anchor_after_filter`'s file for the
+  remembered `last_viewed`, so a remembered file the filter hides resumes at
+  its passing neighbour.
+- Rule: undo / redo's `listed` is over `all`, not `files` (the Tauri
+  `allFiles.includes`), so a judgment on a hidden file is still undone. A
+  one-file step anchors on its file when it passes, else on the file shown
+  before it, and notes `Undid <name> (hidden by the filter)` when the file is
+  not in `files`. Auto-advance after a judgment needs the judged file to be
+  still current (`judgment::should_advance`): a judgment that filtered it out
+  already moved the cursor.
+- Measured: with `{"filter":{"flags":["untagged"]}}` an `--auto 6` run on 6
+  copied ARWs (one rejected in its XMP) cycled over the 5 others; untagged +
+  0 stars + `none` cycled over the 3 unjudged ones; `stars: [3]` (no 3-star
+  file) paged nothing; a RAW copied in mid-run re-listed with the current file
+  kept and the new file paged in its natord place.
 - Rule: a rebuild bumps `order`, which drops a preview read still out for an
   index into the old `files` (the pager is replaced, so its in-flight flag is
   gone), and `refilter` re-requests the current preview whenever the image on

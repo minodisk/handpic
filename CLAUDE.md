@@ -218,16 +218,22 @@ Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `
 (this crate's `debug` lines too under `RUST_LOG=debug`), `src/settings.rs`
 reads the Tauri app's `settings.json` read-only (`--settings <path>`, else the
 `IDENTIFIER` folder's under the config dir, else a `LEGACY_IDENTIFIERS` one's)
-into the sidecar format, the label names, the keymap, auto-advance and the
-sort key, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
+into the sidecar format, the label names, the keymap, auto-advance, the
+sort key and the remembered filter, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
+`src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
+`filter.ts` less the genres and the EXIF sections: flags, stars, labels,
+orientation, `Face focus`, `Eyes` and `Output`; `Stored`, the
+`filter_setting` rule over the stored `filter`; `anchor_after_filter`, the
+file a refilter or a re-listing lands on; the listed files' `Facts` and
+`FILTERED_TEXT`), which the same `refilter` applies after the sort,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
 `IndexedFile`) and what a judgment key makes of it (`Command`, `apply`,
-`label_known`, `advances_after`, a port of the Tauri `judge` and `advance.ts`)
+`label_known`, `advances_after`, `should_advance`, a port of the Tauri `judge` and `advance.ts`)
 and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
 window spawns at startup and drains in `App::on_app_quit`, `src/history.rs`
 the undo and redo of the judgments (`History`, a port of `undo.ts`'s bounded
@@ -259,9 +265,8 @@ batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
 (`Dwell`), and `src/resync.rs` when a change the backend's folder watcher
 (`watch::Watch`, its callback sending into the same channel) reports
 re-lists the open folder (`Resync`: at once when idle, else once the listing
-or scan under way ends, a burst collapsing into one) and where the current
-file lands (`carried_current`: the same file, else its nearest listed
-neighbour), the strip keeping the same files in view (`strip.rs`'s
+or scan under way ends, a burst collapsing into one), the current file
+landing where `filter::anchor_after_filter` puts it, the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
 (`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
 (`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being Rust's

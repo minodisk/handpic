@@ -51,7 +51,78 @@
     `--auto 4`: C2000Z, C960Z, COOLPIX, A065: capture order in a view-only
     folder.
 
+## Step 2 (the filter model and the judgment sections)
+
+- `riffle_core::eyes::EyeState` has only `Open` / `Closed` and no `Hash`, so
+  the `Eyes` section's set holds a filter-local `EyesItem { Open, Closed,
+  Unknown }` (`EyesItem::of(Option<EyeState>)`); `passes` still takes the
+  backend's `Option<EyeState>` as the plan names it. `MarkState` gained
+  `Hash` for the `candidates` set.
+- `Facts` moved from `main.rs` into `filter.rs`, since `passes` takes
+  `Option<&Facts>` (orientation; `None` before pass 1 fails a non-empty
+  orientation section). Its `expect(dead_code)` attributes went with it.
+- `output_of` and `FilterState::is_active` have no caller until Steps 3 and 4;
+  they carry `#[cfg_attr(not(test), expect(dead_code, ...))]`, since a plain
+  `expect` would be unfulfilled in the test build where the unit tests use
+  them.
+- `resync::carried_current` was removed rather than kept beside
+  `anchor_after_filter` (the plan's "no two rules that can drift"): nothing
+  else called it, and its cases are the `anchor_after_filter` previous-list
+  cases with every file passing. CLAUDE.md's `resync.rs` sentence now points
+  at `filter::anchor_after_filter`.
+- A re-listing's `previous` is now the old `files` (the list shown), as the
+  Tauri `resync` passes `files`, not the old `all` Step 1 passed.
+- `judge` keeps `refilter(Some(path), false, None)` (scroll the current file
+  into view), not the plan's `true`: Step 1 and `native-app.md` already record
+  the judgment's refilter as the Tauri `keepScroll` false, and under the
+  rating sort `true` would leave the reordered current file off screen (its
+  path does not change, so `carry` does not count it as moved).
+- Test count: `filter.test.ts` has 82 `test` calls when the judgment
+  describe's generated cases are counted one by one (the plan's 70 counted
+  differently). Left out: the 6 `Genre` cases, the EXIF selection case and
+  `applyStored leaves the EXIF groups alone`; `toStored` is not ported
+  (nothing is written), so its round-trip case became `apply_stored` cases;
+  the 12 generated `a judgment under untagged + 0 + none` cases are one Rust
+  test looping over the four judgments. `advance.test.ts`'s `shouldAdvance`
+  cases are ported less the selection-count and Compare inputs the native app
+  does not have.
+- Headless checks (debug exe, fresh `--index` per run in the scratchpad,
+  copies under `D:\Photos\tests\20261113-filter-sort\filter\`, `--auto 6`):
+  `settings-filter-untagged.json` cycled the 5 unflagged files, HX95 (rejected
+  in its XMP) never paged; `settings-filter-unjudged.json` cycled RX100M2,
+  RX100M3, RX0M2; `settings-filter-stars3.json` (no 3-star file) paged nothing.
+  `filter\resync` with `--auto 9` under the untagged filter and a RAW copied in
+  at 6 s: the re-listing kept HX99 current, the next pages went RX0M2_224,
+  the new RX0M2_225, RX0, RX100M2, HX95 still hidden. `filter\stars3` (RX0's
+  XMP edited to 3 stars) under `settings-filter-stars34.json` (`stars: [3, 4]`)
+  paged RX0, HX99, RX0: on the fresh index the open's list is empty (no
+  judgments yet, every file 0 stars) and pass 1's `Done` refilter brings the
+  two files in and pages them, so the empty-to-filled transition works. The
+  judgment keys,
+  Ctrl+Z and the `FILTERED_TEXT` display cannot be driven by `--auto`; they
+  are the pending manual check below.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check (Step 2, Windows, the user's):** the filter through
+  the judgment keys and undo. Basis: plan Step 2's manual check; the `--auto`
+  runs above covered the page order headlessly, not key presses or the drawn
+  text. Steps: build `crates/native` (`cargo build`, NASM on `PATH`), run
+  `riffle-native D:\Photos\tests\20261113-filter-sort\filter\raw --index <fresh
+  path> --settings D:\Photos\tests\20261113-filter-sort\settings-filter-untagged.json`.
+  Expected: once pass 1 ends the strip shows the 5 unflagged files (HX95
+  absent) and the pane's total is 5; `p` on the current file hides it and
+  lands on the next shown file, with no second move from auto-advance; `Ctrl+Z`
+  brings it back and the view lands on it (`Undid <name>`). On
+  `...\filter\stars3` (RX0 has 3 stars in its XMP) with
+  `settings-filter-stars3.json`: only RX0 shows; `x` on it keeps it shown (a
+  reject keeps its stars). With `settings-filter-unjudged.json` only RX0M2, RX100M2 and RX100M3
+  show. `settings-filter-none.json` (picked only; no picked file) shows `No
+  files match the current filter.` on the status line and in the pane, with
+  no image. Copying a RAW into the folder while filtered re-lists without
+  losing the current file. The p / undo / redo sidecar writes land in the
+  copies only. Step 2's checkbox was ticked on the automated criteria and the
+  headless runs.
 
 - **Pending manual check (Step 1, Windows, the user's):** the strip and the
   `3` key under `"rating"`. Basis: plan Step 1's manual check; the `--auto`

@@ -25,7 +25,7 @@ pub const MIN_EDGE_GAP: f64 = 0.02;
 pub const GOOD_FULL_EYE_SHARP: f64 = 0.162;
 
 /// The state the mark's color is read from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum MarkState {
     Good,
     Neutral,

@@ -123,6 +123,14 @@ pub fn advances_after(cmd: Command) -> bool {
     )
 }
 
+/// Whether a judgment key moves on to the next file, as `advance.ts`'s
+/// `shouldAdvance`: Auto-advance on, an advancing command, and the judged
+/// file still current (a file the judgment filtered out already moved the
+/// cursor).
+pub fn should_advance(cmd: Command, auto_advance: bool, still_current: bool) -> bool {
+    auto_advance && advances_after(cmd) && still_current
+}
+
 /// The `ratings` row, then the writer, as the Tauri `set_rating` orders
 /// them, so a crash between the two leaves the row dirty for the next open.
 #[allow(clippy::too_many_arguments)]
@@ -264,7 +272,8 @@ impl Queue {
 #[cfg(test)]
 mod tests {
     use super::{
-        Command, Queue, State, advances_after, apply, changed, label_known, store, writes,
+        Command, Queue, State, advances_after, apply, changed, label_known, should_advance, store,
+        writes,
     };
     use riffle_backend::{
         index::{Index, IndexedFile},
@@ -430,6 +439,28 @@ mod tests {
         ] {
             assert!(!advances_after(cmd), "{cmd:?}");
         }
+    }
+
+    // `advance.test.ts`'s `shouldAdvance` cases; the selection's target count
+    // and Compare are not in the native app.
+
+    #[test]
+    fn should_advance_when_the_file_already_holds_the_value() {
+        for cmd in [
+            Command::Rate(3),
+            Command::Reject,
+            Command::Pick,
+            Command::Unflag,
+        ] {
+            assert!(should_advance(cmd, true, true), "{cmd:?}");
+        }
+    }
+
+    #[test]
+    fn should_stay_when_off_filtered_out_or_a_label() {
+        assert!(!should_advance(Command::Rate(3), false, true));
+        assert!(!should_advance(Command::Rate(3), true, false));
+        assert!(!should_advance(Command::Label("Red"), true, true));
     }
 
     /// A folder with one empty `DSC1.ARW`, a fresh index and a writer, as the

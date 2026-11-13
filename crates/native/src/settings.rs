@@ -14,6 +14,7 @@ use serde_json::{Map, Value};
 
 use crate::{
     datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
+    filter::Stored,
     sort::SortKey,
 };
 
@@ -25,6 +26,9 @@ pub struct Settings {
     /// The strip's order at startup; the native menu's changes are not
     /// written back.
     pub sort: SortKey,
+    /// The strip's filter at startup, its remembered sections; likewise not
+    /// written back.
+    pub filter: Stored,
 }
 
 /// The settings in `path` (`--settings`), else in the first `settings.json`
@@ -90,13 +94,17 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .and_then(Value::as_bool)
             .unwrap_or(true),
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
+        filter: Stored::from_setting(values.get("filter")),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::load_from;
-    use crate::sort::SortKey;
+    use crate::{
+        filter::{FilterFlag, Stored},
+        sort::SortKey,
+    };
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
     use riffle_core::xmp::LabelNames;
     use std::{fs, path::Path};
@@ -113,7 +121,8 @@ mod tests {
         write(
             &file,
             r#"{"sidecarFormat":"both","labelNames":{"red":"Rot"},"autoAdvance":false,
-                "shortcuts":{"pick":["k"]},"sortOrder":"rating"}"#,
+                "shortcuts":{"pick":["k"]},"sortOrder":"rating",
+                "filter":{"flags":["untagged"],"stars":[0,9]}}"#,
         );
         let s = load_from(Some(&file), None);
         assert_eq!(s.format, SidecarFormat::Both);
@@ -121,6 +130,14 @@ mod tests {
         assert_eq!(s.names.blue, LabelNames::default().blue);
         assert!(!s.auto_advance);
         assert_eq!(s.sort, SortKey::Rating);
+        assert_eq!(
+            s.filter,
+            Stored {
+                flags: vec![FilterFlag::Untagged],
+                stars: vec![0],
+                ..Stored::default()
+            }
+        );
         let pick = s.keymap.bindings().into_iter().find(|b| b.action == "pick");
         assert_eq!(pick.unwrap().keys, ["k"]);
     }
@@ -137,6 +154,7 @@ mod tests {
             assert_eq!(s.keymap, Keymap::defaults());
             assert!(s.auto_advance);
             assert_eq!(s.sort, SortKey::Name);
+            assert_eq!(s.filter, Stored::default());
         }
     }
 
