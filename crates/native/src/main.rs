@@ -3,6 +3,7 @@ mod datadir;
 mod eyes;
 mod facemesh;
 mod faces;
+mod filter;
 mod focus;
 mod history;
 mod hold;
@@ -40,6 +41,7 @@ use std::{
 };
 
 use args::Args;
+use filter::{Facts, FilterState};
 use futures::{
     StreamExt,
     channel::mpsc::{self, UnboundedSender},
@@ -62,7 +64,7 @@ use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::{self, Metadata},
-    index::{self, Focus, Index, IndexedFile},
+    index::{self, Index},
     listing::canonicalize,
     sidecar::{self, Writer},
     watch::{self, Watch},
@@ -173,31 +175,6 @@ fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Ve
         .collect()
 }
 
-/// What the index has of a listed file that the strip's order reads, and
-/// the filter will.
-struct Facts {
-    #[expect(dead_code, reason = "the filter's orientation section reads it")]
-    orientation: u16,
-    capture_time: Option<String>,
-    subsec: Option<String>,
-    #[expect(
-        dead_code,
-        reason = "the filter's Face focus and Eyes sections read it"
-    )]
-    focus: Option<Focus>,
-}
-
-impl From<&IndexedFile> for Facts {
-    fn from(file: &IndexedFile) -> Self {
-        Self {
-            orientation: file.orientation,
-            capture_time: file.capture_time.clone(),
-            subsec: file.subsec.clone(),
-            focus: file.focus,
-        }
-    }
-}
-
 /// The listed files' judgments and facts by path.
 type Entries = (HashMap<String, State>, HashMap<String, Facts>);
 
@@ -252,14 +229,17 @@ struct Riffle {
     /// The listing in natural order, narrowed by `--size` / `--max`: the
     /// Tauri `allFiles`.
     all: Vec<String>,
-    /// `all` in the order in force, what the pager, the strip and the pane
-    /// index into; only the open and `refilter` rebuild it.
+    /// `all` in the order in force, narrowed by the filter: what the pager,
+    /// the strip and the pane index into; only the open and `refilter`
+    /// rebuild it.
     files: Vec<PathBuf>,
     /// The listed files' facts by path, from the index.
     facts: HashMap<String, Facts>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
+    /// The strip's filter; a change lives for the session only.
+    filter: FilterState,
     pager: Pager,
     status: SharedString,
     index: Result<Arc<Mutex<Index>>, String>,
@@ -431,6 +411,11 @@ impl Riffle {
             files: Vec::new(),
             facts: HashMap::new(),
             sort: settings.sort,
+            filter: {
+                let mut filter = FilterState::default();
+                filter.apply_stored(&settings.filter);
+                filter
+            },
             pager: Pager::new(0),
             status: "no folder".into(),
             index,
@@ -649,7 +634,8 @@ impl Riffle {
         let mut same_file = false;
         if carry {
             let was = self.current_path();
-            let previous = std::mem::replace(&mut self.all, shown);
+            let previous = path_strings(&self.files);
+            self.all = shown;
             self.set_entries(entries);
             self.refilter(was.clone(), true, Some(&previous), cx);
             same_file = was.is_some() && was == self.current_path();
@@ -662,9 +648,16 @@ impl Riffle {
             self.step_note = None;
             self.write_errors.clear();
             self.set_entries(entries);
-            let paths = self.ordered();
+            let order = self.ordered();
+            let paths = self.passing(&order);
             self.pager = Pager::new(paths.len());
-            if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
+            let resume = filter::anchor_after_filter(
+                &order,
+                |p| self.passes(p),
+                last_viewed.as_deref(),
+                None,
+            );
+            if let Some(at) = resume.and_then(|r| paths.iter().position(|p| *p == r)) {
                 self.pager.go(Move::To(at));
             }
             self.strip = Strip::new(&paths);
@@ -680,7 +673,11 @@ impl Riffle {
         }
         self.strip_moved(cx);
         if self.files.is_empty() {
-            self.status = format!("no RAW files in {}", listed.dir).into();
+            self.status = if self.all.is_empty() {
+                format!("no RAW files in {}", listed.dir).into()
+            } else {
+                filter::FILTERED_TEXT.into()
+            };
             let old = self.image.take();
             self.retire(old);
             self.shown = None;
@@ -749,13 +746,33 @@ impl Riffle {
         })
     }
 
-    /// Rebuild `files` from `all` in the order in force, as the Tauri
-    /// `refilter`, landing on `anchor` when it is in the new list, else on
-    /// the current file or its nearest neighbour still in it. `keep_scroll`
-    /// keeps the same files in view; otherwise the current file is scrolled
-    /// into view. `previous`, the listing a re-listing replaced, rebuilds
-    /// even an unchanged list, and its caller reads the current preview again
-    /// itself. Whether the current file changed.
+    /// Whether the filter lets the listed `path` through, with what the view
+    /// has of it.
+    fn passes(&self, path: &str) -> bool {
+        let facts = self.facts.get(path);
+        let focus = facts.and_then(|f| f.focus.as_ref());
+        let unjudged = State::default();
+        filter::passes(
+            &self.filter,
+            self.judgments.get(path).unwrap_or(&unjudged),
+            facts,
+            mark::af_eye_state(focus),
+            focus.and_then(|f| f.eyes.eyes),
+            None,
+        )
+    }
+
+    /// The paths of `order` the filter lets through.
+    fn passing(&self, order: &[String]) -> Vec<String> {
+        order.iter().filter(|p| self.passes(p)).cloned().collect()
+    }
+
+    /// Rebuild `files` from `all` in the order in force, narrowed by the
+    /// filter, as the Tauri `refilter`, landing on `anchor_after_filter`'s
+    /// file. `keep_scroll` keeps the same files in view; otherwise the
+    /// current file is scrolled into view. `previous`, the list shown before
+    /// a re-listing, rebuilds even an unchanged list, and its caller reads
+    /// the current preview again itself. Whether the current file changed.
     fn refilter(
         &mut self,
         anchor: Option<String>,
@@ -763,14 +780,16 @@ impl Riffle {
         previous: Option<&[String]>,
         cx: &mut Context<Self>,
     ) -> bool {
-        let next = self.ordered();
+        let order = self.ordered();
+        let next = self.passing(&order);
         let old = path_strings(&self.files);
-        if previous.is_none() && next == old {
+        if !filter::filter_list_changed(&old, &next, previous.is_some()) {
             return false;
         }
-        let current = anchor
-            .and_then(|a| next.iter().position(|p| *p == a))
-            .unwrap_or_else(|| resync::carried_current(&old, &next, self.pager.current()));
+        let current =
+            filter::anchor_after_filter(&order, |p| self.passes(p), anchor.as_deref(), previous)
+                .and_then(|a| next.iter().position(|p| *p == a))
+                .unwrap_or(0);
         let shown = self
             .shown
             .as_ref()
@@ -793,6 +812,13 @@ impl Riffle {
         self.files = next.iter().map(PathBuf::from).collect();
         self.mark_strip();
         self.strip_moved(cx);
+        if next.is_empty() {
+            self.status = filter::FILTERED_TEXT.into();
+            let old = self.image.take();
+            self.retire(old);
+            self.shown = None;
+            self.marks.show(None);
+        }
         if previous.is_none() {
             if moved {
                 self.remember(cx);
@@ -989,9 +1015,10 @@ impl Riffle {
             self.touched.insert(path.clone());
             self.set_state(&path, after.clone());
             self.refilter(Some(path.clone()), false, None, cx);
-            self.store(path, own, after, label_known, entry, cx);
+            self.store(path.clone(), own, after, label_known, entry, cx);
         }
-        if self.settings.auto_advance && judgment::advances_after(cmd) {
+        let still_current = self.current_path() == Some(path);
+        if judgment::should_advance(cmd, self.settings.auto_advance, still_current) {
             self.go(Move::NextClamped, cx);
         }
         cx.notify();
@@ -1003,8 +1030,8 @@ impl Riffle {
         if self.view_only {
             return;
         }
-        let (files, judgments) = (&self.files, &self.judgments);
-        let listed = |p: &str| files.iter().any(|f| f.to_string_lossy() == p);
+        let (all, judgments) = (&self.all, &self.judgments);
+        let listed = |p: &str| all.iter().any(|f| f == p);
         let current = |p: &str| judgments.get(p).cloned().unwrap_or_default();
         let stepped = if redo {
             self.undo.redo(listed, current)
@@ -1013,6 +1040,7 @@ impl Riffle {
         };
         let Some(stepped) = stepped else { return };
         let count = stepped.changes.len();
+        let shown = self.current_path();
         for change in stepped.changes {
             let label_known =
                 self.seen.contains(&change.path) || change.before.label != change.after.label;
@@ -1027,14 +1055,23 @@ impl Riffle {
                 cx,
             );
         }
-        self.refilter(self.current_path(), false, None, cx);
+        // A file the filter now hides leaves the current file where it is.
+        let anchor = match &stepped.move_to {
+            Some(path) if self.passes(path) => Some(path.clone()),
+            _ => shown,
+        };
+        self.refilter(anchor, false, None, cx);
         let verb = if redo { "Redid" } else { "Undid" };
         let note = match stepped.move_to {
             Some(path) => {
-                if let Some(at) = self.files.iter().position(|f| f.to_string_lossy() == path) {
-                    self.go(Move::To(at), cx);
+                let name = file_name(Path::new(&path));
+                match self.files.iter().position(|f| f.to_string_lossy() == path) {
+                    Some(at) => {
+                        self.go(Move::To(at), cx);
+                        format!("{verb} {name}")
+                    }
+                    None => format!("{verb} {name} (hidden by the filter)"),
                 }
-                format!("{verb} {}", file_name(Path::new(&path)))
             }
             None => format!("{verb} {count} files"),
         };
@@ -1685,6 +1722,12 @@ impl Riffle {
                         })),
                 );
             }
+        } else if self.files.is_empty() && !self.all.is_empty() {
+            body = body.child(
+                div()
+                    .text_color(rgb(MUTED_COLOR))
+                    .child(filter::FILTERED_TEXT),
+            );
         }
         div()
             .w(px(PANE_WIDTH))
@@ -2100,10 +2143,11 @@ fn main() {
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take().as_deref());
     log::info!(
-        "settings: sidecarFormat={} autoAdvance={} sortOrder={}",
+        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?}",
         settings.format.setting(),
         settings.auto_advance,
-        settings.sort.setting()
+        settings.sort.setting(),
+        settings.filter
     );
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();

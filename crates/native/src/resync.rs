@@ -41,27 +41,9 @@ impl Resync {
     }
 }
 
-/// Where the current file is after a re-listing: the same file when still
-/// listed, else its nearest neighbour in `previous` that is (the later side
-/// first, as the Tauri frontend's `anchorAfterFilter`), else the first.
-pub fn carried_current(previous: &[String], next: &[String], current: usize) -> usize {
-    let Some(path) = previous.get(current) else {
-        return 0;
-    };
-    let at = |path: &String| next.iter().position(|p| p == path);
-    at(path)
-        .or_else(|| previous[current + 1..].iter().find_map(at))
-        .or_else(|| previous[..current].iter().rev().find_map(at))
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{Resync, carried_current};
-
-    fn paths(names: &[&str]) -> Vec<String> {
-        names.iter().map(|n| n.to_string()).collect()
-    }
+    use super::Resync;
 
     #[test]
     fn a_change_when_idle_relists_at_once() {
@@ -91,26 +73,5 @@ mod tests {
         assert!(!r.changed());
         r.open();
         assert!(!r.finished());
-    }
-
-    #[test]
-    fn the_current_file_stays_current() {
-        let previous = paths(&["a", "b", "c"]);
-        assert_eq!(
-            carried_current(&previous, &paths(&["x", "a", "b", "c"]), 1),
-            2
-        );
-        assert_eq!(carried_current(&previous, &paths(&["a", "b"]), 1), 1);
-    }
-
-    #[test]
-    fn a_deleted_current_file_gives_way_to_its_neighbour() {
-        let previous = paths(&["a", "b", "c", "d"]);
-        assert_eq!(carried_current(&previous, &paths(&["a", "c", "d"]), 1), 1);
-        assert_eq!(carried_current(&previous, &paths(&["a", "d"]), 1), 1);
-        assert_eq!(carried_current(&previous, &paths(&["a", "b"]), 3), 1);
-        assert_eq!(carried_current(&previous, &paths(&["x"]), 1), 0);
-        assert_eq!(carried_current(&previous, &[], 1), 0);
-        assert_eq!(carried_current(&[], &paths(&["a"]), 0), 0);
     }
 }
