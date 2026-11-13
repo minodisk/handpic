@@ -4668,6 +4668,7 @@ dependencies = [
  "riffle-core",
  "serde_json",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
