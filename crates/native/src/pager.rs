@@ -18,6 +18,8 @@ pub struct Pager {
     len: usize,
     index: usize,
     in_flight: bool,
+    /// The current file's preview came from the prefetch ring.
+    hit: bool,
 }
 
 impl Pager {
@@ -26,6 +28,7 @@ impl Pager {
             len,
             index: 0,
             in_flight: false,
+            hit: false,
         }
     }
 
@@ -47,7 +50,22 @@ impl Pager {
             Move::Last => self.len - 1,
             Move::To(index) => index.min(self.len - 1),
         };
+        if self.index != before {
+            self.hit = false;
+        }
         self.index != before
+    }
+
+    /// Whether a preview request is out.
+    pub fn in_flight(&self) -> bool {
+        self.in_flight
+    }
+
+    /// The current file is on screen from the prefetch ring, with everything
+    /// its result brings: a result still out for another file is dropped
+    /// rather than followed by a request, until the current file changes.
+    pub fn hit(&mut self) {
+        self.hit = true;
     }
 
     /// The index to request now, or `None` while another request is out.
@@ -65,6 +83,9 @@ impl Pager {
         if index == self.index {
             self.in_flight = false;
             Finished::Current
+        } else if self.hit {
+            self.in_flight = false;
+            Finished::Dropped
         } else {
             Finished::Stale {
                 draw: ok && shown != Some(self.index),
@@ -83,6 +104,9 @@ pub enum Finished {
     /// with the current file's image not already on screen), then request
     /// `next`, which stays in flight. A failure is never shown.
     Stale { draw: bool, next: usize },
+    /// Another file's, with the current file already on screen from the
+    /// prefetch ring: drop it. Nothing is in flight.
+    Dropped,
 }
 
 #[cfg(test)]
@@ -206,6 +230,62 @@ mod tests {
         assert_eq!(p.finish(1, false, Some(0)), Finished::Current);
         p.go(Move::Next);
         assert_eq!(p.request(), Some(2));
+    }
+
+    #[test]
+    fn a_ring_hit_drops_the_older_result_and_leaves_nothing_in_flight() {
+        let mut p = Pager::new(5);
+        assert_eq!(p.request(), Some(0));
+        p.go(Move::Next);
+        p.hit();
+        assert!(p.in_flight());
+        assert_eq!(p.finish(0, true, Some(1)), Finished::Dropped);
+        assert!(!p.in_flight());
+        p.go(Move::Next);
+        assert_eq!(p.request(), Some(2));
+    }
+
+    #[test]
+    fn a_move_after_a_hit_follows_the_older_result_with_the_current_file() {
+        let mut p = Pager::new(5);
+        assert_eq!(p.request(), Some(0));
+        p.go(Move::Next);
+        p.hit();
+        p.go(Move::Next);
+        assert_eq!(p.request(), None);
+        assert_eq!(
+            p.finish(0, true, Some(1)),
+            Finished::Stale {
+                draw: true,
+                next: 2
+            }
+        );
+        assert!(p.in_flight());
+    }
+
+    #[test]
+    fn a_stale_frame_of_the_current_file_is_not_a_hit_and_still_reloads() {
+        let mut p = Pager::new(5);
+        assert_eq!(p.request(), Some(0));
+        assert_eq!(p.finish(0, true, None), Finished::Current);
+        p.go(Move::Next);
+        assert_eq!(p.request(), Some(1));
+        p.go(Move::Next);
+        assert_eq!(
+            p.finish(1, true, Some(0)),
+            Finished::Stale {
+                draw: true,
+                next: 2
+            }
+        );
+        p.go(Move::Previous);
+        assert_eq!(
+            p.finish(2, true, Some(1)),
+            Finished::Stale {
+                draw: false,
+                next: 1
+            }
+        );
     }
 
     #[test]

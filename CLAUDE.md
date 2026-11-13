@@ -323,7 +323,12 @@ and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
 port of `scanfocus.ts`: the current file, then the strip's range nearest
 first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
-after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), `src/mcp.rs` the MCP
+after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), `src/prefetch.rs` the ring of
+decoded neighbour previews (`Ring`, a port of `prefetch.ts`: the current
+file's two neighbours, the paging direction's first, under
+`PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
+an open or a re-listing and narrowed by `retain` on a `refilter`; off under
+`--no-prefetch`), `src/mcp.rs` the MCP
 companion's server (the backend's `Mcp` on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),

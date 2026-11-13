@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>] [--mcp-port N]";
+pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>] [--mcp-port N] [--no-prefetch]";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {
@@ -14,6 +14,8 @@ pub struct Args {
     pub log: Option<PathBuf>,
     /// The MCP companion's port when `mcpEnabled` is on, for a test run.
     pub mcp_port: Option<u16>,
+    /// Turns the prefetch ring off, for an A/B run.
+    pub no_prefetch: bool,
 }
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -39,6 +41,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
             Some("--mcp-port") => {
                 parsed.mcp_port = Some(number("--mcp-port", &value("--mcp-port")?)?)
             }
+            Some("--no-prefetch") => parsed.no_prefetch = true,
             Some(flag) if flag.starts_with("--") => return Err(format!("unknown flag {flag}")),
             _ if parsed.folder.is_none() => parsed.folder = Some(PathBuf::from(arg)),
             _ => return Err(format!("unexpected argument {}", arg.to_string_lossy())),
@@ -62,7 +65,7 @@ fn size(value: &str) -> Result<(u32, u32), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Args, parse};
+    use super::{Args, USAGE, parse};
     use std::path::PathBuf;
 
     fn run(args: &[&str]) -> Result<Args, String> {
@@ -94,7 +97,8 @@ mod tests {
                 "--log",
                 "D:/t/Handpic.log",
                 "--mcp-port",
-                "41999"
+                "41999",
+                "--no-prefetch"
             ]),
             Ok(Args {
                 folder: Some(PathBuf::from("D:/a b")),
@@ -106,8 +110,15 @@ mod tests {
                 import_settings: Some(PathBuf::from("D:/t/settings.json")),
                 log: Some(PathBuf::from("D:/t/Handpic.log")),
                 mcp_port: Some(41999),
+                no_prefetch: true,
             })
         );
+    }
+
+    #[test]
+    fn the_prefetch_switch_is_off_by_default_and_in_the_usage() {
+        assert!(!run(&["D:/a"]).unwrap().no_prefetch);
+        assert!(USAGE.contains("[--no-prefetch]"));
     }
 
     #[test]

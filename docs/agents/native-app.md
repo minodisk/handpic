@@ -825,7 +825,10 @@ image id and drawn size, so a stale frame gets its own edges or none.
   still recorded only for the current file, so the "4-6 pages in 5 s" of a
   held RAF key below counts current-file pages, not frames drawn.
 - Rule: stepping back onto the file whose stale frame is on screen still
-  reloads it; its analysis, dwell and `page` line wait for that reload.
+  reloads it; its analysis, dwell and `page` line wait for that reload. A
+  prefetch ring hit is not a stale frame: it has had all of them, so
+  `Pager::hit` makes the older result still out `Finished::Dropped` (released,
+  nothing requested, nothing left in flight) until the current file changes.
 - Pending: a held key flipping frames and the release showing the current file
   with its overlays is unverified by hand on Windows.
 
@@ -855,6 +858,42 @@ so `z` never opens on another file's crop.
   keeps the old crop until the new one arrives.
 - Pending: a held key flipping crops while zoomed, and a single press and `z`
   off / on still behaving, is unverified by hand on Windows.
+
+### The prefetch ring holds the decoded neighbours (Inferred)
+
+`prefetch.rs` ports `prefetch.ts`: `Ring` holds the decoded previews of the
+current file's two neighbours (the next one in the paging direction first,
+none across the pager's wrap), at most `PREFETCH_PIXEL_CAP` (32 MP, 128 MB of
+BGRA) in all, the image on screen not counted. `request` takes the current
+file from the ring before it reads; a hit does everything `loaded`'s current
+arm does (`show_current`: status line, meta pane, `marks.show`, `zoom.shown`,
+`analyze_current`, `start_dwell`, the `page` line with `source=prefetch`) but
+the read and the paint hold. `request_prefetch` reads the next wanted file,
+one at a time through `load` on the background executor, only when the pager
+has nothing in flight, the image on screen is the current file's and no scan
+pass runs; it is asked after a current result (read or hit), a settled
+prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
+`--no-prefetch` turns the ring off.
+
+- Rule: an image is owned by one place at a time: the ring, or the screen.
+  `take` hands it to the view; `present` hands the image it replaces back
+  through `keep`, and only after another image replaced it. Only what a ring
+  method returns is retired, so an image in the ring never reaches `retired`
+  (whose `cx.drop_image` would pull its texture).
+- Rule: `opened` (a folder open and a re-listing, which may have changed any
+  file's bytes) clears the ring and marks the shown image not keepable;
+  `refilter` calls `retain` with the new `files`. Whichever plan adds rename,
+  trash or delete (`../plans/20261113-gpui-tree-trash/plan.md`,
+  `../plans/20261113-gpui-folder-dialogs/plan.md`) must call `Ring::forget`
+  with the paths that no longer name what the ring read.
+- Rule: a prefetch's result is dropped by the ring's own stale mark, not by
+  `order`; its `Paused` ends when it lands, never held for a paint.
+- Rule: what the ring gives up is retired with a `cx.notify()`: `retired`
+  drains only in the preview canvas's paint, so an eviction on `settle` with
+  nothing else to draw would otherwise hold the images past the cap.
+- Pending: an arrow key onto a neighbour showing it at once, and a folder
+  switch and a filter change showing no other folder's or hidden file's image,
+  are unverified by hand on Windows.
 
 ### Pass 2 runs on pass 1's thread (Inferred)
 
@@ -1504,7 +1543,9 @@ collapses `ipc + post + worker` into `hop` (the time from the background result
 to the update on the main thread), and splits `draw` into
 `frameWait + paint + present`. `keypressToPixels` includes `present`; Tauri's
 stops at `drawImage`. It starts at the latest press of the file that ended up
-shown.
+shown. `source=read|prefetch` says whether the image came from its own read or
+the prefetch ring; a hit's `read`, `decode`, `orient` and `hop` are 0, and
+its `wait` is the time `go` took before the hit.
 
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 
@@ -1685,3 +1726,24 @@ re-reading the newest file, and the overlay has few pages to compete with. See
 - Rule: measure a background job's cost with a held key, not `--auto`, whose
   1003 ms interval lets every job finish before the next press; and check how
   many pages the hold actually showed before reading a p50.
+
+### A prefetch hit leaves only the frame (Measured)
+
+Release, `--auto 60` on the 20-file compare folders, warm index. Three runs
+with the prefetch ring alternated with three under `--no-prefetch` in one
+session (a busy machine, ARW noisy). Median p50 / p95 `keypressToPixels`:
+ARW 12.82 / 20.10 ms against 23.40 / 34.05 ms, RAF 14.13 / 56.27 ms
+against 66.15 / 78.95 ms. Every prefetch run hit 57 of 60 presses. The 3
+misses are the wraps (no neighbour across the pager's wrap), and they set the
+p95. `paint` did not move on a hit, and `present`'s p50 rose about 0.1 ms.
+Starting the prefetch when the current result is shown therefore does not
+slow the current page, so it stays there. Memory peaks on RAF: about
++110 MB working set and +300 MB private bytes. The cap counts 128 MB of BGRA
+(two RAF neighbours are 104 MB). The rest is the prefetch's decode buffers
+and the GPU textures that kept entries still hold. See
+[the plan's learnings](../plans/20261114-gpui-prefetch/learnings.md).
+
+- Rule: count hits from the `page` line's `source=prefetch`. A prefetch run's
+  p95 is the wraps' reads; read the hits' latency from the p50.
+- Rule: prefetch does not run while a scan pass runs. An A/B of the ring
+  needs a warm index whose scan ends before the first press.

@@ -22,6 +22,7 @@ mod orient;
 mod overlay;
 mod pager;
 mod peaking;
+mod prefetch;
 mod resync;
 mod scan;
 mod selection;
@@ -80,6 +81,7 @@ use menu::{Lead, Menus, Row, Which};
 use meta::Shown;
 use pager::{Finished, Move, Pager};
 use peaking::{Peaking, View};
+use prefetch::{Heading, Ring};
 use resync::Resync;
 use riffle_backend::{
     exif::Metadata,
@@ -104,7 +106,7 @@ use settingsview::{Change, SettingsView};
 use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
-use timing::{Page, Summary};
+use timing::{Page, Source, Summary};
 use tree::{Child, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
 use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
@@ -114,17 +116,41 @@ const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// Out of phase with 60 Hz vsync.
 const AUTO_INTERVAL: Duration = Duration::from_millis(1003);
 
-struct Loaded {
+/// A decoded preview and what showing it needs, on screen or in the
+/// prefetch ring.
+struct Held {
     image: Arc<RenderImage>,
-    read: Duration,
-    decode: Duration,
-    orient: Duration,
-    finished: Instant,
     jpeg_kb: usize,
     px: (u32, u32),
     orientation: u16,
     meta: Metadata,
     focus: Option<FocusLocation>,
+}
+
+impl prefetch::Pixels for Held {
+    fn pixels(&self) -> u64 {
+        u64::from(self.px.0) * u64::from(self.px.1)
+    }
+}
+
+/// The image on screen's facts beside the image and its `Metadata` (in
+/// `Riffle::shown`), to hand it back to the prefetch ring.
+struct OnScreen {
+    path: String,
+    jpeg_kb: usize,
+    px: (u32, u32),
+    orientation: u16,
+    focus: Option<FocusLocation>,
+    /// Off once a re-listing may have changed the file's bytes.
+    keepable: bool,
+}
+
+struct Loaded {
+    held: Held,
+    read: Duration,
+    decode: Duration,
+    orient: Duration,
+    finished: Instant,
     /// The scan's pause, held until the image is painted (`hold.rs`).
     paused: Paused,
 }
@@ -162,16 +188,18 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         RgbaImage::from_raw(upright_w, upright_h, bgra).ok_or("the decode came up short")?;
     let image = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
     Ok(Loaded {
-        image,
+        held: Held {
+            image,
+            jpeg_kb: jpeg.len() / 1024,
+            px: (w, h),
+            orientation: arw.orientation,
+            meta,
+            focus: arw.shot.focus,
+        },
         read,
         decode,
         orient,
         finished: Instant::now(),
-        jpeg_kb: jpeg.len() / 1024,
-        px: (w, h),
-        orientation: arw.orientation,
-        meta,
-        focus: arw.shot.focus,
         paused,
     })
 }
@@ -459,6 +487,12 @@ struct Riffle {
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
     /// The MCP companion's server, `None` while `mcpEnabled` is off.
     mcp: Option<mcp::Server>,
+    /// The decoded neighbours of the current file, `None` under
+    /// `--no-prefetch`.
+    prefetch: Option<Ring<Held>>,
+    heading: Heading,
+    /// `None` while `image` is.
+    screen: Option<OnScreen>,
 }
 
 impl Riffle {
@@ -467,6 +501,7 @@ impl Riffle {
         index: Result<Indexes, String>,
         settings: Settings,
         mcp_port: Option<u16>,
+        prefetch: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -699,6 +734,9 @@ impl Riffle {
             viewport: Rc::default(),
             zoom_pending: Rc::default(),
             peaking: Peaking::default(),
+            prefetch: prefetch.then(Ring::default),
+            heading: Heading::default(),
+            screen: None,
         }
     }
 
@@ -713,6 +751,7 @@ impl Riffle {
             import_settings: _,
             log: _,
             mcp_port: _,
+            no_prefetch: _,
         } = args;
         cx.spawn(async move |this, cx| {
             if let Some(folder) = folder
@@ -1914,6 +1953,7 @@ impl Riffle {
             self.menus.close();
         }
         self.marks.clear();
+        self.clear_ring(cx);
         self.dir = Some(listed.dir.clone());
         self.filter.set_output_known(outputs.found.is_some());
         self.outputs = outputs.found;
@@ -1933,6 +1973,7 @@ impl Riffle {
             self.all = shown;
             self.failed = 0;
             self.key = None;
+            self.heading = Heading::default();
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
@@ -1974,8 +2015,7 @@ impl Riffle {
             } else {
                 filter::FILTERED_TEXT.into()
             };
-            let old = self.image.take();
-            self.retire(old);
+            self.clear_image();
             self.shown = None;
             self.marks.show(None);
         } else {
@@ -2112,14 +2152,17 @@ impl Riffle {
             }
         }
         self.files = next.iter().map(PathBuf::from).collect();
+        if let Some(ring) = &mut self.prefetch {
+            let given = ring.retain(&self.files);
+            self.give_up(given, cx);
+        }
         self.mark_strip();
         let settled = selection::settle(&self.selection, &next, current, false);
         self.set_selection(settled);
         self.strip_moved(cx);
         if next.is_empty() {
             self.status = filter::FILTERED_TEXT.into();
-            let old = self.image.take();
-            self.retire(old);
+            self.clear_image();
             self.shown = None;
             self.marks.show(None);
         }
@@ -2130,6 +2173,9 @@ impl Riffle {
             // The order's bump dropped a preview read still out.
             if moved || shown != self.current_path() {
                 self.request(Instant::now(), cx);
+            } else {
+                // The current file may have new neighbours.
+                self.request_prefetch(cx);
             }
             if moved {
                 self.read_focus(cx);
@@ -2230,6 +2276,7 @@ impl Riffle {
             Event::FacesDone { .. } => {
                 self.scan_status.clear();
                 self.finished(cx);
+                self.request_prefetch(cx);
             }
             Event::Changed(_)
             | Event::TreeChanged(_)
@@ -2928,10 +2975,125 @@ impl Riffle {
             .collect()
     }
 
+    /// Show the current file: from the prefetch ring when it holds it, else
+    /// through a read.
     fn request(&mut self, at: Instant, cx: &mut Context<Self>) {
+        if let Some(held) = self.take_held(cx) {
+            self.show_held(held, cx);
+            return;
+        }
         if let Some(index) = self.pager.request() {
             self.send(index, at, cx);
         }
+    }
+
+    /// Take the current file from the ring, then point the ring at it, as
+    /// `show()` in `main.ts`.
+    fn take_held(&mut self, cx: &mut Context<Self>) -> Option<Held> {
+        let path = self.current_path()?;
+        let index = self.pager.current();
+        self.heading.to(index);
+        let ring = self.prefetch.as_mut()?;
+        let held = ring.take(&path);
+        let given = ring.plan(&self.files, index, self.heading.direction());
+        self.give_up(given, cx);
+        held
+    }
+
+    /// A page turn onto a held neighbour: everything a current result does
+    /// but the read and the paint hold.
+    fn show_held(&mut self, held: Held, cx: &mut Context<Self>) {
+        let index = self.pager.current();
+        self.pager.hit();
+        let now = Instant::now();
+        let page = self.key.take().map(|key| Page {
+            key,
+            sent: now,
+            finished: now,
+            received: now,
+            notified: now,
+            read: Duration::ZERO,
+            decode: Duration::ZERO,
+            orient: Duration::ZERO,
+            jpeg_kb: held.jpeg_kb,
+            px: held.px,
+            orientation: held.orientation,
+            source: Source::Prefetch,
+            file: file_name(&self.files[index]),
+        });
+        self.show_current(index, held, cx);
+        self.pend_page(page);
+        self.request_prefetch(cx);
+    }
+
+    /// Read the next neighbour once the current file's preview is on screen
+    /// and no page read is out. Skipped while a scan pass runs, so the scan
+    /// is not slowed by reads the user may never look at.
+    fn request_prefetch(&mut self, cx: &mut Context<Self>) {
+        let on_screen = self.screen.as_ref().map(|s| s.path.as_str());
+        if self.pager.in_flight()
+            || self.scanning()
+            || on_screen.is_none()
+            || on_screen != self.current_path().as_deref()
+        {
+            return;
+        }
+        let index = self.pager.current();
+        let Some(ring) = &mut self.prefetch else {
+            return;
+        };
+        let given = ring.plan(&self.files, index, self.heading.direction());
+        let next = ring.next();
+        self.give_up(given, cx);
+        let Some(path) = next else { return };
+        let slots = self.slots.clone();
+        cx.spawn(async move |this, cx| {
+            let loaded = cx
+                .background_spawn(async move { guarded(|| load(Path::new(&path), &slots)) })
+                .await;
+            this.update(cx, |this, cx| this.prefetched(loaded, cx)).ok();
+        })
+        .detach();
+    }
+
+    /// The prefetch in flight ended; its scan pause ends with it.
+    fn prefetched(&mut self, loaded: Result<Loaded, String>, cx: &mut Context<Self>) {
+        let held = loaded.ok().map(|loaded| loaded.held);
+        let given = match &mut self.prefetch {
+            Some(ring) => ring.settle(held),
+            None => held.into_iter().collect(),
+        };
+        self.give_up(given, cx);
+        self.request_prefetch(cx);
+    }
+
+    /// Retire what the ring gave up. `retired` drains only on a paint, so ask
+    /// for one rather than hold the images past the cap until the next.
+    fn give_up(&self, given: Vec<Held>, cx: &mut Context<Self>) {
+        if !given.is_empty() {
+            self.retire(given.into_iter().map(|held| held.image));
+            cx.notify();
+        }
+    }
+
+    /// A folder open or a re-listing, which may have changed any file's
+    /// bytes: the ring gives everything up and the image on screen does not
+    /// go back to it.
+    fn clear_ring(&mut self, cx: &mut Context<Self>) {
+        if let Some(screen) = &mut self.screen {
+            screen.keepable = false;
+        }
+        if let Some(ring) = &mut self.prefetch {
+            let given = ring.clear();
+            self.give_up(given, cx);
+        }
+    }
+
+    /// Take the image off screen and retire it.
+    fn clear_image(&mut self) {
+        let old = self.image.take();
+        self.retire(old);
+        self.screen = None;
     }
 
     fn send(&mut self, index: usize, at: Instant, cx: &mut Context<Self>) {
@@ -2947,7 +3109,7 @@ impl Riffle {
             this.update(cx, |this, cx| {
                 if order != this.order {
                     if let Ok(loaded) = loaded {
-                        this.retire(Some(loaded.image));
+                        this.retire(Some(loaded.held.image));
                     }
                     return;
                 }
@@ -2969,57 +3131,84 @@ impl Riffle {
             Some((at, Shown::Read(_))) => *at,
             _ => None,
         };
-        if let Finished::Stale { draw, next } = self.pager.finish(index, result.is_ok(), shown) {
-            match result {
-                Ok(loaded) if draw => self.stale(index, loaded, cx),
-                Ok(loaded) => self.retire(Some(loaded.image)),
-                Err(_) => {}
+        match self.pager.finish(index, result.is_ok(), shown) {
+            Finished::Current => {}
+            Finished::Stale { draw, next } => {
+                match result {
+                    Ok(loaded) if draw => self.stale(index, loaded, cx),
+                    Ok(loaded) => self.retire(Some(loaded.held.image)),
+                    Err(_) => {}
+                }
+                self.send(next, received, cx);
+                return;
             }
-            self.send(next, received, cx);
-            return;
+            Finished::Dropped => {
+                if let Ok(loaded) = result {
+                    self.retire(Some(loaded.held.image));
+                }
+                self.request_prefetch(cx);
+                return;
+            }
         }
         let key = self.key.take();
         let name = file_name(&self.files[index]);
         match result {
-            Ok(loaded) => {
-                self.status = self.status_line(index, &loaded);
-                self.shown = Some((Some(index), Shown::Read(Box::new(loaded.meta))));
-                let old = self.image.replace(loaded.image);
-                self.retire(old);
-                self.hold.hold(loaded.paused);
-                let path = self.files[index].to_string_lossy().into_owned();
-                self.marks.show(Some((path, loaded.orientation)));
-                self.zoom.shown(loaded.focus, loaded.orientation);
-                self.analyze_current(cx);
-                self.start_dwell(cx);
-                cx.notify();
-                if let Some(key) = key {
-                    *self.pending.borrow_mut() = Some(Page {
-                        key,
-                        sent: self.sent,
-                        finished: loaded.finished,
-                        received,
-                        notified: Instant::now(),
-                        read: loaded.read,
-                        decode: loaded.decode,
-                        orient: loaded.orient,
-                        jpeg_kb: loaded.jpeg_kb,
-                        px: loaded.px,
-                        orientation: loaded.orientation,
-                        file: name,
-                    });
-                }
+            Ok(Loaded {
+                held,
+                read,
+                decode,
+                orient,
+                finished,
+                paused,
+            }) => {
+                let page = key.map(|key| Page {
+                    key,
+                    sent: self.sent,
+                    finished,
+                    received,
+                    notified: received,
+                    read,
+                    decode,
+                    orient,
+                    jpeg_kb: held.jpeg_kb,
+                    px: held.px,
+                    orientation: held.orientation,
+                    source: Source::Read,
+                    file: name,
+                });
+                self.show_current(index, held, cx);
+                self.hold.hold(paused);
+                self.pend_page(page);
+                self.request_prefetch(cx);
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
                 self.shown = Some((Some(index), Shown::Failed { name, error: e }));
                 self.dwell.cancel();
                 self.dwell_timer = None;
-                let old = self.image.take();
-                self.retire(old);
+                self.clear_image();
                 self.marks.show(None);
                 cx.notify();
             }
+        }
+    }
+
+    /// Show the current file's preview with everything that is the current
+    /// file's: the overlay's analysis, the 1:1 facts and the dwell.
+    fn show_current(&mut self, index: usize, held: Held, cx: &mut Context<Self>) {
+        let (focus, orientation) = (held.focus, held.orientation);
+        self.present(index, held);
+        self.zoom.shown(focus, orientation);
+        self.analyze_current(cx);
+        self.start_dwell(cx);
+        cx.notify();
+    }
+
+    /// The keyed page the next presented frame completes, notified now.
+    fn pend_page(&self, page: Option<Page>) {
+        if let Some(mut page) = page {
+            page.notified = Instant::now();
+            *self.pending.borrow_mut() = Some(page);
         }
     }
 
@@ -3027,26 +3216,73 @@ impl Riffle {
     /// its status line and meta pane, and the overlay's file, which keeps the
     /// current file's marks off it. Nothing that is the current file's.
     fn stale(&mut self, index: usize, loaded: Loaded, cx: &mut Context<Self>) {
-        self.status = self.status_line(index, &loaded);
-        self.shown = Some((Some(index), Shown::Read(Box::new(loaded.meta))));
-        let old = self.image.replace(loaded.image);
-        self.retire(old);
+        self.present(index, loaded.held);
         self.hold.hold(loaded.paused);
-        let path = self.files[index].to_string_lossy().into_owned();
-        self.marks.show(Some((path, loaded.orientation)));
         cx.notify();
     }
 
-    fn status_line(&self, index: usize, loaded: &Loaded) -> SharedString {
-        let m = &loaded.meta;
+    /// Put `held` on screen as the file at `index`: the image, the status
+    /// line, the meta pane and the overlay's file. The image it replaces goes
+    /// back to the ring when its file is wanted there, else is retired.
+    fn present(&mut self, index: usize, held: Held) {
+        let Held {
+            image,
+            jpeg_kb,
+            px,
+            orientation,
+            meta,
+            focus,
+        } = held;
+        self.status = self.status_line(index, px, orientation, &meta);
+        let path = self.files[index].to_string_lossy().into_owned();
+        let shown = self
+            .shown
+            .replace((Some(index), Shown::Read(Box::new(meta))));
+        let old = self.image.replace(image);
+        let screen = self.screen.replace(OnScreen {
+            path: path.clone(),
+            jpeg_kb,
+            px,
+            orientation,
+            focus,
+            keepable: true,
+        });
+        self.marks.show(Some((path, orientation)));
+        let Some(old) = old else { return };
+        match (screen, shown, &mut self.prefetch) {
+            (Some(screen), Some((_, Shown::Read(meta))), Some(ring)) if screen.keepable => {
+                let given = ring.keep(
+                    screen.path,
+                    Held {
+                        image: old,
+                        jpeg_kb: screen.jpeg_kb,
+                        px: screen.px,
+                        orientation: screen.orientation,
+                        meta: *meta,
+                        focus: screen.focus,
+                    },
+                );
+                self.retire(given.into_iter().map(|held| held.image));
+            }
+            _ => self.retire(Some(old)),
+        }
+    }
+
+    fn status_line(
+        &self,
+        index: usize,
+        px: (u32, u32),
+        orientation: u16,
+        m: &Metadata,
+    ) -> SharedString {
         format!(
             "{}/{}  {}  {}x{}  {}  {}  {}  {}",
             index + 1,
             self.files.len(),
             file_name(&self.files[index]),
-            loaded.px.0,
-            loaded.px.1,
-            loaded.orientation,
+            px.0,
+            px.1,
+            orientation,
             dash(&m.shutter),
             dash(&m.aperture),
             dash(&m.iso),
@@ -4349,6 +4585,7 @@ fn main() {
         }
     );
     let mcp_port = args.mcp_port;
+    let prefetch = !args.no_prefetch;
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
@@ -4366,7 +4603,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, settings, mcp_port, window, cx)
+                    Riffle::new(focus, index, settings, mcp_port, prefetch, window, cx)
                 })
             },
         )
