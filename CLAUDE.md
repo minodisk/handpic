@@ -233,7 +233,7 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
 its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
-(or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
+(or `--settings <path>`) and the embedding model under `<local data dir>/dev.minodisk.handpic.native` (or `--data-dir <path>`), and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
@@ -241,7 +241,7 @@ under `RUST_LOG=debug`), `src/settings.rs`
 reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
-`LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
+`LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, `aiEnabled`, the
 sort key and the remembered filter, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
@@ -260,6 +260,11 @@ file a refilter or a re-listing lands on; the listed files' `Facts` and
 without the `Face focus` help; `apply`, what a click on an item does, the
 window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons,
+`src/settingsmodal.rs` the settings modal's model (open state, tab, the key
+rules of `modal.ts` and `tabs.ts`, `ai.ts`'s `aiStatus`) and `src/settingsview.rs`
+its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
+holding the Culling tab's auto-advance and AI toggles, the latter over the
+backend's `ai` model download,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an

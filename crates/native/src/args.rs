@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>]";
+pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--data-dir <path>] [--log <path>]";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {
@@ -11,6 +11,7 @@ pub struct Args {
     pub index: Option<PathBuf>,
     pub settings: Option<PathBuf>,
     pub import_settings: Option<PathBuf>,
+    pub data_dir: Option<PathBuf>,
     pub log: Option<PathBuf>,
 }
 
@@ -33,6 +34,7 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
             Some("--import-settings") => {
                 parsed.import_settings = Some(PathBuf::from(value("--import-settings")?))
             }
+            Some("--data-dir") => parsed.data_dir = Some(PathBuf::from(value("--data-dir")?)),
             Some("--log") => parsed.log = Some(PathBuf::from(value("--log")?)),
             Some(flag) if flag.starts_with("--") => return Err(format!("unknown flag {flag}")),
             _ if parsed.folder.is_none() => parsed.folder = Some(PathBuf::from(arg)),
@@ -86,6 +88,8 @@ mod tests {
                 "D:/t/settings.sqlite",
                 "--import-settings",
                 "D:/t/settings.json",
+                "--data-dir",
+                "D:/t/data",
                 "--log",
                 "D:/t/Handpic.log"
             ]),
@@ -97,6 +101,7 @@ mod tests {
                 index: Some(PathBuf::from("D:/t/index.sqlite")),
                 settings: Some(PathBuf::from("D:/t/settings.sqlite")),
                 import_settings: Some(PathBuf::from("D:/t/settings.json")),
+                data_dir: Some(PathBuf::from("D:/t/data")),
                 log: Some(PathBuf::from("D:/t/Handpic.log")),
             })
         );
@@ -109,6 +114,7 @@ mod tests {
         assert!(run(&["--index"]).is_err());
         assert!(run(&["--settings"]).is_err());
         assert!(run(&["--import-settings"]).is_err());
+        assert!(run(&["--data-dir"]).is_err());
         assert!(run(&["--log"]).is_err());
         assert!(run(&["--auto", "x"]).is_err());
         assert!(run(&["--nope"]).is_err());

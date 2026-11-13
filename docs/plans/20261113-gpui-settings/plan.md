@@ -291,7 +291,7 @@ native app no longer depends on the Tauri app for any of them.
       write on the main thread.
     - Write only on a change made in the menu, never at load, so a seeded
       `"recommended"` survives until the user picks an order.
-- [ ] Step 3: The settings modal's shell and the Culling tab
+- [x] Step 3: The settings modal's shell and the Culling tab
   - Done when:
     - `crates/native/src/settingsmodal.rs` is the pure model with unit
       tests: the open state, the selected tab, the row capturing a key, and
@@ -325,6 +325,13 @@ native app no longer depends on the Tauri app for any of them.
       app yet. If `crates/backend/src/ai.rs` is on `origin/main` when this
       step starts, the step wires the download and the Tauri status text
       (`ai.ts`'s `aiStatus`) through it instead and says so here.
+      (Done that way: `riffle_backend::ai` landed in #1006. The click writes
+      `aiEnabled` and runs `Ai::switch`, which downloads the model on an
+      enable into the native app's own `<local data dir>/<IDENTIFIER>.native`
+      folder, or `--data-dir <path>`; the status line is `aiStatus`'s, and
+      the note under the toggle says the analysis does not run in this app
+      yet. A download cut short is not resumed at launch, unlike the Tauri
+      app, since nothing here uses the model.)
     - The Sidecar, Keyboard Shortcuts and Import tabs exist and are empty
       until their steps.
     - `main.rs` gains only: the entity field, its subscription, one child
@@ -567,14 +574,17 @@ native app no longer depends on the Tauri app for any of them.
   discoverable, but it is a new always-drawn part, which `native-app.md`'s
   rule puts on the A/B side. A macOS menu bar item is cheap through
   `set_menus` and is left for port Step 10.
-- **`aiEnabled` without the download.** `crates/backend/src/ai.rs` is not
-  on `origin/main`, so the toggle only stores the value and says so. The
-  download wiring depends on that move and on pass 3 existing in the
-  native app; it is a follow-up outside this plan, noted in the parent
-  plan, unless the move has landed by Step 3. Not taken: a conditional
-  final step (the plan could not be archived until another session's work
-  merges), and hiding the toggle until then. A seeded `aiEnabled: true`
-  is harmless meanwhile, since nothing reads it.
+- **`aiEnabled` with the download but no analysis.** `crates/backend/src/ai.rs`
+  landed on `origin/main` (#1006) before Step 3, so the toggle runs
+  `Ai::switch` and its model download, and shows the Tauri `aiStatus` line,
+  with a note that this app does not run the analysis yet (pass 3 is out of
+  scope). The model goes to the native app's own
+  `<local data dir>/<IDENTIFIER>.native` folder, or `--data-dir <path>` for a
+  test run, so a hand check never downloads into a real data dir. Unlike the
+  Tauri app, a download cut short is not resumed at launch: nothing here uses
+  the model, and a seeded `aiEnabled: true` would otherwise fetch 378 MB on
+  the first start. Not taken: the persist-only toggle (the plan's fallback),
+  and hiding the toggle until pass 3 exists.
 - **Left out of this slice.** The Cache tab (Clear Cache needs the
   scan-idle gate that port Step 8 brings), the first-launch format dialog,
   the MCP and Debug tabs, the ranking's refit, the tab icons. Without the
@@ -598,10 +608,14 @@ native app no longer depends on the Tauri app for any of them.
   shortcut capture. The alternative, letting a bound action win over the
   literal arms, changes the order of the key handler's `match` and was
   left alone.
-- **Keyboard use of the modal.** Escape, Tab cycling and the tab list's
-  arrows are ported as far as GPUI's tab stops allow; whether Space /
-  Enter activate a focused control comes for free or not is found in Step
-  3. The mouse path is the one the done criteria require.
+- **Keyboard use of the modal.** Escape closes; Tab / Shift+Tab call
+  `window.focus_next` / `focus_prev`, which wrap over the window's tab stops,
+  all of them the modal's; ArrowUp / ArrowDown / Home / End move the focused
+  selected tab (a roving tab stop). Enter and Space activate a focused
+  control for free (GPUI turns them into a keyboard `ClickEvent` on a
+  focusable element with `on_click`). All of it is read from GPUI's source at
+  the pinned rev; seeing it run is the user's hand check. The mouse path is
+  the one the done criteria require.
 - **The text input is a port of an example.** It is single-line and has
   no undo, no word movement and no double-click selection; IME behaviour
   is read from the source and seen only in the user's hand check. Copying

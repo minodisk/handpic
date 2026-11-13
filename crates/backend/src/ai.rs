@@ -48,11 +48,11 @@ struct Download {
 /// download, `None` when none runs.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct AiState {
-    enabled: bool,
-    ready: bool,
-    downloaded: Option<u64>,
-    total: u64,
-    error: Option<String>,
+    pub enabled: bool,
+    pub ready: bool,
+    pub downloaded: Option<u64>,
+    pub total: u64,
+    pub error: Option<String>,
 }
 
 impl Ai {

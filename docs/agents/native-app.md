@@ -143,9 +143,10 @@ version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
 (`datadir::settings_path`), next to the Tauri app's `settings.json`. The
 values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
-`sortOrder`, `filter`) go through the one `from_values` with the backend's
+`aiEnabled`, `sortOrder`, `filter`) go through the one `from_values` with the backend's
 rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
 `Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
+`aiEnabled` off unless a boolean says on,
 `SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read
 as capture order and left stored as it is, `Stored::from_setting`).
 
@@ -183,7 +184,9 @@ barrier gives the drain for free.
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
   test JSON when it needs seeded values, or it opens and seeds the user's real
   store; and `--log` with a file in the test folder, or it appends to the
-  native app's own `Handpic.log`.
+  native app's own `Handpic.log`. A run that may turn AI analysis on also
+  passes `--data-dir` with a test folder, or the model download goes to the
+  native app's real local data dir.
 
 ### The folder open reads the sidecars before pass 1 (Measured)
 
@@ -452,6 +455,69 @@ dimmed, shows capture order and keeps the stored key.
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
   read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
   `../plans/_archived/20261113-gpui-filter-sort/learnings.md`.
+
+### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
+
+`settingsview.rs`'s `SettingsView` is an `Entity` the window holds and adds as
+its root's last child; `settingsmodal.rs` is its pure model (the open state,
+the selected tab, the shortcut row capturing a key, `modal.ts`'s key rule,
+`tabs.ts`'s vertical `nextTab` and `ai.ts`'s `aiStatus`). While closed its
+`render` returns `Empty`, one zero-size layout node. While open it is
+`deferred(div().absolute().top_0().left_0().size_full())`: in taffy an
+absolute child is placed against its parent, here the window's root, so it
+covers the window, and `deferred` paints it after everything else. The
+backdrop and the box are both `occlude()`d: the backdrop's `on_mouse_down`
+closes it (the box blocks the backdrop's hitbox, so a press inside the box
+does not), and the strip's `on_mouse_down` and `on_scroll`, the menus'
+buttons and the root's focus-on-press all check their hitbox, which
+`BlockMouse` drops from the hit test (`window.rs`'s `hit_test` stops at the
+first blocking hitbox, for scroll too). The tabs are Sidecar, Culling,
+Keyboard Shortcuts and Import (no Cache, MCP or Debug); the modal keeps the
+tab across opens and focuses it on open, as the Tauri `open` does.
+
+A change is emitted as a `settingsview::Change`; the window applies it in its
+`subscribe_in` callback (the main view stays the owner of the values):
+`AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`AiEnabled` writes `aiEnabled`, `Closed` focuses the window's handle again.
+The status line under the box shows `NOT_SAVED` while the settings store did
+not open.
+
+- Rule: the key routing. GPUI dispatches a `KeyDownEvent` along the path from
+  the root to the focused node, capture phase root first, then bubble from the
+  focused node up (`dispatch_key_down_up_event`). The box has its own focus
+  handle (`track_focus`) and an `on_key_down` that calls
+  `cx.stop_propagation()` on every key, so a key with the focus inside the
+  modal never reaches the root's handler; the root's `key_down` also returns
+  at once while the modal is open, for a focus left on the root. `ctrl+,`
+  (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally after
+  `home` / `end` / `q`, closes an open sort or filter menu, and opens the
+  modal; the keymap refuses to bind it.
+- Rule: Tab and Shift+Tab are not built in. The box's handler calls
+  `window.focus_next` / `focus_prev`, which walk the whole window's rendered
+  tab stops and wrap; the modal's controls are the only tab stops (the root's
+  handle comes from `cx.focus_handle()`, `tab_stop` false), so the cycle stays
+  inside the modal. A control is `.id(..).tab_index(0)`; each tab tracks a
+  handle of the view's with `tab_stop(selected)`, the Tauri roving
+  `tabindex`, so only the selected tab is in the cycle and ArrowUp /
+  ArrowDown / Home / End on it select and focus another (`next_tab`).
+- Rule: Enter and Space on a focused control come for free: a focusable
+  element with `on_click` turns a key down then up of either into a
+  `ClickEvent::Keyboard` (`div.rs`), and its listener runs before the box's
+  bubble-phase handler stops the event.
+- Rule: the AI toggle runs the backend's `ai::Ai` (the Tauri `AppAi` over it):
+  `switch` writes nothing itself, starts the model download when turned on
+  with no model in place, and cancels it when turned off; its state callback
+  runs on the download thread and reaches the view through a channel, which
+  notifies only while the modal is open. The model goes to
+  `<local data dir>/<IDENTIFIER>.native/<MODEL_FILE>`, or under
+  `--data-dir <path>` (`datadir::model_path`), never the Tauri app's copy.
+  Nothing in the native app runs pass 3 yet, which the toggle's note says,
+  and unlike the Tauri app a download cut short is not resumed at launch.
+- Not verified headless (mouse clicks and the modal's keys cannot be driven
+  by `--auto`): the clicks, the occlusion, the focus cycle and the keyboard
+  click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at
+  the pinned rev; the hand check is pending in
+  `../plans/20261113-gpui-settings/learnings.md`.
 
 ### The native app keeps its own index (Inferred)
 
