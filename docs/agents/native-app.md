@@ -197,6 +197,23 @@ runs once the message loop ends, after `cx.quit()` (`q`, `--auto`) and after
 writer drained=true` after its summary; the window-close path and a key
 inside the debounce are the user's hand check.
 
+The same handler first stops the running scan, before the drains: the view
+holds its scan in a `scan::Running` (an `Arc<Mutex<Option<Scan>>>`) whose
+clone the handler keeps, since the view may be gone by then.
+`Scan::stop_within(STOP_TIMEOUT)` sets the cancel flag and waits on a channel
+the scan thread drops its sender of when it ends (`JoinHandle` has no timed
+join), logging `quit: scan stopped=<bool> in <ms>ms`. Mid-pass 2 on 3,360
+hardlinked ARW files (release, 3 pass 2 threads) the stop took 6-10 ms and
+the process exited 47-140 ms after the quit, `scan faces: ... canceled=true`
+logged, by `--auto 10` and by `CloseMainWindow` alike. `STOP_TIMEOUT` is 2 s,
+as `DRAIN_TIMEOUT`, for a read a slow or network volume holds; past it the
+process exits with the scan running, as before.
+
+- Rule: a re-listing still stops the previous scan with the unbounded
+  `Scan::stop`: it must not reconcile while the old scan writes. A scan being
+  stopped that way when the app quits is not in the holder, so the quit does
+  not wait for it.
+
 ### A folder change re-lists, never mid-scan (Measured)
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into
@@ -298,9 +315,11 @@ eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
 cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
 still +13 ms on RAF
 ([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
-One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
-running, and the hot list reaches both passes through the one handle
-(`focus_scan` gates on either pass running). The thread starts on every open
+One thread and one flag mean `Scan::stop` (and the quit's bounded
+`stop_within`) cancels and joins whichever pass is running, and the hot list reaches both passes through the one handle
+(`focus_scan` gates on either pass running, as `scan::Status::scanning` tells,
+cleared as soon as a re-listing takes the scan, whether or not a new one
+starts). The thread starts on every open
 with an index, even when pass 1 has nothing to do, so rows below
 `FACES_VERSION` still get pass 2; a no-op pass costs one `faces_todo` query.
 `Event::FacesDone` is sent also when the pass was canceled, had nothing to do
@@ -668,9 +687,10 @@ See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md
   session after the first (ARW `read` about 2.2 against 0.5 ms). A's pass 2
   keeps the cores clocked up and re-reads the paged files through the hot
   list. So A - B can go negative; compare pairs, not one run.
-- Rule: `--auto`'s quit does not stop the scan, so an A run whose pass 2
-  outlasts the presses logs no `scan faces:` line. Read pass 2's progress from
-  the run's index copy instead.
+- Rule: an `--auto` quit inside pass 2 cancels it, so the run logs
+  `scan faces: ... canceled=true` with the `done` count it reached. A quit
+  inside pass 1 logs `scan extract: ... canceled=true` and no `scan faces:`
+  line.
 - Rule: to page while pass 2 runs, a 60-press run needs about 13k ARW or 4.5k
   RAF files to stay inside pass 2 (4.6 ms per ARW file, 15-16 ms per RAF file
   at 22 threads). Build the padding with hardlinks (`os.link`): no disk cost,

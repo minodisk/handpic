@@ -234,7 +234,10 @@ index with the whole listing, reads back the changed sidecars
 to the writer with no debounce) and
 runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
 a thread of its own, their progress reaching
-the view through one channel, `src/strip.rs` is the thumbnail strip's pure
+the view through one channel and the status line's `Status` (cleared whenever
+a re-listing stops the scan), the scan held in the `Running` the app's quit
+handler shares, which stops it within `STOP_TIMEOUT` on every quit,
+`src/strip.rs` is the thumbnail strip's pure
 model (the cell pitch, the scroll offset, the range kept with `RANGE_MARGIN`,
 hit testing and which cell to ask for next, with `strip.ts`'s `missing` /
 `ready` / `failed` bookkeeping, and each cell's judgment `Marks`: the stars,

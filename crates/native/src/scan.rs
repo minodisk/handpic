@@ -3,9 +3,10 @@ use std::{
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, RecvTimeoutError},
     },
     thread::{self, JoinHandle},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use futures::channel::mpsc::UnboundedSender;
@@ -20,6 +21,11 @@ use crate::viewonly;
 
 /// Scan workers inside a file read at once, as the Tauri app's `READ_SLOTS`.
 pub const READ_SLOTS: usize = 2;
+
+/// How long a quit waits for the running scan to stop. Workers finish the
+/// stage of the file they are on, which a slow or network volume can hold
+/// longer; past this the process exits with the scan still running.
+pub const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Two fewer than the cores, at least one, as the Tauri app's `scan_threads`:
 /// two cores stay with the paging path.
@@ -128,12 +134,102 @@ fn file_name(path: &Path) -> String {
         .into_owned()
 }
 
+/// The status line's scan: pass 1's or pass 2's `(done, total)` while it
+/// runs.
+#[derive(Default)]
+pub struct Status {
+    progress: Option<(usize, usize)>,
+    analyzing: Option<(usize, usize)>,
+}
+
+impl Status {
+    /// A scan started with `total` files for pass 1.
+    pub fn started(&mut self, total: usize) {
+        self.progress = Some((0, total));
+        self.analyzing = None;
+    }
+
+    pub fn extracting(&mut self, done: usize, total: usize) {
+        self.progress = Some((done, total));
+    }
+
+    /// Pass 1 ended; pass 2 has not yet counted its files.
+    pub fn extracted(&mut self) {
+        self.progress = None;
+        self.analyzing = Some((0, 0));
+    }
+
+    pub fn analyzing(&mut self, done: usize, total: usize) {
+        self.analyzing = Some((done, total));
+    }
+
+    /// Pass 2 ended, or the scan was stopped: no scan runs.
+    pub fn clear(&mut self) {
+        self.progress = None;
+        self.analyzing = None;
+    }
+
+    /// Pass 1 or pass 2 is running.
+    pub fn scanning(&self) -> bool {
+        self.progress.is_some() || self.analyzing.is_some()
+    }
+
+    /// What the status line says of the running pass.
+    pub fn suffix(&self) -> Option<String> {
+        if let Some((done, total)) = self.progress {
+            Some(format!("  scanning {done}/{total}"))
+        } else {
+            self.analyzing
+                .map(|(done, total)| format!("  analyzing {done}/{total}"))
+        }
+    }
+}
+
+/// The view's scan, shared with the app's quit handler, which can outlive the
+/// view.
+#[derive(Clone, Default)]
+pub struct Running(Arc<Mutex<Option<Scan>>>);
+
+impl Running {
+    fn held(&self) -> std::sync::MutexGuard<'_, Option<Scan>> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn put(&self, scan: Scan) {
+        *self.held() = Some(scan);
+    }
+
+    pub fn take(&self) -> Option<Scan> {
+        self.held().take()
+    }
+
+    /// The held scan is `id`.
+    pub fn is(&self, id: u64) -> bool {
+        self.held().as_ref().is_some_and(|s| s.id == id)
+    }
+
+    /// The files the held scan takes first.
+    pub fn focus(&self, paths: Vec<String>) {
+        if let Some(scan) = self.held().as_ref() {
+            scan.focus(paths);
+        }
+    }
+
+    /// `Scan::stop_within` on the held scan; true with none held.
+    pub fn stop_within(&self, timeout: Duration) -> bool {
+        self.take().is_none_or(|scan| scan.stop_within(timeout))
+    }
+}
+
 /// A running scan over one folder: pass 1, then pass 2 on the same thread.
 pub struct Scan {
     pub id: u64,
     focus: ScanFocus,
     cancel: Arc<AtomicBool>,
     thread: JoinHandle<()>,
+    /// Disconnected once the thread ends, also on a panic: `JoinHandle` has no
+    /// timed join.
+    ended: Receiver<()>,
 }
 
 impl Scan {
@@ -185,9 +281,11 @@ impl Scan {
         events: UnboundedSender<Event>,
     ) -> Self {
         let cancel = Arc::new(AtomicBool::new(false));
+        let (alive, ended) = mpsc::channel::<()>();
         let thread = {
             let (focus, cancel) = (focus.clone(), cancel.clone());
             thread::spawn(move || {
+                let _alive = alive;
                 let summary = index::run_scan(
                     &index,
                     &dir,
@@ -223,6 +321,7 @@ impl Scan {
             focus,
             cancel,
             thread,
+            ended,
         }
     }
 
@@ -235,6 +334,26 @@ impl Scan {
     pub fn stop(self) {
         self.cancel.store(true, Ordering::Relaxed);
         let _ = self.thread.join();
+    }
+
+    /// Cancel and wait at most `timeout` for the thread to end: false when it
+    /// did not, the thread left to die with the process.
+    pub fn stop_within(self, timeout: Duration) -> bool {
+        self.cancel.store(true, Ordering::Relaxed);
+        match self.ended.recv_timeout(timeout) {
+            Err(RecvTimeoutError::Timeout) => {
+                log::warn!(
+                    "scan {} did not stop within {}ms",
+                    self.id,
+                    timeout.as_millis()
+                );
+                false
+            }
+            Ok(()) | Err(RecvTimeoutError::Disconnected) => {
+                let _ = self.thread.join();
+                true
+            }
+        }
     }
 }
 
@@ -332,17 +451,64 @@ fn run_faces_pass(
 
 #[cfg(test)]
 mod tests {
-    use super::{Scan, faces_threads_for, list, natural_order, threads_for};
+    use super::{
+        Running, STOP_TIMEOUT, Scan, Status, faces_threads_for, list, natural_order, threads_for,
+    };
     use riffle_backend::{
         index::Index,
         sidecar::{DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
     };
-    use riffle_core::Flag;
+    use riffle_core::{Flag, scan::ScanFocus};
     use std::{
         fs,
         path::PathBuf,
         sync::{Arc, Mutex},
     };
+
+    #[test]
+    fn a_stop_leaves_no_scan_on_the_status_line() {
+        let mut status = Status::default();
+        assert!(!status.scanning());
+        assert_eq!(status.suffix(), None);
+        status.started(10);
+        status.extracting(3, 10);
+        assert_eq!(status.suffix().as_deref(), Some("  scanning 3/10"));
+        // A re-listing stops the scan whatever comes of its prepare.
+        status.clear();
+        assert!(!status.scanning());
+        assert_eq!(status.suffix(), None);
+        status.started(10);
+        status.extracted();
+        assert!(status.scanning());
+        status.analyzing(4, 9);
+        assert_eq!(status.suffix().as_deref(), Some("  analyzing 4/9"));
+        status.clear();
+        assert!(!status.scanning());
+        assert_eq!(status.suffix(), None);
+    }
+
+    #[test]
+    fn a_bounded_stop_reports_an_ended_scan_stopped() {
+        let temp = tempfile::tempdir().unwrap();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        let (events, _received) = futures::channel::mpsc::unbounded();
+        let running = Running::default();
+        assert!(running.stop_within(STOP_TIMEOUT));
+        running.put(Scan::start(
+            7,
+            index,
+            temp.path().to_string_lossy().into_owned(),
+            Vec::new(),
+            ScanFocus::default(),
+            events,
+        ));
+        assert!(running.is(7));
+        assert!(running.stop_within(STOP_TIMEOUT));
+        assert!(!running.is(7));
+        assert!(running.take().is_none());
+    }
 
     #[test]
     fn an_open_writes_the_judgment_a_crash_left_unwritten() {
