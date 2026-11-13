@@ -452,7 +452,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - `toggleRight`, `toggleStrip`, `toggleSides` and `open` are in
       `TREE_PASSTHROUGH` but the native app handles none of them; port the
       set as it is so they pass once they exist.
-- [ ] Step 5: The strip's multi-selection: Ctrl / Shift click, the extend keys, Select All, judgments on the whole selection
+- [x] Step 5: The strip's multi-selection: Ctrl / Shift click, the extend keys, Select All, judgments on the whole selection
   - Done when:
     - `crates/native/src/selection.rs` is a pure model with unit tests, a
       port of `selection.ts` with `selection.test.ts`'s cases: `Selection
@@ -754,3 +754,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 - (2026-11-14) Step 2 complete
 - (2026-11-14) Step 3 complete
 - (2026-11-14) Step 4 complete
+- (2026-11-14) Step 5 complete
