@@ -4,6 +4,7 @@
 //! Keyboard Shortcuts tab's edits of the keymap.
 
 use riffle_backend::{
+    import,
     shortcuts::Keymap,
     sidecar::{SidecarFormat, label_names_setting},
 };
@@ -69,6 +70,44 @@ pub fn label_names_of(texts: [&str; 5]) -> LabelNames {
 /// The change a commit asks for, none when the names are those in force.
 pub fn label_change(current: &LabelNames, committed: LabelNames) -> Option<LabelNames> {
     (committed != *current).then_some(committed)
+}
+
+/// The Tauri paragraph at the top of the Import tab.
+pub const IMPORT_NOTE: &str = "Import\u{2026} in the folder tree copies the photos of a folder, \
+     such as a memory card, into one folder per capture date under the destination root.";
+
+/// The folder pattern's specifiers, `importsettings.ts`'s
+/// `IMPORT_SPECIFIERS`: the specifier, its meaning and its text for 24
+/// October 2026.
+pub const IMPORT_SPECIFIERS: [(&str, &str, &str); 11] = [
+    ("%Y", "Year", "2026"),
+    ("%y", "Year, two digits", "26"),
+    ("%m", "Month, two digits", "10"),
+    ("%d", "Day, two digits", "24"),
+    ("%b", "Month, short name", "Oct"),
+    ("%B", "Month, full name", "October"),
+    ("%a", "Weekday, short name", "Sat"),
+    ("%A", "Weekday, full name", "Saturday"),
+    ("%j", "Day of the year", "297"),
+    ("%F", "Same as %Y-%m-%d", "2026-10-24"),
+    ("/", "Folder separator", ""),
+];
+
+/// The patterns offered as buttons, the default first.
+pub const IMPORT_PATTERN_EXAMPLES: [&str; 4] = ["%Y/%F", "%F", "%Y/%m/%d", "%Y/%m"];
+
+/// Shown under the root while no destination root is set,
+/// `importsettings.ts`'s `rootNote`.
+pub fn root_note(root: &str) -> Option<&'static str> {
+    root.is_empty()
+        .then_some("Choose the folder imports are copied into.")
+}
+
+/// The write a committed pattern asks for: none when it is the stored one,
+/// the refusal's reason when it is invalid (the stored one is kept).
+pub fn pattern_change(stored: &str, committed: &str) -> Result<Option<String>, String> {
+    import::validate_pattern(committed)?;
+    Ok((committed != stored).then(|| committed.to_owned()))
 }
 
 /// Whether the box's handler stops a key. With a text field focused, a key
@@ -283,10 +322,54 @@ mod tests {
     use riffle_core::xmp::LabelNames;
 
     use super::{
-        APP_KEYS, Edit, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab, display_key, edit,
-        format_change, label_change, label_names_of, label_texts, next_tab, shortcut_label, stops,
+        APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, ModalKey,
+        SettingsModal, Step, TABS, Tab, display_key, edit, format_change, label_change,
+        label_names_of, label_texts, next_tab, pattern_change, root_note, shortcut_label, stops,
         writes_xmp,
     };
+
+    #[test]
+    fn the_specifiers_are_the_date_ones_and_the_folder_separator() {
+        let specs: Vec<&str> = IMPORT_SPECIFIERS.iter().map(|&(spec, _, _)| spec).collect();
+        assert_eq!(
+            specs,
+            [
+                "%Y", "%y", "%m", "%d", "%b", "%B", "%a", "%A", "%j", "%F", "/"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_example_patterns_start_with_the_default_and_are_valid() {
+        assert_eq!(
+            IMPORT_PATTERN_EXAMPLES,
+            ["%Y/%F", "%F", "%Y/%m/%d", "%Y/%m"]
+        );
+        assert_eq!(
+            IMPORT_PATTERN_EXAMPLES[0],
+            riffle_backend::import::DEFAULT_PATTERN
+        );
+        for pattern in IMPORT_PATTERN_EXAMPLES {
+            assert!(riffle_backend::import::validate_pattern(pattern).is_ok());
+        }
+    }
+
+    #[test]
+    fn the_root_note_asks_for_a_root_only_while_none_is_set() {
+        assert_eq!(
+            root_note(""),
+            Some("Choose the folder imports are copied into.")
+        );
+        assert_eq!(root_note("D:\\Photos"), None);
+    }
+
+    #[test]
+    fn a_committed_pattern_is_written_when_valid_and_new() {
+        assert_eq!(pattern_change("%Y/%F", "%Y/%m"), Ok(Some("%Y/%m".into())));
+        assert_eq!(pattern_change("%Y/%F", "%Y/%F"), Ok(None));
+        assert!(pattern_change("%Y/%F", "%H").is_err());
+        assert!(pattern_change("%Y/%F", "%Y//%d").is_err());
+    }
 
     #[test]
     fn the_label_names_show_while_the_format_writes_xmp() {

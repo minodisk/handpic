@@ -553,6 +553,16 @@ impl Riffle {
                     this.settings.writes.shortcuts(keymap);
                     this.settings.keymap = keymap.clone();
                 }
+                Change::ImportRoot(ref root) => {
+                    this.settings.writes.set("importRoot", root.as_str().into());
+                    this.settings.import_root = root.clone();
+                }
+                Change::ImportPattern(ref pattern) => {
+                    this.settings
+                        .writes
+                        .set("importPattern", pattern.as_str().into());
+                    this.settings.import_pattern = pattern.clone();
+                }
                 Change::Closed => window.focus(&this.focus, cx),
             },
         )

@@ -162,7 +162,7 @@ folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
 `delete_run`, which records the run and clears the judgments), none of the
 three checking for a scan, which is the caller's, `src/import.rs` the
 import's settings rules (`format_date`, `validate_pattern`, `root_setting`,
-`pattern_setting`, `example`) and its plan and run (`walk`, `plan`,
+`pattern_setting`, `example`, `today_example`) and its plan and run (`walk`, `plan`,
 `plan_dir`, `summarize`, `refusal`, `prepare`, which creates the destination
 folders, `run_plan`, with a cancel flag and a progress callback, and
 `log_line`), `src/sequence.rs` the `Sequence JPEG Timestamps…` preview and
@@ -266,7 +266,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter and `mcpEnabled`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled` and the import root and pattern, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
@@ -287,7 +287,7 @@ window writing the changed sort or filter; `Menus`, which one is open), which th
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
 rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
-holding the Sidecar tab's format and label names, the Culling tab's auto-advance toggle and the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live,
+holding the Sidecar tab's format and label names, the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
 `src/textinput.rs` a single-line text input entity ported from GPUI's `input.rs` example (IME through `EntityInputHandler`, its editing keys in its own `on_key_down`, `Commit` on Enter or blur, `Cancel` on Escape),
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),

@@ -680,6 +680,31 @@ folder is not re-listed.
   drains the stores and runs `sidecar::switch_to` with nothing left to
   persist, then re-lists.
 
+### The Import tab stores a root and a valid pattern, nothing reads them yet (Inferred)
+
+`Settings` reads `importRoot` and `importPattern` with the backend's
+`import::root_setting` / `pattern_setting` (an invalid stored pattern reads as
+`%Y/%F`). The Import tab shows the root read-only with `Choose…`, the
+`importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
+`IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
+`textinput.rs` field and the example line, `import::today_example` (the
+native crate has no `chrono`), recomputed in a `cx.observe` on the field on
+every notify, so with no debounce; a refusal shows in the error color. A
+commit (Enter, blur, Escape then close) or an example button goes through
+`settingsmodal::pattern_change`: a valid new pattern emits
+`Change::ImportPattern`, which the window writes and keeps in `settings`; an
+invalid one leaves the stored one and shows its reason.
+
+- Rule: `Choose…` calls `cx.prompt_for_paths` (directories only) from the
+  view and awaits it in a `cx.spawn`; the answer comes on a later turn and the
+  view entity lives as long as the window, so `Change::ImportRoot` is emitted
+  and written whether or not the modal is still open. It sets only the root,
+  so a pattern still being typed stays in the field. A dialog error (Linux)
+  goes to the status line.
+- Not verified headless: the OS dialog, the typing and the buttons; the hand
+  check is pending in `../plans/20261113-gpui-settings/learnings.md`.
+  `Import…` itself is port Step 8's.
+
 ### The native app keeps its own index (Inferred)
 
 The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic.native/index.sqlite`,

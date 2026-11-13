@@ -115,6 +115,11 @@ pub fn example(root: &str, pattern: &str, date: NaiveDate) -> Result<String, Str
     Ok(path.to_string_lossy().into_owned())
 }
 
+/// `example` for today in the local time zone, for a caller without `chrono`.
+pub fn today_example(root: &str, pattern: &str) -> Result<String, String> {
+    example(root, pattern, chrono::Local::now().date_naive())
+}
+
 /// A file found under the imported folder and its size.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Found {
@@ -708,6 +713,13 @@ mod tests {
             Ok(relative.to_string_lossy().into_owned())
         );
         assert!(example("", "%H", date()).is_err());
+    }
+
+    #[test]
+    fn today_example_formats_the_local_date() {
+        let today = chrono::Local::now().date_naive();
+        assert_eq!(today_example("", "%F"), Ok(today.format("%F").to_string()));
+        assert!(today_example("", "%H").is_err());
     }
 
     fn temp_dir(name: &str) -> PathBuf {
