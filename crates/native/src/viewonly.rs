@@ -4,6 +4,8 @@
 
 use std::path::Path;
 
+use crate::sort::SortKey;
+
 pub const VIEW_ONLY_NOTE: &str = "JPEG folder: view only";
 
 pub fn is_view_only(paths: &[String]) -> bool {
@@ -15,9 +17,16 @@ pub fn is_view_only(paths: &[String]) -> bool {
         })
 }
 
+/// The strip's sort key: capture order in a view-only folder, else the
+/// user's, which is kept for the next RAW folder.
+pub fn sort_for(view_only: bool, key: SortKey) -> SortKey {
+    if view_only { SortKey::Capture } else { key }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::is_view_only;
+    use super::{is_view_only, sort_for};
+    use crate::sort::SortKey;
 
     fn paths(ps: &[&str]) -> Vec<String> {
         ps.iter().map(|p| (*p).to_owned()).collect()
@@ -50,5 +59,19 @@ mod tests {
         assert!(!is_view_only(&paths(&["/d/a.jpg.ARW"])));
         assert!(!is_view_only(&paths(&["/d.jpg/a.ARW"])));
         assert!(!is_view_only(&paths(&["/d/ajpg"])));
+    }
+
+    #[test]
+    fn sort_for_forces_capture_order_in_view_only_mode() {
+        for key in [SortKey::Name, SortKey::Capture, SortKey::Rating] {
+            assert_eq!(sort_for(true, key), SortKey::Capture);
+        }
+    }
+
+    #[test]
+    fn sort_for_keeps_the_users_key_otherwise() {
+        for key in [SortKey::Name, SortKey::Capture, SortKey::Rating] {
+            assert_eq!(sort_for(false, key), key);
+        }
     }
 }

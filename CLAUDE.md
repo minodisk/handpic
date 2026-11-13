@@ -218,7 +218,11 @@ Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `
 (this crate's `debug` lines too under `RUST_LOG=debug`), `src/settings.rs`
 reads the Tauri app's `settings.json` read-only (`--settings <path>`, else the
 `IDENTIFIER` folder's under the config dir, else a `LEGACY_IDENTIFIERS` one's)
-into the sidecar format, the label names, the keymap and auto-advance,
+into the sidecar format, the label names, the keymap, auto-advance and the
+sort key, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
+capture time then subsec, rating with a reject after the unrated;
+`order_files`, a port of `sort.ts`, which the window's one `refilter` applies
+to the listing `all` to give the `files` everything else indexes into),
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
@@ -284,7 +288,8 @@ a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 `load` builds next to the preview: the `EXIF` and `Maker note` groups and an
 `Analysis` group from the rows the caller passes), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
-`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
+`viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and
+which keeps such a folder in capture order (`sort_for`), and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
 `crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
 one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
