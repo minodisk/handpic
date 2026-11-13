@@ -6,9 +6,12 @@
 //! `trash::trash_listed`, `trash::delete_listed`, `trash::undo_run` or
 //! `trash::redo_run`.
 
+use std::collections::{HashMap, HashSet};
+
 use riffle_backend::trash::{RUN_GONE, Restored, Summary, UNDONE_GONE};
 
 use crate::context::shown_path;
+use crate::judgment::State;
 use crate::tree::{self, Relation};
 
 /// What the dialog asks, and what a progress message reports on.
@@ -302,11 +305,64 @@ impl TrashFlow {
     }
 }
 
+/// Lay the state stashed at a move to the Trash over a fresh listing's
+/// `judgments` and `seen`, for the stashed paths still listed that the fresh
+/// entries lack (a restored file has no `files` row until pass 1 extracts
+/// it). A stash entry the fresh entries now have is dropped; one for a path
+/// not listed stays.
+pub fn carry_stash(
+    stash: &mut HashMap<String, (Option<State>, bool)>,
+    all: &[String],
+    judgments: &mut HashMap<String, State>,
+    seen: &mut HashSet<String>,
+) {
+    let listed: HashSet<&String> = all.iter().collect();
+    stash.retain(|path, (state, was_seen)| {
+        if !listed.contains(path) {
+            return true;
+        }
+        if seen.contains(path) || judgments.contains_key(path) {
+            return false;
+        }
+        if let Some(state) = state {
+            judgments.insert(path.clone(), state.clone());
+        }
+        if *was_seen {
+            seen.insert(path.clone());
+        }
+        true
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use riffle_backend::trash::{Failure, Summary};
 
     use super::*;
+
+    #[test]
+    fn carry_stash_keeps_a_listed_path_absent_from_the_fresh_entries() {
+        let state = State {
+            rating: Some(3),
+            ..State::default()
+        };
+        let mut stash = HashMap::from([
+            ("/a".to_owned(), (Some(state.clone()), true)),
+            ("/b".to_owned(), (Some(state.clone()), true)),
+            ("/c".to_owned(), (Some(state.clone()), true)),
+        ]);
+        let all = vec!["/a".to_owned(), "/b".to_owned()];
+        let mut judgments = HashMap::from([("/b".to_owned(), State::default())]);
+        let mut seen = HashSet::from(["/b".to_owned()]);
+        carry_stash(&mut stash, &all, &mut judgments, &mut seen);
+        assert_eq!(judgments.get("/a"), Some(&state));
+        assert!(seen.contains("/a"));
+        assert_eq!(judgments.get("/b"), Some(&State::default()));
+        assert!(stash.contains_key("/a"));
+        assert!(!stash.contains_key("/b"));
+        assert!(stash.contains_key("/c"));
+        assert!(!judgments.contains_key("/c"));
+    }
 
     fn summary(moved: &[&str], failed: usize) -> Summary {
         Summary {

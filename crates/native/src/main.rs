@@ -1240,6 +1240,15 @@ impl Riffle {
                     );
                 }
                 self.step_note = Some(trash::restored_status(&restored));
+                let opens = self
+                    .dir
+                    .as_deref()
+                    .is_some_and(|dir| trash::opens_target(dir, &entry.dirs, IGNORE_CASE));
+                if !opens {
+                    for path in &restored.restored {
+                        self.trashed_state.remove(path);
+                    }
+                }
                 if let Some(dir) = self.dir.clone()
                     && trash::opens_target(&dir, &entry.dirs, IGNORE_CASE)
                 {
@@ -1247,17 +1256,13 @@ impl Riffle {
                     let back =
                         trash::restored_into(&dir, &restored.restored, &self.all, IGNORE_CASE);
                     if !back.is_empty() {
-                        for path in &back {
-                            if let Some((state, seen)) = self.trashed_state.remove(path) {
-                                if let Some(state) = state {
-                                    self.judgments.entry(path.clone()).or_insert(state);
-                                }
-                                if seen {
-                                    self.seen.insert(path.clone());
-                                }
-                            }
-                        }
                         self.all.extend(back);
+                        trash::carry_stash(
+                            &mut self.trashed_state,
+                            &self.all,
+                            &mut self.judgments,
+                            &mut self.seen,
+                        );
                         self.view_only = viewonly::is_view_only(&self.all);
                         self.refilter(self.current_path(), true, None, cx);
                         self.mark_strip();
@@ -2237,6 +2242,12 @@ impl Riffle {
             };
         }
         self.judgments = judgments;
+        trash::carry_stash(
+            &mut self.trashed_state,
+            &self.all,
+            &mut self.judgments,
+            &mut self.seen,
+        );
         self.facts = facts;
         self.filter.prune_exif(&groups);
         self.exif_groups = groups;
