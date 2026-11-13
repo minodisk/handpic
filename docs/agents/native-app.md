@@ -284,7 +284,7 @@ throughput was not measured (the pass 1 paging measurement below assumed a
 pause around the read only). Holding the pause through the decode (not
 yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 `decode` growth gone, without fewer pass 2 rows per run
-([results](../plans/20261110-gpui-focus-marks/results.md)).
+([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
 
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
@@ -297,7 +297,7 @@ app's `run_faces_pass` does on its one task, but on `faces_threads()` (an
 eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
 cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
 still +13 ms on RAF
-([results](../plans/20261110-gpui-focus-marks/results.md)).
+([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
 One thread and one flag mean `Scan::stop` cancels and joins whichever pass is
 running, and the hot list reaches both passes through the one handle
 (`focus_scan` gates on either pass running). The thread starts on every open
@@ -649,7 +649,7 @@ the scan's pause from its read until its image is painted. The median p50
 `keypressToPixels` A - B was -2.10 ms on ARW 1616x1080 and -0.30 ms on RAF
 4416x2944 (gate +2.0 / +5.0). At 22 pass 2 threads with only the read paused
 it was +9.44 / +88.86 ms: `decode` about doubled and `paint` grew 4-6x.
-See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
+See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md).
 
 - Rule: check every run's `frameWait` p50 before reading an A/B. One session
   ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
@@ -663,6 +663,26 @@ See [the plan's results](../plans/20261110-gpui-focus-marks/results.md).
 - Rule: `--auto`'s quit does not stop the scan, so an A run whose pass 2
   outlasts the presses logs no `scan faces:` line. Read pass 2's progress from
   the run's index copy instead.
+- Rule: to page while pass 2 runs, a 60-press run needs about 13k ARW or 4.5k
+  RAF files to stay inside pass 2 (4.6 ms per ARW file, 15-16 ms per RAF file
+  at 22 threads). Build the padding with hardlinks (`os.link`): no disk cost,
+  and every copy stays warm in the page cache. Name the padding to sort after
+  the compare files (`zzNNN_`) so `--size` / `--max 20` page only the 20.
+- Rule: to turn `f` on in an `--auto` run without a code change, post
+  WM_KEYDOWN / WM_CHAR / WM_KEYUP for `F` to the process's `MainWindowHandle`.
+  `AppActivate` + `SendKeys` does not reach the app and may type into whatever
+  window has focus, so never use it. Close a run by PID with
+  `CloseMainWindow`; never for every `riffle-native` process, because other
+  sessions run their own.
+- Rule: other sessions' `mise run ci`, `cargo` and `riffle-native` processes
+  spoil runs (17 of 25 B attempts and 1 of 11 A attempts were discarded in the
+  Step 6 session of
+  `docs/plans/_archived/20261110-gpui-focus-marks/learnings.md`). Wait for two
+  clean load samples and no build process before each run, and discard a run
+  with a load sample over 15 %. This reduces but does not prevent load
+  arriving mid-run.
+- Use forward slashes in Windows paths in Bash-tool scripts. A doubled
+  backslash in a heredoc collapses to one and can escape the next `$`.
 
 ### The pane and the judgments cost the pager under 1 ms (Measured)
 

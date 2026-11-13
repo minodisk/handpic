@@ -2534,3 +2534,32 @@ During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 
 #### TODO
 
 - [ ] Loosen the bound, or wait on a condition (the scan's end) instead of the wall clock, and confirm `mise run ci` passes with full parallelism.
+
+### Native: real-device checks of the f focus mark, face boxes and face mesh
+
+`gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/native`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the native window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/native/src/mark.rs`, `crates/native/src/overlay.rs`, `crates/native/src/faces.rs`, `crates/native/src/eyes.rs`, `crates/native/src/facemesh.rs`, `crates/native/src/main.rs`.
+
+Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run native:dev -- <folder> --index <fresh file in that test folder>` for the native app, and open the same folder in the Tauri app with its own index (never share one).
+
+#### TODO
+
+- [ ] On Windows, press `f` in both apps and step through `ILCE-1M2_sony_a1_ii_03.arw`, `ILCE-7M4_DSC07652.ARW`, `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw`, `ILCE-6400_DSC01340.ARW`, `ILCE-6400_DSC00405.ARW`, `_DSC1616.ARW`, `_DSC1758.ARW` and `_DSC1760.ARW`. Expect on each file the crosshair and the AF frame on the same spot of the picture with the same color (bright green on `_DSC1758`, gray on `_DSC1616`, white on the rest), no mark on `ILCE-6400_DSC00405.ARW`, and the arm ends keeping the dark outline.
+- [ ] On Windows, with `f` on in both apps, check at least `_DSC1758.ARW` (nine faces), `ILCE-6400_DSC01340.ARW` (orientation 6), `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8) and `ILCE-6400_DSC00405.ARW` (a face box without an AF mark). Expect the same boxes, five cyan dots per face and label text in both apps, each label upright above its box's top-left corner (inside the box at the image's top edge, pulled left at the right edge), and the labels readable over a bright face with the native app's offset-copy halo (`docs/agents/native-app.md`). If they do not read, switch `paint_label` to a dark quad behind the text.
+- [ ] On Windows, with `f` on in both apps, stop on `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (closed eyes, orientation 8), `_DSC1758.ARW` (open eyes) and `ILCE-6400_DSC01340.ARW` (portrait, orientation 6), waiting for the judgment (up to 2 s in a debug build). Expect the magenta mesh (face oval, eyes, brows, nose, lips) on the same face with the same lines in both apps, over a dark outline, and the iris rings and two iris dots on the open-eyed frames only. Also hold `→` with `f` on and check that the log's `eyes` lines name only files the paging stopped on or passed slowly.
+- [ ] On Windows, on a folder of a few hundred RAW files with a fresh `--index`, check that the status line shows `analyzing N/total` after `scanning N/total` and ends clean, and that switching to another folder mid-pass 2 from the folder tree stops it (reopening the first folder resumes the remaining files).
+
+### Native: a failed prepare after a re-listing leaves the stopped scan's status line
+
+Found while wiring `gpui-focus-marks` Step 1. `list` takes and stops the previous `Scan`, but `opened` clears `progress` / `analyzing` only when it starts a new scan. When `Scan::prepare` fails (`(Some(Err(e)), _)`) after a re-listing that interrupted a scan, the status line keeps the stopped scan's `scanning` / `analyzing` text and `scanning()` stays true. Pre-existing for `progress`; `analyzing` follows the same path. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/native/src/main.rs` (`list`, `opened`).
+
+#### TODO
+
+- [ ] Clear `progress` and `analyzing` in the failed-`prepare` arm of `opened` (or whenever `list` stops a scan), with a test or a hand check that the status line and `scanning()` reset.
+
+### Native: quitting or closing the window does not stop the scan
+
+Found while measuring `gpui-focus-marks` Step 6. `Riffle::quit` in `crates/native/src/main.rs` calls `cx.quit()` with no `Scan::stop`, so `--auto`'s quit and closing the window leave the workers to die with the process. A quit mid-pass 2 logs no `scan faces:` summary and the index is not closed cleanly. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/native/src/main.rs` (`Riffle::quit`), `crates/native/src/scan.rs` (`Scan::stop`).
+
+#### TODO
+
+- [ ] Stop (cancel and join) the running scan in `quit` and on window close, so the `scan faces:` summary is logged and the index is closed cleanly. Then drop the "`--auto`'s quit does not stop the scan" rule in `docs/agents/native-app.md`.
