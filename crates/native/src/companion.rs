@@ -1,17 +1,31 @@
 //! The answering side of the MCP companion, a port of `companion.ts` over a
 //! snapshot of the view. The native view has no selection, no compare and no
 //! bursts yet, so the selection is the current file, `burst` is always empty,
-//! and compare, a selection of several photos and `set_judgment` are refused.
+//! and compare and a selection of several photos are refused.
 
-use std::{collections::HashSet, path::PathBuf, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+};
 
-use riffle_backend::ondemand::EyesJudgment;
+use riffle_backend::{
+    index::{flag_name, parse_flag},
+    ondemand::EyesJudgment,
+};
+use riffle_core::Flag;
 use serde_json::{Map, Value, json};
+
+use crate::judgment::State;
 
 const COMPARE_REFUSAL: &str = "compare is not supported by Handpic's native app yet";
 const SELECTION_REFUSAL: &str =
     "selecting more than one photo is not supported by Handpic's native app yet";
-const JUDGMENT_REFUSAL: &str = "set_judgment is not supported by Handpic's native app yet";
+/// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
+const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
+const FLAGS: [&str; 3] = ["none", "pick", "reject"];
+/// The color labels the judgment keys set, as `State.label` holds them.
+const LABELS: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Pink", "Purple"];
 
 /// What a request reads of the view.
 pub struct View<'a> {
@@ -27,6 +41,11 @@ pub struct View<'a> {
     /// The current file's eyes: `None` not judged yet, `Some(None)` judged
     /// with the eyes unknown.
     pub eyes: Option<Option<Arc<EyesJudgment>>>,
+    /// The open folder holds only JPEGs.
+    pub view_only: bool,
+    pub judgments: &'a HashMap<String, State>,
+    /// The paths whose label the index has told the view.
+    pub seen: &'a HashSet<String>,
 }
 
 /// What the view does before it answers with the new `get_view`.
@@ -35,6 +54,21 @@ pub enum Action {
     /// Make the file at this index of `files` current.
     Show(usize),
     ToggleZoom,
+    /// Record `changes` as one undo entry, as a judgment key does, and reply
+    /// with `judged` instead of `get_view`.
+    Judge {
+        changes: Vec<Change>,
+        judged: Value,
+    },
+}
+
+/// One file's judgment `set_judgment` changes.
+#[derive(Debug, PartialEq)]
+pub struct Change {
+    pub path: String,
+    pub before: State,
+    pub after: State,
+    pub label_known: bool,
 }
 
 /// The answer to `kind` over `view`: what the view has to do, if anything,
@@ -45,7 +79,7 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "show_photo" => visible(view, &args["path"]).map(|at| Some(Action::Show(at))),
         "select_photos" => select_photos(view, &args["paths"]).map(Some),
         "set_view" => set_view(view, &args["mode"]),
-        "set_judgment" => Err(JUDGMENT_REFUSAL.into()),
+        "set_judgment" => set_judgment(view, args).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -132,19 +166,150 @@ fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
     Ok(((mode == "zoom") != view.zoomed).then_some(Action::ToggleZoom))
 }
 
+/// The fields `set_judgment` gives, `None` where it keeps each photo's own.
+struct Given {
+    /// `Some(None)` clears the stars.
+    rating: Option<Option<u8>>,
+    flag: Option<Flag>,
+    /// `Some(None)` clears the label.
+    label: Option<Option<String>>,
+}
+
+impl Given {
+    fn over(&self, own: &State) -> State {
+        State {
+            rating: self.rating.unwrap_or(own.rating),
+            flag: self.flag.unwrap_or(own.flag),
+            label: self.label.clone().unwrap_or_else(|| own.label.clone()),
+        }
+    }
+}
+
+fn given(args: &Value) -> Result<Given, String> {
+    let rating = match args.get("rating") {
+        None => None,
+        Some(rating) => Some(
+            rating
+                .as_u64()
+                .filter(|r| *r <= 5)
+                .map(|r| (r > 0).then_some(r as u8))
+                .ok_or("rating must be an integer from 0 to 5")?,
+        ),
+    };
+    let flag = match args.get("flag") {
+        None => None,
+        Some(flag) => Some(
+            flag.as_str()
+                .and_then(|f| parse_flag(f).ok())
+                .ok_or_else(|| format!("flag must be one of {}", FLAGS.join(", ")))?,
+        ),
+    };
+    let label = match args.get("label") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(label) => Some(Some(
+            label
+                .as_str()
+                .filter(|l| LABELS.contains(l))
+                .map(str::to_owned)
+                .ok_or_else(|| format!("label must be one of {}, or null", LABELS.join(", ")))?,
+        )),
+    };
+    if rating.is_none() && flag.is_none() && label.is_none() {
+        return Err("set at least one of rating, flag, label".into());
+    }
+    Ok(Given {
+        rating,
+        flag,
+        label,
+    })
+}
+
+/// `companion.ts`'s `setJudgment`: the given fields over each photo's own
+/// state, on the given paths or else the current file. Only the photos it
+/// changes go into `changes`, each with its label known as a key's store
+/// has it.
+fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
+    if view.view_only {
+        return Err(VIEW_ONLY_REFUSAL.into());
+    }
+    let given = given(args)?;
+    let paths = match args.get("paths") {
+        None | Some(Value::Null) => vec![
+            view.files
+                .get(view.index)
+                .ok_or("no photo is shown in Handpic")?
+                .to_string_lossy()
+                .into_owned(),
+        ],
+        Some(paths) => {
+            let paths = paths
+                .as_array()
+                .ok_or("paths must be an array of strings")?;
+            let mut picked: Vec<String> = Vec::new();
+            for path in paths {
+                let path = view.files[visible(view, path)?]
+                    .to_string_lossy()
+                    .into_owned();
+                if !picked.contains(&path) {
+                    picked.push(path);
+                }
+            }
+            picked
+        }
+    };
+    if paths.is_empty() {
+        return Err("paths must name at least one photo".into());
+    }
+    let mut changes = Vec::new();
+    let mut judged = Vec::new();
+    for path in paths {
+        let own = view.judgments.get(&path).cloned().unwrap_or_default();
+        let after = given.over(&own);
+        judged.push(json!({
+            "path": path,
+            "rating": after.rating,
+            "flag": flag_name(after.flag),
+            "label": after.label,
+        }));
+        if after != own {
+            let label_known = view.seen.contains(&path) || own.label != after.label;
+            changes.push(Change {
+                path,
+                before: own,
+                after,
+                label_known,
+            });
+        }
+    }
+    Ok(Action::Judge {
+        changes,
+        judged: Value::Array(judged),
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Action, View, answer, get_view};
+    use super::{Action, Change, View, answer, get_view};
+    use crate::judgment::State;
     use riffle_backend::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
     };
+    use riffle_core::Flag;
     use serde_json::{Value, json};
-    use std::{path::PathBuf, sync::Arc};
+    use std::{
+        collections::{HashMap, HashSet},
+        path::PathBuf,
+        sync::{Arc, LazyLock},
+    };
 
     fn paths(names: &[&str]) -> Vec<PathBuf> {
         names.iter().map(PathBuf::from).collect()
     }
+
+    static NO_JUDGMENTS: LazyLock<HashMap<String, State>> = LazyLock::new(HashMap::new);
+    static NONE_SEEN: LazyLock<HashSet<String>> = LazyLock::new(HashSet::new);
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -155,6 +320,9 @@ mod tests {
             sort: "name",
             filtered: false,
             eyes: None,
+            view_only: false,
+            judgments: &NO_JUDGMENTS,
+            seen: &NONE_SEEN,
         }
     }
 
@@ -404,12 +572,167 @@ mod tests {
         );
     }
 
+    fn state(rating: Option<u8>, flag: Flag, label: Option<&str>) -> State {
+        State {
+            rating,
+            flag,
+            label: label.map(Into::into),
+        }
+    }
+
+    fn judge(args: Value, view: &View) -> Result<(Vec<Change>, Value), String> {
+        match answer("set_judgment", &args, view)? {
+            Some(Action::Judge { changes, judged }) => Ok((changes, judged)),
+            other => panic!("not a judgment: {other:?}"),
+        }
+    }
+
     #[test]
-    fn set_judgment_is_refused_for_now() {
-        let files = paths(&["/d/a"]);
+    fn set_judgment_changes_only_the_given_fields_and_reports_every_photo() {
+        let files = paths(&["/d/a", "/d/b"]);
+        let judgments = HashMap::from([
+            ("/d/a".to_owned(), state(None, Flag::Pick, None)),
+            ("/d/b".to_owned(), state(Some(3), Flag::None, Some("Red"))),
+        ]);
+        let seen = HashSet::from(["/d/a".to_owned(), "/d/b".to_owned()]);
+        let view = View {
+            judgments: &judgments,
+            seen: &seen,
+            ..view(&files)
+        };
+        let (changes, judged) =
+            judge(json!({ "paths": ["/d/a", "/d/b"], "rating": 3 }), &view).unwrap();
         assert_eq!(
-            ask("set_judgment", json!({ "rating": 3 }), &view(&files)),
-            Err("set_judgment is not supported by Handpic's native app yet".into())
+            judged,
+            json!([
+                { "path": "/d/a", "rating": 3, "flag": "pick", "label": null },
+                { "path": "/d/b", "rating": 3, "flag": "none", "label": "Red" },
+            ])
         );
+        assert_eq!(
+            changes,
+            vec![Change {
+                path: "/d/a".into(),
+                before: state(None, Flag::Pick, None),
+                after: state(Some(3), Flag::Pick, None),
+                label_known: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn set_judgment_clears_with_a_zero_rating_and_a_null_label_on_the_current_file() {
+        let files = paths(&["/d/a", "/d/b"]);
+        let judgments =
+            HashMap::from([("/d/b".to_owned(), state(Some(4), Flag::Pick, Some("Blue")))]);
+        let view = View {
+            index: 1,
+            judgments: &judgments,
+            ..view(&files)
+        };
+        let (changes, judged) = judge(
+            json!({ "rating": 0, "flag": "reject", "label": null }),
+            &view,
+        )
+        .unwrap();
+        assert_eq!(
+            judged,
+            json!([{ "path": "/d/b", "rating": null, "flag": "reject", "label": null }])
+        );
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].after, state(None, Flag::Reject, None));
+        assert!(changes[0].label_known, "the call cleared the label itself");
+    }
+
+    #[test]
+    fn set_judgment_keeps_an_unseen_photos_label_unknown_unless_it_sets_it() {
+        let files = paths(&["/d/a"]);
+        let (changes, _) = judge(
+            json!({ "paths": ["/d/a", "/d/a"], "flag": "pick" }),
+            &view(&files),
+        )
+        .unwrap();
+        assert_eq!(changes.len(), 1);
+        assert!(!changes[0].label_known);
+        let (changes, _) = judge(json!({ "label": "Green" }), &view(&files)).unwrap();
+        assert!(changes[0].label_known);
+    }
+
+    #[test]
+    fn set_judgment_changes_nothing_when_the_photo_already_holds_the_value() {
+        let files = paths(&["/d/a"]);
+        let judgments = HashMap::from([("/d/a".to_owned(), state(Some(2), Flag::None, None))]);
+        let view = View {
+            judgments: &judgments,
+            ..view(&files)
+        };
+        let (changes, judged) = judge(json!({ "rating": 2 }), &view).unwrap();
+        assert!(changes.is_empty());
+        assert_eq!(
+            judged,
+            json!([{ "path": "/d/a", "rating": 2, "flag": "none", "label": null }])
+        );
+    }
+
+    #[test]
+    fn set_judgment_refuses_bad_fields_hidden_paths_and_an_empty_view() {
+        let files = paths(&["/d/a"]);
+        let shown = view(&files);
+        assert!(
+            judge(json!({ "paths": ["/d/hidden"], "rating": 1 }), &shown)
+                .unwrap_err()
+                .starts_with("/d/hidden is not shown in Handpic")
+        );
+        for (args, message) in [
+            (
+                json!({ "rating": 6 }),
+                "rating must be an integer from 0 to 5",
+            ),
+            (
+                json!({ "rating": 1.5 }),
+                "rating must be an integer from 0 to 5",
+            ),
+            (
+                json!({ "flag": "maybe" }),
+                "flag must be one of none, pick, reject",
+            ),
+            (
+                json!({ "label": "Teal" }),
+                "label must be one of Red, Orange, Yellow, Green, Blue, Pink, Purple, or null",
+            ),
+            (json!({}), "set at least one of rating, flag, label"),
+            (
+                json!({ "paths": "/d/a", "rating": 1 }),
+                "paths must be an array of strings",
+            ),
+            (
+                json!({ "paths": [], "rating": 1 }),
+                "paths must name at least one photo",
+            ),
+        ] {
+            assert_eq!(judge(args, &shown).unwrap_err(), message);
+        }
+        assert_eq!(
+            judge(json!({ "rating": 1 }), &view(&[])).unwrap_err(),
+            "no photo is shown in Handpic"
+        );
+    }
+
+    #[test]
+    fn set_judgment_is_refused_in_a_view_only_folder() {
+        let files = paths(&["/d/a.jpg"]);
+        let view = View {
+            view_only: true,
+            ..view(&files)
+        };
+        for args in [
+            json!({ "paths": ["/d/a.jpg"], "rating": 3 }),
+            json!({ "flag": "pick" }),
+        ] {
+            assert_eq!(
+                judge(args, &view).unwrap_err(),
+                "culling does not apply to a JPEG folder"
+            );
+        }
     }
 }

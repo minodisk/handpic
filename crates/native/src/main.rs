@@ -1511,6 +1511,40 @@ impl Riffle {
         cx.notify();
     }
 
+    /// The MCP companion's `set_judgment`: `changes` as one undo entry,
+    /// through the same view-row-writer path as a key, the current file
+    /// staying current and no auto-advance.
+    fn judge_paths(&mut self, changes: Vec<companion::Change>, cx: &mut Context<Self>) {
+        if changes.is_empty() {
+            return;
+        }
+        self.step_note = None;
+        let entry = self.undo.record(
+            changes
+                .iter()
+                .map(|change| Judged {
+                    path: change.path.clone(),
+                    state: change.before.clone(),
+                })
+                .collect(),
+        );
+        for change in &changes {
+            self.touched.insert(change.path.clone());
+            self.set_state(&change.path, change.after.clone());
+        }
+        self.refilter(self.current_path(), false, None, cx);
+        for change in changes {
+            self.store(
+                change.path,
+                change.before,
+                change.after,
+                change.label_known,
+                entry,
+                cx,
+            );
+        }
+    }
+
     /// Undo (or with `redo`, redo) the newest judgment through the same
     /// view-row-writer path as a key, moving to its file.
     fn step(&mut self, redo: bool, cx: &mut Context<Self>) {
@@ -2601,15 +2635,27 @@ impl Riffle {
                 sort: this.sort.setting(),
                 filtered: this.filter.is_active(),
                 eyes: current.and_then(|path| this.marks.eyes(&path)),
+                view_only: this.view_only,
+                judgments: &this.judgments,
+                seen: &this.seen,
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self));
-        match action {
-            Ok(Some(companion::Action::Show(at))) => self.go(Move::To(at), cx),
-            Ok(Some(companion::Action::ToggleZoom)) => self.toggle_zoom(cx),
-            Ok(None) | Err(_) => {}
-        }
-        let reply = action.map(|_| companion::get_view(&view(self)));
+        let reply = match action {
+            Ok(Some(companion::Action::Judge { changes, judged })) => {
+                self.judge_paths(changes, cx);
+                Ok(judged)
+            }
+            Ok(action) => {
+                match action {
+                    Some(companion::Action::Show(at)) => self.go(Move::To(at), cx),
+                    Some(companion::Action::ToggleZoom) => self.toggle_zoom(cx),
+                    _ => {}
+                }
+                Ok(companion::get_view(&view(self)))
+            }
+            Err(e) => Err(e),
+        };
         if let Some(server) = &self.mcp {
             server.reply(request.id, reply);
         }
