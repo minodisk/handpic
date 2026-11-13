@@ -1358,6 +1358,63 @@ mouse listeners were the smaller change.
   rest. `Collapse All` is `Tree::collapse_all`. The watch set follows through
   `tree_changed`.
 
+### The trash dialog is a layer of the window, its focus in the model (Inferred)
+
+The strip menu's `Move to Trash…` and `Delete Permanently…` open one dialog,
+drawn by `main.rs`'s `trash_dialog` as the settings modal is (a `deferred`,
+`occlude()`d `absolute` layer over the window's root) but without an entity
+or a focus handle of its own: `trash::TrashFlow` holds the phase (idle,
+asking, running) and which of its two buttons has the focus, and the
+window's `key_down` hands every key to it first, before the right-click
+menu's close and the tree's gate, while it is busy. The buttons take mouse
+clicks only (no `tab_index`), so `tab` and Enter are the model's.
+
+- Rule: the delete dialog opens on Cancel and takes only a single mouse click
+  on its run button as a yes. `ClickEvent::click_count` is 1 for a keyboard
+  click at the pinned rev (`interactive.rs`), so the handler passes 0 when
+  `is_keyboard()`, the DOM's `detail`; `KeyDownEvent.is_held` (set from the
+  repeat bit on Windows, `gpui_windows`' `events.rs`) is passed along with
+  the keystroke for `swallowed_by_delete`.
+- Rule: while a run is in flight (not held) the dialog stays open with both
+  buttons disabled, so the window takes no click and no key until it comes
+  back, as the Tauri dialog's running phase.
+
+### A trash or delete goes through the gate, and nothing lists under it (Inferred)
+
+The native app has no `Scans` lock; one view thread decides when a listing
+starts, so the guard is `idle::IdleGate` plus `resync.rs`. A confirmed run
+asks the gate with "busy" being `Resync::busy` (a listing or its scan under
+way) or a run in flight: idle, it runs at once on `background_spawn`
+(`judgment::Queue::drain`, then `Writer::flush`, both `DRAIN_TIMEOUT`, then
+`trash::trash_listed` with the view's `Arc<trash::Runs>` or
+`trash::delete_listed`, progress through the view's event channel as
+`Event::TrashProgress`); busy, it is held, the dialog closes and the scan is
+canceled without a join (`Running::cancel`), so it still ends through `Done`
+and `FacesDone`, whose `finished` drains the gate first. A run held while the
+listing itself ran has no scan yet; `opened` cancels the scan it starts when
+`cancels_scan(gate.waiting())`.
+
+- Rule: while a run is in flight the gate's in-flight count is up and
+  `Resync::hold` keeps the resync busy, so a watcher change or a tree
+  `Refresh` is deferred; `relist` returns at once (a sidecar format switch);
+  an `open` (the tree's) is kept in `deferred_open` and runs at the run's
+  end. The run's end calls `Resync::open` (dropping the pending change) and
+  re-lists once, which also rescans what a canceled scan left. `TreeChanged`
+  lists a tree folder only, never the open one.
+- Rule: every caller of `relist` (a sidecar format switch included) calls
+  `Resync::open` first, so `Resync::busy` covers the listing it starts and a
+  trash or delete waits for it.
+- Rule: a folder open discards a held run; a held run that drains while a
+  dialog is asking is dropped, as the Tauri closure checks `trashFlow.busy`.
+- Rule: the run's result goes to the pane: `trashed_status` in the
+  `step_note` line (the Tauri `note`), each failure through `write_failed`
+  (`<name>: could not move to the Trash: <message>`), and after a delete the
+  deleted files' judgments leave both histories (`Undo::without_paths`). The
+  run id is only logged until the trash undo exists.
+- Not verified headless: the dialog, its keys and clicks, the Recycle Bin
+  and the cancel of a running pass 1; the hand checks are pending in
+  `../plans/20261113-gpui-tree-trash/learnings.md`.
+
 ## Timings
 
 ### `keypressToPixels` differs from the Tauri app's (Inferred)

@@ -10,6 +10,7 @@ mod filter;
 mod focus;
 mod history;
 mod hold;
+mod idle;
 mod judgment;
 mod keys;
 mod logger;
@@ -32,6 +33,7 @@ mod strip;
 mod textinput;
 mod thumbs;
 mod timing;
+mod trash;
 mod tree;
 mod treekeys;
 mod viewed;
@@ -65,7 +67,8 @@ use gpui::{
     Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels,
     Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign,
     TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored,
-    canvas, deferred, div, fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
+    canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba, size,
+    uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
@@ -340,6 +343,18 @@ struct Riffle {
     tree_syncing: Option<Task<()>>,
     /// The right-click menu, while one is open.
     context: context::Menu,
+    /// The strip's `Move to Trash…` / `Delete Permanently…` dialog.
+    trash: trash::TrashFlow,
+    /// A confirmed run held for the listing or scan under way; in flight
+    /// while one runs, which no listing or scan starts under.
+    gate: idle::IdleGate<trash::Target>,
+    /// The recorded runs to the Trash, for undo.
+    runs: Arc<riffle_backend::trash::Runs>,
+    /// How far the run in flight got, in the pane's notes.
+    trashing: Option<String>,
+    /// A folder the tree opened while a run was in flight, opened whole at
+    /// its end (only the launch's open has `--size` / `--max`).
+    deferred_open: Option<PathBuf>,
     /// The left pane is shown (`toggleLeft`).
     left_pane: bool,
     /// `--size` and `--max`, which a re-listing applies again.
@@ -391,7 +406,8 @@ struct Riffle {
     undo: Undo,
     /// The strip's multi-selection; the current file is always a member.
     selection: Selection,
-    /// `Undid <name>` / `Redid <name>` until the view moves on.
+    /// `Undid <name>` / `Redid <name>`, or a run's `trash::trashed_status`,
+    /// until the view moves on.
     step_note: Option<String>,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
@@ -598,6 +614,11 @@ impl Riffle {
             tree_watched: None,
             tree_syncing: None,
             context: context::Menu::default(),
+            trash: trash::TrashFlow::default(),
+            gate: idle::IdleGate::default(),
+            runs: Arc::default(),
+            trashing: None,
+            deferred_open: None,
             left_pane: true,
             wanted: None,
             max: None,
@@ -681,6 +702,14 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
+        // No listing starts under a run; its end opens the folder.
+        if self.gate.in_flight() {
+            self.deferred_open = Some(folder);
+            return Task::ready(());
+        }
+        if let Some(held) = self.gate.discard() {
+            log::info!("trash: held run in {} dropped by an open", held.dir);
+        }
         self.opens.fetch_add(1, Ordering::SeqCst);
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
@@ -864,9 +893,7 @@ impl Riffle {
             folders::REVEAL_LABEL,
             self.view_only,
             paths.len(),
-            // Move to Trash… and Delete Permanently… stay disabled until
-            // their dialog exists (this plan's Step 7).
-            true,
+            self.trashing.is_some(),
         );
         self.context
             .open_files((f32::from(at.x), f32::from(at.y)), focused, paths, groups);
@@ -912,8 +939,184 @@ impl Riffle {
                     self.judge(cmd, cx);
                 }
             }
+            context::Action::TrashFiles => self.confirm_trash(paths, trash::Mode::Trash, cx),
+            context::Action::DeleteFiles => self.confirm_trash(paths, trash::Mode::Delete, cx),
             _ => {}
         }
+    }
+
+    /// Ask whether to move `paths`, files of the open folder taken when the
+    /// menu opened, to the Trash, or to delete them. Refused while a run is
+    /// in flight or the dialog is open.
+    fn confirm_trash(&mut self, paths: &[String], mode: trash::Mode, cx: &mut Context<Self>) {
+        let Some(dir) = self.dir.clone() else { return };
+        if self.trashing.is_some()
+            || paths.is_empty()
+            || self.settings_view.read(cx).is_open()
+            || !self.trash.start(trash::Target {
+                dir,
+                paths: paths.to_vec(),
+                mode,
+            })
+        {
+            return;
+        }
+        self.menus.close();
+        cx.notify();
+    }
+
+    /// The dialog's run button, by a click with `click_count` (0 for a key):
+    /// a delete takes a single mouse click only. Through the gate: at once
+    /// with no listing or scan under way, the dialog staying open until the
+    /// run comes back; else held for the scan's end, the dialog closed and
+    /// the scan canceled, as its files are about to go.
+    fn confirm_run(&mut self, click_count: usize, cx: &mut Context<Self>) {
+        if self
+            .trash
+            .target()
+            .is_some_and(|t| t.mode == trash::Mode::Delete)
+            && !trash::confirms_delete(click_count)
+        {
+            return;
+        }
+        let Some(target) = self.trash.run() else {
+            return;
+        };
+        let busy = self.resync.busy() || self.gate.in_flight();
+        let label = target.mode.label();
+        match self.gate.request(label, target, busy) {
+            Some(target) => self.run_trash(target, true, cx),
+            None => {
+                log::info!("trash: {label} held for the scan's end");
+                self.trash.end();
+                self.scan.cancel();
+                // The canceled scan leaves files unscanned, whatever becomes
+                // of the held run.
+                if self.resync.changed() {
+                    self.relist(cx);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn dismiss_trash(&mut self, cx: &mut Context<Self>) {
+        if self.trash.dismiss() {
+            cx.notify();
+        }
+    }
+
+    /// Every key stops here while the dialog is open.
+    fn trash_key_down(&mut self, name: Option<&str>, held: bool, cx: &mut Context<Self>) {
+        match self.trash.key(name, held) {
+            trash::Key::Dismiss => self.dismiss_trash(cx),
+            trash::Key::Run => self.confirm_run(0, cx),
+            trash::Key::Swallow => cx.notify(),
+        }
+    }
+
+    /// Move `target`'s files to the Trash, or delete them, on a background
+    /// task: the judgment stores still queued, then the sidecar writer, are
+    /// flushed first, so no write lands on a file being moved. No listing
+    /// or scan starts until it comes back (`gate`, `resync`). `own` when the
+    /// dialog is still open for it, to close at the end.
+    fn run_trash(&mut self, target: trash::Target, own: bool, cx: &mut Context<Self>) {
+        let trash::Target { dir, paths, mode } = target;
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        self.trashing = Some(trash::progress_status(mode, 0, paths.len()));
+        let (stores, writer, runs, events) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.runs.clone(),
+            self.events.clone(),
+        );
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let ran = dir.clone();
+            let result = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    let progress = |done, total| {
+                        let _ = events.unbounded_send(Event::TrashProgress { mode, done, total });
+                    };
+                    match mode {
+                        trash::Mode::Trash => {
+                            riffle_backend::trash::trash_listed(&ran, &paths, &runs, progress)
+                        }
+                        trash::Mode::Delete => {
+                            riffle_backend::trash::delete_listed(&ran, &paths, progress)
+                        }
+                    }
+                })
+                .await;
+            log::info!(
+                "trash: {} in {dir} in {}ms",
+                mode.label(),
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| this.trashed(&dir, mode, own, result, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// A run came back: report it, drop what a delete took from the
+    /// histories, and re-list the open folder, which also rescans what a
+    /// canceled scan left, or open the folder asked for meanwhile.
+    fn trashed(
+        &mut self,
+        dir: &str,
+        mode: trash::Mode,
+        own: bool,
+        result: Result<riffle_backend::trash::Summary, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.gate.leave_in_flight();
+        self.trashing = None;
+        if own {
+            self.trash.end();
+        }
+        match result {
+            Ok(summary) => {
+                log::info!(
+                    "trash: moved={} failed={} run_id={:?}",
+                    summary.moved.len(),
+                    summary.failed.len(),
+                    summary.run_id
+                );
+                for path in &summary.moved {
+                    self.touched.remove(path);
+                }
+                if mode == trash::Mode::Delete && !summary.moved.is_empty() {
+                    self.undo
+                        .without_paths(&summary.moved.iter().cloned().collect());
+                }
+                for failure in &summary.failed {
+                    self.write_failed(
+                        failure.path.clone(),
+                        format!("{}: {}", mode.failure(), failure.message),
+                    );
+                }
+                self.step_note = Some(trash::trashed_status(mode, &summary));
+            }
+            Err(e) => {
+                log::error!("trash: {} in {dir} failed: {e}", mode.label());
+                self.step_note = Some(e);
+            }
+        }
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if self.dir.is_some() {
+            // The re-listing covers any change seen during the run.
+            self.resync.open();
+            self.relist(cx);
+        }
+        cx.notify();
     }
 
     /// An item of the folder tree's menu.
@@ -1222,6 +1425,17 @@ impl Riffle {
 
     /// The listing and its scan are over: run the re-listing that waited.
     fn finished(&mut self, cx: &mut Context<Self>) {
+        // The run held for this scan runs now, the re-listing at its end
+        // taking the change that waited; a dialog opened meanwhile drops it.
+        if let Some(target) = self.gate.drain() {
+            if !self.trash.busy() {
+                return self.run_trash(target, false, cx);
+            }
+            log::info!(
+                "trash: held run in {} dropped by an open dialog",
+                target.dir
+            );
+        }
         if self.resync.finished() {
             self.relist(cx);
         }
@@ -1229,6 +1443,10 @@ impl Riffle {
 
     fn relist(&mut self, cx: &mut Context<Self>) {
         let Some(dir) = self.dir.clone() else { return };
+        // A run's end re-lists.
+        if self.gate.in_flight() {
+            return;
+        }
         log::info!("resync: dir={dir}");
         self.list(PathBuf::from(dir), true, cx).detach();
     }
@@ -1327,6 +1545,8 @@ impl Riffle {
                 this.touched.clear();
                 this.undo.clear();
                 this.step_note = None;
+                // Mark the listing busy so a trash or delete waits for it.
+                this.resync.open();
                 this.relist(cx);
                 cx.notify();
             })
@@ -1547,6 +1767,10 @@ impl Riffle {
                     self.events.clone(),
                 );
                 self.scan.put(scan);
+                // A run held while the listing ran had no scan to cancel yet.
+                if idle::cancels_scan(self.gate.waiting()) {
+                    self.scan.cancel();
+                }
             }
             (Some(Err(e)), _) => {
                 log::error!("failed to prepare the scan of {}: {e}", listed.dir);
@@ -1704,6 +1928,14 @@ impl Riffle {
             Event::Changed(dir) => return self.changed(dir, cx),
             Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
+            Event::TrashProgress { mode, done, total } => {
+                // The last message can land after the run came back.
+                if self.trashing.is_some() {
+                    self.trashing = Some(trash::progress_status(*mode, *done, *total));
+                    cx.notify();
+                }
+                return;
+            }
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
                 cx.notify();
@@ -1753,7 +1985,8 @@ impl Riffle {
             Event::Changed(_)
             | Event::TreeChanged(_)
             | Event::SidecarError { .. }
-            | Event::Mcp(_) => {}
+            | Event::Mcp(_)
+            | Event::TrashProgress { .. } => {}
         }
         self.pump(cx);
         cx.notify();
@@ -1819,11 +2052,21 @@ impl Riffle {
     /// logged. Nothing gets through while the settings are open. While the
     /// tree has the keyboard it takes the key first, and of the rest only
     /// `tree_gate`'s actions run.
-    fn key_down(&mut self, keystroke: &Keystroke, window: &mut Window, cx: &mut Context<Self>) {
+    fn key_down(
+        &mut self,
+        keystroke: &Keystroke,
+        held: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if self.settings_view.read(cx).is_open() {
             return;
         }
-        let Some(name) = keys::key_name(keystroke) else {
+        let name = keys::key_name(keystroke);
+        if self.trash.busy() {
+            return self.trash_key_down(name.as_deref(), held, cx);
+        }
+        let Some(name) = name else {
             return;
         };
         let action = self.bindings.action_for(&name);
@@ -2800,6 +3043,16 @@ impl Riffle {
                     .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
             )
             .children(
+                self.trashing
+                    .clone()
+                    .or_else(|| {
+                        self.gate
+                            .waiting()
+                            .map(|label| format!("{label}: waiting for the scan to finish"))
+                    })
+                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+            )
+            .children(
                 self.notes
                     .iter()
                     .cloned()
@@ -3137,6 +3390,101 @@ impl Riffle {
         )
     }
 
+    /// The `Move to Trash…` / `Delete Permanently…` dialog while it asks or
+    /// runs: a full-window `occlude()`d layer, so no press reaches what is
+    /// under it, with the title, the line and the two buttons. The focused
+    /// button is kept in `TrashFlow` and outlined; while running both are
+    /// disabled.
+    fn trash_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let target = self.trash.target()?;
+        let text = trash::dialog_text(target.mode, target.paths.len());
+        let running = self.trash.running();
+        let focused = self.trash.focused();
+        let button = |id: &'static str, label: &'static str, which: trash::Button| {
+            let destructive = which == trash::Button::Run;
+            let button = div()
+                .id(id)
+                .px(px(12.))
+                .py(px(4.8))
+                .rounded_md()
+                .border_1()
+                .text_size(px(13.6))
+                .font_weight(FontWeight::MEDIUM)
+                .map(|d| match (!running && focused == which, destructive) {
+                    (true, _) => d.border_color(rgb(PRIMARY_COLOR)),
+                    (false, true) => d.border_color(rgba(0)),
+                    (false, false) => d.border_color(rgba(INPUT_BORDER)),
+                })
+                .bg(if destructive {
+                    rgb(ERROR_COLOR)
+                } else {
+                    rgba(BUTTON_FILL)
+                })
+                .child(label);
+            if running {
+                return button.opacity(0.5);
+            }
+            button
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| match which {
+                    trash::Button::Run => {
+                        let count = if e.is_keyboard() { 0 } else { e.click_count() };
+                        this.confirm_run(count, cx);
+                    }
+                    trash::Button::Cancel => this.dismiss_trash(cx),
+                }))
+        };
+        Some(
+            deferred(
+                div()
+                    .id("trash-backdrop")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .occlude()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(rgba(0x00000099))
+                    .child(
+                        div()
+                            .id("trash-box")
+                            .occlude()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .w(px(640.))
+                            .max_w(relative(0.9))
+                            .px_4()
+                            .py_3()
+                            .bg(rgb(PANE_COLOR))
+                            .border_1()
+                            .border_color(rgba(BORDER_COLOR))
+                            .rounded_lg()
+                            .text_color(rgb(FOREGROUND_COLOR))
+                            .text_size(px(13.))
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(text.title),
+                            )
+                            .child(div().child(text.line))
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_end()
+                                    .gap_2()
+                                    .child(button("trash-run", text.run, trash::Button::Run))
+                                    .child(button("trash-cancel", "Cancel", trash::Button::Cancel)),
+                            ),
+                    ),
+            )
+            .into_any_element(),
+        )
+    }
+
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
     fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
@@ -3208,7 +3556,7 @@ impl Render for Riffle {
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
-                this.key_down(&e.keystroke, window, cx);
+                this.key_down(&e.keystroke, e.is_held, window, cx);
             }))
             .child(
                 div()
@@ -3326,6 +3674,7 @@ impl Render for Riffle {
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
             .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
+            .children(self.trash_dialog(cx))
     }
 }
 

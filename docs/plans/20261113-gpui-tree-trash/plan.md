@@ -553,7 +553,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       through `Command::from_action` like a key.
     - Record whether the copied path carries the `\\?\` prefix on Windows.
       The Tauri app writes the listed path as it is; do the same.
-- [ ] Step 7: Move to Trash… and Delete Permanently…: the dialog, the run, its progress, the hold during a scan
+- [x] Step 7: Move to Trash… and Delete Permanently…: the dialog, the run, its progress, the hold during a scan
   - Done when:
     - `crates/native/src/trash.rs` is a pure model with unit tests, a port
       of `trash.ts` with the matching cases of `trash.test.ts`:
@@ -756,3 +756,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 - (2026-11-14) Step 4 complete
 - (2026-11-14) Step 5 complete
 - (2026-11-14) Step 6 complete
+- (2026-11-14) Step 7 complete

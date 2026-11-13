@@ -394,7 +394,16 @@ out in a view-only folder) and `Move to Trash…` / `Delete Permanently…`,
 `shown_path`, a path without the Windows verbatim prefix the shell refuses,
 and `Menu`, the open menu's
 position and target), which the window draws as a `deferred` / `anchored`
-popover at the pointer, and `src/peaking.rs`
+popover at the pointer, `src/trash.rs` the strip's `Move to Trash…` /
+`Delete Permanently…` (a port of `trash.ts`: `dialog_text`, the delete
+dialog's `swallowed_by_delete` and `confirms_delete`, `progress_status`,
+`trashed_status` and `TrashFlow`, idle / asking / running with the focused
+button), which the window draws as a `deferred`, `occlude()`d full-window
+dialog and runs through the backend's `trash::trash_listed` /
+`trash::delete_listed` on a background task, `src/idle.rs` the gate holding
+a confirmed run for the end of the listing or scan under way (`IdleGate`, one
+held operation, a later request replacing it, and the in-flight count no
+listing starts under; `cancels_scan`, a port of `idle.ts`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the
