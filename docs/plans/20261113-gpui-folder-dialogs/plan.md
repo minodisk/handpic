@@ -275,7 +275,7 @@ folder operation.
       copied.
     - The step picks the module `SCAN_RUNNING` and `format_bytes` live in;
       nothing else moves out of `commands.rs`.
-- [ ] Step 2: Move the import's and the sequencer's Tauri-free parts into the backend
+- [x] Step 2: Move the import's and the sequencer's Tauri-free parts into the backend
   - Done when:
     - `crates/backend/src/import.rs` holds, beside the settings pieces
       (`DEFAULT_PATTERN`, `ImportSettings`, `validate_pattern`,
@@ -712,3 +712,4 @@ folder operation.
 ## Progress
 
 (2026-11-14) Step 1 complete
+(2026-11-14) Step 2 complete

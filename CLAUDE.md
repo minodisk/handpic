@@ -160,7 +160,14 @@ head; `preview`) and the split (`split_folder`, over the same `Context`),
 `src/foldersidecars.rs` the counting, the rewrite and the delete of a
 folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
 `delete_run`, which records the run and clears the judgments), none of the
-three checking for a scan, which is the caller's, `src/text.rs` the
+three checking for a scan, which is the caller's, `src/import.rs` the
+import's settings rules (`format_date`, `validate_pattern`, `root_setting`,
+`pattern_setting`, `example`) and its plan and run (`walk`, `plan`,
+`plan_dir`, `summarize`, `refusal`, `prepare`, which creates the destination
+folders, `run_plan`, with a cancel flag and a progress callback, and
+`log_line`), `src/sequence.rs` the `Sequence JPEG Timestamps…` preview and
+run over `riffle_core::sequence` (`preview`, `run`, with a cancel flag and a
+`(done, total)` callback), neither touching the index, `src/text.rs` the
 `SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
@@ -210,13 +217,14 @@ per date, with the undated files and any colliding target; `date_folder_run`
 re-plans and either renames through `rename_folder`'s path or moves each dated
 file with its sidecars and index rows into its date folder, leaving the
 undated ones and removing the original folder only when it ends up empty),
-`src/import.rs` the folder menu's `Import…`: the destination root and the
+`src/import.rs` the folder menu's `Import…`, over the backend's `import`:
+the destination root and the
 date-only folder pattern (chrono strftime, `%Y/%F` by default) of the
 settings' `Import` tab, persisted in the `importRoot` and `importPattern`
 keys, `import_preview`, which plans every RAW and JPEG under the folder, each
 RAW with its sidecars, into date folders (copy, skip on the same name and
-size, collision on another size, undated), and `import_run` /
-`import_cancel`, which create the folders, copy the plan through
+size, collision on another size, undated) and keeps the plan for the run, and
+`import_run` / `import_cancel`, which create the folders, copy the plan through
 `riffle_core::copy`, stream `import-progress` / `import-done` and log one
 `import:` line per run,
 `src/watch.rs`
@@ -230,7 +238,7 @@ folder's index rows dirty and push them through the sidecar writer, patching
 only the judgment fields of the current format's sidecars, and
 `delete_sidecars_preview` / `delete_sidecars_run` move those sidecars to the
 OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
-`Sequence JPEG Timestamps…` commands (`sequence_preview`,
+`Sequence JPEG Timestamps…` commands over the backend's `sequence` (`sequence_preview`,
 `sequence_run`, `sequence_cancel`) and their `sequence-progress` /
 `sequence-done` events, `src/output.rs` the `outputs_of` command behind the
 strip's `Output` filter, over the backend's `output`, and
