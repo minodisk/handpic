@@ -20,10 +20,37 @@ pub fn index_path(flag: Option<PathBuf>, cache: Option<&Path>) -> Option<PathBuf
     })
 }
 
+/// The settings store: `flag` when given, else `settings.sqlite` in the
+/// `<IDENTIFIER>` folder under `config`, next to the Tauri app's
+/// `settings.json`; `None` when neither is known.
+pub fn settings_path(flag: Option<PathBuf>, config: Option<&Path>) -> Option<PathBuf> {
+    flag.or_else(|| config.map(|config| config.join(IDENTIFIER).join("settings.sqlite")))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::index_path;
+    use super::{IDENTIFIER, index_path, settings_path};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn the_settings_flag_beats_the_default_under_the_config_dir() {
+        assert_eq!(
+            settings_path(
+                Some(PathBuf::from("D:/t/s.sqlite")),
+                Some(Path::new("C:/config"))
+            ),
+            Some(PathBuf::from("D:/t/s.sqlite"))
+        );
+        assert_eq!(
+            settings_path(None, Some(Path::new("C:/config"))),
+            Some(
+                Path::new("C:/config")
+                    .join(IDENTIFIER)
+                    .join("settings.sqlite")
+            )
+        );
+        assert_eq!(settings_path(None, None), None);
+    }
 
     #[test]
     fn the_flag_beats_the_default() {
