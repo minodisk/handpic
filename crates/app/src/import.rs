@@ -27,8 +27,9 @@ use serde_json::Value;
 use tauri::{Emitter, Manager};
 
 use crate::commands::canonicalize;
+use crate::index;
 use crate::sidecar::SidecarFormat;
-use crate::{datefolder, index};
+use riffle_backend::datefolder;
 
 /// The pattern used when none is stored: `2026/2026-10-24`.
 pub const DEFAULT_PATTERN: &str = "%Y/%F";
