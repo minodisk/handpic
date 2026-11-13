@@ -286,7 +286,7 @@ mod tests {
         path::{Path, PathBuf},
         sync::{Arc, Mutex},
         thread,
-        time::Instant,
+        time::{Duration, Instant},
     };
 
     fn file(rating: Option<i8>, flag: Flag, label: Option<&str>) -> IndexedFile {
@@ -607,16 +607,24 @@ mod tests {
         if started.elapsed() < DEBOUNCE {
             assert!(!xmp.exists());
         }
-        thread::sleep(DEBOUNCE * 3);
+        // Polled rather than flushed, so the write is the debounce's own; the
+        // deadline only bounds a loaded runner, it is not a timing claim.
+        let clean = || {
+            folder
+                .index
+                .lock()
+                .unwrap()
+                .dirty_rows(&folder.dir)
+                .unwrap()
+                .is_empty()
+        };
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !(xmp.exists() && clean()) && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(10));
+        }
         let written = fs::read_to_string(&xmp).unwrap();
         assert!(written.contains(r#"xmp:Rating="3""#), "{written}");
-        let row = folder
-            .index
-            .lock()
-            .unwrap()
-            .dirty_rows(&folder.dir)
-            .unwrap();
-        assert!(row.is_empty(), "{row:?}");
+        assert!(clean(), "the write leaves no dirty row");
     }
 
     #[test]
