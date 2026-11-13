@@ -565,6 +565,33 @@ image id and drawn size, so a stale frame gets its own edges or none.
 - Pending: a held key flipping frames and the release showing the current file
   with its overlays is unverified by hand on Windows.
 
+### A held key draws each stale crop before chasing the current one (Inferred)
+
+The 1:1 view's crop chain has the same shape: one read in flight, and a crop
+read for an earlier page (`seq`) used to be released. `Zoom` now records the
+page each held crop was read for. While zoomed, `page()` keeps the held crop
+on screen and asks for the new page's (once, while nothing is in flight); a
+stale crop that arrives is held in place of the previous one and the current
+page is asked for, so the drawn crop lags the cursor by at most one crop read.
+A stale failed read holds nothing new, shows no error and still asks for the
+current page; the current page's failure shows its error and releases a held
+crop of another page. Not zoomed, a page and a stale arrival release the crop,
+so `z` never opens on another file's crop.
+
+- Rule: the canvas never mixes two files. `zoom_paint` draws the held crop
+  whatever page it is for, but the placeholder (and the `full` size that
+  scales it) only when `Zoom::placeholder_fits`: no crop held, or the held
+  one is the current page's. The crop's peaking layer is keyed by its own
+  image.
+- Rule: the `zoom` timing line, the resize re-cut and the reuse of a held crop
+  on `z` or a settled viewport (`toggle`, `settled`) are the current page's
+  crop's only; a stale held crop never counts as already having it.
+- Rule: a single press while zoomed goes old crop, new crop (no black frame or
+  placeholder in between), and a folder switch or re-listing while zoomed
+  keeps the old crop until the new one arrives.
+- Pending: a held key flipping crops while zoomed, and a single press and `z`
+  off / on still behaving, is unverified by hand on Windows.
+
 ### Pass 2 runs on pass 1's thread (Inferred)
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
