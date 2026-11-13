@@ -48,7 +48,9 @@ fn remove_leftovers(_: &str) -> Report {
     Report::new()
 }
 
-/// `leftovers` runs once per legacy identifier whose folders all moved.
+/// `leftovers` runs once per legacy identifier whose folders all moved. The
+/// first identifier that is not fully moved ends the run, so the older ones
+/// are left untouched for the next launch.
 fn migrate_under(
     bases: &[PathBuf],
     identifier: &str,
@@ -63,9 +65,12 @@ fn migrate_under(
         let all_moved = moved.iter().all(Result::is_ok);
         complete &= all_moved;
         report.extend(moved);
-        if all_moved {
-            report.extend(leftovers(legacy));
+        if !all_moved {
+            // Stop here: merging an older identifier first would let its copy
+            // of a file the newer one failed to move win the next launch.
+            break;
         }
+        report.extend(leftovers(legacy));
     }
     Outcome { report, complete }
 }
@@ -518,6 +523,31 @@ mod tests {
             fs::read_to_string(current.join("logs/Riffle.log")).unwrap(),
             "log"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_failed_newer_legacy_leaves_the_older_one_untouched() {
+        let root = temp_root("stops-early");
+        let handpic = root.join("com.minodisk.handpic");
+        let riffle = root.join("com.minodisk.riffle");
+        write(&handpic.join("settings.json"), "handpic");
+        // A directory where the partial file goes makes the move of this file fail.
+        fs::create_dir_all(root.join("dev.minodisk.handpic/settings.json.migrating")).unwrap();
+        write(&riffle.join("settings.json"), "riffle");
+        let outcome = migrate_under(
+            std::slice::from_ref(&root),
+            "dev.minodisk.handpic",
+            real_rename,
+            no_leftovers,
+        );
+        assert!(!outcome.complete);
+        assert_eq!(outcome.report.len(), 1, "{:?}", outcome.report);
+        assert_eq!(
+            fs::read_to_string(riffle.join("settings.json")).unwrap(),
+            "riffle"
+        );
+        assert!(!root.join("dev.minodisk.handpic/settings.json").exists());
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -80,3 +80,5 @@ session).
 - **The native app's index is not migrated.** `<cache dir>/com.minodisk.handpic.native/index.sqlite` is left behind and the next native open runs a cold pass 1 into `dev.minodisk.handpic.native`. The orphaned folder can be deleted by hand.
 
 ## Progress
+
+- (2026-11-13) Step 1 complete; the first-launch manual check is pending (see `learnings.md`)
