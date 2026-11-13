@@ -1,6 +1,6 @@
 mod args;
-mod context;
 mod companion;
+mod context;
 mod datadir;
 mod exif;
 mod eyes;
