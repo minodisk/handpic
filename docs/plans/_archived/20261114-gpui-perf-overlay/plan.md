@@ -24,7 +24,7 @@ the system's disk busy time, and one bar per preview switch. The GPUI app
 (`crates/native`) has the sampler available since the gpui-companions plan
 moved it into `crates/backend/src/perf.rs`, but no overlay. This plan ports
 the overlay, which is the "performance overlay (`perf.rs` sampler)" part of
-Step 9 of [the gpui-port plan](../20261109-gpui-port/plan.md). No other
+Step 9 of [the gpui-port plan](../../20261109-gpui-port/plan.md). No other
 sub-plan covers it.
 
 Out of scope, owned by other plans: pass 3, the ranking, the prefetch ring,
