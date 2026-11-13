@@ -1,5 +1,6 @@
 mod args;
 mod companion;
+mod context;
 mod datadir;
 mod exif;
 mod eyes;
@@ -55,9 +56,9 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, FocusHandle,
-    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point, RenderImage,
-    ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
+    Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
+    FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point,
+    RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
     UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
     fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
@@ -78,6 +79,7 @@ use riffle_backend::{
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, Writer},
+    treewatch::TreeWatch,
     watch::{self, Watch},
 };
 use riffle_core::{
@@ -313,6 +315,14 @@ struct Riffle {
     reveal_wanted: Option<String>,
     /// The last folder listing of the tree that failed, until another open.
     tree_note: Option<String>,
+    /// The watcher on the tree's expanded, drawn folders, the set last handed
+    /// to it (`None` to hand the next one over whatever it is), and the
+    /// latest hand-over, which awaits the one before it.
+    tree_watch: Arc<TreeWatch>,
+    tree_watched: Option<Vec<String>>,
+    tree_syncing: Option<Task<()>>,
+    /// The right-click menu, while one is open.
+    context: context::Menu,
     /// The left pane is shown (`toggleLeft`).
     left_pane: bool,
     /// `--size` and `--max`, which a re-listing applies again.
@@ -464,13 +474,20 @@ impl Riffle {
             })
             .detach();
         }
-        cx.spawn(async move |this, cx| {
-            let roots = cx
-                .background_spawn(async { folders::roots(dirs::home_dir()) })
-                .await;
-            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        Self::read_roots(cx);
+        // A volume mounted since shows up when the window becomes active.
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() && this.roots_loaded {
+                Self::read_roots(cx);
+            }
         })
         .detach();
+        let tree_watch = {
+            let events = events.clone();
+            TreeWatch::spawn(move |dir| {
+                let _ = events.unbounded_send(Event::TreeChanged(dir));
+            })
+        };
         let writes = settings.writes.clone();
         App::on_app_quit(cx, move |_| {
             let drained = writes.drain(settings::DRAIN_TIMEOUT);
@@ -527,6 +544,10 @@ impl Riffle {
             roots_loaded: false,
             reveal_wanted: None,
             tree_note: None,
+            tree_watch: Arc::new(tree_watch),
+            tree_watched: None,
+            tree_syncing: None,
+            context: context::Menu::default(),
             left_pane: true,
             wanted: None,
             max: None,
@@ -626,6 +647,19 @@ impl Riffle {
         self.open(PathBuf::from(path), None, None, cx).detach();
     }
 
+    /// Read the roots on a background task; `add_roots` skips the ones
+    /// already shown, so this also runs again on the window's activation,
+    /// where a failure is not reported.
+    fn read_roots(cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let roots = cx
+                .background_spawn(async { folders::roots(dirs::home_dir()) })
+                .await;
+            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        })
+        .detach();
+    }
+
     fn roots_read(&mut self, roots: Vec<folders::FolderNode>, cx: &mut Context<Self>) {
         self.tree.add_roots(roots.into_iter().map(Child::from));
         self.roots_loaded = true;
@@ -635,7 +669,8 @@ impl Riffle {
         }
     }
 
-    /// Rebuild the tree's rows and find the open folder's among them.
+    /// Rebuild the tree's rows, find the open folder's among them and hand a
+    /// changed watched set to the tree's watcher.
     fn tree_changed(&mut self, cx: &mut Context<Self>) {
         self.tree_rows = self.tree.rows();
         self.tree_open_row = self.tree_open.as_ref().and_then(|open| {
@@ -643,6 +678,126 @@ impl Riffle {
                 tree::relation(&row.path, open, IGNORE_CASE) == Some(Relation::Same)
             })
         });
+        self.sync_tree_watches(cx);
+        cx.notify();
+    }
+
+    /// Hand the watched set to the tree's watcher off the main thread, after
+    /// the previous hand-over, so they apply in order; an unchanged set is
+    /// not sent. A collapse releases watches, which waits on the watcher.
+    fn sync_tree_watches(&mut self, cx: &mut Context<Self>) {
+        let dirs = self.tree.watched_folders();
+        if self.tree_watched.as_ref() == Some(&dirs) {
+            return;
+        }
+        self.tree_watched = Some(dirs.clone());
+        let previous = self.tree_syncing.take();
+        let watch = self.tree_watch.clone();
+        self.tree_syncing = Some(cx.background_spawn(async move {
+            if let Some(previous) = previous {
+                previous.await;
+            }
+            watch.set(&dirs);
+        }));
+    }
+
+    /// The tree's watcher saw `dir` change: re-list it while it is still
+    /// expanded and drawn. A failed re-list is a background refresh's and
+    /// leaves the folder as it was: deleting a folder often fails its own
+    /// re-list first, and its parent's re-list removes the row.
+    fn tree_folder_changed(&mut self, dir: String, cx: &mut Context<Self>) {
+        if !self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == dir && row.expanded)
+        {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            match listed {
+                Ok(folder) => {
+                    this.update(cx, |this, cx| {
+                        this.tree_listed(&dir, Ok(folder), false);
+                        this.tree_changed(cx);
+                    })
+                    .ok();
+                }
+                Err(e) => log::warn!("failed to re-list the subfolders of {dir}: {e}"),
+            }
+        })
+        .detach();
+    }
+
+    /// The tree menu's `Refresh`: re-list the folder, expanded or not, and
+    /// hand the watched set over again, so a watch that failed is retried.
+    /// The open folder itself is re-listed as a watcher change would.
+    fn tree_refresh(&mut self, dir: String, cx: &mut Context<Self>) {
+        let open = self
+            .tree_open
+            .as_ref()
+            .is_some_and(|open| tree::relation(open, &dir, IGNORE_CASE) == Some(Relation::Same));
+        if open && self.dir.is_some() && self.resync.changed() {
+            self.relist(cx);
+        }
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            this.update(cx, |this, cx| {
+                this.tree_listed(&dir, listed, true);
+                this.tree_watched = None;
+                this.tree_changed(cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A right-click on a tree row: its menu at the pointer, the status row's
+    /// menus closed.
+    fn tree_context(
+        &mut self,
+        at: Point<Pixels>,
+        path: String,
+        name: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.menus.close();
+        self.context.open_folder(
+            (f32::from(at.x), f32::from(at.y)),
+            path,
+            name,
+            folders::REVEAL_LABEL,
+        );
+        cx.notify();
+    }
+
+    /// A click on an item of the right-click menu.
+    fn context_action(&mut self, action: context::Action, cx: &mut Context<Self>) {
+        let Some(context::Target::Folder { path, name }) = self.context.close() else {
+            return;
+        };
+        match action {
+            context::Action::RevealFolder => {
+                let path = Path::new(&path);
+                // A root has no parent folder to select it in, so it opens.
+                if path.parent().is_some() {
+                    cx.reveal_path(path);
+                } else {
+                    cx.open_with_system(path);
+                }
+            }
+            context::Action::CopyPath => cx.write_to_clipboard(ClipboardItem::new_string(path)),
+            context::Action::CopyFolderName => {
+                cx.write_to_clipboard(ClipboardItem::new_string(name));
+            }
+            context::Action::RefreshFolder => self.tree_refresh(path, cx),
+        }
         cx.notify();
     }
 
@@ -1167,6 +1322,7 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
@@ -1214,7 +1370,10 @@ impl Riffle {
                 self.scan_status.clear();
                 self.finished(cx);
             }
-            Event::Changed(_) | Event::SidecarError { .. } | Event::Mcp(_) => {}
+            Event::Changed(_)
+            | Event::TreeChanged(_)
+            | Event::SidecarError { .. }
+            | Event::Mcp(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -1283,6 +1442,15 @@ impl Riffle {
         };
         let action = self.bindings.action_for(&name);
         log::debug!("key: {name} action={action:?}");
+        // Any key closes the right-click menu; only `escape` stops there, as
+        // in the Tauri app's keydown handler.
+        if self.context.is_open() {
+            self.context.close();
+            cx.notify();
+            if name == "escape" {
+                return;
+            }
+        }
         match (name.as_str(), action) {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
@@ -2173,6 +2341,7 @@ impl Riffle {
                     .child(count.to_string())
             });
         let path = row.path.clone();
+        let (menu_path, menu_name) = (row.path.clone(), row.name.clone());
         div()
             .id(("tree-row", at))
             .h(px(TREE_ROW_HEIGHT))
@@ -2202,6 +2371,12 @@ impl Riffle {
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                 this.open_from_tree(path.clone(), cx);
             }))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                    this.tree_context(e.position, menu_path.clone(), menu_name.clone(), cx);
+                }),
+            )
             .into_any_element()
     }
 
@@ -2357,6 +2532,60 @@ impl Riffle {
                     .map(|(at, row)| menu_row(at, row, cx)),
             )
             .into_any_element()
+    }
+
+    /// The open right-click menu at the pointer, drawn after the rest of the
+    /// window and over it, kept inside the window; laid out only while open.
+    fn context_popover(&self, max_height: Pixels, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let open = self.context.open()?;
+        let (x, y) = open.at;
+        let mut rows: Vec<AnyElement> = Vec::new();
+        for (group, items) in open.groups.iter().enumerate() {
+            if group > 0 {
+                rows.push(
+                    div()
+                        .h(px(1.))
+                        .my_1()
+                        .bg(rgba(BORDER_COLOR))
+                        .into_any_element(),
+                );
+            }
+            for item in items {
+                rows.push(context_row(rows.len(), item, cx));
+            }
+        }
+        let popover = div()
+            .id("context-menu")
+            .occlude()
+            .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.context.close();
+                cx.notify();
+            }))
+            .flex()
+            .flex_col()
+            .min_w(px(180.))
+            .max_h(max_height)
+            .overflow_y_scroll()
+            .p_1()
+            .bg(rgb(PANE_COLOR))
+            .border_1()
+            .border_color(rgba(BORDER_COLOR))
+            .rounded_md()
+            .text_size(px(13.))
+            .children(rows);
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .child(deferred(
+                    anchored()
+                        .position(point(px(x), px(y)))
+                        .snap_to_window()
+                        .child(popover),
+                ))
+                .into_any_element(),
+        )
     }
 
     /// Answer an MCP companion tool call from the view, after moving it as
@@ -2520,6 +2749,7 @@ impl Render for Riffle {
                     ),
             )
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
+            .children(self.context_popover(window.viewport_size().height - px(40.), cx))
     }
 }
 
@@ -2609,6 +2839,41 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         .children(lead)
         .child(label)
         .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action.clone(), cx)))
+        .into_any_element()
+}
+
+/// One item of the right-click menu: its check mark, label and shortcut,
+/// dimmed and inert while disabled.
+fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> AnyElement {
+    let action = item.action;
+    let row = div()
+        .id(("context-item", at))
+        .flex()
+        .items_center()
+        .gap_2()
+        .pr_3()
+        .py(px(3.))
+        .rounded_sm()
+        .child(div().w(px(MENU_INDENT)).flex_none().text_center().child(
+            if item.checked == Some(true) {
+                "\u{2713}"
+            } else {
+                ""
+            },
+        ))
+        .child(div().flex_1().child(item.label.clone()))
+        .child(
+            div()
+                .text_size(px(11.))
+                .text_color(rgb(MUTED_COLOR))
+                .child(item.shortcut.clone()),
+        );
+    if item.disabled {
+        return row.opacity(0.5).into_any_element();
+    }
+    row.cursor_pointer()
+        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+        .on_click(cx.listener(move |this, _, _, cx| this.context_action(action, cx)))
         .into_any_element()
 }
 

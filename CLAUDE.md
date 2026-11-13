@@ -358,8 +358,15 @@ left pane's folder tree (a port of the state half of `tree.ts`: the roots,
 each folder's listed children, expansion, RAW count and failed listing, the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
-draws as a `uniform_list`, fills from the backend's `folders` and expands
-down to the open folder on every open, and `src/peaking.rs`
+draws as a `uniform_list`, fills from the backend's `folders`, expands
+down to the open folder on every open, keeps following the disk through the
+backend's `treewatch` on its expanded, drawn folders (`watched_folders`) and
+re-reads the roots when the window becomes active, `src/context.rs` the
+right-click menus (a port of `context.ts`: the items with their action, label,
+shortcut, checked and disabled state, `folder_groups`, the tree's reveal,
+`Copy Path`, `Copy Folder Name` and `Refresh`, and `Menu`, the open menu's
+position and target), which the window draws as a `deferred` / `anchored`
+popover at the pointer, and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

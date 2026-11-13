@@ -76,6 +76,34 @@
 - The local `python` heredoc edits wrote CRLF on Windows (text mode); the
   file had to be converted back to LF. Write with `newline=''` or binary.
 
+## Step 3: the tree follows the disk, and its right-click menu
+
+- The watched set is handed over from `tree_changed`, so every path that
+  changes the tree (expand, collapse, a listing, a reveal step, a watcher
+  re-list, `Refresh`) syncs the watcher without a call of its own. The chain
+  is a `Task<()>` that awaits the previous one before `TreeWatch::set`; the
+  previous task is moved into the new one, so it is never dropped (which
+  would cancel it).
+- `notify` 8.2.2 (the native lock) was checked with a throwaway test in the
+  native crate driving the backend's `TreeWatch`: collapse (`unwatch` +
+  `settle`) took 0.1-0.3 ms, a re-expand watched again, no event arrived
+  while collapsed, and the parent folder could be renamed after the last
+  collapse. `cargo test -p riffle-backend` from `crates/native` is refused
+  ("requires dev-dependencies and is not a member of the workspace"), hence
+  the throwaway; recorded in `native-app.md`.
+- `Refresh` on the open folder also re-lists it through `Resync`, as the
+  Tauri menu's `resync("refresh")` does (`opensTarget`, `Same` only). The plan
+  did not list this; it is three lines and keeps the port's behaviour.
+- GPUI's Windows `reveal_path` needs a parent folder (`target.parent()`),
+  so revealing a root (`D:\`) would only log an error; the menu opens a root
+  with `open_with_system` instead. The tree's paths never carry `\\?\`, so the
+  prefix question is Step 6's (strip files); it stays unverified.
+- `context::Open` holds the pointer position as `(f32, f32)`, so it cannot
+  derive `Eq`; the tests compare its fields.
+- The `bash` heredoc holding the large Rust edit failed to parse
+  (`unexpected EOF while looking for matching '`), so the edit script went
+  into a scratchpad file written with the Write tool and run with `python`.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
@@ -115,3 +143,32 @@
   that listing's `Scan::prepare` may run before the eviction. Only reachable
   by opening two folders within the eviction's run at launch. Basis: Step 2's
   concurrent-open guard. File: `crates/native/src/main.rs` (`list`).
+- **Pending manual check (Step 3, Windows).** Basis: Step 3's Done-when; the
+  watcher-driven re-list, the window activation and the right-click menu
+  cannot be driven headless. The step's checkbox was ticked on the automated
+  criteria (`context.rs` tests, `mise run ci`, `mise run native:check`, and
+  the `notify` 8.2.2 throwaway test). Setup as Step 2's (copies under
+  `D:\Photos\tests\20261113-gpui-tree-trash\tree\`, `cargo build` in
+  `crates/native`, a fresh `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`). Steps and expected results:
+  1. Launch on `...\tree\a`, so `...\tree` is expanded. In Explorer, create
+     a subfolder `c` in `...\tree`: it appears in the tree within about a
+     second, `tree` staying expanded. Rename `c` to `d`: the row follows.
+     Delete `d`: the row goes, and no error shows in the pane's notes.
+  2. Collapse `tree`, create `e` under it in Explorer: nothing happens (no
+     re-list in the log); expand `tree`: `e` is listed. Remove `e`.
+  3. Right-click a folder row (`b`): a menu opens at the pointer with the
+     reveal item (`Reveal in File Explorer`), `Copy Path`, `Copy Folder
+     Name` and `Refresh`; `escape` closes it, and so does a left or right
+     press elsewhere (a right press on another row opens that row's menu).
+  4. The reveal item opens Explorer on `tree` with `b` selected; on a root
+     (`D:\`) it opens the drive. `Copy Path` then pasting gives the row's
+     full path (e.g. `D:\Photos\tests\20261113-gpui-tree-trash\tree\b`);
+     `Copy Folder Name` gives `b`.
+  5. With `tree` collapsed, create `f` under it in Explorer, then
+     right-click `tree` and pick `Refresh`: expanding it lists `f` with no
+     wait on a re-list. `Refresh` on the open folder `a` re-lists its files.
+     Remove `f`.
+  6. Switch to another app and back: the tree does not flicker or collapse
+     (the roots are re-read and the known ones skipped); with a USB drive
+     plugged in meanwhile, its volume appears as a new root.

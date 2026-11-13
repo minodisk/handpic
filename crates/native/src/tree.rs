@@ -177,7 +177,6 @@ impl Tree {
     /// The folders the tree watches: the expanded ones among the drawn rows,
     /// sorted. A node left expanded under a collapsed parent is not drawn, so
     /// it is not watched.
-    #[allow(dead_code)]
     pub fn watched_folders(&self) -> Vec<String> {
         let mut out: Vec<String> = self
             .rows()
