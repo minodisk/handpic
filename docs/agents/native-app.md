@@ -864,6 +864,11 @@ strip needed one because `uniform_list` is vertical only.
   open is still the latest, and its result is dropped otherwise, so a quick second
   open is never overwritten by the first's late listing, nor left with the
   first folder's watcher.
+- Rule: listings settle in order. Each one's background task first awaits the
+  previous listing's `settled` signal (a oneshot kept on `Riffle`), then stops
+  the previous scan and joins the launch's eviction, then signals its own, so a
+  second open never reconciles or scans while an earlier listing is still
+  stopping the old scan or the eviction is still deleting rows.
 - Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
   with it hidden by `toggleLeft`. Not measured in the running app. The toggle

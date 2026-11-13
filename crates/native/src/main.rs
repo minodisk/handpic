@@ -281,6 +281,9 @@ struct Riffle {
     strip_width: f32,
     /// The launch's eviction, which the first scan waits for.
     eviction: Option<JoinHandle<()>>,
+    /// Resolves once the latest listing has stopped the previous scan and
+    /// joined the eviction, which the next listing waits for first.
+    settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
     /// The pending `ScanFocus` update, replaced on every change.
@@ -488,6 +491,7 @@ impl Riffle {
             thumbs: Thumbs::default(),
             strip_width: f32::from(window.viewport_size().width),
             eviction,
+            settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: running,
             scan_focus: None,
@@ -789,6 +793,9 @@ impl Riffle {
         let previous = self.scan.take();
         self.scan_status.clear();
         let eviction = self.eviction.take();
+        let earlier = self.settled.take();
+        let (settle, settled) = futures::channel::oneshot::channel::<()>();
+        self.settled = Some(settled);
         let watching = self.watch.clone();
         let writer = self.writer.clone();
         let (format, names) = (self.settings.format, self.settings.names.clone());
@@ -797,12 +804,19 @@ impl Riffle {
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
+                    // An earlier listing may still be stopping the previous
+                    // scan or joining the eviction; this one reconciles only
+                    // after it (a dropped sender resolves it too).
+                    if let Some(earlier) = earlier {
+                        let _ = earlier.await;
+                    }
                     if let Some(previous) = previous {
                         previous.stop();
                     }
                     if let Some(eviction) = eviction {
                         let _ = eviction.join();
                     }
+                    let _ = settle.send(());
                     // Watched before the listing, so a change during it is
                     // not missed; under `watching_lock`, so a later open's
                     // watcher is never replaced by this one's.
