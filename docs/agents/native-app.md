@@ -182,6 +182,17 @@ as it was, and the app runs on the defaults (`Xmp`, the English names, the
 default keymap, auto-advance on) with no store behind `Settings::writes`, so
 nothing is written; the startup `settings:` line ends `store=none`.
 
+- Rule: `Store::open` reads `user_version` before it sets `journal_mode = WAL`,
+  so a store with a newer schema is refused before its header is touched
+  (switching a rollback-journal database to WAL rewrites the header). The
+  schema and the seed are then written in one `BEGIN IMMEDIATE` transaction
+  that re-reads `user_version`, so two processes opening one new store cannot
+  both seed it, and (`PRAGMA user_version` being transactional) a store is
+  never found with the table but no version. A JSON file opened with
+  `Connection::open` succeeds and fails only at the first query ("file is not
+  a database"), leaving its bytes as they were; keep that order if the open
+  is ever reworked.
+
 Every write goes through `Settings::writes` (`settings::Writes`): a
 `set(key, value)` or `delete(key)` is sent to one `settings-store` thread,
 which applies them to the store in the order given, so two quick changes of
