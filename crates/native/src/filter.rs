@@ -106,10 +106,6 @@ pub struct FilterState {
 
 impl FilterState {
     /// Any section has an item checked.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the lit Filter button reads it")
-    )]
     pub fn is_active(&self) -> bool {
         !(self.flags.is_empty()
             && self.stars.is_empty()

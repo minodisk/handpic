@@ -310,6 +310,47 @@ last, and a JPEG folder under `"name"` paged in capture order.
   logged 0 ms on 8 copied ARWs with a 3-file `Output\`; renaming `Output\`
   away and back re-listed twice, `found=none` then `found=3`.
 
+### The sort and filter menus are deferred popovers over the window (Inferred)
+
+The status row is a flex row: the status text, then `Sort ▾` and `Filter ▾`
+at its right end (`menu.rs` holds the rows, the clicks' `apply` and `Menus`;
+`main.rs` only maps rows to `div`s). The filter button is lit while
+`FilterState::is_active`; the sort button is dimmed and has no handler in a
+view-only folder, whose open closes a sort menu left open. A menu item runs
+`menu::apply`, then `refilter` on the current file with the scroll not kept,
+so a reorder scrolls the current file into view. Nothing is written.
+
+- Rule: an open menu is `div().absolute().top_0().right_0()` inside a
+  `relative()` wrapper of its button, holding `deferred(anchored()
+  .anchor(Anchor::BottomRight).offset(0, -4).snap_to_window())`: `anchored`
+  without `position` places itself where it is laid out (here the button's
+  top-right corner), so no bounds need reading back, and `deferred` paints it
+  after everything else. The popover is `occlude()`d, so the strip's
+  `on_mouse_down`, which checks `hitbox.is_hovered`, does not see a press
+  inside it, and its height is capped at the window's less 40 px with
+  `overflow_y_scroll`. Nothing is laid out while both menus are closed.
+- Rule: `on_mouse_down_out` (a capture-phase listener, run before any
+  bubble-phase `on_mouse_down`) on the popover closes it on any press outside,
+  including one on its own button, whose bubble-phase `on_mouse_down` then
+  runs for the same press. `Menus` keeps the closed menu and the press's
+  position, so that button press does not reopen it (the Tauri toggle sits
+  inside `#sort` / `#filter`, which its `mousedown` listener spares). The
+  buttons toggle on `on_mouse_down`, not `on_click`, for that reason; items
+  use `on_click`.
+- Rule: `escape` closes an open menu, taken in the key handler before the
+  keymap's actions like `home` / `end` / `q`, and only while a menu is open,
+  so a user binding on `escape` still works otherwise (no default binding
+  uses it). Every other key goes through the window's handler as before, so
+  paging, `e`, `z` and `f` work with a menu open.
+- Measured: the preview canvas stays 1380 x 852 logical px in the default
+  1600 x 1000 window with the two buttons in the status row (12 px text),
+  the same as the plain status line, so the fit scale is unchanged.
+- Not verified headless (mouse clicks cannot be driven by `--auto`): that a
+  press on an item reaches its `on_click` and not the strip, and that
+  `on_mouse_down_out` fires for a press in the strip or the preview. Both are
+  read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
+  `../plans/20261113-gpui-filter-sort/learnings.md`.
+
 ### The native app keeps its own index (Inferred)
 
 The index lives at `<dirs::cache_dir()>/com.minodisk.handpic.native/index.sqlite`,

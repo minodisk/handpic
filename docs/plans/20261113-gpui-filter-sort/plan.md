@@ -347,7 +347,7 @@ so port Step 7 stays open after this plan with only those sections left.
       `manual_focus`; keep the `Facts` struct holding the whole `Focus` so
       `mark::af_eye_state` and the pane's future Analysis rows read one
       thing.
-- [ ] Step 4: The two menus in GPUI: the Sort and Filter buttons, their popovers, Reset, Escape and click-out
+- [x] Step 4: The two menus in GPUI: the Sort and Filter buttons, their popovers, Reset, Escape and click-out
   - Done when:
     - `crates/native/src/menu.rs` is a pure model with unit tests: the sort
       menu's items (`Capture time`, `File name`, `Rating`, in `index.html`'s
@@ -503,3 +503,4 @@ so port Step 7 stays open after this plan with only those sections left.
 - (2026-11-13) Step 1 complete
 - (2026-11-13) Step 2 complete; the judgment, filter and undo manual check is still pending (see `learnings.md`)
 - (2026-11-13) Step 3 complete
+- (2026-11-13) Step 4 complete
