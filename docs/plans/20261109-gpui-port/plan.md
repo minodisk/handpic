@@ -365,17 +365,35 @@ them; their contents are deliberately coarse.
     Tauri-side code and `crates/backend/src/ai.rs` at the switch-over is
     left to Step 10.
 - [ ] Step 10: Packaging, the updater, the three-platform CI and the switch-over
-  - Done when: installers for Windows, macOS (both arches) and Linux from
-    `release.yml` without the Tauri bundler (`cargo-packager` or
-    `cargo-bundle`; decided then), a self-update replacing
-    `tauri-plugin-updater` with the same signed `latest.json` contract or a
-    documented new one, the `native` CI job extended to `ubuntu-latest`
-    (the apt list above) and `macos-latest`, the native crate merged into
-    the root workspace (one `Cargo.lock`, the root toolchain bumped, the
-    patches moved to the root), `crates/app` and `crates/app/ui` removed
-    with their Vite+, pnpm and Tauri tooling, `README.md` / `README.ja.md`,
-    `CONTRIBUTING.md`, `CLAUDE.md`, `docs/humans/**` and `docs/agents/**`
-    rewritten for the native app, `tauri-app.md` archived.
+  - Done when: the six sub-milestones below are done, in this order, each
+    re-planned as its own plan when its turn comes. The packager
+    (`cargo-packager`) and the updater (self-written, keeping the signed
+    `latest.json` contract) are decided in
+    [`packaging-updater.md`](./packaging-updater.md), with what is still
+    unverified.
+    1. The `native` CI job on `windows-latest`, `ubuntu-latest` (the apt list
+       above) and `macos-latest`, and the packaging / updater decision
+       (`../20261114-gpui-ci-packaging/plan.md`).
+    2. Package the native app with `cargo-packager`, without the Tauri
+       bundler, on a manual `workflow_dispatch` only, uploading workflow
+       artifacts: Windows (NSIS, MSI), macOS arm64 and x86_64 (`.app`, DMG),
+       Linux (deb, AppImage, rpm per the decision). No release is touched.
+    3. The self-update in `crates/backend` replacing `tauri-plugin-updater`,
+       with the native app's startup check, menu item and quit-time install,
+       reading `latest.json`.
+    4. `release.yml` builds, signs and attaches the native installers for
+       Windows, macOS (both arches) and Linux and a `latest.json` with
+       today's keys, each signature verified against the public key; a
+       real-device update from the last Tauri release on each platform before
+       the first native release is published.
+    5. Merge the native crate into the root workspace: one `Cargo.lock`, the
+       root toolchain bumped, the patches moved to the root, one `notify`
+       version (deciding the `todo.md` item on whether `configure` still
+       queues behind `Unwatch` on 8.2.2), and `crates/app` and
+       `crates/app/ui` removed with their Vite+, pnpm and Tauri tooling.
+    6. `README.md` / `README.ja.md`, `CONTRIBUTING.md`, `CLAUDE.md`,
+       `docs/humans/**` and `docs/agents/**` rewritten for the native app,
+       `tauri-app.md` archived.
 
 ## Trade-offs and risks
 
@@ -573,3 +591,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-13) Step 7: the filter and the sort, through `../_archived/20261113-gpui-filter-sort/plan.md`; the per-folder EXIF filter sections remain
 - (2026-11-13) Step 7 complete: the per-folder EXIF filter sections and two refilter fixes, through `../_archived/20261113-gpui-exif-filter/plan.md`
 - (2026-11-14) Step 9: the AI features (pass 3, genres, the ranking, the recommended mark and sort, `aiEnabled`) dropped from the port by the user's decision
+- (2026-11-14) Step 10, sub-milestone 1: the `native` CI job on three platforms and the packaging / updater decision, through `../20261114-gpui-ci-packaging/plan.md` (Step 10 stays open)
