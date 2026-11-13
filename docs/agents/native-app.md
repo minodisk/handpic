@@ -354,13 +354,13 @@ so a reorder scrolls the current file into view. Nothing is written.
 
 ### The native app keeps its own index (Inferred)
 
-The index lives at `<dirs::cache_dir()>/com.minodisk.handpic.native/index.sqlite`,
-apart from the Tauri app's `com.minodisk.riffle/index.sqlite` (or
-`com.minodisk.handpic/` after the Handpic rename); `--index <path>`
+The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic.native/index.sqlite`,
+apart from the Tauri app's `dev.minodisk.handpic/index.sqlite`; `--index <path>`
 overrides it. The folder is named after the Handpic identifier
 (`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`) and nothing is
-migrated from the earlier `com.minodisk.riffle.native`: the native app never
-shipped, so an old developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
+migrated from the earlier `com.minodisk.riffle.native` or
+`com.minodisk.handpic.native`: the native app never shipped, so an old
+developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
 launch's `VACUUM` against a native scan's writes), make two
 `EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's
 `reconcile` drop the user's rows. The cost is a cold pass 1 on each folder's

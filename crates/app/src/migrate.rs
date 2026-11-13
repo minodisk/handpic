@@ -9,7 +9,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.riffle"];
+/// Newest first: an entry's files win a conflict with a later entry's, since
+/// each is merged in turn and an existing destination file wins.
+const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.handpic", "com.minodisk.riffle"];
 
 /// One entry per pair of folders that needed moving; `Ok` and `Err` both hold
 /// the line to log.
@@ -28,17 +30,41 @@ pub struct Outcome {
 }
 
 pub fn run(identifier: &str) -> Outcome {
+    migrate_under(
+        &base_dirs(),
+        identifier,
+        |from, to| fs::rename(from, to),
+        remove_leftovers,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn remove_leftovers(legacy: &str) -> Report {
+    remove_macos_leftovers(legacy)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn remove_leftovers(_: &str) -> Report {
+    Report::new()
+}
+
+/// `leftovers` runs once per legacy identifier whose folders all moved.
+fn migrate_under(
+    bases: &[PathBuf],
+    identifier: &str,
+    rename: Rename,
+    mut leftovers: impl FnMut(&str) -> Report,
+) -> Outcome {
     let mut report = Report::new();
     let mut complete = true;
     for legacy in LEGACY_IDENTIFIERS.iter().filter(|id| **id != identifier) {
-        let pairs = pairs_under(&base_dirs(), legacy, identifier);
-        let moved = migrate_pairs(&pairs, |from, to| fs::rename(from, to));
+        let pairs = pairs_under(bases, legacy, identifier);
+        let moved = migrate_pairs(&pairs, rename);
         let all_moved = moved.iter().all(Result::is_ok);
         complete &= all_moved;
         report.extend(moved);
-        #[cfg(target_os = "macos")]
         if all_moved {
-            report.extend(remove_macos_leftovers(legacy));
+            report.extend(leftovers(legacy));
         }
     }
     Outcome { report, complete }
@@ -432,10 +458,67 @@ mod tests {
         );
     }
 
+    fn no_leftovers(_: &str) -> Report {
+        Report::new()
+    }
+
     #[test]
     fn the_current_identifier_is_not_a_migration() {
-        let outcome = run(LEGACY_IDENTIFIERS[0]);
+        let root = temp_root("current");
+        let current = LEGACY_IDENTIFIERS[LEGACY_IDENTIFIERS.len() - 1];
+        write(&root.join(current).join("settings.json"), "keep");
+        let outcome = migrate_under(
+            std::slice::from_ref(&root),
+            current,
+            real_rename,
+            no_leftovers,
+        );
         assert!(outcome.report.is_empty() && outcome.complete);
+        assert_eq!(
+            fs::read_to_string(root.join(current).join("settings.json")).unwrap(),
+            "keep"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn every_legacy_folder_merges_and_the_newest_wins_a_conflict() {
+        let root = temp_root("legacies");
+        let handpic = root.join("com.minodisk.handpic");
+        let riffle = root.join("com.minodisk.riffle");
+        let current = root.join("dev.minodisk.handpic");
+        write(&handpic.join("settings.json"), "handpic");
+        write(&handpic.join("ranking.json"), "ranking");
+        write(&riffle.join("settings.json"), "riffle");
+        write(&riffle.join("logs/Riffle.log"), "log");
+        let mut cleaned = Vec::new();
+        let outcome = migrate_under(
+            std::slice::from_ref(&root),
+            "dev.minodisk.handpic",
+            real_rename,
+            |legacy| {
+                cleaned.push(legacy.to_string());
+                Report::new()
+            },
+        );
+        assert!(outcome.complete, "{:?}", outcome.report);
+        assert_eq!(outcome.report.len(), 2, "{:?}", outcome.report);
+        assert_eq!(cleaned, ["com.minodisk.handpic", "com.minodisk.riffle"]);
+        assert!(!handpic.exists());
+        assert!(!riffle.exists());
+        assert_eq!(
+            fs::read_to_string(current.join("settings.json")).unwrap(),
+            "handpic"
+        );
+        assert_eq!(
+            fs::read_to_string(current.join("ranking.json")).unwrap(),
+            "ranking"
+        );
+        assert_eq!(
+            fs::read_to_string(current.join("logs/Riffle.log")).unwrap(),
+            "log"
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(target_os = "macos")]

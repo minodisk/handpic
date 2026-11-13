@@ -775,9 +775,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   `Handpic.log`, the app's log file (capped at 1 MB; on rotation the previous
   contents are discarded, not kept as a separate file). It lives in the app
   log directory:
-  `%LOCALAPPDATA%\com.minodisk.handpic\logs\` on Windows,
-  `~/Library/Logs/com.minodisk.handpic/` on macOS and
-  `~/.local/share/com.minodisk.handpic/logs/` on Linux.
+  `%LOCALAPPDATA%\dev.minodisk.handpic\logs\` on Windows,
+  `~/Library/Logs/dev.minodisk.handpic/` on macOS and
+  `~/.local/share/dev.minodisk.handpic/logs/` on Linux.
 - **Auto-advance**: when `Auto-advance after a star, reject or pick` is on in
   `Handpic > Settings...` (on by default), `1`-`5`, reject, pick and un-reject / un-pick move to the
   next file, also when the file already has the value pressed (which leaves
