@@ -577,8 +577,11 @@ The Sidecar tab's three rows (`settingsmodal::FORMATS`) emit
 (`format_change`); the window's `switch_format` sets `settings.format` at
 once, so the next judgment, from a key or the MCP companion's
 `set_judgment` alike, is queued in the new format. Then, on the background
-executor and under the view's `format_switch` lock (one switch at a time, as
-the Tauri `AppSwitchLock`), it drains the judgment stores
+executor and under the view's `format_switch` lock (one switch at a time), it first checks
+its format against `format_latest`, the one last asked for, written on the main
+thread, and does nothing when a later click superseded it, so back-to-back
+switches end persisted as the radio shows (the Tauri `AppSwitchLock` gets the
+same by re-checking the current format inside the lock). Otherwise it drains the judgment stores
 (`judgment::Queue::drain`: a store queued before the switch carries the old
 format and must reach the writer before its flush) and runs the backend's
 `sidecar::switch_to`: the writer's flush (`sidecar::DRAIN_TIMEOUT`),

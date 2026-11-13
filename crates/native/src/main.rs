@@ -370,6 +370,9 @@ struct Riffle {
     stores: judgment::Queue,
     /// Held by a sidecar format switch off the main thread, one at a time.
     format_switch: Arc<Mutex<()>>,
+    /// The format last asked for, written on the main thread; a switch task that
+    /// finds it differs from its own is superseded and does nothing.
+    format_latest: Arc<Mutex<SidecarFormat>>,
     /// The open folder's undo and redo histories.
     undo: Undo,
     /// `Undid <name>` / `Redid <name>` until the view moves on.
@@ -587,6 +590,7 @@ impl Riffle {
             shown: None,
             view_only: false,
             bindings: Bindings::new(&settings.keymap),
+            format_latest: Arc::new(Mutex::new(settings.format)),
             settings,
             settings_view,
             judgments: HashMap::new(),
@@ -997,21 +1001,34 @@ impl Riffle {
             format.setting()
         );
         self.settings.format = format;
+        *index::lock(&self.format_latest) = format;
         let (index, writer) = (self.index.clone().ok(), self.writer.clone());
         let (stores, writes) = (self.stores.clone(), self.settings.writes.clone());
         let lock = self.format_switch.clone();
+        let latest = self.format_latest.clone();
         cx.spawn(async move |this, cx| {
             let switched = cx
                 .background_spawn(async move {
                     let _guard = index::lock(&lock);
+                    if *index::lock(&latest) != format {
+                        // A later click superseded this one; its task
+                        // switches to the format the user ended on.
+                        return Ok(false);
+                    }
                     stores.drain(sidecar::DRAIN_TIMEOUT);
                     sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |format| {
                         writes.set("sidecarFormat", format.setting().into());
                         Ok(())
                     })
+                    .map(|()| true)
                 })
                 .await;
             this.update(cx, |this, cx| {
+                let switched = match switched {
+                    Ok(true) => Ok(()),
+                    Ok(false) => return,
+                    Err(e) => Err(e),
+                };
                 if let Err(e) = switched {
                     log::error!("failed to switch the sidecar format: {e}");
                     this.settings_view.update(cx, |view, cx| view.failed(e, cx));
