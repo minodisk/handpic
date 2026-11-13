@@ -500,6 +500,43 @@ yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
 
+### A held key draws each stale preview before chasing the current file (Inferred)
+
+The pager keeps one preview read in flight. When one read + decode outlasts
+the key repeat, every result during a hold is another file's; throwing those
+away left the fit view blank until the key was released. `Pager::finish`
+now decides what a result leads to: the current file's is shown (or its
+failure) and clears the in-flight marker; another file's is drawn when its
+read succeeded and the current file's image is not already on screen (A shown,
+press to B, back to A before B arrives: drawing B would flash the wrong file),
+and then the current index is requested, staying in flight. A stale failure is
+neither shown nor printed. The drawn frame therefore lags the cursor by at most
+one load, the files in between are still skipped, and the number of reads per
+key sequence is unchanged.
+
+A stale frame sets the status line, `self.shown`, the image, `marks.show` and
+the paint hold, and nothing else. `self.shown` names the file whose image is on
+screen because `refilter` rewrites the status line's `n/total` from it and
+re-requests when it is not the current file, and the meta pane follows it.
+`marks.show` follows the image too: `Marks::mark`, `wanted_faces` and
+`wanted_eyes` draw and ask only when the shown file is the current one, so a
+stale frame gets no `f` overlay; left at the previous file, stepping back onto
+it while a load is out would put its marks on the stale image. `zoom.shown` is
+the current file's only, since it stamps the facts with the current page's
+`seq`, so `zoom.preview()` stays `None` for a stale frame and the 1:1 canvas
+never uses it as the placeholder. The fit view's peaking layer is keyed by the
+image id and drawn size, so a stale frame gets its own edges or none.
+
+- Rule: the on-demand analysis (`analyze_current`), the dwell and viewed mark
+  (`start_dwell`), the keypress (`self.key`) and the latency `page` line
+  (`self.pending`) are the current file's result's only. A `page` line is
+  still recorded only for the current file, so the "4-6 pages in 5 s" of a
+  held RAF key below counts current-file pages, not frames drawn.
+- Rule: stepping back onto the file whose stale frame is on screen still
+  reloads it; its analysis, dwell and `page` line wait for that reload.
+- Pending: a held key flipping frames and the release showing the current file
+  with its overlays is unverified by hand on Windows.
+
 ### Pass 2 runs on pass 1's thread (Inferred)
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
