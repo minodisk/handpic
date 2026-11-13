@@ -2547,15 +2547,16 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 - [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
 
-### Native: a held `→` on RAF previews barely draws
+### Native: real-device checks of the held-key preview and crop (gpui-held-key-preview)
 
 #### Background
 
-In `gpui-zoom-peaking`'s Step 2 measurement, 5 s of key-downs every 33 ms showed only 4-6 RAF pages (`--size 4416x2944`), peaking off as well as on, against about 105 on ARW. A RAF preview load (40-45 ms) outlasts the key repeat, so when it lands the pager has moved and `Pager::finish` re-reads the newest file; a page shows only when a gap between key-downs is longer than a load. The Tauri app may behave the same (not compared). Showing the landed preview while the next one loads would let a held key draw. Plan: `docs/plans/_archived/20261110-gpui-zoom-peaking/plan.md` (see its `results.md`, "RAF pages under a held key"). Files: `crates/native/src/pager.rs`, `crates/native/src/main.rs` (`loaded`).
+`gpui-held-key-preview` made the GPUI native app (`crates/native`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run native:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/native/src/pager.rs`, `crates/native/src/zoom.rs`, `crates/native/src/main.rs`.
 
 #### TODO
 
-- [ ] Compare a held `→` on a RAF folder in the Tauri app, then decide whether the native pager should show a landed preview while the next one loads, so a held key draws.
+- [ ] On Windows, fit view: open a folder in the native app (`mise run native:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
+- [ ] On Windows, 1:1 view: on a folder whose crop read outlasts the key repeat (RAF, ARW), press `z`, then hold `→`. Expected: the 1:1 view flips through crops during the hold (skipping some files) instead of staying on the first one until release. No crop is ever drawn over another file's scaled preview. On release the current file's crop is shown. A single press while zoomed goes old crop, new crop. `z` off / on on the same file reuses its crop with no new `zoom` line, and a `z` press prints one `zoom` line.
 
 ### Native: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
 
