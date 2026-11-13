@@ -500,6 +500,7 @@ impl Riffle {
             max,
             index: _,
             settings: _,
+            log: _,
         } = args;
         let prompt = folder.is_none().then(|| {
             cx.prompt_for_paths(PathPromptOptions {
@@ -2418,7 +2419,6 @@ fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
 }
 
 fn main() {
-    logger::install();
     let mut args = match args::parse(env::args_os().skip(1)) {
         Ok(args) => args,
         Err(e) => {
@@ -2426,6 +2426,8 @@ fn main() {
             process::exit(2);
         }
     };
+    logger::install(args.log.take());
+    riffle_backend::diagnostics::install_panic_hook();
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take().as_deref());
     log::info!(

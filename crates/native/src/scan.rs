@@ -12,6 +12,7 @@ use std::{
 
 use futures::channel::mpsc::UnboundedSender;
 use riffle_backend::{
+    diagnostics::invariant,
     index::{self, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing, stat_sidecars},
     output,
@@ -336,6 +337,11 @@ impl Scan {
                     &cancel,
                     index::PROGRESS_INTERVAL,
                     |done, total, ready| {
+                        invariant!(
+                            done <= total,
+                            "scan progress within total",
+                            "dir={dir} scan_id={id} done={done} total={total}"
+                        );
                         let _ = events.unbounded_send(Event::Progress {
                             scan: id,
                             done,
@@ -347,6 +353,11 @@ impl Scan {
                 let _ = events.unbounded_send(Event::Done { scan: id, summary });
                 let summary =
                     run_faces_pass(&index, &dir, &focus, &cancel, |done, total, ready| {
+                        invariant!(
+                            done <= total,
+                            "scan progress within total",
+                            "dir={dir} scan_id={id} done={done} total={total}"
+                        );
                         let _ = events.unbounded_send(Event::FacesProgress {
                             scan: id,
                             done,
