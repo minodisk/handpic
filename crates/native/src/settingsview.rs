@@ -5,22 +5,24 @@
 //! view, which owns the values, to apply.
 
 use gpui::{
-    ClickEvent, Context, Empty, EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton,
-    SharedString, Window, deferred, div, prelude::*, px, rgb, rgba,
+    ClickEvent, Context, ElementId, Empty, EventEmitter, FocusHandle, FontWeight, KeyDownEvent,
+    MouseButton, SharedString, Window, deferred, div, prelude::*, px, rgb, rgba,
 };
 
-use riffle_backend::sidecar::SidecarFormat;
+use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
 
 use crate::{
-    ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
-    PANE_COLOR, PRIMARY_COLOR, keys,
-    settingsmodal::{self, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab},
+    ACCENT_COLOR, BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER,
+    MUTED_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
+    settingsmodal::{self, Edit, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab},
 };
 
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
     SidecarFormat(SidecarFormat),
+    /// The keymap after a successful edit.
+    Keymap(Keymap),
     /// The focus goes back to the window.
     Closed,
 }
@@ -35,6 +37,7 @@ pub struct SettingsView {
     /// The values shown, read from the main view on every open.
     auto_advance: bool,
     format: SidecarFormat,
+    keymap: Keymap,
     status: Option<SharedString>,
 }
 
@@ -48,6 +51,7 @@ impl SettingsView {
             model: SettingsModal::default(),
             auto_advance: true,
             format: SidecarFormat::default(),
+            keymap: Keymap::defaults(),
             status: None,
         }
     }
@@ -62,6 +66,7 @@ impl SettingsView {
         &mut self,
         auto_advance: bool,
         format: SidecarFormat,
+        keymap: Keymap,
         saved: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -71,6 +76,7 @@ impl SettingsView {
         }
         self.auto_advance = auto_advance;
         self.format = format;
+        self.keymap = keymap;
         self.status = (!saved).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
@@ -90,8 +96,15 @@ impl SettingsView {
             ModalKey::Close => self.close(cx),
             ModalKey::Focus(Step::Next) => window.focus_next(cx),
             ModalKey::Focus(Step::Previous) => window.focus_prev(cx),
-            ModalKey::Add(key) => log::debug!("settings: no shortcut row takes {key} yet"),
-            ModalKey::Cancel => {}
+            ModalKey::Add(key) => {
+                if let Some(action) = self.model.capturing.take() {
+                    self.edit(Edit::Add(action, key), cx);
+                }
+            }
+            ModalKey::Cancel => {
+                self.model.capturing = None;
+                cx.notify();
+            }
             ModalKey::Native => {
                 let Some(name) = name else { return };
                 if self.tabs[self.model.tab.at()].is_focused(window) {
@@ -106,7 +119,31 @@ impl SettingsView {
     }
 
     fn select(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        self.model.tab = tab;
+        self.model.select(tab);
+        cx.notify();
+    }
+
+    /// The row's `+`: the next key goes to `action`. The box takes the focus,
+    /// since the pressed `+` is replaced by the prompt and a focus left on a
+    /// node no longer drawn would send the key to the window's root.
+    fn capture(&mut self, action: &'static str, window: &mut Window, cx: &mut Context<Self>) {
+        self.model.capturing = Some(action);
+        self.status = None;
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+
+    /// Applies `edit` to the shown keymap and hands the result to the main
+    /// view; a refusal goes to the status line and changes nothing.
+    fn edit(&mut self, edit: Edit, cx: &mut Context<Self>) {
+        self.model.capturing = None;
+        match settingsmodal::edit(&mut self.keymap, edit) {
+            Ok(()) => {
+                self.status = None;
+                cx.emit(Change::Keymap(self.keymap.clone()));
+            }
+            Err(e) => self.status = Some(e.into()),
+        }
         cx.notify();
     }
 
@@ -192,8 +229,107 @@ impl SettingsView {
                     cx.listener(move |this, _: &ClickEvent, _, cx| this.choose_format(format, cx)),
                 )
             })),
-            Tab::Shortcuts | Tab::Import => content,
+            Tab::Shortcuts => {
+                content
+                    .child(self.shortcuts(cx))
+                    .child(div().flex().justify_end().child(button(
+                        "shortcuts-reset-all".into(),
+                        "Reset all",
+                        cx.listener(|this, _: &ClickEvent, _, cx| this.edit(Edit::ResetAll, cx)),
+                    )))
+            }
+            Tab::Import => content,
         }
+    }
+
+    /// One row per action: its label, a chip per key with its remove button,
+    /// `+` or the capture prompt, and `Reset`. Laid out only while the tab is
+    /// shown, so the rows are plain `div`s in a scrolling list.
+    fn shortcuts(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .id("shortcuts")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .children(
+                self.keymap
+                    .bindings()
+                    .into_iter()
+                    .enumerate()
+                    .map(|(at, b)| {
+                        let action = b.action;
+                        let capturing = self.model.capturing == Some(action);
+                        div()
+                            .id(("shortcut", at))
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .py(px(3.))
+                            .child(
+                                div()
+                                    .w(px(220.))
+                                    .flex_none()
+                                    .child(settingsmodal::shortcut_label(action)),
+                            )
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_1()
+                                    .flex_wrap()
+                                    .items_center()
+                                    .gap(px(4.))
+                                    .children(b.keys.into_iter().enumerate().map(|(k, key)| {
+                                        let shown = settingsmodal::display_key(&key).to_owned();
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(3.))
+                                            .pl(px(6.))
+                                            .rounded_sm()
+                                            .bg(rgb(ACCENT_COLOR))
+                                            .child(shown)
+                                            .child(button(
+                                                ("remove", k).into(),
+                                                "\u{d7}",
+                                                cx.listener(
+                                                    move |this, _: &ClickEvent, window, cx| {
+                                                        this.edit(
+                                                            Edit::Remove(action, key.clone()),
+                                                            cx,
+                                                        );
+                                                        // The pressed button is gone with its chip.
+                                                        window.focus(&this.focus, cx);
+                                                    },
+                                                ),
+                                            ))
+                                    }))
+                                    .child(if capturing {
+                                        div()
+                                            .text_color(rgb(MUTED_COLOR))
+                                            .child("Press a key...")
+                                            .into_any_element()
+                                    } else {
+                                        button(
+                                            "add".into(),
+                                            "+",
+                                            cx.listener(move |this, _: &ClickEvent, window, cx| {
+                                                this.capture(action, window, cx);
+                                            }),
+                                        )
+                                        .into_any_element()
+                                    }),
+                            )
+                            .child(button(
+                                "reset".into(),
+                                "Reset",
+                                cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                    this.edit(Edit::Reset(action), cx);
+                                }),
+                            ))
+                    }),
+            )
     }
 
     fn dialog(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -260,6 +396,29 @@ impl SettingsView {
                     .child(status)
             }))
     }
+}
+
+/// A small outlined button; a click, Enter or Space on it when focused runs
+/// `on_click`. `id` is unique within its row, whose own id scopes it.
+fn button(
+    id: ElementId,
+    label: &'static str,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .tab_index(0)
+        .flex_none()
+        .px(px(6.))
+        .rounded_sm()
+        .border_1()
+        .border_color(rgba(INPUT_BORDER))
+        .bg(rgba(BUTTON_FILL))
+        .cursor_pointer()
+        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+        .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
+        .child(label)
+        .on_click(on_click)
 }
 
 /// A checkbox row: the box, checked or not, then its label; a click, Enter or

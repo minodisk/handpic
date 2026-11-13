@@ -1,8 +1,9 @@
 //! The settings modal's pure model: its open state, the selected tab and the
 //! shortcut row waiting for a key, the key rule of `modal.ts`'s
-//! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`.
+//! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`, and the
+//! Keyboard Shortcuts tab's edits of the keymap.
 
-use riffle_backend::sidecar::SidecarFormat;
+use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
 
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
@@ -27,6 +28,91 @@ pub fn format_change(current: SidecarFormat, chosen: SidecarFormat) -> Option<Si
 
 /// The modal's status line while the settings store did not open.
 pub const NOT_SAVED: &str = "The settings store did not open, so changes last until the app quits.";
+
+/// The native app's own keys, which `key_down` takes before the keymap, so a
+/// binding to one would never fire. `escape` cannot be captured (it cancels)
+/// and `ctrl+,` / `meta+,` the keymap refuses as a menu accelerator.
+pub const APP_KEYS: [&str; 3] = ["home", "end", "q"];
+
+/// A Keyboard Shortcuts tab edit of the keymap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Edit {
+    Add(&'static str, String),
+    Remove(&'static str, String),
+    Reset(&'static str),
+    ResetAll,
+}
+
+/// Applies `edit` to `keymap`, or gives the message of its refusal, leaving
+/// `keymap` as it was: the backend's, or one of `APP_KEYS` added.
+pub fn edit(keymap: &mut Keymap, edit: Edit) -> Result<(), String> {
+    match edit {
+        Edit::Add(_, key) if APP_KEYS.contains(&key.as_str()) => {
+            Err(format!("{key:?} is taken by this app"))
+        }
+        Edit::Add(action, key) => keymap.add(action, &key),
+        Edit::Remove(action, key) => keymap.remove(action, &key),
+        Edit::Reset(action) => keymap.reset(action),
+        Edit::ResetAll => {
+            keymap.reset_all();
+            Ok(())
+        }
+    }
+}
+
+/// A shortcut row's label, `settings.ts`'s `shortcutLabels`, else the
+/// action's own name.
+pub fn shortcut_label(action: &'static str) -> &'static str {
+    match action {
+        "previous" => "Previous",
+        "next" => "Next",
+        "burstPrevious" => "Previous burst",
+        "burstNext" => "Next burst",
+        "burstFramePrevious" => "Previous frame in burst",
+        "burstFrameNext" => "Next frame in burst",
+        "extendPrevious" => "Extend selection left",
+        "extendNext" => "Extend selection right",
+        "selectAll" => "Select all",
+        "open" => "Open folder",
+        "undo" => "Undo",
+        "redo" => "Redo",
+        "toggleLeft" => "Show / hide the folder tree",
+        "toggleRight" => "Show / hide the metadata pane",
+        "toggleStrip" => "Show / hide the filmstrip",
+        "toggleSides" => "Show / hide both side panes",
+        "focus" => "Focus mark",
+        "zoom" => "1:1 zoom",
+        "grayscale" => "Grayscale",
+        "compare" => "Compare frames",
+        "performance" => "Performance graph",
+        "peaking" => "Focus peaking",
+        "rate1" => "1 star",
+        "rate2" => "2 stars",
+        "rate3" => "3 stars",
+        "rate4" => "4 stars",
+        "rate5" => "5 stars",
+        "reject" => "Reject",
+        "rejectRest" => "Reject the rest of the burst",
+        "pick" => "Pick",
+        "unflag" => "Un-reject / un-pick",
+        "clear" => "0 star",
+        "red" => "Red label",
+        "orange" => "Orange label",
+        "yellow" => "Yellow label",
+        "green" => "Green label",
+        "blue" => "Blue label",
+        "pink" => "Pink label",
+        "purple" => "Purple label",
+        "clearlabel" => "Clear label",
+        "clearall" => "Clear",
+        other => other,
+    }
+}
+
+/// A key as its chip shows it, `keys.ts`'s `displayKey`.
+pub fn display_key(key: &str) -> &str {
+    if key == "space" { "Space" } else { key }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Tab {
@@ -100,6 +186,12 @@ impl SettingsModal {
         self.capturing = None;
     }
 
+    /// Switching tabs cancels a capture, as `selectTab` does.
+    pub fn select(&mut self, tab: Tab) {
+        self.tab = tab;
+        self.capturing = None;
+    }
+
     /// `key` is `keys::key_name`'s name, `None` for a lone modifier. While a
     /// row captures, Escape cancels the capture and any other key is added;
     /// otherwise Escape closes and Tab moves the focus within the modal.
@@ -135,9 +227,121 @@ pub fn next_tab(current: Tab, key: &str) -> Tab {
 
 #[cfg(test)]
 mod tests {
-    use riffle_backend::sidecar::SidecarFormat;
+    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
 
-    use super::{FORMATS, ModalKey, SettingsModal, Step, TABS, Tab, format_change, next_tab};
+    use super::{
+        APP_KEYS, Edit, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab, display_key, edit,
+        format_change, next_tab, shortcut_label,
+    };
+
+    fn keys_of(keymap: &Keymap, action: &str) -> Vec<String> {
+        keymap
+            .bindings()
+            .into_iter()
+            .find(|b| b.action == action)
+            .unwrap()
+            .keys
+    }
+
+    #[test]
+    fn switching_tabs_cancels_a_capture() {
+        let mut modal = open();
+        modal.capturing = Some("pick");
+        modal.select(Tab::Culling);
+        assert_eq!(modal.tab, Tab::Culling);
+        assert_eq!(modal.capturing, None);
+    }
+
+    #[test]
+    fn a_captured_key_is_added_to_the_capturing_action() {
+        let mut modal = open();
+        modal.capturing = Some("pick");
+        let ModalKey::Add(key) = modal.key(Some("k")) else {
+            panic!("not added");
+        };
+        let action = modal.capturing.take().unwrap();
+        let mut keymap = Keymap::defaults();
+        assert_eq!(edit(&mut keymap, Edit::Add(action, key)), Ok(()));
+        assert_eq!(keys_of(&keymap, "pick"), ["p", "k"]);
+        assert_eq!(modal.key(Some("escape")), ModalKey::Close);
+    }
+
+    #[test]
+    fn a_key_bound_to_another_action_is_refused_with_the_backend_message() {
+        let mut keymap = Keymap::defaults();
+        assert_eq!(
+            edit(&mut keymap, Edit::Add("pick", "x".into())),
+            Err("\"x\" is bound to reject".to_owned())
+        );
+        assert_eq!(keymap, Keymap::defaults());
+    }
+
+    #[test]
+    fn the_app_s_own_keys_are_refused() {
+        let mut keymap = Keymap::defaults();
+        for key in APP_KEYS {
+            assert_eq!(
+                edit(&mut keymap, Edit::Add("pick", key.into())),
+                Err(format!("{key:?} is taken by this app")),
+                "{key}"
+            );
+        }
+        assert_eq!(keymap, Keymap::defaults());
+    }
+
+    #[test]
+    fn a_menu_accelerator_and_the_last_key_are_refused() {
+        let mut keymap = Keymap::defaults();
+        let open_key = if cfg!(target_os = "macos") {
+            "meta+,"
+        } else {
+            "ctrl+,"
+        };
+        assert_eq!(
+            edit(&mut keymap, Edit::Add("pick", open_key.into())),
+            Err(format!("{open_key:?} is a menu accelerator"))
+        );
+        assert_eq!(
+            edit(&mut keymap, Edit::Remove("pick", "p".into())),
+            Err("\"p\" is the only key for pick; use Reset".to_owned())
+        );
+        assert_eq!(keymap, Keymap::defaults());
+    }
+
+    #[test]
+    fn remove_reset_and_reset_all_edit_the_keymap() {
+        let mut keymap = Keymap::defaults();
+        edit(&mut keymap, Edit::Add("pick", "k".into())).unwrap();
+        edit(&mut keymap, Edit::Add("reject", "j".into())).unwrap();
+        edit(&mut keymap, Edit::Remove("pick", "p".into())).unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), ["k"]);
+        edit(&mut keymap, Edit::Reset("pick")).unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), ["p"]);
+        assert_eq!(keys_of(&keymap, "reject"), ["x", "j"]);
+        edit(&mut keymap, Edit::ResetAll).unwrap();
+        assert_eq!(keymap, Keymap::defaults());
+    }
+
+    #[test]
+    fn every_action_has_its_tauri_label() {
+        for binding in Keymap::defaults().bindings() {
+            assert_ne!(
+                shortcut_label(binding.action),
+                binding.action,
+                "{}",
+                binding.action
+            );
+        }
+        assert_eq!(shortcut_label("pick"), "Pick");
+        assert_eq!(shortcut_label("clear"), "0 star");
+        assert_eq!(shortcut_label("somethingNew"), "somethingNew");
+    }
+
+    #[test]
+    fn the_space_bar_is_shown_as_space() {
+        assert_eq!(display_key("space"), "Space");
+        assert_eq!(display_key("shift+x"), "shift+x");
+    }
 
     fn open() -> SettingsModal {
         let mut modal = SettingsModal::default();

@@ -50,10 +50,6 @@ pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 enum Write {
     Set(String, Value),
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
-    )]
     Delete(String),
     Barrier(mpsc::Sender<()>),
 }
@@ -109,12 +105,19 @@ impl Writes {
         self.send(Write::Set(key.to_owned(), value));
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
-    )]
     pub fn delete(&self, key: &str) {
         self.send(Write::Delete(key.to_owned()));
+    }
+
+    /// `keymap`'s overrides under `shortcuts`, the key deleted when there are
+    /// none, as the Tauri `update_keymap` saves them.
+    pub fn shortcuts(&self, keymap: &Keymap) {
+        let overrides = keymap.overrides();
+        if overrides.as_object().is_some_and(|o| o.is_empty()) {
+            self.delete("shortcuts");
+        } else {
+            self.set("shortcuts", overrides);
+        }
     }
 
     fn send(&self, write: Write) {
@@ -519,6 +522,27 @@ mod tests {
         assert_eq!(stored.get("labelNames"), Some(&json!({"red": "Rot"})));
         assert_eq!(stored.get("filter"), Some(&json!({})));
         assert!(!stored.contains_key("autoAdvance"));
+    }
+
+    #[test]
+    fn the_shortcuts_are_stored_as_overrides_and_deleted_without_any() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(dir.path(), "s", r#"{"shortcuts":{"pick":["k"]}}"#);
+        let path = dir.path().join("s.sqlite");
+        let mut keymap = Keymap::defaults();
+        keymap.add("reject", "j").unwrap();
+        s.writes.shortcuts(&keymap);
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        assert_eq!(
+            values(&path).get("shortcuts"),
+            Some(&json!({"reject": ["x", "j"]}))
+        );
+        keymap.reset_all();
+        s.writes.shortcuts(&keymap);
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        assert!(!values(&path).contains_key("shortcuts"));
+        let reloaded = load_from(Some(path), None, None);
+        assert_eq!(reloaded.keymap, Keymap::defaults());
     }
 
     #[test]

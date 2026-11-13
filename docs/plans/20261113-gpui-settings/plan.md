@@ -398,7 +398,7 @@ any of them.
       may no longer describe the files.
     - The reset must have finished before the re-listing's
       `sidecar::reconcile_of` runs.
-- [ ] Step 5: The Keyboard Shortcuts tab: the keymap edited live
+- [x] Step 5: The Keyboard Shortcuts tab: the keymap edited live
   - Done when:
     - The tab lists every action of the keymap in `Keymap::bindings()`
       order with the labels of `settings.ts`'s `shortcutLabels`, each key

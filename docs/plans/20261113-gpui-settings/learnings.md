@@ -164,7 +164,64 @@
   field, the `Change::SidecarFormat` arm, the format passed to `open`, the
   `SidecarFormat` import and the `switch_format` method.
 
+## Step 5: the Keyboard Shortcuts tab, the keymap edited live
+
+- The literal keys `key_down` takes before the keymap on `origin/main`
+  (`0e5fe766`, after #1025 and #1020): `home`, `end`, `q`, `ctrl+,` /
+  `meta+,`, and `escape` only while the right-click menu or a sort / filter
+  menu is open. The refused list (`settingsmodal::APP_KEYS`) is `home`, `end`
+  and `q`: `escape` cannot be captured (it cancels the capture), `ctrl+,` /
+  `meta+,` the backend already refuses as a menu accelerator, and a binding
+  to `escape` still fires while no menu is open. The folder tree's keys
+  (#1025: the arrows, Home / End, Enter, Escape, type-ahead in
+  `tree_key_down`) are not refused: they run only while the tree has the
+  keyboard (`tree_keys`), when `treekeys::tree_gate` swallows every photo
+  action anyway, as in the Tauri app. The MCP companion (#1020) adds no key.
+- The view edits its own copy of the keymap (read on every open, like the
+  format and auto-advance) and emits the whole result as `Change::Keymap`;
+  the window replaces `settings.keymap` and `bindings` and writes
+  `shortcuts` through the new `Writes::shortcuts` (overrides, or a delete
+  when there are none). The `expect(dead_code)` on `Writes::delete` and its
+  `Write` variant is gone. `main.rs` gained the `Change::Keymap` arm and the
+  keymap passed to `open`, nothing else.
+- Focus while capturing: GPUI sends a key to the root's dispatch path when
+  the focused handle's node is not in the rendered frame, and the root's
+  `key_down` returns while the modal is open, so a capture started by a `+`
+  that is replaced by the prompt would hear nothing. `capture` focuses the
+  box's own handle, and a `×` click does the same after its edit (its chip is
+  gone). Read from `window.rs`'s dispatch at the pinned rev, not yet seen
+  running.
+- `mise run fmt` also reformatted `settingsview.rs` (the long closures inside
+  the rows); `mise run native:check` passed on the first run (520 tests).
+
 ## Deferred issues (todo candidates)
+
+- Pending manual check (Step 5, Windows, the user's): the keymap edited live.
+  Basis: Step 5's Done-when; the checkbox was ticked on the automated
+  criteria (`settingsmodal.rs`'s edit / capture / label tests,
+  `settings.rs`'s `the_shortcuts_are_stored_as_overrides_and_deleted_without_any`,
+  clippy). Steps, on copies under `D:\Photos\tests\20261113-settings\` only,
+  after `cargo build` in `crates/native`:
+  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-s5a.sqlite --settings D:\Photos\tests\20261113-settings\step5.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
+     (a fresh `step5.sqlite`, nothing seeded).
+  2. Ctrl+, → Keyboard Shortcuts. Expected: about 40 rows in the Tauri
+     order and labels (`Previous`, `Next`, ... `Clear`), the list scrolls,
+     `Reset all` under it, `Show / hide both side panes` holding `tab`.
+  3. On `Pick`, press `+`: `Press a key...` appears; press `k`. Expected:
+     a `k` chip next to `p`. Close, press `k` on a file: it is picked.
+  4. Open again, remove `k` with its `×`; close; `k` does nothing.
+  5. `+` on `Pick`, press `x`. Expected: the status line says `"x" is bound
+     to reject` and nothing changes. `+`, then `q`: `"q" is taken by this
+     app`. `+`, then Escape: the capture ends and the modal stays open.
+     `+`, then switch to the Culling tab and back: no capture is shown.
+     `×` on `p` alone: `"p" is the only key for pick; use Reset`.
+  6. Add `k` to Pick again, quit, start again with the same `--settings` and
+     a fresh `--index` (`index-s5b.sqlite`). Expected: `k` picks and the row
+     shows `p` and `k`. `Reset all`, quit, restart (`index-s5c.sqlite`):
+     only `p`, and the store holds no `shortcuts` key.
+  7. Note which names arrive in the capture for Shift+1 and Ctrl+Alt+1 (the
+     open question of `native-app.md`'s "Every keystroke goes through the
+     keymap": the code expects `!` and `ctrl+alt+1`; Ctrl+Alt+1 is refused as bound to red, the message naming it), and record them there.
 
 - Pending manual check (Step 4, Windows, the user's): the sidecar format
   switched live. Basis: Step 4's Done-when; the checkbox was ticked on the

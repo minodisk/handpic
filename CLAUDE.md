@@ -285,9 +285,9 @@ without the `Face focus` help; `apply`, what a click on an item does, the
 window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons,
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
-rules of `modal.ts` and `tabs.ts`) and `src/settingsview.rs`
+rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
-holding the Sidecar tab's format and the Culling tab's auto-advance toggle,
+holding the Sidecar tab's format, the Culling tab's auto-advance toggle and the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
