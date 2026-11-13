@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod diagnostics;
 pub mod exif;
 pub mod folders;

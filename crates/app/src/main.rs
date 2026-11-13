@@ -791,7 +791,7 @@ fn main() {
             app.manage(commands::AppIndexReader(reader));
             app.manage(commands::Scans::default());
             app.manage(commands::AppReadSlots::default());
-            app.manage(ai::AppAi::new(ai_enabled, ai::model_path(app.handle())));
+            app.manage(ai::AppAi::new(app.handle(), ai_enabled));
             app.manage(rank::AppRank::default());
             rank::refit_in_background(app.handle());
             // A model still missing at launch (a download cut short by a

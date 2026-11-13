@@ -45,3 +45,29 @@
   `sysinfo 0.31.4` (two versions, so the plan's "already resolves `sysinfo`"
   did not save a crate), plus `objc2-io-kit` for its macOS build; `windows
   0.62.2` was already in the lock.
+
+## Step 3: the `aiEnabled` state and the model download in `crates/backend`
+
+- The seam is `ai::Ai`, a cloneable `Arc` over the status, the model path and
+  an `on_state: Fn(AiState) + Send + Sync` callback given to `Ai::new`, so the
+  download thread holds a clone of the `Ai` itself (no `app.state::<AppAi>()`)
+  to clear its own entry and report progress and the final state. `switch`
+  reports through the same callback and also returns the state. Unlike the
+  perf sampler, the callback returns nothing: the Tauri app ignored every
+  `ai-state` emit error before (`let _ = app.emit(...)`), and the wrapper
+  keeps doing so.
+- `AppAi::new` now takes the `AppHandle` (it builds the emitting callback and
+  calls `model_path` itself), so `main.rs`'s call changed shape; `enabled` /
+  `model_if_enabled` delegate. `AiState` is re-exported from the app's `ai`
+  so `commands.rs` keeps naming `crate::ai::AiState`.
+- The download's `log` lines (`embedding model downloaded to ...`,
+  `embedding model download failed: ...`) now come under target
+  `riffle_backend::ai` instead of `riffle_app::ai`.
+- `reqwest`, `rustls` and `sha2` left `crates/app/Cargo.toml` entirely; nothing
+  else there used them.
+- `ring` on Windows: `mise run native:check` (with NASM on `PATH` as the
+  plan's rule says) built `ring` and the rest of the new TLS stack without any
+  extra setup and passed. `crates/native/Cargo.lock` gained 35 packages,
+  among them `reqwest`, `rustls`, `ring`, `hyper`, `hyper-rustls`,
+  `rustls-platform-verifier` (with `jni` / `security-framework` for other
+  platforms), `tower` / `tower-http`, `webpki-root-certs` and `base64`.
