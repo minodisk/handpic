@@ -248,7 +248,8 @@ struct Riffle {
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
-    /// The strip's filter; a change lives for the session only.
+    /// The strip's filter; its remembered sections are written back on a menu
+    /// change, `Output` and the EXIF checks live for the session only.
     filter: FilterState,
     /// The open folder's EXIF groups, the filter menu's last sections.
     exif_groups: exif::Groups,
@@ -1852,8 +1853,9 @@ impl Riffle {
         cx.notify();
     }
 
-    /// A click on a menu item: the sort or the filter changes for the
-    /// session only, and the strip is rebuilt on the current file.
+    /// A click on a menu item: the sort or the filter changes, the changed
+    /// `sortOrder` or remembered `filter` sections are written to the settings
+    /// store, and the strip is rebuilt on the current file.
     fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
         self.menus.acted(&action);
         let (sort, stored) = (self.sort, self.filter.stored());
