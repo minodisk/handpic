@@ -80,7 +80,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 `crates/native/Cargo.lock`, and clippy lints the backend only from the root.
 
 - Rule: check a backend change with both `mise run ci` and
-  `mise run native:check`.
+  `mise run native:check`. `mise run ci` runs only `lint` and `test` of the
+  root workspace, so it never covers `crates/native`. This holds for a change
+  to the app's identifier or to `native`'s own files (`datadir`, `logger`,
+  `settings`) as well as for a backend change.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
