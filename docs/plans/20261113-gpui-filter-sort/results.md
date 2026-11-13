@@ -62,7 +62,7 @@ or other `riffle` process ran.
 
 Tries per used run: ARW A2, A3, B1, B2 and B3 2 each, A1 1; RAF A1 2, B2 3,
 B3 4, the others 1. So 11 of 23 timed attempts were discarded (ARW 5 of 11,
-RAF 6 of 12), every one for a single load sample of 16-31 % during the run,
+RAF 6 of 12), every one for one to three load samples of 16-31 % during the run (8 of them for a single sample),
 none for a build process. RAF B3 passed on its last allowed try.
 
 ## Per run p50 / p95 (ms)

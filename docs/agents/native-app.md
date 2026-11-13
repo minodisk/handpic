@@ -892,7 +892,7 @@ unlike the pane, add nothing to `present`. See
   plan's cost alone; prefer that over a pre-plan commit with other plans'
   merges in between, so a delta is not shared out across them.
 - Rule: a deliberately quiet machine still spoils runs. 11 of 23 timed
-  attempts were discarded for one load sample of 16-31 % mid-run with no build
+  attempts were discarded for one to three load samples of 16-31 % mid-run with no build
   process running, and one slot passed only on its fourth and last try. Keep
   the 4-try cap per slot; a slot that uses them all voids the folder's session
   rather than relaxing the 15 % gate.

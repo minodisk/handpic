@@ -194,7 +194,7 @@
   between #989 and #993.
 - B also has pass 2, so both warm runs waited for `scan faces:`; each binary
   finished in one warm run.
-- 11 of 23 timed attempts were discarded by the idle gate (one load sample of
+- 11 of 23 timed attempts were discarded by the idle gate (one to three load samples of
   16-31 % mid-run each, no build process); RAF B3 passed on its 4th and last
   try. Recorded as a rule in `docs/agents/native-app.md`.
 - `CLAUDE.md`'s `crates/native` sentence already names `sort.rs`,
