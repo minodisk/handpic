@@ -926,7 +926,9 @@ machine: another session's `cargo` build fails the gate, so redo the slot.
 held in `ctrl+alt+shift+meta+` order (`platform` is `meta`), then the key
 lower-cased, GPUI's `left` / `right` / `up` / `down` as `arrowleft` ...
 `arrowdown`; a lone modifier has no name. `Bindings` maps each bound key to
-its action once at startup. The window's handler takes `home`, `end` and `q`
+its action once at startup. The window's handler, past the tree's gate while
+the tree has the keyboard ("The tree takes the keyboard through one flag in
+the view"), takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
@@ -1142,6 +1144,48 @@ handler.
   name through `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
 - Not verified headless: the hand check is pending in
   `../plans/20261113-gpui-tree-trash/learnings.md`.
+
+### The tree takes the keyboard through one flag in the view (Inferred)
+
+The window keeps its one `FocusHandle`; `tree_keys` on the view says whether
+the tree has the keyboard, and `key_down` checks it right after the
+right-click menu's close and before every other arm (the literal `home` /
+`end` / `q`, the status row's menus' `escape`, the keymap's actions). A
+second `FocusHandle` on the pane would give the same routing, but the gate
+must also sit before those literal arms in the window's handler, and a press
+outside the pane must still reach its own handler, so a flag and the pane's
+mouse listeners were the smaller change.
+
+- Rule: a left press in the pane (`on_mouse_down(Left)`) gives the tree the
+  keyboard; a press of any button outside it (`on_mouse_down_out`, the
+  capture phase, so the press still reaches its target) hands it back; a
+  right press in the pane does neither. A press on the right-click menu hands
+  it back too (`on_any_mouse_down` on the popover, which is `occlude()`d and
+  may be drawn over the pane), as a Tauri menu button takes the focus.
+  `escape` and hiding the pane (`toggleLeft`) hand it back as well. The
+  type-ahead buffer starts over whenever the keyboard moves.
+- Rule: while the tree has it, `tree_key_down` takes `escape`, the arrows,
+  `home` / `end`, `enter` and any printable key without Ctrl / Alt / Meta
+  (type-ahead); any other key runs its action only when
+  `treekeys::tree_gate` lets it through (`toggleLeft` today) and is
+  otherwise swallowed, so `q`, the judgment keys, paging and undo never reach
+  the photo. The cursor row is outlined in `--sidebar-ring` only while the
+  tree has the keyboard.
+- Rule: opening a folder from the tree, by a click on its name or `enter`,
+  leaves the keyboard with the tree, as in the Tauri app (`folders.ts`'s
+  `openFolder` and `main.ts`'s `openDirectory` never blur the tree); the
+  open's reveal puts the cursor on the opened folder.
+- Inferred from `gpui_windows`' `process_key`: type-ahead takes the
+  keystroke's own `key_char` (`keys::typed_char`), since `key_name`
+  lower-cases a shifted letter and names the space bar `space`. `key_char` is
+  `ToUnicode`'s character with a control character dropped, so `enter`,
+  `tab` and `escape` type nothing. Type-ahead with an IME on is not a goal.
+- Rule: `Expand All` walks one listing at a time on `background_spawn`, depth
+  first through an explicit stack of chains (no async recursion), skips a
+  link (`is_link`), stops a branch whose chain was collapsed or dropped
+  meanwhile and marks and reports a folder that fails, going on with the
+  rest. `Collapse All` is `Tree::collapse_all`. The watch set follows through
+  `tree_changed`.
 
 ## Timings
 
