@@ -621,3 +621,4 @@ native app no longer depends on the Tauri app for any of them.
 ## Progress
 
 - (2026-11-13) Step 1 complete
+- (2026-11-13) Step 2 complete
