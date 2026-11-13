@@ -1,5 +1,6 @@
 pub mod diagnostics;
 pub mod exif;
+pub mod folders;
 pub mod index;
 pub mod listing;
 pub mod ondemand;
@@ -8,4 +9,5 @@ pub mod photolab;
 pub mod shortcuts;
 pub mod sidecar;
 pub mod trash;
+pub mod treewatch;
 pub mod watch;

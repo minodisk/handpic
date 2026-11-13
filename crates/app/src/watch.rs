@@ -4,8 +4,6 @@
 use riffle_backend::watch::Watch;
 use tauri::{Emitter, Manager};
 
-pub(crate) use riffle_backend::watch::triggers;
-
 /// The payload of `folder-changed`: which folder to rescan, so a listener that
 /// outlives the open folder can drop an event for another one.
 #[derive(serde::Serialize, Clone)]

@@ -112,7 +112,14 @@ XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 (`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
 `src/listing.rs`
 the one `read_dir` of a folder (its RAW files, or its JPEGs when it holds no
-RAW, and the sidecars next to them) and `canonicalize`, `src/ondemand.rs`
+RAW, and the sidecars next to them) and `canonicalize`, `src/folders.rs` the
+folder tree's listing (`roots`, the home directory given by the caller and the
+volumes; `list`, one folder's RAW count and visible subfolders, each
+`FolderNode` with its `is_link`; `REVEAL_LABEL`, `is_hidden`),
+`src/treewatch.rs` the folder tree's watchers (`TreeWatch`, one
+non-recursive watch per expanded folder, `set` making the watched set equal to
+the given folders, each folder's burst debounced into one call of the `spawn`
+callback, and `with_released`, which a folder rename runs under), `src/ondemand.rs`
 the faces and the eye judgment of the shown file, read on demand rather than
 at scan time and touching neither the index nor `ReadSlots` (`read_faces`,
 `read_eyes`, whose `current` check stops a superseded judgment, and the
