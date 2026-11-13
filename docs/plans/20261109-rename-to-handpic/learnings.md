@@ -154,7 +154,7 @@ code. The debug installers stayed in `target/debug/bundle` and were not run.
   Basis: `crates/app/src/migrate.rs`, `crates/app/src/main.rs`.
 - **Pending manual check, Step 2, first launch on real Riffle data** (Step 2's
   checkbox stays unticked until this is done). On a machine with Riffle 1.10.0's
-  data, run this build. Expected: the data is under `com.minodisk.handpic` and no
+  data, run this build. Expected: the data is under `dev.minodisk.handpic` and no
   `com.minodisk.riffle` folder remains, with the open folder, ratings, settings,
   ranking, model and viewed history intact, and no data-migration error dialog.
   The automated criteria are met; `mise run ci` passed on this step.

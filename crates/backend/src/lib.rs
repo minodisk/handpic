@@ -5,6 +5,7 @@ pub mod index;
 pub mod listing;
 pub mod ondemand;
 pub mod output;
+pub mod perf;
 pub mod photolab;
 pub mod shortcuts;
 pub mod sidecar;

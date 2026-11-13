@@ -2,6 +2,19 @@
 
 ## Cross-cutting / other
 
+### App: real-device check of the first launch after the identifier change to dev.minodisk.handpic
+
+#### Background
+
+The identifier-dev-minodisk feature changed the app identifier from `com.minodisk.handpic` to `dev.minodisk.handpic` and made `com.minodisk.handpic` and `com.minodisk.riffle` legacy identifiers whose data moves to the new folders on the first launch. The migration is covered by temp-directory tests in `migrate.rs` (both legacy folders merged, old folders gone, the `com.minodisk.handpic` copy wins a conflict). It was never run against the real `%APPDATA%` / `%LOCALAPPDATA%` data. Launching a build would migrate the developer's real user data, and the GUI cannot be driven by an agent. Close any running Handpic first: a file held open makes the migration stop with its error dialog and resume on the next launch.
+
+Plan: `docs/plans/_archived/20261113-identifier-dev-minodisk/plan.md`
+Files: `crates/app/src/migrate.rs`, `crates/app/tauri.conf.json`, `crates/native/src/datadir.rs`
+
+#### TODO
+
+- [ ] On Windows, close any running Handpic, then build and launch the app with the new identifier once. Expected: the data is under `%APPDATA%\dev.minodisk.handpic` and `%LOCALAPPDATA%\dev.minodisk.handpic`, no `com.minodisk.handpic` (or `com.minodisk.riffle`) folder remains in either, no data-migration error dialog appeared, and the open folder, settings and ranking are intact.
+
 ### App: real-device check of the strip menu's reveal and copy items
 
 `strip-file-reveal-copy` (docs/plans/_archived/20261018-strip-file-reveal-copy/plan.md) added three items to the filmstrip's right-click menu, after `Select All`: the platform's reveal label (`Reveal in Finder` / `Reveal in File Explorer` / `Open Containing Folder`, calling `reveal_folder` on the focused file), `Copy Path` and `Copy File Name`. On a multi-selection the copy items write every targeted file, one per line with no trailing newline. CI and the `context.test.ts` unit tests cover the menu composition, including the view-only menu. The OS file manager reveal and the clipboard contents were never exercised on a real machine: the step was ticked on the automated criteria only.
