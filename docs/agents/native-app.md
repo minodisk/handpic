@@ -1750,7 +1750,7 @@ slow the current page, so it stays there. Memory peaks on RAF: about
 +110 MB working set and +300 MB private bytes. The cap counts 128 MB of BGRA
 (two RAF neighbours are 104 MB). The rest is the prefetch's decode buffers
 and the GPU textures that kept entries still hold. See
-[the plan's learnings](../plans/20261114-gpui-prefetch/learnings.md).
+[the plan's learnings](../plans/_archived/20261114-gpui-prefetch/learnings.md).
 
 - Rule: count hits from the `page` line's `source=prefetch`. A prefetch run's
   p95 is the wraps' reads; read the hits' latency from the p50.
