@@ -304,7 +304,7 @@ so port Step 7 stays open after this plan with only those sections left.
     - A refilter rebuilds `Strip::new`, so cells re-request thumbnails the
       `keep` did not carry; that is the Tauri `strip.setFiles` behaviour and
       needs no cache.
-- [ ] Step 3: The `Face focus`, `Eyes` and `Output` sections' data: facts from pass 2 as it runs, the export folder read with the listing
+- [x] Step 3: The `Face focus`, `Eyes` and `Output` sections' data: facts from pass 2 as it runs, the export folder read with the listing
   - Done when:
     - `Event::FacesProgress`'s `ready` updates the facts of the named paths
       (the `Focus` rebuilt from `FaceReady` over the entry's `point` /
@@ -502,3 +502,4 @@ so port Step 7 stays open after this plan with only those sections left.
 
 - (2026-11-13) Step 1 complete
 - (2026-11-13) Step 2 complete; the judgment, filter and undo manual check is still pending (see `learnings.md`)
+- (2026-11-13) Step 3 complete

@@ -102,6 +102,45 @@
   Ctrl+Z and the `FILTERED_TEXT` display cannot be driven by `--auto`; they
   are the pending manual check below.
 
+## Step 3 (the Face focus, Eyes and Output sections' data)
+
+- `FaceReady` carries `eye_focus`, `candidate` and the whole `StoredEyes`
+  (all `Copy`), so `filter::apply_face_ready` patches the three into the
+  existing `Focus` and keeps its `point` / `manual_focus`; a file without
+  facts or without a focus is skipped, as the Tauri `applyFaceReady`.
+- The export read is `scan::outputs(&Listed) -> Outputs { found, listing,
+  failure }`, called in `list`'s background task right after `scan::list`.
+  The failure is kept in its own `outputs_failure` field, not in `notes`
+  (which `opened` clears and refills with the sidecar errors), so it stays
+  until a read succeeds, as the Tauri `outputsFailure`. `output_of` lost its
+  `expect(dead_code)`; `is_active` keeps its own (Step 4's button).
+- `set_output_known(false)` runs before the open's ordering, so a re-listing
+  that loses the export folder clears the `outputs` checks before `passes`
+  reads them.
+- Headless checks (debug exe, fresh `--index` per run in the scratchpad,
+  `D:\Photos\tests\20261113-filter-sort\faces\`: the 8 ARWs of
+  `20261110-gpui-pass2\marks` and an `Output\` holding `_DSC1616.jpg`,
+  `ILCE-6400_DSC00405_1.jpg` (a virtual copy) and `_DSC1758-DxO_DeepPRIME
+  3.jpg`):
+  - `settings-filter-good.json` (`candidates: ["good"]`), `--auto 40`: the
+    open's and pass 1's lists are empty on the fresh index; pass 2 (3.0 s)
+    filled in DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, which the run
+    then cycled. FacesDone reads nothing, so the fill came from
+    `FacesProgress`.
+  - `settings-filter-open.json` (`eyes: ["open"]`), `--auto 12`: cycled
+    a1_ii_03, DSC00405, DSC01340, _DSC1758.
+    `settings-filter-closed.json` (`eyes: ["closed"]`): no page lines, as
+    only DSC03068 is closed (its earlier pass-2 read: `eyes: Some(Closed)`)
+    and a one-file list does not page.
+  - `output: dir=… found=3 in 0ms` at the open; renaming `Output\` away at
+    8 s and back at 12 s re-listed twice, logging `found=none` then
+    `found=3`.
+- The `Output` section cannot be checked end to end yet: nothing stores an
+  `outputs` filter (the Tauri app never remembers it) and the menu is Step 4.
+  It is covered by `filter.rs`'s unit tests (`output_of`, `passes` with an
+  output, `set_output_known`) and the backend's `output.rs` tests for the
+  matching; the log lines above show the answer reaching the view.
+
 ## Deferred issues (todo candidates)
 
 - **The pane's `n / total` lags a refilter that hides the shown file
@@ -144,3 +183,31 @@
   `...\sort\jpg-sequenced` with `settings-name.json` (strip in capture order:
   C2000Z, C960Z, COOLPIX, A065). Step 1's checkbox was ticked on the
   automated criteria and the headless runs.
+
+- **Pending manual check (Step 3, Windows, the user's):** the `Face focus`,
+  `Eyes` and `Output` sections in the window. Basis: plan Step 3's manual
+  check; the `--auto` runs above covered the page order and the log lines
+  headlessly, not the strip's drawing or the `f` marks. Steps: build
+  `crates/native` (`cargo build`, NASM on `PATH`), run `riffle-native
+  D:\Photos\tests\20261113-filter-sort\faces --index <fresh path> --settings
+  D:\Photos\tests\20261113-filter-sort\settings-filter-good.json`. Expected:
+  the strip starts empty and fills in while `analyzing n / m` runs, ending with
+  DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, each with a bright green `f`
+  mark. With `settings-filter-closed.json` only DSC03068 shows. Once Step 4's
+  menu exists: `Output` shows DSC00405, _DSC1616 and _DSC1758, `No output` the
+  other 5; renaming `Output\` away hides the section (its checks cleared) and
+  renaming it back brings it back. Step 3's checkbox was ticked on the
+  automated criteria and the headless runs.
+
+- **A pass-1 entries read can overwrite pass-2 facts (Step 3, not acted
+  on):** `read_entries` (pass 1's `Done`) replaces `facts` wholesale when its
+  background read returns; pass 2 starts at the same time, so a
+  `FacesProgress` applied before that read returns is overwritten by a read
+  that started before the pass-2 write, and a `FacesProgress` arriving before
+  the read returns finds no facts on a fresh index and is skipped (the Tauri
+  `folder_entries` refresh after pass 1 looks to have the same window). The
+  file keeps `Neutral` / unknown eyes until the next re-listing. The headless
+  runs did not show it. Fix if it shows: re-apply the
+  `FacesProgress` batches received since the read was issued, or read the
+  entries again at `FacesDone`. Files: `crates/native/src/main.rs`
+  (`read_entries`, `scanned`).

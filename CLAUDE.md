@@ -238,7 +238,7 @@ and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
 window spawns at startup and drains in `App::on_app_quit`, `src/history.rs`
 the undo and redo of the judgments (`History`, a port of `undo.ts`'s bounded
 stack, `step`, the Tauri `step` rule, and `Undo`, the open folder's two
-histories, cleared when another folder opens), `src/scan.rs` lists a folder with its sidecars, reconciles the
+histories, cleared when another folder opens), `src/scan.rs` lists a folder with its sidecars and reads which of its files have an export (`outputs`, for the filter's `Output` section), reconciles the
 index with the whole listing, reads back the changed sidecars
 (`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
 to the writer with no debounce) and

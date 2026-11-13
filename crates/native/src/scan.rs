@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex,
@@ -13,6 +14,7 @@ use futures::channel::mpsc::UnboundedSender;
 use riffle_backend::{
     index::{self, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing, stat_sidecars},
+    output,
     sidecar::{self, SidecarError, SidecarFormat, Writer},
 };
 use riffle_core::{scan::ScanFocus, xmp::LabelNames};
@@ -111,6 +113,45 @@ pub fn list(folder: &Path, format: SidecarFormat) -> Result<Listed, String> {
         files: listing.files,
         sidecars: listing.sidecars,
     })
+}
+
+/// What the folder's export folders say of its listing, for the `Output`
+/// filter section.
+pub struct Outputs {
+    /// The listed files with an export; `None` without an export folder or
+    /// when one could not be read whole.
+    pub found: Option<HashSet<String>>,
+    /// The files the answer is about.
+    pub listing: HashSet<String>,
+    /// Why the export folder could not be read, for the pane's notes.
+    pub failure: Option<String>,
+}
+
+/// `output::outputs_in` over the listing, as the Tauri `outputs_of`: at most
+/// two `read_dir`s, so it runs with the listing on the open's background
+/// task.
+pub fn outputs(listed: &Listed) -> Outputs {
+    let started = Instant::now();
+    let (found, failure) = match output::outputs_in(Path::new(&listed.dir), &listed.files) {
+        Ok(found) => (found.map(|f| f.into_iter().collect::<HashSet<_>>()), None),
+        Err(e) => {
+            log::warn!("output filter: {e}");
+            (None, Some(format!("Output filter: {e}")))
+        }
+    };
+    log::info!(
+        "output: dir={} found={} in {}ms",
+        listed.dir,
+        found
+            .as_ref()
+            .map_or_else(|| "none".to_string(), |f| f.len().to_string()),
+        started.elapsed().as_millis()
+    );
+    Outputs {
+        found,
+        listing: listed.files.iter().cloned().collect(),
+        failure,
+    }
 }
 
 /// What a folder open prepared: the files pass 1 extracts and the sidecars

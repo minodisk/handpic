@@ -11,9 +11,9 @@
 //! The `Genre` section is port Step 9's (the ranking) and the per-folder EXIF
 //! sections a follow-up slice's; neither is here yet.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use riffle_backend::index::{Focus, IndexedFile};
+use riffle_backend::index::{FaceReady, Focus, IndexedFile};
 use riffle_core::{Flag, eyes::EyeState};
 use serde_json::Value;
 
@@ -130,6 +130,14 @@ impl FilterState {
         self.candidates = stored.candidates.iter().copied().collect();
         self.eyes = stored.eyes.iter().copied().collect();
     }
+
+    /// Whether the open folder gave an export answer: without one the
+    /// `Output` section is hidden and its checks cleared.
+    pub fn set_output_known(&mut self, known: bool) {
+        if !known {
+            self.outputs.clear();
+        }
+    }
 }
 
 /// The remembered filter, the Tauri `settings.json`'s `filter`: every
@@ -238,7 +246,6 @@ pub fn passes(
 /// The export state of `path`, from the `found` subset of `listing` the
 /// export folder gave, or `None` without an answer. A file outside `listing`
 /// is unknown rather than `No`.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Output section reads it"))]
 pub fn output_of(
     found: Option<&HashSet<String>>,
     listing: &HashSet<String>,
@@ -253,6 +260,19 @@ pub fn output_of(
     } else {
         OutputState::No
     })
+}
+
+/// Patch each of pass 2's `ready` files into its facts' focus, as the Tauri
+/// `applyFaceReady`: a file without facts or without a focus (a JPEG) is left
+/// alone.
+pub fn apply_face_ready(facts: &mut HashMap<String, Facts>, ready: &[FaceReady]) {
+    for item in ready {
+        if let Some(focus) = facts.get_mut(&item.path).and_then(|f| f.focus.as_mut()) {
+            focus.eye_focus = item.eye_focus;
+            focus.candidate = item.candidate;
+            focus.eyes = item.eyes;
+        }
+    }
 }
 
 /// The path that becomes current after a refilter: `anchor` if it still
@@ -985,6 +1005,70 @@ mod tests {
 
     fn set(names: &[&str]) -> HashSet<String> {
         names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[test]
+    fn an_unknown_output_clears_the_output_checks() {
+        let mut s = state(&[Picked], &[], &[], &[], &[], &[], &[Yes, No]);
+        s.set_output_known(false);
+        assert_eq!(s, state(&[Picked], &[], &[], &[], &[], &[], &[]));
+    }
+
+    #[test]
+    fn a_known_output_keeps_the_output_checks() {
+        let mut s = outputs(&[No]);
+        s.set_output_known(true);
+        assert_eq!(s.outputs, HashSet::from([No]));
+    }
+
+    fn ready(path: &str, focus: &Focus) -> FaceReady {
+        FaceReady {
+            path: path.into(),
+            eye_focus: focus.eye_focus,
+            candidate: focus.candidate,
+            sharpness: Some(0.5),
+            eyes: focus.eyes,
+        }
+    }
+
+    #[test]
+    fn a_ready_file_takes_pass_2_values_over_its_af_point() {
+        let mut before = candidate();
+        before.manual_focus = true;
+        before.eye_focus = None;
+        before.candidate = FocusCandidate::Unknown;
+        before.eyes = StoredEyes::default();
+        let mut facts = HashMap::from([(
+            "A.ARW".to_string(),
+            Facts {
+                focus: Some(before),
+                ..facts(6)
+            },
+        )]);
+        let after = with(|f| f.eyes.eyes = Some(EyeState::Closed));
+        apply_face_ready(&mut facts, &[ready("A.ARW", &after)]);
+        let focus = facts["A.ARW"].focus.unwrap();
+        assert_eq!(focus.eye_focus, after.eye_focus);
+        assert_eq!(focus.candidate, after.candidate);
+        assert_eq!(focus.eyes, after.eyes);
+        assert_eq!(
+            focus.point.map(|p| (p.x, p.y)),
+            before.point.map(|p| (p.x, p.y))
+        );
+        assert!(focus.manual_focus);
+        assert_eq!(facts["A.ARW"].orientation, 6);
+        assert_eq!(af_eye_state(Some(&focus)), af_eye_state(Some(&after)));
+    }
+
+    #[test]
+    fn a_ready_file_without_facts_or_focus_is_left_alone() {
+        let mut facts = HashMap::from([("J.JPG".to_string(), facts(1))]);
+        apply_face_ready(
+            &mut facts,
+            &[ready("J.JPG", &candidate()), ready("B.ARW", &candidate())],
+        );
+        assert!(facts["J.JPG"].focus.is_none());
+        assert!(!facts.contains_key("B.ARW"));
     }
 
     #[test]
