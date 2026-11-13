@@ -57,9 +57,9 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, Entity, FocusHandle,
-    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, PathPromptOptions, Pixels,
-    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
+    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, Entity,
+    FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point,
+    RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
     UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
     fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
