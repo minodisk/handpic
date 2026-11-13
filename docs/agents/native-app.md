@@ -705,7 +705,7 @@ about 105 per run) and +1.11 ms on RAF (52.70 off, 53.81 on), against the plan's
 up). On RAF a held key shows only 4-6 pages in 5 s whether peaking is on or off:
 a preview load (about 40-45 ms) outlasts the key repeat, so the pager keeps
 re-reading the newest file, and the overlay has few pages to compete with. See
-[the plan's results](../plans/20261110-gpui-zoom-peaking/results.md).
+[the plan's results](../plans/_archived/20261110-gpui-zoom-peaking/results.md).
 
 - Rule: measure a background job's cost with a held key, not `--auto`, whose
   1003 ms interval lets every job finish before the next press; and check how
