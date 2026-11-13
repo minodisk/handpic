@@ -750,3 +750,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 
 ## Progress
 
+- (2026-11-13) Step 1 complete
