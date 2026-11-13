@@ -837,11 +837,90 @@ impl Riffle {
         cx.notify();
     }
 
-    /// A click on an item of the right-click menu.
-    fn context_action(&mut self, action: context::Action, cx: &mut Context<Self>) {
-        let Some(context::Target::Folder { path, name }) = self.context.close() else {
+    /// A right-click on the strip at `at`, `x` from its left edge, as the
+    /// Tauri strip's `contextmenu` handler: a cell outside the selection
+    /// becomes the selection alone, one inside keeps it, the focus moves to
+    /// the cell, and the menu opens on the selection's targets. The strip's
+    /// empty area opens nothing.
+    fn strip_context(&mut self, at: Point<Pixels>, x: f32, cx: &mut Context<Self>) {
+        let Some(index) = self.strip.hit_test(x) else {
             return;
         };
+        let files = path_strings(&self.files);
+        if !self.selection.selected.contains(&files[index]) {
+            self.set_selection(selection::single(Some(&files[index])));
+        }
+        self.focus_on(Move::To(index), cx);
+        self.menus.close();
+        let focused = files[self.pager.current()].clone();
+        let paths = selection::targets(&self.selection, &files, self.pager.current());
+        let state = self.judgments.get(&focused).cloned().unwrap_or_default();
+        let groups = context::strip_groups(
+            &self.settings.keymap.bindings(),
+            &state,
+            folders::REVEAL_LABEL,
+            self.view_only,
+            paths.len(),
+            // Move to Trash… and Delete Permanently… stay disabled until
+            // their dialog exists (this plan's Step 7).
+            true,
+        );
+        self.context
+            .open_files((f32::from(at.x), f32::from(at.y)), focused, paths, groups);
+        cx.notify();
+    }
+
+    /// A click on an item of the right-click menu.
+    fn context_action(&mut self, action: context::Action, cx: &mut Context<Self>) {
+        match self.context.close() {
+            Some(context::Target::Folder { path, name }) => {
+                self.folder_action(action, path, name, cx);
+            }
+            Some(context::Target::Files { focused, paths }) => {
+                self.files_action(action, &focused, &paths, cx);
+            }
+            None => {}
+        }
+        cx.notify();
+    }
+
+    /// An item of the strip's menu: the reveal acts on the focused file, the
+    /// copy items on the targets, one per line, as listed; a judgment runs
+    /// as its key does.
+    fn files_action(
+        &mut self,
+        action: context::Action,
+        focused: &str,
+        paths: &[String],
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            context::Action::SelectAll => self.select_all(cx),
+            context::Action::RevealFile => cx.reveal_path(Path::new(&context::shown_path(focused))),
+            context::Action::CopyPath => {
+                cx.write_to_clipboard(ClipboardItem::new_string(paths.join("\n")));
+            }
+            context::Action::CopyFileName => {
+                let names: Vec<String> = paths.iter().map(|p| file_name(Path::new(p))).collect();
+                cx.write_to_clipboard(ClipboardItem::new_string(names.join("\n")));
+            }
+            context::Action::Judge(action) => {
+                if let Some(cmd) = Command::from_action(action) {
+                    self.judge(cmd, cx);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// An item of the folder tree's menu.
+    fn folder_action(
+        &mut self,
+        action: context::Action,
+        path: String,
+        name: String,
+        cx: &mut Context<Self>,
+    ) {
         match action {
             context::Action::RevealFolder => {
                 let path = Path::new(&path);
@@ -862,8 +941,8 @@ impl Riffle {
                 self.tree.collapse_all(&path);
                 self.tree_changed(cx);
             }
+            _ => {}
         }
-        cx.notify();
     }
 
     /// The menu's `Expand All`: expand `path` and every subfolder under it,
@@ -2958,7 +3037,8 @@ impl Riffle {
     }
 
     /// The open right-click menu at the pointer, drawn after the rest of the
-    /// window and over it, kept inside the window; laid out only while open.
+    /// window and over it, flipped and kept inside the window; laid out only
+    /// while open.
     fn context_popover(&self, max_height: Pixels, cx: &mut Context<Self>) -> Option<AnyElement> {
         let open = self.context.open()?;
         let (x, y) = open.at;
@@ -3007,11 +3087,10 @@ impl Riffle {
                 .absolute()
                 .top_0()
                 .left_0()
+                // `anchored`'s default fit flips the menu to the pointer's
+                // other side near an edge, as the Tauri `menuPosition`.
                 .child(deferred(
-                    anchored()
-                        .position(point(px(x), px(y)))
-                        .snap_to_window()
-                        .child(popover),
+                    anchored().position(point(px(x), px(y))).child(popover),
                 ))
                 .into_any_element(),
         )
@@ -3174,6 +3253,13 @@ impl Render for Riffle {
                 div()
                     .w_full()
                     .h(px(strip::STRIP_HEIGHT))
+                    .on_mouse_down(
+                        MouseButton::Right,
+                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                            // The strip spans the window from its left edge.
+                            this.strip_context(e.position, f32::from(e.position.x), cx);
+                        }),
+                    )
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, e: &MouseDownEvent, _, cx| {

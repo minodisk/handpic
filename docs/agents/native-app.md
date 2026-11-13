@@ -1218,29 +1218,48 @@ answered); `add_roots` skips the roots already shown.
 ### The right-click menu is a deferred popover at the pointer (Inferred)
 
 `context.rs` holds the menus' items and the open menu (`Menu`: where it was
-opened, in window coordinates, and its target); `main.rs` maps them to
-`div`s. A right press (`on_mouse_down(MouseButton::Right, ..)`) on a tree row
-opens the folder menu, closing the status row's menus. The popover is
-`div().absolute()` holding `deferred(anchored().position(at)
-.snap_to_window())`: `anchored`'s default `AnchoredPositionMode::Window`
-takes the `MouseDownEvent`'s window position as is, and `snap_to_window`
-keeps it inside near an edge (the Tauri `menuPosition` flips instead). It is
+opened, in window coordinates, and its target, a tree folder or the strip's
+focused file and targets); `main.rs` maps them to `div`s. A right press
+(`on_mouse_down(MouseButton::Right, ..)`) on a tree row opens the folder
+menu, and one on a strip cell (the strip's wrapping `div`, `strip::hit_test`
+giving the cell) the strip's menu, closing the status row's menus. The
+popover is `div().absolute()` holding `deferred(anchored().position(at))`:
+`anchored`'s default `AnchoredPositionMode::Window` takes the
+`MouseDownEvent`'s window position as is, and its default fit,
+`AnchoredFitMode::SwitchAnchor`, puts the menu on the pointer's other side
+when it overflows an edge and then still snaps it inside, as the Tauri
+`menuPosition`. `snap_to_window` would only shift it, so a menu opened on
+the strip at the window's bottom would cover the pointer. It is
 `occlude()`d with `on_mouse_down_out` closing it on any press outside, of
 any button, so a right press on another row closes the menu in the capture
 phase and opens that row's in the bubble phase; any key closes it (`escape` stops there,
 the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is dimmed with no
 handler.
 
+- Rule: the strip's right-click follows the Tauri strip's `contextmenu`
+  handler: a cell outside the selection becomes the selection alone, one
+  inside keeps it, and the focus moves to the cell either way; the strip's
+  empty area opens nothing. The menu's targets are `selection::targets`,
+  taken when it opens. Its judgment items carry the keymap's action names
+  (`Action::Judge`) and run through `Command::from_action` and `judge` as a
+  key does, so they act on the selection as it is when picked; each item's
+  shortcut is its action's first key, shown as `keys.ts`'s `displayKey`
+  (`space` as `Space`), not `Keymap::accelerator_for`, which spells keys for
+  the Tauri menu bar.
 - Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
   item in its parent through the desktop folder's `ParseDisplayName` (`open_target_in_explorer`)
-  and only logs a failure. A root (`D:\`) has no parent, so the menu opens it
-  with `cx.open_with_system` instead. The tree's paths never carry the
-  verbatim `\\?\` prefix; whether the shell accepts a prefixed index path
-  (the strip's files, Step 6 of the tree-trash plan) is unverified, so strip
-  it there (`trash.ts`'s `shownPath`) unless a check shows it works.
+  and only logs a failure. A root (`D:\`) has no parent, so the folder menu
+  opens it with `cx.open_with_system` instead. The tree's paths never carry
+  the verbatim `\\?\` prefix, but the strip's files do (the index's
+  canonical folder). The shell refuses a prefixed path: `SHParseDisplayName`
+  returned `E_INVALIDARG` (`0x80070057`) for `\\?\C:\Windows\notepad.exe` and
+  `S_OK` without the prefix (measured from PowerShell, 2026-11-14), so the
+  strip's reveal passes `context::shown_path` (`trash.ts`'s `shownPath`).
 - Rule: the copy items write the tree's spelling of the path and the row's
-  name through `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
-- Not verified headless: the hand check is pending in
+  name, or the strip's targets' listed paths (prefix and all, as the Tauri
+  app writes them) and file names, one per line, through
+  `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
+- Not verified headless: the hand checks are pending in
   `../plans/20261113-gpui-tree-trash/learnings.md`.
 
 ### The tree takes the keyboard through one flag in the view (Inferred)
