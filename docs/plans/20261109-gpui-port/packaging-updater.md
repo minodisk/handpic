@@ -3,7 +3,7 @@
 The decision record for Step 10 of [the gpui-port plan](./plan.md): which tool
 packages the native app, how it updates itself, and what the first native
 release must give the Tauri installs already in the field. Written by the
-[gpui-ci-packaging plan](../20261114-gpui-ci-packaging/plan.md) on
+the gpui-ci-packaging plan (`../20261114-gpui-ci-packaging/plan.md`) on
 2026-11-14.
 
 Each claim is tagged **Source** (read from the named source on 2026-11-14) or

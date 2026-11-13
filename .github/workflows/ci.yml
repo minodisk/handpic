@@ -123,7 +123,12 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y             libfontconfig-dev             libwayland-dev             libx11-xcb-dev             libxkbcommon-x11-dev             libvulkan1
+          sudo apt-get install --no-install-recommends -y \
+            libfontconfig-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev \
+            libvulkan1
 
       - uses: jdx/mise-action@v2
         with:
