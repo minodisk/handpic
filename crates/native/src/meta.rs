@@ -18,6 +18,13 @@ pub enum Shown {
     },
 }
 
+/// The pane's `n / total`: the pager's current file over the shown list, as
+/// the Tauri `positionEl`, so a refilter that hides the file on screen moves
+/// it at once rather than when the next preview arrives.
+pub fn position(current: usize, total: usize) -> String {
+    format!("{} / {}", current + 1, total)
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Row<'a> {
     pub label: &'a str,
@@ -89,6 +96,14 @@ pub fn groups<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `p` under `untagged` on `b` of `a b c`: the pager moves to `c`, at 1
+    /// of 2, while `b`'s preview, shown at 1 of 3, is still on screen.
+    #[test]
+    fn the_position_follows_the_pager_after_a_refilter() {
+        let (current, total) = (1, 2);
+        assert_eq!(position(current, total), "2 / 2");
+    }
 
     fn empty() -> Metadata {
         Metadata {
