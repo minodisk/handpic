@@ -371,6 +371,9 @@ struct Riffle {
     /// The undo entry whose restore or redo is out, so a second undo or
     /// redo does nothing until it comes back.
     trash_step: Option<u64>,
+    /// The judgments and `seen` membership of the files a Move to Trash
+    /// took, kept for an undo landing before the re-listing reads them back.
+    trashed_state: HashMap<String, (Option<State>, bool)>,
     /// How far the run in flight got, in the pane's notes.
     trashing: Option<String>,
     /// A folder the tree opened while a run was in flight, opened whole at
@@ -639,6 +642,7 @@ impl Riffle {
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
+            trashed_state: HashMap::new(),
             trashing: None,
             deferred_open: None,
             left_pane: true,
@@ -1118,6 +1122,13 @@ impl Riffle {
                 );
                 for path in &summary.moved {
                     self.touched.remove(path);
+                    if mode == trash::Mode::Trash {
+                        let state = self.judgments.get(path).cloned();
+                        let seen = self.seen.contains(path);
+                        if state.is_some() || seen {
+                            self.trashed_state.insert(path.clone(), (state, seen));
+                        }
+                    }
                 }
                 if mode == trash::Mode::Delete && !summary.moved.is_empty() {
                     self.undo
@@ -1236,9 +1247,20 @@ impl Riffle {
                     let back =
                         trash::restored_into(&dir, &restored.restored, &self.all, IGNORE_CASE);
                     if !back.is_empty() {
+                        for path in &back {
+                            if let Some((state, seen)) = self.trashed_state.remove(path) {
+                                if let Some(state) = state {
+                                    self.judgments.entry(path.clone()).or_insert(state);
+                                }
+                                if seen {
+                                    self.seen.insert(path.clone());
+                                }
+                            }
+                        }
                         self.all.extend(back);
                         self.view_only = viewonly::is_view_only(&self.all);
                         self.refilter(self.current_path(), true, None, cx);
+                        self.mark_strip();
                     }
                 }
             }
