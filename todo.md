@@ -2585,3 +2585,41 @@ The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.
 #### TODO
 
 - [ ] Let the quit handler also wait, bounded by `STOP_TIMEOUT`, for a scan that a re-listing is stopping in the background (for example by keeping that scan, or a join signal for it, in the shared holder until its stop returns), and log the outcome on the `quit:` line.
+
+### Native: real-device checks of the strip's sort order, the filter and the filter / sort menus
+
+`gpui-filter-sort` added the strip's sort order, the filter (flags, stars, labels, orientation, `Face focus`, `Eyes`, `Output`) and the status row's `Sort ▾` / `Filter ▾` menus to the GPUI app (`crates/native`). CI, the unit tests (`sort.rs`, `filter.rs`, `menu.rs`) and debug `--auto` runs covered the page order and the log lines headlessly. Clicks and key presses cannot be driven by `--auto`, so nobody has watched the strip's drawing, pressed a judgment key under a sort or a filter, or clicked a menu. Windows only. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/native/src/main.rs`, `crates/native/src/sort.rs`, `crates/native/src/filter.rs`, `crates/native/src/menu.rs`.
+
+Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build`, then run `target\debug\riffle-native.exe <folder> --index <fresh path> --settings <file>`, with a fresh index per run. The folders and settings files below are copies under `D:\Photos\tests\20261113-filter-sort\`; use only those, and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`. Record what was seen in `docs/agents/native-app.md`, above all whether a click inside the deferred popover reaches its `on_click` before the strip's `on_mouse_down`, and whether a click on a strip cell that closes the menu also selects the cell.
+
+#### TODO
+
+- [ ] Sort (Step 1): open `sort\raw` with `settings-rating.json`. Once pass 1 ends the strip shows HX99, RX0, RX0M2, RX100M2, RX100M3, HX95 (dimmed). On RX100M2 press `3`: the strip reorders at once with RX100M2 right after HX99, it stays current (outlined, preview unchanged), and auto-advance then moves to its new right neighbour (RX0). Repeat with `settings-capture.json` (strip in capture order), and open `sort\jpg-sequenced` with `settings-name.json` (strip in capture order: C2000Z, C960Z, COOLPIX, A065).
+- [ ] Filter through the judgment keys and undo (Step 2): open `filter\raw` with `settings-filter-untagged.json`. Once pass 1 ends the strip shows the 5 unflagged files (HX95 absent) and the pane's total is 5; `p` on the current file hides it and lands on the next shown file, with no second move from auto-advance; `Ctrl+Z` brings it back and the view lands on it (`Undid <name>`). On `filter\stars3` (RX0 has 3 stars in its XMP) with `settings-filter-stars3.json`: only RX0 shows, and `x` on it keeps it shown (a reject keeps its stars). With `settings-filter-unjudged.json` only RX0M2, RX100M2 and RX100M3 show. `settings-filter-none.json` (picked only; no picked file) shows `No files match the current filter.` on the status line and in the pane, with no image. Copying a RAW into the folder while filtered re-lists without losing the current file. The `p` / undo / redo sidecar writes land in the copies only.
+- [ ] `Face focus` and `Eyes` (Step 3): open `faces` with `settings-filter-good.json`. The strip starts empty and fills in while `analyzing n / m` runs, ending with DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, each with a bright green `f` mark. With `settings-filter-closed.json` only DSC03068 shows.
+- [ ] The menus and the `Output` section (Steps 3 and 4): open `menu\raw` with `settings-name.json`. `Sort ▾` and `Filter ▾` sit at the status row's right end and the preview is the same size as before. Click `Filter ▾`: the menu opens upward over the strip, its right edge on the button's; check `Picked`, then `Red`: the menu stays open, each gets a check mark, the strip narrows (no picked or red file in `raw`: `No files match the current filter.`; use `menu\faces` after picking one with `p` to see a narrowed strip) and the button lights; a click on an item does not also select a strip cell under it. `Escape` closes it; reopen and click the preview: it closes; reopen and click a strip cell: it closes (record whether the cell is also selected); click `Filter ▾` while open: it closes and stays closed. `Reset` unchecks all and shows every file, the button no longer lit. `Sort ▾` then `Rating`: the strip reorders (HX99, RX0, RX0M2, RX100M2, RX100M3, HX95), the menu closes and the current file stays current and in view. With the filter menu open, hold `→`: the pager pages; `e`, `z`, `f` still toggle peaking, 1:1 and the focus mark. On `menu\jpg-sequenced`: `Sort ▾` is dimmed and does nothing, the strip is in capture order. On `menu\faces` the filter menu shows the `Output` section (`Output`: DSC00405, _DSC1616, _DSC1758; `No output`: the other 5); renaming `Output\` away hides the section (its checks cleared) and renaming it back brings it back; on `menu\raw` (no `Output\`) the section is absent. The settings file is untouched.
+
+### Native: the pane's `n / total` lags a refilter that hides the shown file
+
+Found in `gpui-filter-sort` Step 2's local review. When a refilter hides the shown file, the pane still names the old position until the new current file's preview loads. The same lag already followed a re-listing before that plan. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`. Files: `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] Rebuild the pane's position line in `refilter` when the current index changes, not on the preview's arrival, and check that `p` under the `untagged` filter updates it at once.
+
+### Native: a menu change while the filter hides every file lands on the first file
+
+When the filter hides every file, `current_path()` is `None` because `files` is empty, so the next menu change's `refilter` has no anchor and lands on index 0 (`Reset` included); the file shown before the filter emptied the list is not remembered. The Tauri `refilter` keeps its current path across an empty list. Found in `gpui-filter-sort` Step 4. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`. Files: `crates/native/src/main.rs` (`menu_action`, `refilter`).
+
+#### TODO
+
+- [ ] Keep the last current path in the view and use it as the anchor while `files` is empty, with a unit test if the rule moves into a pure function.
+
+### Native: the per-folder EXIF filter sections in the filter menu (closes port Step 7)
+
+`gpui-filter-sort` ported the filter's flags, stars, labels, orientation, `Face focus`, `Eyes` and `Output` sections and left the per-folder EXIF sections to a follow-up slice (decided 2026-11-13), so the GPUI port's Step 7 stays open with only these left. The Tauri filter builds one group per folder from `exif.ts`'s `exifKey` over `IndexedFile.exif` (camera, lens, aperture, shutter, ISO, focal ranges); a stored filter holds none of them. `Genre` and `recommended` stay port Step 9's. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`, `docs/plans/20261109-gpui-port/plan.md`. Files: `crates/native/src/filter.rs`, `crates/native/src/menu.rs`, `crates/native/src/main.rs`, `crates/app/ui/src/filter.ts`, `crates/app/ui/src/exif.ts`.
+
+#### TODO
+
+- [ ] Plan and implement the slice: the sections ported with the matching `filter.test.ts` cases, per session only, nothing written to `settings.json`. It adds no per-page work, so per `docs/agents/native-app.md`'s gate-scope rule its plan states whether an A/B applies.
+- [ ] When it merges, tick port Step 7 in `docs/plans/20261109-gpui-port/plan.md` and add its Progress entry.
