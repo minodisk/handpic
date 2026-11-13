@@ -72,7 +72,7 @@ use riffle_core::{
     reader,
     scan::{Paused, ReadSlots, ScanFocus},
 };
-use scan::{Event, Listed, Prepared, Scan};
+use scan::{Event, Listed, Prepared, Running, Scan};
 use settings::Settings;
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
@@ -230,7 +230,7 @@ struct Riffle {
     /// The launch's eviction, which the first scan waits for.
     eviction: Option<JoinHandle<()>>,
     slots: ReadSlots,
-    scan: Option<Scan>,
+    scan: Running,
     /// The pending `ScanFocus` update, replaced on every change.
     scan_focus: Option<Task<()>>,
     next_scan: u64,
@@ -250,10 +250,7 @@ struct Riffle {
     /// The running dwell clock; dropping it stops it.
     dwell_timer: Option<Task<()>>,
     events: UnboundedSender<Event>,
-    /// `(done, total)` while pass 1 runs.
-    progress: Option<(usize, usize)>,
-    /// `(done, total)` while pass 2 runs.
-    analyzing: Option<(usize, usize)>,
+    scan_status: scan::Status,
     failed: usize,
     image: Option<Arc<RenderImage>>,
     /// The meta pane's file, the one whose preview is on screen, with its
@@ -363,9 +360,16 @@ impl Riffle {
         // view before the quit handlers run. The drain runs as the handler is
         // called, so GPUI's 200 ms bound on the returned future does not cut it.
         let stores = judgment::Queue::new();
+        let running = Running::default();
         if let Some(writer) = writer.clone() {
-            let stores = stores.clone();
+            let (stores, running) = (stores.clone(), running.clone());
             App::on_app_quit(cx, move |_| {
+                let started = Instant::now();
+                let stopped = running.stop_within(scan::STOP_TIMEOUT);
+                log::info!(
+                    "quit: scan stopped={stopped} in {}ms",
+                    started.elapsed().as_millis()
+                );
                 let stored = stores.drain(sidecar::DRAIN_TIMEOUT);
                 let drained = writer.flush(sidecar::DRAIN_TIMEOUT);
                 log::info!(
@@ -387,7 +391,7 @@ impl Riffle {
             strip_width: f32::from(window.viewport_size().width),
             eviction,
             slots: ReadSlots::new(scan::READ_SLOTS),
-            scan: None,
+            scan: running,
             scan_focus: None,
             next_scan: 0,
             dir: None,
@@ -401,8 +405,7 @@ impl Riffle {
             dwell: Dwell::default(),
             dwell_timer: None,
             events,
-            progress: None,
-            analyzing: None,
+            scan_status: scan::Status::default(),
             failed: 0,
             image: None,
             shown: None,
@@ -524,6 +527,7 @@ impl Riffle {
         let index = self.index.clone().ok();
         let reader = self.reader.clone();
         let previous = self.scan.take();
+        self.scan_status.clear();
         let eviction = self.eviction.take();
         let watching = self.watch.clone();
         let writer = self.writer.clone();
@@ -653,8 +657,7 @@ impl Riffle {
                     .collect();
                 let id = self.next_scan;
                 self.next_scan += 1;
-                self.progress = Some((0, todo.len()));
-                self.analyzing = None;
+                self.scan_status.started(todo.len());
                 self.failed = 0;
                 // Set before the workers start, so their first files are
                 // already the ones on screen.
@@ -668,7 +671,7 @@ impl Riffle {
                     focus,
                     self.events.clone(),
                 );
-                self.scan = Some(scan);
+                self.scan.put(scan);
             }
             (Some(Err(e)), _) => {
                 log::error!("failed to prepare the scan of {}: {e}", listed.dir);
@@ -718,22 +721,21 @@ impl Riffle {
                 return;
             }
         };
-        if self.scan.as_ref().is_none_or(|s| s.id != scan) {
+        if !self.scan.is(scan) {
             return;
         }
         match event {
             Event::Progress {
                 done, total, ready, ..
             } => {
-                self.progress = Some((done, total));
+                self.scan_status.extracting(done, total);
                 self.strip.mark_ready(&ready);
                 if self.current_path().is_some_and(|p| ready.contains(&p)) {
                     self.read_focus(cx);
                 }
             }
             Event::Done { summary, .. } => {
-                self.progress = None;
-                self.analyzing = Some((0, 0));
+                self.scan_status.extracted();
                 self.failed = summary.errors;
                 self.strip.refresh();
                 self.read_judgments(cx);
@@ -741,7 +743,7 @@ impl Riffle {
             Event::FacesProgress {
                 done, total, ready, ..
             } => {
-                self.analyzing = Some((done, total));
+                self.scan_status.analyzing(done, total);
                 if let Some(current) = self.current_path()
                     && ready.iter().any(|r| r.path == current)
                 {
@@ -749,7 +751,7 @@ impl Riffle {
                 }
             }
             Event::FacesDone { .. } => {
-                self.analyzing = None;
+                self.scan_status.clear();
                 self.finished(cx);
             }
             Event::Changed(_) | Event::SidecarError { .. } => {}
@@ -987,15 +989,13 @@ impl Riffle {
 
     /// Pass 1 or pass 2 is running.
     fn scanning(&self) -> bool {
-        self.progress.is_some() || self.analyzing.is_some()
+        self.scan_status.scanning()
     }
 
     /// Hand the running scan the current file and the strip's range.
     fn focus_scan(&self) {
-        if let Some(scan) = &self.scan
-            && self.scanning()
-        {
-            scan.focus(self.scan_focus_paths());
+        if self.scanning() {
+            self.scan.focus(self.scan_focus_paths());
         }
     }
 
@@ -1341,10 +1341,8 @@ impl Riffle {
         if let Err(e) = &self.index {
             status.push_str(&format!("  no index: {e}"));
         }
-        if let Some((done, total)) = self.progress {
-            status.push_str(&format!("  scanning {done}/{total}"));
-        } else if let Some((done, total)) = self.analyzing {
-            status.push_str(&format!("  analyzing {done}/{total}"));
+        if let Some(scan) = self.scan_status.suffix() {
+            status.push_str(&scan);
         } else if self.failed > 0 {
             status.push_str(&format!("  {} failed", self.failed));
         }

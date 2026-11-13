@@ -2578,18 +2578,10 @@ Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run
 - [ ] On Windows, with `f` on in both apps, stop on `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (closed eyes, orientation 8), `_DSC1758.ARW` (open eyes) and `ILCE-6400_DSC01340.ARW` (portrait, orientation 6), waiting for the judgment (up to 2 s in a debug build). Expect the magenta mesh (face oval, eyes, brows, nose, lips) on the same face with the same lines in both apps, over a dark outline, and the iris rings and two iris dots on the open-eyed frames only. Also hold `→` with `f` on and check that the log's `eyes` lines name only files the paging stopped on or passed slowly.
 - [ ] On Windows, on a folder of a few hundred RAW files with a fresh `--index`, check that the status line shows `analyzing N/total` after `scanning N/total` and ends clean, and that switching to another folder mid-pass 2 from the folder tree stops it (reopening the first folder resumes the remaining files).
 
-### Native: a failed prepare after a re-listing leaves the stopped scan's status line
+### Native: quitting while a re-listing is stopping the previous scan does not wait for that scan
 
-Found while wiring `gpui-focus-marks` Step 1. `list` takes and stops the previous `Scan`, but `opened` clears `progress` / `analyzing` only when it starts a new scan. When `Scan::prepare` fails (`(Some(Err(e)), _)`) after a re-listing that interrupted a scan, the status line keeps the stopped scan's `scanning` / `analyzing` text and `scanning()` stays true. Pre-existing for `progress`; `analyzing` follows the same path. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/native/src/main.rs` (`list`, `opened`).
-
-#### TODO
-
-- [ ] Clear `progress` and `analyzing` in the failed-`prepare` arm of `opened` (or whenever `list` stops a scan), with a test or a hand check that the status line and `scanning()` reset.
-
-### Native: quitting or closing the window does not stop the scan
-
-Found while measuring `gpui-focus-marks` Step 6. `Riffle::quit` in `crates/native/src/main.rs` calls `cx.quit()` with no `Scan::stop`, so `--auto`'s quit and closing the window leave the workers to die with the process. A quit mid-pass 2 logs no `scan faces:` summary and the index is not closed cleanly. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/native/src/main.rs` (`Riffle::quit`), `crates/native/src/scan.rs` (`Scan::stop`).
+The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.md`) made every quit path stop the held scan with a bounded wait (`scan::Running::stop_within`, `STOP_TIMEOUT`) in the app-level `on_app_quit` handler. `list` moves the previous scan out of the holder into a background task that calls the unbounded `Scan::stop`. If the user quits while that task is still winding the scan down, the holder is empty, so the handler does not wait for it. The process can then exit before that scan's `scan faces:` line, and its write transaction may be cut. This was left out as rare and as needing more state, and the hand check did not exercise it. Files: `crates/native/src/scan.rs`, `crates/native/src/main.rs`, `docs/agents/native-app.md`.
 
 #### TODO
 
-- [ ] Stop (cancel and join) the running scan in `quit` and on window close, so the `scan faces:` summary is logged and the index is closed cleanly. Then drop the "`--auto`'s quit does not stop the scan" rule in `docs/agents/native-app.md`.
+- [ ] Let the quit handler also wait, bounded by `STOP_TIMEOUT`, for a scan that a re-listing is stopping in the background (for example by keeping that scan, or a join signal for it, in the shared holder until its stop returns), and log the outcome on the `quit:` line.
