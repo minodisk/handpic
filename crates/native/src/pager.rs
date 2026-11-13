@@ -80,12 +80,12 @@ impl Pager {
     /// A result for `index` arrived, `ok` when its read succeeded, while the
     /// image of `shown` is on screen (`None` for no image or a failure).
     pub fn finish(&mut self, index: usize, ok: bool, shown: Option<usize>) -> Finished {
-        if index == self.index {
-            self.in_flight = false;
-            Finished::Current
-        } else if self.hit {
+        if self.hit {
             self.in_flight = false;
             Finished::Dropped
+        } else if index == self.index {
+            self.in_flight = false;
+            Finished::Current
         } else {
             Finished::Stale {
                 draw: ok && shown != Some(self.index),
@@ -243,6 +243,18 @@ mod tests {
         assert!(!p.in_flight());
         p.go(Move::Next);
         assert_eq!(p.request(), Some(2));
+    }
+
+    #[test]
+    fn a_hit_on_the_file_whose_own_read_is_out_drops_that_read() {
+        let mut p = Pager::new(5);
+        p.go(Move::Next);
+        assert_eq!(p.request(), Some(1));
+        p.go(Move::Next);
+        p.go(Move::Previous);
+        p.hit();
+        assert_eq!(p.finish(1, true, Some(1)), Finished::Dropped);
+        assert!(!p.in_flight());
     }
 
     #[test]
