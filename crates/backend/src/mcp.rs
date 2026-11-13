@@ -508,6 +508,8 @@ struct Status {
 pub struct Mcp {
     status: tokio::sync::Mutex<Status>,
     companion: Companion,
+    /// The port a switch binds, `MCP_PORT` unless a test run gives another.
+    port: u16,
 }
 
 impl Mcp {
@@ -518,7 +520,13 @@ impl Mcp {
                 bridge: Arc::new(bridge),
                 index,
             },
+            port: MCP_PORT,
         }
+    }
+
+    /// The server listening on `port` instead of `MCP_PORT`.
+    pub fn with_port(self, port: u16) -> Self {
+        Mcp { port, ..self }
     }
 
     /// Complete a bridge call with the main window's answer.
@@ -536,10 +544,10 @@ pub struct McpState {
 }
 
 impl Status {
-    fn state(&self) -> McpState {
+    fn state(&self, port: u16) -> McpState {
         McpState {
             enabled: self.enabled,
-            port: self.running.as_ref().map_or(MCP_PORT, |r| r.port),
+            port: self.running.as_ref().map_or(port, |r| r.port),
             error: self.error.clone(),
         }
     }
@@ -591,12 +599,12 @@ async fn shut(running: Running) {
     }
 }
 
-/// Start the server on `MCP_PORT` unless it is running, and return its port.
-async fn start(status: &mut Status, companion: Companion) -> Result<u16, String> {
+/// Start the server on `port` unless it is running, and return its port.
+async fn start(status: &mut Status, companion: Companion, port: u16) -> Result<u16, String> {
     if let Some(running) = &status.running {
         return Ok(running.port);
     }
-    let running = bind(MCP_PORT, companion).await?;
+    let running = bind(port, companion).await?;
     let port = running.port;
     status.running = Some(running);
     Ok(port)
@@ -614,7 +622,7 @@ impl Mcp {
 
     /// The current state, as the settings modal shows it.
     pub async fn state(&self) -> McpState {
-        self.status.lock().await.state()
+        self.status.lock().await.state(self.port)
     }
 
     /// Turn the server on or off and remember a bind error. A failed bind is
@@ -625,14 +633,14 @@ impl Mcp {
         status.enabled = enabled;
         status.error = None;
         if enabled {
-            if let Err(e) = start(&mut status, self.companion.clone()).await {
+            if let Err(e) = start(&mut status, self.companion.clone(), self.port).await {
                 log::error!("failed to start the MCP server: {e}");
                 status.error = Some(e);
             }
         } else if let Some(running) = status.running.take() {
             shut(running).await;
         }
-        status.state()
+        status.state(self.port)
     }
 }
 
@@ -734,11 +742,34 @@ mod tests {
                 ..Status::default()
             };
 
-            let started = start(&mut status, silent()).await.unwrap();
+            let started = start(&mut status, silent(), MCP_PORT).await.unwrap();
             assert_eq!(started, port);
 
             let running = status.running.take().unwrap();
             shut(running).await;
+        });
+    }
+
+    #[test]
+    fn a_switch_binds_the_given_port_and_reports_it() {
+        block_on(async {
+            let free = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let port = free.local_addr().unwrap().port();
+            drop(free);
+            let mcp = Mcp::new(Bridge::new(|_| Ok(())), None).with_port(port);
+            assert_eq!(
+                mcp.switch(true).await,
+                McpState {
+                    enabled: true,
+                    port,
+                    error: None
+                }
+            );
+            assert!(tokio::net::TcpStream::connect(("127.0.0.1", port))
+                .await
+                .is_ok());
+            mcp.stop().await;
+            assert_eq!(mcp.state().await.port, port);
         });
     }
 

@@ -150,7 +150,18 @@ loopback Streamable HTTP endpoint on `MCP_PORT` with its seven tools, started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
 callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
-`mcp_enabled_setting`, the stored `mcpEnabled` rule), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+`mcp_enabled_setting`, the stored `mcpEnabled` rule), `src/rename.rs` the
+folder and RAW file rename (`check_name`, `folder_target`, `file_plan` /
+`file_run`, and `rename_folder`, which releases the watcher and the tree
+watches around the rename and carries the index rows and the recorded trash
+runs along, given them in a `Context`), `src/datefolder.rs` the `Rename by
+Capture Date…` plan (`plan_of` from the index's capture times, else the file
+head; `preview`) and the split (`split_folder`, over the same `Context`),
+`src/foldersidecars.rs` the counting, the rewrite and the delete of a
+folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
+`delete_run`, which records the run and clears the judgments), none of the
+three checking for a scan, which is the caller's, `src/text.rs` the
+`SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -186,9 +197,13 @@ home and volume roots, one folder's subfolders and RAW count, and
 `reveal_folder`, the right-click item that reveals a folder, or from the
 strip's menu a file, in the OS file manager under the per-platform
 `REVEAL_LABEL`), `src/rename.rs` the
-`rename_folder` command (it checks the new name, releases the folder watcher,
-renames the folder and carries its index rows to the new path),
-`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands
+`rename_folder` and `rename_file` commands, wrappers over the backend's
+`rename` that drain the sidecar writer, refuse a running scan under the
+`Scans` lock and stop the embedding pass (the folder's: it checks the new
+name, releases the folder watcher, renames the folder and carries its index
+rows to the new path),
+`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands,
+wrappers over the backend's `datefolder` with the same guards
 (`date_folder_preview` plans from the capture dates of the photos directly in
 the folder a rename to its one `YYYY-MM-DD` or a split into one sibling folder
 per date, with the undated files and any colliding target; `date_folder_run`
@@ -209,7 +224,8 @@ the backend's watcher emitting `folder-changed` and `src/treewatch.rs` the folde
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
 `src/foldersidecars.rs`
 the folder menu's `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-commands (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
+commands, wrappers over the backend's `foldersidecars` with the writer drain
+and the scan refusal (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
 folder's index rows dirty and push them through the sidecar writer, patching
 only the judgment fields of the current format's sidecars, and
 `delete_sidecars_preview` / `delete_sidecars_run` move those sidecars to the
@@ -242,7 +258,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key and the remembered filter, and writes them back in order on one thread
+sort key, the remembered filter and `mcpEnabled`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
@@ -293,7 +309,13 @@ and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
 port of `scanfocus.ts`: the current file, then the strip's range nearest
 first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
-after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), and `src/viewed.rs` the
+after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), `src/mcp.rs` the MCP
+companion's server (the backend's `Mcp` on a tokio runtime of its own on one
+`mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
+run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
+`src/companion.rs` the answers to its tool calls (a port of `companion.ts`
+over a snapshot of the view: the current file as the selection, no burst, and
+compare, several photos and `set_judgment` refused), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
@@ -332,9 +354,16 @@ whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 which keeps such a folder in capture order (`sort_for`), and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
 `crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
-one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
+one read in flight, an earlier page's crop held on screen until the current
+one arrives and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
 the crop and the scaled-preview placeholder are painted, one JPEG pixel per
-device pixel with the focus point at the canvas center), and `src/peaking.rs`
+device pixel with the focus point at the canvas center), `src/tree.rs` the
+left pane's folder tree (a port of the state half of `tree.ts`: the roots,
+each folder's listed children, expansion, RAW count and failed listing, the
+drawn `rows`, and the path spelling `ancestors_within`, `respell` and
+`relation` compare by, case ignored on Windows and macOS), which the window
+draws as a `uniform_list`, fills from the backend's `folders` and expands
+down to the open folder on every open, and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

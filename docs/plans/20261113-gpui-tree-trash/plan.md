@@ -262,7 +262,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       into the app's test module (`native-app.md`).
     - The reveal itself is not shared: the Tauri app keeps the opener
       plugin, the native app uses GPUI's `reveal_path` (Step 3).
-- [ ] Step 2: The tree model and the left pane: roots, expanding a folder, the RAW count, opening a folder from the tree, a launch with no folder
+- [x] Step 2: The tree model and the left pane: roots, expanding a folder, the RAW count, opening a folder from the tree, a launch with no folder
   - Done when:
     - `crates/native/src/tree.rs` is a pure model with unit tests, a port of
       the tree's state from `tree.ts`: the `Tree` (roots, nodes with
@@ -293,7 +293,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       the chain from its root (adding a root for a folder no root holds),
       respell the chain from the listings, highlight it and scroll it into
       view; a second open while the chain is still listing owns the tree
-      (the `listing` counter is the folder token).
+      (the `opens` counter is the folder token, not `listing`, which every watcher re-listing bumps and would cut a reveal short).
     - A launch without a folder argument opens nothing: `start` no longer
       calls `cx.prompt_for_paths`. With no folder open the window shows the
       tree, an empty preview, an empty strip and `no folder` on the status
@@ -751,3 +751,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 ## Progress
 
 - (2026-11-13) Step 1 complete
+- (2026-11-14) Step 2 complete

@@ -1,4 +1,5 @@
 mod args;
+mod companion;
 mod datadir;
 mod exif;
 mod eyes;
@@ -12,6 +13,7 @@ mod judgment;
 mod keys;
 mod logger;
 mod mark;
+mod mcp;
 mod menu;
 mod meta;
 mod orient;
@@ -27,6 +29,7 @@ mod sort;
 mod strip;
 mod thumbs;
 mod timing;
+mod tree;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -39,7 +42,10 @@ use std::{
     path::{Path, PathBuf},
     process,
     rc::Rc,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -51,11 +57,11 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ContentMask, Context, Corners, Entity, FocusHandle,
+    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, Entity, FocusHandle,
     FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, PathPromptOptions, Pixels,
-    Point, RenderImage, ScrollEvent, SharedString, Task, TextAlign, TitlebarOptions, Window,
-    WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*,
-    px, rgb, rgba, size,
+    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
+    UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
+    fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
@@ -70,6 +76,7 @@ use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::Metadata,
+    folders::{self, Folder},
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, Writer},
@@ -88,6 +95,7 @@ use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
+use tree::{Child, IGNORE_CASE, Relation, Tree};
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
 
@@ -279,6 +287,9 @@ struct Riffle {
     strip_width: f32,
     /// The launch's eviction, which the first scan waits for.
     eviction: Option<JoinHandle<()>>,
+    /// Resolves once the latest listing has stopped the previous scan and
+    /// joined the eviction, which the next listing waits for first.
+    settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
     /// The pending `ScanFocus` update, replaced on every change.
@@ -286,6 +297,27 @@ struct Riffle {
     next_scan: u64,
     /// The open folder's canonical path, the key of its index rows.
     dir: Option<String>,
+    /// Bumped by every open, without a lock: a listing or a reveal of an
+    /// earlier open is dropped.
+    opens: Arc<AtomicU64>,
+    /// Taken by a listing's background task around "the counter still equals
+    /// my token, then set the watcher", never by the UI thread.
+    watching_lock: Arc<Mutex<()>>,
+    /// The left-hand folder tree and its drawn rows, rebuilt when it changes.
+    tree: Tree,
+    tree_rows: Vec<tree::Row>,
+    /// The open folder as the tree spells it, and its row while drawn.
+    tree_open: Option<String>,
+    tree_open_row: Option<usize>,
+    tree_scroll: UniformListScrollHandle,
+    /// The roots have been read; an open before that waits in
+    /// `reveal_wanted`.
+    roots_loaded: bool,
+    reveal_wanted: Option<String>,
+    /// The last folder listing of the tree that failed, until another open.
+    tree_note: Option<String>,
+    /// The left pane is shown (`toggleLeft`).
+    left_pane: bool,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -354,6 +386,8 @@ struct Riffle {
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
+    /// The MCP companion's server, `None` while `mcpEnabled` is off.
+    mcp: Option<mcp::Server>,
 }
 
 impl Riffle {
@@ -361,6 +395,7 @@ impl Riffle {
         focus: FocusHandle,
         index: Result<Indexes, String>,
         settings: Settings,
+        mcp_port: Option<u16>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -434,6 +469,13 @@ impl Riffle {
             })
             .detach();
         }
+        cx.spawn(async move |this, cx| {
+            let roots = cx
+                .background_spawn(async { folders::roots(dirs::home_dir()) })
+                .await;
+            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        })
+        .detach();
         let writes = settings.writes.clone();
         App::on_app_quit(cx, move |_| {
             let drained = writes.drain(settings::DRAIN_TIMEOUT);
@@ -455,6 +497,13 @@ impl Riffle {
         )
         .detach();
         Self {
+            mcp: mcp::start(
+                settings.mcp_enabled,
+                mcp_port,
+                events.clone(),
+                reader.clone(),
+                cx,
+            ),
             focus,
             all: Vec::new(),
             files: Vec::new(),
@@ -480,11 +529,23 @@ impl Riffle {
             thumbs: Thumbs::default(),
             strip_width: f32::from(window.viewport_size().width),
             eviction,
+            settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: running,
             scan_focus: None,
             next_scan: 0,
             dir: None,
+            opens: Arc::default(),
+            watching_lock: Arc::default(),
+            tree: Tree::default(),
+            tree_rows: Vec::new(),
+            tree_open: None,
+            tree_open_row: None,
+            tree_scroll: UniformListScrollHandle::new(),
+            roots_loaded: false,
+            reveal_wanted: None,
+            tree_note: None,
+            left_pane: true,
             wanted: None,
             max: None,
             listing: 0,
@@ -538,26 +599,9 @@ impl Riffle {
             settings: _,
             import_settings: _,
             log: _,
+            mcp_port: _,
         } = args;
-        let prompt = folder.is_none().then(|| {
-            cx.prompt_for_paths(PathPromptOptions {
-                files: false,
-                directories: true,
-                multiple: false,
-                prompt: None,
-            })
-        });
         cx.spawn(async move |this, cx| {
-            let folder = match (folder, prompt) {
-                (Some(folder), _) => Some(folder),
-                (None, Some(prompt)) => prompt
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
-                    .flatten()
-                    .and_then(|mut paths| paths.pop()),
-                (None, None) => None,
-            };
             if let Some(folder) = folder
                 && let Ok(opening) = this.update(cx, |this, cx| this.open(folder, size, max, cx))
             {
@@ -581,10 +625,176 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
+        self.opens.fetch_add(1, Ordering::SeqCst);
+        self.tree_note = None;
+        let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
+        self.reveal(shown.to_string_lossy().into_owned(), cx);
         self.wanted = wanted;
         self.max = max;
         self.resync.open();
         self.list(folder, false, cx)
+    }
+
+    fn opens(&self) -> u64 {
+        self.opens.load(Ordering::SeqCst)
+    }
+
+    /// A click on a folder's name in the tree: open it whole, without the
+    /// command line's `--size` / `--max`.
+    fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) {
+        self.open(PathBuf::from(path), None, None, cx).detach();
+    }
+
+    fn roots_read(&mut self, roots: Vec<folders::FolderNode>, cx: &mut Context<Self>) {
+        self.tree.add_roots(roots.into_iter().map(Child::from));
+        self.roots_loaded = true;
+        self.tree_changed(cx);
+        if let Some(path) = self.reveal_wanted.take() {
+            self.reveal(path, cx);
+        }
+    }
+
+    /// Rebuild the tree's rows and find the open folder's among them.
+    fn tree_changed(&mut self, cx: &mut Context<Self>) {
+        self.tree_rows = self.tree.rows();
+        self.tree_open_row = self.tree_open.as_ref().and_then(|open| {
+            self.tree_rows.iter().position(|row| {
+                tree::relation(&row.path, open, IGNORE_CASE) == Some(Relation::Same)
+            })
+        });
+        cx.notify();
+    }
+
+    /// A listing of the tree's `dir` answered: its children, or `None` with
+    /// the folder collapsed and marked, and the error in the notes when
+    /// `report`.
+    fn tree_listed(
+        &mut self,
+        dir: &str,
+        listed: Result<Folder, String>,
+        report: bool,
+    ) -> Option<Vec<Child>> {
+        match listed {
+            Ok(folder) => {
+                let children: Vec<Child> = folder.children.into_iter().map(Child::from).collect();
+                self.tree
+                    .set_children(dir, folder.raw_count, children.clone());
+                Some(children)
+            }
+            Err(e) => {
+                log::warn!("failed to list the subfolders of {dir}: {e}");
+                self.tree.collapse(dir);
+                self.tree.mark_failed(dir, e.clone());
+                if report {
+                    self.tree_note = Some(e);
+                }
+                None
+            }
+        }
+    }
+
+    /// An expander click: collapse, or expand and list the folder again, its
+    /// cached children drawn meanwhile.
+    fn tree_toggle(&mut self, dir: String, cx: &mut Context<Self>) {
+        if self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == dir && row.expanded)
+        {
+            self.tree.collapse(&dir);
+            self.tree_changed(cx);
+            return;
+        }
+        self.tree.expand(&dir);
+        self.tree_changed(cx);
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            this.update(cx, |this, cx| {
+                this.tree_listed(&dir, listed, true);
+                this.tree_changed(cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Expand and list the chain from the root holding `path` (a root added
+    /// for a folder none holds) down to it, respelling the chain from the
+    /// listings, then highlight it and scroll it into view, as `folders.ts`'s
+    /// `reveal`. A later open owns the tree: this one stops at its next step.
+    fn reveal(&mut self, path: String, cx: &mut Context<Self>) {
+        self.tree_open = Some(path.clone());
+        self.tree_changed(cx);
+        if !self.roots_loaded {
+            self.reveal_wanted = Some(path);
+            return;
+        }
+        let chain = match tree::ancestors_within(self.tree.roots(), &path, IGNORE_CASE) {
+            Some(chain) => Some(chain),
+            None => {
+                let root = tree::root_of(&path);
+                self.tree.add_roots([Child {
+                    name: root.clone(),
+                    path: root.clone(),
+                    is_link: false,
+                }]);
+                self.tree_changed(cx);
+                tree::ancestors_within([root.as_str()], &path, IGNORE_CASE)
+            }
+        };
+        let Some(mut chain) = chain else { return };
+        let token = self.opens();
+        cx.spawn(async move |this, cx| {
+            for at in 0..chain.len() {
+                let dir = chain[at].clone();
+                let walking = this.update(cx, |this, cx| {
+                    if this.opens() != token || !this.tree.has(&dir) {
+                        return false;
+                    }
+                    this.tree.expand(&dir);
+                    this.tree_changed(cx);
+                    true
+                });
+                if !walking.unwrap_or(false) {
+                    break;
+                }
+                let listing = dir.clone();
+                let listed = cx
+                    .background_spawn(async move { folders::list(Path::new(&listing)) })
+                    .await;
+                let children = this.update(cx, |this, cx| {
+                    let current = this.opens() == token;
+                    if !current && listed.is_ok() {
+                        return None;
+                    }
+                    let children = this.tree_listed(&dir, listed, current);
+                    this.tree_changed(cx);
+                    children.filter(|_| current)
+                });
+                let Ok(Some(children)) = children else { break };
+                chain = tree::respell(chain, at + 1, &children, IGNORE_CASE);
+            }
+            this.update(cx, |this, cx| {
+                if this.opens() != token {
+                    return;
+                }
+                // The chain's end is spelled the way the tree keys its nodes,
+                // which the caller's path may not be.
+                if let Some(end) = chain.last() {
+                    this.tree_open = Some(end.clone());
+                }
+                this.tree_changed(cx);
+                if let Some(row) = this.tree_open_row {
+                    this.tree_scroll
+                        .scroll_to_item(row, ScrollStrategy::Nearest);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// The watcher saw the open folder change: re-list it now, or once the
@@ -623,22 +833,41 @@ impl Riffle {
         let previous = self.scan.take();
         self.scan_status.clear();
         let eviction = self.eviction.take();
+        let earlier = self.settled.take();
+        let (settle, settled) = futures::channel::oneshot::channel::<()>();
+        self.settled = Some(settled);
         let watching = self.watch.clone();
         let writer = self.writer.clone();
         let (format, names) = (self.settings.format, self.settings.names.clone());
+        let (opens, watching_lock, token) =
+            (self.opens.clone(), self.watching_lock.clone(), self.opens());
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
+                    // An earlier listing may still be stopping the previous
+                    // scan or joining the eviction; this one reconciles only
+                    // after it (a dropped sender resolves it too).
+                    if let Some(earlier) = earlier {
+                        let _ = earlier.await;
+                    }
                     if let Some(previous) = previous {
                         previous.stop();
                     }
                     if let Some(eviction) = eviction {
                         let _ = eviction.join();
                     }
+                    let _ = settle.send(());
                     // Watched before the listing, so a change during it is
-                    // not missed.
+                    // not missed; under `watching_lock`, so a later open's
+                    // watcher is never replaced by this one's.
                     let dir = canonicalize(&folder.to_string_lossy());
-                    watch::set(&watching, &dir, &dir);
+                    {
+                        let _guard = index::lock(&watching_lock);
+                        if opens.load(Ordering::SeqCst) != token {
+                            return Ok(None);
+                        }
+                        watch::set(&watching, &dir, &dir);
+                    }
                     let listed = scan::list(Path::new(&dir), format)?;
                     let outputs = scan::outputs(&listed);
                     let todo = index.map(|index| {
@@ -652,7 +881,7 @@ impl Riffle {
                         _ => Default::default(),
                     };
                     let shown = shown(&listed.files, wanted, max);
-                    Ok::<_, String>(Opened {
+                    Ok::<_, String>(Some(Opened {
                         listed,
                         shown,
                         outputs,
@@ -660,11 +889,21 @@ impl Riffle {
                         entries,
                         last_viewed,
                         viewed,
-                    })
+                    }))
                 })
                 .await;
-            this.update(cx, |this, cx| this.opened(opened, carry, cx))
-                .ok();
+            this.update(cx, |this, cx| {
+                // A later open owns the view.
+                if this.opens() != token {
+                    return;
+                }
+                match opened {
+                    Ok(Some(opened)) => this.opened(Ok(opened), carry, cx),
+                    Ok(None) => {}
+                    Err(e) => this.opened(Err(e), carry, cx),
+                }
+            })
+            .ok();
         })
     }
 
@@ -711,6 +950,8 @@ impl Riffle {
             same_file = was.is_some() && was == self.current_path();
         } else {
             self.all = shown;
+            self.failed = 0;
+            self.key = None;
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
@@ -945,6 +1186,7 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
                 cx.notify();
@@ -991,7 +1233,7 @@ impl Riffle {
                 self.scan_status.clear();
                 self.finished(cx);
             }
-            Event::Changed(_) | Event::SidecarError { .. } => {}
+            Event::Changed(_) | Event::SidecarError { .. } | Event::Mcp(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -1086,6 +1328,11 @@ impl Riffle {
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some("toggleLeft")) => {
+                self.left_pane = !self.left_pane;
+                self.zoom_resized(cx);
+                cx.notify();
+            }
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
@@ -1666,8 +1913,8 @@ impl Riffle {
         cx.notify();
     }
 
-    /// Another file or listing is current: drop the held crop and, zoomed,
-    /// read the new one.
+    /// Another file or listing is current: zoomed, read the new crop while the
+    /// held one stays on screen; otherwise drop the held crop.
     fn zoom_page(&mut self, cx: &mut Context<Self>) {
         let (old, request) = self.zoom.page(!self.files.is_empty(), self.viewport.get());
         self.retire(old.map(|crop| crop.image));
@@ -1710,9 +1957,10 @@ impl Riffle {
                 self.retire(release.map(|crop| crop.image));
                 self.send_crop(request, cx);
             }
-            Arrived::Failed(e) => {
+            Arrived::Failed { error, release } => {
+                self.retire(release.map(|crop| crop.image));
                 let name = file_name(&self.files[self.pager.current()]);
-                self.fail(&format!("{name}: {e}"));
+                self.fail(&format!("{name}: {error}"));
             }
         }
         cx.notify();
@@ -1736,21 +1984,26 @@ impl Riffle {
         }));
     }
 
-    /// What the preview canvas paints while zoomed: the crop, over the
-    /// scaled preview when the file has a focus point.
+    /// What the preview canvas paints while zoomed: the held crop, over the
+    /// scaled preview when the file has a focus point and the crop, if any,
+    /// is the current page's.
     fn zoom_paint(&self) -> Option<zoom::Paint> {
         if !self.zoom.is_on() {
             return None;
         }
         let crop = self.zoom.crop();
-        let placeholder = self.image.clone().zip(self.zoom.preview()).and_then(
-            |(image, (focus, orientation))| {
-                let s = image.size(0);
-                let preview = (s.width.0 as u32, s.height.0 as u32);
-                let rect = zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
-                Some((image, rect))
-            },
-        );
+        let preview = self.zoom.preview().filter(|_| self.zoom.placeholder_fits());
+        let placeholder =
+            self.image
+                .clone()
+                .zip(preview)
+                .and_then(|(image, (focus, orientation))| {
+                    let s = image.size(0);
+                    let preview = (s.width.0 as u32, s.height.0 as u32);
+                    let rect =
+                        zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
+                    Some((image, rect))
+                });
         Some(zoom::Paint {
             placeholder,
             crop: crop.map(|c| (c.image.clone(), c.point)),
@@ -1887,11 +2140,101 @@ impl Riffle {
                     .iter()
                     .cloned()
                     .chain(self.outputs_failure.clone())
+                    .chain(self.tree_note.clone())
                     .chain(self.write_errors.iter().map(|(path, message)| {
                         format!("{}: {message}", file_name(Path::new(path)))
                     }))
                     .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
             )
+    }
+
+    /// The left-hand folder tree: a `uniform_list`, so only the rows on
+    /// screen are laid out.
+    fn tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .w(px(PANE_WIDTH))
+            .flex_none()
+            .h_full()
+            .py_1()
+            .bg(rgb(PANE_COLOR))
+            .text_size(px(TREE_TEXT))
+            .child(
+                uniform_list(
+                    "tree",
+                    self.tree_rows.len(),
+                    cx.processor(|this, range: std::ops::Range<usize>, _, cx| {
+                        range.map(|at| this.tree_row(at, cx)).collect::<Vec<_>>()
+                    }),
+                )
+                .track_scroll(&self.tree_scroll)
+                .size_full(),
+            )
+    }
+
+    /// One row of the tree: the expander, the name and, expanded, the RAW
+    /// count; the open folder highlighted, a failed one's name in red.
+    fn tree_row(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
+        let row = &self.tree_rows[at];
+        let mut expander = div()
+            .id(("tree-expander", at))
+            .w(px(14.))
+            .flex_none()
+            .text_center()
+            .text_size(px(11.))
+            .text_color(rgb(MUTED_COLOR));
+        if row.expandable {
+            let path = row.path.clone();
+            expander = expander
+                .cursor_pointer()
+                .child(if row.expanded { "\u{25be}" } else { "\u{25b8}" })
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.tree_toggle(path.clone(), cx);
+                }));
+        }
+        let count = row
+            .raw_count
+            .filter(|count| row.expanded && *count > 0)
+            .map(|count| {
+                div()
+                    .flex_none()
+                    .px(px(5.))
+                    .rounded_full()
+                    .bg(rgb(ACCENT_COLOR))
+                    .text_size(px(11.))
+                    .child(count.to_string())
+            });
+        let path = row.path.clone();
+        div()
+            .id(("tree-row", at))
+            .h(px(TREE_ROW_HEIGHT))
+            .mx_1()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .pl(px(4. + row.depth as f32 * 12.))
+            .pr_2()
+            .rounded_sm()
+            .cursor_pointer()
+            .whitespace_nowrap()
+            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+            .when(self.tree_open_row == Some(at), |s| {
+                s.bg(rgb(ACCENT_COLOR)).font_weight(FontWeight::SEMIBOLD)
+            })
+            .child(expander)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .when(row.failed.is_some(), |s| s.text_color(rgb(ERROR_COLOR)))
+                    .child(row.name.clone()),
+            )
+            .children(count)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.open_from_tree(path.clone(), cx);
+            }))
+            .into_any_element()
     }
 
     /// A press on a menu's button.
@@ -2048,6 +2391,34 @@ impl Riffle {
             .into_any_element()
     }
 
+    /// Answer an MCP companion tool call from the view, after moving it as
+    /// the call asks.
+    fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
+        fn view(this: &Riffle) -> companion::View<'_> {
+            let current = this.current_path();
+            companion::View {
+                folder: this.dir.as_deref(),
+                files: &this.files,
+                index: this.pager.current(),
+                zoomed: this.zoom.is_on(),
+                sort: this.sort.setting(),
+                filtered: this.filter.is_active(),
+                eyes: current.and_then(|path| this.marks.eyes(&path)),
+            }
+        }
+        let action = companion::answer(request.kind, &request.args, &view(self));
+        match action {
+            Ok(Some(companion::Action::Show(at))) => self.go(Move::To(at), cx),
+            Ok(Some(companion::Action::ToggleZoom)) => self.toggle_zoom(cx),
+            Ok(None) | Err(_) => {}
+        }
+        let reply = action.map(|_| companion::get_view(&view(self)));
+        if let Some(server) = &self.mcp {
+            server.reply(request.id, reply);
+        }
+        cx.notify();
+    }
+
     fn quit(&mut self, cx: &mut Context<Self>) {
         println!("{}", self.summary.borrow().table());
         cx.quit();
@@ -2083,6 +2454,7 @@ impl Render for Riffle {
                     .flex_1()
                     .min_h_0()
                     .flex()
+                    .children(self.left_pane.then(|| self.tree_pane(cx)))
                     .child(
                         canvas(
                             |_, _, _| {},
@@ -2284,8 +2656,12 @@ struct StripCell {
     marks: Marks,
 }
 
-/// In the Tauri info pane's range (`#info`, 220 px).
+/// In the Tauri info pane's range (`#info`, 220 px), and the folder tree's
+/// (`#side`).
 const PANE_WIDTH: f32 = 220.;
+/// `#folders`' 0.8 rem text in a 1.4 line, and `.folder`'s 2 px padding.
+const TREE_TEXT: f32 = 12.8;
+const TREE_ROW_HEIGHT: f32 = 22.;
 const PANE_COLOR: u32 = 0x171717;
 const MUTED_COLOR: u32 = 0xa1a1a1;
 const ERROR_COLOR: u32 = 0xff6467;
@@ -2542,6 +2918,7 @@ fn main() {
             "none"
         }
     );
+    let mcp_port = args.mcp_port;
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
@@ -2559,7 +2936,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, settings, window, cx)
+                    Riffle::new(focus, index, settings, mcp_port, window, cx)
                 })
             },
         )

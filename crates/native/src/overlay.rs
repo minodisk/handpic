@@ -152,6 +152,12 @@ impl Marks {
         })
     }
 
+    /// `path`'s eyes as judged so far: `None` not judged yet, `Some(None)`
+    /// judged with the eyes unknown.
+    pub fn eyes(&self, path: &str) -> Option<Option<Arc<EyesJudgment>>> {
+        self.eyes.get(path).cloned()
+    }
+
     /// The file whose faces to detect and the token to settle them with:
     /// `current`, while the overlay is on, its image is shown, it is a RAW
     /// file and it is neither detected nor being detected.
