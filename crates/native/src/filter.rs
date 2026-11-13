@@ -19,7 +19,7 @@ use riffle_backend::{
     index::{FaceReady, Focus, IndexedFile},
 };
 use riffle_core::{Flag, eyes::EyeState};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::{
     exif::{self, Group, Groups},
@@ -173,6 +173,30 @@ impl FilterState {
             !set.is_empty()
         });
     }
+
+    /// The remembered sections, each in the menu's item order.
+    pub fn stored(&self) -> Stored {
+        Stored {
+            flags: checked(&FLAGS, &self.flags),
+            stars: (0..=5).filter(|s| self.stars.contains(s)).collect(),
+            labels: LABELS
+                .iter()
+                .filter(|l| self.labels.contains(**l))
+                .map(|l| l.to_string())
+                .collect(),
+            orientations: checked(&ORIENTATIONS, &self.orientations),
+            candidates: checked(&CANDIDATES, &self.candidates),
+            eyes: checked(&EYES, &self.eyes),
+        }
+    }
+}
+
+fn checked<T: Copy + Eq + std::hash::Hash>(items: &[(T, &str)], set: &HashSet<T>) -> Vec<T> {
+    items
+        .iter()
+        .map(|(item, _)| *item)
+        .filter(|item| set.contains(item))
+        .collect()
 }
 
 /// The remembered filter, the Tauri `settings.json`'s `filter`: every
@@ -225,7 +249,51 @@ impl Stored {
             }),
         }
     }
+
+    /// The stored `filter` value, each section in the menu's item order.
+    pub fn setting(&self) -> Value {
+        json!({
+            "flags": names(&FLAGS, &self.flags),
+            "stars": (0..=5).filter(|s| self.stars.contains(s)).collect::<Vec<u8>>(),
+            "labels": LABELS
+                .iter()
+                .filter(|l| self.labels.iter().any(|s| s == *l))
+                .collect::<Vec<_>>(),
+            "orientations": names(&ORIENTATIONS, &self.orientations),
+            "candidates": names(&CANDIDATES, &self.candidates),
+            "eyes": names(&EYES, &self.eyes),
+        })
+    }
 }
+
+fn names<T: PartialEq>(items: &[(T, &'static str)], kept: &[T]) -> Vec<&'static str> {
+    items
+        .iter()
+        .filter(|(item, _)| kept.contains(item))
+        .map(|(_, name)| *name)
+        .collect()
+}
+
+/// Each section's items in the menu's order, with their stored names.
+const FLAGS: [(FilterFlag, &str); 3] = [
+    (FilterFlag::Picked, "picked"),
+    (FilterFlag::Untagged, "untagged"),
+    (FilterFlag::Rejected, "rejected"),
+];
+const ORIENTATIONS: [(Orientation, &str); 2] = [
+    (Orientation::Portrait, "portrait"),
+    (Orientation::Landscape, "landscape"),
+];
+const CANDIDATES: [(AfEye, &str); 3] = [
+    (MarkState::Good, "good"),
+    (MarkState::Neutral, "neutral"),
+    (MarkState::Low, "low"),
+];
+const EYES: [(EyesItem, &str); 3] = [
+    (EyesItem::Open, "open"),
+    (EyesItem::Closed, "closed"),
+    (EyesItem::Unknown, "unknown"),
+];
 
 const LABELS: &[&str] = &[
     "red", "orange", "yellow", "green", "blue", "pink", "purple", "none",
@@ -402,8 +470,8 @@ impl KeptAnchor {
 #[cfg(test)]
 mod tests {
     //! `filter.test.ts`, less the `Genre` section's six cases (port Step 9).
-    //! `toStored` is not ported (nothing is written), so the round trip
-    //! checks `apply_stored` alone. A `Face focus` state the Tauri
+    //! `toStored` is `FilterState::stored`, written by `Stored::setting`,
+    //! which the round trip below reads back. A `Face focus` state the Tauri
     //! cases leave `undefined` is `mark::af_eye_state(None)`, `Neutral`.
 
     use super::*;
@@ -1248,6 +1316,58 @@ mod tests {
                 candidates: vec![Good, Neutral],
                 eyes: vec![EyesItem::Closed],
             }
+        );
+    }
+
+    #[test]
+    fn the_stored_value_round_trips_in_the_menu_order_without_outputs_or_exif() {
+        let mut s = state(
+            &[Rejected, Picked],
+            &[5, 0],
+            &["none", "red"],
+            &[Landscape, Portrait],
+            &[Low, Good],
+            &[EyesItem::Unknown, EyesItem::Open],
+            &[Yes],
+        );
+        s.toggle_exif(Group::Iso, "100");
+        let stored = s.stored();
+        assert_eq!(
+            stored,
+            Stored {
+                flags: vec![Picked, Rejected],
+                stars: vec![0, 5],
+                labels: vec!["red".into(), "none".into()],
+                orientations: vec![Portrait, Landscape],
+                candidates: vec![Good, Low],
+                eyes: vec![EyesItem::Open, EyesItem::Unknown],
+            }
+        );
+        let value = stored.setting();
+        assert_eq!(
+            value,
+            json!({
+                "flags": ["picked", "rejected"],
+                "stars": [0, 5],
+                "labels": ["red", "none"],
+                "orientations": ["portrait", "landscape"],
+                "candidates": ["good", "low"],
+                "eyes": ["open", "unknown"],
+            })
+        );
+        assert_eq!(Stored::from_setting(Some(&value)), stored);
+        let reversed = Stored {
+            flags: vec![Rejected, Picked],
+            stars: vec![5, 0],
+            ..stored.clone()
+        };
+        assert_eq!(reversed.setting(), value);
+        assert_eq!(
+            FilterState::default().stored().setting(),
+            json!({
+                "flags": [], "stars": [], "labels": [],
+                "orientations": [], "candidates": [], "eyes": [],
+            })
         );
     }
 

@@ -248,7 +248,8 @@ struct Riffle {
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
-    /// The strip's filter; a change lives for the session only.
+    /// The strip's filter; its remembered sections are written back on a menu
+    /// change, `Output` and the EXIF checks live for the session only.
     filter: FilterState,
     /// The open folder's EXIF groups, the filter menu's last sections.
     exif_groups: exif::Groups,
@@ -428,6 +429,13 @@ impl Riffle {
             })
             .detach();
         }
+        let writes = settings.writes.clone();
+        App::on_app_quit(cx, move |_| {
+            let drained = writes.drain(settings::DRAIN_TIMEOUT);
+            log::info!("quit: settings writes drained={drained}");
+            async {}
+        })
+        .detach();
         Self {
             focus,
             all: Vec::new(),
@@ -1873,11 +1881,22 @@ impl Riffle {
         cx.notify();
     }
 
-    /// A click on a menu item: the sort or the filter changes for the
-    /// session only, and the strip is rebuilt on the current file.
+    /// A click on a menu item: the sort or the filter changes, the changed
+    /// `sortOrder` or remembered `filter` sections are written to the settings
+    /// store, and the strip is rebuilt on the current file.
     fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
         self.menus.acted(&action);
+        let (sort, stored) = (self.sort, self.filter.stored());
         menu::apply(&mut self.filter, &mut self.sort, action);
+        if self.sort != sort {
+            self.settings
+                .writes
+                .set("sortOrder", self.sort.setting().into());
+        }
+        let after = self.filter.stored();
+        if after != stored {
+            self.settings.writes.set("filter", after.setting());
+        }
         let anchor = self.kept_anchor.anchor(self.current_path());
         self.refilter(anchor, false, None, cx);
         cx.notify();
@@ -2484,7 +2503,7 @@ fn main() {
         settings.auto_advance,
         settings.sort.setting(),
         settings.filter,
-        if settings.store.is_some() {
+        if settings.writes.is_open() {
             "open"
         } else {
             "none"

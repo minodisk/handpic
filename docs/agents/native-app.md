@@ -164,8 +164,20 @@ the paths tried).
 The store is never deleted or recreated, unlike the index (a cache): a file
 that is not a database, or one with a newer `user_version`, is an error left
 as it was, and the app runs on the defaults (`Xmp`, the English names, the
-default keymap, auto-advance on) with `Settings::store` `None`, so nothing is
-written; the startup `settings:` line ends `store=none`.
+default keymap, auto-advance on) with no store behind `Settings::writes`, so
+nothing is written; the startup `settings:` line ends `store=none`.
+
+Every write goes through `Settings::writes` (`settings::Writes`): a
+`set(key, value)` or `delete(key)` is sent to one `settings-store` thread,
+which applies them to the store in the order given, so two quick changes of
+one key cannot land reversed, and never on the main thread. A failed write is
+logged (`settings store: failed to write <key>`) and the in-memory value
+stands, as in the Tauri app. `App::on_app_quit` drains them (`drain`, at most
+`settings::DRAIN_TIMEOUT`) in a handler of its own, registered whether or not
+the index opened (`quit: settings writes drained=…`). One thread with a
+channel was taken over `viewed.rs`'s `Latest`: a `Latest` per key would need
+one per key and a way to wait for them all on quit, where the channel's
+barrier gives the drain for free.
 
 - Rule: every debug or hand-check run passes `--settings` with a test store
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
@@ -388,7 +400,14 @@ at its right end (`menu.rs` holds the rows, the clicks' `apply` and `Menus`;
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open. A menu item runs
 `menu::apply`, then `refilter` on the current file with the scroll not kept,
-so a reorder scrolls the current file into view. Nothing is written.
+so a reorder scrolls the current file into view. `menu_action` then writes
+`sortOrder` (`SortKey::setting`) when the sort key changed, and `filter`
+(`FilterState::stored`, then `Stored::setting`: the remembered sections, each
+in the menu's item order, never `Output` or the EXIF checks) when a remembered
+section changed, `Reset` included; a change of `Output` or EXIF alone writes
+nothing. Nothing is written at load, so a seeded `recommended` stays stored
+until the user picks an order, and a view-only folder, whose sort button is
+dimmed, shows capture order and keeps the stored key.
 
 - Rule: the filter menu ends with the folder's EXIF sections, after `Output`
   (or `Eyes` without an export answer), in the Tauri order and headings
