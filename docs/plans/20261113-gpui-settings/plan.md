@@ -440,7 +440,7 @@ any of them.
     - The actions the native app does not handle yet (bursts, the panes,
       compare, ...) are listed and editable like the rest; their keys only
       log until their steps land.
-- [ ] Step 6: A text input, and the label names
+- [x] Step 6: A text input, and the label names
   - Done when:
     - `crates/native/src/textinput.rs` is a single-line text input entity,
       ported from GPUI's `crates/gpui/examples/input.rs` at the pinned rev
@@ -628,3 +628,4 @@ any of them.
 - (2026-11-14) Step 3 complete
 - (2026-11-14) Step 4 complete
 - (2026-11-14) Step 5 complete
+- (2026-11-14) Step 6 complete

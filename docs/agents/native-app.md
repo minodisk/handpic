@@ -666,6 +666,19 @@ folder is not re-listed.
   the format it captured at its start; the switch's own re-listing comes
   after the reset and supersedes it (`opens` token), so the view ends on the
   new format's judgments.
+- Rule: a label names change takes the same path (`switch_names`, both
+  through `reset_sidecars` under the `format_switch` lock). While the format
+  writes XMP the Sidecar tab shows the five name fields
+  (`textinput.rs`), a row of `i18n::presets()` languages and `Reset`; a
+  field's commit (Enter or blur; Escape commits and closes, as the Tauri
+  field's `change` fires when the closing dialog takes its focus) or `Reset`
+  normalizes the five with `sidecar::label_names_setting`, shows them back
+  and emits `Change::LabelNames` only when they differ. The window then
+  writes `labelNames` and puts the names in force on the main thread (a
+  judgment queued before keeps the names it carries; overlapping changes end
+  stored as the fields show, so no `format_latest`-style guard), and off it
+  drains the stores and runs `sidecar::switch_to` with nothing left to
+  persist, then re-lists.
 
 ### The native app keeps its own index (Inferred)
 
@@ -1124,9 +1137,50 @@ overlay comes about 50-60 ms after the image; the held-key measurement showed
 no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
 resize (Sobel 4-6 ms).
 
-### IME handling is unverified (Inferred)
+### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
 
-It exists in `gpui_windows`; nothing has exercised it yet.
+GPUI at the pinned rev has no text input element. `textinput.rs` is a port
+of `crates/gpui/examples/input.rs` (Apache-2.0, the source named in its
+header): a focusable `div` around a custom `Element` that shapes one line,
+paints the caret, the selection and the IME's marked text underlined, and
+registers the entity as the window's input handler
+(`window.handle_input` with an `ElementInputHandler`) on every paint, so the
+platform's text input and IME reach `EntityInputHandler`'s
+`replace_text_in_range` / `replace_and_mark_text_in_range` only while the
+input is focused. The owner reads the text with `text`, sets it with
+`set_text` and hears `Event::Commit` (Enter, or the focus left: `cx.on_blur`)
+and `Event::Cancel` (Escape).
+
+- Rule: the editing keys (backspace, delete, the arrows and Shift+arrows,
+  Home / End, select-all, copy, cut, paste, Enter, Escape) are taken in the
+  input's own `on_key_down` from `keys::key_name`, the clipboard ones on
+  `ctrl+` on Windows and Linux and `meta+` (cmd) on macOS. The example binds
+  them with `actions!` and `cx.bind_keys` as `cmd-a` / `cmd-c` / `cmd-v` /
+  `cmd-x` only, so on Windows Ctrl+A and the rest did nothing there; here
+  nothing enters GPUI's global keymap, so the pager's key path is unchanged.
+- Rule: a stopped key down types nothing on Windows. `gpui_windows`'s message
+  loop calls `translate_accelerator` first, which dispatches `WM_KEYDOWN` to
+  the window; when a listener stopped it (`propagate` false) the loop skips
+  `TranslateMessage`, so no `WM_CHAR` follows. A consumed editing key
+  therefore never also inserts a character, and a key meant to be typed must
+  not be stopped by anything on the dispatch path: the settings box's handler
+  lets a key it does not take go on while a name field is focused
+  (`settingsmodal::stops`), and the window's root handler returns without
+  stopping it while the modal is open. `WM_CHAR` then reaches the focused
+  input's handler. A key the IME takes arrives as `VK_PROCESSKEY`, for which
+  `MapVirtualKeyW` gives no character, so GPUI raises no `KeyDownEvent` and
+  `TranslateMessage` always runs: composition never passes through the
+  listeners, and Enter or Backspace inside a composition stay the IME's.
+- Seen running (the user, 2026-11-14, Windows, the example itself built
+  standalone at the pinned rev): Japanese IME composition, the candidate
+  window placed at the text and the commit all work. Not yet seen in the
+  native app (the settings' label name fields): the pending check in
+  `../plans/20261113-gpui-settings/learnings.md`.
+- Limits kept from the example: one line, no horizontal scroll (long text is
+  clipped), no undo, no word movement, no double-click selection. Its third
+  test (one selection rectangle on a 10 000-character line) needs a shaped
+  line and so GPUI's `test-support`, which this crate does not enable; it is
+  ported onto the rectangle helper (`span`).
 
 ### A launch without a folder shows only the tree (Inferred)
 

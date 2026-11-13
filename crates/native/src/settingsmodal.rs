@@ -3,7 +3,11 @@
 //! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`, and the
 //! Keyboard Shortcuts tab's edits of the keymap.
 
-use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+use riffle_backend::{
+    shortcuts::Keymap,
+    sidecar::{SidecarFormat, label_names_setting},
+};
+use riffle_core::xmp::LabelNames;
 
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
@@ -24,6 +28,54 @@ pub const FORMATS: [(SidecarFormat, &str); 3] = [
 /// format in force.
 pub fn format_change(current: SidecarFormat, chosen: SidecarFormat) -> Option<SidecarFormat> {
     (chosen != current).then_some(chosen)
+}
+
+/// The label names block is shown while the format writes XMP.
+pub fn writes_xmp(format: SidecarFormat) -> bool {
+    format.kinds().contains(&SidecarFormat::Xmp)
+}
+
+/// The Tauri paragraph over the label name fields.
+pub const LABEL_NAMES_NOTE: &str = "The xmp:Label written for each color. These must match the names \
+     in Lightroom's color label set. Either edit them here to match your set (Reset fills in \
+     Lightroom's default set for the language chosen below), or change your set to these names in \
+     Lightroom Classic under Metadata > Color Label Set > Edit.";
+
+/// The five name fields' colors, in the Tauri order.
+pub const LABEL_COLORS: [&str; 5] = ["Red", "Yellow", "Green", "Blue", "Purple"];
+
+/// `names` in `LABEL_COLORS` order, as the fields show them.
+pub fn label_texts(names: &LabelNames) -> [&str; 5] {
+    [
+        &names.red,
+        &names.yellow,
+        &names.green,
+        &names.blue,
+        &names.purple,
+    ]
+}
+
+/// The five fields' texts normalized as the backend stores them: trimmed, a
+/// blank one the English default (`sidecar::label_names_setting`).
+pub fn label_names_of(texts: [&str; 5]) -> LabelNames {
+    let value: serde_json::Map<String, serde_json::Value> = LABEL_COLORS
+        .iter()
+        .zip(texts)
+        .map(|(color, text)| (color.to_lowercase(), text.into()))
+        .collect();
+    label_names_setting(Some(&value.into()))
+}
+
+/// The change a commit asks for, none when the names are those in force.
+pub fn label_change(current: &LabelNames, committed: LabelNames) -> Option<LabelNames> {
+    (committed != *current).then_some(committed)
+}
+
+/// Whether the box's handler stops a key. With a text field focused, a key
+/// the modal does not take goes on, so the platform's text input types its
+/// character (a stopped key down is never translated into one on Windows).
+pub fn stops(key: &ModalKey, editing: bool) -> bool {
+    !(editing && *key == ModalKey::Native)
 }
 
 /// The modal's status line while the settings store did not open.
@@ -228,11 +280,61 @@ pub fn next_tab(current: Tab, key: &str) -> Tab {
 #[cfg(test)]
 mod tests {
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use riffle_core::xmp::LabelNames;
 
     use super::{
         APP_KEYS, Edit, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab, display_key, edit,
-        format_change, next_tab, shortcut_label,
+        format_change, label_change, label_names_of, label_texts, next_tab, shortcut_label, stops,
+        writes_xmp,
     };
+
+    #[test]
+    fn the_label_names_show_while_the_format_writes_xmp() {
+        assert!(writes_xmp(SidecarFormat::Xmp));
+        assert!(writes_xmp(SidecarFormat::Both));
+        assert!(!writes_xmp(SidecarFormat::Dop));
+    }
+
+    #[test]
+    fn committed_names_are_trimmed_and_a_blank_one_is_the_english_default() {
+        let names = label_names_of([" Rot ", "", "Grün", "   ", "Lila"]);
+        assert_eq!(
+            label_texts(&names),
+            ["Rot", "Yellow", "Grün", "Blue", "Lila"]
+        );
+    }
+
+    #[test]
+    fn a_commit_of_the_names_in_force_changes_nothing() {
+        let current = LabelNames::default();
+        assert_eq!(
+            label_change(
+                &current,
+                label_names_of([" Red", "Yellow", "Green", "", "Purple"])
+            ),
+            None
+        );
+        let rot = label_names_of(["Rot", "Yellow", "Green", "Blue", "Purple"]);
+        assert_eq!(label_change(&current, rot.clone()), Some(rot));
+    }
+
+    #[test]
+    fn a_preset_fills_the_fields_in_the_tauri_order() {
+        let ja = riffle_core::i18n::preset("ja").unwrap();
+        assert_eq!(
+            label_texts(&ja.names),
+            ["レッド", "イエロー", "グリーン", "ブルー", "パープル"]
+        );
+        assert_eq!(riffle_core::i18n::presets()[0].code, "en");
+    }
+
+    #[test]
+    fn a_focused_text_field_keeps_the_keys_the_modal_does_not_take() {
+        assert!(!stops(&ModalKey::Native, true));
+        assert!(stops(&ModalKey::Native, false));
+        assert!(stops(&ModalKey::Focus(Step::Next), true));
+        assert!(stops(&ModalKey::Close, true));
+    }
 
     fn keys_of(keymap: &Keymap, action: &str) -> Vec<String> {
         keymap

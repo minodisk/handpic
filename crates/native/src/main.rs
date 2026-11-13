@@ -29,6 +29,7 @@ mod settingsmodal;
 mod settingsview;
 mod sort;
 mod strip;
+mod textinput;
 mod thumbs;
 mod timing;
 mod tree;
@@ -91,6 +92,7 @@ use riffle_core::{
     arw::FocusLocation,
     reader,
     scan::{Paused, ReadSlots, ScanFocus},
+    xmp::LabelNames,
 };
 use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
 use selection::Selection;
@@ -519,7 +521,7 @@ impl Riffle {
             async {}
         })
         .detach();
-        let settings_view = cx.new(SettingsView::new);
+        let settings_view = cx.new(|cx| SettingsView::new(window, cx));
         cx.subscribe_in(
             &settings_view,
             window,
@@ -529,6 +531,7 @@ impl Riffle {
                     this.settings.writes.set("autoAdvance", on.into());
                 }
                 Change::SidecarFormat(format) => this.switch_format(format, cx),
+                Change::LabelNames(ref names) => this.switch_names(names.clone(), cx),
                 Change::Keymap(ref keymap) => {
                     this.bindings = Bindings::new(keymap);
                     this.settings.writes.shortcuts(keymap);
@@ -1248,23 +1251,66 @@ impl Riffle {
         *index::lock(&self.format_latest) = format;
         let (index, writer) = (self.index.clone().ok(), self.writer.clone());
         let (stores, writes) = (self.stores.clone(), self.settings.writes.clone());
-        let lock = self.format_switch.clone();
         let latest = self.format_latest.clone();
+        self.reset_sidecars(
+            move || {
+                if *index::lock(&latest) != format {
+                    // A later click superseded this one; its task
+                    // switches to the format the user ended on.
+                    return Ok(false);
+                }
+                stores.drain(sidecar::DRAIN_TIMEOUT);
+                sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |format| {
+                    writes.set("sidecarFormat", format.setting().into());
+                    Ok(())
+                })
+                .map(|()| true)
+            },
+            cx,
+        );
+    }
+
+    /// The settings' label names change: written and in force at once, so a
+    /// judgment queued before it keeps the names it was made under and the
+    /// next one takes the new ones; then the rest of a format switch, with
+    /// nothing left to persist (the writes are ordered on this thread, so
+    /// overlapping changes end stored as the fields show).
+    fn switch_names(&mut self, names: LabelNames, cx: &mut Context<Self>) {
+        if names == self.settings.names {
+            return;
+        }
+        log::info!("label names: {:?} -> {names:?}", self.settings.names);
+        self.settings
+            .writes
+            .set("labelNames", sidecar::label_names_value(&names));
+        self.settings.names = names;
+        let (index, writer) = (self.index.clone().ok(), self.writer.clone());
+        let (stores, format) = (self.stores.clone(), self.settings.format);
+        self.reset_sidecars(
+            move || {
+                stores.drain(sidecar::DRAIN_TIMEOUT);
+                sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |_| Ok(()))
+                    .map(|()| true)
+            },
+            cx,
+        );
+    }
+
+    /// Runs `job` off the main thread, one at a time with the other sidecar
+    /// switches; when it did its switch (`Ok(true)`) the open folder is
+    /// listed again, its histories cleared as the Tauri reopen clears them.
+    /// A failure goes to the settings' status line, with no re-listing.
+    fn reset_sidecars(
+        &mut self,
+        job: impl FnOnce() -> Result<bool, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let lock = self.format_switch.clone();
         cx.spawn(async move |this, cx| {
             let switched = cx
                 .background_spawn(async move {
                     let _guard = index::lock(&lock);
-                    if *index::lock(&latest) != format {
-                        // A later click superseded this one; its task
-                        // switches to the format the user ended on.
-                        return Ok(false);
-                    }
-                    stores.drain(sidecar::DRAIN_TIMEOUT);
-                    sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |format| {
-                        writes.set("sidecarFormat", format.setting().into());
-                        Ok(())
-                    })
-                    .map(|()| true)
+                    job()
                 })
                 .await;
             this.update(cx, |this, cx| {
@@ -1274,7 +1320,7 @@ impl Riffle {
                     Err(e) => Err(e),
                 };
                 if let Err(e) = switched {
-                    log::error!("failed to switch the sidecar format: {e}");
+                    log::error!("failed to switch the sidecars: {e}");
                     this.settings_view.update(cx, |view, cx| view.failed(e, cx));
                     return;
                 }
@@ -1803,14 +1849,9 @@ impl Riffle {
             ("q", _) => self.quit(cx),
             (name, _) if name == settingsmodal::OPEN_KEY => {
                 self.menus.close();
-                let (auto_advance, format, keymap, saved) = (
-                    self.settings.auto_advance,
-                    self.settings.format,
-                    self.settings.keymap.clone(),
-                    self.settings.writes.is_open(),
-                );
+                let settings = &self.settings;
                 self.settings_view.update(cx, |view, cx| {
-                    view.open(auto_advance, format, keymap, saved, window, cx);
+                    view.open(settings, window, cx);
                 });
                 cx.notify();
             }

@@ -194,7 +194,93 @@
 - `mise run fmt` also reformatted `settingsview.rs` (the long closures inside
   the rows); `mise run native:check` passed on the first run (520 tests).
 
+## Step 6: a text input, and the label names
+
+- No `textinput.rs` existed on `origin/main` (`004dda85`). The port keeps the
+  example's `EntityInputHandler`, the custom line `Element` and the mouse
+  selection, and moves the text, selection and marked range into a plain
+  `Text` so its offsets and boundaries are unit-tested without GPUI's
+  `test-support` (not enabled in this crate). The example's first two tests
+  port as they are; the third shapes a 10 000-character line, so it is
+  ported onto the one-rectangle helper (`span`) instead.
+- IME, from the user (another session, 2026-11-14): the example built
+  standalone at `b5cd310b` on Windows composes Japanese, shows the candidate
+  window and commits. But it binds its editing keys as `cmd-a` / `cmd-c` /
+  `cmd-v` / `cmd-x` only (`input.rs:772-775`), so Ctrl+A and the rest do
+  nothing on Windows. `textinput.rs` takes them in its own `on_key_down` on
+  `ctrl+` (Windows, Linux) or `meta+` (macOS), registering nothing globally.
+- The key path, read at the pinned rev: `gpui_windows`'s message loop runs
+  `translate_accelerator` (the `WM_KEYDOWN` dispatch) before
+  `TranslateMessage`, and skips the latter when a listener stopped the key.
+  So a stopped key types nothing: the input stopping its editing keys is what
+  keeps them from inserting, and the settings box, which stopped every key
+  since Step 3, now lets a key it does not take go on while a name field is
+  focused (`settingsmodal::stops`). The root's `key_down` returns without
+  stopping while the modal is open. IME keys arrive as `VK_PROCESSKEY`, which
+  raises no GPUI `KeyDownEvent`, so composition never meets the listeners.
+- Escape in a field commits and closes the modal, the Tauri behaviour (its
+  `change` fires as the closing dialog takes the focus). Enter commits and
+  stays. The field's blur commits too, so Tab out of a field commits.
+- A commit emits `Change::LabelNames` only when the normalized names differ
+  from those in force (the Tauri `change` event fires only on a changed
+  value; the native blur fires on every focus loss), so an unchanged field
+  writes nothing.
+- The main view's switch: `switch_format`'s background part became
+  `reset_sidecars(job)` (the `format_switch` lock, the job, then clear the
+  histories and re-list, or the failure on the status line), shared by
+  `switch_format` and the new `switch_names`. The names are written and put
+  in force on the main thread before the job, so two overlapping changes end
+  stored in click order without a `format_latest`-style guard; the job
+  drains the stores and calls `sidecar::switch_to` with a no-op persist, so
+  the flush / reset order stays the backend's one copy. The failure log line
+  is now `failed to switch the sidecars`.
+- `SettingsView::open` takes `&Settings` instead of four values: a fifth
+  (the names) would have put it over clippy's `too_many_arguments`, and the
+  call in `main.rs` got shorter. `SettingsView::new` takes the window (the
+  fields' `on_blur` needs it).
+- The language chooser is a wrapping row of the 16 `i18n::presets()` names,
+  English first and chosen by default (the Tauri select's first option),
+  the chosen one lit; `Reset` commits that language's names. A popover would
+  have needed the menus' deferred / anchored machinery for one control.
+- A `select_all` method for the owner (asked for as optional by the folder
+  rename plan) was dropped: unused here, clippy's `dead_code` refuses it.
+  Ctrl+A in the field selects all; the rename step can add the method.
+
 ## Deferred issues (todo candidates)
+
+- Pending manual check (Step 6, Windows, the user's): the text input and the
+  label names. Basis: Step 6's Done-when; the checkbox was ticked on the
+  automated criteria (`textinput.rs`'s and `settingsmodal.rs`'s tests,
+  clippy). Steps, on copies under `D:\Photos\tests\20261113-settings\` only,
+  after `cargo build` in `crates/native`:
+  1. Prepare `D:\Photos\tests\20261113-settings\labels\` with two or three
+     ARW copies, one with a `.xmp` holding `xmp:Label="Rot"`.
+  2. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\labels --index D:\Photos\tests\20261113-settings\index-s6a.sqlite --settings D:\Photos\tests\20261113-settings\step6.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
+     (a fresh `step6.sqlite`, nothing seeded, so the format is XMP).
+     Expected: the `Rot` file shows no red label.
+  3. Ctrl+, → Sidecar. Expected: under the three radios the paragraph, five
+     fields (Red ... Purple) holding the English names, the language row
+     with `English` lit and `Reset`. Choose `PhotoLab (.dop)`: the block
+     hides; choose `Lightroom (.xmp)` again: it shows.
+  4. Click in the Red field, Ctrl+A, type `Rot`, press Enter. Expected: the
+     log has `label names: ... -> ...` and a `resync: dir=…`; the `Rot` file
+     now shows red. Close, label another file red (Ctrl+Alt+1 by default): its
+     `.xmp` holds `xmp:Label="Rot"`.
+  5. In a field, check: typing, Backspace / Delete, the arrows and
+     Shift+arrows, Home / End, a mouse drag selection, Ctrl+C then Ctrl+V,
+     Ctrl+X. A typed `q`, `1` or arrow key does nothing behind the modal.
+     Tab moves to the next field and commits the one left. Escape commits a
+     typed name and closes the modal.
+  6. With the Japanese IME on, type a name in the Yellow field: the
+     composition is underlined, the candidate window sits at the field, and
+     Enter commits the composition (without committing the field); a second
+     Enter commits the field.
+  7. Choose `日本語` in the language row and press `Reset`. Expected: the
+     fields show `レッド` ... `パープル` and the `Rot` file loses its red
+     label after the re-listing.
+  8. Quit, start again with the same `--settings` and a fresh `--index`
+     (`index-s6b.sqlite`). Expected: Ctrl+, → Sidecar shows the last names in the
+     fields.
 
 - Pending manual check (Step 5, Windows, the user's): the keymap edited live.
   Basis: Step 5's Done-when; the checkbox was ticked on the automated
