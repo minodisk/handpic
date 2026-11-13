@@ -53,3 +53,5 @@ item, and not to edit the port plan's Step 10.
 - The recent Native items put the background directly under the `###` title; this one uses `#### Background`, as most of the file does. Either passes CI.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
