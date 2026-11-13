@@ -334,9 +334,16 @@ whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 which keeps such a folder in capture order (`sort_for`), and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
 `crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
-one read in flight and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
+one read in flight, an earlier page's crop held on screen until the current
+one arrives and a resize re-cut after `CROP_RESIZE_DEBOUNCE`; and where
 the crop and the scaled-preview placeholder are painted, one JPEG pixel per
-device pixel with the focus point at the canvas center), and `src/peaking.rs`
+device pixel with the focus point at the canvas center), `src/tree.rs` the
+left pane's folder tree (a port of the state half of `tree.ts`: the roots,
+each folder's listed children, expansion, RAW count and failed listing, the
+drawn `rows`, and the path spelling `ancestors_within`, `respell` and
+`relation` compare by, case ignored on Windows and macOS), which the window
+draws as a `uniform_list`, fills from the backend's `folders` and expands
+down to the open folder on every open, and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the
