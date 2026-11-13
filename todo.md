@@ -2514,6 +2514,36 @@ In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW co
 
 - [ ] When a later strip change (marks, badges) lands, re-run the same-session A/B and check that `present` p95 has not grown past 1 ms; if it has, look at `paint_strip` first.
 
+### Agents: `GIT_DIR` / `GIT_WORK_TREE` exported around `mise run ci` leak into `merge.test.sh` and write to the real repository
+
+#### Background
+
+`gpui-zoom-peaking` Step 2 Phase B: after the repository folder was renamed, a worktree's `.git` pointed at a stale path, and a session worked around it by exporting `GIT_DIR` / `GIT_WORK_TREE`. That leaked into `mise run ci`, where the merge-settings skill's `merge.test.sh` runs `git -C <tmp> init`, `commit` and `worktree add`; they landed in the real repository (an empty `init` commit, a branch `other`, a worktree entry `hooks-other`). The fix was `git worktree repair <worktree>` from the renamed repository. Plan: `docs/plans/_archived/20261110-gpui-zoom-peaking/plan.md`. Files: the merge-settings skill's `merge.test.sh`, `CLAUDE.md` (Development section).
+
+#### TODO
+
+- [ ] Either add a line to `CLAUDE.md`'s Development section ("never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`"), or make `merge.test.sh` unset both variables (fixing the cause). Done when the line is in `CLAUDE.md`, or the test script unsets them and a test shows it cannot touch the outer repository.
+
+### Native: private bytes grow while `→` is held in the 1:1 view
+
+#### Background
+
+In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took private bytes from 418 to 511 to 557 MB without peaking (549 -> 593 MB with it), while the fit-view holds settled near 400-425 MB. Each zoomed page reads the full JPEG (`reader::read_full`) and decodes a crop. Whether this is allocator retention that plateaus, or a crop or texture that is not released, is unknown. Plan: `docs/plans/_archived/20261110-gpui-zoom-peaking/plan.md`. Files: `crates/native/src/zoom.rs`, `crates/native/src/main.rs` (`zoom_page`, `crop_arrived`).
+
+#### TODO
+
+- [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
+
+### Native: a held `→` on RAF previews barely draws
+
+#### Background
+
+In `gpui-zoom-peaking`'s Step 2 measurement, 5 s of key-downs every 33 ms showed only 4-6 RAF pages (`--size 4416x2944`), peaking off as well as on, against about 105 on ARW. A RAF preview load (40-45 ms) outlasts the key repeat, so when it lands the pager has moved and `Pager::finish` re-reads the newest file; a page shows only when a gap between key-downs is longer than a load. The Tauri app may behave the same (not compared). Showing the landed preview while the next one loads would let a held key draw. Plan: `docs/plans/_archived/20261110-gpui-zoom-peaking/plan.md` (see its `results.md`, "RAF pages under a held key"). Files: `crates/native/src/pager.rs`, `crates/native/src/main.rs` (`loaded`).
+
+#### TODO
+
+- [ ] Compare a held `→` on a RAF folder in the Tauri app, then decide whether the native pager should show a landed preview while the next one loads, so a held key draws.
+
 ### Native: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
 
 `gpui-judgments` added the meta pane, the view-only JPEG folder, the strip's judgment marks, the judgment keys through the keymap, the index and sidecar writes and undo / redo to the GPUI app (`crates/native`). Each step's checkbox was ticked on its automated criteria (unit tests, `--auto` runs); nobody has watched the running window or pressed the keys by hand, and the window close button's writer drain has not been seen. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/native/src/main.rs`, `crates/native/src/meta.rs`, `crates/native/src/viewonly.rs`, `crates/native/src/strip.rs`, `crates/native/src/keys.rs`, `crates/native/src/judgment.rs`, `crates/native/src/history.rs`, `crates/native/src/settings.rs`.
