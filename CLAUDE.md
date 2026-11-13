@@ -237,7 +237,8 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key and the remembered filter, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
+sort key and the remembered filter, and writes them back in order on one thread
+(`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
@@ -245,13 +246,14 @@ to the listing `all` to give the `files` everything else indexes into),
 `filter.ts` less the genres: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
 `src/exif.rs` builds (a port of `exif.ts`); `Stored`, the
-`filter_setting` rule over the stored `filter`; `anchor_after_filter`, the
+`filter_setting` rule over the stored `filter`, and back (`stored`,
+`setting`); `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,
 `src/menu.rs` the status row's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
 `filter_rows`, a port of `index.html`'s `#sort-menu` and `#filter-menu`
-without the `Face focus` help; `apply`, what a click on an item does, for the
-session only; `Menus`, which one is open), which the window draws as
+without the `Face focus` help; `apply`, what a click on an item does, the
+window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),

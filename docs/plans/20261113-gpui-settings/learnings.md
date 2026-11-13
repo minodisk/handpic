@@ -41,3 +41,53 @@
   sortOrder=rating … store=open`. After the JSON was edited to `"dop"`, the
   second run logged no seed line and still `sidecarFormat=both`; the JSON's
   SHA-256 was the same before and after that run (the bytes the edit left).
+
+## Step 2: persist the strip's filter and sort order
+
+- The write path is one `settings-store` thread fed by a `std::sync::mpsc`
+  channel (`settings::Writes`), the shape of `judgment::Queue`, not
+  `viewed.rs`'s `Latest`: a channel keeps every key's order by construction
+  and its barrier message gives the quit drain for free, where a `Latest`
+  would be needed per key plus a way to wait on all of them. `Store` holds a
+  `rusqlite::Connection`, which is `Send`, so the store itself moves into the
+  thread; `Settings::store` became `Settings::writes`, and the Step 1 tests
+  that read the store back now reopen the file (`values(path)`).
+- `Writes::delete` has no caller until Step 5 (the shortcut editor deletes
+  `shortcuts`); clippy's `-D dead-code` refused it, so it and its `Write`
+  variant carry `#[cfg_attr(not(test), expect(dead_code, reason = …))]`.
+  Step 5 removes the attribute.
+- The settings drain is its own `App::on_app_quit` handler, not a line in the
+  judgment stores' one: that handler is registered only when the index
+  opened, and a filter change made with no index must still be drained.
+- `menu_action` compares `FilterState::stored()` before and after
+  `menu::apply`, so a change of `Output` or an EXIF check alone (both per
+  session) writes nothing, and `Reset` writes only when a remembered section
+  was checked. The stored value always holds all six sections, as the Tauri
+  `filter_setting` writes it.
+- A python one-liner probe run without `</dev/null` hung on the Windows
+  console (`_pyrepl` `WinError 123`) and was moved to the background; scripts
+  run as `timeout 30 python -I <script> </dev/null` worked.
+
+## Deferred issues (todo candidates)
+
+- Pending manual check (Step 2, Windows, the user's): the sort order and the
+  filter survive a restart. Basis: Step 2's Done-when ("A restart with the
+  same `--settings` store starts with the filter and the sort order the last
+  run ended with"); the checkbox was ticked on the automated criteria (the
+  `settings.rs` writer tests and `filter.rs`'s round trip). Steps, on copies
+  under `D:\Photos\tests\20261113-settings\` only, after `cargo build` in
+  `crates/native`:
+  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-a.sqlite --settings D:\Photos\tests\20261113-settings\step2.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
+     (a fresh `step2.sqlite`, nothing seeded).
+  2. In `Sort ▾` pick `Rating`; in `Filter ▾` check `Picked` and `Landscape`,
+     and also an `Output` or EXIF item if shown. Quit (close the window); the
+     log shows `quit: settings writes drained=true`.
+  3. Start again with the same `--settings` and a fresh `--index`
+     (`index-b.sqlite`). Expected: the startup `settings:` line shows
+     `sortOrder=rating` and a filter with `flags: [Picked]` and
+     `orientations: [Landscape]`; the sort menu has `Rating` checked, the
+     filter button is lit with `Picked` and `Landscape` checked, and the
+     `Output` / EXIF items are unchecked.
+  4. `Filter ▾` → `Reset`, quit, start again with a fresh `--index`
+     (`index-c.sqlite`). Expected: the `settings:` line shows an empty
+     filter and the filter button is not lit; the sort is still `Rating`.

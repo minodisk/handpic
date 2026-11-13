@@ -428,6 +428,13 @@ impl Riffle {
             })
             .detach();
         }
+        let writes = settings.writes.clone();
+        App::on_app_quit(cx, move |_| {
+            let drained = writes.drain(settings::DRAIN_TIMEOUT);
+            log::info!("quit: settings writes drained={drained}");
+            async {}
+        })
+        .detach();
         Self {
             focus,
             all: Vec::new(),
@@ -1849,7 +1856,17 @@ impl Riffle {
     /// session only, and the strip is rebuilt on the current file.
     fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
         self.menus.acted(&action);
+        let (sort, stored) = (self.sort, self.filter.stored());
         menu::apply(&mut self.filter, &mut self.sort, action);
+        if self.sort != sort {
+            self.settings
+                .writes
+                .set("sortOrder", self.sort.setting().into());
+        }
+        let after = self.filter.stored();
+        if after != stored {
+            self.settings.writes.set("filter", after.setting());
+        }
         let anchor = self.kept_anchor.anchor(self.current_path());
         self.refilter(anchor, false, None, cx);
         cx.notify();
@@ -2456,7 +2473,7 @@ fn main() {
         settings.auto_advance,
         settings.sort.setting(),
         settings.filter,
-        if settings.store.is_some() {
+        if settings.writes.is_open() {
             "open"
         } else {
             "none"
