@@ -894,6 +894,12 @@ prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
 - Rule: what the ring gives up is retired with a `cx.notify()`: `retired`
   drains only in the preview canvas's paint, so an eviction on `settle` with
   nothing else to draw would otherwise hold the images past the cap.
+- Rule: a ring method used only by its own tests (for example `Ring::forget`
+  before a plan calls it) cannot carry a bare `#[expect(dead_code, ...)]`.
+  Under `cargo test` the lint does not fire, so clippy's `-D warnings` fails
+  it as an unfulfilled expectation. Use
+  `#[cfg_attr(not(test), expect(dead_code, reason = ...))]`, as `settings.rs`
+  does.
 - Pending: an arrow key onto a neighbour showing it at once, and a folder
   switch and a filter change showing no other folder's or hidden file's image,
   are unverified by hand on Windows.

@@ -2721,3 +2721,43 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 #### TODO
 
 - [ ] Decide whether every listing should wait for the eviction (or the eviction should be a shared future), or accept the race as unreachable in practice.
+
+### Native: real-device check of the prefetch ring on a page turn, a folder switch and a filter change
+
+`gpui-prefetch` added a ring of decoded neighbour previews to the GPUI app (`crates/native`). CI, the ring's unit tests and the `--auto 60` A/B on the ARW and RAF copies cover the logic and the page-turn timing (57 of 60 presses hit, RAF p50 `keypressToPixels` about 66 to 14 ms). Nobody has pressed the keys by hand: the Step 1 checkbox was ticked on the automated criteria only, so a folder switch and a filter change were never watched for another folder's or a hidden file's image appearing. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/native/src/main.rs` (`take_held`, `clear_ring`, the `retain` in `refilter`), `crates/native/src/prefetch.rs`.
+
+#### TODO
+
+- [ ] On Windows, with the release build (`mise run native:release`, NASM on `PATH`) on a folder under `D:\Photos\tests\`, wait for the scan to end, then press `→` onto the next file. Expect it to show at once, and its `page` line to say `source=prefetch`.
+- [ ] On Windows, in the same build, open another folder from the tree. Expect no image of the previous folder to show at any point.
+- [ ] On Windows, in the same build, change the filter so the current file's neighbour is hidden, then press `→`. Expect a hidden file's image never to show.
+
+### Native: kept prefetch-ring entries keep their GPU texture
+
+#### Background
+
+`gpui-prefetch`'s memory measurement on the RAF folder showed about +110 MB working set and about +300 MB private bytes with the ring on, against the cap's 128 MB of BGRA (two 4416x2944 neighbours are 104 MB). An image that was painted and then handed back through `Ring::keep` holds its GPU texture until it is retired, because only a retired image gets `cx.drop_image`. Releasing the texture on `keep` and uploading it again on the next hit would trade memory for `paint` on a hit (which did not grow in the A/B). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/native/src/main.rs` (`present`), `crates/native/src/prefetch.rs`.
+
+#### TODO
+
+- [ ] Decide whether to release a kept entry's texture on `keep`. Measure private bytes and `paint` on a hit on the RAF copy with and without the release.
+
+### Native: the prefetch ring never covers the wrap from the last file to the first
+
+#### Background
+
+`prefetch::neighbours` stops at the ends of the list, a faithful port of `prefetch.ts`, but the native `Pager` wraps on `Next` / `Previous`. The press from the last file to the first therefore pays a full read. In `gpui-prefetch`'s `--auto 60` runs on 20 files, those 3 misses in 60 presses set the p95 at a read's latency (RAF 56 ms against a hit's 14 ms p50). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/native/src/prefetch.rs`, `crates/native/src/pager.rs`.
+
+#### TODO
+
+- [ ] Decide whether `neighbours` should wrap when the pager does. If so, make it wrap with unit tests, and re-run `--auto 60` to check that the p95 falls.
+
+### Native: `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped` is flaky on a loaded machine
+
+#### Background
+
+The test failed once in four `cargo test` runs of the native workspace during `gpui-prefetch`, with no change near `scan.rs`, and passed on the reruns. It is probably a timing-bound `stop_within` on a loaded machine. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/native/src/scan.rs`.
+
+#### TODO
+
+- [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).

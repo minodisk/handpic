@@ -243,3 +243,5 @@ port (`../20261109-gpui-port/plan.md`).
   prefetched.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
