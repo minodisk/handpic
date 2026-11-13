@@ -451,7 +451,10 @@ impl Riffle {
                     this.settings.auto_advance = on;
                     this.settings.writes.set("autoAdvance", on.into());
                 }
-                Change::AiEnabled(on) => this.settings.writes.set("aiEnabled", on.into()),
+                Change::AiEnabled(on) => {
+                    this.settings.ai_enabled = on;
+                    this.settings.writes.set("aiEnabled", on.into());
+                }
                 Change::Closed => window.focus(&this.focus, cx),
             },
         )
