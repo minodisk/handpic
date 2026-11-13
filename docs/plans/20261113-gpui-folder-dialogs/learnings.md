@@ -38,3 +38,29 @@
   same from `crates/backend/src`.
 - Plain `cargo` is not on the Bash tool's `PATH` here; `mise exec -- cargo
   ...` works.
+
+## Step 2: the Tauri-free parts of the import and the sequencer
+
+- The settings plan's Step 7 had not landed (`origin/main` had no
+  `crates/backend/src/import.rs`), so this step created the module with the
+  settings pieces too and added `chrono` to the backend; that plan's Step 7
+  now extends it (its settings rules, `root_setting`, `pattern_setting`,
+  `example`, are already public there).
+- Moved into `crates/backend/src/import.rs`: `DEFAULT_PATTERN`,
+  `ImportSettings`, `validate_pattern`, `format_date`, `check_segment`
+  (private), `root_setting`, `pattern_setting`, `example`, `Found`, `Photo`,
+  `walk`, `name_of` (made public, the app's progress event names the file
+  with it), `Decision`, `Planned`, `Destination`, `Plan`, `plan`,
+  `FolderSummary`, `Totals`, `Preview`, `refusal`, `summarize`, `plan_dir`,
+  `Failure`, `Ran`, `Prepared` (public with public fields: `prepare` returns
+  it and the native app reads `folders`), `prepare`, `run_plan`, `log_line`,
+  with 25 of the 26 tests. The app keeps the settings state and commands,
+  `ImportPreviews`, `Imports` / `begin` and its one test.
+- `crates/backend/src/sequence.rs`: `Failure`, `Row`, `Preview`, `preview`,
+  and the new `run(dir, cancel, progress) -> Ran`, the body `sequence_run`
+  had inline (the output folder, the failures, a folder-level error as the
+  one failure keyed by `dir`). Its progress callback is `Fn(usize, usize) +
+  Sync`, not `FnMut`: `riffle_core::sequence::run` calls it from its worker
+  threads. The two preview tests moved; the `begin` test stays in the app.
+- `crates/native/Cargo.lock` gained only `chrono` under `riffle-backend`
+  (chrono was already in the lock through `riffle-core`).

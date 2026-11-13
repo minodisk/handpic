@@ -4613,6 +4613,7 @@ version = "1.10.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "chrono",
  "log",
  "notify",
  "objc2-foundation 0.3.2",
