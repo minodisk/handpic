@@ -2,6 +2,8 @@
 //! shortcut row waiting for a key, the key rule of `modal.ts`'s
 //! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`.
 
+use riffle_backend::sidecar::SidecarFormat;
+
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
 pub const OPEN_KEY: &str = if cfg!(target_os = "macos") {
@@ -9,6 +11,19 @@ pub const OPEN_KEY: &str = if cfg!(target_os = "macos") {
 } else {
     "ctrl+,"
 };
+
+/// The Sidecar tab's choices, in the Tauri order.
+pub const FORMATS: [(SidecarFormat, &str); 3] = [
+    (SidecarFormat::Xmp, "Lightroom (.xmp)"),
+    (SidecarFormat::Dop, "PhotoLab (.dop)"),
+    (SidecarFormat::Both, "Both (.xmp and .dop)"),
+];
+
+/// The switch a click on `chosen` asks for, none when it is already the
+/// format in force.
+pub fn format_change(current: SidecarFormat, chosen: SidecarFormat) -> Option<SidecarFormat> {
+    (chosen != current).then_some(chosen)
+}
 
 /// The modal's status line while the settings store did not open.
 pub const NOT_SAVED: &str = "The settings store did not open, so changes last until the app quits.";
@@ -120,7 +135,9 @@ pub fn next_tab(current: Tab, key: &str) -> Tab {
 
 #[cfg(test)]
 mod tests {
-    use super::{ModalKey, SettingsModal, Step, TABS, Tab, next_tab};
+    use riffle_backend::sidecar::SidecarFormat;
+
+    use super::{FORMATS, ModalKey, SettingsModal, Step, TABS, Tab, format_change, next_tab};
 
     fn open() -> SettingsModal {
         let mut modal = SettingsModal::default();
@@ -245,5 +262,37 @@ mod tests {
         for key in ["arrowleft", "arrowright", "enter", "tab"] {
             assert_eq!(next_tab(Tab::Culling, key), Tab::Culling, "{key}");
         }
+    }
+
+    #[test]
+    fn the_formats_are_the_tauri_radios_in_order() {
+        let labels: Vec<_> = FORMATS.iter().map(|(_, label)| *label).collect();
+        assert_eq!(
+            labels,
+            [
+                "Lightroom (.xmp)",
+                "PhotoLab (.dop)",
+                "Both (.xmp and .dop)"
+            ]
+        );
+    }
+
+    #[test]
+    fn choosing_the_format_in_force_switches_nothing() {
+        for (format, _) in FORMATS {
+            assert_eq!(format_change(format, format), None);
+        }
+    }
+
+    #[test]
+    fn choosing_another_format_switches_to_it() {
+        assert_eq!(
+            format_change(SidecarFormat::Xmp, SidecarFormat::Dop),
+            Some(SidecarFormat::Dop)
+        );
+        assert_eq!(
+            format_change(SidecarFormat::Both, SidecarFormat::Xmp),
+            Some(SidecarFormat::Xmp)
+        );
     }
 }

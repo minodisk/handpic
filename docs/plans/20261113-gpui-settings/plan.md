@@ -355,7 +355,7 @@ any of them.
       `BORDER_COLOR`, `INPUT_BORDER`, `BUTTON_FILL`, ...), reachable from a
       child module as they are. No tab icons: GPUI's `svg()` needs an asset
       source the app does not have.
-- [ ] Step 4: The Sidecar tab: the sidecar format, switched live
+- [x] Step 4: The Sidecar tab: the sidecar format, switched live
   - Done when:
     - The Sidecar tab shows `Lightroom (.xmp)`, `PhotoLab (.dop)` and `Both
       (.xmp and .dop)` with the stored one selected.
@@ -626,3 +626,4 @@ any of them.
 - (2026-11-13) Step 1 complete
 - (2026-11-13) Step 2 complete
 - (2026-11-14) Step 3 complete
+- (2026-11-14) Step 4 complete

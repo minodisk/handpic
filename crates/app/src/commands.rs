@@ -395,8 +395,8 @@ fn choose_format(
 }
 
 /// The body of `switch_sidecar_format`, without the `AppHandle`: the state
-/// write, the drain, `persist` (a save failure is logged, not returned) and
-/// the index reset. The caller serializes switches (the command does it with
+/// write, then the backend's `sidecar::switch_to` (the drain, `persist` and
+/// the index reset). The caller serializes switches (the command does it with
 /// `AppSwitchLock`); this function does no locking of its own beyond the
 /// state and index mutexes.
 fn switch_format(
@@ -410,16 +410,7 @@ fn switch_format(
         return Ok(());
     }
     *index::lock(current) = format;
-    if let Some(writer) = writer {
-        writer.flush(crate::sidecar::DRAIN_TIMEOUT);
-    }
-    if let Err(e) = persist(format) {
-        log::warn!("failed to save the sidecar format: {e}");
-    }
-    match index {
-        Some(index) => index::lock(index).reset_sidecars(),
-        None => Ok(()),
-    }
+    crate::sidecar::switch_to(format, writer, index, persist)
 }
 
 /// Remember `dir` as the folder to reopen on the next launch. Failing to write

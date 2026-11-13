@@ -132,7 +132,69 @@
   this step. The bullets above about the AI wiring describe what was
   removed. A seeded `aiEnabled` key stays in the store, unread.
 
+## Step 4: the Sidecar tab, the sidecar format switched live
+
+- Nothing of the switch had moved on `origin/main` (`d72386f4`). The shared
+  body is the backend's `sidecar::switch_to(format, writer, index, persist)`:
+  the flush, the persist (a failure logged) and `Index::reset_sidecars`. The
+  current-format check and the state write stay with each caller, since the
+  native view's format is main-thread state and the rest has to run off it:
+  the Tauri `switch_format` keeps its `Mutex<SidecarFormat>` check and write
+  and then calls `switch_to`; its race tests stay in `crates/app` unchanged.
+  The backend gained two tests next to `switch_to` (a queued write of the old
+  format lands before the persist; clean rows dropped, a dirty row keeps its
+  judgment and loses the stat; a failed persist still resets), and the "no
+  change for the same format" test is `settingsmodal::format_change`'s, the
+  check the view applies before emitting (the window re-checks it in one
+  line).
+- The native app has a step the Tauri app does not: the judgment stores
+  queue (`judgment::Queue`). A store submitted before the switch carries the
+  old format and may not have reached the writer when it is flushed, so the
+  switch drains the queue first (`Queue::drain`, a barrier). A judgment from
+  a key or from the MCP companion's `set_judgment` after the click goes
+  through the same `store` with `self.settings.format`, already the new one.
+- The Tauri reopen on `sidecar-format` (`openDirectory`) clears `touched`
+  and removes the judgment entries from its undo / redo stacks; the native
+  `relist` carries both, so the switch's completion clears `touched`, the
+  `Undo` histories and the step note before calling it. On a failure the
+  Tauri command returns before emitting `sidecar-format`, so the native
+  switch puts the message on the modal's status line and does not re-list.
+- One switch at a time: a `format_switch: Arc<Mutex<()>>` field held by the
+  background part, the `AppSwitchLock` counterpart. `main.rs` gained that
+  field, the `Change::SidecarFormat` arm, the format passed to `open`, the
+  `SidecarFormat` import and the `switch_format` method.
+
 ## Deferred issues (todo candidates)
+
+- Pending manual check (Step 4, Windows, the user's): the sidecar format
+  switched live. Basis: Step 4's Done-when; the checkbox was ticked on the
+  automated criteria (`sidecar.rs`'s `switch_to` tests, `settingsmodal.rs`'s
+  `format_change` tests, the Tauri race tests, clippy). Steps, on copies under
+  `D:\Photos\tests\20261113-settings\` only, after `cargo build` in
+  `crates/native`:
+  1. Prepare `D:\Photos\tests\20261113-settings\formats\` with two or three
+     ARW copies, each with a `.xmp` and a `.ARW.dop` holding different
+     ratings (e.g. XMP 2, `.dop` 4), and `D:\Photos\tests\20261113-settings\jpegs\`
+     with a few JPEGs only. Write `step4-seed.json` there holding
+     `{"sidecarFormat":"xmp"}`.
+  2. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\formats --index D:\Photos\tests\20261113-settings\index-s4a.sqlite --settings D:\Photos\tests\20261113-settings\step4.sqlite --import-settings D:\Photos\tests\20261113-settings\step4-seed.json --log D:\Photos\tests\20261113-settings\Handpic.log`
+     (a fresh `step4.sqlite`). Expected: the strip shows the XMP ratings.
+  3. Ctrl+, → Sidecar: `Lightroom (.xmp)` is selected. Choose
+     `PhotoLab (.dop)`. Expected: the log has `sidecar format: xmp -> dop`
+     then a `resync: dir=…` re-listing; the strip and the pane show the
+     `.dop` ratings. Choosing `PhotoLab (.dop)` again logs nothing.
+  4. Close, press `5` on a file. Expected: only its `.ARW.dop` changes (the
+     `.xmp`'s mtime and bytes stay).
+  5. Switch to `Both (.xmp and .dop)`, press `3` on a file. Expected: both
+     its `.xmp` and `.ARW.dop` hold 3. Also, through the MCP companion if it
+     is on, a `set_judgment` right after a switch writes the new format.
+  6. Quit, start again with the same `--settings` and a fresh `--index`
+     (`index-s4b.sqlite`), no `--import-settings`. Expected: the startup
+     `settings:` line has `sidecarFormat=both` and the tab shows `Both`
+     selected.
+  7. Open `D:\Photos\tests\20261113-settings\jpegs` the same way (fresh
+     `--index`) and switch the format. Expected: no error in the status line
+     or the log, and the folder re-lists view-only.
 
 - Pending manual check (Step 2, Windows, the user's): the sort order and the
   filter survive a restart. Basis: Step 2's Done-when ("A restart with the
