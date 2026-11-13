@@ -242,7 +242,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key and the remembered filter, and writes them back in order on one thread
+sort key, the remembered filter and `mcpEnabled`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
@@ -289,7 +289,13 @@ and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
 port of `scanfocus.ts`: the current file, then the strip's range nearest
 first), handed to `ScanFocus` before the scan starts and `SCAN_FOCUS_DELAY`
-after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), and `src/viewed.rs` the
+after the current file or the range last changed, `src/hold.rs` the scan pause a preview holds from its read until its image is painted (`PaintHold`), `src/mcp.rs` the MCP
+companion's server (the backend's `Mcp` on a tokio runtime of its own on one
+`mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
+run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
+`src/companion.rs` the answers to its tool calls (a port of `companion.ts`
+over a snapshot of the view: the current file as the selection, no burst, and
+compare, several photos and `set_judgment` refused), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview

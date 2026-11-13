@@ -81,7 +81,10 @@ callback and returns each switch's `McpState`; the Tauri app's `mcp.rs` owns
 spawns its tasks with a bare `tokio::spawn`, so `Mcp::switch` and `Mcp::stop`
 must run inside a tokio runtime: the Tauri app calls them from async commands,
 a task on `tauri::async_runtime` and `tauri::async_runtime::block_on`, which
-all enter Tauri's runtime; the native app has to own one.
+all enter Tauri's runtime; the native app's `mcp.rs` owns a current-thread
+runtime on its one `mcp` thread, which runs the switch, waits for the quit's
+signal and runs the stop. `Mcp::with_port` binds another port than
+`MCP_PORT`, for the native `--mcp-port`.
 
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.

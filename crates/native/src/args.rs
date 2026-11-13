@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>]";
+pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>] [--mcp-port N]";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {
@@ -12,6 +12,8 @@ pub struct Args {
     pub settings: Option<PathBuf>,
     pub import_settings: Option<PathBuf>,
     pub log: Option<PathBuf>,
+    /// The MCP companion's port when `mcpEnabled` is on, for a test run.
+    pub mcp_port: Option<u16>,
 }
 
 pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
@@ -34,6 +36,9 @@ pub fn parse(args: impl IntoIterator<Item = OsString>) -> Result<Args, String> {
                 parsed.import_settings = Some(PathBuf::from(value("--import-settings")?))
             }
             Some("--log") => parsed.log = Some(PathBuf::from(value("--log")?)),
+            Some("--mcp-port") => {
+                parsed.mcp_port = Some(number("--mcp-port", &value("--mcp-port")?)?)
+            }
             Some(flag) if flag.starts_with("--") => return Err(format!("unknown flag {flag}")),
             _ if parsed.folder.is_none() => parsed.folder = Some(PathBuf::from(arg)),
             _ => return Err(format!("unexpected argument {}", arg.to_string_lossy())),
@@ -87,7 +92,9 @@ mod tests {
                 "--import-settings",
                 "D:/t/settings.json",
                 "--log",
-                "D:/t/Handpic.log"
+                "D:/t/Handpic.log",
+                "--mcp-port",
+                "41999"
             ]),
             Ok(Args {
                 folder: Some(PathBuf::from("D:/a b")),
@@ -98,6 +105,7 @@ mod tests {
                 settings: Some(PathBuf::from("D:/t/settings.sqlite")),
                 import_settings: Some(PathBuf::from("D:/t/settings.json")),
                 log: Some(PathBuf::from("D:/t/Handpic.log")),
+                mcp_port: Some(41999),
             })
         );
     }
@@ -110,6 +118,8 @@ mod tests {
         assert!(run(&["--settings"]).is_err());
         assert!(run(&["--import-settings"]).is_err());
         assert!(run(&["--log"]).is_err());
+        assert!(run(&["--mcp-port"]).is_err());
+        assert!(run(&["--mcp-port", "70000"]).is_err());
         assert!(run(&["--auto", "x"]).is_err());
         assert!(run(&["--nope"]).is_err());
         assert!(run(&["a", "b"]).is_err());

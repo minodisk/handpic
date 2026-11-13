@@ -227,7 +227,7 @@ before going on.
       release-please bumps with the app's; `get_info` keeps the name
       `handpic`.
 
-- [ ] Step 5: Serve the MCP endpoint from the GPUI app: the read and navigate tools
+- [x] Step 5: Serve the MCP endpoint from the GPUI app: the read and navigate tools
   - Assumes Step 4 is merged (and Step 1, for the log lines the check reads).
   - Done when: with `"mcpEnabled": true` in the settings file the native app
     listens on `127.0.0.1:41917` (or `--mcp-port`), and with it off or
@@ -385,3 +385,4 @@ before going on.
 - (2026-11-13) Step 2 complete
 - (2026-11-13) Step 3 complete
 - (2026-11-13) Step 4 complete
+- (2026-11-14) Step 5 complete

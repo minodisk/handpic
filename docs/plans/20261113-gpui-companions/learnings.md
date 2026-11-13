@@ -119,6 +119,80 @@
   next to the backend's 0.10); `mise run native:check` passed without other
   setup.
 
+## Step 5: the MCP endpoint in the GPUI app (read and navigate tools)
+
+- The runtime: a tokio **current-thread** runtime driven by one named `mcp`
+  thread, rather than a multi-thread runtime with one worker. The thread's
+  `block_on` runs `Mcp::switch(true)`, logs the returned `McpState`, waits on
+  a oneshot the quit handler fires, then runs `Mcp::stop` and signals back.
+  So `switch` and `stop` run inside the runtime (Step 4's rule), the native
+  crate needs only tokio's `rt` and `sync` features as a direct dependency
+  (the backend's `net` / `time` unify in), and the GPUI main thread never
+  blocks on the bind. The quit handler (`App::on_app_quit`, registered only
+  when the server starts) waits at most `STOP_WAIT` (2.5 s, the backend's
+  2 s stop timeout plus a margin) and logs `quit: MCP server stopped=<bool>
+  in <ms>ms`.
+- The backend gained `Mcp::with_port`: `switch` always bound `MCP_PORT`, so
+  `--mcp-port` had no way in. The Tauri app is unchanged (it never calls it);
+  a new backend test, `a_switch_binds_the_given_port_and_reports_it`, covers
+  it.
+- `main.rs`: two `mod` lines, the `mcp` field (filled by `mcp::start` in the
+  struct literal, before `events` / `reader` / `settings` move), one extra
+  `Riffle::new` parameter for the port (`main` copies `args.mcp_port` before
+  the `move` closure), `mcp_port: _` in `start`'s exhaustive destructure,
+  the `Event::Mcp` arm in `scanned` (plus `Event::Mcp(_)` on the second
+  match's no-op arm) and the `mcp_request` method. The snapshot is built by a
+  nested `fn view(this: &Riffle) -> companion::View<'_>`: a closure
+  returning a borrow of its argument does not get the right lifetime
+  ("lifetime may not live long enough").
+- `companion::answer` returns what the view has to do (`Show(index)` through
+  `go(Move::To(..))`, `ToggleZoom` through `toggle_zoom`) and the view then
+  replies with `get_view` over a fresh snapshot, as `companion.ts` calls the
+  action then `getView`. `set_view` toggles only when the mode differs.
+- `overlay::Marks` gained `eyes(path)`, the `EyesCache` entry, for
+  `current.eyes`.
+- The native view still has no selection (checked on `main` at `e341ef21`),
+  so the plan's current-file fallback stands.
+- curl on Git Bash: a JSON body passed as a `--data` argument with `\`
+  escapes reached the server mangled (`invalid escape`), apparently MSYS's
+  argument conversion; feeding the body through stdin
+  (`--data-binary @- <<< "$body"`) works.
+- Automated check (debug build, `--auto 25` on 3 ARW copies in
+  `D:\Photos\tests\20261114-native-mcp\photos`, `--index`, `--settings`
+  (`settings.sqlite`), `--import-settings` (`settings.json` holding
+  `{"mcpEnabled": true}`) and `--log` all in that folder, `--mcp-port 41931`),
+  replies trimmed, paths with their JSON escapes undone (the `--auto` pager
+  moves the current file between calls):
+  - `initialize`: 200, SSE `serverInfo {"name":"handpic","version":"1.10.0"}`
+    with the instructions; the `Mcp-Session-Id` header came back.
+  - `notifications/initialized`: `HTTP/1.1 202 Accepted`.
+  - `tools/list`: `get_photo get_preview get_view select_photos set_judgment
+    set_view show_photo`.
+  - `get_view`: `{"folder":"\\?\D:\Photos\tests\20261114-native-mcp\photos","count":3,"current":{"path":"\\?\D:\...\_DSC0745.ARW","position":1},"selected":["\\?\D:\...\_DSC0745.ARW"],"mode":"normal","compare_active":null,"burst":[],"sort":"name","filtered":false}`,
+    `isError: false`.
+  - `show_photo` `_DSC0787.ARW`: the same shape with `current.position: 3`
+    and `selected` that file; a path outside the folder: `isError: true`,
+    `D:\Photos\tests\nope.ARW is not shown in Handpic: not in the open
+    folder, or hidden by the filter`.
+  - `set_view` `zoom` then `normal`: `"mode":"zoom"`, then `"mode":"normal"`;
+    `compare`: `compare is not supported by Handpic's native app yet`.
+  - `select_photos` with two paths: `selecting more than one photo is not
+    supported by Handpic's native app yet`; `set_judgment` `{rating: 3}`:
+    `set_judgment is not supported by Handpic's native app yet`.
+  - `get_photo` (no path): the current file's row and shooting settings
+    (`rating: null`, `flag: "none"`, `sharpness: 371.2`, the focus with
+    `eye_focus 0.9986`, `orientation 6`, `camera "SONY ILCE-7M5"`, ...).
+  - `get_preview` `{long_edge: 256}`: an `image/jpeg` block (base64 starting
+    `/9j/4AAQ`) and `{"path":"\\?\D:\...\_DSC0787.ARW","width":135,"height":202}`.
+  - The log held `mcp: McpState { enabled: true, port: 41931, error: None }`
+    at startup and `quit: MCP server stopped=true in 0ms` after the other
+    `quit:` lines; the process exited 0 on its own.
+  - Off: the same run with a store seeded from `{}` logged no `mcp` /
+    `rmcp` line at all. Bind failure: with 41933 held by another listener
+    the backend logged `failed to start the MCP server: could not listen on
+    127.0.0.1:41933: ... (os error 10048)`, the state line carried the error,
+    and the app scanned, paged and quit normally (exit 0).
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 4, the Tauri app's MCP toggle on the moved
@@ -134,3 +208,16 @@
   (`set_mcp_enabled`, `mcp_enabled`, `mcp_reply`) and `crates/app/src/main.rs`
   (setup's switch, the exit's `stop`); the step's checkbox was ticked on the
   automated criteria (the backend's loopback test and the moved tests).
+- Pending manual check (Step 5, an MCP client on the native app): on
+  Windows, run the GPUI app from this branch with `"mcpEnabled": true` in
+  the settings it is seeded from (on a test copy under `D:\Photos\tests\`,
+  with `--index`, `--settings`, `--import-settings`, `--log` there and a free
+  `--mcp-port`), connect a real MCP client (for example Claude Code with an
+  `http` server at `http://127.0.0.1:<port>/mcp`), and ask it to show another
+  photo, zoom and unzoom. Expected: the client lists the seven tools,
+  `show_photo` visibly moves the window's preview and strip to that photo,
+  `set_view` `zoom` / `normal` visibly enters and leaves the 1:1 view, and
+  closing the window by hand leaves `quit: MCP server stopped=true` in the
+  log. Basis: Step 5's `crates/native/src/mcp.rs`, `companion.rs` and
+  `main.rs`'s `mcp_request`; the step's checkbox was ticked on the automated
+  criteria (unit tests and the curl check above).

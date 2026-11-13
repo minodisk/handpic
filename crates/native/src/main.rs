@@ -1,4 +1,5 @@
 mod args;
+mod companion;
 mod datadir;
 mod exif;
 mod eyes;
@@ -12,6 +13,7 @@ mod judgment;
 mod keys;
 mod logger;
 mod mark;
+mod mcp;
 mod menu;
 mod meta;
 mod orient;
@@ -379,6 +381,8 @@ struct Riffle {
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
+    /// The MCP companion's server, `None` while `mcpEnabled` is off.
+    mcp: Option<mcp::Server>,
 }
 
 impl Riffle {
@@ -386,6 +390,7 @@ impl Riffle {
         focus: FocusHandle,
         index: Result<Indexes, String>,
         settings: Settings,
+        mcp_port: Option<u16>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -474,6 +479,13 @@ impl Riffle {
         })
         .detach();
         Self {
+            mcp: mcp::start(
+                settings.mcp_enabled,
+                mcp_port,
+                events.clone(),
+                reader.clone(),
+                cx,
+            ),
             focus,
             all: Vec::new(),
             files: Vec::new(),
@@ -568,6 +580,7 @@ impl Riffle {
             settings: _,
             import_settings: _,
             log: _,
+            mcp_port: _,
         } = args;
         cx.spawn(async move |this, cx| {
             if let Some(folder) = folder
@@ -1154,6 +1167,7 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
                 cx.notify();
@@ -1200,7 +1214,7 @@ impl Riffle {
                 self.scan_status.clear();
                 self.finished(cx);
             }
-            Event::Changed(_) | Event::SidecarError { .. } => {}
+            Event::Changed(_) | Event::SidecarError { .. } | Event::Mcp(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -2345,6 +2359,34 @@ impl Riffle {
             .into_any_element()
     }
 
+    /// Answer an MCP companion tool call from the view, after moving it as
+    /// the call asks.
+    fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
+        fn view(this: &Riffle) -> companion::View<'_> {
+            let current = this.current_path();
+            companion::View {
+                folder: this.dir.as_deref(),
+                files: &this.files,
+                index: this.pager.current(),
+                zoomed: this.zoom.is_on(),
+                sort: this.sort.setting(),
+                filtered: this.filter.is_active(),
+                eyes: current.and_then(|path| this.marks.eyes(&path)),
+            }
+        }
+        let action = companion::answer(request.kind, &request.args, &view(self));
+        match action {
+            Ok(Some(companion::Action::Show(at))) => self.go(Move::To(at), cx),
+            Ok(Some(companion::Action::ToggleZoom)) => self.toggle_zoom(cx),
+            Ok(None) | Err(_) => {}
+        }
+        let reply = action.map(|_| companion::get_view(&view(self)));
+        if let Some(server) = &self.mcp {
+            server.reply(request.id, reply);
+        }
+        cx.notify();
+    }
+
     fn quit(&mut self, cx: &mut Context<Self>) {
         println!("{}", self.summary.borrow().table());
         cx.quit();
@@ -2843,6 +2885,7 @@ fn main() {
             "none"
         }
     );
+    let mcp_port = args.mcp_port;
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
@@ -2860,7 +2903,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, settings, window, cx)
+                    Riffle::new(focus, index, settings, mcp_port, window, cx)
                 })
             },
         )
