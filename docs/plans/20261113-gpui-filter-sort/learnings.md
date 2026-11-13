@@ -104,6 +104,12 @@
 
 ## Deferred issues (todo candidates)
 
+- **The pane's `n / total` lags a refilter that hides the shown file
+  (Step 2 local review, round 1, not acted on):** until the new current
+  file's preview loads, the pane still names the old position. The same lag
+  already followed a re-listing before this plan. Fix: rebuild the pane's
+  position line in `refilter` when the current index changes, not on the
+  preview's arrival.
 - **Pending manual check (Step 2, Windows, the user's):** the filter through
   the judgment keys and undo. Basis: plan Step 2's manual check; the `--auto`
   runs above covered the page order headlessly, not key presses or the drawn
