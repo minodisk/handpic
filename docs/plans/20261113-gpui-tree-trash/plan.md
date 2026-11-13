@@ -508,7 +508,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - Read the exact focus and anchor behaviour of a Ctrl and a Shift click
       from `main.ts`'s strip click handler and `selection.ts` rather than
       from memory; record anything `selection.ts` alone does not say.
-- [ ] Step 6: The strip's right-click menu: Select All, reveal, copy and the judgment groups
+- [x] Step 6: The strip's right-click menu: Select All, reveal, copy and the judgment groups
   - Done when:
     - `context.rs` gains `strip_groups(bindings, state, reveal_label,
       view_only, count, trashing)`, a port of `contextMenuGroups` with the

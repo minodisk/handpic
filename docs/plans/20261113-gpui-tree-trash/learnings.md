@@ -166,6 +166,40 @@
   into a tab and a control character, as Step 4 found. Scripts holding a
   backslash go into a file written with the Write tool.
 
+## Step 6: the strip's right-click menu
+
+- The shell refuses the verbatim prefix: `SHParseDisplayName` (what GPUI's
+  Windows `reveal_path` goes through, via the desktop folder's
+  `ParseDisplayName`) returned `E_INVALIDARG` for
+  `\\?\C:\Windows\notepad.exe` and `S_OK` without it, measured from a
+  PowerShell `Add-Type` P/Invoke. So the strip's reveal passes
+  `context::shown_path`, a port of `trash.ts`'s `shownPath`, now in
+  `context.rs`; Step 7's `trash.rs` can use it from there rather than port
+  it again. The copy items write the listed path as is, prefix and all, as
+  the Tauri app does (the listing is under the canonical folder, so on
+  Windows the copied path carries `\\?\`).
+- The context popover dropped `.snap_to_window()`: `anchored`'s default
+  `SwitchAnchor` flips the menu to the pointer's other side and still snaps
+  it inside, as the Tauri `menuPosition` and the Done-when's "flipping"
+  expect; snapping alone would push a menu opened on the bottom strip over
+  the pointer. This changes the tree's menu too.
+- `Keymap::accelerator_for` is the Tauri menu bar's accelerator spelling, so
+  the shortcut text is a port of `displayKey` (`space` -> `Space`) over
+  `Keymap::bindings()`, built only when the menu opens.
+- `Move to Trash…` / `Delete Permanently…` are disabled by passing
+  `trashing = true` from `strip_context` until Step 7, which should pass its
+  in-flight state there and handle `Action::TrashFiles` / `DeleteFiles` in
+  `files_action`.
+- The judgment items call `judge`, which takes the targets from the
+  selection when picked, as the Tauri `runAction`; the copy items use the
+  targets taken when the menu opened, as the Tauri `paths`.
+- `context_action` is split into `folder_action` / `files_action` on the
+  closed menu's `Target`; the folder match gained a `_ => {}` arm for the
+  strip's actions.
+- A PowerShell script with `\\?\` written through a `bash` heredoc lost a
+  backslash again (and a Python heredoc turned `\n` in `\notepad.exe` into a
+  newline in a doc edit); write such text with the Write or Edit tools.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
@@ -316,3 +350,39 @@
   for a multi-selection (`renderMeta` in `main.ts`). Basis: Step 5's
   wiring; the Done-when does not ask for it. Files:
   `crates/native/src/main.rs` (`status`), `crates/app/ui/src/main.ts`.
+- **Pending manual check (Step 6, Windows).** Basis: Step 6's Done-when;
+  the right-click menu, the clipboard and Explorer cannot be driven
+  headless. The step's checkbox was ticked on the automated criteria
+  (`context.rs` tests, `mise run ci`, `mise run native:check`, and the
+  `SHParseDisplayName` measurement of the verbatim prefix). Setup: copy ten
+  or so ARWs into `D:\Photos\tests\20261113-gpui-tree-trash\menu\` and a few
+  JPEGs into `...\menu-jpeg\`; `cargo build` in `crates/native` (rename a
+  locked `riffle-native.exe` aside, never kill it); run on `...\menu` with a
+  fresh `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`. Steps and expected results:
+  1. Select three cells (click, Shift click), right-click one of them that
+     is not the current file: the menu opens at the pointer (on a cell near
+     the right edge it opens to the pointer's left; on the bottom strip it
+     opens above the pointer), the three stay selected and the focus moves
+     to the right-clicked cell.
+  2. The menu holds `Select All` (`ctrl+a`), the reveal item (`Reveal in
+     File Explorer`), `Copy Path` / `Copy File Name`, the flag, star and
+     label groups with their keys (`p`, `x`, `u`, `1`-`5`, `0`,
+     `ctrl+alt+1`-`7`, `ctrl+alt+0`) and the focused file's flag, stars and
+     label checked, then `Move 3 Files to Trash…` and `Delete 3 Files
+     Permanently…`, both dimmed and inert.
+  3. `Copy Path` then paste: three full paths, one per line, in strip order
+     (they start with `\\?\` on Windows); `Copy File Name`: the three names.
+  4. `2 stars`: the three files get two stars (and their `.xmp`s say so),
+     one undo entry; open the menu again: `2 stars` is checked.
+  5. The reveal item opens Explorer on `...\menu` with the focused file
+     selected.
+  6. Right-click a cell outside the selection: it alone is selected and
+     focused. Right-click the strip's empty area right of the last cell:
+     nothing opens. `Select All` selects every cell.
+  7. A press on the preview, or `escape`, closes the menu; a left click on
+     a cell still pages.
+  8. Open `...\menu-jpeg` (from the tree): the menu has no flag, star or
+     label groups.
+  9. The tree's right-click menu near the window's bottom edge opens above
+     the pointer (it flips now instead of only snapping).

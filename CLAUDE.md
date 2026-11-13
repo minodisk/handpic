@@ -387,7 +387,11 @@ keyboard (`TREE_PASSTHROUGH`, `tree_gate`, a port of `treekeys.ts`),
 right-click menus (a port of `context.ts`: the items with their action, label,
 shortcut, checked and disabled state, `folder_groups`, the tree's reveal,
 `Copy Path`, `Copy Folder Name`, `Refresh` and, off a root, `Expand All` /
-`Collapse All`, and `Menu`, the open menu's
+`Collapse All`, `strip_groups`, the strip's `Select All`, reveal, `Copy Path`
+/ `Copy File Name`, the judgment groups checked from the focused file (left
+out in a view-only folder) and `Move to Trash…` / `Delete Permanently…`,
+`shown_path`, a path without the Windows verbatim prefix the shell refuses,
+and `Menu`, the open menu's
 position and target), which the window draws as a `deferred` / `anchored`
 popover at the pointer, and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
