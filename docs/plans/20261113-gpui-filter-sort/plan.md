@@ -261,7 +261,7 @@ so port Step 7 stays open after this plan with only those sections left.
       while the listing is not empty. The pane's `n / total` and the status
       line's count are over the filtered `files` (unchanged code, now
       meaning the filtered list).
-    - `judge`: after `set_state`, `refilter(Some(path), true, None)`; then
+    - `judge`: after `set_state`, `refilter(Some(path), false, None)` (the Tauri `commit` calls `refilter(anchor)`, `keepScroll` defaulting to `false`); then
       auto-advance only when `judgment::should_advance(cmd, auto_advance,
       still_current)` holds, `still_current` being `current_path() ==
       Some(path)` (a file the judgment filtered out already moved the
@@ -501,3 +501,4 @@ so port Step 7 stays open after this plan with only those sections left.
 ## Progress
 
 - (2026-11-13) Step 1 complete
+- (2026-11-13) Step 2 complete; the judgment, filter and undo manual check is still pending (see `learnings.md`)
