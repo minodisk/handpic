@@ -568,6 +568,7 @@ tab across opens and focuses it on open, as the Tauri `open` does.
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`Keymap` replaces the keymap (next section),
 `Closed` focuses the window's handle again.
 The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
@@ -601,6 +602,39 @@ not open.
   by `--auto`): the clicks, the occlusion, the focus cycle and the keyboard
   click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at
   the pinned rev; the hand check is pending in
+  `../plans/20261113-gpui-settings/learnings.md`.
+
+### The keymap is edited in the modal and replaced whole (Inferred)
+
+The Keyboard Shortcuts tab lists `Keymap::bindings()` in order, labeled by
+`settingsmodal::shortcut_label` (`settings.ts`'s `shortcutLabels`), each key a
+chip (`display_key`: `space` as `Space`) with a `×`, then `+` or `Press a
+key...`, then `Reset`; `Reset all` is under the scrolling list. The view
+edits its own copy of the keymap, read from the window on every open, through
+`settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
+refusal shows the backend's message on the status line and leaves the copy
+as it was, a success emits `Change::Keymap`, on which the window replaces
+`settings.keymap` and `bindings` (`Bindings::new`) and writes
+`Keymap::overrides()` under `shortcuts`, deleting the key when there are none
+(`Writes::shortcuts`, the Tauri `update_keymap` rule).
+
+- Rule: the capture sees the raw key in the box's handler. `+` sets
+  `capturing` and focuses the box itself, since the pressed `+` is replaced by
+  the prompt and a focus left on a node no longer drawn would send the key to
+  the window's root, whose handler returns while the modal is open; a `×`
+  focuses the box after its edit for the same reason. The next named key
+  (`key_name`, a lone modifier ignored) is added, Escape cancels, and a tab
+  switch or a close cancels (`SettingsModal::select` / `close`).
+- Rule: `settingsmodal::APP_KEYS` (`home`, `end`, `q`) are refused with
+  `"<key>" is taken by this app`: `key_down` takes them before the keymap, so
+  a binding would never fire. `escape` cannot be captured (it cancels) and
+  `ctrl+,` / `meta+,` the backend refuses as a menu accelerator. The folder
+  tree's keys (arrows, Home / End, Enter, Escape, type-ahead) are not
+  refused: they are taken only while the tree has the keyboard, when the
+  keymap's photo actions are swallowed anyway (`treekeys.rs`).
+- Not verified headless: the clicks, the capture and the names a shifted
+  digit and Ctrl+Alt+digit arrive under ("Every keystroke goes through the
+  keymap"); the hand check is pending in
   `../plans/20261113-gpui-settings/learnings.md`.
 
 ### A sidecar format switch is the Tauri order, shared (Inferred)
@@ -989,7 +1023,8 @@ machine: another session's `cargo` build fails the gate, so redo the slot.
 held in `ctrl+alt+shift+meta+` order (`platform` is `meta`), then the key
 lower-cased, GPUI's `left` / `right` / `up` / `down` as `arrowleft` ...
 `arrowdown`; a lone modifier has no name. `Bindings` maps each bound key to
-its action once at startup. The window's handler, past the tree's gate while
+its action, built at startup and again on every Keyboard Shortcuts edit
+(`self.bindings` replaced, the lookup still one `HashMap` read). The window's handler, past the tree's gate while
 the tree has the keyboard ("The tree takes the keyboard through one flag in
 the view"), takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the

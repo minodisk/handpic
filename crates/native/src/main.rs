@@ -529,6 +529,11 @@ impl Riffle {
                     this.settings.writes.set("autoAdvance", on.into());
                 }
                 Change::SidecarFormat(format) => this.switch_format(format, cx),
+                Change::Keymap(ref keymap) => {
+                    this.bindings = Bindings::new(keymap);
+                    this.settings.writes.shortcuts(keymap);
+                    this.settings.keymap = keymap.clone();
+                }
                 Change::Closed => window.focus(&this.focus, cx),
             },
         )
@@ -1719,13 +1724,14 @@ impl Riffle {
             ("q", _) => self.quit(cx),
             (name, _) if name == settingsmodal::OPEN_KEY => {
                 self.menus.close();
-                let (auto_advance, format, saved) = (
+                let (auto_advance, format, keymap, saved) = (
                     self.settings.auto_advance,
                     self.settings.format,
+                    self.settings.keymap.clone(),
                     self.settings.writes.is_open(),
                 );
                 self.settings_view.update(cx, |view, cx| {
-                    view.open(auto_advance, format, saved, window, cx);
+                    view.open(auto_advance, format, keymap, saved, window, cx);
                 });
                 cx.notify();
             }

@@ -61,8 +61,8 @@ pub fn typed_char(keystroke: &Keystroke) -> Option<String> {
     }
 }
 
-/// Each bound key's action, built once from the keymap, which stays as it is
-/// until the settings UI (port Step 9).
+/// Each bound key's action, built from the keymap, and built again whenever
+/// the Keyboard Shortcuts tab edits it.
 pub struct Bindings(HashMap<String, &'static str>);
 
 impl Bindings {
