@@ -132,7 +132,7 @@ nothing is queued, and the number of reads per key sequence does not change.
       pair in the same PR.
     - No same-session A/B latency gate is run for this plan.
 
-- [ ] Step 2: Draw a stale crop before chasing the current one (1:1 view)
+- [x] Step 2: Draw a stale crop before chasing the current one (1:1 view)
   - Done when:
     - Holding an arrow key while zoomed flips through 1:1 crops; the drawn
       crop lags the cursor by at most one crop read, and intermediate files

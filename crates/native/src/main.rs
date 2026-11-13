@@ -1626,8 +1626,8 @@ impl Riffle {
         cx.notify();
     }
 
-    /// Another file or listing is current: drop the held crop and, zoomed,
-    /// read the new one.
+    /// Another file or listing is current: zoomed, read the new crop while the
+    /// held one stays on screen; otherwise drop the held crop.
     fn zoom_page(&mut self, cx: &mut Context<Self>) {
         let (old, request) = self.zoom.page(!self.files.is_empty(), self.viewport.get());
         self.retire(old.map(|crop| crop.image));
@@ -1670,9 +1670,10 @@ impl Riffle {
                 self.retire(release.map(|crop| crop.image));
                 self.send_crop(request, cx);
             }
-            Arrived::Failed(e) => {
+            Arrived::Failed { error, release } => {
+                self.retire(release.map(|crop| crop.image));
                 let name = file_name(&self.files[self.pager.current()]);
-                self.fail(&format!("{name}: {e}"));
+                self.fail(&format!("{name}: {error}"));
             }
         }
         cx.notify();
@@ -1696,21 +1697,26 @@ impl Riffle {
         }));
     }
 
-    /// What the preview canvas paints while zoomed: the crop, over the
-    /// scaled preview when the file has a focus point.
+    /// What the preview canvas paints while zoomed: the held crop, over the
+    /// scaled preview when the file has a focus point and the crop, if any,
+    /// is the current page's.
     fn zoom_paint(&self) -> Option<zoom::Paint> {
         if !self.zoom.is_on() {
             return None;
         }
         let crop = self.zoom.crop();
-        let placeholder = self.image.clone().zip(self.zoom.preview()).and_then(
-            |(image, (focus, orientation))| {
-                let s = image.size(0);
-                let preview = (s.width.0 as u32, s.height.0 as u32);
-                let rect = zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
-                Some((image, rect))
-            },
-        );
+        let preview = self.zoom.preview().filter(|_| self.zoom.placeholder_fits());
+        let placeholder =
+            self.image
+                .clone()
+                .zip(preview)
+                .and_then(|(image, (focus, orientation))| {
+                    let s = image.size(0);
+                    let preview = (s.width.0 as u32, s.height.0 as u32);
+                    let rect =
+                        zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
+                    Some((image, rect))
+                });
         Some(zoom::Paint {
             placeholder,
             crop: crop.map(|c| (c.image.clone(), c.point)),
