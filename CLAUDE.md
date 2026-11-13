@@ -79,7 +79,7 @@ centers and nose tip, their eye and nose offsets and the eye window's score, the
 `crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
 like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
-formatting shared by the meta pane (`Metadata`, `metadata`) and the filter menu, `src/photolab.rs` the
+formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 `docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
@@ -121,7 +121,7 @@ non-recursive watch per expanded folder, `set` making the watched set equal to
 the given folders, each folder's burst debounced into one call of the `spawn`
 callback, and `with_released`, which a folder rename runs under), `src/ondemand.rs`
 the faces and the eye judgment of the shown file, read on demand rather than
-at scan time and touching neither the index nor `ReadSlots` (`read_faces`,
+at scan time and touching neither the index nor `ReadSlots` (`read_preview`, `read_faces`,
 `read_eyes`, whose `current` check stops a superseded judgment, and the
 `raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
@@ -145,7 +145,12 @@ on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
 the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
+loopback Streamable HTTP endpoint on `MCP_PORT` with its seven tools, started,
+stopped and switched on the caller's tokio runtime, each switch returning its
+`McpState`; `Bridge`, which hands each tool's `Request` to the app's send
+callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
+`mcp_enabled_setting`, the stored `mcpEnabled` rule), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -214,9 +219,9 @@ OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
 `sequence-done` events, `src/output.rs` the `outputs_of` command behind the
 strip's `Output` filter, over the backend's `output`, and
 `src/mcp.rs` the MCP
-companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
-key, its tools, and the bridge that asks the main window over the
-`mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
+companion over the backend's `mcp`, turned on by the `mcpEnabled` key: the
+bridge that asks the main window over the `mcp-request` event and the
+`mcp_reply` command, and the `mcp-state` emit, and `src/diagnostics.rs`
 the `log_frontend` command that writes the frontend's `uncaught-js:` and
 `invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
 current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's
@@ -237,7 +242,8 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key and the remembered filter, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
+sort key and the remembered filter, and writes them back in order on one thread
+(`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
@@ -245,13 +251,14 @@ to the listing `all` to give the `files` everything else indexes into),
 `filter.ts` less the genres: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
 `src/exif.rs` builds (a port of `exif.ts`); `Stored`, the
-`filter_setting` rule over the stored `filter`; `anchor_after_filter`, the
+`filter_setting` rule over the stored `filter`, and back (`stored`,
+`setting`); `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,
 `src/menu.rs` the status row's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
 `filter_rows`, a port of `index.html`'s `#sort-menu` and `#filter-menu`
-without the `Face focus` help; `apply`, what a click on an item does, for the
-session only; `Menus`, which one is open), which the window draws as
+without the `Face focus` help; `apply`, what a click on an item does, the
+window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),

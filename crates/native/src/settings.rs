@@ -5,7 +5,12 @@
 //! `settings.json`, which is only ever read; after that the two apps'
 //! settings diverge.
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::mpsc,
+    thread,
+    time::Duration,
+};
 
 use riffle_backend::{
     shortcuts::Keymap,
@@ -26,15 +31,107 @@ pub struct Settings {
     pub names: LabelNames,
     pub keymap: Keymap,
     pub auto_advance: bool,
-    /// The strip's order at startup; the native menu's changes are not
-    /// written back.
+    /// The strip's order at startup; the sort menu writes it back.
     pub sort: SortKey,
-    /// The strip's filter at startup, its remembered sections; likewise not
-    /// written back.
+    /// The strip's filter at startup, its remembered sections; the filter
+    /// menu writes them back.
     pub filter: Stored,
-    /// The store the values came from; `None` when it did not open, so
-    /// nothing is written.
-    pub store: Option<Store>,
+    /// The writes to the store the values came from; a no-op when it did not
+    /// open.
+    pub writes: Writes,
+}
+
+/// How long the quit handler waits for the settings writes.
+pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
+
+enum Write {
+    Set(String, Value),
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
+    )]
+    Delete(String),
+    Barrier(mpsc::Sender<()>),
+}
+
+/// The settings writes, applied to the store by one thread in the order they
+/// were given, so two quick changes of one key cannot land reversed. A failed
+/// write is logged and the in-memory value stands, as in the Tauri app.
+#[derive(Clone)]
+pub struct Writes {
+    jobs: Option<mpsc::Sender<Write>>,
+}
+
+impl Writes {
+    /// The writer of `store`; without one every write is a no-op.
+    fn spawn(store: Option<Store>) -> Self {
+        let jobs = store.map(|store| {
+            let (jobs, queued) = mpsc::channel::<Write>();
+            thread::Builder::new()
+                .name("settings-store".into())
+                .spawn(move || {
+                    for job in queued {
+                        let (key, written) = match job {
+                            Write::Set(key, value) => {
+                                let written = store.set(&key, &value);
+                                (key, written)
+                            }
+                            Write::Delete(key) => {
+                                let written = store.delete(&key);
+                                (key, written)
+                            }
+                            Write::Barrier(done) => {
+                                done.send(()).ok();
+                                continue;
+                            }
+                        };
+                        if let Err(e) = written {
+                            log::warn!("settings store: failed to write {key}: {e}");
+                        }
+                    }
+                })
+                .expect("spawn the settings store thread");
+            jobs
+        });
+        Self { jobs }
+    }
+
+    /// Whether the store opened, so the writes land.
+    pub fn is_open(&self) -> bool {
+        self.jobs.is_some()
+    }
+
+    pub fn set(&self, key: &str, value: Value) {
+        self.send(Write::Set(key.to_owned(), value));
+    }
+
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
+    )]
+    pub fn delete(&self, key: &str) {
+        self.send(Write::Delete(key.to_owned()));
+    }
+
+    fn send(&self, write: Write) {
+        if let Some(jobs) = &self.jobs {
+            jobs.send(write).ok();
+        }
+    }
+
+    /// Waits until every write given so far has run, at most `timeout`.
+    /// `false` when the wait timed out or the thread is gone; `true` without
+    /// a store.
+    pub fn drain(&self, timeout: Duration) -> bool {
+        let Some(jobs) = &self.jobs else {
+            return true;
+        };
+        let (done, reached) = mpsc::channel();
+        if jobs.send(Write::Barrier(done)).is_err() {
+            return false;
+        }
+        reached.recv_timeout(timeout).is_ok()
+    }
 }
 
 /// The settings in the store at `path` (`--settings`), else in
@@ -67,7 +164,7 @@ fn load_from(path: Option<PathBuf>, import: Option<&Path>, config: Option<&Path>
                 log::info!("settings store: new, {note}");
             }
             Settings {
-                store: Some(store),
+                writes: Writes::spawn(Some(store)),
                 ..from_values(&values)
             }
         }
@@ -134,25 +231,34 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .unwrap_or(true),
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
-        store: None,
+        writes: Writes::spawn(None),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Settings, load_from};
+    use super::{Settings, Writes, load_from};
     use crate::{
         datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
         filter::{FilterFlag, Stored},
         sort::SortKey,
     };
-    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
     use riffle_core::xmp::LabelNames;
-    use serde_json::json;
+    use serde_json::{Map, Value, json};
     use std::{
         fs,
         path::{Path, PathBuf},
+        time::Duration,
     };
+
+    /// What the existing store at `path` holds.
+    fn values(path: &Path) -> Map<String, Value> {
+        Store::open(path, || panic!("seeded an existing store"))
+            .unwrap()
+            .values()
+            .unwrap()
+    }
 
     fn write(path: &Path, text: &str) {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -195,7 +301,7 @@ mod tests {
         );
         let pick = s.keymap.bindings().into_iter().find(|b| b.action == "pick");
         assert_eq!(pick.unwrap().keys, ["k"]);
-        assert!(s.store.is_some());
+        assert!(s.writes.is_open());
     }
 
     #[test]
@@ -207,14 +313,14 @@ mod tests {
             Some(&dir.path().join("none.json")),
             None,
         );
-        for s in [malformed, missing] {
+        for (s, name) in [(malformed, "malformed"), (missing, "missing")] {
             assert_eq!(s.format, SidecarFormat::Xmp);
             assert_eq!(s.names, LabelNames::default());
             assert_eq!(s.keymap, Keymap::defaults());
             assert!(s.auto_advance);
             assert_eq!(s.sort, SortKey::Name);
             assert_eq!(s.filter, Stored::default());
-            assert!(s.store.unwrap().values().unwrap().is_empty());
+            assert!(values(&dir.path().join(format!("{name}.sqlite"))).is_empty());
         }
     }
 
@@ -243,9 +349,9 @@ mod tests {
     #[test]
     fn a_stored_recommended_is_not_rewritten_by_the_load() {
         let dir = tempfile::tempdir().unwrap();
-        let s = seeded(dir.path(), "s", r#"{"sortOrder":"recommended"}"#);
-        let values = s.store.unwrap().values().unwrap();
-        assert_eq!(values.get("sortOrder"), Some(&json!("recommended")));
+        drop(seeded(dir.path(), "s", r#"{"sortOrder":"recommended"}"#));
+        let stored = values(&dir.path().join("s.sqlite"));
+        assert_eq!(stored.get("sortOrder"), Some(&json!("recommended")));
     }
 
     #[test]
@@ -275,7 +381,7 @@ mod tests {
         );
         let s = load_from(Some(dir.path().join("s.sqlite")), None, Some(&config));
         assert_eq!(s.format, SidecarFormat::Xmp);
-        assert!(s.store.unwrap().values().unwrap().is_empty());
+        assert!(values(&dir.path().join("s.sqlite")).is_empty());
         assert!(!config.join(IDENTIFIER).join("settings.sqlite").exists());
     }
 
@@ -371,7 +477,42 @@ mod tests {
         write(&path, text);
         let s = load_from(Some(path.clone()), None, None);
         assert_eq!(s.format, SidecarFormat::Xmp);
-        assert!(s.store.is_none());
+        assert!(!s.writes.is_open());
         assert_eq!(fs::read_to_string(&path).unwrap(), text);
+    }
+
+    #[test]
+    fn the_writes_land_in_order_and_the_drain_waits_for_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(dir.path(), "s", r#"{"autoAdvance":false,"filter":{}}"#);
+        for i in 0..50 {
+            s.writes.set("sortOrder", json!(i));
+        }
+        s.writes.set("sortOrder", json!("rating"));
+        s.writes.set("labelNames", json!({"red": "Rot"}));
+        s.writes.delete("autoAdvance");
+        s.writes.delete("missing");
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        let stored = values(&dir.path().join("s.sqlite"));
+        assert_eq!(stored.get("sortOrder"), Some(&json!("rating")));
+        assert_eq!(stored.get("labelNames"), Some(&json!({"red": "Rot"})));
+        assert_eq!(stored.get("filter"), Some(&json!({})));
+        assert!(!stored.contains_key("autoAdvance"));
+    }
+
+    #[test]
+    fn without_a_store_every_write_is_a_no_op() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.json");
+        let text = r#"{"sidecarFormat":"both"}"#;
+        write(&path, text);
+        let s = load_from(Some(path.clone()), None, None);
+        s.writes.set("sortOrder", json!("rating"));
+        s.writes.delete("sidecarFormat");
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+        let none = Writes::spawn(None);
+        none.set("sortOrder", json!("rating"));
+        assert!(none.drain(Duration::ZERO));
     }
 }

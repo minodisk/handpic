@@ -4,6 +4,7 @@ pub mod exif;
 pub mod folders;
 pub mod index;
 pub mod listing;
+pub mod mcp;
 pub mod ondemand;
 pub mod output;
 pub mod perf;

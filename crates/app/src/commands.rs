@@ -16,7 +16,10 @@ use tauri_plugin_store::StoreExt;
 
 use riffle_backend::listing::Listing;
 pub(crate) use riffle_backend::listing::{canonicalize, read_listing, stat_sidecars};
-use riffle_backend::ondemand::{raw_only, read_eyes, read_faces, EyesResponse, FacesResponse};
+use riffle_backend::mcp::mcp_enabled_setting;
+use riffle_backend::ondemand::{
+    raw_only, read_eyes, read_faces, read_preview, EyesResponse, FacesResponse,
+};
 
 use crate::diagnostics::invariant;
 use crate::index::{self, FileStat, Index, IndexedFile};
@@ -234,15 +237,6 @@ fn take_listing(
     cached.take().map(|c| c.listing)
 }
 
-/// Extract a file's IFD0 preview JPEG along with the Orientation, reading only
-/// the bounded prefix the metadata and the preview need rather than the whole
-/// 48 MB file.
-pub(crate) fn read_preview(path: &Path) -> Result<(u16, Vec<u8>), String> {
-    let (arw, jpeg) =
-        riffle_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok((arw.orientation, jpeg))
-}
-
 /// Open the native folder picker and resolve once the user answers, or `None`
 /// if they cancel.
 ///
@@ -329,11 +323,6 @@ pub fn load_settings(
 /// The stored `autoAdvance` value; missing or non-boolean means on.
 fn auto_advance_setting(value: Option<&Value>) -> bool {
     value.and_then(Value::as_bool).unwrap_or(true)
-}
-
-/// The stored `mcpEnabled` value; missing or non-boolean means off.
-fn mcp_enabled_setting(value: Option<&Value>) -> bool {
-    value.and_then(Value::as_bool).unwrap_or(false)
 }
 
 /// The stored `aiEnabled` value; missing or non-boolean means off.
@@ -553,16 +542,7 @@ pub async fn dropped_folder(path: String) -> Result<Option<String>, String> {
     .map_err(|e| e.to_string())
 }
 
-pub(crate) use crate::exif::Metadata;
-
-pub(crate) fn read_metadata(path: &Path) -> Result<Metadata, String> {
-    let name = path
-        .file_name()
-        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    let arw =
-        riffle_core::reader::read_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    Ok(crate::exif::metadata(name, &arw.shot))
-}
+use crate::exif::{read_metadata, Metadata};
 
 /// The metadata of one file, read from the same bounded prefix as `preview`.
 #[tauri::command]

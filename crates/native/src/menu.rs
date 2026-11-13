@@ -234,7 +234,7 @@ fn flip<T: Eq + std::hash::Hash>(set: &mut std::collections::HashSet<T>, value: 
 }
 
 /// Apply a click on an item: a toggle flips its item, `Reset` clears every
-/// section, a sort pick sets the key. Nothing is written.
+/// section, a sort pick sets the key. The caller writes what changed.
 pub fn apply(filter: &mut FilterState, sort: &mut SortKey, action: Action) {
     match action {
         Action::Toggle(toggle) => match toggle {

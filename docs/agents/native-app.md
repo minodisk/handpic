@@ -75,6 +75,13 @@ in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
 `&Runs` and a `progress(done, total)` callback; the Tauri commands keep the
 writer flush, the `Scans` lock and its `SCAN_RUNNING` refusal, the
 `trash-progress` emit and the log line around them.
+The MCP companion's server (`mcp::Mcp`) takes a `Bridge` built over a send
+callback and returns each switch's `McpState`; the Tauri app's `mcp.rs` owns
+`mcp-request`, the main-window check and the `mcp-state` emit. The server
+spawns its tasks with a bare `tokio::spawn`, so `Mcp::switch` and `Mcp::stop`
+must run inside a tokio runtime: the Tauri app calls them from async commands,
+a task on `tauri::async_runtime` and `tauri::async_runtime::block_on`, which
+all enter Tauri's runtime; the native app has to own one.
 
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.
@@ -111,8 +118,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 
 The folder-open sidecar pass (`sidecar::reconcile_of`, with `SidecarError`
 and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
-`exif::metadata(name, &shot)`) and the stored `labelNames` value
-(`sidecar::label_names_setting` / `label_names_value`) moved out of
+`exif::metadata(name, &shot)`), the stored `labelNames` value
+(`sidecar::label_names_setting` / `label_names_value`), the metadata and
+preview reads (`exif::read_metadata`, `ondemand::read_preview`) and the stored
+`mcpEnabled` value (`mcp::mcp_enabled_setting`) moved out of
 `crates/app/src/commands.rs` so the native app can call them; the Tauri
 commands call them from there. `raw_only` stayed in `crates/app`: the native
 app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
@@ -155,8 +164,20 @@ the paths tried).
 The store is never deleted or recreated, unlike the index (a cache): a file
 that is not a database, or one with a newer `user_version`, is an error left
 as it was, and the app runs on the defaults (`Xmp`, the English names, the
-default keymap, auto-advance on) with `Settings::store` `None`, so nothing is
-written; the startup `settings:` line ends `store=none`.
+default keymap, auto-advance on) with no store behind `Settings::writes`, so
+nothing is written; the startup `settings:` line ends `store=none`.
+
+Every write goes through `Settings::writes` (`settings::Writes`): a
+`set(key, value)` or `delete(key)` is sent to one `settings-store` thread,
+which applies them to the store in the order given, so two quick changes of
+one key cannot land reversed, and never on the main thread. A failed write is
+logged (`settings store: failed to write <key>`) and the in-memory value
+stands, as in the Tauri app. `App::on_app_quit` drains them (`drain`, at most
+`settings::DRAIN_TIMEOUT`) in a handler of its own, registered whether or not
+the index opened (`quit: settings writes drained=…`). One thread with a
+channel was taken over `viewed.rs`'s `Latest`: a `Latest` per key would need
+one per key and a way to wait for them all on quit, where the channel's
+barrier gives the drain for free.
 
 - Rule: every debug or hand-check run passes `--settings` with a test store
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
@@ -379,7 +400,14 @@ at its right end (`menu.rs` holds the rows, the clicks' `apply` and `Menus`;
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open. A menu item runs
 `menu::apply`, then `refilter` on the current file with the scroll not kept,
-so a reorder scrolls the current file into view. Nothing is written.
+so a reorder scrolls the current file into view. `menu_action` then writes
+`sortOrder` (`SortKey::setting`) when the sort key changed, and `filter`
+(`FilterState::stored`, then `Stored::setting`: the remembered sections, each
+in the menu's item order, never `Output` or the EXIF checks) when a remembered
+section changed, `Reset` included; a change of `Output` or EXIF alone writes
+nothing. Nothing is written at load, so a seeded `recommended` stays stored
+until the user picks an order, and a view-only folder, whose sort button is
+dimmed, shows capture order and keeps the stored key.
 
 - Rule: the filter menu ends with the folder's EXIF sections, after `Output`
   (or `Eyes` without an export answer), in the Tauri order and headings
@@ -499,6 +527,43 @@ yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
+
+### A held key draws each stale preview before chasing the current file (Inferred)
+
+The pager keeps one preview read in flight. When one read + decode outlasts
+the key repeat, every result during a hold is another file's; throwing those
+away left the fit view blank until the key was released. `Pager::finish`
+now decides what a result leads to: the current file's is shown (or its
+failure) and clears the in-flight marker; another file's is drawn when its
+read succeeded and the current file's image is not already on screen (A shown,
+press to B, back to A before B arrives: drawing B would flash the wrong file),
+and then the current index is requested, staying in flight. A stale failure is
+neither shown nor printed. The drawn frame therefore lags the cursor by at most
+one load, the files in between are still skipped, and the number of reads per
+key sequence is unchanged.
+
+A stale frame sets the status line, `self.shown`, the image, `marks.show` and
+the paint hold, and nothing else. `self.shown` names the file whose image is on
+screen because `refilter` rewrites the status line's `n/total` from it and
+re-requests when it is not the current file, and the meta pane follows it.
+`marks.show` follows the image too: `Marks::mark`, `wanted_faces` and
+`wanted_eyes` draw and ask only when the shown file is the current one, so a
+stale frame gets no `f` overlay; left at the previous file, stepping back onto
+it while a load is out would put its marks on the stale image. `zoom.shown` is
+the current file's only, since it stamps the facts with the current page's
+`seq`, so `zoom.preview()` stays `None` for a stale frame and the 1:1 canvas
+never uses it as the placeholder. The fit view's peaking layer is keyed by the
+image id and drawn size, so a stale frame gets its own edges or none.
+
+- Rule: the on-demand analysis (`analyze_current`), the dwell and viewed mark
+  (`start_dwell`), the keypress (`self.key`) and the latency `page` line
+  (`self.pending`) are the current file's result's only. A `page` line is
+  still recorded only for the current file, so the "4-6 pages in 5 s" of a
+  held RAF key below counts current-file pages, not frames drawn.
+- Rule: stepping back onto the file whose stale frame is on screen still
+  reloads it; its analysis, dwell and `page` line wait for that reload.
+- Pending: a held key flipping frames and the release showing the current file
+  with its overlays is unverified by hand on Windows.
 
 ### Pass 2 runs on pass 1's thread (Inferred)
 

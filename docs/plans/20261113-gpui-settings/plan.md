@@ -253,7 +253,7 @@ native app no longer depends on the Tauri app for any of them.
       `SortKey::from_setting`, `Stored::from_setting`).
     - A stored `"recommended"` sort order still reads as capture order and
       must not be rewritten by the load.
-- [ ] Step 2: Persist the strip's filter and sort order
+- [x] Step 2: Persist the strip's filter and sort order
   - Done when:
     - `settings.rs` has the write path every later step uses: a handle that
       takes `(key, value)` or a delete, applies them to the store off the
@@ -621,3 +621,4 @@ native app no longer depends on the Tauri app for any of them.
 ## Progress
 
 - (2026-11-13) Step 1 complete
+- (2026-11-13) Step 2 complete
