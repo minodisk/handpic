@@ -3765,7 +3765,6 @@ dependencies = [
  "dirs",
  "log",
  "mozjpeg",
- "notify",
  "rfd",
  "riffle-backend",
  "riffle-core",
@@ -3785,7 +3784,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower",
- "trash",
 ]
 
 [[package]]

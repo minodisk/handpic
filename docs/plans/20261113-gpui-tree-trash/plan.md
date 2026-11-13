@@ -216,7 +216,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 
 ## Steps
 
-- [ ] Step 1: Move the folder tree's and the trash commands' Tauri-free pieces into the backend
+- [x] Step 1: Move the folder tree's and the trash commands' Tauri-free pieces into the backend
   - Done when:
     - `crates/backend/src/folders.rs` holds `FolderNode`, `Folder` (fields
       public, `serde::Serialize` kept), `pub fn roots(home: Option<PathBuf>)
@@ -750,3 +750,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 
 ## Progress
 
+- (2026-11-13) Step 1 complete

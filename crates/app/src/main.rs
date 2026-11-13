@@ -806,7 +806,7 @@ fn main() {
             app.manage(trash::Runs::default());
             app.manage(commands::AppListing::default());
             app.manage(watch::spawn(app.handle().clone()));
-            app.manage(treewatch::TreeWatch::spawn(app.handle().clone()));
+            app.manage(treewatch::spawn(app.handle().clone()));
             commands::spawn_eviction(app.handle().clone());
             app.manage(update::UpdateRun::default());
             update::spawn(app.handle().clone(), false);

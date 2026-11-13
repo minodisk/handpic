@@ -28,7 +28,7 @@ use tauri::{Emitter, Manager};
 
 use crate::commands::canonicalize;
 use crate::sidecar::SidecarFormat;
-use crate::{datefolder, folders, index};
+use crate::{datefolder, index};
 
 /// The pattern used when none is stored: `2026/2026-10-24`.
 pub const DEFAULT_PATTERN: &str = "%Y/%F";
@@ -210,7 +210,7 @@ pub struct Photo {
 }
 
 /// Every RAW and JPEG under `dir`, recursively, sorted by path, each RAW
-/// with the sidecars next to it. Symlinks are followed as `folders::kind`
+/// with the sidecars next to it. Symlinks are followed as `listing::kind`
 /// follows them (a folder reached twice is walked once), and hidden folders
 /// are skipped as the folder tree skips them.
 pub fn walk(dir: &Path) -> Result<Vec<Photo>, String> {
@@ -224,13 +224,13 @@ pub fn walk(dir: &Path) -> Result<Vec<Photo>, String> {
         let entries = fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let mut files = Vec::new();
         for entry in entries.flatten() {
-            let Some((is_dir, is_file)) = folders::kind(&entry) else {
+            let Some((is_dir, is_file)) = riffle_backend::listing::kind(&entry) else {
                 continue;
             };
             let path = entry.path();
             if is_dir {
                 if !entry.file_name().to_string_lossy().starts_with('.')
-                    && !folders::is_hidden(&entry)
+                    && !riffle_backend::folders::is_hidden(&entry)
                 {
                     dirs.push(path);
                 }

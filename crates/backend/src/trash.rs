@@ -1,15 +1,16 @@
 //! Moving files of a folder to the OS trash, RAW first and its sidecars
 //! after. The grouping and the per-file loop are pure so they can be tested
-//! without touching the real Trash; only `commands::trash_files` supplies
-//! the mover that calls into the `trash` crate.
+//! without touching the real Trash; only `trash_listed` and `redo_run` (for
+//! `commands::trash_files` and `commands::trash_rejected_redo`) supply the
+//! mover that calls into the `trash` crate.
 //! Each run that moved something is recorded in `Runs`, and `restore` puts
-//! a recorded run back for `commands::trash_rejected_undo`, again through
-//! closures so the tests never touch the real Trash. What an undo brought
-//! back is kept in `Runs` too, and `redo` moves exactly those files to the
-//! Trash again for `commands::trash_rejected_redo`.
+//! a recorded run back for `undo_run` (`commands::trash_rejected_undo`),
+//! again through closures so the tests never touch the real Trash. What an
+//! undo brought back is kept in `Runs` too, and `redo` moves exactly those
+//! files to the Trash again.
 //! `delete_for_good` runs the same grouping and loop with a remover instead
-//! of a mover, for `commands::delete_files`: nothing is recorded, as nothing
-//! can come back.
+//! of a mover, for `delete_listed` (`commands::delete_files`): nothing is
+//! recorded, as nothing can come back.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -806,6 +807,180 @@ pub fn newest_by_path(items: Vec<::trash::TrashItem>) -> HashMap<String, ::trash
         }
     }
     newest
+}
+
+/// Move `paths`, files of the folder `dir` as the listing gave them, to the
+/// OS trash in their order, each RAW together with the `.xmp` and `.dop`
+/// sidecars that exist for it and a JPEG alone (see `groups_of`), and record
+/// the run in `runs`. A path outside `dir` fails without being moved, one
+/// gone meanwhile fails too. `progress` is called after each group moved, or
+/// each chunk on Windows (see `move_groups`).
+pub fn trash_listed(
+    dir: &str,
+    paths: &[String],
+    runs: &Runs,
+    progress: impl FnMut(usize, usize),
+) -> Result<Summary, String> {
+    let dir = crate::listing::canonicalize(dir);
+    let listing = crate::listing::read_listing(Path::new(&dir), Some(SidecarFormat::Both))?;
+    let (groups, foreign) = groups_of(
+        Path::new(&dir),
+        paths,
+        &crate::listing::stat_sidecars(&listing.sidecars),
+    );
+    let (mut summary, moved) = move_groups(groups, progress);
+    summary.failed.extend(foreign);
+    summary.run_id = runs.record(moved);
+    Ok(summary)
+}
+
+/// Delete `paths`, files of the folder `dir` as the listing gave them, for
+/// good (see `delete_for_good`): grouped and ordered as `trash_listed` moves
+/// them, file by file, nothing recorded. `progress` is called after each
+/// group.
+pub fn delete_listed(
+    dir: &str,
+    paths: &[String],
+    progress: impl FnMut(usize, usize),
+) -> Result<Summary, String> {
+    let dir = crate::listing::canonicalize(dir);
+    let listing = crate::listing::read_listing(Path::new(&dir), Some(SidecarFormat::Both))?;
+    Ok(delete_for_good(
+        Path::new(&dir),
+        paths,
+        &listing.files,
+        &crate::listing::stat_sidecars(&listing.sidecars),
+        remove_one,
+        progress,
+    ))
+}
+
+/// Move every file the run `run_id` of `runs` moved back to where it came
+/// from, RAW before its sidecars, never overwriting (see `restore`). An
+/// unknown run is `RUN_GONE`; a run is forgotten once undone, whatever came
+/// back, and what came back (the `Restored`'s `back`) is kept in `runs` for
+/// `redo_run` under the same id.
+pub fn undo_run(runs: &Runs, run_id: u64) -> Result<Restored, String> {
+    let run = runs.take(run_id).ok_or_else(|| RUN_GONE.to_string())?;
+    let restored = restore_run(&run);
+    runs.undone(run.id, restored.back.clone());
+    Ok(restored)
+}
+
+/// Move the files the undo of run `run_id` brought back to the Trash again,
+/// exactly those, RAW before its sidecars (see `redo`); a file gone
+/// meanwhile is a failure. The move is recorded in `runs` as a new run, whose
+/// id the `Summary` carries. An unknown run is `UNDONE_GONE`; it is forgotten
+/// once redone. `progress` is called after each group moved, or each chunk
+/// on Windows (see `move_again`).
+pub fn redo_run(
+    runs: &Runs,
+    run_id: u64,
+    progress: impl FnMut(usize, usize),
+) -> Result<Summary, String> {
+    let paths = runs
+        .take_undone(run_id)
+        .ok_or_else(|| UNDONE_GONE.to_string())?;
+    let (mut summary, moved) = move_again(paths, progress);
+    summary.run_id = runs.record(moved);
+    Ok(summary)
+}
+
+/// Restore `run` from the Trash listed once, each file matched by its
+/// original path (the newest item of a path) and restored on its own, so one
+/// missing or colliding item cannot fail the others. The Trash puts a file
+/// back at its original path, and the Windows Recycle Bin fails when that
+/// folder is gone, so for a file whose folder was renamed since the missing
+/// folders are created first (`create_missing`), the file is put back
+/// and then moved into the renamed folder (`relocate`), which removes
+/// exactly the folders created.
+#[cfg(not(target_os = "macos"))]
+fn restore_run(run: &TrashRun) -> Restored {
+    let items = match ::trash::os_limited::list() {
+        Ok(items) => items,
+        Err(e) => return Restored::none(run, &format!("could not list the Trash: {e}")),
+    };
+    let mut items = newest_by_path(items);
+    restore(
+        run,
+        |trashed| items.remove(&trash_key(&trashed.path)),
+        Path::exists,
+        |trashed, item| {
+            let created = match (&trashed.restore_to, trashed.path.parent()) {
+                (Some(_), Some(parent)) => create_missing(parent)?,
+                _ => Vec::new(),
+            };
+            if let Err(e) = ::trash::os_limited::restore_all([item]) {
+                remove_created(&created);
+                return Err(match e {
+                    ::trash::Error::RestoreCollision { .. } => ALREADY_EXISTS.to_string(),
+                    e => e.to_string(),
+                });
+            }
+            match &trashed.restore_to {
+                Some(to) => relocate(&trashed.path, to, &created),
+                None => Ok(()),
+            }
+        },
+    )
+}
+
+/// Restore `run` from the locations its files got in the Trash, recorded by
+/// `trash_one`.
+#[cfg(target_os = "macos")]
+fn restore_run(run: &TrashRun) -> Restored {
+    restore_recorded(run)
+}
+
+/// The mover of `trash_listed`. On macOS it goes through
+/// `NSFileManager` itself to keep where the file went; the crate's default
+/// there drives the Finder through AppleScript, which needs Automation
+/// permission.
+#[cfg(target_os = "macos")]
+pub fn trash_one(path: &Path) -> Result<Option<PathBuf>, String> {
+    trash_file(path).map(Some)
+}
+
+/// The mover of `trash_listed`: the Trash is listed at undo time, so
+/// where the file went is not kept.
+#[cfg(not(target_os = "macos"))]
+pub fn trash_one(path: &Path) -> Result<Option<PathBuf>, String> {
+    ::trash::delete(path)
+        .map(|()| None)
+        .map_err(|e| e.to_string())
+}
+
+/// The chunk mover of `trash_listed` and `redo_run`: one shell
+/// operation for all of `paths`.
+#[cfg(windows)]
+fn trash_many(paths: &[PathBuf]) -> Result<(), String> {
+    ::trash::delete_all(paths).map_err(|e| e.to_string())
+}
+
+/// Move `groups` to the Trash in chunks: a shell operation costs far more
+/// than the files it moves.
+#[cfg(windows)]
+fn move_groups(groups: Vec<Group>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+    run_chunked(groups, Path::exists, trash_many, trash_one, progress)
+}
+
+/// Move `groups` to the Trash one file at a time: macOS needs where each file
+/// went, and `::trash::delete_all` is a loop of single moves on Linux.
+#[cfg(not(windows))]
+fn move_groups(groups: Vec<Group>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+    run(groups, trash_one, progress)
+}
+
+/// `redo` of `paths`, chunked like `move_groups`.
+#[cfg(windows)]
+fn move_again(paths: Vec<PathBuf>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+    redo_chunked(paths, Path::exists, trash_many, trash_one, progress)
+}
+
+/// `redo` of `paths`, one file at a time like `move_groups`.
+#[cfg(not(windows))]
+fn move_again(paths: Vec<PathBuf>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+    redo(paths, Path::exists, trash_one, progress)
 }
 
 #[cfg(test)]

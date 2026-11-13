@@ -20,7 +20,7 @@ use serde::Serialize;
 use tauri::Manager;
 
 use crate::commands::{
-    canonicalize, format_bytes, read_listing, stat_sidecars, trash_one, AppIndex, AppLabelNames,
+    canonicalize, format_bytes, read_listing, stat_sidecars, AppIndex, AppLabelNames,
     AppSidecarFormat, AppWriter, Scans, SCAN_RUNNING, SIZE_BASE,
 };
 use crate::index::{self, DirtyRow, Index};
@@ -419,7 +419,7 @@ pub async fn delete_sidecars_run(
         let format = *index::lock(&app.state::<AppSidecarFormat>().0);
         let dir = canonicalize(&dir);
         let doomed = doomed(&dir, format)?;
-        let (mut summary, moved, cleared) = delete(doomed, trash_one);
+        let (mut summary, moved, cleared) = delete(doomed, trash::trash_one);
         summary.run_id = app.state::<trash::Runs>().record(moved);
         if let Some(index) = &app.state::<AppIndex>().0 {
             index::lock(index).clear_judgments(&dir, &cleared)?;

@@ -67,7 +67,14 @@ of non-path dependencies. RAF decode measured about 99 ms without SIMD and
 `riffle-backend` serves both apps, so it reports through callbacks:
 `watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
 take the `&Watch`. Each app's own thin module owns the event name and payload;
-in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`.
+in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
+`crates/app/src/treewatch.rs` with `tree-changed` over
+`treewatch::TreeWatch::spawn(on_changed)`, `TreeWatch::set(dirs)` and
+`treewatch::with_released(&TreeWatch, ..)`. The trash commands' bodies
+(`trash::trash_listed`, `delete_listed`, `undo_run`, `redo_run`) take the
+`&Runs` and a `progress(done, total)` callback; the Tauri commands keep the
+writer flush, the `Scans` lock and its `SCAN_RUNNING` refusal, the
+`trash-progress` emit and the log line around them.
 
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.
@@ -109,6 +116,11 @@ and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
 `crates/app/src/commands.rs` so the native app can call them; the Tauri
 commands call them from there. `raw_only` stayed in `crates/app`: the native
 app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
+The folder tree's listing (`folders::roots(home)`, `list(dir)`,
+`REVEAL_LABEL`, `is_hidden`) moved the same way out of
+`crates/app/src/folders.rs`; the home directory is the caller's (Tauri's
+path resolver there), and the reveal itself is not shared: the Tauri app
+keeps the opener plugin, the native app has GPUI's `App::reveal_path`.
 
 - Rule: a Tauri-free helper the native app needs moves into the backend, it is
   not copied, so the two apps cannot drift in what they read and show.
