@@ -2,7 +2,7 @@
 //! Tauri `step`: each entry is a batch of files with their state before the
 //! change, undone as one.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use crate::judgment::State;
 
@@ -194,6 +194,17 @@ impl Undo {
         }
     }
 
+    /// The files in `gone` were deleted for good: drop their judgments
+    /// from both histories, and every batch left empty, as `withoutPaths`
+    /// and `isEmptyBatch` do. Undoing one would judge a path that no
+    /// longer exists.
+    pub fn without_paths(&mut self, gone: &HashSet<String>) {
+        for history in [&mut self.undo, &mut self.redo] {
+            history.update(|batch| batch.judged.retain(|j| !gone.contains(&j.path)));
+            history.remove_where(|batch| batch.judged.is_empty());
+        }
+    }
+
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
@@ -205,7 +216,7 @@ mod tests {
     use super::{Batch, Change, History, Judged, Undo, step};
     use crate::judgment::State;
     use riffle_core::Flag;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
     fn stars(n: u8) -> State {
         State {
@@ -469,5 +480,26 @@ mod tests {
             .unwrap();
         view.undo.forget(stepped.id, "1");
         assert_eq!(view.redo(), None);
+    }
+
+    #[test]
+    fn dropping_deleted_paths_empties_a_batch_of_them_in_both_histories() {
+        let mut undo = Undo::new();
+        undo.record(vec![judged("1", stars(1)), judged("2", stars(2))]);
+        undo.record(vec![judged("1", stars(3))]);
+        undo.record(vec![judged("1", stars(4))]);
+        let current = |_: &str| State::default();
+        assert!(undo.undo(|_| true, current).is_some());
+        undo.without_paths(&HashSet::from(["1".to_owned()]));
+        assert_eq!(undo.redo(|_| true, current), None);
+        let left = undo.undo(|_| true, current).unwrap();
+        assert_eq!(
+            left.changes
+                .iter()
+                .map(|c| c.path.as_str())
+                .collect::<Vec<_>>(),
+            vec!["2"]
+        );
+        assert_eq!(undo.undo(|_| true, current), None);
     }
 }

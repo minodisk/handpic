@@ -200,6 +200,42 @@
   backslash again (and a Python heredoc turned `\n` in `\notepad.exe` into a
   newline in a doc edit); write such text with the Write or Edit tools.
 
+## Step 7: Move to Trash… and Delete Permanently…
+
+- `trash.rs` does not port `shownPath` again: the dialog shows no path, and
+  `context::shown_path` (Step 6) is the one copy. The sidecar variants of
+  `trashedStatus` (`what = "sidecars"`) are part 2's (`Delete Sidecars…`);
+  `trashed_status(mode, &Summary)` takes the backend's `Summary` directly.
+- `IdleGate` is generic over the held operation (`IdleGate<trash::Target>`)
+  rather than holding closures: a closure over `&mut Riffle` cannot be
+  stored in the view. `request(label, op, busy)` returns the op to run now;
+  the Tauri `cancel` callback has no user yet (part 2's rename), so a
+  replaced or discarded op is simply returned / dropped, and the cancel
+  cases of `idle.test.ts` became "the replaced one is never drained".
+- The gate's "busy" is `Resync::busy`, not `scan_status.scanning()`: the
+  Tauri `scanRunning` is set before `scan_folder`'s listing, and the native
+  listing (reconcile, sidecar pass) is as much a race with a move as the
+  scan is. A run held during the listing is canceled in `opened` right after
+  `Scan::start`, as the Tauri `start_scan` `.then` does.
+- `ClickEvent::click_count()` is 1 for a keyboard click at the pinned rev,
+  not the DOM's 0, so the run button's handler passes 0 when
+  `is_keyboard()`. The buttons have no `tab_index`, so no keyboard click
+  reaches them anyway; `tab` / Enter / Space are `TrashFlow::key`'s.
+- The guard against a listing mid-run: `relist` returns while in flight,
+  `open` defers into `deferred_open` (only the tree can open then: the
+  dialog occludes the window during a run it owns, so this is a drained
+  held run), a watcher change and `Refresh` are deferred by `Resync::hold`,
+  and `TreeChanged` lists only a tree folder. The run's end then either
+  opens the deferred folder or `Resync::open` + `relist` once.
+- The trashed status goes to `step_note` (the pane line under the meta
+  rows), not `status`: the re-listing reads the current preview again and
+  `loaded` rewrites `status`, so the line would vanish at once.
+- Python on Windows writes `\r\n` in text mode; the first `main.rs` edit
+  turned four files CRLF. Use `newline=''` on `open`, or `sed -i 's/\r$//'`
+  afterwards. A long Python heredoc through `bash -c` also failed to parse
+  (`unexpected EOF while looking for matching '`); a script file in the
+  scratchpad run with `python <file>` worked.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
@@ -386,3 +422,40 @@
      label groups.
   9. The tree's right-click menu near the window's bottom edge opens above
      the pointer (it flips now instead of only snapping).
+- **Pending manual check (Step 7, Windows).** Basis: Step 7's Done-when;
+  the dialog, its keys and clicks, the Recycle Bin and the cancel of a
+  running scan cannot be driven headless. The step's checkbox was ticked on
+  the automated criteria (`trash.rs`, `idle.rs`, `history.rs` and
+  `resync.rs` tests, `mise run ci`, `mise run native:check`). Setup: copy
+  ten or so ARWs, a few with both a `.xmp` and a `.dop` next to them, into
+  `D:\Photos\tests\20261113-gpui-tree-trash\trash\`, and a few hundred into
+  `...\trash-large\`; `cargo build` in `crates/native` (rename a locked
+  `riffle-native.exe` aside, never kill it); run with a fresh `--index` and
+  an explicit `--settings` under `D:\Photos\tests\20261113-gpui-tree-trash\`.
+  Trash and delete only these copies. Steps and expected results:
+  1. On `...\trash`, once the scan is over, right-click a RAW that has a
+     `.xmp` and a `.dop`, pick `Move to Trash…`: the dialog says `Move to
+     Trash` / `Move 1 file to the Trash?` with `Move to Trash` (outlined) and
+     `Cancel`; `tab` moves the outline to `Cancel` and back; `enter`
+     confirms. The three files are in the Recycle Bin, the strip moves to
+     the neighbour, the pane says `Moved 1 file to the Trash`, and the log
+     has a `trash: moved=1 failed=0 run_id=Some(..)` line.
+  2. Select three cells, right-click one: the menu says `Move 3 Files to
+     Trash…`; the dialog's line is `Move 3 files to the Trash?`; `escape`
+     closes it and nothing moves; `Cancel` does the same.
+  3. Right-click a cell, `Delete Permanently…`: the dialog opens with
+     `Cancel` outlined; `tab` to `Delete Permanently`, then `enter` and
+     `space` do nothing, a double-click on `Delete Permanently` does nothing,
+     one click deletes. The file and its sidecars are gone and not in the
+     Recycle Bin; the pane says `Deleted 1 file`; a judgment made on it
+     before is no longer undoable (`ctrl+z` skips it).
+  4. While the dialog is open, `q`, the judgment keys, `ctrl+,` and clicks on
+     the tree, the strip and the status row's menus do nothing.
+  5. Open `...\trash-large` on a fresh `--index`; during pass 1 (`scanning
+     n/N` in the status line) pick `Move to Trash…` on one file and confirm:
+     the dialog closes at once, the pane says `Move to Trash: waiting for
+     the scan to finish`, the scan ends early, then `moving to Trash 0 / 1`
+     shows briefly, the file goes, the folder re-lists and the scan resumes
+     for the files the canceled pass left (`scanning` again).
+  6. Repeat 5 but open another folder under `D:\Photos\tests\` from the tree
+     before the scan ends: nothing is moved and the waiting note goes.

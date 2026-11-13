@@ -94,6 +94,12 @@ pub enum Event {
     },
     /// A tool call of the MCP companion for the view to answer.
     Mcp(riffle_backend::mcp::Request),
+    /// How far the move to the Trash or the delete in flight got.
+    TrashProgress {
+        mode: crate::trash::Mode,
+        done: usize,
+        total: usize,
+    },
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its
@@ -262,6 +268,14 @@ impl Running {
         }
     }
 
+    /// `Scan::cancel` on the held scan, which stays held: it still ends
+    /// through `Done` and `FacesDone`.
+    pub fn cancel(&self) {
+        if let Some(scan) = self.held().as_ref() {
+            scan.cancel();
+        }
+    }
+
     /// `Scan::stop_within` on the held scan; true with none held.
     pub fn stop_within(&self, timeout: Duration) -> bool {
         self.take().is_none_or(|scan| scan.stop_within(timeout))
@@ -385,6 +399,12 @@ impl Scan {
     /// The files the scan takes first.
     pub fn focus(&self, paths: Vec<String>) {
         self.focus.set(paths);
+    }
+
+    /// Cancel without waiting: the workers finish the stage they are on and
+    /// the thread still sends `Done` and `FacesDone`.
+    pub fn cancel(&self) {
+        self.cancel.store(true, Ordering::Relaxed);
     }
 
     /// Cancel and wait for the thread to end.
