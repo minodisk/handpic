@@ -819,11 +819,54 @@ resize (Sobel 4-6 ms).
 
 It exists in `gpui_windows`; nothing has exercised it yet.
 
-### The native folder picker is `cx.prompt_for_paths` (Measured)
+### A launch without a folder shows only the tree (Inferred)
 
-It takes `PathPromptOptions`. With `directories: true` and `files: false` it
-is the OS folder dialog; Enter on a typed path navigates into the folder, and a
-second Enter selects it.
+`start` opens the command line's folder, if any, and nothing else: the OS
+folder picker (`cx.prompt_for_paths`) is no longer shown at launch, and a
+folder is opened from the left pane's tree. With no folder open the window
+shows the tree, an empty preview and strip, and `no folder` on the status
+line; every handler already tolerated `dir: None` and an empty `files` (the
+pager's `go` and `request` are no-ops at length 0, `judge` and `step` need a
+current path, `zoom::toggle` needs files, the strip's hit test finds no cell).
+
+When it was still used, `cx.prompt_for_paths` with `PathPromptOptions {
+directories: true, files: false }` was the OS folder dialog; Enter on a typed
+path navigated into the folder, and a second Enter selected it (Measured).
+
+### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
+
+The left pane (220 px, the Tauri `#side`) sits beside the preview canvas and
+above the strip, which still spans the window, so `strip_clicked` still takes
+the event's window `x` as the strip's. Its rows are `tree::Tree::rows`,
+rebuilt into the view's `tree_rows` whenever the tree changes (never in
+`render`), and drawn by a `uniform_list` over them: it lays out only the rows
+on screen, its rows are plain `div`s with their own click listeners (the
+expander's `on_click` stops propagation so the row's open does not run), and
+its `UniformListScrollHandle::scroll_to_item(.., ScrollStrategy::Nearest)` is
+what the reveal and the tree's keyboard scroll a row into view with. A
+`canvas` like the strip's would need its own hit testing and scroll model; the
+strip needed one because `uniform_list` is vertical only.
+
+- Rule: tree nodes are keyed by the tree's own spelling (the root's, then one
+  separator per level), never by the canonical `\\?\` path the index uses.
+  The open folder's row is found with `tree::relation`, case ignored on
+  Windows and macOS (`tree::IGNORE_CASE`).
+- Rule: every open (`open`, from the command line or the tree) bumps the
+  `opens` counter and reveals the folder: the chain from its root (a root
+  added for a folder none holds) is expanded and listed one level at a time on
+  `background_spawn`, respelled from each listing, and the end row is
+  highlighted and scrolled to. A step that finds `opens` moved on stops, so a
+  later open owns the tree. An open before the roots have been read waits in
+  `reveal_wanted`.
+- Rule: the same counter guards the listing of the open: its background task
+  sets the folder watcher under the counter's lock only while its open is
+  still the latest, and its result is dropped otherwise, so a quick second
+  open is never overwritten by the first's late listing, nor left with the
+  first folder's watcher.
+- Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x
+  1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
+  with it hidden by `toggleLeft`. Not measured in the running app. The toggle
+  lasts for the session only and re-cuts a 1:1 crop through `zoom_resized`.
 
 ## Timings
 

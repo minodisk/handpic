@@ -262,7 +262,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       into the app's test module (`native-app.md`).
     - The reveal itself is not shared: the Tauri app keeps the opener
       plugin, the native app uses GPUI's `reveal_path` (Step 3).
-- [ ] Step 2: The tree model and the left pane: roots, expanding a folder, the RAW count, opening a folder from the tree, a launch with no folder
+- [x] Step 2: The tree model and the left pane: roots, expanding a folder, the RAW count, opening a folder from the tree, a launch with no folder
   - Done when:
     - `crates/native/src/tree.rs` is a pure model with unit tests, a port of
       the tree's state from `tree.ts`: the `Tree` (roots, nodes with

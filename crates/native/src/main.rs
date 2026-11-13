@@ -25,6 +25,7 @@ mod sort;
 mod strip;
 mod thumbs;
 mod timing;
+mod tree;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -49,11 +50,11 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ContentMask, Context, Corners, FocusHandle, FontWeight,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, PathPromptOptions, Pixels, Point,
-    RenderImage, ScrollEvent, SharedString, Task, TextAlign, TitlebarOptions, Window, WindowBounds,
-    WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, rgb,
-    rgba, size,
+    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, FocusHandle,
+    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point, RenderImage,
+    ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
+    UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
+    fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
@@ -68,6 +69,7 @@ use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::Metadata,
+    folders::{self, Folder},
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, Writer},
@@ -85,6 +87,7 @@ use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
+use tree::{Child, IGNORE_CASE, Relation, Tree};
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
 
@@ -282,6 +285,24 @@ struct Riffle {
     next_scan: u64,
     /// The open folder's canonical path, the key of its index rows.
     dir: Option<String>,
+    /// Bumped by every open, under the lock its listing's watcher is set
+    /// under: a listing or a reveal of an earlier open is dropped.
+    opens: Arc<Mutex<u64>>,
+    /// The left-hand folder tree and its drawn rows, rebuilt when it changes.
+    tree: Tree,
+    tree_rows: Vec<tree::Row>,
+    /// The open folder as the tree spells it, and its row while drawn.
+    tree_open: Option<String>,
+    tree_open_row: Option<usize>,
+    tree_scroll: UniformListScrollHandle,
+    /// The roots have been read; an open before that waits in
+    /// `reveal_wanted`.
+    roots_loaded: bool,
+    reveal_wanted: Option<String>,
+    /// The last folder listing of the tree that failed, until another open.
+    tree_note: Option<String>,
+    /// The left pane is shown (`toggleLeft`).
+    left_pane: bool,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -428,6 +449,13 @@ impl Riffle {
             })
             .detach();
         }
+        cx.spawn(async move |this, cx| {
+            let roots = cx
+                .background_spawn(async { folders::roots(dirs::home_dir()) })
+                .await;
+            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        })
+        .detach();
         Self {
             focus,
             all: Vec::new(),
@@ -459,6 +487,16 @@ impl Riffle {
             scan_focus: None,
             next_scan: 0,
             dir: None,
+            opens: Arc::default(),
+            tree: Tree::default(),
+            tree_rows: Vec::new(),
+            tree_open: None,
+            tree_open_row: None,
+            tree_scroll: UniformListScrollHandle::new(),
+            roots_loaded: false,
+            reveal_wanted: None,
+            tree_note: None,
+            left_pane: true,
             wanted: None,
             max: None,
             listing: 0,
@@ -512,25 +550,7 @@ impl Riffle {
             import_settings: _,
             log: _,
         } = args;
-        let prompt = folder.is_none().then(|| {
-            cx.prompt_for_paths(PathPromptOptions {
-                files: false,
-                directories: true,
-                multiple: false,
-                prompt: None,
-            })
-        });
         cx.spawn(async move |this, cx| {
-            let folder = match (folder, prompt) {
-                (Some(folder), _) => Some(folder),
-                (None, Some(prompt)) => prompt
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
-                    .flatten()
-                    .and_then(|mut paths| paths.pop()),
-                (None, None) => None,
-            };
             if let Some(folder) = folder
                 && let Ok(opening) = this.update(cx, |this, cx| this.open(folder, size, max, cx))
             {
@@ -554,10 +574,176 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
+        *index::lock(&self.opens) += 1;
+        self.tree_note = None;
+        let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
+        self.reveal(shown.to_string_lossy().into_owned(), cx);
         self.wanted = wanted;
         self.max = max;
         self.resync.open();
         self.list(folder, false, cx)
+    }
+
+    fn opens(&self) -> u64 {
+        *index::lock(&self.opens)
+    }
+
+    /// A click on a folder's name in the tree: open it whole, without the
+    /// command line's `--size` / `--max`.
+    fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) {
+        self.open(PathBuf::from(path), None, None, cx).detach();
+    }
+
+    fn roots_read(&mut self, roots: Vec<folders::FolderNode>, cx: &mut Context<Self>) {
+        self.tree.add_roots(roots.into_iter().map(Child::from));
+        self.roots_loaded = true;
+        self.tree_changed(cx);
+        if let Some(path) = self.reveal_wanted.take() {
+            self.reveal(path, cx);
+        }
+    }
+
+    /// Rebuild the tree's rows and find the open folder's among them.
+    fn tree_changed(&mut self, cx: &mut Context<Self>) {
+        self.tree_rows = self.tree.rows();
+        self.tree_open_row = self.tree_open.as_ref().and_then(|open| {
+            self.tree_rows.iter().position(|row| {
+                tree::relation(&row.path, open, IGNORE_CASE) == Some(Relation::Same)
+            })
+        });
+        cx.notify();
+    }
+
+    /// A listing of the tree's `dir` answered: its children, or `None` with
+    /// the folder collapsed and marked, and the error in the notes when
+    /// `report`.
+    fn tree_listed(
+        &mut self,
+        dir: &str,
+        listed: Result<Folder, String>,
+        report: bool,
+    ) -> Option<Vec<Child>> {
+        match listed {
+            Ok(folder) => {
+                let children: Vec<Child> = folder.children.into_iter().map(Child::from).collect();
+                self.tree
+                    .set_children(dir, folder.raw_count, children.clone());
+                Some(children)
+            }
+            Err(e) => {
+                log::warn!("failed to list the subfolders of {dir}: {e}");
+                self.tree.collapse(dir);
+                self.tree.mark_failed(dir, e.clone());
+                if report {
+                    self.tree_note = Some(e);
+                }
+                None
+            }
+        }
+    }
+
+    /// An expander click: collapse, or expand and list the folder again, its
+    /// cached children drawn meanwhile.
+    fn tree_toggle(&mut self, dir: String, cx: &mut Context<Self>) {
+        if self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == dir && row.expanded)
+        {
+            self.tree.collapse(&dir);
+            self.tree_changed(cx);
+            return;
+        }
+        self.tree.expand(&dir);
+        self.tree_changed(cx);
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            this.update(cx, |this, cx| {
+                this.tree_listed(&dir, listed, true);
+                this.tree_changed(cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Expand and list the chain from the root holding `path` (a root added
+    /// for a folder none holds) down to it, respelling the chain from the
+    /// listings, then highlight it and scroll it into view, as `folders.ts`'s
+    /// `reveal`. A later open owns the tree: this one stops at its next step.
+    fn reveal(&mut self, path: String, cx: &mut Context<Self>) {
+        self.tree_open = Some(path.clone());
+        self.tree_changed(cx);
+        if !self.roots_loaded {
+            self.reveal_wanted = Some(path);
+            return;
+        }
+        let chain = match tree::ancestors_within(self.tree.roots(), &path, IGNORE_CASE) {
+            Some(chain) => Some(chain),
+            None => {
+                let root = tree::root_of(&path);
+                self.tree.add_roots([Child {
+                    name: root.clone(),
+                    path: root.clone(),
+                    is_link: false,
+                }]);
+                self.tree_changed(cx);
+                tree::ancestors_within([root.as_str()], &path, IGNORE_CASE)
+            }
+        };
+        let Some(mut chain) = chain else { return };
+        let token = self.opens();
+        cx.spawn(async move |this, cx| {
+            for at in 0..chain.len() {
+                let dir = chain[at].clone();
+                let walking = this.update(cx, |this, cx| {
+                    if this.opens() != token || !this.tree.has(&dir) {
+                        return false;
+                    }
+                    this.tree.expand(&dir);
+                    this.tree_changed(cx);
+                    true
+                });
+                if !walking.unwrap_or(false) {
+                    break;
+                }
+                let listing = dir.clone();
+                let listed = cx
+                    .background_spawn(async move { folders::list(Path::new(&listing)) })
+                    .await;
+                let children = this.update(cx, |this, cx| {
+                    let current = this.opens() == token;
+                    if !current && listed.is_ok() {
+                        return None;
+                    }
+                    let children = this.tree_listed(&dir, listed, current);
+                    this.tree_changed(cx);
+                    children.filter(|_| current)
+                });
+                let Ok(Some(children)) = children else { break };
+                chain = tree::respell(chain, at + 1, &children, IGNORE_CASE);
+            }
+            this.update(cx, |this, cx| {
+                if this.opens() != token {
+                    return;
+                }
+                // The chain's end is spelled the way the tree keys its nodes,
+                // which the caller's path may not be.
+                if let Some(end) = chain.last() {
+                    this.tree_open = Some(end.clone());
+                }
+                this.tree_changed(cx);
+                if let Some(row) = this.tree_open_row {
+                    this.tree_scroll
+                        .scroll_to_item(row, ScrollStrategy::Nearest);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// The watcher saw the open folder change: re-list it now, or once the
@@ -599,6 +785,7 @@ impl Riffle {
         let watching = self.watch.clone();
         let writer = self.writer.clone();
         let (format, names) = (self.settings.format, self.settings.names.clone());
+        let (opens, token) = (self.opens.clone(), self.opens());
         cx.spawn(async move |this, cx| {
             let opened = cx
                 .background_spawn(async move {
@@ -609,9 +796,16 @@ impl Riffle {
                         let _ = eviction.join();
                     }
                     // Watched before the listing, so a change during it is
-                    // not missed.
+                    // not missed; under the open's lock, so a later open's
+                    // watcher is never replaced by this one's.
                     let dir = canonicalize(&folder.to_string_lossy());
-                    watch::set(&watching, &dir, &dir);
+                    {
+                        let opens = index::lock(&opens);
+                        if *opens != token {
+                            return Ok(None);
+                        }
+                        watch::set(&watching, &dir, &dir);
+                    }
                     let listed = scan::list(Path::new(&dir), format)?;
                     let outputs = scan::outputs(&listed);
                     let todo = index.map(|index| {
@@ -625,7 +819,7 @@ impl Riffle {
                         _ => Default::default(),
                     };
                     let shown = shown(&listed.files, wanted, max);
-                    Ok::<_, String>(Opened {
+                    Ok::<_, String>(Some(Opened {
                         listed,
                         shown,
                         outputs,
@@ -633,11 +827,21 @@ impl Riffle {
                         entries,
                         last_viewed,
                         viewed,
-                    })
+                    }))
                 })
                 .await;
-            this.update(cx, |this, cx| this.opened(opened, carry, cx))
-                .ok();
+            this.update(cx, |this, cx| {
+                // A later open owns the view.
+                if this.opens() != token {
+                    return;
+                }
+                match opened {
+                    Ok(Some(opened)) => this.opened(Ok(opened), carry, cx),
+                    Ok(None) => {}
+                    Err(e) => this.opened(Err(e), carry, cx),
+                }
+            })
+            .ok();
         })
     }
 
@@ -684,6 +888,8 @@ impl Riffle {
             same_file = was.is_some() && was == self.current_path();
         } else {
             self.all = shown;
+            self.failed = 0;
+            self.key = None;
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
@@ -1046,6 +1252,11 @@ impl Riffle {
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some("toggleLeft")) => {
+                self.left_pane = !self.left_pane;
+                self.zoom_resized(cx);
+                cx.notify();
+            }
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
@@ -1819,11 +2030,101 @@ impl Riffle {
                     .iter()
                     .cloned()
                     .chain(self.outputs_failure.clone())
+                    .chain(self.tree_note.clone())
                     .chain(self.write_errors.iter().map(|(path, message)| {
                         format!("{}: {message}", file_name(Path::new(path)))
                     }))
                     .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
             )
+    }
+
+    /// The left-hand folder tree: a `uniform_list`, so only the rows on
+    /// screen are laid out.
+    fn tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .w(px(PANE_WIDTH))
+            .flex_none()
+            .h_full()
+            .py_1()
+            .bg(rgb(PANE_COLOR))
+            .text_size(px(TREE_TEXT))
+            .child(
+                uniform_list(
+                    "tree",
+                    self.tree_rows.len(),
+                    cx.processor(|this, range: std::ops::Range<usize>, _, cx| {
+                        range.map(|at| this.tree_row(at, cx)).collect::<Vec<_>>()
+                    }),
+                )
+                .track_scroll(&self.tree_scroll)
+                .size_full(),
+            )
+    }
+
+    /// One row of the tree: the expander, the name and, expanded, the RAW
+    /// count; the open folder highlighted, a failed one's name in red.
+    fn tree_row(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
+        let row = &self.tree_rows[at];
+        let mut expander = div()
+            .id(("tree-expander", at))
+            .w(px(14.))
+            .flex_none()
+            .text_center()
+            .text_size(px(11.))
+            .text_color(rgb(MUTED_COLOR));
+        if row.expandable {
+            let path = row.path.clone();
+            expander = expander
+                .cursor_pointer()
+                .child(if row.expanded { "\u{25be}" } else { "\u{25b8}" })
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    cx.stop_propagation();
+                    this.tree_toggle(path.clone(), cx);
+                }));
+        }
+        let count = row
+            .raw_count
+            .filter(|count| row.expanded && *count > 0)
+            .map(|count| {
+                div()
+                    .flex_none()
+                    .px(px(5.))
+                    .rounded_full()
+                    .bg(rgb(ACCENT_COLOR))
+                    .text_size(px(11.))
+                    .child(count.to_string())
+            });
+        let path = row.path.clone();
+        div()
+            .id(("tree-row", at))
+            .h(px(TREE_ROW_HEIGHT))
+            .mx_1()
+            .flex()
+            .items_center()
+            .gap(px(2.))
+            .pl(px(4. + row.depth as f32 * 12.))
+            .pr_2()
+            .rounded_sm()
+            .cursor_pointer()
+            .whitespace_nowrap()
+            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+            .when(self.tree_open_row == Some(at), |s| {
+                s.bg(rgb(ACCENT_COLOR)).font_weight(FontWeight::SEMIBOLD)
+            })
+            .child(expander)
+            .child(
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .truncate()
+                    .when(row.failed.is_some(), |s| s.text_color(rgb(ERROR_COLOR)))
+                    .child(row.name.clone()),
+            )
+            .children(count)
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.open_from_tree(path.clone(), cx);
+            }))
+            .into_any_element()
     }
 
     /// A press on a menu's button.
@@ -2004,6 +2305,7 @@ impl Render for Riffle {
                     .flex_1()
                     .min_h_0()
                     .flex()
+                    .children(self.left_pane.then(|| self.tree_pane(cx)))
                     .child(
                         canvas(
                             |_, _, _| {},
@@ -2204,8 +2506,12 @@ struct StripCell {
     marks: Marks,
 }
 
-/// In the Tauri info pane's range (`#info`, 220 px).
+/// In the Tauri info pane's range (`#info`, 220 px), and the folder tree's
+/// (`#side`).
 const PANE_WIDTH: f32 = 220.;
+/// `#folders`' 0.8 rem text in a 1.4 line, and `.folder`'s 2 px padding.
+const TREE_TEXT: f32 = 12.8;
+const TREE_ROW_HEIGHT: f32 = 22.;
 const PANE_COLOR: u32 = 0x171717;
 const MUTED_COLOR: u32 = 0xa1a1a1;
 const ERROR_COLOR: u32 = 0xff6467;
