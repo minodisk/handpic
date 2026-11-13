@@ -293,3 +293,5 @@ here.
   from running either tool. Nothing was installed or built.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
