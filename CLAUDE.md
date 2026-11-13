@@ -79,7 +79,7 @@ centers and nose tip, their eye and nose offsets and the eye window's score, the
 `crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
 like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
-formatting shared by the meta pane (`Metadata`, `metadata`) and the filter menu, `src/photolab.rs` the
+formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 `docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
@@ -121,7 +121,7 @@ non-recursive watch per expanded folder, `set` making the watched set equal to
 the given folders, each folder's burst debounced into one call of the `spawn`
 callback, and `with_released`, which a folder rename runs under), `src/ondemand.rs`
 the faces and the eye judgment of the shown file, read on demand rather than
-at scan time and touching neither the index nor `ReadSlots` (`read_faces`,
+at scan time and touching neither the index nor `ReadSlots` (`read_preview`, `read_faces`,
 `read_eyes`, whose `current` check stops a superseded judgment, and the
 `raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
@@ -145,7 +145,12 @@ on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
 the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
+loopback Streamable HTTP endpoint on `MCP_PORT` with its seven tools, started,
+stopped and switched on the caller's tokio runtime, each switch returning its
+`McpState`; `Bridge`, which hands each tool's `Request` to the app's send
+callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
+`mcp_enabled_setting`, the stored `mcpEnabled` rule), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -214,9 +219,9 @@ OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
 `sequence-done` events, `src/output.rs` the `outputs_of` command behind the
 strip's `Output` filter, over the backend's `output`, and
 `src/mcp.rs` the MCP
-companion: the loopback Streamable HTTP server turned on by the `mcpEnabled`
-key, its tools, and the bridge that asks the main window over the
-`mcp-request` event and the `mcp_reply` command, and `src/diagnostics.rs`
+companion over the backend's `mcp`, turned on by the `mcpEnabled` key: the
+bridge that asks the main window over the `mcp-request` event and the
+`mcp_reply` command, and the `mcp-state` emit, and `src/diagnostics.rs`
 the `log_frontend` command that writes the frontend's `uncaught-js:` and
 `invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
 current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's

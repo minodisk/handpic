@@ -811,7 +811,7 @@ fn main() {
             app.manage(update::UpdateRun::default());
             update::spawn(app.handle().clone(), false);
             app.manage(mcp::AppMcp::new(
-                mcp::Bridge::to_main_window(app.handle().clone()),
+                app.handle(),
                 app.state::<commands::AppIndexReader>().0.clone(),
             ));
             // A failed bind (the port in use) is reported in the settings
