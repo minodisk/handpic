@@ -247,8 +247,9 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   moves (`selection::restore`); an entry of several files leaves the current
   file and notes `Undid N files` / `Redid N files`. Each entry has an id, so a failed store drops its file
   from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
-  Another folder's open clears both histories; a re-listing keeps them and a
-  step drops the files no longer listed.
+  Another folder's open drops the judgment batches of both histories and
+  keeps the trash runs; a re-listing keeps them and a step drops the files
+  no longer listed.
 - Rule: `label_known` for a store follows the Tauri `send` rule: the entry was
   seen, or (for an undo / redo, which has no command) the restored label
   differs from the current one. A `ClearAll` on a file whose entry was not seen
@@ -1409,11 +1410,54 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
 - Rule: the run's result goes to the pane: `trashed_status` in the
   `step_note` line (the Tauri `note`), each failure through `write_failed`
   (`<name>: could not move to the Trash: <message>`), and after a delete the
-  deleted files' judgments leave both histories (`Undo::without_paths`). The
-  run id is only logged until the trash undo exists.
+  deleted files' judgments leave both histories (`Undo::without_paths`). A
+  move whose `Summary::run_id` is set pushes its run on the undo history
+  (see the next entry).
 - Not verified headless: the dialog, its keys and clicks, the Recycle Bin
   and the cancel of a running pass 1; the hand checks are pending in
   `../plans/20261113-gpui-tree-trash/learnings.md`.
+
+### A trash run is undone through the same gate, and outlives a folder switch (Inferred)
+
+`history.rs`'s entry is `Entry::Judgments(Batch)` or `Entry::Trash(TrashEntry
+{ id, run_id, count, dirs })`, the Tauri `undo.ts` `Entry`. A move that
+recorded a run pushes it and clears the redo history (`record_trash`); a
+redo's new run is pushed without clearing it (`redone_trash`), as a redone
+batch is. `step` and `Undo::forget` see only batches: the view's `step`
+looks at the top first (`top_trash`) and hands a run to `step_trash`, as the
+Tauri `step` does, so `history::step` returns `None` with a run on top and
+leaves it there.
+
+- Rule: an undo or a redo of a run goes through `idle::IdleGate` as the run
+  does, held under `Undo Move to Trash` / `Redo Move to Trash` while a
+  listing or scan is under way and drained at `finished`, but it never
+  cancels the scan (`cancels_scan` is false for those labels). The gate's
+  slot is the `Held` enum (`Run`, `Undo`, `Redo`) in `main.rs`.
+- Rule: the entry stays on its history until the backend answers
+  (`trash_step` names the one out, and every undo or redo key does nothing
+  meanwhile); a drained step runs only while its entry is still on top
+  (`Undo::on_top`), and entries are removed by id (`remove_trash`), not
+  popped, since judgments may have been pushed above it meanwhile. A
+  refusal other than `RUN_GONE` / `UNDONE_GONE` (`trash::still_held`)
+  leaves it where it was.
+- Rule: the restore (`trash::undo_run`, which lists the Recycle Bin on
+  Windows) runs on `background_spawn` with no progress; the redo
+  (`trash::redo_run`) drains the judgment queue and flushes the writer first,
+  as a run does, and reports through `Event::TrashProgress` and `trashed`.
+  Both hold `Resync` and the gate's in-flight count, so nothing lists under
+  them, and a tree open meanwhile waits in `deferred_open`.
+- Rule: when the open folder is one of the run's `dirs` (`opens_target`),
+  the restored files directly in it (`restored_into`, compared through
+  `context::shown_path` as the backend spells them canonically) join `all` at
+  once and `refilter` runs, so a second undo already reaches their
+  judgments, and the folder is re-listed with the current file and the
+  selection kept. Otherwise only a change seen meanwhile re-lists.
+- Rule: another folder's open, and a sidecar format switch, drop only the
+  judgment batches (`Undo::drop_judgments`); the runs stay, so a run made in
+  one folder is undone from another, its files going back to theirs. A
+  delete records no run and is not undoable.
+- Not verified headless: the restore from the Recycle Bin and the redo; the
+  hand checks are pending in `../plans/20261113-gpui-tree-trash/learnings.md`.
 
 ## Timings
 
