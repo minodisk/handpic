@@ -500,4 +500,4 @@ so port Step 7 stays open after this plan with only those sections left.
 
 ## Progress
 
-- (none yet)
+- (2026-11-13) Step 1 complete
