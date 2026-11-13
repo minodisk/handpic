@@ -220,7 +220,7 @@ folder operation.
 
 ## Steps
 
-- [ ] Step 1: Move the Tauri-free parts of the folder rename, the date rename and the folder sidecar operations into the backend
+- [x] Step 1: Move the Tauri-free parts of the folder rename, the date rename and the folder sidecar operations into the backend
   - Done when:
     - `crates/backend/src/rename.rs` holds `Renamed` (fields public,
       `Serialize` kept), `check_name`, `folder_target`, `FilePlan`,
@@ -711,3 +711,4 @@ folder operation.
 
 ## Progress
 
+(2026-11-14) Step 1 complete

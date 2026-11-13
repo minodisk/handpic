@@ -75,6 +75,14 @@ in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
 `&Runs` and a `progress(done, total)` callback; the Tauri commands keep the
 writer flush, the `Scans` lock and its `SCAN_RUNNING` refusal, the
 `trash-progress` emit and the log line around them.
+The folder operations' bodies take their state the same way:
+`rename::rename_folder` and `datefolder::split_folder` take a
+`rename::Context` (the `&Watch`, the `&TreeWatch`, the optional index and the
+`&Runs`), `datefolder::plan_of` the optional index, and
+`foldersidecars::delete_run` the index and the `&Runs`. None of them checks
+for a scan or drains the sidecar writer: the Tauri wrappers flush the writer,
+take the `Scans` lock, refuse with `text::SCAN_RUNNING` and hold the lock
+across the call, and the native app has to guard the call with its own gate.
 The MCP companion's server (`mcp::Mcp`) takes a `Bridge` built over a send
 callback and returns each switch's `McpState`; the Tauri app's `mcp.rs` owns
 `mcp-request`, the main-window check and the `mcp-state` emit. The server
@@ -88,6 +96,9 @@ signal and runs the stop. `Mcp::with_port` binds another port than
 
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.
+- Rule: a backend body that changes a folder on disk leaves the scan check to
+  its caller and says so in its doc comment; call it only with the caller's
+  refusal of a running scan held across the call.
 
 ### The backend is compiled twice (Inferred)
 

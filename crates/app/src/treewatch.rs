@@ -26,12 +26,3 @@ pub async fn set_tree_watches(app: tauri::AppHandle, dirs: Vec<String>) -> Resul
     .await
     .map_err(|e| e.to_string())
 }
-
-/// `riffle_backend::treewatch::with_released` over the managed `TreeWatch`.
-pub fn with_released<T>(
-    app: &tauri::AppHandle,
-    dir: &str,
-    f: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
-    riffle_backend::treewatch::with_released(&app.state::<TreeWatch>(), dir, f)
-}

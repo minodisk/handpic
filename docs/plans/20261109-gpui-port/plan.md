@@ -355,6 +355,17 @@ them; their contents are deliberately coarse.
     greppable prefixes (`docs/agents/app-log.md`).
   - The MCP companion, `Handpic.log` and the move of `perf.rs` and `ai.rs`
     into `crates/backend` were done by `../20261113-gpui-companions/plan.md`.
+  - Not ported, by the user's decision (2026-11-14): the AI features, that
+    is `aiEnabled` with the model download, pass 3 embeddings, genres and
+    the filter's `Genre` section, the personal ranking with its refits, the
+    recommended mark and the `recommended` sort. The archived evaluations
+    put the ranking's within-burst Top-1 at 54.9% against 39.4% for the
+    first frame (`../_archived/20261012-image-embeddings/ranking.md`), too
+    weak to be worth the port. They drop out of Step 9's done-when; the
+    native app keeps reading a stored `recommended` sort as capture order,
+    and a settings `aiEnabled` toggle is not needed. What to do with the
+    Tauri-side code and `crates/backend/src/ai.rs` at the switch-over is
+    left to Step 10.
 - [ ] Step 10: Packaging, the updater, the three-platform CI and the switch-over
   - Done when: installers for Windows, macOS (both arches) and Linux from
     `release.yml` without the Tauri bundler (`cargo-packager` or
@@ -564,3 +575,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-13) Step 7: the filter and the sort, through `../_archived/20261113-gpui-filter-sort/plan.md`; the per-folder EXIF filter sections remain
 - (2026-11-13) Step 7 complete: the per-folder EXIF filter sections and two refilter fixes, through `../_archived/20261113-gpui-exif-filter/plan.md`
 - (2026-11-14) Step 9: the MCP companion, `Handpic.log` and the backend's perf and AI modules, through `../20261113-gpui-companions/plan.md` (Step 9 stays open)
+- (2026-11-14) Step 9: the AI features (pass 3, genres, the ranking, the recommended mark and sort, `aiEnabled`) dropped from the port by the user's decision
