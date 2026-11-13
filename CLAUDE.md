@@ -215,7 +215,7 @@ off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
-its own index at `<cache dir>/com.minodisk.handpic.native/index.sqlite` (or
+its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or

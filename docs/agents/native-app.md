@@ -80,7 +80,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 `crates/native/Cargo.lock`, and clippy lints the backend only from the root.
 
 - Rule: check a backend change with both `mise run ci` and
-  `mise run native:check`.
+  `mise run native:check`. `mise run ci` runs only `lint` and `test` of the
+  root workspace, so it never covers `crates/native`. This holds for a change
+  to the app's identifier or to `native`'s own files (`datadir`, `logger`,
+  `settings`) as well as for a backend change.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
@@ -354,13 +357,13 @@ so a reorder scrolls the current file into view. Nothing is written.
 
 ### The native app keeps its own index (Inferred)
 
-The index lives at `<dirs::cache_dir()>/com.minodisk.handpic.native/index.sqlite`,
-apart from the Tauri app's `com.minodisk.riffle/index.sqlite` (or
-`com.minodisk.handpic/` after the Handpic rename); `--index <path>`
+The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic.native/index.sqlite`,
+apart from the Tauri app's `dev.minodisk.handpic/index.sqlite`; `--index <path>`
 overrides it. The folder is named after the Handpic identifier
 (`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`) and nothing is
-migrated from the earlier `com.minodisk.riffle.native`: the native app never
-shipped, so an old developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
+migrated from the earlier `com.minodisk.riffle.native` or
+`com.minodisk.handpic.native`: the native app never shipped, so an old
+developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
 launch's `VACUUM` against a native scan's writes), make two
 `EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's
 `reconcile` drop the user's rows. The cost is a cold pass 1 on each folder's
