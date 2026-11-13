@@ -92,6 +92,8 @@ pub enum Event {
         path: String,
         message: String,
     },
+    /// A tool call of the MCP companion for the view to answer.
+    Mcp(riffle_backend::mcp::Request),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its

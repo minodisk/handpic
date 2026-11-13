@@ -13,6 +13,7 @@ use std::{
 };
 
 use riffle_backend::{
+    mcp,
     shortcuts::Keymap,
     sidecar::{self, SidecarFormat},
     store::Store,
@@ -36,6 +37,9 @@ pub struct Settings {
     /// The strip's filter at startup, its remembered sections; the filter
     /// menu writes them back.
     pub filter: Stored,
+    /// The MCP companion's server is on (`mcpEnabled`, by the backend's
+    /// rule).
+    pub mcp_enabled: bool,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -231,6 +235,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .unwrap_or(true),
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
+        mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
         writes: Writes::spawn(None),
     }
 }
@@ -321,6 +326,22 @@ mod tests {
             assert_eq!(s.sort, SortKey::Name);
             assert_eq!(s.filter, Stored::default());
             assert!(values(&dir.path().join(format!("{name}.sqlite"))).is_empty());
+        }
+    }
+
+    #[test]
+    fn mcp_is_on_only_for_a_stored_true() {
+        let dir = tempfile::tempdir().unwrap();
+        for (i, (stored, on)) in [
+            (r#"{"mcpEnabled":true}"#, true),
+            (r#"{"mcpEnabled":false}"#, false),
+            (r#"{"mcpEnabled":"true"}"#, false),
+            (r#"{}"#, false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_eq!(seeded(dir.path(), &i.to_string(), stored).mcp_enabled, on);
         }
     }
 

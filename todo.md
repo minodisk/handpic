@@ -2643,3 +2643,18 @@ The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitiv
 #### TODO
 
 - [ ] Make the status line's `n/total` follow the current index after a refilter, as the pane's does, and check that `p` under the `untagged` filter updates it at once.
+
+### Native: drop the `.native` suffix from the native app's index and log folders at the switch-over
+
+#### Background
+
+The GPUI app (`crates/native`) keeps its index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite`, apart from the Tauri app's `dev.minodisk.handpic/index.sqlite`, so the two apps never share one index while both run during the port. Sharing one file today would put two processes on it (the Tauri launch's `VACUUM` against a native scan's writes), make two `EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's `reconcile` drop the user's rows (`docs/agents/native-app.md`, "The native app keeps its own index (Inferred)"). Its `Handpic.log` lives under a `dev.minodisk.handpic.native` folder for the same reason. Once the native app ships in place of the Tauri app, the suffix has no reason left and both folders should be `dev.minodisk.handpic`. Plan: `docs/plans/20261109-gpui-port/plan.md` (Step 10, the switch-over). Files: `crates/native/src/datadir.rs`, `crates/native/src/logger.rs`.
+
+Act on this when the native app replaces the Tauri app as the shipped app (the port's Step 10), not before: until then the suffix is what keeps the two apps apart.
+
+#### TODO
+
+- [ ] Decide whether the native app takes over the Tauri app's existing index in the same folder or rebuilds it. Taken-over rows were written under the Tauri app's `EXTRACTOR_VERSION` and hold `ratings`, `views`, `folders.last_viewed` and `embeddings`; a rebuild costs a cold pass 1 per folder and loses whatever the sidecars do not hold.
+- [ ] Drop the suffix in `crates/native/src/datadir.rs` (`index_path` and its test `the_default_is_the_native_folder_under_the_cache_dir`) and `crates/native/src/logger.rs` (`log_path`'s `{IDENTIFIER}.native` folder and its test `the_default_is_the_native_folder_in_the_tauri_log_dir_shape`).
+- [ ] Update `CLAUDE.md` (the native index path), `docs/agents/native-app.md` ("The native app keeps its own index") and `docs/agents/app-log.md` (the native log paths), and check that `CONTRIBUTING.md`'s "The index" paths still hold (it has no `.native` mention).
+- [ ] Leave the developer-only `dev.minodisk.handpic.native` folders behind; nothing migrates from them.
