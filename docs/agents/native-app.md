@@ -478,7 +478,7 @@ tab across opens and focuses it on open, as the Tauri `open` does.
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
-`AiEnabled` writes `aiEnabled`, `Closed` focuses the window's handle again.
+`AiEnabled` sets `settings.ai_enabled` and writes `aiEnabled`, `Closed` focuses the window's handle again.
 The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
 
