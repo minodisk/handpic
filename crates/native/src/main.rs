@@ -236,6 +236,9 @@ struct Riffle {
     files: Vec<PathBuf>,
     /// The listed files' facts by path, from the index.
     facts: HashMap<String, Facts>,
+    /// Pass 2 files reported since the last read of the index, laid over a
+    /// snapshot read before they were written.
+    pending_faces: Vec<riffle_backend::index::FaceReady>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
@@ -418,6 +421,7 @@ impl Riffle {
             all: Vec::new(),
             files: Vec::new(),
             facts: HashMap::new(),
+            pending_faces: Vec::new(),
             sort: settings.sort,
             filter: {
                 let mut filter = FilterState::default();
@@ -639,6 +643,7 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.pending_faces.clear();
         self.order += 1;
         self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
@@ -919,6 +924,7 @@ impl Riffle {
             } => {
                 self.scan_status.analyzing(done, total);
                 filter::apply_face_ready(&mut self.facts, &ready);
+                self.pending_faces.extend(ready.iter().cloned());
                 // The `Face focus` and `Eyes` sections fill in as the pass
                 // runs, the strip keeping its scroll offset.
                 if !(self.filter.candidates.is_empty() && self.filter.eyes.is_empty()) {
@@ -970,6 +976,7 @@ impl Riffle {
             return;
         };
         let listing = self.listing;
+        self.pending_faces.clear();
         cx.spawn(async move |this, cx| {
             let entries = cx
                 .background_spawn(async move { entries_of(&reader, &dir) })
@@ -979,6 +986,8 @@ impl Riffle {
                     && listing == this.listing
                 {
                     this.set_entries(entries);
+                    // Pass 2 files written after the snapshot was read.
+                    filter::apply_face_ready(&mut this.facts, &this.pending_faces);
                     this.refilter(this.current_path(), true, None, cx);
                     this.mark_strip();
                     cx.notify();
