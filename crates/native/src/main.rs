@@ -24,6 +24,8 @@ mod peaking;
 mod resync;
 mod scan;
 mod settings;
+mod settingsmodal;
+mod settingsview;
 mod sort;
 mod strip;
 mod thumbs;
@@ -58,10 +60,10 @@ use futures::{
 };
 use gpui::{
     Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
-    FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point,
-    RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
-    UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
-    fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
+    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels,
+    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign,
+    TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored,
+    canvas, deferred, div, fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
@@ -91,6 +93,7 @@ use riffle_core::{
 };
 use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
 use settings::Settings;
+use settingsview::{Change, SettingsView};
 use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
@@ -362,6 +365,8 @@ struct Riffle {
     view_only: bool,
     settings: Settings,
     bindings: Bindings,
+    /// The settings modal, laid out only while open.
+    settings_view: Entity<SettingsView>,
     /// The open folder's judgments by listed path.
     judgments: HashMap<String, State>,
     /// The paths the index last returned an entry for, whose label is known.
@@ -505,6 +510,19 @@ impl Riffle {
             async {}
         })
         .detach();
+        let settings_view = cx.new(SettingsView::new);
+        cx.subscribe_in(
+            &settings_view,
+            window,
+            |this, _, change, window, cx| match *change {
+                Change::AutoAdvance(on) => {
+                    this.settings.auto_advance = on;
+                    this.settings.writes.set("autoAdvance", on.into());
+                }
+                Change::Closed => window.focus(&this.focus, cx),
+            },
+        )
+        .detach();
         Self {
             mcp: mcp::start(
                 settings.mcp_enabled,
@@ -581,6 +599,7 @@ impl Riffle {
             view_only: false,
             bindings: Bindings::new(&settings.keymap),
             settings,
+            settings_view,
             judgments: HashMap::new(),
             seen: HashSet::new(),
             touched: HashSet::new(),
@@ -1589,10 +1608,15 @@ impl Riffle {
     }
 
     /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
-    /// native app's own keys, and `escape` while a menu is open; an action
-    /// not handled yet is only logged. While the tree has the keyboard it
-    /// takes the key first, and of the rest only `tree_gate`'s actions run.
-    fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
+    /// native app's own keys, `ctrl+,` (`meta+,` on macOS) opens the settings,
+    /// and `escape` while a menu is open; an action not handled yet is only
+    /// logged. Nothing gets through while the settings are open. While the
+    /// tree has the keyboard it takes the key first, and of the rest only
+    /// `tree_gate`'s actions run.
+    fn key_down(&mut self, keystroke: &Keystroke, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_view.read(cx).is_open() {
+            return;
+        }
         let Some(name) = keys::key_name(keystroke) else {
             return;
         };
@@ -1617,6 +1641,15 @@ impl Riffle {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
             ("q", _) => self.quit(cx),
+            (name, _) if name == settingsmodal::OPEN_KEY => {
+                self.menus.close();
+                let (auto_advance, saved) =
+                    (self.settings.auto_advance, self.settings.writes.is_open());
+                self.settings_view.update(cx, |view, cx| {
+                    view.open(auto_advance, saved, window, cx);
+                });
+                cx.notify();
+            }
             ("escape", _) if self.menus.is_open() => {
                 self.menus.close();
                 cx.notify();
@@ -2876,9 +2909,9 @@ impl Render for Riffle {
             .bg(rgb(0x000000))
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
-            .on_key_down(
-                cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(&e.keystroke, cx)),
-            )
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
+                this.key_down(&e.keystroke, window, cx);
+            }))
             .child(
                 div()
                     .flex_1()
@@ -2982,6 +3015,7 @@ impl Render for Riffle {
                     ),
             )
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
+            .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
     }
 }
