@@ -104,6 +104,40 @@
   (`unexpected EOF while looking for matching '`), so the edit script went
   into a scratchpad file written with the Write tool and run with `python`.
 
+## Step 4: the tree's keyboard
+
+- Focus model: one `tree_keys` flag on the view, checked in `key_down` right
+  after the right-click menu's close, not a second `FocusHandle`. The pane
+  gives it on a left press (`on_mouse_down(Left)`) and hands it back from
+  `on_mouse_down_out` (capture phase, any button), so the press outside still
+  reaches its own handler. A right press in the pane does neither.
+- `on_mouse_down_out` is bounds-based (`hitbox.contains(mouse_position)`), so
+  a press on the right-click menu where it is drawn over the pane would not
+  hand the keys back while one beyond the pane would. The popover's own
+  `on_any_mouse_down` hands them back, matching the Tauri menu's buttons,
+  which take the focus. The pane's own left listener does not fire there,
+  since the popover is `occlude()`d.
+- The Tauri app leaves the keyboard with the tree after opening a folder from
+  it (`openFolder` -> `openDirectory` never calls `folders.blur()`; only
+  `changePanels` hiding the pane does), so the native app does the same.
+- `tree_key` takes the drawn rows rather than the tree: `Row::expandable` is
+  `tree.ts`'s `canExpand`, so the rows the view already keeps suffice.
+- `typed_char` (in `keys.rs`) uses the keystroke's `key_char` first:
+  `key_name` lower-cases Shift+A and names the space bar `space`. Read from
+  `gpui_windows`' `process_key` (`ToUnicode`, control characters dropped),
+  not seen in the running app.
+- `Typed::at` is an `Option<Instant>` (the TS `-Infinity` start), so the
+  tests build their times from one `Instant::now()` plus offsets.
+- `Expand All` is a loop over an explicit stack of chains rather than the TS
+  recursive `walk`, which an `async` closure cannot recurse into without
+  boxing; pushing a listed folder's children in reverse keeps the depth-first
+  order, and the "chain still expanded" check runs before each child as in
+  the TS.
+- Python edit scripts passed through a `bash` heredoc lost backslashes (a
+  replacement holding `r"D:\a"` did not match, and a `\x` in the text broke
+  the script); scripts holding backslashes went into scratchpad files written
+  with the Write tool instead, or `sed` by line number.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
@@ -172,3 +206,43 @@
   6. Switch to another app and back: the tree does not flicker or collapse
      (the roots are re-read and the known ones skipped); with a USB drive
      plugged in meanwhile, its volume appears as a new root.
+- **Pending manual check (Step 4, Windows).** Basis: Step 4's Done-when;
+  the tree's keyboard, its focus model and the menu's `Expand All` /
+  `Collapse All` cannot be driven headless. The step's checkbox was ticked on
+  the automated criteria (`tree.rs`, `treekeys.rs`, `keys.rs` and
+  `context.rs` tests, `mise run ci`, `mise run native:check`). Setup as Step
+  2's (copies under `D:\Photos\tests\20261113-gpui-tree-trash\tree\`, with
+  `a` and `b` holding a few ARWs and `b` holding nested subfolders, e.g.
+  `b\20a\x`, `b\20b`, `b\c\d`; `cargo build` in `crates/native`, a fresh
+  `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`). Steps and expected results:
+  1. Launch on `...\tree\a`. Press `3`: `a`'s current file is rated (the
+     photo has the keyboard).
+  2. Click the expander of `b`: `b` expands and the tree takes the keyboard;
+     the outline sits on the cursor row (`a`, where the open's reveal put
+     it). Down / Up move the outline one row, Home / End to the first and
+     last rows, and an off-screen row scrolls into view.
+  3. With the cursor on `b`: Right on collapsed `b` expands it, Right again
+     moves to its first child; Left on that child goes back to `b`, Left on
+     expanded `b` collapses it, Left again goes to `tree`.
+  4. Expand `b` and type `20` quickly: the cursor jumps to `20a`; tap `2`
+     repeatedly: it cycles through the folders starting with `2`.
+  5. With the tree focused, `3`, `p`, the arrows and `Ctrl+Z` change no photo
+     and no judgment, and `q` does not quit; `ctrl+alt+arrowleft`
+     (`toggleLeft`) hides the pane, after which `3` rates again (hiding the
+     pane hands the keys back); show the pane again.
+  6. Click a row, press `escape`: `3` rates again. Click a row, then click
+     the preview: `3` rates again. With the photo holding the keys, right-click
+     a row and close the menu with `escape`: `3` still rates (the right-click
+     gave nothing). Click a row, right-click another, `escape`: the menu
+     closes and the tree keeps the keys (a second `escape` hands them back).
+  7. Move the cursor to `b` and press Enter: `b` opens (strip, preview,
+     status follow), the cursor and highlight sit on `b`, and the tree keeps
+     the keyboard (Down still moves the cursor). Open only folders under
+     `D:\Photos\tests\`.
+  8. Right-click `b` (not a root): the menu ends with `Expand All` /
+     `Collapse All`; on a root (`D:\`) they are absent. `Expand All` on `b`
+     expands `b` and every folder under it, one listing at a time;
+     `Collapse All` on `b` collapses everything under `b`, `b` staying
+     expanded. A folder created in Explorer under an expanded one still
+     appears (the watch set follows).

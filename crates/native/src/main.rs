@@ -29,6 +29,7 @@ mod strip;
 mod thumbs;
 mod timing;
 mod tree;
+mod treekeys;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -94,7 +95,8 @@ use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
-use tree::{Child, IGNORE_CASE, Relation, Tree};
+use tree::{Child, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
+use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
 
@@ -309,6 +311,14 @@ struct Riffle {
     tree_open: Option<String>,
     tree_open_row: Option<usize>,
     tree_scroll: UniformListScrollHandle,
+    /// The tree has the keyboard: a click in its pane gave it, `escape` or a
+    /// press elsewhere hands it back to the photo.
+    tree_keys: bool,
+    /// The tree's keyboard cursor, drawn while it has the keyboard, its row
+    /// while drawn, and the type-ahead typed so far.
+    tree_cursor: Option<String>,
+    tree_cursor_row: Option<usize>,
+    typed: Typed,
     /// The roots have been read; an open before that waits in
     /// `reveal_wanted`.
     roots_loaded: bool,
@@ -541,6 +551,10 @@ impl Riffle {
             tree_open: None,
             tree_open_row: None,
             tree_scroll: UniformListScrollHandle::new(),
+            tree_keys: false,
+            tree_cursor: None,
+            tree_cursor_row: None,
+            typed: Typed::default(),
             roots_loaded: false,
             reveal_wanted: None,
             tree_note: None,
@@ -678,6 +692,10 @@ impl Riffle {
                 tree::relation(&row.path, open, IGNORE_CASE) == Some(Relation::Same)
             })
         });
+        self.tree_cursor_row = self
+            .tree_cursor
+            .as_ref()
+            .and_then(|cursor| self.tree_rows.iter().position(|row| &row.path == cursor));
         self.sync_tree_watches(cx);
         cx.notify();
     }
@@ -768,11 +786,16 @@ impl Riffle {
         cx: &mut Context<Self>,
     ) {
         self.menus.close();
+        let root = self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == path && row.depth == 0);
         self.context.open_folder(
             (f32::from(at.x), f32::from(at.y)),
             path,
             name,
             folders::REVEAL_LABEL,
+            root,
         );
         cx.notify();
     }
@@ -797,8 +820,139 @@ impl Riffle {
                 cx.write_to_clipboard(ClipboardItem::new_string(name));
             }
             context::Action::RefreshFolder => self.tree_refresh(path, cx),
+            context::Action::ExpandAll => self.tree_expand_all(path, cx),
+            context::Action::CollapseAll => {
+                self.tree.collapse_all(&path);
+                self.tree_changed(cx);
+            }
         }
         cx.notify();
+    }
+
+    /// The menu's `Expand All`: expand `path` and every subfolder under it,
+    /// listing each as an expander click does, one listing at a time, as
+    /// `folders.ts`'s `expandAll`. A branch stops once a folder on its chain
+    /// was collapsed or dropped meanwhile; a folder that fails to list is
+    /// marked and reported and the rest go on; a link is not descended into,
+    /// since it can loop back on an ancestor.
+    fn tree_expand_all(&mut self, path: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let mut chains = vec![vec![path]];
+            while let Some(chain) = chains.pop() {
+                let Some(dir) = chain.last().cloned() else {
+                    continue;
+                };
+                let walking = this.update(cx, |this, cx| {
+                    let parents = &chain[..chain.len() - 1];
+                    if !parents.iter().all(|p| this.tree.is_expanded(p)) || !this.tree.has(&dir) {
+                        return false;
+                    }
+                    this.tree.expand(&dir);
+                    this.tree_changed(cx);
+                    true
+                });
+                match walking {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(_) => return,
+                }
+                let listing = dir.clone();
+                let listed = cx
+                    .background_spawn(async move { folders::list(Path::new(&listing)) })
+                    .await;
+                let Ok(children) = this.update(cx, |this, cx| {
+                    let listed = this.tree_listed(&dir, listed, true).is_some();
+                    this.tree_changed(cx);
+                    if listed {
+                        this.tree.drawn_children_of(&dir)
+                    } else {
+                        Vec::new()
+                    }
+                }) else {
+                    return;
+                };
+                for child in children.into_iter().rev().filter(|child| !child.is_link) {
+                    let mut next = chain.clone();
+                    next.push(child.path);
+                    chains.push(next);
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Give the tree the keyboard, or with `false` hand it back to the photo;
+    /// the type-ahead starts over either way.
+    fn set_tree_keys(&mut self, keys: bool, cx: &mut Context<Self>) {
+        if self.tree_keys != keys {
+            self.tree_keys = keys;
+            self.typed = Typed::default();
+            cx.notify();
+        }
+    }
+
+    fn move_tree_cursor(&mut self, to: String, cx: &mut Context<Self>) {
+        self.tree_cursor_row = self.tree_rows.iter().position(|row| row.path == to);
+        self.tree_cursor = Some(to);
+        if let Some(row) = self.tree_cursor_row {
+            self.tree_scroll
+                .scroll_to_item(row, ScrollStrategy::Nearest);
+        }
+        cx.notify();
+    }
+
+    /// A key while the tree has the keyboard, as `folders.ts`'s `keydown`:
+    /// `escape` hands the keys back, the arrows and `home` / `end` move the
+    /// cursor, left / right / `enter` act on its row, and a printable key
+    /// without Ctrl / Alt / Meta is type-ahead. False when the tree did not
+    /// consume the key.
+    fn tree_key_down(&mut self, keystroke: &Keystroke, name: &str, cx: &mut Context<Self>) -> bool {
+        let step = match name {
+            "arrowup" => Some(StepKey::Up),
+            "arrowdown" => Some(StepKey::Down),
+            "home" => Some(StepKey::Home),
+            "end" => Some(StepKey::End),
+            _ => None,
+        };
+        let key = match name {
+            "arrowleft" => Some(TreeKey::Left),
+            "arrowright" => Some(TreeKey::Right),
+            "enter" => Some(TreeKey::Enter),
+            _ => None,
+        };
+        if name == "escape" {
+            self.set_tree_keys(false, cx);
+        } else if let Some(step) = step {
+            if let Some(to) = tree::step(&self.tree_rows, self.tree_cursor.as_deref(), step) {
+                self.move_tree_cursor(to, cx);
+            }
+        } else if let Some(key) = key {
+            match tree::tree_key(&self.tree_rows, self.tree_cursor.as_deref(), key) {
+                Some(TreeCommand::Focus(path)) => self.move_tree_cursor(path, cx),
+                Some(TreeCommand::Expand(path) | TreeCommand::Collapse(path)) => {
+                    self.tree_toggle(path, cx);
+                }
+                Some(TreeCommand::Open(path)) => self.open_from_tree(path, cx),
+                None => {}
+            }
+        } else if let Some(typed) = keys::typed_char(keystroke) {
+            self.typed = tree::append_typed(
+                &self.typed,
+                &typed,
+                Instant::now(),
+                tree::TYPE_AHEAD_TIMEOUT,
+            );
+            if let Some(to) = tree::type_ahead(
+                &self.tree_rows,
+                self.tree_cursor.as_deref(),
+                &self.typed.text,
+            ) {
+                self.move_tree_cursor(to, cx);
+            }
+        } else {
+            return false;
+        }
+        true
     }
 
     /// A listing of the tree's `dir` answered: its children, or `None` with
@@ -922,6 +1076,7 @@ impl Riffle {
                 if let Some(end) = chain.last() {
                     this.tree_open = Some(end.clone());
                 }
+                this.tree_cursor = this.tree_open.clone();
                 this.tree_changed(cx);
                 if let Some(row) = this.tree_open_row {
                     this.tree_scroll
@@ -1435,7 +1590,8 @@ impl Riffle {
 
     /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
     /// native app's own keys, and `escape` while a menu is open; an action
-    /// not handled yet is only logged.
+    /// not handled yet is only logged. While the tree has the keyboard it
+    /// takes the key first, and of the rest only `tree_gate`'s actions run.
     fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
         let Some(name) = keys::key_name(keystroke) else {
             return;
@@ -1450,6 +1606,12 @@ impl Riffle {
             if name == "escape" {
                 return;
             }
+        }
+        if self.tree_keys
+            && (self.tree_key_down(keystroke, &name, cx)
+                || treekeys::tree_gate(action) == Gate::Swallow)
+        {
+            return;
         }
         match (name.as_str(), action) {
             ("home", _) => self.go(Move::First, cx),
@@ -1466,6 +1628,10 @@ impl Riffle {
             (_, Some("peaking")) => self.toggle_peaking(cx),
             (_, Some("toggleLeft")) => {
                 self.left_pane = !self.left_pane;
+                // A hidden pane must not keep the keyboard.
+                if !self.left_pane {
+                    self.set_tree_keys(false, cx);
+                }
                 self.zoom_resized(cx);
                 cx.notify();
             }
@@ -2319,9 +2485,18 @@ impl Riffle {
     }
 
     /// The left-hand folder tree: a `uniform_list`, so only the rows on
-    /// screen are laid out.
+    /// screen are laid out. A left press in it gives it the keyboard, a press
+    /// of any button outside it hands the keyboard back, and a right press in
+    /// it does neither.
     fn tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.set_tree_keys(true, cx)),
+            )
+            .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.set_tree_keys(false, cx);
+            }))
             .w(px(PANE_WIDTH))
             .flex_none()
             .h_full()
@@ -2386,6 +2561,12 @@ impl Riffle {
             .pl(px(4. + row.depth as f32 * 12.))
             .pr_2()
             .rounded_sm()
+            .border_1()
+            .border_color(if self.tree_keys && self.tree_cursor_row == Some(at) {
+                rgba(RING_COLOR)
+            } else {
+                rgba(0x00000000)
+            })
             .cursor_pointer()
             .whitespace_nowrap()
             .hover(|s| s.bg(rgb(ACCENT_COLOR)))
@@ -2594,6 +2775,12 @@ impl Riffle {
             .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
                 this.context.close();
                 cx.notify();
+            }))
+            // A press on the menu is one outside the tree, also where the
+            // menu is drawn over the pane, as a Tauri menu button takes the
+            // focus.
+            .on_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.set_tree_keys(false, cx);
             }))
             .flex()
             .flex_col()
@@ -2962,6 +3149,8 @@ const FLAG_DOT: f32 = 7.;
 const PRIMARY_COLOR: u32 = 0xe5e5e5;
 const FOREGROUND_COLOR: u32 = 0xfafafa;
 const ACCENT_COLOR: u32 = 0x262626;
+/// `style.css`'s `--sidebar-ring`, the tree cursor's outline.
+const RING_COLOR: u32 = 0x737373ff;
 const BORDER_COLOR: u32 = 0xffffff1a;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;

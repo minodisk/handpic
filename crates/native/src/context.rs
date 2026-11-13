@@ -8,6 +8,8 @@ pub enum Action {
     CopyPath,
     CopyFolderName,
     RefreshFolder,
+    ExpandAll,
+    CollapseAll,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -32,16 +34,24 @@ fn command(action: Action, label: &str) -> Item {
 }
 
 /// The folder tree's menu: the reveal item, labeled per platform, then
-/// copying the folder's path or name, then re-listing it.
-pub fn folder_groups(reveal_label: &str) -> Vec<Vec<Item>> {
-    vec![
+/// copying the folder's path or name, then re-listing it, then, not on a
+/// root (home or a volume), expanding or collapsing every subfolder under it.
+pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
+    let mut groups = vec![
         vec![command(Action::RevealFolder, reveal_label)],
         vec![
             command(Action::CopyPath, "Copy Path"),
             command(Action::CopyFolderName, "Copy Folder Name"),
         ],
         vec![command(Action::RefreshFolder, "Refresh")],
-    ]
+    ];
+    if !root {
+        groups.push(vec![
+            command(Action::ExpandAll, "Expand All"),
+            command(Action::CollapseAll, "Collapse All"),
+        ]);
+    }
+    groups
 }
 
 /// What an open menu acts on.
@@ -74,12 +84,20 @@ impl Menu {
         self.open.is_some()
     }
 
-    /// A right-click on a tree folder at `at`, replacing any menu open.
-    pub fn open_folder(&mut self, at: (f32, f32), path: String, name: String, reveal_label: &str) {
+    /// A right-click on a tree folder at `at`, replacing any menu open;
+    /// `root` when the folder is drawn as a root.
+    pub fn open_folder(
+        &mut self,
+        at: (f32, f32),
+        path: String,
+        name: String,
+        reveal_label: &str,
+        root: bool,
+    ) {
         self.open = Some(Open {
             at,
             target: Target::Folder { path, name },
-            groups: folder_groups(reveal_label),
+            groups: folder_groups(reveal_label, root),
         });
     }
 
@@ -96,12 +114,12 @@ mod tests {
     const REVEAL: &str = "Reveal in Finder";
 
     /// Ported from `context.test.ts`'s `folderMenuGroups` cases, less the
-    /// items part 2 and the tree's keyboard step add (the renames, `Expand
-    /// All` / `Collapse All`, the sidecars, the sequencing and the import).
+    /// items part 2 adds (the renames, the sidecars, the sequencing and the
+    /// import).
     #[test]
-    fn folder_groups_hold_the_reveal_then_the_copy_then_the_refresh_item() {
+    fn folder_groups_hold_the_reveal_the_copy_the_refresh_then_the_expand_and_collapse_items() {
         assert_eq!(
-            folder_groups(REVEAL),
+            folder_groups(REVEAL, false),
             vec![
                 vec![command(Action::RevealFolder, REVEAL)],
                 vec![
@@ -109,13 +127,33 @@ mod tests {
                     command(Action::CopyFolderName, "Copy Folder Name"),
                 ],
                 vec![command(Action::RefreshFolder, "Refresh")],
+                vec![
+                    command(Action::ExpandAll, "Expand All"),
+                    command(Action::CollapseAll, "Collapse All"),
+                ],
+            ]
+        );
+    }
+
+    #[test]
+    fn a_root_has_no_expand_or_collapse_all() {
+        let actions: Vec<Vec<Action>> = folder_groups(REVEAL, true)
+            .into_iter()
+            .map(|group| group.into_iter().map(|item| item.action).collect())
+            .collect();
+        assert_eq!(
+            actions,
+            vec![
+                vec![Action::RevealFolder],
+                vec![Action::CopyPath, Action::CopyFolderName],
+                vec![Action::RefreshFolder],
             ]
         );
     }
 
     #[test]
     fn folder_items_have_no_shortcut_no_checked_state_and_are_enabled() {
-        for item in folder_groups(REVEAL).into_iter().flatten() {
+        for item in folder_groups(REVEAL, false).into_iter().flatten() {
             assert_eq!(item.shortcut, "");
             assert_eq!(item.checked, None);
             assert!(!item.disabled);
@@ -128,7 +166,7 @@ mod tests {
         assert!(!menu.is_open());
         assert_eq!(menu.close(), None);
 
-        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL);
+        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL, false);
         let open = menu.open().unwrap();
         assert_eq!(open.at, (10., 20.));
         assert_eq!(
@@ -138,7 +176,7 @@ mod tests {
                 name: "a".into()
             }
         );
-        assert_eq!(open.groups, folder_groups(REVEAL));
+        assert_eq!(open.groups, folder_groups(REVEAL, false));
 
         assert_eq!(
             menu.close(),
@@ -154,8 +192,8 @@ mod tests {
     #[test]
     fn a_second_right_click_replaces_the_open_menu() {
         let mut menu = Menu::default();
-        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL);
-        menu.open_folder((30., 40.), r"D:\b".into(), "b".into(), REVEAL);
+        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL, false);
+        menu.open_folder((30., 40.), r"D:\b".into(), "b".into(), REVEAL, true);
         let open = menu.open().unwrap();
         assert_eq!(open.at, (30., 40.));
         assert_eq!(
@@ -165,5 +203,6 @@ mod tests {
                 name: "b".into()
             }
         );
+        assert_eq!(open.groups, folder_groups(REVEAL, true));
     }
 }

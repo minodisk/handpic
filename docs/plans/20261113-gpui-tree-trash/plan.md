@@ -388,7 +388,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - On Windows a watch pins the folder's ancestors against a rename
       (`treewatch.rs`'s module comment); this plan renames nothing, so
       `with_released` is not called from the native app yet.
-- [ ] Step 4: The tree's keyboard: focus, the cursor, Left / Right / Enter, type-ahead, Expand All / Collapse All
+- [x] Step 4: The tree's keyboard: focus, the cursor, Left / Right / Enter, type-ahead, Expand All / Collapse All
   - Done when:
     - `tree.rs` gains, with the matching cases of `tree.test.ts`: `step`
       (`up` / `down` stopping at the ends, `home` / `end`, a cursor not

@@ -362,10 +362,17 @@ drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 draws as a `uniform_list`, fills from the backend's `folders`, expands
 down to the open folder on every open, keeps following the disk through the
 backend's `treewatch` on its expanded, drawn folders (`watched_folders`) and
-re-reads the roots when the window becomes active, `src/context.rs` the
+re-reads the roots when the window becomes active, and its keyboard (the
+cursor's `step`, `tree_key`'s Left / Right / Enter, the type-ahead's
+`append_typed` / `type_ahead`, and `collapse_all`), which the tree takes on a
+click in its pane and hands back on `escape` or a press elsewhere,
+`src/treekeys.rs` the keymap actions that still run while the tree has the
+keyboard (`TREE_PASSTHROUGH`, `tree_gate`, a port of `treekeys.ts`),
+`src/context.rs` the
 right-click menus (a port of `context.ts`: the items with their action, label,
 shortcut, checked and disabled state, `folder_groups`, the tree's reveal,
-`Copy Path`, `Copy Folder Name` and `Refresh`, and `Menu`, the open menu's
+`Copy Path`, `Copy Folder Name`, `Refresh` and, off a root, `Expand All` /
+`Collapse All`, and `Menu`, the open menu's
 position and target), which the window draws as a `deferred` / `anchored`
 popover at the pointer, and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
