@@ -775,6 +775,24 @@ rule: a canvas only when `paint` grows by more than 1 ms).
   element tree; look at `present` (and `frameWait` for layout) when adding
   elements beside it.
 
+### A same-session A/B gates only work on the page path (Hit)
+
+A same-session A/B needs the machine idle for 30 to 60 minutes, and other
+sessions' builds spoil its runs (see the pass 2 section below). The user
+decided on 2026-11-13 that it is needed only for work that can move the
+pager's latency.
+
+- Rule: a port plan includes the A/B latency gate only when it touches
+  rendering (per-frame drawing, overlays, new drawn parts such as the status
+  row, the strip's marks, the pane, menus' buttons), AI (pass 3 embeddings,
+  genres, the ranking, the face and eye models), the preview (read, decode,
+  orient, prefetch, the 1:1 view), the thumbnails (their read, decode and the
+  scan that makes them), or background work that runs while paging (scan
+  passes, watchers, folder reads on the open). Dialogs, context menus, file
+  operations, the settings UI, code moves into the backend and fixes off the
+  page path need no A/B. When in doubt, the plan says which side it is on and
+  why.
+
 ### The strip costs the pager under 1 ms (Measured)
 
 Same-session A/B, the pager with the strip, the index and pass 1 against the
