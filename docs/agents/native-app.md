@@ -570,6 +570,33 @@ not open.
   the pinned rev; the hand check is pending in
   `../plans/20261113-gpui-settings/learnings.md`.
 
+### A sidecar format switch is the Tauri order, shared (Inferred)
+
+The Sidecar tab's three rows (`settingsmodal::FORMATS`) emit
+`Change::SidecarFormat` only for a format other than the one shown
+(`format_change`); the window's `switch_format` sets `settings.format` at
+once, so the next judgment, from a key or the MCP companion's
+`set_judgment` alike, is queued in the new format. Then, on the background
+executor and under the view's `format_switch` lock (one switch at a time, as
+the Tauri `AppSwitchLock`), it drains the judgment stores
+(`judgment::Queue::drain`: a store queued before the switch carries the old
+format and must reach the writer before its flush) and runs the backend's
+`sidecar::switch_to`: the writer's flush (`sidecar::DRAIN_TIMEOUT`),
+`sidecarFormat` persisted through `Settings::writes`, `Index::reset_sidecars`.
+The Tauri `switch_format` calls the same `switch_to` after its own state
+write, so the two apps share one copy of that order. Back on the main thread
+it clears `touched`, the undo histories and the step note, as the Tauri
+reopen (`openDirectory`) clears `touched` and the judgment entries of its
+histories, and re-lists the open folder with `relist`, whose
+`sidecar::reconcile_of` runs only after the reset. A failure goes to the
+modal's status line (`SettingsView::failed`) and, as in the Tauri app, the
+folder is not re-listed.
+
+- Rule: a listing already under way when the format changes reconciles with
+  the format it captured at its start; the switch's own re-listing comes
+  after the reset and supersedes it (`opens` token), so the view ends on the
+  new format's judgments.
+
 ### The native app keeps its own index (Inferred)
 
 The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic.native/index.sqlite`,

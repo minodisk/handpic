@@ -80,7 +80,7 @@ use riffle_backend::{
     folders::{self, Folder},
     index::{self, Index},
     listing::canonicalize,
-    sidecar::{self, Writer},
+    sidecar::{self, SidecarFormat, Writer},
     treewatch::TreeWatch,
     watch::{self, Watch},
 };
@@ -368,6 +368,8 @@ struct Riffle {
     writer: Option<Arc<Writer>>,
     /// The judgment stores, run in the order of the keys.
     stores: judgment::Queue,
+    /// Held by a sidecar format switch off the main thread, one at a time.
+    format_switch: Arc<Mutex<()>>,
     /// The open folder's undo and redo histories.
     undo: Undo,
     /// `Undid <name>` / `Redid <name>` until the view moves on.
@@ -509,6 +511,7 @@ impl Riffle {
                     this.settings.auto_advance = on;
                     this.settings.writes.set("autoAdvance", on.into());
                 }
+                Change::SidecarFormat(format) => this.switch_format(format, cx),
                 Change::Closed => window.focus(&this.focus, cx),
             },
         )
@@ -591,6 +594,7 @@ impl Riffle {
             touched: HashSet::new(),
             writer,
             stores,
+            format_switch: Arc::default(),
             undo: Undo::new(),
             step_note: None,
             notes: Vec::new(),
@@ -976,6 +980,52 @@ impl Riffle {
         let Some(dir) = self.dir.clone() else { return };
         log::info!("resync: dir={dir}");
         self.list(PathBuf::from(dir), true, cx).detach();
+    }
+
+    /// The settings' sidecar format switch: the next judgment is queued in
+    /// `format` at once; off the main thread, one switch at a time, the
+    /// judgments queued before it reach the writer and `sidecar::switch_to`
+    /// drains, persists and resets the index; then the open folder is listed
+    /// again, its histories cleared as the Tauri reopen clears them.
+    fn switch_format(&mut self, format: SidecarFormat, cx: &mut Context<Self>) {
+        if format == self.settings.format {
+            return;
+        }
+        log::info!(
+            "sidecar format: {} -> {}",
+            self.settings.format.setting(),
+            format.setting()
+        );
+        self.settings.format = format;
+        let (index, writer) = (self.index.clone().ok(), self.writer.clone());
+        let (stores, writes) = (self.stores.clone(), self.settings.writes.clone());
+        let lock = self.format_switch.clone();
+        cx.spawn(async move |this, cx| {
+            let switched = cx
+                .background_spawn(async move {
+                    let _guard = index::lock(&lock);
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |format| {
+                        writes.set("sidecarFormat", format.setting().into());
+                        Ok(())
+                    })
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                if let Err(e) = switched {
+                    log::error!("failed to switch the sidecar format: {e}");
+                    this.settings_view.update(cx, |view, cx| view.failed(e, cx));
+                    return;
+                }
+                this.touched.clear();
+                this.undo.clear();
+                this.step_note = None;
+                this.relist(cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Watch and list the folder and, with an index, reconcile it once the
@@ -1480,10 +1530,13 @@ impl Riffle {
             ("q", _) => self.quit(cx),
             (name, _) if name == settingsmodal::OPEN_KEY => {
                 self.menus.close();
-                let (auto_advance, saved) =
-                    (self.settings.auto_advance, self.settings.writes.is_open());
+                let (auto_advance, format, saved) = (
+                    self.settings.auto_advance,
+                    self.settings.format,
+                    self.settings.writes.is_open(),
+                );
                 self.settings_view.update(cx, |view, cx| {
-                    view.open(auto_advance, saved, window, cx);
+                    view.open(auto_advance, format, saved, window, cx);
                 });
                 cx.notify();
             }

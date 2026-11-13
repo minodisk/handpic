@@ -525,6 +525,30 @@ impl Writer {
     }
 }
 
+/// The rest of a sidecar format switch once the caller has put `format` in
+/// force, so a judgment made meanwhile is queued in it: drain what the writer
+/// still holds queued in the old format, `persist` the new one (a failure is
+/// logged, not returned), and reset the index so the next folder open reads
+/// the new format's sidecars. Blocks on the drain and SQLite, so it must not
+/// run on a UI thread; the caller serializes switches.
+pub fn switch_to(
+    format: SidecarFormat,
+    writer: Option<&Writer>,
+    index: Option<&Arc<Mutex<Index>>>,
+    persist: impl FnOnce(SidecarFormat) -> Result<(), String>,
+) -> Result<(), String> {
+    if let Some(writer) = writer {
+        writer.flush(DRAIN_TIMEOUT);
+    }
+    if let Err(e) = persist(format) {
+        log::warn!("failed to save the sidecar format: {e}");
+    }
+    match index {
+        Some(index) => lock(index).reset_sidecars(),
+        None => Ok(()),
+    }
+}
+
 fn run<F>(rx: Receiver<Message>, index: Arc<Mutex<Index>>, on_error: F)
 where
     F: Fn(&Path, &str),
@@ -2582,6 +2606,113 @@ mod tests {
         }
 
         drop(writer);
+        remove_temp_dir(&dir);
+    }
+
+    /// The paths of the `ratings` rows, each with whether its stat is gone.
+    fn stat_cleared(index: &Arc<Mutex<Index>>) -> Vec<(String, bool)> {
+        lock(index)
+            .conn
+            .prepare(
+                "SELECT path, xmp_size IS NULL AND xmp_mtime_ns IS NULL FROM ratings ORDER BY path",
+            )
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn a_switch_drains_the_old_format_then_persists_then_resets_the_index() {
+        let dir = temp_dir("switch-to");
+        let index = index(&dir);
+        let writer = writer(index.clone());
+        let queued = arw(&dir, "c.ARW");
+        let queued_str = queued.to_string_lossy().into_owned();
+        {
+            let mut index = lock(&index);
+            index
+                .set_rating("d", "/a.ARW", Some(3), Flag::None, None, true)
+                .unwrap();
+            assert!(index
+                .mark_written("/a.ARW", Some(3), Flag::None, None, true, Some((42, 7)))
+                .unwrap());
+            index
+                .store_sidecar_ratings(
+                    "d",
+                    &[("/b.ARW".to_string(), Some(5), Flag::None, None, 9, 9, false)],
+                )
+                .unwrap();
+            index
+                .set_rating("d", "/b.ARW", Some(1), Flag::Pick, Some("Red"), true)
+                .unwrap();
+            index
+                .set_rating("d", &queued_str, Some(2), Flag::None, None, true)
+                .unwrap();
+        }
+        writer
+            .set(
+                queued.clone(),
+                Some(2),
+                Flag::None,
+                None,
+                true,
+                SidecarFormat::Xmp,
+                LabelNames::default(),
+            )
+            .unwrap();
+        let mut persisted = None;
+
+        switch_to(SidecarFormat::Dop, Some(&writer), Some(&index), |format| {
+            persisted = Some((format, SidecarFormat::Xmp.sidecar_path(&queued).exists()));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(
+            persisted,
+            Some((SidecarFormat::Dop, true)),
+            "the old format's queue is written before the new format is persisted"
+        );
+        assert_eq!(
+            stat_cleared(&index),
+            [("/b.ARW".to_string(), true)],
+            "clean rows are dropped, a dirty one loses the old format's stat"
+        );
+        assert_eq!(
+            lock(&index).dirty_rows("d").unwrap(),
+            [(
+                "/b.ARW".to_string(),
+                Some(1),
+                Flag::Pick,
+                Some("Red".to_string()),
+                true
+            )],
+            "a dirty row keeps its judgment"
+        );
+
+        drop(writer);
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn a_failed_persist_still_resets_the_index() {
+        let dir = temp_dir("switch-to-persist");
+        let index = index(&dir);
+        lock(&index)
+            .store_sidecar_ratings(
+                "d",
+                &[("/a.ARW".to_string(), Some(5), Flag::None, None, 9, 9, false)],
+            )
+            .unwrap();
+
+        let switched = switch_to(SidecarFormat::Both, None, Some(&index), |_| {
+            Err("read-only".into())
+        });
+
+        assert_eq!(switched, Ok(()));
+        assert!(stat_cleared(&index).is_empty());
         remove_temp_dir(&dir);
     }
 }

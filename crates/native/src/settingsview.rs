@@ -9,15 +9,18 @@ use gpui::{
     SharedString, Window, deferred, div, prelude::*, px, rgb, rgba,
 };
 
+use riffle_backend::sidecar::SidecarFormat;
+
 use crate::{
     ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
     PANE_COLOR, PRIMARY_COLOR, keys,
-    settingsmodal::{self, ModalKey, SettingsModal, Step, TABS, Tab},
+    settingsmodal::{self, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab},
 };
 
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
+    SidecarFormat(SidecarFormat),
     /// The focus goes back to the window.
     Closed,
 }
@@ -29,8 +32,9 @@ pub struct SettingsView {
     /// Tauri tablist's roving `tabindex`.
     tabs: Vec<FocusHandle>,
     model: SettingsModal,
-    /// The value shown, read from the main view on every open.
+    /// The values shown, read from the main view on every open.
     auto_advance: bool,
+    format: SidecarFormat,
     status: Option<SharedString>,
 }
 
@@ -43,6 +47,7 @@ impl SettingsView {
             tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
             model: SettingsModal::default(),
             auto_advance: true,
+            format: SidecarFormat::default(),
             status: None,
         }
     }
@@ -56,6 +61,7 @@ impl SettingsView {
     pub fn open(
         &mut self,
         auto_advance: bool,
+        format: SidecarFormat,
         saved: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
@@ -64,6 +70,7 @@ impl SettingsView {
             return;
         }
         self.auto_advance = auto_advance;
+        self.format = format;
         self.status = (!saved).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
@@ -106,6 +113,22 @@ impl SettingsView {
     fn flip_auto_advance(&mut self, cx: &mut Context<Self>) {
         self.auto_advance = !self.auto_advance;
         cx.emit(Change::AutoAdvance(self.auto_advance));
+        cx.notify();
+    }
+
+    fn choose_format(&mut self, chosen: SidecarFormat, cx: &mut Context<Self>) {
+        let Some(format) = settingsmodal::format_change(self.format, chosen) else {
+            return;
+        };
+        self.format = format;
+        self.status = None;
+        cx.emit(Change::SidecarFormat(format));
+        cx.notify();
+    }
+
+    /// A switch failed: its message goes to the status line.
+    pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
+        self.status = Some(message.into());
         cx.notify();
     }
 
@@ -161,7 +184,15 @@ impl SettingsView {
                 "Auto-advance after a star, reject or pick",
                 cx.listener(|this, _: &ClickEvent, _, cx| this.flip_auto_advance(cx)),
             )),
-            Tab::Sidecar | Tab::Shortcuts | Tab::Import => content,
+            Tab::Sidecar => content.children(FORMATS.iter().map(|&(format, label)| {
+                radio(
+                    format.setting(),
+                    format == self.format,
+                    label,
+                    cx.listener(move |this, _: &ClickEvent, _, cx| this.choose_format(format, cx)),
+                )
+            })),
+            Tab::Shortcuts | Tab::Import => content,
         }
     }
 
@@ -267,6 +298,46 @@ fn checkbox(
                     d.bg(rgb(PRIMARY_COLOR))
                         .text_color(rgb(PANE_COLOR))
                         .child("\u{2713}")
+                }),
+        )
+        .child(label)
+        .on_click(on_click)
+}
+
+/// A radio row: the round box, filled when selected, then its label; a click,
+/// Enter or Space on the focused row selects it.
+fn radio(
+    id: &'static str,
+    selected: bool,
+    label: &'static str,
+    on_click: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
+) -> impl IntoElement {
+    div()
+        .id(id)
+        .tab_index(0)
+        .flex()
+        .items_center()
+        .gap_2()
+        .px_2()
+        .py(px(2.))
+        .rounded_sm()
+        .border_1()
+        .border_color(rgba(0))
+        .cursor_pointer()
+        .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
+        .child(
+            div()
+                .size(px(14.))
+                .flex_none()
+                .flex()
+                .items_center()
+                .justify_center()
+                .rounded_full()
+                .border_1()
+                .border_color(rgba(INPUT_BORDER))
+                .when(selected, |d| {
+                    d.border_color(rgb(PRIMARY_COLOR))
+                        .child(div().size(px(6.)).rounded_full().bg(rgb(PRIMARY_COLOR)))
                 }),
         )
         .child(label)

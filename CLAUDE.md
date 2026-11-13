@@ -107,7 +107,7 @@ counting as scanning; the passes run on worker threads below normal OS
 priority (the second and third lower still) and take the on-screen files first
 through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
-`sidecarFormat` key of the settings store, next to the configurable
+`sidecarFormat` key of the settings store, a switch's drain, persist and index reset (`switch_to`), next to the configurable
 `xmp:Label` names per color persisted in the `labelNames` key
 (`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
 `src/listing.rs`
@@ -287,7 +287,7 @@ window writing the changed sort or filter; `Menus`, which one is open), which th
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
 rules of `modal.ts` and `tabs.ts`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
-holding the Culling tab's auto-advance toggle,
+holding the Sidecar tab's format and the Culling tab's auto-advance toggle,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
