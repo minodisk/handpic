@@ -63,7 +63,7 @@ use judgment::{Command, State};
 use keys::Bindings;
 use menu::{Lead, Menus, Row, Which};
 use meta::Shown;
-use pager::{Move, Pager};
+use pager::{Finished, Move, Pager};
 use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
@@ -1508,27 +1508,24 @@ impl Riffle {
         received: Instant,
         cx: &mut Context<Self>,
     ) {
-        if let Some(current) = self.pager.finish(index) {
-            self.send(current, received, cx);
+        let shown = match &self.shown {
+            Some((at, Shown::Read(_))) => *at,
+            _ => None,
+        };
+        if let Finished::Stale { draw, next } = self.pager.finish(index, result.is_ok(), shown) {
+            match result {
+                Ok(loaded) if draw => self.stale(index, loaded, cx),
+                Ok(loaded) => self.retire(Some(loaded.image)),
+                Err(_) => {}
+            }
+            self.send(next, received, cx);
             return;
         }
         let key = self.key.take();
         let name = file_name(&self.files[index]);
         match result {
             Ok(loaded) => {
-                let m = &loaded.meta;
-                self.status = format!(
-                    "{}/{}  {name}  {}x{}  {}  {}  {}  {}",
-                    index + 1,
-                    self.files.len(),
-                    loaded.px.0,
-                    loaded.px.1,
-                    loaded.orientation,
-                    dash(&m.shutter),
-                    dash(&m.aperture),
-                    dash(&m.iso),
-                )
-                .into();
+                self.status = self.status_line(index, &loaded);
                 self.shown = Some((Some(index), Shown::Read(Box::new(loaded.meta))));
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
@@ -1567,6 +1564,37 @@ impl Riffle {
                 cx.notify();
             }
         }
+    }
+
+    /// Draw another file's result on the way to the current one: the frame,
+    /// its status line and meta pane, and the overlay's file, which keeps the
+    /// current file's marks off it. Nothing that is the current file's.
+    fn stale(&mut self, index: usize, loaded: Loaded, cx: &mut Context<Self>) {
+        self.status = self.status_line(index, &loaded);
+        self.shown = Some((Some(index), Shown::Read(Box::new(loaded.meta))));
+        let old = self.image.replace(loaded.image);
+        self.retire(old);
+        self.hold.hold(loaded.paused);
+        let path = self.files[index].to_string_lossy().into_owned();
+        self.marks.show(Some((path, loaded.orientation)));
+        cx.notify();
+    }
+
+    fn status_line(&self, index: usize, loaded: &Loaded) -> SharedString {
+        let m = &loaded.meta;
+        format!(
+            "{}/{}  {}  {}x{}  {}  {}  {}  {}",
+            index + 1,
+            self.files.len(),
+            file_name(&self.files[index]),
+            loaded.px.0,
+            loaded.px.1,
+            loaded.orientation,
+            dash(&m.shutter),
+            dash(&m.aperture),
+            dash(&m.iso),
+        )
+        .into()
     }
 
     fn fail(&mut self, message: &str) {

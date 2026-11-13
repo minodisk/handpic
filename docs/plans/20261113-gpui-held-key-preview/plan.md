@@ -33,7 +33,7 @@ nothing is queued, and the number of reads per key sequence does not change.
 
 ## Steps
 
-- [ ] Step 1: Draw a stale preview result before chasing the current file
+- [x] Step 1: Draw a stale preview result before chasing the current file
       (fit view)
   - Done when:
     - Holding an arrow key flips through previews in the fit view; the drawn
@@ -246,3 +246,5 @@ nothing is queued, and the number of reads per key sequence does not change.
   and no-flicker rules in `loaded()`, where they have no unit test.
 
 ## Progress
+
+- (2026-11-13) Step 1 complete
