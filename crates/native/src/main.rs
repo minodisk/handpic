@@ -1425,14 +1425,19 @@ impl Riffle {
         };
         let action = self.bindings.action_for(&name);
         log::debug!("key: {name} action={action:?}");
+        // Any key closes the right-click menu; only `escape` stops there, as
+        // in the Tauri app's keydown handler.
+        if self.context.is_open() {
+            self.context.close();
+            cx.notify();
+            if name == "escape" {
+                return;
+            }
+        }
         match (name.as_str(), action) {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
             ("q", _) => self.quit(cx),
-            ("escape", _) if self.context.is_open() => {
-                self.context.close();
-                cx.notify();
-            }
             ("escape", _) if self.menus.is_open() => {
                 self.menus.close();
                 cx.notify();

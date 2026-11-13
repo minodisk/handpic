@@ -1011,8 +1011,8 @@ takes the `MouseDownEvent`'s window position as is, and `snap_to_window`
 keeps it inside near an edge (the Tauri `menuPosition` flips instead). It is
 `occlude()`d with `on_mouse_down_out` closing it on any press outside, of
 any button, so a right press on another row closes the menu in the capture
-phase and opens that row's in the bubble phase; `escape` closes it before the
-status row's menus. Items use `on_click`; a disabled item is dimmed with no
+phase and opens that row's in the bubble phase; any key closes it (`escape` stops there,
+the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is dimmed with no
 handler.
 
 - Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
