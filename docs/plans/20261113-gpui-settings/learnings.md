@@ -68,6 +68,70 @@
   console (`_pyrepl` `WinError 123`) and was moved to the background; scripts
   run as `timeout 30 python -I <script> </dev/null` worked.
 
+## Step 3: the settings modal's shell and the Culling tab
+
+- `crates/backend/src/ai.rs` was on `origin/main` (#1006), so the AI toggle
+  is wired through `riffle_backend::ai::Ai` rather than persist-only:
+  `Ai::switch` downloads the model on an enable, the status line is a port of
+  `ai.ts`'s `aiStatus` (`settingsmodal::ai_status`, its tests ported), and the
+  note under the toggle says the analysis does not run in this app yet.
+  `AiState`'s fields were private (the Tauri app only serialized it), so they
+  became `pub`; nothing else in the backend changed.
+- Where the model goes: `datadir::model_path`, `<local data dir>/<IDENTIFIER>.native/<MODEL_FILE>`
+  (the `.native` folder the index already uses, apart from the Tauri app's
+  copy under `<local data dir>/<IDENTIFIER>`), or `--data-dir <path>`, a new
+  flag added so a hand check that turns AI on never downloads into a real
+  data dir. `Ai::new` runs at startup and only reads that folder (it removes
+  stale `.part` files); the headless smoke run below created nothing there.
+- Decided: no resume of a cut-short download at launch (the Tauri app calls
+  `switch(true)` when `aiEnabled` is on): nothing in the native app uses the
+  model, and a seeded `aiEnabled: true` would otherwise fetch 378 MB on the
+  first start. Recorded in the plan's Step 3 text and its trade-offs.
+- The `Ai` handle lives in `SettingsView`, not the main view: its state
+  callback runs on the download thread and goes through a channel of the view
+  (`futures::channel::mpsc`, as the scan's events do), which notifies only
+  while the modal is open. The main view still owns the values in memory and
+  writes `autoAdvance` / `aiEnabled` from its `subscribe_in` callback.
+- Read from GPUI at the pinned rev (`b5cd310b`): a `KeyDownEvent` runs the
+  capture phase root first, then the bubble phase from the focused node up
+  (`window.rs` `dispatch_key_down_up_event`), so the box's `on_key_down` with
+  `cx.stop_propagation()` keeps every key from the root's handler; the root's
+  guard covers a focus left on the root. Tab is not built in:
+  `window.focus_next` / `focus_prev` walk the window's tab stops and wrap
+  (`tab_stop.rs`), and the main view's focus handle is not a tab stop, so the
+  cycle stays in the modal. Enter / Space on a focused element with `on_click`
+  become a `ClickEvent::Keyboard` (`div.rs`) for free. `occlude()` is
+  `HitboxBehavior::BlockMouse`, which `hit_test` stops at, scroll included.
+  `Hitbox::is_hovered` is false right after keyboard input
+  (`last_input_was_keyboard`); a mouse press sets the modality first, so it
+  does not affect the clicks.
+- `cycleFocus` of `modal.ts` was not ported: GPUI's `focus_next` wraps on its
+  own, and the function would have no caller (clippy `dead_code`).
+  `tabs.ts`'s horizontal orientation was dropped for the same reason; the
+  vertical cases are ported on the four tabs, and the Debug-tab cases have no
+  counterpart.
+- `key_down` gained a `window` parameter (to focus the modal's selected tab
+  on open), so the root's listener passes it; `Riffle::new` gained the
+  `model` path; `start`'s `Args` destructure gained `data_dir: _`. These are
+  the Ai wiring beyond the plan's five named `main.rs` changes.
+- Headless smoke run (debug exe, test paths only): `riffle-native.exe
+  D:\Photos\tests\20261113-settings\photos --index ...\index-step3.sqlite
+  --settings ...\step3.sqlite --data-dir ...\data --log ...\step3.log --auto 2`
+  logged `aiEnabled=false` in the `settings:` line and `embedding model:
+  D:\Photos\tests\20261113-settings\data\models/siglip2-base-patch32-256/vision_model.onnx`,
+  paged twice and quit; no `data` folder was created.
+- A stray `python - </dev/null` (typed by mistake ahead of a `perl` edit)
+  still hung in the Bash tool and was moved to the background; it was left
+  running, not killed. The edit was redone with the Edit tool.
+- Scope change (the user, 2026-11-14): the AI features are not ported to the
+  native app at all (`aiEnabled` with the model download, pass 3, genres,
+  the ranking, `recommended`). The AI toggle, its `aiStatus` line and note,
+  `Change::AiEnabled`, the `Ai` handle, `datadir::model_path`, the
+  `--data-dir` flag and `Settings::ai_enabled` were removed, and
+  `AiState`'s fields went back to private, so the backend is unchanged by
+  this step. The bullets above about the AI wiring describe what was
+  removed. A seeded `aiEnabled` key stays in the store, unread.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, Windows, the user's): the sort order and the
@@ -91,3 +155,28 @@
   4. `Filter ▾` → `Reset`, quit, start again with a fresh `--index`
      (`index-c.sqlite`). Expected: the `settings:` line shows an empty
      filter and the filter button is not lit; the sort is still `Rating`.
+- Pending manual check (Step 3, Windows, the user's): the settings modal's
+  shell and the Culling tab. Basis: Step 3's Done-when (the open / close
+  paths, no key or press reaching the window behind it, the auto-advance
+  toggle taking effect and surviving a restart); the checkbox was ticked on
+  the automated criteria (`settingsmodal.rs`'s tests, clippy). Steps, on copies
+  under `D:\Photos\tests\20261113-settings\` only, after `cargo build` in
+  `crates/native`:
+  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-s3a.sqlite --settings D:\Photos\tests\20261113-settings\step3-hand.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
+  2. Open `Filter ▾`, then press Ctrl+,. Expected: the menu closes and the
+     Settings box appears centered over a dimmed window, the Sidecar tab
+     selected (empty), Culling, Keyboard Shortcuts and Import below it.
+  3. With it open, press the arrow keys, `q`, `1` and `x`, click a strip
+     cell and scroll the wheel over the strip. Expected: the preview, the
+     strip and the file's rating do not change and the app does not quit.
+     With the Sidecar tab focused, ArrowDown / ArrowUp / Home / End move the
+     selected tab; Tab / Shift+Tab move a visible focus border through the
+     close button, the selected tab and (on Culling) the auto-advance
+     checkbox, wrapping; Space or Enter on the focused checkbox flips it.
+  4. Close it with Escape, open it again and close with the `×` button, then
+     open and close with a press on the dimmed area outside the box. After
+     each close, ArrowRight pages to the next file.
+  5. On Culling, turn auto-advance off and close. Press `1`: the rating is
+     set and the file stays. Quit, start again with the same `--settings`
+     and a fresh `--index` (`index-s3b.sqlite`). Expected: the startup
+     `settings:` line has `autoAdvance=false` and the checkbox is off.
