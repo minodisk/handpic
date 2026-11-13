@@ -2,10 +2,13 @@
 //! `#sort-menu` and `#filter-menu`: their rows in the HTML's order and
 //! labels, each item's checked state, what a click on it does, and which menu
 //! is open. The `Face focus` `?` help is left out (the user's decision), the
-//! `Recommended` sort and the `Genre` section are port Step 9's and the EXIF
-//! sections a follow-up slice's.
+//! `Recommended` sort and the `Genre` section are port Step 9's. The EXIF
+//! sections come last, one per group the folder has (`exif::groups_of`), an
+//! item keyed by its group and label rather than its row, as the groups can
+//! be rebuilt between the frame that drew the menu and the click.
 
 use crate::{
+    exif::{GROUPS, Group, Groups},
     filter::{AfEye, EyesItem, FilterFlag, FilterState, Orientation, OutputState},
     mark::MarkState,
     sort::SortKey,
@@ -19,7 +22,7 @@ pub enum Which {
 }
 
 /// One filter item's section and value.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Toggle {
     Flag(FilterFlag),
     Stars(u8),
@@ -29,10 +32,11 @@ pub enum Toggle {
     Candidate(AfEye),
     Eyes(EyesItem),
     Output(OutputState),
+    Exif(Group, String),
 }
 
 /// What a click on an item does.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
     Toggle(Toggle),
     Reset,
@@ -40,9 +44,11 @@ pub enum Action {
 }
 
 /// What an item's text is.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Label {
     Text(&'static str),
+    /// A folder's EXIF label.
+    Owned(String),
     /// `on` lit stars, then `5 - on` dim ones, as the HTML's `.on` / `.off`.
     Stars(u8),
 }
@@ -60,7 +66,7 @@ pub enum Lead {
     Face(Option<MarkState>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
     pub label: Label,
     pub lead: Lead,
@@ -68,7 +74,7 @@ pub struct Item {
     pub action: Action,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Row {
     Item(Item),
     Separator,
@@ -108,13 +114,14 @@ pub fn sort_rows(in_force: SortKey) -> Vec<Row> {
 }
 
 /// The filter menu's rows, each item checked from `filter`; the `Output`
-/// section only while the folder gave an export answer.
-pub fn filter_rows(filter: &FilterState, output_known: bool) -> Vec<Row> {
+/// section only while the folder gave an export answer, then the folder's
+/// EXIF `groups`.
+pub fn filter_rows(filter: &FilterState, output_known: bool, groups: &Groups) -> Vec<Row> {
     let item = |label, lead, toggle: Toggle| {
         Row::Item(Item {
             label,
             lead,
-            checked: is_checked(filter, toggle),
+            checked: is_checked(filter, &toggle),
             action: Action::Toggle(toggle),
         })
     };
@@ -189,18 +196,34 @@ pub fn filter_rows(filter: &FilterState, output_known: bool) -> Vec<Row> {
             rows.push(item(Label::Text(text), Lead::None, Toggle::Output(output)));
         }
     }
+    for group in GROUPS {
+        let labels = groups.labels(group);
+        if labels.is_empty() {
+            continue;
+        }
+        rows.push(Row::Separator);
+        rows.push(Row::Heading(group.heading()));
+        for label in labels {
+            rows.push(item(
+                Label::Owned(label.clone()),
+                Lead::None,
+                Toggle::Exif(group, label.clone()),
+            ));
+        }
+    }
     rows
 }
 
-fn is_checked(filter: &FilterState, toggle: Toggle) -> bool {
+fn is_checked(filter: &FilterState, toggle: &Toggle) -> bool {
     match toggle {
-        Toggle::Flag(flag) => filter.flags.contains(&flag),
-        Toggle::Stars(stars) => filter.stars.contains(&stars),
-        Toggle::Label(label) => filter.labels.contains(label),
-        Toggle::Orientation(o) => filter.orientations.contains(&o),
-        Toggle::Candidate(state) => filter.candidates.contains(&state),
-        Toggle::Eyes(eyes) => filter.eyes.contains(&eyes),
-        Toggle::Output(output) => filter.outputs.contains(&output),
+        Toggle::Flag(flag) => filter.flags.contains(flag),
+        Toggle::Stars(stars) => filter.stars.contains(stars),
+        Toggle::Label(label) => filter.labels.contains(*label),
+        Toggle::Orientation(o) => filter.orientations.contains(o),
+        Toggle::Candidate(state) => filter.candidates.contains(state),
+        Toggle::Eyes(eyes) => filter.eyes.contains(eyes),
+        Toggle::Output(output) => filter.outputs.contains(output),
+        Toggle::Exif(group, label) => filter.exif.get(group).is_some_and(|s| s.contains(label)),
     }
 }
 
@@ -222,6 +245,7 @@ pub fn apply(filter: &mut FilterState, sort: &mut SortKey, action: Action) {
             Toggle::Candidate(state) => flip(&mut filter.candidates, state),
             Toggle::Eyes(eyes) => flip(&mut filter.eyes, eyes),
             Toggle::Output(output) => flip(&mut filter.outputs, output),
+            Toggle::Exif(group, label) => filter.toggle_exif(group, &label),
         },
         Action::Reset => *filter = FilterState::default(),
         Action::Sort(key) => *sort = key,
@@ -275,7 +299,7 @@ impl Menus {
 
     /// After an item's action: a sort pick closes the menu, a filter item
     /// keeps it open so several can be checked in one go.
-    pub fn acted(&mut self, action: Action) {
+    pub fn acted(&mut self, action: &Action) {
         if matches!(action, Action::Sort(_)) {
             self.close();
         }
@@ -289,7 +313,7 @@ mod tests {
     fn items(rows: &[Row]) -> Vec<Item> {
         rows.iter()
             .filter_map(|row| match row {
-                Row::Item(item) => Some(*item),
+                Row::Item(item) => Some(item.clone()),
                 _ => None,
             })
             .collect()
@@ -303,6 +327,10 @@ mod tests {
                     ..
                 }) => (*text).to_owned(),
                 Row::Item(Item {
+                    label: Label::Owned(text),
+                    ..
+                }) => text.clone(),
+                Row::Item(Item {
                     label: Label::Stars(on),
                     ..
                 }) => format!("stars {on}"),
@@ -310,6 +338,14 @@ mod tests {
                 Row::Heading(text) => format!("# {text}"),
             })
             .collect()
+    }
+
+    fn groups() -> Groups {
+        Groups(vec![
+            (Group::Camera, vec!["ILCE-1".into(), "ILCE-7RM5".into()]),
+            (Group::Iso, vec!["ISO 100".into()]),
+            (Group::Focal, vec!["<24 mm".into(), ">200 mm".into()]),
+        ])
     }
 
     fn checked(rows: &[Row]) -> Vec<Action> {
@@ -325,7 +361,10 @@ mod tests {
         let rows = sort_rows(SortKey::Name);
         assert_eq!(texts(&rows), ["Capture time", "File name", "Rating"]);
         assert_eq!(
-            items(&rows).iter().map(|i| i.action).collect::<Vec<_>>(),
+            items(&rows)
+                .into_iter()
+                .map(|i| i.action)
+                .collect::<Vec<_>>(),
             [
                 Action::Sort(SortKey::Capture),
                 Action::Sort(SortKey::Name),
@@ -343,7 +382,7 @@ mod tests {
 
     #[test]
     fn the_filter_menu_lists_the_html_rows_in_order() {
-        let rows = filter_rows(&FilterState::default(), true);
+        let rows = filter_rows(&FilterState::default(), true, &Groups::default());
         assert_eq!(
             texts(&rows),
             [
@@ -391,7 +430,7 @@ mod tests {
 
     #[test]
     fn the_output_section_is_hidden_without_an_answer() {
-        let rows = filter_rows(&FilterState::default(), false);
+        let rows = filter_rows(&FilterState::default(), false, &Groups::default());
         assert_eq!(texts(&rows).last().map(String::as_str), Some("Unknown"));
         assert!(
             !items(&rows)
@@ -402,7 +441,7 @@ mod tests {
 
     #[test]
     fn the_leads_follow_the_css() {
-        let rows = filter_rows(&FilterState::default(), true);
+        let rows = filter_rows(&FilterState::default(), true, &Groups::default());
         let lead = |action| {
             items(&rows)
                 .into_iter()
@@ -450,7 +489,14 @@ mod tests {
 
     #[test]
     fn no_item_is_checked_on_an_empty_filter() {
-        assert!(checked(&filter_rows(&FilterState::default(), true)).is_empty());
+        assert!(
+            checked(&filter_rows(
+                &FilterState::default(),
+                true,
+                &Groups::default()
+            ))
+            .is_empty()
+        );
     }
 
     #[test]
@@ -466,7 +512,7 @@ mod tests {
         filter.eyes.insert(EyesItem::Unknown);
         filter.outputs.insert(OutputState::No);
         assert_eq!(
-            checked(&filter_rows(&filter, true)),
+            checked(&filter_rows(&filter, true, &Groups::default())),
             [
                 Toggle::Flag(FilterFlag::Picked),
                 Toggle::Stars(0),
@@ -486,21 +532,21 @@ mod tests {
     fn a_foreign_label_checks_no_item() {
         let mut filter = FilterState::default();
         filter.labels.insert("Approved".into());
-        assert!(checked(&filter_rows(&filter, true)).is_empty());
+        assert!(checked(&filter_rows(&filter, true, &Groups::default())).is_empty());
     }
 
     #[test]
     fn every_toggle_flips_its_item_and_leaves_the_sort() {
-        for item in items(&filter_rows(&FilterState::default(), true)) {
-            let Action::Toggle(toggle) = item.action else {
+        for item in items(&filter_rows(&FilterState::default(), true, &groups())) {
+            let Action::Toggle(toggle) = item.action.clone() else {
                 continue;
             };
             let (mut filter, mut sort) = (FilterState::default(), SortKey::Rating);
-            apply(&mut filter, &mut sort, item.action);
-            assert!(is_checked(&filter, toggle), "{toggle:?} on");
+            apply(&mut filter, &mut sort, item.action.clone());
+            assert!(is_checked(&filter, &toggle), "{toggle:?} on");
             assert!(filter.is_active());
             apply(&mut filter, &mut sort, item.action);
-            assert!(!is_checked(&filter, toggle), "{toggle:?} off");
+            assert!(!is_checked(&filter, &toggle), "{toggle:?} off");
             assert_eq!(filter, FilterState::default());
             assert_eq!(sort, SortKey::Rating);
         }
@@ -527,9 +573,11 @@ mod tests {
         filter.candidates.insert(MarkState::Good);
         filter.eyes.insert(EyesItem::Closed);
         filter.outputs.insert(OutputState::Yes);
+        filter.toggle_exif(Group::Camera, "ILCE-1");
         let mut sort = SortKey::Capture;
         apply(&mut filter, &mut sort, Action::Reset);
         assert!(!filter.is_active());
+        assert!(filter.exif.is_empty());
         assert_eq!(sort, SortKey::Capture);
     }
 
@@ -625,7 +673,7 @@ mod tests {
     fn a_sort_pick_closes_the_menu() {
         let mut menus = Menus::default();
         menus.toggle(Which::Sort, (0., 0.));
-        menus.acted(Action::Sort(SortKey::Capture));
+        menus.acted(&Action::Sort(SortKey::Capture));
         assert!(!menus.is_open());
     }
 
@@ -633,9 +681,87 @@ mod tests {
     fn a_filter_toggle_and_reset_keep_the_menu_open() {
         let mut menus = Menus::default();
         menus.toggle(Which::Filter, (0., 0.));
-        menus.acted(Action::Toggle(Toggle::Flag(FilterFlag::Picked)));
+        menus.acted(&Action::Toggle(Toggle::Flag(FilterFlag::Picked)));
         assert_eq!(menus.open(), Some(Which::Filter));
-        menus.acted(Action::Reset);
+        menus.acted(&Action::Reset);
         assert_eq!(menus.open(), Some(Which::Filter));
+    }
+
+    #[test]
+    fn the_exif_sections_come_last_with_their_headings() {
+        let rows = filter_rows(&FilterState::default(), true, &groups());
+        let all = texts(&rows);
+        let output = all.iter().position(|t| t == "No output").unwrap();
+        assert_eq!(
+            all[output + 1..],
+            [
+                "---",
+                "# Camera",
+                "ILCE-1",
+                "ILCE-7RM5",
+                "---",
+                "# ISO",
+                "ISO 100",
+                "---",
+                "# Focal length",
+                "<24 mm",
+                ">200 mm",
+            ]
+        );
+        let without_output = texts(&filter_rows(&FilterState::default(), false, &groups()));
+        let eyes = without_output.iter().position(|t| t == "Unknown").unwrap();
+        assert_eq!(without_output[eyes + 1..], all[output + 1..]);
+    }
+
+    #[test]
+    fn every_exif_heading_follows_the_tauri_names() {
+        let groups = Groups(
+            GROUPS
+                .iter()
+                .map(|g| (*g, vec![format!("{g:?}")]))
+                .collect(),
+        );
+        let headings: Vec<String> = texts(&filter_rows(&FilterState::default(), true, &groups))
+            .into_iter()
+            .filter_map(|t| t.strip_prefix("# ").map(str::to_owned))
+            .skip(3)
+            .collect();
+        assert_eq!(
+            headings,
+            [
+                "Camera",
+                "Lens",
+                "Aperture",
+                "Shutter speed",
+                "ISO",
+                "Focal length"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_exif_item_is_checked_from_its_group_and_label() {
+        let mut filter = FilterState::default();
+        filter.toggle_exif(Group::Camera, "ILCE-7RM5");
+        filter.toggle_exif(Group::Iso, "ILCE-7RM5");
+        assert_eq!(
+            checked(&filter_rows(&filter, true, &groups())),
+            [Action::Toggle(Toggle::Exif(
+                Group::Camera,
+                "ILCE-7RM5".into()
+            ))]
+        );
+    }
+
+    #[test]
+    fn an_exif_toggle_flips_its_label_and_lights_the_filter() {
+        let (mut filter, mut sort) = (FilterState::default(), SortKey::Name);
+        let action = Action::Toggle(Toggle::Exif(Group::Focal, ">200 mm".into()));
+        apply(&mut filter, &mut sort, action.clone());
+        assert!(filter.is_active());
+        assert!(filter.exif[&Group::Focal].contains(">200 mm"));
+        apply(&mut filter, &mut sort, action);
+        assert!(!filter.is_active());
+        assert_eq!(filter, FilterState::default());
     }
 }

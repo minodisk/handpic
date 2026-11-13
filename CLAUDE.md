@@ -233,8 +233,9 @@ capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
 `src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
-`filter.ts` less the genres and the EXIF sections: flags, stars, labels,
-orientation, `Face focus`, `Eyes` and `Output`; `Stored`, the
+`filter.ts` less the genres: flags, stars, labels,
+orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
+`src/exif.rs` builds (a port of `exif.ts`); `Stored`, the
 `filter_setting` rule over the stored `filter`; `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,

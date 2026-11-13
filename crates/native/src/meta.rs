@@ -18,6 +18,13 @@ pub enum Shown {
     },
 }
 
+/// The pane's `n / total`: the pager's current file over the shown list, as
+/// the Tauri `positionEl`, so a refilter that hides the file on screen moves
+/// it at once rather than when the next preview arrives.
+pub fn position(current: usize, total: usize) -> String {
+    format!("{} / {}", current + 1, total)
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Row<'a> {
     pub label: &'a str,
@@ -89,6 +96,13 @@ pub fn groups<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one-based `n / total` text. Which index it is given (the pager's
+    /// current, not the shown file's) is the call site's rule in `main.rs`.
+    #[test]
+    fn the_position_is_one_based() {
+        assert_eq!(position(1, 2), "2 / 2");
+    }
 
     fn empty() -> Metadata {
         Metadata {

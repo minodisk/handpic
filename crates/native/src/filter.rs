@@ -6,18 +6,26 @@
 //! mark's states (`mark::af_eye_state`), a file the pass has not reached being
 //! `Neutral`; `Eyes` reads the AF face's stored eye state, a file without one
 //! being `Unknown`. A file whose export state is not known passes neither
-//! `Output` item.
+//! `Output` item. An EXIF group's checked labels match the file's label in
+//! that group (`exif::exif_key`), a file without one failing it; the EXIF
+//! checks are per session and dropped when their label leaves the folder.
 //!
-//! The `Genre` section is port Step 9's (the ranking) and the per-folder EXIF
-//! sections a follow-up slice's; neither is here yet.
+//! The `Genre` section is port Step 9's (the ranking) and is not here yet.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use riffle_backend::index::{FaceReady, Focus, IndexedFile};
+use riffle_backend::{
+    exif::Exif,
+    index::{FaceReady, Focus, IndexedFile},
+};
 use riffle_core::{Flag, eyes::EyeState};
 use serde_json::Value;
 
-use crate::{judgment::State, mark::MarkState};
+use crate::{
+    exif::{self, Group, Groups},
+    judgment::State,
+    mark::MarkState,
+};
 
 /// The status line and the pane while the filter hides every listed file.
 pub const FILTERED_TEXT: &str = "No files match the current filter.";
@@ -29,6 +37,7 @@ pub struct Facts {
     pub capture_time: Option<String>,
     pub subsec: Option<String>,
     pub focus: Option<Focus>,
+    pub exif: Option<Exif>,
 }
 
 impl From<&IndexedFile> for Facts {
@@ -38,6 +47,7 @@ impl From<&IndexedFile> for Facts {
             capture_time: file.capture_time.clone(),
             subsec: file.subsec.clone(),
             focus: file.focus,
+            exif: file.exif.clone(),
         }
     }
 }
@@ -102,6 +112,8 @@ pub struct FilterState {
     pub candidates: HashSet<AfEye>,
     pub eyes: HashSet<EyesItem>,
     pub outputs: HashSet<OutputState>,
+    /// The checked labels of each EXIF group; a group with none has no entry.
+    pub exif: BTreeMap<Group, BTreeSet<String>>,
 }
 
 impl FilterState {
@@ -113,11 +125,12 @@ impl FilterState {
             && self.orientations.is_empty()
             && self.candidates.is_empty()
             && self.eyes.is_empty()
-            && self.outputs.is_empty())
+            && self.outputs.is_empty()
+            && self.exif.is_empty())
     }
 
     /// Replace the remembered sections' checks with `stored`, leaving
-    /// `outputs`, which is per session.
+    /// `outputs` and `exif`, which are per session.
     pub fn apply_stored(&mut self, stored: &Stored) {
         self.flags = stored.flags.iter().copied().collect();
         self.stars = stored.stars.iter().copied().collect();
@@ -133,6 +146,32 @@ impl FilterState {
         if !known {
             self.outputs.clear();
         }
+    }
+
+    /// Check `label` of `group` if unchecked, else uncheck it.
+    pub fn toggle_exif(&mut self, group: Group, label: &str) {
+        let set = self.exif.entry(group).or_default();
+        if !set.remove(label) {
+            set.insert(label.to_owned());
+        }
+        if set.is_empty() {
+            self.exif.remove(&group);
+        }
+    }
+
+    /// Another folder's open: no EXIF item is checked.
+    pub fn clear_exif(&mut self) {
+        self.exif.clear();
+    }
+
+    /// Drop each checked EXIF label the folder's `groups` no longer have, so
+    /// a stale check cannot hide every file.
+    pub fn prune_exif(&mut self, groups: &Groups) {
+        self.exif.retain(|group, set| {
+            let labels = groups.labels(*group);
+            set.retain(|label| labels.contains(label));
+            !set.is_empty()
+        });
     }
 }
 
@@ -237,6 +276,10 @@ pub fn passes(
         && (state.candidates.is_empty() || state.candidates.contains(&af_eye))
         && (state.eyes.is_empty() || state.eyes.contains(&EyesItem::of(eyes)))
         && (state.outputs.is_empty() || output.is_some_and(|o| state.outputs.contains(&o)))
+        && state.exif.iter().all(|(group, labels)| {
+            exif::exif_key(facts.and_then(|f| f.exif.as_ref()), *group)
+                .is_some_and(|key| labels.contains(&key.label))
+        })
 }
 
 /// The export state of `path`, from the `found` subset of `listing` the
@@ -321,12 +364,46 @@ pub fn filter_list_changed(files: &[String], next: &[String], force: bool) -> bo
     force || files != next
 }
 
+/// Where the shown file, at `at` in `old`, sits in `next`: `None` once it is
+/// not listed there, so a later refilter does not take the file then at that
+/// index for the one on screen.
+pub fn shown_after(old: &[String], next: &[String], at: Option<usize>) -> Option<usize> {
+    let path = old.get(at?)?;
+    next.iter().position(|p| p == path)
+}
+
+/// The anchor of the refilter that emptied the shown list, given back to a
+/// menu change while no file is current, so it lands on the file shown before
+/// the list emptied.
+#[derive(Debug, Default)]
+pub struct KeptAnchor(Option<String>);
+
+impl KeptAnchor {
+    /// After a refilter from `anchor` that left the list `empty` or not.
+    pub fn refiltered(&mut self, anchor: Option<&str>, empty: bool) {
+        if !empty {
+            self.0 = None;
+        } else if let Some(anchor) = anchor {
+            self.0 = Some(anchor.to_owned());
+        }
+    }
+
+    /// `current`, else the kept anchor.
+    pub fn anchor(&self, current: Option<String>) -> Option<String> {
+        current.or_else(|| self.0.clone())
+    }
+
+    /// Another folder's open.
+    pub fn clear(&mut self) {
+        self.0 = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    //! `filter.test.ts`, less the `Genre` section's six cases (port Step 9),
-    //! the EXIF selection case and `applyStored` leaving the EXIF groups (the
-    //! follow-up slice). `toStored` is not ported (nothing is written), so the
-    //! round trip checks `apply_stored` alone. A `Face focus` state the Tauri
+    //! `filter.test.ts`, less the `Genre` section's six cases (port Step 9).
+    //! `toStored` is not ported (nothing is written), so the round trip
+    //! checks `apply_stored` alone. A `Face focus` state the Tauri
     //! cases leave `undefined` is `mark::af_eye_state(None)`, `Neutral`.
 
     use super::*;
@@ -355,6 +432,7 @@ mod tests {
             candidates: candidates.iter().copied().collect(),
             eyes: eyes.iter().copied().collect(),
             outputs: outputs.iter().copied().collect(),
+            exif: BTreeMap::new(),
         }
     }
 
@@ -393,6 +471,7 @@ mod tests {
             capture_time: None,
             subsec: None,
             focus: None,
+            exif: None,
         }
     }
 
@@ -1194,5 +1273,162 @@ mod tests {
         let mut extra = value.clone();
         extra["exif"] = json!({"ISO": ["100"]});
         assert_eq!(Stored::from_setting(Some(&extra)), valid);
+    }
+
+    fn exif_facts() -> Facts {
+        Facts {
+            exif: Some(Exif {
+                camera: Some("ILCE-7RM5".into()),
+                iso: Some(riffle_backend::exif::Labeled {
+                    value: 100.,
+                    label: "ISO 100".into(),
+                }),
+                ..Exif::default()
+            }),
+            ..facts(1)
+        }
+    }
+
+    fn exif_state(checks: &[(Group, &[&str])]) -> FilterState {
+        let mut s = none();
+        for (group, labels) in checks {
+            for label in *labels {
+                s.toggle_exif(*group, label);
+            }
+        }
+        s
+    }
+
+    fn exif_passes(s: &FilterState, facts: Option<&Facts>) -> bool {
+        passes(s, &unjudged(), facts, NEUTRAL, None, None)
+    }
+
+    #[test]
+    fn an_exif_selection_matches_by_label_and_fails_a_file_without_exif() {
+        let f = exif_facts();
+        let s = exif_state(&[(Group::Camera, &["ILCE-7RM5"])]);
+        assert!(s.is_active());
+        assert!(exif_passes(&s, Some(&f)));
+        assert!(!exif_passes(
+            &exif_state(&[(Group::Camera, &["Other"])]),
+            Some(&f)
+        ));
+        assert!(!exif_passes(&s, Some(&facts(1))));
+        assert!(!exif_passes(&s, None));
+    }
+
+    #[test]
+    fn exif_groups_or_within_and_and_across() {
+        let f = exif_facts();
+        let either = exif_state(&[(Group::Camera, &["ILCE-7RM5", "ILCE-1"])]);
+        assert!(exif_passes(&either, Some(&f)));
+        let both = exif_state(&[(Group::Camera, &["ILCE-7RM5"]), (Group::Iso, &["ISO 6400"])]);
+        assert!(!exif_passes(&both, Some(&f)));
+        let missing = exif_state(&[(Group::Lens, &["FE 35mm F1.4 GM"])]);
+        assert!(!exif_passes(&missing, Some(&f)));
+    }
+
+    #[test]
+    fn apply_stored_leaves_the_exif_groups_alone() {
+        let mut s = exif_state(&[(Group::Camera, &["ILCE-7RM5"])]);
+        let stored = Stored {
+            flags: vec![Picked],
+            ..Stored::default()
+        };
+        s.apply_stored(&stored);
+        assert_eq!(
+            s.exif.get(&Group::Camera),
+            Some(&BTreeSet::from(["ILCE-7RM5".to_owned()]))
+        );
+        assert_eq!(s.flags, HashSet::from([Picked]));
+    }
+
+    #[test]
+    fn toggling_an_exif_label_twice_leaves_no_empty_group() {
+        let mut s = none();
+        s.toggle_exif(Group::Iso, "ISO 100");
+        s.toggle_exif(Group::Iso, "ISO 100");
+        assert_eq!(s, none());
+        assert!(!s.is_active());
+    }
+
+    #[test]
+    fn prune_drops_the_labels_the_folder_no_longer_has() {
+        let mut s = exif_state(&[
+            (Group::Camera, &["ILCE-7RM5", "ILCE-1"]),
+            (Group::Iso, &["ISO 100"]),
+            (Group::Lens, &["Gone"]),
+        ]);
+        s.flags.insert(Picked);
+        let groups = Groups(vec![
+            (Group::Camera, vec!["ILCE-7RM5".into()]),
+            (Group::Iso, vec!["ISO 100".into(), "ISO 200".into()]),
+        ]);
+        s.prune_exif(&groups);
+        let mut want = exif_state(&[(Group::Camera, &["ILCE-7RM5"]), (Group::Iso, &["ISO 100"])]);
+        want.flags.insert(Picked);
+        assert_eq!(s, want);
+        s.prune_exif(&Groups::default());
+        assert!(s.exif.is_empty());
+        assert_eq!(s.flags, HashSet::from([Picked]));
+    }
+
+    #[test]
+    fn clear_exif_unchecks_every_group_only() {
+        let mut s = exif_state(&[(Group::Camera, &["ILCE-7RM5"])]);
+        s.outputs.insert(No);
+        s.clear_exif();
+        assert!(s.exif.is_empty());
+        assert_eq!(s.outputs, HashSet::from([No]));
+    }
+
+    /// `p` under `untagged` hides the shown `b`: the shown index must not
+    /// carry over to `c`, which now sits where `b` was.
+    #[test]
+    fn a_hidden_shown_file_has_no_index_in_the_new_list() {
+        let old = paths(&["a", "b", "c"]);
+        let next = paths(&["a", "c"]);
+        assert_eq!(shown_after(&old, &next, Some(1)), None);
+        assert_eq!(shown_after(&old, &next, Some(2)), Some(1));
+        assert_eq!(shown_after(&next, &paths(&["c"]), None), None);
+    }
+
+    #[test]
+    fn a_menu_change_on_an_empty_list_lands_on_the_file_shown_before() {
+        let mut kept = KeptAnchor::default();
+        // `p` on `b` under `untagged` hides the last file.
+        kept.refiltered(Some("b"), true);
+        // A refilter on the still-empty list has no current file.
+        kept.refiltered(None, true);
+        let anchor = kept.anchor(None);
+        assert_eq!(anchor.as_deref(), Some("b"));
+        let landed = anchor_after_filter(&paths(ALL), |_| true, anchor.as_deref(), None);
+        assert_eq!(landed.as_deref(), Some("b"));
+        let landed = anchor_after_filter(&paths(ALL), |p| p != "b", anchor.as_deref(), None);
+        assert_eq!(landed.as_deref(), Some("c"));
+    }
+
+    #[test]
+    fn a_kept_anchor_no_longer_listed_falls_back_to_the_first_file() {
+        let mut kept = KeptAnchor::default();
+        kept.refiltered(Some("z"), true);
+        let next = paths(&["a", "b"]);
+        let landed = anchor_after_filter(&next, |_| true, kept.anchor(None).as_deref(), None);
+        let at = landed
+            .and_then(|a| next.iter().position(|p| *p == a))
+            .unwrap_or(0);
+        assert_eq!(at, 0);
+    }
+
+    #[test]
+    fn the_current_file_wins_and_a_non_empty_list_forgets_the_anchor() {
+        let mut kept = KeptAnchor::default();
+        kept.refiltered(Some("b"), true);
+        assert_eq!(kept.anchor(Some("c".into())).as_deref(), Some("c"));
+        kept.refiltered(Some("c"), false);
+        assert_eq!(kept.anchor(None), None);
+        kept.refiltered(Some("b"), true);
+        kept.clear();
+        assert_eq!(kept.anchor(None), None);
     }
 }

@@ -1,5 +1,6 @@
 mod args;
 mod datadir;
+mod exif;
 mod eyes;
 mod facemesh;
 mod faces;
@@ -66,7 +67,7 @@ use pager::{Move, Pager};
 use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
-    exif::{self, Metadata},
+    exif::Metadata,
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, Writer},
@@ -122,7 +123,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let preview = reader::read_preview(path);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
-    let meta = exif::metadata(file_name(path), &arw.shot);
+    let meta = riffle_backend::exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -178,8 +179,9 @@ fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Ve
         .collect()
 }
 
-/// The listed files' judgments and facts by path.
-type Entries = (HashMap<String, State>, HashMap<String, Facts>);
+/// The listed files' judgments and facts by path, and the folder's EXIF
+/// groups.
+type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
 
 struct Opened {
     listed: Listed,
@@ -225,7 +227,8 @@ fn entries_of(reader: &Mutex<Index>, dir: &str) -> Option<Entries> {
         .iter()
         .map(|file| (file.path.clone(), Facts::from(file)))
         .collect();
-    Some((judgments, facts))
+    let groups = exif::groups_of(entries.iter().map(|file| file.exif.as_ref()));
+    Some((judgments, facts, groups))
 }
 
 struct Riffle {
@@ -247,6 +250,10 @@ struct Riffle {
     sort: SortKey,
     /// The strip's filter; a change lives for the session only.
     filter: FilterState,
+    /// The open folder's EXIF groups, the filter menu's last sections.
+    exif_groups: exif::Groups,
+    /// The anchor a menu change lands on while the filter hides every file.
+    kept_anchor: filter::KeptAnchor,
     /// The status row's sort or filter menu, while one is open.
     menus: Menus,
     /// The listed files with an export, `None` while the folder gives no
@@ -296,8 +303,8 @@ struct Riffle {
     failed: usize,
     image: Option<Arc<RenderImage>>,
     /// The meta pane's file, the one whose preview is on screen, with its
-    /// index.
-    shown: Option<(usize, Shown)>,
+    /// index, `None` once a refilter hid it.
+    shown: Option<(Option<usize>, Shown)>,
     /// The open folder holds only JPEGs.
     view_only: bool,
     settings: Settings,
@@ -433,6 +440,8 @@ impl Riffle {
                 filter.apply_stored(&settings.filter);
                 filter
             },
+            exif_groups: exif::Groups::default(),
+            kept_anchor: filter::KeptAnchor::default(),
             menus: Menus::default(),
             outputs: None,
             outputs_listing: HashSet::new(),
@@ -680,6 +689,8 @@ impl Riffle {
             self.undo.clear();
             self.step_note = None;
             self.write_errors.clear();
+            self.filter.clear_exif();
+            self.kept_anchor.clear();
             self.set_entries(entries);
             let order = self.ordered();
             let paths = self.passing(&order);
@@ -826,13 +837,15 @@ impl Riffle {
         let shown = self
             .shown
             .as_ref()
-            .and_then(|(at, _)| old.get(*at).cloned());
+            .and_then(|(at, _)| old.get((*at)?).cloned());
         let moved = self.carry(&next, current, keep_scroll);
         self.order += 1;
-        if let (Some((at, _)), Some(path)) = (&mut self.shown, &shown)
-            && let Some(to) = next.iter().position(|p| p == path)
-        {
-            *at = to;
+        self.kept_anchor
+            .refiltered(anchor.as_deref(), next.is_empty());
+        if let Some((at, _)) = &mut self.shown {
+            *at = filter::shown_after(&old, &next, *at);
+        }
+        if let Some((Some(to), _)) = self.shown {
             // The status line's `n/total` follows the shown file's new place.
             if let Some((head, rest)) = self.status.split_once("  ")
                 && let Some((a, b)) = head.split_once('/')
@@ -958,7 +971,7 @@ impl Riffle {
 
     /// Keep the folder's judgments, the view's own for a file judged since
     /// the open, and its facts.
-    fn set_entries(&mut self, (mut judgments, facts): Entries) {
+    fn set_entries(&mut self, (mut judgments, facts, groups): Entries) {
         self.seen = judgments.keys().cloned().collect();
         for path in &self.touched {
             match self.judgments.get(path) {
@@ -968,6 +981,8 @@ impl Riffle {
         }
         self.judgments = judgments;
         self.facts = facts;
+        self.filter.prune_exif(&groups);
+        self.exif_groups = groups;
     }
 
     /// Hand the shown files' judgments to the strip.
@@ -1513,7 +1528,7 @@ impl Riffle {
                     dash(&m.iso),
                 )
                 .into();
-                self.shown = Some((index, Shown::Read(Box::new(loaded.meta))));
+                self.shown = Some((Some(index), Shown::Read(Box::new(loaded.meta))));
                 let old = self.image.replace(loaded.image);
                 self.retire(old);
                 self.hold.hold(loaded.paused);
@@ -1542,7 +1557,7 @@ impl Riffle {
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
-                self.shown = Some((index, Shown::Failed { name, error: e }));
+                self.shown = Some((Some(index), Shown::Failed { name, error: e }));
                 self.dwell.cancel();
                 self.dwell_timer = None;
                 let old = self.image.take();
@@ -1726,7 +1741,7 @@ impl Riffle {
             .flex()
             .flex_col()
             .gap_3();
-        if let Some((at, shown)) = &self.shown {
+        if let Some((_, shown)) = &self.shown {
             let (name, meta, error) = match shown {
                 Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
                 Shown::Failed { name, error } => (name, None, Some(error)),
@@ -1734,11 +1749,11 @@ impl Riffle {
             body = body.child(
                 div()
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()))
-                    .child(div().text_color(rgb(MUTED_COLOR)).child(format!(
-                        "{} / {}",
-                        at + 1,
-                        self.files.len()
-                    ))),
+                    .child(
+                        div()
+                            .text_color(rgb(MUTED_COLOR))
+                            .child(meta::position(self.pager.current(), self.files.len())),
+                    ),
             );
             if let Some(error) = error {
                 body = body.child(div().text_color(rgb(ERROR_COLOR)).child(error.clone()));
@@ -1832,9 +1847,10 @@ impl Riffle {
     /// A click on a menu item: the sort or the filter changes for the
     /// session only, and the strip is rebuilt on the current file.
     fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
+        self.menus.acted(&action);
         menu::apply(&mut self.filter, &mut self.sort, action);
-        self.menus.acted(action);
-        self.refilter(self.current_path(), false, None, cx);
+        let anchor = self.kept_anchor.anchor(self.current_path());
+        self.refilter(anchor, false, None, cx);
         cx.notify();
     }
 
@@ -1909,7 +1925,9 @@ impl Riffle {
         let popover = (self.menus.open() == Some(which)).then(|| {
             let rows = match which {
                 Which::Sort => menu::sort_rows(viewonly::sort_for(self.view_only, self.sort)),
-                Which::Filter => menu::filter_rows(&self.filter, self.outputs.is_some()),
+                Which::Filter => {
+                    menu::filter_rows(&self.filter, self.outputs.is_some(), &self.exif_groups)
+                }
             };
             // Drawn after the rest of the window and over it, its right edge
             // on the button's, opening upward.
@@ -2136,6 +2154,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
     };
     let label = match item.label {
         menu::Label::Text(text) => div().child(text),
+        menu::Label::Owned(text) => div().child(text),
         menu::Label::Stars(on) => div()
             .flex()
             .child(
@@ -2169,7 +2188,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         )
         .children(lead)
         .child(label)
-        .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action, cx)))
+        .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action.clone(), cx)))
         .into_any_element()
 }
 

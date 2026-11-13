@@ -2612,27 +2612,34 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 - [ ] `Face focus` and `Eyes` (Step 3): open `faces` with `settings-filter-good.json`. The strip starts empty and fills in while `analyzing n / m` runs, ending with DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, each with a bright green `f` mark. With `settings-filter-closed.json` only DSC03068 shows.
 - [ ] The menus and the `Output` section (Steps 3 and 4): open `menu\raw` with `settings-name.json`. `Sort ▾` and `Filter ▾` sit at the status row's right end and the preview is the same size as before. Click `Filter ▾`: the menu opens upward over the strip, its right edge on the button's; check `Picked`, then `Red`: the menu stays open, each gets a check mark, the strip narrows (no picked or red file in `raw`: `No files match the current filter.`; use `menu\faces` after picking one with `p` to see a narrowed strip) and the button lights; a click on an item does not also select a strip cell under it. `Escape` closes it; reopen and click the preview: it closes; reopen and click a strip cell: it closes (record whether the cell is also selected); click `Filter ▾` while open: it closes and stays closed. `Reset` unchecks all and shows every file, the button no longer lit. `Sort ▾` then `Rating`: the strip reorders (HX99, RX0, RX0M2, RX100M2, RX100M3, HX95), the menu closes and the current file stays current and in view. With the filter menu open, hold `→`: the pager pages; `e`, `z`, `f` still toggle peaking, 1:1 and the focus mark. On `menu\jpg-sequenced`: `Sort ▾` is dimmed and does nothing, the strip is in capture order. On `menu\faces` the filter menu shows the `Output` section (`Output`: DSC00405, _DSC1616, _DSC1758; `No output`: the other 5); renaming `Output\` away hides the section (its checks cleared) and renaming it back brings it back; on `menu\raw` (no `Output\`) the section is absent. The settings file is untouched.
 
-### Native: the pane's `n / total` lags a refilter that hides the shown file
+### Native: real-device checks of the EXIF filter sections and the refilter fixes
 
-Found in `gpui-filter-sort` Step 2's local review. When a refilter hides the shown file, the pane still names the old position until the new current file's preview loads. The same lag already followed a re-listing before that plan. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`. Files: `crates/native/src/main.rs`.
+`gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the meta pane's `n / total` follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/native/src/exif.rs`, `crates/native/src/filter.rs`, `crates/native/src/menu.rs`, `crates/native/src/main.rs`.
 
-#### TODO
-
-- [ ] Rebuild the pane's position line in `refilter` when the current index changes, not on the preview's arrival, and check that `p` under the `untagged` filter updates it at once.
-
-### Native: a menu change while the filter hides every file lands on the first file
-
-When the filter hides every file, `current_path()` is `None` because `files` is empty, so the next menu change's `refilter` has no anchor and lands on index 0 (`Reset` included); the file shown before the filter emptied the list is not remembered. The Tauri `refilter` keeps its current path across an empty list. Found in `gpui-filter-sort` Step 4. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`. Files: `crates/native/src/main.rs` (`menu_action`, `refilter`).
+Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build`, then run `target\debug\riffle-native.exe <folder> --index <fresh path> --settings <file>`, with a fresh index per run. Use only copies under `D:\Photos\tests\` (a folder with several cameras, such as `D:\Photos\tests\20261113-filter-sort\sort\raw`), and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`.
 
 #### TODO
 
-- [ ] Keep the last current path in the view and use it as the anchor while `files` is empty, with a unit test if the rule moves into a pure function.
+- [ ] On Windows, the filter menu ends with `Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`, each listing the folder's values in order; it scrolls when taller than the window. On a fresh index the sections appear once pass 1 ends.
+- [ ] On Windows, checking one camera narrows the strip and lights the button; a second camera widens it (OR); an ISO item on top narrows it (AND); `Reset` clears all.
+- [ ] On Windows, copying in a RAW from another camera adds its item after the re-scan; removing the only file of a checked camera drops that check instead of leaving an empty strip.
+- [ ] On Windows, under the `untagged` filter, `p` on the current file updates the pane's `n / total` at once (the name follows when the next preview arrives).
+- [ ] On Windows, with a filter that hides every file, `Reset` or unchecking the item comes back to the file shown before, not the first one.
+- [ ] On Windows, the settings file is untouched (its modification time unchanged).
+- [ ] On Windows, on a fresh index with `untagged` plus a `Face focus` item checked, press `p` repeatedly while pass 2 runs: the image on screen must always end up the current file's, never a judged file's left behind (the `shown_after` fix in `refilter`, found by reading only; the race is timing-dependent and may not show either way).
 
-### Native: the per-folder EXIF filter sections in the filter menu (closes port Step 7)
+### Native: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
 
-`gpui-filter-sort` ported the filter's flags, stars, labels, orientation, `Face focus`, `Eyes` and `Output` sections and left the per-folder EXIF sections to a follow-up slice (decided 2026-11-13), so the GPUI port's Step 7 stays open with only these left. The Tauri filter builds one group per folder from `exif.ts`'s `exifKey` over `IndexedFile.exif` (camera, lens, aperture, shutter, ISO, focal ranges); a stored filter holds none of them. `Genre` and `recommended` stay port Step 9's. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md`, `docs/plans/20261109-gpui-port/plan.md`. Files: `crates/native/src/filter.rs`, `crates/native/src/menu.rs`, `crates/native/src/main.rs`, `crates/app/ui/src/filter.ts`, `crates/app/ui/src/exif.ts`.
+The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/native` has no ICU collator. Tauri uses `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/native/src/exif.rs` (`compare`).
 
 #### TODO
 
-- [ ] Plan and implement the slice: the sections ported with the matching `filter.test.ts` cases, per session only, nothing written to `settings.json`. It adds no per-page work, so per `docs/agents/native-app.md`'s gate-scope rule its plan states whether an A/B applies.
-- [ ] When it merges, tick port Step 7 in `docs/plans/20261109-gpui-port/plan.md` and add its Progress entry.
+- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
+
+### Native: the status line's `n/total` still lags a refilter that hides the shown file
+
+`gpui-exif-filter` fixed the meta pane's `n / total` (it reads the pager's current index) but left the status line's `n/total` alone: it only follows the shown file's new place, so it lags a refilter that hides the shown file. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/native/src/main.rs` (`refilter`).
+
+#### TODO
+
+- [ ] Make the status line's `n/total` follow the current index after a refilter, as the pane's does, and check that `p` under the `untagged` filter updates it at once.

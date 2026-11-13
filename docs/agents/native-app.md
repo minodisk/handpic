@@ -313,6 +313,34 @@ last, and a JPEG folder under `"name"` paged in capture order.
 - Measured: `output: dir=… found=N in …ms` (`found=none` without an answer)
   logged 0 ms on 8 copied ARWs with a 3-file `Output\`; renaming `Output\`
   away and back re-listed twice, `found=none` then `found=3`.
+- Rule: the EXIF sections' groups (`exif::groups_of`, per group its labels in
+  display order) are built from the same `Index::entries` rows on the same
+  background task as `facts` (`entries_of`), in the index's order so a label
+  two files share takes the last one's order as in Tauri, never per page.
+  `set_entries` stores them and prunes the EXIF checks against them
+  (`FilterState::prune_exif`) before any `refilter` that follows, so a check
+  whose label left the folder cannot empty the strip. Another folder's open
+  clears the EXIF checks (`clear_exif`), a re-listing only prunes; they are
+  never stored. `passes` reads a file's EXIF from its `facts`
+  (`exif::exif_key`), a file without one failing a non-empty group.
+- Measured: `groups_of` over 5,000 synthetic entries (six groups, a few dozen
+  labels) took 5.8 ms in a debug test build.
+- Rule: the pane's `n / total` is the pager's current index over `files`
+  (`meta::position`, the Tauri `positionEl`), not the shown file's index, so
+  a refilter that hides the file on screen (`p` under `untagged`) moves it at
+  once; the name still names the file on screen until the next preview
+  arrives. The shown file's index becomes `None` when a refilter hides it
+  (`filter::shown_after`): a stale index would name the file then at that
+  place in the next `refilter`, which could skip the re-request of a preview
+  its `order` bump had just dropped. The status line's `n/total` is left
+  alone.
+- Rule: a `refilter` that empties `files` keeps its anchor
+  (`filter::KeptAnchor`), a non-empty one or another folder's open drops it.
+  A menu change, and only a menu change, anchors on it while no file is
+  current, so `Reset` or unchecking the item lands on the file shown before
+  the list emptied, else on its `anchor_after_filter` neighbour, else on the
+  first file. This is a native improvement: the Tauri `refilter` lands on the
+  first file there.
 
 ### The sort and filter menus are deferred popovers over the window (Inferred)
 
@@ -323,6 +351,19 @@ at its right end (`menu.rs` holds the rows, the clicks' `apply` and `Menus`;
 view-only folder, whose open closes a sort menu left open. A menu item runs
 `menu::apply`, then `refilter` on the current file with the scroll not kept,
 so a reorder scrolls the current file into view. Nothing is written.
+
+- Rule: the filter menu ends with the folder's EXIF sections, after `Output`
+  (or `Eyes` without an export answer), in the Tauri order and headings
+  (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`),
+  each a separator, a heading and one item per label, a group the folder
+  lacks left out. Numbers sort by value (`f64::total_cmp`), ties by label;
+  `Camera` and `Lens` by a case-insensitive compare, ties by the plain one
+  (Tauri uses `localeCompare`; no collator here). The focal length is
+  bucketed into `exif::FOCAL_RANGES`, half-open. An item is keyed by its
+  group and label (`Toggle::Exif`), not its row, since the groups can be
+  rebuilt between the frame that drew the menu and the click, which made
+  `Row`, `Item`, `Label` (with `Label::Owned`), `Toggle` and `Action` `Clone`
+  rather than `Copy`. The longer menu relies on the popover's scroll.
 
 - Rule: an open menu is `div().absolute().top_0().right_0()` inside a
   `relative()` wrapper of its button, holding `deferred(anchored()
