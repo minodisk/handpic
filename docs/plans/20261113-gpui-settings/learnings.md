@@ -123,6 +123,14 @@
 - A stray `python - </dev/null` (typed by mistake ahead of a `perl` edit)
   still hung in the Bash tool and was moved to the background; it was left
   running, not killed. The edit was redone with the Edit tool.
+- Scope change (the user, 2026-11-14): the AI features are not ported to the
+  native app at all (`aiEnabled` with the model download, pass 3, genres,
+  the ranking, `recommended`). The AI toggle, its `aiStatus` line and note,
+  `Change::AiEnabled`, the `Ai` handle, `datadir::model_path`, the
+  `--data-dir` flag and `Settings::ai_enabled` were removed, and
+  `AiState`'s fields went back to private, so the backend is unchanged by
+  this step. The bullets above about the AI wiring describe what was
+  removed. A seeded `aiEnabled` key stays in the store, unread.
 
 ## Deferred issues (todo candidates)
 
@@ -151,11 +159,10 @@
   shell and the Culling tab. Basis: Step 3's Done-when (the open / close
   paths, no key or press reaching the window behind it, the auto-advance
   toggle taking effect and surviving a restart); the checkbox was ticked on
-  the automated criteria (`settingsmodal.rs`'s tests, `settings.rs`'s
-  `aiEnabled` read, `datadir.rs` / `args.rs` tests, clippy). Steps, on copies
+  the automated criteria (`settingsmodal.rs`'s tests, clippy). Steps, on copies
   under `D:\Photos\tests\20261113-settings\` only, after `cargo build` in
   `crates/native`:
-  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-s3a.sqlite --settings D:\Photos\tests\20261113-settings\step3-hand.sqlite --data-dir D:\Photos\tests\20261113-settings\data --log D:\Photos\tests\20261113-settings\Handpic.log`
+  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-s3a.sqlite --settings D:\Photos\tests\20261113-settings\step3-hand.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
   2. Open `Filter ▾`, then press Ctrl+,. Expected: the menu closes and the
      Settings box appears centered over a dimmed window, the Sidecar tab
      selected (empty), Culling, Keyboard Shortcuts and Import below it.
@@ -164,8 +171,8 @@
      strip and the file's rating do not change and the app does not quit.
      With the Sidecar tab focused, ArrowDown / ArrowUp / Home / End move the
      selected tab; Tab / Shift+Tab move a visible focus border through the
-     close button, the selected tab and (on Culling) the two checkboxes,
-     wrapping; Space or Enter on a focused checkbox flips it.
+     close button, the selected tab and (on Culling) the auto-advance
+     checkbox, wrapping; Space or Enter on the focused checkbox flips it.
   4. Close it with Escape, open it again and close with the `×` button, then
      open and close with a press on the dimmed area outside the box. After
      each close, ArrowRight pages to the next file.
@@ -173,9 +180,3 @@
      set and the file stays. Quit, start again with the same `--settings`
      and a fresh `--index` (`index-s3b.sqlite`). Expected: the startup
      `settings:` line has `autoAdvance=false` and the checkbox is off.
-  6. Optional, needs the network and 378 MB under the test `data` folder:
-     on Culling turn AI on. Expected: the status line counts `Downloading
-     the model: N / 378 MB`, then `On`; the file lands under
-     `D:\Photos\tests\20261113-settings\data\models\`; turning it off
-     mid-download leaves no `.part` file. The startup line of the next run
-     shows `aiEnabled=true`.

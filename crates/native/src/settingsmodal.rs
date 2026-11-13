@@ -1,9 +1,6 @@
 //! The settings modal's pure model: its open state, the selected tab and the
 //! shortcut row waiting for a key, the key rule of `modal.ts`'s
-//! `SettingsModal`, the vertical tablist of `tabs.ts`'s `nextTab`, and the AI
-//! status line of `ai.ts`'s `aiStatus`.
-
-use riffle_backend::ai::AiState;
+//! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`.
 
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
@@ -12,11 +9,6 @@ pub const OPEN_KEY: &str = if cfg!(target_os = "macos") {
 } else {
     "ctrl+,"
 };
-
-/// Under the AI toggle: the Tauri paragraph, less the background run this app
-/// does not have yet.
-pub const AI_NOTE: &str = "Turning it on first downloads the model from Hugging Face. This app \
-     does not run the analysis yet; the setting and the model are kept for when it does.";
 
 /// The modal's status line while the settings store did not open.
 pub const NOT_SAVED: &str = "The settings store did not open, so changes last until the app quits.";
@@ -126,29 +118,9 @@ pub fn next_tab(current: Tab, key: &str) -> Tab {
     }
 }
 
-const MB: u64 = 1_000_000;
-
-/// The status line under the AI toggle.
-pub fn ai_status(state: &AiState) -> String {
-    if let Some(error) = &state.error {
-        return error.clone();
-    }
-    let total = (state.total + MB / 2) / MB;
-    if let Some(downloaded) = state.downloaded {
-        return format!("Downloading the model: {} / {total} MB", downloaded / MB);
-    }
-    match (state.enabled, state.ready) {
-        (false, true) => "Off".into(),
-        (false, false) => format!("Off; turning it on downloads the model ({total} MB)"),
-        (true, true) => "On".into(),
-        (true, false) => "The model is not downloaded".into(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{ModalKey, SettingsModal, Step, TABS, Tab, ai_status, next_tab};
-    use riffle_backend::ai::AiState;
+    use super::{ModalKey, SettingsModal, Step, TABS, Tab, next_tab};
 
     fn open() -> SettingsModal {
         let mut modal = SettingsModal::default();
@@ -273,70 +245,5 @@ mod tests {
         for key in ["arrowleft", "arrowright", "enter", "tab"] {
             assert_eq!(next_tab(Tab::Culling, key), Tab::Culling, "{key}");
         }
-    }
-
-    const BASE: AiState = AiState {
-        enabled: false,
-        ready: false,
-        downloaded: None,
-        total: 378_478_689,
-        error: None,
-    };
-
-    #[test]
-    fn the_ai_status_names_the_download_size_while_off_with_no_model() {
-        assert_eq!(
-            ai_status(&BASE),
-            "Off; turning it on downloads the model (378 MB)"
-        );
-    }
-
-    #[test]
-    fn the_ai_status_is_off_once_the_model_is_in_place() {
-        let state = AiState {
-            ready: true,
-            ..BASE
-        };
-        assert_eq!(ai_status(&state), "Off");
-    }
-
-    #[test]
-    fn the_ai_status_shows_the_download_progress() {
-        let state = AiState {
-            enabled: true,
-            downloaded: Some(120_500_000),
-            ..BASE
-        };
-        assert_eq!(ai_status(&state), "Downloading the model: 120 / 378 MB");
-    }
-
-    #[test]
-    fn the_ai_status_is_on_with_the_model_in_place() {
-        let state = AiState {
-            enabled: true,
-            ready: true,
-            ..BASE
-        };
-        assert_eq!(ai_status(&state), "On");
-    }
-
-    #[test]
-    fn the_ai_status_shows_a_failed_download() {
-        let error = "The model download failed: SHA-256 00, expected 0d";
-        let state = AiState {
-            enabled: true,
-            error: Some(error.into()),
-            ..BASE
-        };
-        assert_eq!(ai_status(&state), error);
-    }
-
-    #[test]
-    fn the_ai_status_says_when_the_model_is_missing_while_on() {
-        let state = AiState {
-            enabled: true,
-            ..BASE
-        };
-        assert_eq!(ai_status(&state), "The model is not downloaded");
     }
 }

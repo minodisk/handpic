@@ -2,17 +2,12 @@
 //! pure `settingsmodal` model: a backdrop over the whole window and a
 //! centered box, painted after the rest of the window and occluding it,
 //! laid out only while open. A change is emitted as a `Change` for the main
-//! view, which owns the values, to apply; the AI switch and its model
-//! download (`riffle_backend::ai`) live here.
+//! view, which owns the values, to apply.
 
-use std::path::PathBuf;
-
-use futures::{StreamExt, channel::mpsc};
 use gpui::{
     ClickEvent, Context, Empty, EventEmitter, FocusHandle, FontWeight, KeyDownEvent, MouseButton,
     SharedString, Window, deferred, div, prelude::*, px, rgb, rgba,
 };
-use riffle_backend::ai::{Ai, AiState};
 
 use crate::{
     ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
@@ -23,7 +18,6 @@ use crate::{
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
-    AiEnabled(bool),
     /// The focus goes back to the window.
     Closed,
 }
@@ -37,46 +31,18 @@ pub struct SettingsView {
     model: SettingsModal,
     /// The value shown, read from the main view on every open.
     auto_advance: bool,
-    ai: Ai,
-    ai_state: AiState,
     status: Option<SharedString>,
 }
 
 impl EventEmitter<Change> for SettingsView {}
 
 impl SettingsView {
-    /// `model` is the embedding model's file; the download thread's state
-    /// reports reach the view through a channel.
-    pub fn new(ai_enabled: bool, model: Option<PathBuf>, cx: &mut Context<Self>) -> Self {
-        match &model {
-            Some(path) => log::info!("embedding model: {}", path.display()),
-            None => log::warn!("no local data dir for the embedding model"),
-        }
-        let (states, mut received) = mpsc::unbounded();
-        let ai = Ai::new(ai_enabled, model, move |state| {
-            let _ = states.unbounded_send(state);
-        });
-        cx.spawn(async move |this, cx| {
-            while let Some(state) = received.next().await {
-                let shown = this.update(cx, |this, cx| {
-                    this.ai_state = state;
-                    if this.model.is_open() {
-                        cx.notify();
-                    }
-                });
-                if shown.is_err() {
-                    break;
-                }
-            }
-        })
-        .detach();
+    pub fn new(cx: &mut Context<Self>) -> Self {
         Self {
             focus: cx.focus_handle(),
             tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
             model: SettingsModal::default(),
             auto_advance: true,
-            ai_state: ai.state(),
-            ai,
             status: None,
         }
     }
@@ -98,7 +64,6 @@ impl SettingsView {
             return;
         }
         self.auto_advance = auto_advance;
-        self.ai_state = self.ai.state();
         self.status = (!saved).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
@@ -141,13 +106,6 @@ impl SettingsView {
     fn flip_auto_advance(&mut self, cx: &mut Context<Self>) {
         self.auto_advance = !self.auto_advance;
         cx.emit(Change::AutoAdvance(self.auto_advance));
-        cx.notify();
-    }
-
-    fn flip_ai(&mut self, cx: &mut Context<Self>) {
-        let on = !self.ai_state.enabled;
-        self.ai_state = self.ai.switch(on);
-        cx.emit(Change::AiEnabled(on));
         cx.notify();
     }
 
@@ -197,26 +155,12 @@ impl SettingsView {
             .gap_2()
             .text_size(px(13.));
         match self.model.tab {
-            Tab::Culling => content
-                .child(checkbox(
-                    "auto-advance",
-                    self.auto_advance,
-                    "Auto-advance after a star, reject or pick",
-                    cx.listener(|this, _: &ClickEvent, _, cx| this.flip_auto_advance(cx)),
-                ))
-                .child(checkbox(
-                    "ai-enabled",
-                    self.ai_state.enabled,
-                    "AI analysis of what each photo shows",
-                    cx.listener(|this, _: &ClickEvent, _, cx| this.flip_ai(cx)),
-                ))
-                .child(div().px_2().child(settingsmodal::AI_NOTE))
-                .child(
-                    div()
-                        .px_2()
-                        .text_color(rgb(MUTED_COLOR))
-                        .child(settingsmodal::ai_status(&self.ai_state)),
-                ),
+            Tab::Culling => content.child(checkbox(
+                "auto-advance",
+                self.auto_advance,
+                "Auto-advance after a star, reject or pick",
+                cx.listener(|this, _: &ClickEvent, _, cx| this.flip_auto_advance(cx)),
+            )),
             Tab::Sidecar | Tab::Shortcuts | Tab::Import => content,
         }
     }

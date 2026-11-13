@@ -31,9 +31,6 @@ pub struct Settings {
     pub names: LabelNames,
     pub keymap: Keymap,
     pub auto_advance: bool,
-    /// Whether AI analysis is on: the settings modal's toggle and the model
-    /// download behind it; nothing in this app runs the analysis yet.
-    pub ai_enabled: bool,
     /// The strip's order at startup; the sort menu writes it back.
     pub sort: SortKey,
     /// The strip's filter at startup, its remembered sections; the filter
@@ -232,10 +229,6 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .get("autoAdvance")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        ai_enabled: values
-            .get("aiEnabled")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
         writes: Writes::spawn(None),
@@ -287,7 +280,7 @@ mod tests {
     #[test]
     fn reads_the_stored_values() {
         let dir = tempfile::tempdir().unwrap();
-        let text = r#"{"sidecarFormat":"both","labelNames":{"red":"Rot"},"autoAdvance":false,"aiEnabled":true,
+        let text = r#"{"sidecarFormat":"both","labelNames":{"red":"Rot"},"autoAdvance":false,
                 "shortcuts":{"pick":["k"]},"sortOrder":"rating",
                 "filter":{"flags":["untagged"],"stars":[0,9]}}"#;
         drop(seeded(dir.path(), "s", text));
@@ -297,7 +290,6 @@ mod tests {
         assert_eq!(s.names.red, "Rot");
         assert_eq!(s.names.blue, LabelNames::default().blue);
         assert!(!s.auto_advance);
-        assert!(s.ai_enabled);
         assert_eq!(s.sort, SortKey::Rating);
         assert_eq!(
             s.filter,
@@ -326,7 +318,6 @@ mod tests {
             assert_eq!(s.names, LabelNames::default());
             assert_eq!(s.keymap, Keymap::defaults());
             assert!(s.auto_advance);
-            assert!(!s.ai_enabled);
             assert_eq!(s.sort, SortKey::Name);
             assert_eq!(s.filter, Stored::default());
             assert!(values(&dir.path().join(format!("{name}.sqlite"))).is_empty());

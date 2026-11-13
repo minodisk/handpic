@@ -143,10 +143,9 @@ version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
 (`datadir::settings_path`), next to the Tauri app's `settings.json`. The
 values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
-`aiEnabled`, `sortOrder`, `filter`) go through the one `from_values` with the backend's
+`sortOrder`, `filter`) go through the one `from_values` with the backend's
 rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
 `Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
-`aiEnabled` off unless a boolean says on,
 `SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read
 as capture order and left stored as it is, `Stored::from_setting`).
 
@@ -184,9 +183,7 @@ barrier gives the drain for free.
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
   test JSON when it needs seeded values, or it opens and seeds the user's real
   store; and `--log` with a file in the test folder, or it appends to the
-  native app's own `Handpic.log`. A run that may turn AI analysis on also
-  passes `--data-dir` with a test folder, or the model download goes to the
-  native app's real local data dir.
+  native app's own `Handpic.log`.
 
 ### The folder open reads the sidecars before pass 1 (Measured)
 
@@ -461,7 +458,7 @@ dimmed, shows capture order and keeps the stored key.
 `settingsview.rs`'s `SettingsView` is an `Entity` the window holds and adds as
 its root's last child; `settingsmodal.rs` is its pure model (the open state,
 the selected tab, the shortcut row capturing a key, `modal.ts`'s key rule,
-`tabs.ts`'s vertical `nextTab` and `ai.ts`'s `aiStatus`). While closed its
+`tabs.ts`'s vertical `nextTab`). While closed its
 `render` returns `Empty`, one zero-size layout node. While open it is
 `deferred(div().absolute().top_0().left_0().size_full())`: in taffy an
 absolute child is placed against its parent, here the window's root, so it
@@ -478,7 +475,7 @@ tab across opens and focuses it on open, as the Tauri `open` does.
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
-`AiEnabled` sets `settings.ai_enabled` and writes `aiEnabled`, `Closed` focuses the window's handle again.
+`Closed` focuses the window's handle again.
 The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
 
@@ -504,15 +501,9 @@ not open.
   element with `on_click` turns a key down then up of either into a
   `ClickEvent::Keyboard` (`div.rs`), and its listener runs before the box's
   bubble-phase handler stops the event.
-- Rule: the AI toggle runs the backend's `ai::Ai` (the Tauri `AppAi` over it):
-  `switch` writes nothing itself, starts the model download when turned on
-  with no model in place, and cancels it when turned off; its state callback
-  runs on the download thread and reaches the view through a channel, which
-  notifies only while the modal is open. The model goes to
-  `<local data dir>/<IDENTIFIER>.native/<MODEL_FILE>`, or under
-  `--data-dir <path>` (`datadir::model_path`), never the Tauri app's copy.
-  Nothing in the native app runs pass 3 yet, which the toggle's note says,
-  and unlike the Tauri app a download cut short is not resumed at launch.
+- Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
+  features (`aiEnabled` with the model download, pass 3, genres, the ranking,
+  `recommended`); a seeded `aiEnabled` key stays in the store, unread.
 - Not verified headless (mouse clicks and the modal's keys cannot be driven
   by `--auto`): the clicks, the occlusion, the focus cycle and the keyboard
   click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at

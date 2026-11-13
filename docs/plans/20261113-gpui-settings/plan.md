@@ -29,9 +29,11 @@ This plan gives the native app its own settings store (a dedicated SQLite
 file, seeded once from the Tauri `settings.json`), persists the strip's
 filter and sort order in it, and ports the settings modal: the sidecar
 format, the label names, the shortcut editor, the Import tab and the
-auto-advance and `aiEnabled` toggles, each taking effect live where the
-Tauri app's does. Once it is done the two apps' settings diverge and the
-native app no longer depends on the Tauri app for any of them.
+auto-advance toggle, each taking effect live where the Tauri app's does
+(the `aiEnabled` toggle is not ported: the user decided on 2026-11-14 not
+to port the AI features to the native app). Once it is done the two apps'
+settings diverge and the native app no longer depends on the Tauri app for
+any of them.
 
 ### Decisions (the user, 2026-11-13)
 
@@ -319,19 +321,11 @@ native app no longer depends on the Tauri app for any of them.
     - The Culling tab has `Auto-advance after a star, reject or pick`: a
       click flips `self.settings.auto_advance` at once and writes
       `autoAdvance`; the next judgment key follows it.
-    - The Culling tab has `AI analysis of what each photo shows`: a click
-      writes `aiEnabled` and nothing else, with a line under it saying the
-      value is only remembered because the analysis does not run in this
-      app yet. If `crates/backend/src/ai.rs` is on `origin/main` when this
-      step starts, the step wires the download and the Tauri status text
-      (`ai.ts`'s `aiStatus`) through it instead and says so here.
-      (Done that way: `riffle_backend::ai` landed in #1006. The click writes
-      `aiEnabled` and runs `Ai::switch`, which downloads the model on an
-      enable into the native app's own `<local data dir>/<IDENTIFIER>.native`
-      folder, or `--data-dir <path>`; the status line is `aiStatus`'s, and
-      the note under the toggle says the analysis does not run in this app
-      yet. A download cut short is not resumed at launch, unlike the Tauri
-      app, since nothing here uses the model.)
+    - The AI toggle (`AI analysis of what each photo shows`) was dropped by
+      the user's 2026-11-14 decision not to port the AI features (`aiEnabled`
+      with the model download, pass 3, genres, the ranking, `recommended`)
+      to the native app. The Culling tab holds auto-advance only, and a
+      seeded `aiEnabled` key is left in the store unread.
     - The Sidecar, Keyboard Shortcuts and Import tabs exist and are empty
       until their steps.
     - `main.rs` gains only: the entity field, its subscription, one child
@@ -536,9 +530,9 @@ native app no longer depends on the Tauri app for any of them.
       one); the example buttons fill and save.
     - `../20261109-gpui-port/plan.md` gets a line under Step 9 and a
       Progress entry saying the settings modal slice was done through this
-      plan and what of Step 9's settings is still open (the model download
-      behind `aiEnabled`, unless Step 3 wired it; the Cache tab; the
-      first-launch format dialog; a macOS app menu with `Settings…`);
+      plan and what of Step 9's settings is still open (the Cache tab; the
+      first-launch format dialog; a macOS app menu with `Settings…`), and
+      that the AI features are not ported (the user, 2026-11-14);
       Step 9 stays unticked.
     - `native-app.md` and `CLAUDE.md` (the backend's `import.rs`, the
       native modules' final wording) are updated; `mise run ci` and
@@ -574,17 +568,12 @@ native app no longer depends on the Tauri app for any of them.
   discoverable, but it is a new always-drawn part, which `native-app.md`'s
   rule puts on the A/B side. A macOS menu bar item is cheap through
   `set_menus` and is left for port Step 10.
-- **`aiEnabled` with the download but no analysis.** `crates/backend/src/ai.rs`
-  landed on `origin/main` (#1006) before Step 3, so the toggle runs
-  `Ai::switch` and its model download, and shows the Tauri `aiStatus` line,
-  with a note that this app does not run the analysis yet (pass 3 is out of
-  scope). The model goes to the native app's own
-  `<local data dir>/<IDENTIFIER>.native` folder, or `--data-dir <path>` for a
-  test run, so a hand check never downloads into a real data dir. Unlike the
-  Tauri app, a download cut short is not resumed at launch: nothing here uses
-  the model, and a seeded `aiEnabled: true` would otherwise fetch 378 MB on
-  the first start. Not taken: the persist-only toggle (the plan's fallback),
-  and hiding the toggle until pass 3 exists.
+- **No `aiEnabled` toggle.** The user decided on 2026-11-14 not to port the
+  AI features to the native app at all (`aiEnabled` with the model download,
+  pass 3, genres, the ranking, `recommended`). Step 3 first wired the toggle
+  to `riffle_backend::ai`'s download (#1006) and then removed it, with the
+  `--data-dir` flag it needed. A seeded `aiEnabled` key stays in the store
+  and is never read, so the Tauri value is kept should the decision change.
 - **Left out of this slice.** The Cache tab (Clear Cache needs the
   scan-idle gate that port Step 8 brings), the first-launch format dialog,
   the MCP and Debug tabs, the ranking's refit, the tab icons. Without the

@@ -361,7 +361,6 @@ impl Riffle {
         focus: FocusHandle,
         index: Result<Indexes, String>,
         settings: Settings,
-        model: Option<PathBuf>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -442,7 +441,7 @@ impl Riffle {
             async {}
         })
         .detach();
-        let settings_view = cx.new(|cx| SettingsView::new(settings.ai_enabled, model, cx));
+        let settings_view = cx.new(SettingsView::new);
         cx.subscribe_in(
             &settings_view,
             window,
@@ -450,10 +449,6 @@ impl Riffle {
                 Change::AutoAdvance(on) => {
                     this.settings.auto_advance = on;
                     this.settings.writes.set("autoAdvance", on.into());
-                }
-                Change::AiEnabled(on) => {
-                    this.settings.ai_enabled = on;
-                    this.settings.writes.set("aiEnabled", on.into());
                 }
                 Change::Closed => window.focus(&this.focus, cx),
             },
@@ -542,7 +537,6 @@ impl Riffle {
             index: _,
             settings: _,
             import_settings: _,
-            data_dir: _,
             log: _,
         } = args;
         let prompt = folder.is_none().then(|| {
@@ -2536,12 +2530,10 @@ fn main() {
     riffle_backend::diagnostics::install_panic_hook();
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take(), args.import_settings.take().as_deref());
-    let model = datadir::model_path(args.data_dir.take(), dirs::data_local_dir().as_deref());
     log::info!(
-        "settings: sidecarFormat={} autoAdvance={} aiEnabled={} sortOrder={} filter={:?} store={}",
+        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?} store={}",
         settings.format.setting(),
         settings.auto_advance,
-        settings.ai_enabled,
         settings.sort.setting(),
         settings.filter,
         if settings.writes.is_open() {
@@ -2567,7 +2559,7 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, settings, model, window, cx)
+                    Riffle::new(focus, index, settings, window, cx)
                 })
             },
         )
