@@ -332,7 +332,7 @@ them; their contents are deliberately coarse.
     the tri-state flag and the color label with their keys from
     `shortcuts.rs`, the coalescing sidecar writer (XMP, `.dop`, both; the
     PhotoLab uuid lookup), undo, and view-only JPEG folders.
-- [ ] Step 7: Filter, sort, focus marks, 1:1 zoom and peaking, pass 2
+- [x] Step 7: Filter, sort, focus marks, 1:1 zoom and peaking, pass 2
   - Done when: the filter menu's sections and the sort orders, pass 2
     (`run_faces_scan`: `eye_focus`, sharpness, EAR, pose) with the `f`
     mark, face boxes, the face mesh overlay, the 1:1 crop through
@@ -560,3 +560,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-13) Step 6 complete, through `../_archived/20261110-gpui-judgments/plan.md`
 - (2026-11-12) Step 7's 1:1 zoom and focus peaking slice done, through `../_archived/20261110-gpui-zoom-peaking/plan.md` (Step 7 stays open)
 - (2026-11-13) Step 7: the filter and the sort, through `../_archived/20261113-gpui-filter-sort/plan.md`; the per-folder EXIF filter sections remain
+- (2026-11-13) Step 7 complete: the per-folder EXIF filter sections and two refilter fixes, through `../_archived/20261113-gpui-exif-filter/plan.md`

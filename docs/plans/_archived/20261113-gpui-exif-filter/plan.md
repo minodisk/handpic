@@ -21,10 +21,10 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 The GPUI app (`crates/native`) has every filter section of the Tauri app
 except the per-folder EXIF ones (camera, lens, aperture, shutter speed, ISO,
 focal length ranges), which
-[the filter-sort plan](../_archived/20261113-gpui-filter-sort/plan.md) left to
+[the filter-sort plan](../20261113-gpui-filter-sort/plan.md) left to
 a follow-up slice (the user's decision, 2026-11-13). This plan ports them and
 fixes the two refilter bugs that plan's reviews found, which closes Step 7 of
-[the GPUI port plan](../20261109-gpui-port/plan.md).
+[the GPUI port plan](../../20261109-gpui-port/plan.md).
 
 Once done, the native filter menu narrows a folder by camera, lens, aperture,
 shutter speed, ISO and focal length range as the Tauri one does, the pane's
@@ -111,7 +111,7 @@ pane showing the pager's current index (option (a)); the status line's
 
 ### A/B latency measurement: not needed
 
-Per [native-app.md](../../agents/native-app.md)'s "A same-session A/B gates
+Per [native-app.md](../../../agents/native-app.md)'s "A same-session A/B gates
 only work on the page path", this plan is on the off-page-path side:
 
 - The EXIF groups are built only when the entries are read (the open, a
