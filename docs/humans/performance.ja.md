@@ -136,7 +136,7 @@ p50 の差は ARW が +0.9 ms、RAF が -1.5 ms で、実行ごとのばらつ�
 | ARW, 1616x1080 | 19.6 / 32.2 | 22.3 / 31.0 |
 | RAF, 4416x2944 | 65.8 / 79.2 | 65.3 / 76.4 |
 
-p50 の差は ARW が -2.6 ms、RAF が +0.5 ms で、実行ごとのばらつきの範囲内です。`paint` と `present` は変わっていません。実行ごとの数値と計測条件は [`results.md`](../plans/20261113-gpui-filter-sort/results.md) にあります。
+p50 の差は ARW が -2.6 ms、RAF が +0.5 ms で、実行ごとのばらつきの範囲内です。`paint` と `present` は変わっていません。実行ごとの数値と計測条件は [`results.md`](../plans/_archived/20261113-gpui-filter-sort/results.md) にあります。
 
 ## フォルダースキャンのスループット
 

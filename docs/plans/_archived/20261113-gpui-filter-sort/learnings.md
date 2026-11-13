@@ -299,7 +299,9 @@
   automated criteria and the headless runs.
 
 - **A pass-1 entries read can overwrite pass-2 facts (Step 3, not acted
-  on):** `read_entries` (pass 1's `Done`) replaces `facts` wholesale when its
+  on):** Fixed in Step 3's local review: `pending_faces` in
+  `crates/native/src/main.rs` keeps the `FacesProgress` rows that arrive while
+  the read is in flight and reapplies them after `set_entries`. `read_entries` (pass 1's `Done`) replaces `facts` wholesale when its
   background read returns; pass 2 starts at the same time, so a
   `FacesProgress` applied before that read returns is overwritten by a read
   that started before the pass-2 write, and a `FacesProgress` arriving before

@@ -349,7 +349,7 @@ so a reorder scrolls the current file into view. Nothing is written.
   press on an item reaches its `on_click` and not the strip, and that
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
   read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
-  `../plans/20261113-gpui-filter-sort/learnings.md`.
+  `../plans/_archived/20261113-gpui-filter-sort/learnings.md`.
 
 ### The native app keeps its own index (Inferred)
 
@@ -886,7 +886,7 @@ order): median p50 `keypressToPixels` -2.63 ms on ARW and +0.46 ms on RAF,
 inside the run-to-run spread (A's ARW runs alone span 19.28-22.11 ms).
 `paint` and `present` stayed within 0.04 ms: the status row's two buttons,
 unlike the pane, add nothing to `present`. See
-[the plan's results](../plans/20261113-gpui-filter-sort/results.md).
+[the plan's results](../plans/_archived/20261113-gpui-filter-sort/results.md).
 
 - Rule: when B is the commit right after the plan's own PR, A - B is the
   plan's cost alone; prefer that over a pre-plan commit with other plans'

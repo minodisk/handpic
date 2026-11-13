@@ -218,7 +218,7 @@ no filter set, file-name order) added, against the pager from just before them
 The difference is -2.6 ms on ARW and +0.5 ms on RAF at p50, inside the
 run-to-run spread; `paint` and `present` did not move. Per-run numbers and the
 conditions are in
-[`results.md`](../plans/20261113-gpui-filter-sort/results.md).
+[`results.md`](../plans/_archived/20261113-gpui-filter-sort/results.md).
 
 ## Folder scan throughput
 
