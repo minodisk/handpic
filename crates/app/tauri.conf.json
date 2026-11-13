@@ -2,7 +2,7 @@
   "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
   "productName": "Handpic",
   "version": "1.10.0",
-  "identifier": "com.minodisk.handpic",
+  "identifier": "dev.minodisk.handpic",
   "build": {
     "devUrl": "http://localhost:1420",
     "frontendDist": "ui/dist",

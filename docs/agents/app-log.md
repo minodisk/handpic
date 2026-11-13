@@ -17,9 +17,9 @@ The GPUI port (`crates/native`) writes a `Handpic.log` of its own; see
 
 | OS      | Path                                                     |
 | ------- | -------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\com.minodisk.handpic\logs\Handpic.log`     |
-| macOS   | `~/Library/Logs/com.minodisk.handpic/Handpic.log`          |
-| Linux   | `~/.local/share/com.minodisk.handpic/logs/Handpic.log`     |
+| Windows | `%LOCALAPPDATA%\dev.minodisk.handpic\logs\Handpic.log`     |
+| macOS   | `~/Library/Logs/dev.minodisk.handpic/Handpic.log`          |
+| Linux   | `~/.local/share/dev.minodisk.handpic/logs/Handpic.log`     |
 
 - The Windows path was checked against the running app. The macOS and Linux
   paths are taken from `app_log_dir` in tauri 2.11.6's
@@ -175,9 +175,9 @@ one file.
 
 | OS      | Path                                                              |
 | ------- | ----------------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\com.minodisk.handpic.native\logs\Handpic.log`     |
-| macOS   | `~/Library/Logs/com.minodisk.handpic.native/Handpic.log`          |
-| Linux   | `~/.local/share/com.minodisk.handpic.native/logs/Handpic.log`     |
+| Windows | `%LOCALAPPDATA%\dev.minodisk.handpic.native\logs\Handpic.log`     |
+| macOS   | `~/Library/Logs/dev.minodisk.handpic.native/Handpic.log`          |
+| Linux   | `~/.local/share/dev.minodisk.handpic.native/logs/Handpic.log`     |
 
 - `--log <path>` names the file instead; every debug or hand-check run passes
   it (see `native-app.md`). A file that cannot be opened is reported once on

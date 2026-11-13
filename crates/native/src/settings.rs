@@ -280,7 +280,7 @@ mod tests {
     }
 
     #[test]
-    fn the_current_identifier_wins_over_the_legacy_one() {
+    fn the_current_identifier_wins_over_the_legacy_ones() {
         let dir = tempfile::tempdir().unwrap();
         write(
             &tauri_json(dir.path(), IDENTIFIER),
@@ -288,6 +288,10 @@ mod tests {
         );
         write(
             &tauri_json(dir.path(), LEGACY_IDENTIFIERS[0]),
+            r#"{"sidecarFormat":"xmp"}"#,
+        );
+        write(
+            &tauri_json(dir.path(), LEGACY_IDENTIFIERS[1]),
             r#"{"sidecarFormat":"both"}"#,
         );
         assert_eq!(
@@ -297,10 +301,27 @@ mod tests {
     }
 
     #[test]
-    fn the_legacy_file_is_used_when_only_it_exists() {
+    fn the_newer_legacy_file_wins_when_the_current_one_is_absent() {
         let dir = tempfile::tempdir().unwrap();
         write(
             &tauri_json(dir.path(), LEGACY_IDENTIFIERS[0]),
+            r#"{"sidecarFormat":"dop"}"#,
+        );
+        write(
+            &tauri_json(dir.path(), LEGACY_IDENTIFIERS[1]),
+            r#"{"sidecarFormat":"both"}"#,
+        );
+        assert_eq!(
+            load_from(None, None, Some(dir.path())).format,
+            SidecarFormat::Dop
+        );
+    }
+
+    #[test]
+    fn the_riffle_file_is_used_when_only_it_exists() {
+        let dir = tempfile::tempdir().unwrap();
+        write(
+            &tauri_json(dir.path(), LEGACY_IDENTIFIERS[1]),
             r#"{"sidecarFormat":"both"}"#,
         );
         assert_eq!(

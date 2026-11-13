@@ -1,10 +1,10 @@
 use std::path::{Path, PathBuf};
 
 /// The product's identifier after the Handpic rename.
-pub const IDENTIFIER: &str = "com.minodisk.handpic";
+pub const IDENTIFIER: &str = "dev.minodisk.handpic";
 
 /// The identifiers the product had before `IDENTIFIER`, newest first.
-pub const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.riffle"];
+pub const LEGACY_IDENTIFIERS: &[&str] = &["com.minodisk.handpic", "com.minodisk.riffle"];
 
 /// The index file: `flag` when given, else `index.sqlite` in the native app's
 /// own `<IDENTIFIER>.native` folder under `cache`, apart from the Tauri app's
@@ -69,7 +69,7 @@ mod tests {
             index_path(None, Some(Path::new("C:/cache"))),
             Some(
                 Path::new("C:/cache")
-                    .join("com.minodisk.handpic.native")
+                    .join("dev.minodisk.handpic.native")
                     .join("index.sqlite")
             )
         );
