@@ -5,22 +5,28 @@
 //! view, which owns the values, to apply.
 
 use gpui::{
-    ClickEvent, Context, ElementId, Empty, EventEmitter, FocusHandle, FontWeight, KeyDownEvent,
-    MouseButton, SharedString, Window, deferred, div, prelude::*, px, rgb, rgba,
+    ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
+    FontWeight, KeyDownEvent, MouseButton, SharedString, Window, deferred, div, prelude::*, px,
+    rgb, rgba,
 };
 
 use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
     ACCENT_COLOR, BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER,
     MUTED_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
-    settingsmodal::{self, Edit, FORMATS, ModalKey, SettingsModal, Step, TABS, Tab},
+    settings::Settings,
+    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, Step, TABS, Tab},
+    textinput::{self, TextInput},
 };
 
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
     SidecarFormat(SidecarFormat),
+    /// The normalized names after a commit that changed them.
+    LabelNames(LabelNames),
     /// The keymap after a successful edit.
     Keymap(Keymap),
     /// The focus goes back to the window.
@@ -38,13 +44,28 @@ pub struct SettingsView {
     auto_advance: bool,
     format: SidecarFormat,
     keymap: Keymap,
+    label_names: LabelNames,
+    /// The Sidecar tab's name fields, in `LABEL_COLORS` order.
+    name_fields: Vec<Entity<TextInput>>,
+    /// The language `Reset` fills in, an index into `i18n::presets()`.
+    language: usize,
     status: Option<SharedString>,
 }
 
 impl EventEmitter<Change> for SettingsView {}
 
 impl SettingsView {
-    pub fn new(cx: &mut Context<Self>) -> Self {
+    pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let name_fields: Vec<_> = LABEL_COLORS
+            .iter()
+            .map(|_| cx.new(|cx| TextInput::new(window, cx)))
+            .collect();
+        for field in &name_fields {
+            cx.subscribe_in(field, window, |this, _, event, window, cx| {
+                this.name_field(*event, window, cx);
+            })
+            .detach();
+        }
         Self {
             focus: cx.focus_handle(),
             tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
@@ -52,6 +73,9 @@ impl SettingsView {
             auto_advance: true,
             format: SidecarFormat::default(),
             keymap: Keymap::defaults(),
+            label_names: LabelNames::default(),
+            name_fields,
+            language: 0,
             status: None,
         }
     }
@@ -60,26 +84,71 @@ impl SettingsView {
         self.model.is_open()
     }
 
-    /// Opens on the tab it was left on, with that tab focused. `saved` is
-    /// whether the settings store opened.
-    pub fn open(
-        &mut self,
-        auto_advance: bool,
-        format: SidecarFormat,
-        keymap: Keymap,
-        saved: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
+    /// Opens on the tab it was left on, with that tab focused, showing
+    /// `settings`' values.
+    pub fn open(&mut self, settings: &Settings, window: &mut Window, cx: &mut Context<Self>) {
         if !self.model.open() {
             return;
         }
-        self.auto_advance = auto_advance;
-        self.format = format;
-        self.keymap = keymap;
-        self.status = (!saved).then(|| settingsmodal::NOT_SAVED.into());
+        self.auto_advance = settings.auto_advance;
+        self.format = settings.format;
+        self.keymap = settings.keymap.clone();
+        self.show_names(settings.names.clone(), window, cx);
+        self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
+    }
+
+    fn show_names(&mut self, names: LabelNames, window: &Window, cx: &mut Context<Self>) {
+        for (field, text) in self
+            .name_fields
+            .iter()
+            .zip(settingsmodal::label_texts(&names))
+        {
+            field.update(cx, |field, cx| field.set_text(text, window, cx));
+        }
+        self.label_names = names;
+    }
+
+    /// A name field committed (Enter, or it lost the focus) or was left with
+    /// Escape. Escape commits too, then closes the modal: the Tauri field's
+    /// `change` fires when the closing dialog takes its focus.
+    fn name_field(&mut self, event: textinput::Event, window: &mut Window, cx: &mut Context<Self>) {
+        let texts: Vec<String> = self
+            .name_fields
+            .iter()
+            .map(|field| field.read(cx).text().to_owned())
+            .collect();
+        let texts = std::array::from_fn(|at| texts[at].as_str());
+        self.commit_names(settingsmodal::label_names_of(texts), window, cx);
+        if event == textinput::Event::Cancel && self.model.is_open() {
+            self.close(cx);
+        }
+    }
+
+    /// Shows `names` back in the fields and hands them to the main view when
+    /// they differ from those in force.
+    fn commit_names(&mut self, names: LabelNames, window: &Window, cx: &mut Context<Self>) {
+        let current = self.label_names.clone();
+        self.show_names(names.clone(), window, cx);
+        if let Some(names) = settingsmodal::label_change(&current, names) {
+            self.status = None;
+            cx.emit(Change::LabelNames(names));
+        }
+        cx.notify();
+    }
+
+    /// `Reset`: the chosen language's Lightroom names.
+    fn reset_names(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(preset) = i18n::presets().get(self.language) {
+            self.commit_names(preset.names.clone(), window, cx);
+        }
+    }
+
+    fn editing(&self, window: &Window, cx: &gpui::App) -> bool {
+        self.name_fields
+            .iter()
+            .any(|field| field.focus_handle(cx).is_focused(window))
     }
 
     fn close(&mut self, cx: &mut Context<Self>) {
@@ -88,11 +157,17 @@ impl SettingsView {
         cx.notify();
     }
 
-    /// Every key stops here, so none reaches the window's keymap.
+    /// Every key stops here, so none reaches the window's keymap, except
+    /// that a key typed in a name field goes on to the platform's text input
+    /// (the window's own handler returns while the modal is open).
     fn key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        cx.stop_propagation();
         let name = keys::key_name(&e.keystroke);
-        match self.model.key(name.as_deref()) {
+        let key = self.model.key(name.as_deref());
+        if !settingsmodal::stops(&key, self.editing(window, cx)) {
+            return;
+        }
+        cx.stop_propagation();
+        match key {
             ModalKey::Close => self.close(cx),
             ModalKey::Focus(Step::Next) => window.focus_next(cx),
             ModalKey::Focus(Step::Previous) => window.focus_prev(cx),
@@ -221,14 +296,20 @@ impl SettingsView {
                 "Auto-advance after a star, reject or pick",
                 cx.listener(|this, _: &ClickEvent, _, cx| this.flip_auto_advance(cx)),
             )),
-            Tab::Sidecar => content.children(FORMATS.iter().map(|&(format, label)| {
-                radio(
-                    format.setting(),
-                    format == self.format,
-                    label,
-                    cx.listener(move |this, _: &ClickEvent, _, cx| this.choose_format(format, cx)),
-                )
-            })),
+            Tab::Sidecar => content
+                .children(FORMATS.iter().map(|&(format, label)| {
+                    radio(
+                        format.setting(),
+                        format == self.format,
+                        label,
+                        cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            this.choose_format(format, cx);
+                        }),
+                    )
+                }))
+                .when(settingsmodal::writes_xmp(self.format), |d| {
+                    d.child(self.label_names(cx))
+                }),
             Tab::Shortcuts => {
                 content
                     .child(self.shortcuts(cx))
@@ -240,6 +321,70 @@ impl SettingsView {
             }
             Tab::Import => content,
         }
+    }
+
+    /// The Tauri paragraph, a name field per color, the languages `Reset`
+    /// chooses from (GPUI has no select element: a wrapping row of them,
+    /// the chosen one lit) and `Reset`.
+    fn label_names(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .flex()
+            .flex_col()
+            .gap_2()
+            .pt_2()
+            .child(
+                div()
+                    .text_color(rgb(MUTED_COLOR))
+                    .child(settingsmodal::LABEL_NAMES_NOTE),
+            )
+            .children(
+                LABEL_COLORS
+                    .iter()
+                    .zip(&self.name_fields)
+                    .map(|(color, field)| {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(div().w(px(64.)).flex_none().child(*color))
+                            .child(div().w(px(240.)).child(field.clone()))
+                    }),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .items_center()
+                    .gap(px(4.))
+                    .children(i18n::presets().iter().enumerate().map(|(at, preset)| {
+                        let chosen = at == self.language;
+                        div()
+                            .id(("label-language", at))
+                            .tab_index(0)
+                            .px(px(6.))
+                            .rounded_sm()
+                            .border_1()
+                            .border_color(rgba(if chosen { 0 } else { INPUT_BORDER }))
+                            .when(chosen, |d| {
+                                d.bg(rgb(ACCENT_COLOR)).border_color(rgb(PRIMARY_COLOR))
+                            })
+                            .cursor_pointer()
+                            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+                            .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
+                            .child(preset.name.clone())
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.language = at;
+                                cx.notify();
+                            }))
+                    }))
+                    .child(button(
+                        "label-names-reset".into(),
+                        "Reset",
+                        cx.listener(|this, _: &ClickEvent, window, cx| {
+                            this.reset_names(window, cx)
+                        }),
+                    )),
+            )
     }
 
     /// One row per action: its label, a chip per key with its remove button,
