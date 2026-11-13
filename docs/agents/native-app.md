@@ -289,6 +289,26 @@ last, and a JPEG folder under `"name"` paged in capture order.
   view (`carried_offset`).
 - Measured: `order_files` over 1,000 paths takes 0.4-0.5 ms in a release
   test build and 13-17 ms in the debug one (natord dominates the name order).
+- Rule: pass 2's `FacesProgress` patches each written file's `Focus` in
+  `facts` (`filter::apply_face_ready`, the Tauri `applyFaceReady`: a file
+  without facts or without a focus is left alone) and refilters with the
+  current file as anchor and the scroll kept only while a `Face focus` or
+  `Eyes` item is checked; `FacesDone` reads nothing. On a fresh index under
+  `{"filter":{"candidates":["good"]}}` the open's list and pass 1's are empty
+  (no `eye_focus` yet, so every file is `Neutral`) and the 3 good frames of 8
+  came in from `FacesProgress` alone; `eyes: ["open"]` paged the 4 open-eyed
+  frames.
+- Rule: the `Output` section's answer is read on the open's (and the
+  re-listing's) background task right after `scan::list`, before
+  `Scan::prepare` (`scan::outputs` over `output::outputs_in`, at most two
+  `read_dir`s), never on the main thread, and handed to `opened` with the
+  listing it is about. No export folder or a read error is no answer:
+  `FilterState::set_output_known(false)` clears the `outputs` checks, and an
+  error is logged as `output filter: …` and kept in the pane's notes as
+  `Output filter: …` until a read succeeds. The section is never stored.
+- Measured: `output: dir=… found=N in …ms` (`found=none` without an answer)
+  logged 0 ms on 8 copied ARWs with a 3-file `Output\`; renaming `Output\`
+  away and back re-listed twice, `found=none` then `found=3`.
 
 ### The native app keeps its own index (Inferred)
 

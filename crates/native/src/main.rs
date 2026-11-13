@@ -75,7 +75,7 @@ use riffle_core::{
     reader,
     scan::{Paused, ReadSlots, ScanFocus},
 };
-use scan::{Event, Listed, Prepared, Running, Scan};
+use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
 use settings::Settings;
 use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
@@ -181,6 +181,7 @@ type Entries = (HashMap<String, State>, HashMap<String, Facts>);
 struct Opened {
     listed: Listed,
     shown: Vec<String>,
+    outputs: Outputs,
     /// `None` without an index.
     todo: Option<Result<Prepared, String>>,
     /// `None` without an index or when the read failed.
@@ -235,11 +236,21 @@ struct Riffle {
     files: Vec<PathBuf>,
     /// The listed files' facts by path, from the index.
     facts: HashMap<String, Facts>,
+    /// Pass 2 files reported since the last read of the index, laid over a
+    /// snapshot read before they were written.
+    pending_faces: Vec<riffle_backend::index::FaceReady>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
     /// The strip's filter; a change lives for the session only.
     filter: FilterState,
+    /// The listed files with an export, `None` while the folder gives no
+    /// answer, and the listing the answer is about (`filter::output_of`).
+    outputs: Option<HashSet<String>>,
+    outputs_listing: HashSet<String>,
+    /// Why the last export read failed, in the pane's notes until one
+    /// succeeds.
+    outputs_failure: Option<String>,
     pager: Pager,
     status: SharedString,
     index: Result<Arc<Mutex<Index>>, String>,
@@ -410,12 +421,16 @@ impl Riffle {
             all: Vec::new(),
             files: Vec::new(),
             facts: HashMap::new(),
+            pending_faces: Vec::new(),
             sort: settings.sort,
             filter: {
                 let mut filter = FilterState::default();
                 filter.apply_stored(&settings.filter);
                 filter
             },
+            outputs: None,
+            outputs_listing: HashSet::new(),
+            outputs_failure: None,
             pager: Pager::new(0),
             status: "no folder".into(),
             index,
@@ -581,6 +596,7 @@ impl Riffle {
                     let dir = canonicalize(&folder.to_string_lossy());
                     watch::set(&watching, &dir, &dir);
                     let listed = scan::list(Path::new(&dir), format)?;
+                    let outputs = scan::outputs(&listed);
                     let todo = index.map(|index| {
                         Scan::prepare(&index, writer.as_deref(), &listed, format, &names)
                     });
@@ -595,6 +611,7 @@ impl Riffle {
                     Ok::<_, String>(Opened {
                         listed,
                         shown,
+                        outputs,
                         todo,
                         entries,
                         last_viewed,
@@ -611,6 +628,7 @@ impl Riffle {
         let Opened {
             listed,
             shown,
+            outputs,
             todo,
             entries,
             last_viewed,
@@ -625,10 +643,15 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.pending_faces.clear();
         self.order += 1;
         self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
         self.dir = Some(listed.dir.clone());
+        self.filter.set_output_known(outputs.found.is_some());
+        self.outputs = outputs.found;
+        self.outputs_listing = outputs.listing;
+        self.outputs_failure = outputs.failure;
         let entries = entries.unwrap_or_default();
         // A re-listing that leaves the same file current keeps its crop.
         let mut same_file = false;
@@ -758,7 +781,7 @@ impl Riffle {
             facts,
             mark::af_eye_state(focus),
             focus.and_then(|f| f.eyes.eyes),
-            None,
+            filter::output_of(self.outputs.as_ref(), &self.outputs_listing, path),
         )
     }
 
@@ -900,6 +923,13 @@ impl Riffle {
                 done, total, ready, ..
             } => {
                 self.scan_status.analyzing(done, total);
+                filter::apply_face_ready(&mut self.facts, &ready);
+                self.pending_faces.extend(ready.iter().cloned());
+                // The `Face focus` and `Eyes` sections fill in as the pass
+                // runs, the strip keeping its scroll offset.
+                if !(self.filter.candidates.is_empty() && self.filter.eyes.is_empty()) {
+                    self.refilter(self.current_path(), true, None, cx);
+                }
                 if let Some(current) = self.current_path()
                     && ready.iter().any(|r| r.path == current)
                 {
@@ -946,6 +976,7 @@ impl Riffle {
             return;
         };
         let listing = self.listing;
+        self.pending_faces.clear();
         cx.spawn(async move |this, cx| {
             let entries = cx
                 .background_spawn(async move { entries_of(&reader, &dir) })
@@ -955,6 +986,8 @@ impl Riffle {
                     && listing == this.listing
                 {
                     this.set_entries(entries);
+                    // Pass 2 files written after the snapshot was read.
+                    filter::apply_face_ready(&mut this.facts, &this.pending_faces);
                     this.refilter(this.current_path(), true, None, cx);
                     this.mark_strip();
                     cx.notify();
@@ -1754,6 +1787,7 @@ impl Riffle {
                 self.notes
                     .iter()
                     .cloned()
+                    .chain(self.outputs_failure.clone())
                     .chain(self.write_errors.iter().map(|(path, message)| {
                         format!("{}: {message}", file_name(Path::new(path)))
                     }))
