@@ -306,3 +306,5 @@ machine idle for 30 to 60 minutes).
   and then `todo.md`.
 
 ## Progress
+
+- 2026-11-13: Step 1 landed: the EXIF filter sections and the two refilter fixes in `crates/native`. The GUI checks are pending for the user, see `learnings.md`.

@@ -54,6 +54,12 @@
 - Python's text-mode `open(..., "w")` on Windows wrote CRLF into the `.rs`
   files; normalize with `newline=""` or `sed -i 's/\r$//'` before committing.
 
+- The meta pane's `n / total` reads the pager's current index at the call
+  site (`main.rs`, `meta::position(self.pager.current(), ...)`). That choice is
+  too trivial to extract, so no unit test covers it; `meta::position`'s test
+  covers only the one-based formatting. It rests on the pending GUI check
+  (refilter hiding the shown file).
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Windows, debug build, `mise run native:dev` on a copy

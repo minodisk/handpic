@@ -97,12 +97,11 @@ pub fn groups<'a>(
 mod tests {
     use super::*;
 
-    /// `p` under `untagged` on `b` of `a b c`: the pager moves to `c`, at 1
-    /// of 2, while `b`'s preview, shown at 1 of 3, is still on screen.
+    /// The one-based `n / total` text. Which index it is given (the pager's
+    /// current, not the shown file's) is the call site's rule in `main.rs`.
     #[test]
-    fn the_position_follows_the_pager_after_a_refilter() {
-        let (current, total) = (1, 2);
-        assert_eq!(position(current, total), "2 / 2");
+    fn the_position_is_one_based() {
+        assert_eq!(position(1, 2), "2 / 2");
     }
 
     fn empty() -> Metadata {
