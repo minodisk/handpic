@@ -246,3 +246,5 @@ nothing is queued, and the number of reads per key sequence does not change.
   and no-flicker rules in `loaded()`, where they have no unit test.
 
 ## Progress
+
+- (2026-11-13) Step 1 complete
