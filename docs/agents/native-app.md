@@ -1347,6 +1347,9 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   end. The run's end calls `Resync::open` (dropping the pending change) and
   re-lists once, which also rescans what a canceled scan left. `TreeChanged`
   lists a tree folder only, never the open one.
+- Rule: every caller of `relist` (a sidecar format switch included) calls
+  `Resync::open` first, so `Resync::busy` covers the listing it starts and a
+  trash or delete waits for it.
 - Rule: a folder open discards a held run; a held run that drains while a
   dialog is asking is dropped, as the Tauri closure checks `trashFlow.busy`.
 - Rule: the run's result goes to the pane: `trashed_status` in the

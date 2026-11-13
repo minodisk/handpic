@@ -1499,6 +1499,8 @@ impl Riffle {
                 this.touched.clear();
                 this.undo.clear();
                 this.step_note = None;
+                // Mark the listing busy so a trash or delete waits for it.
+                this.resync.open();
                 this.relist(cx);
                 cx.notify();
             })
@@ -3347,8 +3349,6 @@ impl Riffle {
         )
     }
 
-    /// Answer an MCP companion tool call from the view, after moving it as
-    /// the call asks.
     /// The `Move to Trash…` / `Delete Permanently…` dialog while it asks or
     /// runs: a full-window `occlude()`d layer, so no press reaches what is
     /// under it, with the title, the line and the two buttons. The focused
@@ -3444,6 +3444,8 @@ impl Riffle {
         )
     }
 
+    /// Answer an MCP companion tool call from the view, after moving it as
+    /// the call asks.
     fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
         fn view(this: &Riffle) -> companion::View<'_> {
             let current = this.current_path();
