@@ -3765,7 +3765,6 @@ dependencies = [
  "dirs",
  "log",
  "mozjpeg",
- "notify",
  "reqwest",
  "rfd",
  "riffle-backend",
@@ -3788,7 +3787,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tower",
- "trash",
  "windows 0.62.2",
 ]
 
