@@ -6,11 +6,11 @@
 
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyDownEvent, MouseButton, SharedString, Window, deferred, div, prelude::*, px,
-    rgb, rgba,
+    FontWeight, KeyDownEvent, MouseButton, PathPromptOptions, SharedString, Window, deferred, div,
+    prelude::*, px, rgb, rgba,
 };
 
-use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
@@ -29,6 +29,10 @@ pub enum Change {
     LabelNames(LabelNames),
     /// The keymap after a successful edit.
     Keymap(Keymap),
+    /// The destination root chosen in the folder dialog.
+    ImportRoot(String),
+    /// A committed pattern that is valid and not the stored one.
+    ImportPattern(String),
     /// The focus goes back to the window.
     Closed,
 }
@@ -49,6 +53,13 @@ pub struct SettingsView {
     name_fields: Vec<Entity<TextInput>>,
     /// The language `Reset` fills in, an index into `i18n::presets()`.
     language: usize,
+    /// The stored destination root and pattern.
+    import_root: String,
+    import_pattern: String,
+    pattern_field: Entity<TextInput>,
+    /// Where today's photos would go under the field's pattern, or why it is
+    /// refused, recomputed as the field changes.
+    example: Result<String, String>,
     status: Option<SharedString>,
 }
 
@@ -66,6 +77,13 @@ impl SettingsView {
             })
             .detach();
         }
+        let pattern_field = cx.new(|cx| TextInput::new(window, cx));
+        cx.subscribe_in(&pattern_field, window, |this, _, event, _, cx| {
+            this.pattern_field(*event, cx);
+        })
+        .detach();
+        cx.observe(&pattern_field, |this, _, cx| this.show_example(cx))
+            .detach();
         Self {
             focus: cx.focus_handle(),
             tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
@@ -76,6 +94,10 @@ impl SettingsView {
             label_names: LabelNames::default(),
             name_fields,
             language: 0,
+            import_root: String::new(),
+            import_pattern: import::DEFAULT_PATTERN.to_owned(),
+            pattern_field,
+            example: Ok(String::new()),
             status: None,
         }
     }
@@ -94,6 +116,12 @@ impl SettingsView {
         self.format = settings.format;
         self.keymap = settings.keymap.clone();
         self.show_names(settings.names.clone(), window, cx);
+        self.import_root = settings.import_root.clone();
+        self.import_pattern = settings.import_pattern.clone();
+        let pattern = self.import_pattern.clone();
+        self.pattern_field
+            .update(cx, |field, cx| field.set_text(&pattern, window, cx));
+        self.show_example(cx);
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
@@ -145,9 +173,88 @@ impl SettingsView {
         }
     }
 
+    /// The example for the pattern in the field, a local call, so it follows
+    /// every edit without the Tauri frontend's debounce.
+    fn show_example(&mut self, cx: &mut Context<Self>) {
+        let example = import::today_example(&self.import_root, self.pattern_field.read(cx).text());
+        if example != self.example {
+            self.example = example;
+            cx.notify();
+        }
+    }
+
+    /// The pattern field committed or was left with Escape, which commits
+    /// too and then closes, as a name field does.
+    fn pattern_field(&mut self, event: textinput::Event, cx: &mut Context<Self>) {
+        let pattern = self.pattern_field.read(cx).text().to_owned();
+        self.commit_pattern(pattern, cx);
+        if event == textinput::Event::Cancel && self.model.is_open() {
+            self.close(cx);
+        }
+    }
+
+    /// A valid new pattern is handed to the main view to store; an invalid
+    /// one shows its reason in the example line and the stored one stays.
+    fn commit_pattern(&mut self, pattern: String, cx: &mut Context<Self>) {
+        match settingsmodal::pattern_change(&self.import_pattern, &pattern) {
+            Ok(Some(pattern)) => {
+                self.status = None;
+                self.import_pattern = pattern.clone();
+                cx.emit(Change::ImportPattern(pattern));
+            }
+            Ok(None) => {}
+            Err(e) => {
+                self.status = None;
+                self.example = Err(e);
+            }
+        }
+        cx.notify();
+    }
+
+    /// An example pattern button: it fills the field and commits.
+    fn use_pattern(&mut self, pattern: &str, window: &Window, cx: &mut Context<Self>) {
+        self.pattern_field
+            .update(cx, |field, cx| field.set_text(pattern, window, cx));
+        self.commit_pattern(pattern.to_owned(), cx);
+    }
+
+    /// `Choose…`: the OS folder dialog, answered on a later turn. The chosen
+    /// root is handed to the main view whether or not the modal is still
+    /// open, and the pattern being typed is kept.
+    fn choose_root(&mut self, cx: &mut Context<Self>) {
+        self.status = None;
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: None,
+        });
+        cx.spawn(async move |this, cx| {
+            let chosen = match chosen.await {
+                Ok(Ok(Some(paths))) => paths.into_iter().next(),
+                Ok(Ok(None)) | Err(_) => None,
+                Ok(Err(e)) => {
+                    this.update(cx, |this, cx| this.failed(e.to_string(), cx))
+                        .ok();
+                    None
+                }
+            };
+            let Some(root) = chosen else { return };
+            this.update(cx, |this, cx| {
+                this.import_root = root.to_string_lossy().into_owned();
+                cx.emit(Change::ImportRoot(this.import_root.clone()));
+                this.show_example(cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     fn editing(&self, window: &Window, cx: &gpui::App) -> bool {
         self.name_fields
             .iter()
+            .chain([&self.pattern_field])
             .any(|field| field.focus_handle(cx).is_focused(window))
     }
 
@@ -319,8 +426,101 @@ impl SettingsView {
                         cx.listener(|this, _: &ClickEvent, _, cx| this.edit(Edit::ResetAll, cx)),
                     )))
             }
-            Tab::Import => content,
+            Tab::Import => content.child(self.import(cx)),
         }
+    }
+
+    /// The Tauri paragraph, the read-only root with `Choose…` and its note,
+    /// the pattern field, the example line, the example patterns and the
+    /// specifier table.
+    fn import(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (example, refused) = match &self.example {
+            Ok(example) => (example.clone(), false),
+            Err(reason) => (reason.clone(), true),
+        };
+        div()
+            .id("import")
+            .flex()
+            .flex_col()
+            .flex_1()
+            .min_h_0()
+            .gap_2()
+            .overflow_y_scroll()
+            .child(div().child(settingsmodal::IMPORT_NOTE))
+            .child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Destination root"),
+            )
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .px(px(6.))
+                            .min_h(px(22.))
+                            .rounded_sm()
+                            .border_1()
+                            .border_color(rgba(INPUT_BORDER))
+                            .text_color(rgb(MUTED_COLOR))
+                            .child(self.import_root.clone()),
+                    )
+                    .child(button(
+                        "import-root-choose".into(),
+                        "Choose\u{2026}",
+                        cx.listener(|this, _: &ClickEvent, _, cx| this.choose_root(cx)),
+                    )),
+            )
+            .children(
+                settingsmodal::root_note(&self.import_root)
+                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+            )
+            .child(
+                div()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child("Folder pattern"),
+            )
+            .child(div().w(px(240.)).child(self.pattern_field.clone()))
+            .child(
+                div()
+                    .when(refused, |d| d.text_color(rgb(ERROR_COLOR)))
+                    .child(example),
+            )
+            .child(
+                div().flex().flex_wrap().gap(px(4.)).children(
+                    settingsmodal::IMPORT_PATTERN_EXAMPLES
+                        .iter()
+                        .enumerate()
+                        .map(|(at, &pattern)| {
+                            button(
+                                ("import-pattern", at).into(),
+                                pattern,
+                                cx.listener(move |this, _: &ClickEvent, window, cx| {
+                                    this.use_pattern(pattern, window, cx);
+                                }),
+                            )
+                        }),
+                ),
+            )
+            .child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .children(settingsmodal::IMPORT_SPECIFIERS.iter().map(
+                        |&(spec, meaning, example)| {
+                            div()
+                                .flex()
+                                .gap_2()
+                                .child(div().w(px(48.)).flex_none().child(spec))
+                                .child(div().w(px(180.)).flex_none().child(meaning))
+                                .child(div().text_color(rgb(MUTED_COLOR)).child(example))
+                        },
+                    )),
+            )
     }
 
     /// The Tauri paragraph, a name field per color, the languages `Reset`
