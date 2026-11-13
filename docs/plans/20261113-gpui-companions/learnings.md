@@ -193,6 +193,56 @@
     127.0.0.1:41933: ... (os error 10048)`, the state line carried the error,
     and the app scanned, paged and quit normally (exit 0).
 
+## Step 6: `set_judgment` in the GPUI app
+
+- The Tauri rule, checked in `main.ts`'s `record` / `send` and
+  `selection.ts`'s `judgments`: only the files whose state changes are
+  written and go into the undo entry (no `forceLabel` for the companion), and
+  `labelKnown` is "the entry was seen, or the label changed". `judgment.rs`'s
+  `writes` / `label_known` take a key `Command`, so the companion applies the
+  undo path's rule itself (`seen || own.label != after.label`) rather than
+  adding a fake command; the reply still lists every given photo, unchanged
+  ones included, as `companion.ts` does.
+- `judgment::State.label` holds the color's English name (`Red` ...
+  `Purple`, what `Command::Label` stores and the index row keeps); the
+  configured `xmp:Label` name is applied only by the sidecar writer through
+  `LabelNames`. So the tool's color names go in as they are, as in the Tauri
+  app.
+- The Tauri `view.judge` decides the value from a focused file, but
+  `set_judgment`'s command has no toggle, so the focused file does not matter
+  and the native port keeps the given order.
+- The backend's `set_judgment` already validates the fields before the
+  bridge; `companion.rs` validates again with `companion.ts`'s messages, so
+  its unit tests cover the refusals without the server.
+- `main.rs` gained only `judge_paths` (record, touch, set_state, one
+  refilter with the current file as anchor, store each under the entry's id)
+  and the `Judge` arm in `mcp_request`, whose reply is the judged list
+  instead of `get_view`. The native view still has no selection (checked at
+  `e9ee6b62`), so the default target is the current file.
+- `set_judgment` paths are matched as the index keys them (`\\?\`-prefixed),
+  not canonicalized; the backend's `resolve` only serves `get_photo` /
+  `get_preview`.
+- Automated check (debug build, `--auto 25` on 3 ARW copies in
+  `D:\Photos\tests\20261114-native-judgment\photos`, `--index`,
+  `--settings` (`settings.sqlite`), `--import-settings` (`settings.json`
+  holding `{"mcpEnabled": true, "sidecarFormat": "xmp"}`) and `--log` in that
+  folder, `--mcp-port 41937`), replies trimmed:
+  - `{paths: [_DSC0745, _DSC0786], rating: 4, label: "Red"}`: both reported
+    `rating 4, flag none, label Red`, `isError: false`.
+  - `{paths: [_DSC0786], flag: "pick"}`: `rating 4, flag pick, label Red`.
+  - `{rating: 2}` (no paths): the current file then, `_DSC0745`, reported
+    `rating 2, flag none, label Red`.
+  - `{rating: 9}`: `rating must be an integer from 0 to 5` (the backend's
+    check); a path outside the folder: `... is not shown in Handpic: not in
+    the open folder, or hidden by the filter`.
+  - After the run quit on its own (exit 0, `quit: judgment stores
+    drained=true sidecar writer drained=true`, `quit: MCP server
+    stopped=true`): `_DSC0745.xmp` held `xmp:Rating="2"`, `xmp:Label="Red"`,
+    `photoshop:LabelColor="red"`; `_DSC0786.xmp` `xmp:Rating="4"`, the same
+    label and `xmpDM:good="True"`; `_DSC0787` got no sidecar. The `ratings`
+    rows: `_DSC0745` rating 2, flag 0, `Red`, `label_known` 1, `dirty` 0;
+    `_DSC0786` rating 4, flag 1, `Red`, `label_known` 1, `dirty` 0.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 4, the Tauri app's MCP toggle on the moved
@@ -221,3 +271,17 @@
   log. Basis: Step 5's `crates/native/src/mcp.rs`, `companion.rs` and
   `main.rs`'s `mcp_request`; the step's checkbox was ticked on the automated
   criteria (unit tests and the curl check above).
+- Pending manual check (Step 6, `set_judgment` on the native app): on
+  Windows, run the GPUI app from this branch on a test copy under
+  `D:\Photos\tests\` with `"mcpEnabled": true` seeded through
+  `--import-settings`, with `--index`, `--settings`, `--log` there and a free
+  `--mcp-port`, connect a real MCP client and ask it to rate two photos (by
+  path) and then to pick the current one. Expected: the stars and the flag
+  show in the strip's cells and the meta pane at once, the window does not
+  advance, one `Ctrl+Z` undoes the two-photo call as a whole (both cells
+  revert, the sidecars follow), and closing the window by hand leaves
+  `quit: judgment stores drained=true sidecar writer drained=true` and
+  `quit: MCP server stopped=true` in the `--log` file. Basis: Step 6's
+  `crates/native/src/companion.rs` (`set_judgment`) and `main.rs`'s
+  `judge_paths`; the step's checkbox was ticked on the automated criteria
+  (unit tests and the curl check above).

@@ -283,7 +283,7 @@ before going on.
     - Pending manual checks for `learnings.md`: an MCP client connected to
       the native app, and `show_photo` / `set_view` visibly moving the view.
 
-- [ ] Step 6: `set_judgment` in the GPUI app, and the documentation
+- [x] Step 6: `set_judgment` in the GPUI app, and the documentation
   - Assumes Step 5 is merged.
   - Done when: `set_judgment` records stars, the flag and the label on the
     given paths, or on the current file when none are given, through the same

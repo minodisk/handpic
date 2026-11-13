@@ -273,6 +273,51 @@ process exits with the scan running, as before.
   stopped that way when the app quits is not in the holder, so the quit does
   not wait for it.
 
+### The MCP companion answers from the view, one channel hop away (Measured)
+
+With `mcpEnabled` true in the settings store, `mcp.rs` builds a tokio
+current-thread runtime on one named `mcp` thread, which runs the backend's
+`Mcp::switch(true)` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
+quit handler's signal and runs `Mcp::stop` (logged as `quit: MCP server
+stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). With it off or missing there
+is no runtime, no thread and no server. A bind failure is logged with the
+`mcp: McpState` line and the app runs on. The backend's `Bridge` send callback
+only puts the request into the view's channel as `scan::Event::Mcp`; the
+view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
+returns the action or the refusal, the view applies it (`go(Move::To(..))`,
+`toggle_zoom`, or `judge_paths`) and replies through `Mcp::reply`.
+`get_photo` and `get_preview` never reach the view: the backend reads them on
+tokio's blocking pool against the index's read-only connection, outside
+`ReadSlots`, as in the Tauri app.
+
+`set_judgment` goes the judgment keys' way: `companion.rs` merges the given
+fields over each photo's own state (an omitted field kept, a rating of 0 and a
+null label clearing), keeps only the photos it changes, with the label known
+when the entry was seen or the call changed the label (the Tauri `send`
+rule), and `judge_paths` records them as one `history::Undo` entry, marks them
+`touched`, applies them, refilters once with the current file kept, and stores
+each under that entry's id. There is no auto-advance, and a view-only folder
+refuses with `viewonly.ts`'s message. The reply lists every given photo's
+resulting stars, flag and label, the unchanged ones too. The tool's English
+color names are what `judgment::State.label` holds, so no mapping is needed.
+A `curl` check on test copies found the stars, the pick and the label in each
+`.xmp` and the `ratings` row after `--auto` quit.
+
+Not supported yet, each refused with a message naming the native app: compare
+and a `select_photos` with several paths. `selected` is the current file
+alone, `burst` is always empty (no `burst.ts` port), and `current.eyes` is
+present only once the `f` overlay has judged the file.
+
+- Rule: a test run with MCP on passes `--mcp-port` with a free port other
+  than 41917 (the user's Tauri app may hold it), seeds `"mcpEnabled": true`
+  through `--import-settings` into a fresh `--settings` store, and passes
+  `--log` with a file in the test folder, next to `--index`.
+- Rule: on Git Bash, give `curl` the JSON body on stdin
+  (`--data-binary @- <<< "$body"`); a `--data` argument with `\` escapes
+  reaches the server mangled. The session id is the `Mcp-Session-Id` header of
+  the `initialize` reply, and `set_judgment` paths are matched as the index
+  keys them (`\\?\`-prefixed on Windows), not canonicalized.
+
 ### A folder change re-lists, never mid-scan (Measured)
 
 `main.rs` holds one `watch::Watch` whose callback sends `Event::Changed` into

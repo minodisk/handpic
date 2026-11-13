@@ -294,8 +294,9 @@ companion's server (the backend's `Mcp` on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
-over a snapshot of the view: the current file as the selection, no burst, and
-compare, several photos and `set_judgment` refused), and `src/viewed.rs` the
+over a snapshot of the view: the current file as the selection, no burst,
+compare and several photos refused, and `set_judgment`'s changes, one undo
+entry through the judgment keys' view, row and writer path), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
