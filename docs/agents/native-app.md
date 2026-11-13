@@ -691,6 +691,11 @@ See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md
   `scan faces: ... canceled=true` with the `done` count it reached. A quit
   inside pass 1 logs `scan extract: ... canceled=true` and no `scan faces:`
   line.
+- Rule: size `--auto N` below pass 2's length (N presses at `AUTO_INTERVAL`
+  ~1 s plus `AUTO_SETTLE`), and use a fresh `--index` each run. A re-used
+  index let pass 2 finish on its own (3,066 files took 41 s against
+  `--auto 60`), so the run logged `canceled=false` and
+  `quit: scan stopped=true in 0ms`, which proves nothing about the stop.
 - Rule: to page while pass 2 runs, a 60-press run needs about 13k ARW or 4.5k
   RAF files to stay inside pass 2 (4.6 ms per ARW file, 15-16 ms per RAF file
   at 22 threads). Build the padding with hardlinks (`os.link`): no disk cost,

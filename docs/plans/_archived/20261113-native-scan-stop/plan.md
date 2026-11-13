@@ -165,3 +165,5 @@ logged and no index write is in flight when the process exits.
   possible without GPUI and what lets the app-level handler reach the scan.
 
 ## Progress
+
+- (2026-11-13) Step 1 complete
