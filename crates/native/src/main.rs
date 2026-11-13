@@ -23,6 +23,7 @@ mod pager;
 mod peaking;
 mod resync;
 mod scan;
+mod selection;
 mod settings;
 mod settingsmodal;
 mod settingsview;
@@ -92,6 +93,7 @@ use riffle_core::{
     scan::{Paused, ReadSlots, ScanFocus},
 };
 use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
+use selection::Selection;
 use settings::Settings;
 use settingsview::{Change, SettingsView};
 use sort::{SortFacts, SortKey};
@@ -380,6 +382,8 @@ struct Riffle {
     stores: judgment::Queue,
     /// The open folder's undo and redo histories.
     undo: Undo,
+    /// The strip's multi-selection; the current file is always a member.
+    selection: Selection,
     /// `Undid <name>` / `Redid <name>` until the view moves on.
     step_note: Option<String>,
     /// The sidecars the open could not read, as `<name>: <message>`.
@@ -606,6 +610,7 @@ impl Riffle {
             writer,
             stores,
             undo: Undo::new(),
+            selection: Selection::default(),
             step_note: None,
             notes: Vec::new(),
             write_errors: Vec::new(),
@@ -1290,6 +1295,8 @@ impl Riffle {
             self.retire(old);
             self.files = paths.iter().map(PathBuf::from).collect();
             self.mark_strip();
+            let landed = selection::settle(&self.selection, &paths, self.pager.current(), true);
+            self.set_selection(landed);
         }
         if carry {
             self.remember(cx);
@@ -1436,6 +1443,8 @@ impl Riffle {
         }
         self.files = next.iter().map(PathBuf::from).collect();
         self.mark_strip();
+        let settled = selection::settle(&self.selection, &next, current, false);
+        self.set_selection(settled);
         self.strip_moved(cx);
         if next.is_empty() {
             self.status = filter::FILTERED_TEXT.into();
@@ -1668,6 +1677,9 @@ impl Riffle {
                 self.zoom_resized(cx);
                 cx.notify();
             }
+            (_, Some("extendPrevious")) => self.extend(-1, cx),
+            (_, Some("extendNext")) => self.extend(1, cx),
+            (_, Some("selectAll")) => self.select_all(cx),
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
@@ -1678,9 +1690,11 @@ impl Riffle {
         }
     }
 
-    /// A judgment key on the current file: the view and the strip first, then
-    /// the row and the writer in the background. Auto-advance moves on after
-    /// the stars and the flags, also when the file already held the value.
+    /// A judgment key on the selection's targets, its value decided from the
+    /// current file: the view and the strip first, then the row and the
+    /// writer per changed file in the background, all as one undo entry.
+    /// Auto-advance moves on after the stars and the flags on a single
+    /// target, also when the file already held the value.
     fn judge(&mut self, cmd: Command, cx: &mut Context<Self>) {
         if self.view_only {
             return;
@@ -1689,22 +1703,50 @@ impl Riffle {
             return;
         };
         self.step_note = None;
-        let own = self.judgments.get(&path).cloned().unwrap_or_default();
-        let after = judgment::apply(&own, &own, cmd);
-        let seen = self.seen.contains(&path);
-        if judgment::writes(seen, &own, &after, cmd) {
-            let label_known = judgment::label_known(seen, &own, &after, cmd);
-            let entry = self.undo.record(vec![Judged {
-                path: path.clone(),
-                state: own.clone(),
-            }]);
-            self.touched.insert(path.clone());
-            self.set_state(&path, after.clone());
+        let files = path_strings(&self.files);
+        let targets = selection::targets(&self.selection, &files, self.pager.current());
+        let changes = selection::judgments(
+            &targets,
+            &path,
+            |p| self.judgments.get(p).cloned().unwrap_or_default(),
+            cmd,
+            |p| self.seen.contains(p),
+        );
+        if !changes.is_empty() {
+            let entry = self.undo.record(
+                changes
+                    .iter()
+                    .map(|change| Judged {
+                        path: change.path.clone(),
+                        state: change.before.clone(),
+                    })
+                    .collect(),
+            );
+            for change in &changes {
+                self.touched.insert(change.path.clone());
+                self.set_state(&change.path, change.after.clone());
+            }
             self.refilter(Some(path.clone()), false, None, cx);
-            self.store(path.clone(), own, after, label_known, entry, cx);
+            for change in changes {
+                let seen = self.seen.contains(&change.path);
+                let label_known = judgment::label_known(seen, &change.before, &change.after, cmd);
+                self.store(
+                    change.path,
+                    change.before,
+                    change.after,
+                    label_known,
+                    entry,
+                    cx,
+                );
+            }
         }
         let still_current = self.current_path() == Some(path);
-        if judgment::should_advance(cmd, self.settings.auto_advance, still_current) {
+        if judgment::should_advance(
+            cmd,
+            targets.len(),
+            self.settings.auto_advance,
+            still_current,
+        ) {
             self.go(Move::NextClamped, cx);
         }
         cx.notify();
@@ -1778,12 +1820,19 @@ impl Riffle {
         // A file the filter now hides leaves the current file where it is.
         let anchor = match &stepped.move_to {
             Some(path) if self.passes(path) => Some(path.clone()),
-            _ => shown,
+            _ => shown.clone(),
         };
         self.refilter(anchor, false, None, cx);
         let verb = if redo { "Redid" } else { "Undid" };
         let note = match stepped.move_to {
             Some(path) => {
+                let restored = selection::restore(
+                    &self.selection,
+                    &path_strings(&self.files),
+                    shown.as_deref(),
+                    &path,
+                );
+                self.set_selection(restored);
                 let name = file_name(Path::new(&path));
                 match self.files.iter().position(|f| f.to_string_lossy() == path) {
                     Some(at) => {
@@ -1910,9 +1959,48 @@ impl Riffle {
         }));
     }
 
+    /// Move to `to` and, when the current file changed, select it alone, as
+    /// a paging key leaves the selection.
     fn go(&mut self, to: Move, cx: &mut Context<Self>) {
+        if self.focus_on(to, cx) {
+            self.select_current();
+        }
+    }
+
+    fn select_current(&mut self) {
+        let current = self.current_path();
+        self.set_selection(selection::single(current.as_deref()));
+    }
+
+    fn set_selection(&mut self, selection: Selection) {
+        self.selection = selection;
+        self.strip.set_selected(&self.selection.selected);
+    }
+
+    /// `extendPrevious` / `extendNext`: move the focus by `delta` and select
+    /// the range from the anchor to it.
+    fn extend(&mut self, delta: isize, cx: &mut Context<Self>) {
+        let files = path_strings(&self.files);
+        let (extended, at) =
+            selection::extend(&self.selection, &files, self.pager.current(), delta);
+        self.set_selection(extended);
+        self.focus_on(Move::To(at), cx);
+        cx.notify();
+    }
+
+    /// `selectAll`: every shown file, the focus kept.
+    fn select_all(&mut self, cx: &mut Context<Self>) {
+        let all = selection::all(&path_strings(&self.files), self.pager.current());
+        self.set_selection(all);
+        cx.notify();
+    }
+
+    /// Move to `to` without touching the selection. Whether the current file
+    /// changed.
+    fn focus_on(&mut self, to: Move, cx: &mut Context<Self>) -> bool {
         let key = Instant::now();
-        if self.pager.go(to) {
+        let moved = self.pager.go(to);
+        if moved {
             self.key = Some(key);
             self.step_note = None;
             self.dwell.cancel();
@@ -1925,6 +2013,7 @@ impl Riffle {
             self.read_focus(cx);
             self.zoom_page(cx);
         }
+        moved
     }
 
     fn toggle_marks(&mut self, cx: &mut Context<Self>) {
@@ -2090,10 +2179,19 @@ impl Riffle {
         cx.notify();
     }
 
-    fn strip_clicked(&mut self, x: f32, cx: &mut Context<Self>) {
-        if let Some(index) = self.strip.hit_test(x) {
-            self.go(Move::To(index), cx);
-        }
+    /// A click on a cell, as `main.ts`'s strip click handler: a toggle only
+    /// changes the selection; a range or a plain click also moves the focus
+    /// to the clicked file.
+    fn strip_clicked(&mut self, x: f32, modifiers: selection::Modifiers, cx: &mut Context<Self>) {
+        let Some(at) = self.strip.hit_test(x) else {
+            return;
+        };
+        let files = path_strings(&self.files);
+        let focused = self.pager.current();
+        let clicked = selection::click(&self.selection, &files, focused, at, modifiers);
+        self.set_selection(clicked);
+        self.focus_on(Move::To(if modifiers.toggle { focused } else { at }), cx);
+        cx.notify();
     }
 
     /// A vertical wheel scrolls the strip sideways too, as the Tauri strip's.
@@ -2122,6 +2220,7 @@ impl Riffle {
                         .into()
                 }),
                 current: index == current,
+                selected: index != current && self.strip.is_selected(index),
                 marks: self.strip.marks(index),
             })
             .collect()
@@ -2868,7 +2967,10 @@ impl Riffle {
             }
             Ok(action) => {
                 match action {
-                    Some(companion::Action::Show(at)) => self.go(Move::To(at), cx),
+                    Some(companion::Action::Show(at)) => {
+                        self.focus_on(Move::To(at), cx);
+                        self.select_current();
+                    }
                     Some(companion::Action::ToggleZoom) => self.toggle_zoom(cx),
                     _ => {}
                 }
@@ -2999,8 +3101,12 @@ impl Render for Riffle {
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                            let modifiers = selection::Modifiers {
+                                toggle: e.modifiers.control || e.modifiers.platform,
+                                range: e.modifiers.shift,
+                            };
                             // The strip spans the window from its left edge.
-                            this.strip_clicked(f32::from(e.position.x), cx);
+                            this.strip_clicked(f32::from(e.position.x), modifiers, cx);
                         }),
                     )
                     .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
@@ -3152,6 +3258,8 @@ struct StripCell {
     /// `Some` on a cell the scan failed on, with why.
     failure: Option<SharedString>,
     current: bool,
+    /// Selected and not current.
+    selected: bool,
     marks: Marks,
 }
 
@@ -3166,6 +3274,8 @@ const MUTED_COLOR: u32 = 0xa1a1a1;
 const ERROR_COLOR: u32 = 0xff6467;
 const PLACEHOLDER: u32 = 0x262626;
 const CURRENT_OUTLINE: u32 = 0xe5e5e5;
+/// `style.css`'s `--muted`, a selected cell's fill.
+const MUTED_FILL: u32 = 0x262626;
 const NAME_COLOR: u32 = 0xd4d4d4;
 const FAILURE_COLOR: u32 = 0xa3a3a3;
 /// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
@@ -3219,6 +3329,10 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 rgb(CURRENT_OUTLINE),
                 Default::default(),
             ));
+        } else if cell.selected {
+            // `.cell.selected`: `--muted` behind, a `--ring` border.
+            window.paint_quad(fill(cell_bounds, rgb(MUTED_FILL)));
+            window.paint_quad(outline(cell_bounds, rgba(RING_COLOR), Default::default()));
         }
         window.with_content_mask(
             Some(ContentMask {

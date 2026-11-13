@@ -221,8 +221,8 @@ no sidecar's mtime moved.
 
 ### A judgment goes view, row, writer (Measured)
 
-A judgment key on the current file (none in a view-only folder) applies
-`judgment::apply` to the view's map and the strip's cell at once, then on
+A judgment key on the strip's selection (none in a view-only folder) applies
+`judgment::apply` to the view's map and the strip's cells at once, then on
 `cx.background_spawn` runs `judgment::store`: `Index::set_rating` on the
 writer connection, then `Writer::set`, the Tauri `set_rating`'s order, so a
 crash between the two leaves the row dirty. A failure of either puts the
@@ -239,11 +239,13 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   paths judged since the open), whose state a later `entries` read, such as
   the one at pass 1's `Done`, does not replace, as the Tauri `touched` set.
 - Rule: undo and redo go through the same path. A judgment that writes
-  records its file's state before it as one `history::Undo` entry (a batch,
-  for the selection of port Step 8) and clears the redo history; `Ctrl+Z` /
+  records its files' states before it as one `history::Undo` entry (a batch
+  over the selection's targets) and clears the redo history; `Ctrl+Z` /
   `Ctrl+Shift+Z` pop an entry, push the files' current states onto the other
   history, apply the popped states as a key would (view, row, writer) and
-  move to the file. Each entry has an id, so a failed store drops its file
+  move to the file of a one-file entry, selecting it alone when the focus
+  moves (`selection::restore`); an entry of several files leaves the current
+  file and notes `Undid N files` / `Redid N files`. Each entry has an id, so a failed store drops its file
   from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
   Another folder's open clears both histories; a re-listing keeps them and a
   step drops the files no longer listed.
@@ -254,6 +256,36 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   `writes` next to `changed`; do not fold the two into one test. A failed
   undo / redo store also drops its file from the entry it pushed onto the
   other history (the Tauri `step` passes no `onFail` for that entry).
+
+### The selection is keyed by path and ends every `refilter` (Inferred)
+
+`selection.rs` is `selection.ts` over the native `judgment` types: a
+`Selection { selected, anchor }` of listed paths, the current file always a
+member. The view holds one; `set_selection` hands its paths to the strip
+(`Strip::set_selected`, indices through the strip's `index_of`), which paints
+a selected cell other than the current one as `.cell.selected` (the `--muted`
+fill and a `--ring` border), so nothing maps paths per frame.
+
+- Rule: `go` (paging, `home` / `end`, auto-advance, a one-file undo) selects
+  the landed file alone only when the current file changed, as `main.ts`'s
+  `move`; `focus_on` is the move without touching the selection, which a
+  Ctrl / Shift click, `extendPrevious` / `extendNext` and the MCP `show`
+  use after setting the selection themselves. A Ctrl click (Cmd on macOS;
+  either modifier, as `strip.ts` reads `metaKey || ctrlKey`) toggles the cell
+  and keeps the focus; a Shift click selects the range from the anchor and
+  moves the focus to the clicked cell; a plain click selects it alone, also
+  on the current cell. `selectAll` selects every shown file with the focus
+  kept. None of them is refused in a view-only folder.
+- Rule: every `refilter` that rebuilds `files` ends with `settle(.., false)`,
+  that is `prune`, so a file a judgment or the filter hides leaves the
+  selection; a new folder's open lands with `settle(.., true)`, the landed
+  file alone. A re-listing goes through `refilter` and so prunes.
+- Rule: a judgment's targets are `selection::targets` (the focused file alone
+  while one or none is selected) and its changes `selection::judgments`: the
+  value decided once from the current file, each file kept on the fields the
+  command does not touch, the current file first, a file left out unless
+  `judgment::writes` holds for it (its `seen` per path). Auto-advance needs
+  exactly one target (`should_advance`'s `targets`).
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
@@ -296,7 +328,8 @@ is no runtime, no thread and no server. A bind failure is logged with the
 `mcp: McpState` line and the app runs on. The backend's `Bridge` send callback
 only puts the request into the view's channel as `scan::Event::Mcp`; the
 view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
-returns the action or the refusal, the view applies it (`go(Move::To(..))`,
+returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
+with the file selected alone,
 `toggle_zoom`, or `judge_paths`) and replies through `Mcp::reply`.
 `get_photo` and `get_preview` never reach the view: the backend reads them on
 tokio's blocking pool against the index's read-only connection, outside

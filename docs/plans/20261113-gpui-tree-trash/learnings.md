@@ -138,6 +138,34 @@
   the script); scripts holding backslashes went into scratchpad files written
   with the Write tool instead, or `sed` by line number.
 
+## Step 5: the strip's multi-selection
+
+- `go` now selects the landed file alone only when the current file changed
+  (`main.ts`'s `move` returns early at the ends, keeping a multi-selection),
+  and the old body became `focus_on`, the move without touching the
+  selection. A Ctrl / Shift click, the extend keys and the MCP `show` set the
+  selection themselves and call `focus_on`; the MCP `show` then selects the
+  file alone even when it was already current, as the Tauri `showPhoto`.
+- `selection::judgments` takes `seen` per path instead of the TS `force`
+  callback and keeps a file when `judgment::writes` holds, so `changed` and
+  `writes` stay two functions and the `ClearAll`-on-an-unseen-file rule is
+  the same one the single-file judge used. The TS "a batch with no change is
+  empty unless forced" case is ported as `ClearAll` on blank files, seen
+  versus unseen, since the native `Command` has no identity command.
+- The strip keeps the selected cells as indices (`Strip::set_selected`
+  through its `index_of`), set on every selection change and after each
+  `refilter` (whose `carry` rebuilds the strip), as `strip.ts`'s
+  `setSelected`, so the paint maps no path per frame.
+- `settle(.., true)` is used by a new folder's open (the landed file alone)
+  and `settle(.., false)` by `refilter`; the native open resolves the resume
+  target before the first `refilter`, so the Tauri `pendingResume` case
+  never arises after the open.
+- A Python edit script in a `bash` heredoc failed with `unexpected EOF while
+  looking for matching '` (a long script with many quotes); a heredoc into a
+  file under `$TMP` ran, but still turned `\t` and `\2` in a Windows path
+  into a tab and a control character, as Step 4 found. Scripts holding a
+  backslash go into a file written with the Write tool.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
@@ -246,3 +274,45 @@
      `Collapse All` on `b` collapses everything under `b`, `b` staying
      expanded. A folder created in Explorer under an expanded one still
      appears (the watch set follows).
+- **Pending manual check (Step 5, Windows).** Basis: Step 5's Done-when;
+  modifier clicks, the extend keys and the painted selection cannot be
+  driven headless. The step's checkbox was ticked on the automated criteria
+  (`selection.rs`, `strip.rs` and `judgment.rs` tests, `mise run ci`, `mise
+  run native:check`). Setup: copy ten or so ARWs into
+  `D:\Photos\tests\20261113-gpui-tree-trash\select\`; `cargo build` in
+  `crates/native` (rename a locked `riffle-native.exe` aside, never kill
+  it); run on that folder with a fresh `--index` and an explicit
+  `--settings` under `D:\Photos\tests\20261113-gpui-tree-trash\`, with
+  Auto-advance on. Steps and expected results:
+  1. Click a cell, Shift click the one four cells on: five cells are
+     selected (the current one outlined in white, the other four filled
+     dark gray with a gray border), and the focus is on the Shift-clicked
+     cell.
+  2. Ctrl click one of the middle four: it drops out of the selection and the
+     focus stays put. Ctrl click the current cell: nothing changes.
+  3. Press `3`: the four selected files get three stars on their cells, the
+     focus does not advance, and each one's `.xmp` says `xmp:Rating="3"`.
+  4. `Ctrl+Z` once: all four are back to their previous stars, the current
+     file unmoved, and the pane notes `Undid 4 files`; `Ctrl+Shift+Z` puts
+     the three stars back with `Redid 4 files`.
+  5. Click a cell, `Shift+Right` twice: three cells selected and the focus
+     on the last; `Shift+Left` once: two; `Left`: the focus moves and only
+     that cell is selected.
+  6. `Ctrl+A`: every cell selected, the focus kept; `p`: every file is
+     picked (green dot) as one undo entry (`Ctrl+Z` notes `Undid N files`).
+  7. Filter to unrated (Filter menu), select three cells and press `2`: the
+     three leave the strip and the selection; the selection is the new
+     current file alone.
+  8. In a JPEG-only folder under `D:\Photos\tests\`, Shift click selects a
+     range, but the judgment keys change nothing.
+- The MCP companion still treats the selection as the current file: its
+  `selected` reports the current file alone and `select_photos` with several
+  paths is refused, though the native view now has a multi-selection
+  (`selection::selection_of` is ported and unused, `allow(dead_code)`, for
+  it). Basis: Step 5's port of `selection.ts` (the Tauri `selectPhotos`).
+  Files: `crates/native/src/companion.rs`, `crates/native/src/selection.rs`,
+  `crates/native/src/main.rs` (`mcp_request`).
+- The status line does not show the Tauri position's ` · N selected` suffix
+  for a multi-selection (`renderMeta` in `main.ts`). Basis: Step 5's
+  wiring; the Done-when does not ask for it. Files:
+  `crates/native/src/main.rs` (`status`), `crates/app/ui/src/main.ts`.

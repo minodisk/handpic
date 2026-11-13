@@ -124,11 +124,16 @@ pub fn advances_after(cmd: Command) -> bool {
 }
 
 /// Whether a judgment key moves on to the next file, as `advance.ts`'s
-/// `shouldAdvance`: Auto-advance on, an advancing command, and the judged
-/// file still current (a file the judgment filtered out already moved the
-/// cursor).
-pub fn should_advance(cmd: Command, auto_advance: bool, still_current: bool) -> bool {
-    auto_advance && advances_after(cmd) && still_current
+/// `shouldAdvance`: one file addressed (changed or already holding the
+/// value), Auto-advance on, an advancing command, and the judged file still
+/// current (a file the judgment filtered out already moved the cursor).
+pub fn should_advance(
+    cmd: Command,
+    targets: usize,
+    auto_advance: bool,
+    still_current: bool,
+) -> bool {
+    targets == 1 && auto_advance && advances_after(cmd) && still_current
 }
 
 /// The `ratings` row, then the writer, as the Tauri `set_rating` orders
@@ -441,8 +446,8 @@ mod tests {
         }
     }
 
-    // `advance.test.ts`'s `shouldAdvance` cases; the selection's target count
-    // and Compare are not in the native app.
+    // `advance.test.ts`'s `shouldAdvance` cases; Compare is not in the native
+    // app.
 
     #[test]
     fn should_advance_when_the_file_already_holds_the_value() {
@@ -452,15 +457,25 @@ mod tests {
             Command::Pick,
             Command::Unflag,
         ] {
-            assert!(should_advance(cmd, true, true), "{cmd:?}");
+            assert!(should_advance(cmd, 1, true, true), "{cmd:?}");
         }
     }
 
     #[test]
+    fn should_stay_when_nothing_was_targeted_or_the_folder_is_view_only() {
+        assert!(!should_advance(Command::Rate(3), 0, true, true));
+    }
+
+    #[test]
+    fn should_stay_after_a_batch_judgment() {
+        assert!(!should_advance(Command::Rate(3), 2, true, true));
+    }
+
+    #[test]
     fn should_stay_when_off_filtered_out_or_a_label() {
-        assert!(!should_advance(Command::Rate(3), false, true));
-        assert!(!should_advance(Command::Rate(3), true, false));
-        assert!(!should_advance(Command::Label("Red"), true, true));
+        assert!(!should_advance(Command::Rate(3), 1, false, true));
+        assert!(!should_advance(Command::Rate(3), 1, true, false));
+        assert!(!should_advance(Command::Label("Red"), 1, true, true));
     }
 
     /// A folder with one empty `DSC1.ARW`, a fresh index and a writer, as the
