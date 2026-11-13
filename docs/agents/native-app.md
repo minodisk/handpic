@@ -129,7 +129,8 @@ English names, the default keymap, auto-advance on). The native app never
 writes it; its settings UI is port Step 9.
 
 - Rule: every debug or hand-check run passes `--settings` with a test file,
-  or it picks up the user's real format.
+  or it picks up the user's real format, and `--log` with a file in the test
+  folder, or it appends to the native app's own `Handpic.log`.
 
 ### The folder open reads the sidecars before pass 1 (Measured)
 
@@ -461,6 +462,15 @@ own lines (the UI font, the GPU, and an `ERROR` for the missing DXGI debug
 interface on a machine without the Graphics Tools, which is harmless).
 `RUST_LOG=debug` (or `trace`) adds this crate's own lines of that level, such
 as `key: <name> action=…` for every keystroke, and not GPUI's.
+
+`logger.rs` also writes each line, as
+`[YYYY-MM-DD][HH:MM:SS][target][LEVEL] message` in UTC, to a `Handpic.log`
+under the native app's own folder, or to `--log <path>` (see
+`app-log.md`'s "The GPUI app's log"), with one `write` per line on a
+`Mutex<File>` opened for append and the size kept in memory; past 1 MB it
+starts anew as the Tauri app's does. `main` installs it once the arguments
+are parsed and the backend's panic hook right after it. The `page` / `zoom`
+timing lines stay `println!` to stdout.
 
 ## GPUI
 

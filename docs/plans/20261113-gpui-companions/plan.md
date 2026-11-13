@@ -107,7 +107,7 @@ before going on.
 
 ## Steps
 
-- [ ] Step 1: Write `Handpic.log` from the GPUI app
+- [x] Step 1: Write `Handpic.log` from the GPUI app
   - Done when: the native app writes every `log` line it prints to stderr also
     to a `Handpic.log`, as `[YYYY-MM-DD][HH:MM:SS][target][LEVEL] message` in
     UTC; the backend's panic hook is installed, so a panic on any thread

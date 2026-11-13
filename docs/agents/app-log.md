@@ -10,6 +10,9 @@ prefixed lines come from `crates/backend/src/diagnostics.rs` (the panic hook
 and the `invariant!` macro), `crates/app/src/diagnostics.rs` (`log_frontend`)
 and `crates/app/ui/src/uncaught.ts`.
 
+The GPUI port (`crates/native`) writes a `Handpic.log` of its own; see
+[The GPUI app's log](#the-gpui-apps-log) at the end.
+
 ## Where the file is
 
 | OS      | Path                                                     |
@@ -148,12 +151,14 @@ broken assumption. A normal session produces none. The checks:
 | Name                         | Where                                                         | Details                                 | Means                                                                                                          |
 | ---------------------------- | ------------------------------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `scan progress within total` | `start_scan`'s `scan-progress` / `faces-progress` callbacks   | `dir=... scan_id=... done=... total=...` | a pass reported more files done than it was given; progress bars overflow                                      |
+| `scan progress within total` (GPUI app) | `Scan::start`'s pass 1 and pass 2 progress callbacks in `crates/native/src/scan.rs` | `dir=... scan_id=... done=... total=...` | the same, for the native status line's `scanning` / `analyzing` counts |
 | `start_scan once per scan`   | `start_scan`, when nothing is pending for `scan_id`            | `scan_id=... latest=...`                | `start_scan` was called again for a scan that is still running                                                 |
 | `faces-done after scan-done` | the frontend's `faces-done` listener (`crates/app/ui/src/main.ts`) | `dir=... scan_id=...`                   | the frontend got a scan's `faces-done` without having recorded its `scan-done` (events out of order, or `scanDone` reset mid-scan) |
 | `data migration` | `setup` in `crates/app/src/main.rs`, reporting what `migrate::run` did before the logger existed | `pair=<old>→<new> <path>: <error>`, or `<path>: <error>` for a macOS leftover that could not be removed | a folder of an earlier identifier could not be moved whole; it stays, the app shows an error and exits without starting (so this line reaches only stderr), and the next launch resumes, an existing destination file winning. A macOS leftover failure is logged and does not stop the app |
 
-The two backend checks log under `riffle_app::commands`; the frontend one
-comes through `log_frontend` under `riffle_app::diagnostics`.
+The two backend checks log under `riffle_app::commands` (the GPUI app's under
+`riffle_native::scan`); the frontend one comes through `log_frontend` under
+`riffle_app::diagnostics`.
 
 The checks are not exhaustive, so no `invariant:` line proves nothing broke.
 `start_scan once per scan` fires only while the first scan is still running; a
@@ -161,3 +166,35 @@ second `start_scan` after that scan finished (`finish` has cleared `running`)
 logs nothing. It also logs nothing when `scan_folder` inserted no pending entry
 (idle rescan of an indexed folder, or index cache unavailable) and `running`
 does not hold `scan_id`; that is normal, not a violation.
+
+## The GPUI app's log
+
+`crates/native/src/logger.rs` writes every `log` line it prints to stderr also
+to a `Handpic.log` of the native app's own, so the two apps never append to
+one file.
+
+| OS      | Path                                                              |
+| ------- | ----------------------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\com.minodisk.handpic.native\logs\Handpic.log`     |
+| macOS   | `~/Library/Logs/com.minodisk.handpic.native/Handpic.log`          |
+| Linux   | `~/.local/share/com.minodisk.handpic.native/logs/Handpic.log`     |
+
+- `--log <path>` names the file instead; every debug or hand-check run passes
+  it (see `native-app.md`). A file that cannot be opened is reported once on
+  stderr and the app runs with stderr only.
+- The line format, the UTC time and the 1 MB cap are the Tauri app's: the
+  file starts anew when the next line would pass 1 MB, leaving no rotated
+  copy. The size is tracked in memory from the file's length at startup.
+- Targets: `riffle_native` and its modules (`riffle_native::scan`,
+  `riffle_native::settings`, ...), `riffle_backend::*` (`scan extract`,
+  `scan faces`, `panic:` under `riffle_backend::diagnostics`), and GPUI's own
+  `INFO` lines (`gpui_windows::*`: the UI font, the GPU).
+- Levels: `INFO` and above in every build. `RUST_LOG=debug` (or `trace`) adds
+  `riffle_native`'s lines of that level only, not the backend's or GPUI's.
+- `panic:` comes from the backend's hook, installed in `main` right after the
+  logger and before the window opens, so a startup panic is logged too.
+  `invariant:` comes from `invariant!` as in the Tauri app. There is no
+  `uncaught-js:`: the native app has no frontend.
+- The timing lines (`page ...`, `zoom ...` and the `--auto` summary) are
+  printed to stdout, where the measurement scripts read them, and are not in
+  the file.
