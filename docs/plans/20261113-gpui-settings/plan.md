@@ -495,7 +495,7 @@ any of them.
       smaller one.
     - The input is written to be reused by Step 7's pattern field; nothing
       beyond what those two uses need.
-- [ ] Step 7: The Import tab, and the parent plan's note
+- [x] Step 7: The Import tab, and the parent plan's note
   - Done when:
     - The Tauri-free import settings are in the backend
       (`crates/backend/src/import.rs`: `DEFAULT_PATTERN`, `ImportSettings`,

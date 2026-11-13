@@ -13,7 +13,7 @@ use std::{
 };
 
 use riffle_backend::{
-    mcp,
+    import, mcp,
     shortcuts::Keymap,
     sidecar::{self, SidecarFormat},
     store::Store,
@@ -40,6 +40,10 @@ pub struct Settings {
     /// The MCP companion's server is on (`mcpEnabled`, by the backend's
     /// rule).
     pub mcp_enabled: bool,
+    /// The Import tab's destination root, empty while not set, and folder
+    /// pattern, an invalid stored one read as the default.
+    pub import_root: String,
+    pub import_pattern: String,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -239,6 +243,8 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
         mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
+        import_root: import::root_setting(values.get("importRoot")),
+        import_pattern: import::pattern_setting(values.get("importPattern")),
         writes: Writes::spawn(None),
     }
 }
@@ -346,6 +352,29 @@ mod tests {
         {
             assert_eq!(seeded(dir.path(), &i.to_string(), stored).mcp_enabled, on);
         }
+    }
+
+    #[test]
+    fn the_import_settings_are_read_with_the_backend_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(
+            dir.path(),
+            "valid",
+            r#"{"importRoot":"D:\\Photos","importPattern":"%Y/%m"}"#,
+        );
+        assert_eq!(
+            (s.import_root.as_str(), s.import_pattern.as_str()),
+            ("D:\\Photos", "%Y/%m")
+        );
+        let s = seeded(
+            dir.path(),
+            "invalid",
+            r#"{"importRoot":3,"importPattern":"%H"}"#,
+        );
+        assert_eq!(
+            (s.import_root.as_str(), s.import_pattern.as_str()),
+            ("", "%Y/%F")
+        );
     }
 
     #[test]

@@ -246,7 +246,76 @@
   rename plan) was dropped: unused here, clippy's `dead_code` refuses it.
   Ctrl+A in the field selects all; the rename step can add the method.
 
+## Step 7: the Import tab, and the parent plan's note
+
+- `crates/backend/src/import.rs` was already on `main` (#1024) with
+  `DEFAULT_PATTERN`, `ImportSettings`, `validate_pattern`, `format_date`,
+  `root_setting`, `pattern_setting` and `example`, plus the plan and run
+  that the Import… session added, and `chrono` as a backend dependency.
+  Nothing was moved; the only backend addition is `today_example` (the local
+  date, so the native crate needs no `chrono`), with one test.
+  `crates/app/src/import.rs` was left alone (its `import_pattern_example`
+  still calls `example` with `chrono::Local` itself), since another session
+  edits it.
+- The example follows the field through `cx.observe` on the pattern field
+  rather than a new `textinput::Event`: the input notifies on every edit (and
+  on caret moves), and the observer only notifies the view when the example
+  text changed, so `textinput.rs` is unchanged.
+- An invalid committed pattern shows its reason in the example line, not the
+  status line, as the Tauri `saveImportPattern` does; a live-typed invalid
+  pattern already shows the same refusal, since both come from
+  `format_date`. A commit of the stored pattern writes nothing
+  (`pattern_change` gives `None`); the Tauri command rewrites it, which
+  stores the same value.
+- `Choose…` runs `prompt_for_paths` from the view, not the window: the
+  `SettingsView` entity lives as long as the window, so the spawned task's
+  `update` and its `Change::ImportRoot` reach the window's subscription even
+  after the modal closed, which is what the Done-when asks for, with one
+  `Change` arm in `main.rs` and no new method there. The OS dialog was not
+  opened in any automated run.
+- The specifier table's examples are not re-checked against the backend in
+  the native tests (it would need a `NaiveDate`, hence `chrono`); the
+  backend's `formats_every_accepted_specifier` already pins the same texts.
+- `main.rs` gained the two `Change` arms only.
+
 ## Deferred issues (todo candidates)
+
+- Pending manual check (Step 7, Windows, the user's): the Import tab. Basis:
+  Step 7's Done-when (the root chosen in the OS dialog, the live example, the
+  validation and the restart); the checkbox was ticked on the automated
+  criteria (`settingsmodal.rs`'s and `settings.rs`'s tests, the backend's
+  `today_example` test, clippy). Steps, on copies under
+  `D:\Photos\tests\20261113-settings\` only, after `cargo build` in
+  `crates/native`:
+  1. `target\debug\riffle-native.exe D:\Photos\tests\20261113-settings\photos --index D:\Photos\tests\20261113-settings\index-s7a.sqlite --settings D:\Photos\tests\20261113-settings\step7.sqlite --log D:\Photos\tests\20261113-settings\Handpic.log`
+     (a fresh `step7.sqlite`, nothing seeded).
+  2. Ctrl+, → Import. Expected: the paragraph, `Destination root` with an
+     empty box, `Choose…` and the note `Choose the folder imports are copied
+     into.`, the pattern field holding `%Y/%F`, the example `2026\2026-11-14`
+     (today's date, relative while no root is set), the four example
+     buttons and the eleven-row specifier table.
+  3. `Choose…`: the Windows folder dialog opens; pick
+     `D:\Photos\tests\20261113-settings\import-root` (create it first).
+     Expected: the root box shows it, the note is gone, and the example reads
+     `D:\Photos\tests\20261113-settings\import-root\2026\2026-11-14`.
+     Type into the field without committing, open `Choose…` again and pick
+     the same folder: the typed text stays in the field.
+  4. Replace the pattern with `%Y/%m` by typing: the example changes as each
+     character is typed and ends `...\import-root\2026\11`; press Enter.
+  5. Type `%H` and press Enter: the example line shows the time-specifier
+     refusal in red. Type `%Y//%d` and press Enter: the empty-folder-name
+     refusal. Escape closes the modal.
+  6. Quit, start again with the same `--settings` and a fresh `--index`
+     (`index-s7b.sqlite`). Expected: Ctrl+, → Import shows the chosen root
+     and `%Y/%m` (the last valid pattern), not `%Y//%d`.
+  7. Click `%F`: the field shows `%F` and the example `...\2026-11-14`;
+     quit and restart as in 6: `%F` is kept.
+  8. Open `Choose…` and close the modal (Escape is taken by the dialog, so
+     press Cancel in the dialog, then reopen and repeat, this time picking a
+     folder after the modal was closed with the `×` while the dialog is up,
+     if the dialog lets the window be clicked). Expected: a root picked
+     after the modal closed still shows on the next open and after a
+     restart.
 
 - Pending manual check (Step 6, Windows, the user's): the text input and the
   label names. Basis: Step 6's Done-when; the checkbox was ticked on the
