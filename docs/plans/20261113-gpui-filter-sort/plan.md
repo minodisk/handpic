@@ -401,7 +401,7 @@ so port Step 7 stays open after this plan with only those sections left.
       and owns the mouse). If the row's height has to grow for the buttons,
       measure the preview canvas's height change on the compare folders
       (it changes the fit scale, not the page cost).
-- [ ] Step 5: The same-session latency gate and the docs
+- [x] Step 5: The same-session latency gate and the docs
   - Done when:
     - **Gate**, `results.md` in this folder: a same-session A/B as the
       judgments plan's Step 5 (`../_archived/20261110-gpui-judgments/plan.md`),
@@ -504,3 +504,4 @@ so port Step 7 stays open after this plan with only those sections left.
 - (2026-11-13) Step 2 complete; the judgment, filter and undo manual check is still pending (see `learnings.md`)
 - (2026-11-13) Step 3 complete
 - (2026-11-13) Step 4 complete
+- (2026-11-13) Step 5 complete

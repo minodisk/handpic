@@ -206,6 +206,20 @@ numbers and the conditions are in
 [`results.md`](../plans/_archived/20261110-gpui-judgments/results.md). This session's
 absolute numbers are higher than the 2026-11-10 one's, again not explained.
 
+With the strip's filter and sort order (the `Sort ▾` and `Filter ▾` menus,
+no filter set, file-name order) added, against the pager from just before them
+(2026-11-13, the same method, the index already filled):
+
+| Case | With the filter and the sort | Before them |
+|---|---|---|
+| ARW, 1616x1080 | 19.6 / 32.2 | 22.3 / 31.0 |
+| RAF, 4416x2944 | 65.8 / 79.2 | 65.3 / 76.4 |
+
+The difference is -2.6 ms on ARW and +0.5 ms on RAF at p50, inside the
+run-to-run spread; `paint` and `present` did not move. Per-run numbers and the
+conditions are in
+[`results.md`](../plans/20261113-gpui-filter-sort/results.md).
+
 ## Folder scan throughput
 
 `riffle-cli scan` runs the folder extraction (bounded read, metadata parse,

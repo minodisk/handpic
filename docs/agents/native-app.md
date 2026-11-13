@@ -877,6 +877,30 @@ move; `present`'s p50 was 0.07-0.10 ms higher in every A run. See
   runs were warm; check that each cold run's `--index` file name is distinct
   before trusting a table.
 
+### The filter and the sort cost the pager nothing measurable (Measured)
+
+Same-session A/B, `40e3ec57` (the filter-sort plan's Steps 1-4 only) against
+`f080850a` (`main` right after that plan's own PR), three runs each, 60
+presses, warm index, both on the same `--settings` file (no filter, `name`
+order): median p50 `keypressToPixels` -2.63 ms on ARW and +0.46 ms on RAF,
+inside the run-to-run spread (A's ARW runs alone span 19.28-22.11 ms).
+`paint` and `present` stayed within 0.04 ms: the status row's two buttons,
+unlike the pane, add nothing to `present`. See
+[the plan's results](../plans/20261113-gpui-filter-sort/results.md).
+
+- Rule: when B is the commit right after the plan's own PR, A - B is the
+  plan's cost alone; prefer that over a pre-plan commit with other plans'
+  merges in between, so a delta is not shared out across them.
+- Rule: a deliberately quiet machine still spoils runs. 11 of 23 timed
+  attempts were discarded for one load sample of 16-31 % mid-run with no build
+  process running, and one slot passed only on its fourth and last try. Keep
+  the 4-try cap per slot; a slot that uses them all voids the folder's session
+  rather than relaxing the 15 % gate.
+- Rule: a delta the size of the bound can be pure spread. ARW's three pairs
+  were all negative (-2.97, -0.40, -2.35 ms) for code that does not run per
+  page; RAF's changed sign. Check what the plan runs per page before reading
+  a delta as a cost or a gain.
+
 ### During pass 1 the preview reads what the scan already read (Measured)
 
 Stepping with the arrow through 520 cold ARW files while pass 1 ran (27.7 s),

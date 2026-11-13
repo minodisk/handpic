@@ -184,6 +184,25 @@
   item model, its order and labels, `apply` and the open / close rules are
   `menu.rs`'s unit tests.
 
+## Step 5 (the latency gate and the docs)
+
+- Gate met: median p50 `keypressToPixels` A - B -2.63 ms on ARW (bound
+  +2.0) and +0.46 ms on RAF (bound +5.0), both inside the run-to-run spread;
+  `paint` and `present` within 0.04 ms. See `results.md`.
+- B was `f080850a`, `main` right after this plan's own PR (#989), not an
+  older commit, so A - B is this plan's cost alone; no other plan merged
+  between #989 and #993.
+- B also has pass 2, so both warm runs waited for `scan faces:`; each binary
+  finished in one warm run.
+- 11 of 23 timed attempts were discarded by the idle gate (one load sample of
+  16-31 % mid-run each, no build process); RAF B3 passed on its 4th and last
+  try. Recorded as a rule in `docs/agents/native-app.md`.
+- `CLAUDE.md`'s `crates/native` sentence already names `sort.rs`,
+  `filter.rs` and `menu.rs` (added per step); nothing to change.
+- The new `performance.md` lines link this folder's `results.md` at its
+  current path; the archive move of the wrap-up has to rewrite that link (and
+  the one in `native-app.md`) to `_archived/`, as the earlier plans' links were.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 4, Windows, the user's):** the two menus.
