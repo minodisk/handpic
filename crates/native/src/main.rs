@@ -1816,8 +1816,15 @@ impl Riffle {
     }
 
     /// A press outside the open menu's popover.
-    fn menu_dismissed(&mut self, at: Point<Pixels>, cx: &mut Context<Self>) {
-        self.menus.dismiss((f32::from(at.x), f32::from(at.y)));
+    /// Only a left press is recorded: no toggle listens to another button, so
+    /// a record of it would swallow the next left press on the button.
+    fn menu_dismissed(&mut self, e: &MouseDownEvent, cx: &mut Context<Self>) {
+        if e.button == MouseButton::Left {
+            self.menus
+                .dismiss((f32::from(e.position.x), f32::from(e.position.y)));
+        } else {
+            self.menus.close();
+        }
         cx.notify();
     }
 
@@ -1921,7 +1928,7 @@ impl Riffle {
             .id("menu")
             .occlude()
             .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                this.menu_dismissed(e.position, cx);
+                this.menu_dismissed(e, cx);
             }))
             .flex()
             .flex_col()

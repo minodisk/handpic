@@ -576,6 +576,16 @@ mod tests {
     }
 
     #[test]
+    fn a_non_left_dismiss_leaves_no_record_to_swallow_the_next_toggle() {
+        let mut menus = Menus::default();
+        menus.toggle(Which::Filter, (10., 10.));
+        // A right press outside closes without recording.
+        assert!(menus.close());
+        menus.toggle(Which::Filter, (10., 10.));
+        assert_eq!(menus.open(), Some(Which::Filter));
+    }
+
+    #[test]
     fn the_other_button_closes_one_menu_and_opens_its_own() {
         let mut menus = Menus::default();
         menus.toggle(Which::Sort, (10., 10.));
