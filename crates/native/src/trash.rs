@@ -1,10 +1,18 @@
 //! The strip's `Move to Trash…` and `Delete Permanently…`, kept pure: the
 //! confirmation dialog's text and flow, which keys and clicks it takes, and
-//! what the pane says during the run and once it comes back. A port of the
-//! Tauri app's `trash.ts`; the window draws the dialog and runs the backend's
-//! `trash::trash_listed` or `trash::delete_listed`.
+//! what the pane says during the run and once it comes back, and what an
+//! undo of a run brings back into the open folder. A port of the Tauri app's
+//! `trash.ts`; the window draws the dialog and runs the backend's
+//! `trash::trash_listed`, `trash::delete_listed`, `trash::undo_run` or
+//! `trash::redo_run`.
 
-use riffle_backend::trash::Summary;
+use std::collections::{HashMap, HashSet};
+
+use riffle_backend::trash::{RUN_GONE, Restored, Summary, UNDONE_GONE};
+
+use crate::context::shown_path;
+use crate::judgment::State;
+use crate::tree::{self, Relation};
 
 /// What the dialog asks, and what a progress message reports on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -106,6 +114,52 @@ pub fn trashed_status(mode: Mode, summary: &Summary) -> String {
     } else {
         format!("{went}, {} failed", summary.failed.len())
     }
+}
+
+/// What the pane says once an undo came back: the files that came back,
+/// and how many failed.
+pub fn restored_status(restored: &Restored) -> String {
+    let count = restored.restored.len();
+    let back = format!("Restored {count} {} from the Trash", files(count));
+    if restored.failed.is_empty() {
+        back
+    } else {
+        format!("{back}, {} failed", restored.failed.len())
+    }
+}
+
+/// The restored files that sit directly in `open_dir`, not yet in `all`.
+/// The backend spells them canonically (with the verbatim prefix on
+/// Windows), as the listing spells `all`, while `open_dir` may lack it.
+pub fn restored_into(
+    open_dir: &str,
+    restored: &[String],
+    all: &[String],
+    ignore_case: bool,
+) -> Vec<String> {
+    let open = shown_path(open_dir);
+    restored
+        .iter()
+        .filter(|path| {
+            let parent = path.rfind(['/', '\\']).map_or("", |at| &path[..at]);
+            tree::relation(&shown_path(parent), &open, ignore_case) == Some(Relation::Same)
+                && !all.contains(path)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Whether the backend still holds a run it refused to undo or redo: any
+/// failure but its "no longer" answers leaves the run undoable or redoable
+/// later.
+pub fn still_held(err: &str) -> bool {
+    err != RUN_GONE && err != UNDONE_GONE
+}
+
+/// Whether `open_dir` is one of `dirs`.
+pub fn opens_target(open_dir: &str, dirs: &[String], ignore_case: bool) -> bool {
+    dirs.iter()
+        .any(|dir| tree::relation(open_dir, dir, ignore_case) == Some(Relation::Same))
 }
 
 /// The files of the folder `dir` the dialog asks about, by their listed
@@ -251,11 +305,64 @@ impl TrashFlow {
     }
 }
 
+/// Lay the state stashed at a move to the Trash over a fresh listing's
+/// `judgments` and `seen`, for the stashed paths still listed that the fresh
+/// entries lack (a restored file has no `files` row until pass 1 extracts
+/// it). A stash entry the fresh entries now have is dropped; one for a path
+/// not listed stays.
+pub fn carry_stash(
+    stash: &mut HashMap<String, (Option<State>, bool)>,
+    all: &[String],
+    judgments: &mut HashMap<String, State>,
+    seen: &mut HashSet<String>,
+) {
+    let listed: HashSet<&String> = all.iter().collect();
+    stash.retain(|path, (state, was_seen)| {
+        if !listed.contains(path) {
+            return true;
+        }
+        if seen.contains(path) || judgments.contains_key(path) {
+            return false;
+        }
+        if let Some(state) = state {
+            judgments.insert(path.clone(), state.clone());
+        }
+        if *was_seen {
+            seen.insert(path.clone());
+        }
+        true
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use riffle_backend::trash::{Failure, Summary};
 
     use super::*;
+
+    #[test]
+    fn carry_stash_keeps_a_listed_path_absent_from_the_fresh_entries() {
+        let state = State {
+            rating: Some(3),
+            ..State::default()
+        };
+        let mut stash = HashMap::from([
+            ("/a".to_owned(), (Some(state.clone()), true)),
+            ("/b".to_owned(), (Some(state.clone()), true)),
+            ("/c".to_owned(), (Some(state.clone()), true)),
+        ]);
+        let all = vec!["/a".to_owned(), "/b".to_owned()];
+        let mut judgments = HashMap::from([("/b".to_owned(), State::default())]);
+        let mut seen = HashSet::from(["/b".to_owned()]);
+        carry_stash(&mut stash, &all, &mut judgments, &mut seen);
+        assert_eq!(judgments.get("/a"), Some(&state));
+        assert!(seen.contains("/a"));
+        assert_eq!(judgments.get("/b"), Some(&State::default()));
+        assert!(stash.contains_key("/a"));
+        assert!(!stash.contains_key("/b"));
+        assert!(stash.contains_key("/c"));
+        assert!(!judgments.contains_key("/c"));
+    }
 
     fn summary(moved: &[&str], failed: usize) -> Summary {
         Summary {
@@ -316,6 +423,166 @@ mod tests {
             trashed_status(Mode::Delete, &summary(&["/a.ARW", "/b.ARW"], 1)),
             "Deleted 2 files, 1 failed"
         );
+    }
+
+    fn restored(restored: &[&str], failed: usize) -> Restored {
+        Restored {
+            restored: restored.iter().map(|p| (*p).to_owned()).collect(),
+            failed: (0..failed)
+                .map(|i| Failure {
+                    path: format!("/a{i}.xmp"),
+                    message: "already exists at the original location".to_owned(),
+                })
+                .collect(),
+            back: Vec::new(),
+        }
+    }
+
+    fn strings(paths: &[&str]) -> Vec<String> {
+        paths.iter().map(|p| (*p).to_owned()).collect()
+    }
+
+    #[test]
+    fn restored_status_counts_the_files_that_came_back() {
+        assert_eq!(
+            restored_status(&restored(&["/a.ARW"], 0)),
+            "Restored 1 file from the Trash"
+        );
+        assert_eq!(
+            restored_status(&restored(&["/a.ARW", "/b.ARW"], 0)),
+            "Restored 2 files from the Trash"
+        );
+    }
+
+    #[test]
+    fn restored_status_appends_the_failures() {
+        assert_eq!(
+            restored_status(&restored(&["/b.ARW"], 2)),
+            "Restored 1 file from the Trash, 2 failed"
+        );
+    }
+
+    #[test]
+    fn restored_into_keeps_the_raws_directly_in_the_open_folder_not_listed_yet() {
+        assert_eq!(
+            restored_into(
+                "/photos/a",
+                &strings(&[
+                    "/photos/a/1.ARW",
+                    "/photos/a/2.ARW",
+                    "/photos/a/sub/3.ARW",
+                    "/photos/b/4.ARW"
+                ]),
+                &strings(&["/photos/a/2.ARW"]),
+                false,
+            ),
+            strings(&["/photos/a/1.ARW"])
+        );
+    }
+
+    #[test]
+    fn restored_into_compares_windows_paths_the_way_the_folder_tree_does() {
+        assert_eq!(
+            restored_into(r"C:\photos", &strings(&[r"c:\photos\1.ARW"]), &[], false),
+            strings(&[r"c:\photos\1.ARW"])
+        );
+    }
+
+    #[test]
+    fn restored_into_matches_a_canonical_path_against_an_open_folder_without_the_prefix() {
+        assert_eq!(
+            restored_into(
+                r"C:\photos",
+                &strings(&[r"\\?\C:\photos\1.ARW"]),
+                &[],
+                false
+            ),
+            strings(&[r"\\?\C:\photos\1.ARW"])
+        );
+        assert_eq!(
+            restored_into(
+                r"\\?\C:\photos",
+                &strings(&[r"\\?\C:\photos\1.ARW"]),
+                &strings(&[r"\\?\C:\photos\1.ARW"]),
+                false,
+            ),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn restored_into_matches_another_case_only_when_the_case_is_ignored() {
+        assert_eq!(
+            restored_into(r"c:\Photos", &strings(&[r"C:\photos\1.ARW"]), &[], true),
+            strings(&[r"C:\photos\1.ARW"])
+        );
+        assert_eq!(
+            restored_into(r"c:\Photos", &strings(&[r"C:\photos\1.ARW"]), &[], false),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn still_held_keeps_a_run_refused_for_another_reason() {
+        assert!(still_held("a scan is running; wait for it to finish"));
+    }
+
+    #[test]
+    fn still_held_drops_a_run_the_backend_no_longer_holds() {
+        assert!(!still_held("this run can no longer be undone"));
+        assert!(!still_held("this run can no longer be redone"));
+    }
+
+    #[test]
+    fn opens_target_holds_for_a_target_equal_to_the_open_folder_however_spelled() {
+        assert!(opens_target(
+            "/photos/2026",
+            &strings(&["/other", "/photos/2026"]),
+            false
+        ));
+        assert!(opens_target(
+            r"C:\Photos\2026",
+            &strings(&["c:/Photos/2026/"]),
+            false
+        ));
+    }
+
+    #[test]
+    fn opens_target_does_not_hold_for_an_unrelated_folder_or_a_sibling_sharing_a_prefix() {
+        assert!(!opens_target(
+            "/photos/2025",
+            &strings(&["/photos/2026"]),
+            false
+        ));
+        assert!(!opens_target(
+            "/photos/2026b",
+            &strings(&["/photos/2026"]),
+            false
+        ));
+    }
+
+    #[test]
+    fn opens_target_does_not_hold_for_a_folder_above_or_below_a_target() {
+        assert!(!opens_target("/photos", &strings(&["/photos/2026"]), false));
+        assert!(!opens_target(
+            "/photos/2026/0101",
+            &strings(&["/photos/2026"]),
+            false
+        ));
+    }
+
+    #[test]
+    fn opens_target_holds_for_another_case_only_when_the_case_is_ignored() {
+        assert!(opens_target(
+            r"d:\photos\2026",
+            &strings(&[r"D:\Photos\2026"]),
+            true
+        ));
+        assert!(!opens_target(
+            r"d:\photos\2026",
+            &strings(&[r"D:\Photos\2026"]),
+            false
+        ));
     }
 
     #[test]

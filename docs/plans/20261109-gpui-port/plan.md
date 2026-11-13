@@ -582,4 +582,5 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-13) Step 7 complete: the per-folder EXIF filter sections and two refilter fixes, through `../_archived/20261113-gpui-exif-filter/plan.md`
 - (2026-11-14) Step 9: the MCP companion, `Handpic.log` and the backend's perf and AI modules, through `../20261113-gpui-companions/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 9: the AI features (pass 3, genres, the ranking, the recommended mark and sort, `aiEnabled`) dropped from the port by the user's decision
+- (2026-11-14) Step 8: the folder tree, the strip's selection and its right-click menu, through `../_archived/20261113-gpui-tree-trash/plan.md`; the folder operation dialogs remain
 - (2026-11-14) Step 9: the settings modal (the native store, the persisted filter and sort, the Sidecar, Culling, Keyboard Shortcuts and Import tabs), through `../20261113-gpui-settings/plan.md`; the Cache tab, the first-launch format dialog and a macOS `Settings…` menu item remain, and the AI features are not ported by the user's decision (Step 9 stays open)

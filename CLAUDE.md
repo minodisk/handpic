@@ -296,9 +296,11 @@ holding the Sidecar tab's format and label names, the Culling tab's auto-advance
 `label_known`, `advances_after`, `should_advance`, a port of the Tauri `judge` and `advance.ts`)
 and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
 window spawns at startup and drains in `App::on_app_quit`, `src/history.rs`
-the undo and redo of the judgments (`History`, a port of `undo.ts`'s bounded
-stack, `step`, the Tauri `step` rule, and `Undo`, the open folder's two
-histories, cleared when another folder opens), `src/selection.rs` the strip's
+the undo and redo of the judgments and the moves to the Trash (`History`, a
+port of `undo.ts`'s bounded stack, its `Entry` a judgment `Batch` or a
+`TrashEntry`, `step`, the Tauri `step` rule, `undone_trash`, and `Undo`, the
+two histories, whose judgment batches go when another folder opens and whose
+trash runs stay), `src/selection.rs` the strip's
 multi-selection (`Selection`, a port of `selection.ts`: `click`, `extend`,
 `all`, `prune`, `settle`, `restore`, `targets` and `judgments`, a command's
 changes over the targets, its value decided from the current file), `src/scan.rs` lists a folder with its sidecars and reads which of its files have an export (`outputs`, for the filter's `Output` section), reconciles the
@@ -398,10 +400,12 @@ popover at the pointer, `src/trash.rs` the strip's `Move to Trash…` /
 `Delete Permanently…` (a port of `trash.ts`: `dialog_text`, the delete
 dialog's `swallowed_by_delete` and `confirms_delete`, `progress_status`,
 `trashed_status` and `TrashFlow`, idle / asking / running with the focused
-button), which the window draws as a `deferred`, `occlude()`d full-window
-dialog and runs through the backend's `trash::trash_listed` /
-`trash::delete_listed` on a background task, `src/idle.rs` the gate holding
-a confirmed run for the end of the listing or scan under way (`IdleGate`, one
+button; for the undo, `restored_status`, `restored_into`, `still_held` and
+`opens_target`), which the window draws as a `deferred`, `occlude()`d
+full-window dialog and runs through the backend's `trash::trash_listed` /
+`trash::delete_listed` on a background task, undoing a run with
+`trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding
+a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one
 held operation, a later request replacing it, and the in-flight count no
 listing starts under; `cancels_scan`, a port of `idle.ts`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the

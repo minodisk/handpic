@@ -71,7 +71,7 @@ use gpui::{
     uniform_list,
 };
 use gpui_platform::application;
-use history::{Judged, Undo};
+use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
@@ -201,9 +201,26 @@ fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Ve
         .collect()
 }
 
+/// What the log calls a held operation dropped by an open.
+fn held_label(held: &Held) -> String {
+    match held {
+        Held::Run(target) => format!("held run in {}", target.dir),
+        Held::Undo(entry) => format!("held undo of run {}", entry.run_id),
+        Held::Redo(entry) => format!("held redo of run {}", entry.run_id),
+    }
+}
+
 /// The listed files' judgments and facts by path, and the folder's EXIF
 /// groups.
 type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
+
+/// What the gate holds for the listing or scan under way: a confirmed run,
+/// or the undo or redo of one.
+enum Held {
+    Run(trash::Target),
+    Undo(TrashEntry),
+    Redo(TrashEntry),
+}
 
 struct Opened {
     listed: Listed,
@@ -345,11 +362,18 @@ struct Riffle {
     context: context::Menu,
     /// The strip's `Move to Trash…` / `Delete Permanently…` dialog.
     trash: trash::TrashFlow,
-    /// A confirmed run held for the listing or scan under way; in flight
-    /// while one runs, which no listing or scan starts under.
-    gate: idle::IdleGate<trash::Target>,
+    /// A confirmed run, or a run's undo or redo, held for the listing or
+    /// scan under way; in flight while one runs, which no listing or scan
+    /// starts under.
+    gate: idle::IdleGate<Held>,
     /// The recorded runs to the Trash, for undo.
     runs: Arc<riffle_backend::trash::Runs>,
+    /// The undo entry whose restore or redo is out, so a second undo or
+    /// redo does nothing until it comes back.
+    trash_step: Option<u64>,
+    /// The judgments and `seen` membership of the files a Move to Trash
+    /// took, kept for an undo landing before the re-listing reads them back.
+    trashed_state: HashMap<String, (Option<State>, bool)>,
     /// How far the run in flight got, in the pane's notes.
     trashing: Option<String>,
     /// A folder the tree opened while a run was in flight, opened whole at
@@ -627,6 +651,8 @@ impl Riffle {
             trash: trash::TrashFlow::default(),
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
+            trash_step: None,
+            trashed_state: HashMap::new(),
             trashing: None,
             deferred_open: None,
             left_pane: true,
@@ -718,7 +744,7 @@ impl Riffle {
             return Task::ready(());
         }
         if let Some(held) = self.gate.discard() {
-            log::info!("trash: held run in {} dropped by an open", held.dir);
+            log::info!("trash: {} dropped by an open", held_label(&held));
         }
         self.opens.fetch_add(1, Ordering::SeqCst);
         self.tree_note = None;
@@ -994,8 +1020,9 @@ impl Riffle {
         };
         let busy = self.resync.busy() || self.gate.in_flight();
         let label = target.mode.label();
-        match self.gate.request(label, target, busy) {
-            Some(target) => self.run_trash(target, true, cx),
+        match self.gate.request(label, Held::Run(target), busy) {
+            Some(Held::Run(target)) => self.run_trash(target, true, cx),
+            Some(_) => {}
             None => {
                 log::info!("trash: {label} held for the scan's end");
                 self.trash.end();
@@ -1068,21 +1095,25 @@ impl Riffle {
                 mode.label(),
                 started.elapsed().as_millis()
             );
-            this.update(cx, |this, cx| this.trashed(&dir, mode, own, result, cx))
-                .ok();
+            this.update(cx, |this, cx| {
+                this.trashed(vec![dir], mode, own, false, result, cx);
+            })
+            .ok();
         })
         .detach();
         cx.notify();
     }
 
-    /// A run came back: report it, drop what a delete took from the
-    /// histories, and re-list the open folder, which also rescans what a
-    /// canceled scan left, or open the folder asked for meanwhile.
+    /// A run, or a redo (`redo`), came back: report it, push a run that
+    /// moved something on the undo history, drop what a delete took from
+    /// the histories, and re-list the open folder, which also rescans what
+    /// a canceled scan left, or open the folder asked for meanwhile.
     fn trashed(
         &mut self,
-        dir: &str,
+        dirs: Vec<String>,
         mode: trash::Mode,
         own: bool,
+        redo: bool,
         result: Result<riffle_backend::trash::Summary, String>,
         cx: &mut Context<Self>,
     ) {
@@ -1101,10 +1132,25 @@ impl Riffle {
                 );
                 for path in &summary.moved {
                     self.touched.remove(path);
+                    if mode == trash::Mode::Trash {
+                        let state = self.judgments.get(path).cloned();
+                        let seen = self.seen.contains(path);
+                        if state.is_some() || seen {
+                            self.trashed_state.insert(path.clone(), (state, seen));
+                        }
+                    }
                 }
                 if mode == trash::Mode::Delete && !summary.moved.is_empty() {
                     self.undo
                         .without_paths(&summary.moved.iter().cloned().collect());
+                }
+                if let Some(run_id) = summary.run_id {
+                    let count = summary.moved.len();
+                    if redo {
+                        self.undo.redone_trash(run_id, count, dirs);
+                    } else {
+                        self.undo.record_trash(run_id, count, dirs);
+                    }
                 }
                 for failure in &summary.failed {
                     self.write_failed(
@@ -1115,7 +1161,7 @@ impl Riffle {
                 self.step_note = Some(trash::trashed_status(mode, &summary));
             }
             Err(e) => {
-                log::error!("trash: {} in {dir} failed: {e}", mode.label());
+                log::error!("trash: {} in {dirs:?} failed: {e}", mode.label());
                 self.step_note = Some(e);
             }
         }
@@ -1127,6 +1173,188 @@ impl Riffle {
             self.relist(cx);
         }
         cx.notify();
+    }
+
+    /// An undo or a redo with the run `entry` on top: through the gate,
+    /// waiting for a listing or scan under way without canceling it.
+    fn step_trash(&mut self, entry: TrashEntry, redo: bool, cx: &mut Context<Self>) {
+        let (label, held) = if redo {
+            ("Redo Move to Trash", Held::Redo(entry))
+        } else {
+            ("Undo Move to Trash", Held::Undo(entry))
+        };
+        let busy = self.resync.busy() || self.gate.in_flight();
+        match self.gate.request(label, held, busy) {
+            Some(Held::Undo(entry)) => {
+                self.undo_trash(entry, cx);
+            }
+            Some(Held::Redo(entry)) => {
+                self.redo_trash(entry, cx);
+            }
+            Some(Held::Run(_)) => {}
+            None => log::info!("trash: {label} held for the scan's end"),
+        }
+        cx.notify();
+    }
+
+    /// Restore the run `entry` from the Trash on a background task; it stays
+    /// on the history until the backend answers. False when another step is
+    /// out or the entry is no longer on top, as nothing then runs.
+    fn undo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
+        if self.trash_step.is_some() || !self.undo.on_top(entry.id, false) {
+            return false;
+        }
+        self.trash_step = Some(entry.id);
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        let runs = self.runs.clone();
+        let run_id = entry.run_id;
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { riffle_backend::trash::undo_run(&runs, run_id) })
+                .await;
+            log::info!(
+                "trash: undo of run {run_id} in {}ms: {:?}",
+                started.elapsed().as_millis(),
+                result.as_ref().map(|r| (r.restored.len(), r.failed.len()))
+            );
+            this.update(cx, |this, cx| this.restored(entry, result, cx))
+                .ok();
+        })
+        .detach();
+        true
+    }
+
+    /// An undo came back: the entry moves to the redo history when anything
+    /// came back, a refusal other than the run being gone leaves it
+    /// undoable, and when the open folder was among the run's folders the
+    /// restored files join `all` at once, the current file and the
+    /// selection kept, before the re-listing brings their judgments.
+    fn restored(
+        &mut self,
+        entry: TrashEntry,
+        result: Result<riffle_backend::trash::Restored, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.trash_step = None;
+        self.gate.leave_in_flight();
+        let mut refresh = false;
+        match result {
+            Ok(restored) => {
+                self.undo.undone(&entry, &restored);
+                for failure in &restored.failed {
+                    self.write_failed(
+                        failure.path.clone(),
+                        format!("could not restore from the Trash: {}", failure.message),
+                    );
+                }
+                self.step_note = Some(trash::restored_status(&restored));
+                let opens = self
+                    .dir
+                    .as_deref()
+                    .is_some_and(|dir| trash::opens_target(dir, &entry.dirs, IGNORE_CASE));
+                if !opens {
+                    for path in &restored.restored {
+                        self.trashed_state.remove(path);
+                    }
+                }
+                if let Some(dir) = self.dir.clone()
+                    && trash::opens_target(&dir, &entry.dirs, IGNORE_CASE)
+                {
+                    refresh = true;
+                    let back =
+                        trash::restored_into(&dir, &restored.restored, &self.all, IGNORE_CASE);
+                    if !back.is_empty() {
+                        self.all.extend(back);
+                        trash::carry_stash(
+                            &mut self.trashed_state,
+                            &self.all,
+                            &mut self.judgments,
+                            &mut self.seen,
+                        );
+                        self.view_only = viewonly::is_view_only(&self.all);
+                        self.refilter(self.current_path(), true, None, cx);
+                        self.mark_strip();
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("trash: undo of run {} failed: {e}", entry.run_id);
+                if !trash::still_held(&e) {
+                    self.undo.remove_trash(entry.id);
+                }
+                self.step_note = Some(e);
+            }
+        }
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if refresh {
+            self.resync.open();
+            self.relist(cx);
+        } else if self.resync.finished() {
+            // A change seen in the open folder during the restore.
+            self.resync.open();
+            self.relist(cx);
+        }
+        cx.notify();
+    }
+
+    /// Move what the undo of `entry` brought back to the Trash again, with
+    /// no dialog, as a new run; it stays on the redo history until the
+    /// backend answers. False when another step or a run is out or the entry
+    /// is no longer on top, as nothing then runs.
+    fn redo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
+        if self.trash_step.is_some() || self.trashing.is_some() || !self.undo.on_top(entry.id, true)
+        {
+            return false;
+        }
+        self.trash_step = Some(entry.id);
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        self.trashing = Some(trash::progress_status(trash::Mode::Trash, 0, entry.count));
+        let (stores, writer, runs, events) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.runs.clone(),
+            self.events.clone(),
+        );
+        let run_id = entry.run_id;
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    riffle_backend::trash::redo_run(&runs, run_id, |done, total| {
+                        let _ = events.unbounded_send(Event::TrashProgress {
+                            mode: trash::Mode::Trash,
+                            done,
+                            total,
+                        });
+                    })
+                })
+                .await;
+            log::info!(
+                "trash: redo of run {run_id} in {}ms",
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| {
+                this.trash_step = None;
+                match &result {
+                    Ok(_) => this.undo.remove_trash(entry.id),
+                    Err(e) if !trash::still_held(e) => this.undo.remove_trash(entry.id),
+                    Err(_) => {}
+                }
+                this.trashed(entry.dirs, trash::Mode::Trash, false, true, result, cx);
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+        true
     }
 
     /// An item of the folder tree's menu.
@@ -1437,14 +1665,25 @@ impl Riffle {
     fn finished(&mut self, cx: &mut Context<Self>) {
         // The run held for this scan runs now, the re-listing at its end
         // taking the change that waited; a dialog opened meanwhile drops it.
-        if let Some(target) = self.gate.drain() {
-            if !self.trash.busy() {
+        match self.gate.drain() {
+            Some(Held::Run(target)) if !self.trash.busy() => {
                 return self.run_trash(target, false, cx);
             }
-            log::info!(
+            Some(Held::Run(target)) => log::info!(
                 "trash: held run in {} dropped by an open dialog",
                 target.dir
-            );
+            ),
+            Some(Held::Undo(entry)) => {
+                if self.undo_trash(entry, cx) {
+                    return;
+                }
+            }
+            Some(Held::Redo(entry)) => {
+                if self.redo_trash(entry, cx) {
+                    return;
+                }
+            }
+            None => {}
         }
         if self.resync.finished() {
             self.relist(cx);
@@ -1553,7 +1792,7 @@ impl Riffle {
                     return;
                 }
                 this.touched.clear();
-                this.undo.clear();
+                this.undo.drop_judgments();
                 this.step_note = None;
                 // Mark the listing busy so a trash or delete waits for it.
                 this.resync.open();
@@ -1697,7 +1936,7 @@ impl Riffle {
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
-            self.undo.clear();
+            self.undo.drop_judgments();
             self.step_note = None;
             self.write_errors.clear();
             self.filter.clear_exif();
@@ -2013,6 +2252,12 @@ impl Riffle {
             };
         }
         self.judgments = judgments;
+        trash::carry_stash(
+            &mut self.trashed_state,
+            &self.all,
+            &mut self.judgments,
+            &mut self.seen,
+        );
         self.facts = facts;
         self.filter.prune_exif(&groups);
         self.exif_groups = groups;
@@ -2237,7 +2482,15 @@ impl Riffle {
 
     /// Undo (or with `redo`, redo) the newest judgment through the same
     /// view-row-writer path as a key, moving to its file.
+    /// A run to the Trash on top is restored or moved again instead
+    /// (`step_trash`), and nothing steps while one is out.
     fn step(&mut self, redo: bool, cx: &mut Context<Self>) {
+        if self.trash_step.is_some() {
+            return;
+        }
+        if let Some(entry) = self.undo.top_trash(redo) {
+            return self.step_trash(entry, redo, cx);
+        }
         if self.view_only {
             return;
         }

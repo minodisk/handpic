@@ -628,7 +628,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       second mechanism.
     - The run id the backend returns is kept for Step 8; this step only
       logs it.
-- [ ] Step 8: Trash undo and redo, and the plan's docs wrap-up
+- [x] Step 8: Trash undo and redo, and the plan's docs wrap-up
   - Done when:
     - `history.rs`: an undo entry is a judgment batch or a trash run
       (`run_id`, `count`, `dirs`), ported from `undo.ts` with its tests:
@@ -757,3 +757,4 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 - (2026-11-14) Step 5 complete
 - (2026-11-14) Step 6 complete
 - (2026-11-14) Step 7 complete
+- (2026-11-14) Step 8 complete

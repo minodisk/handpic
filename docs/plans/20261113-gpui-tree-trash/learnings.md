@@ -236,7 +236,38 @@
   (`unexpected EOF while looking for matching '`); a script file in the
   scratchpad run with `python <file>` worked.
 
+## Step 8: Trash undo and redo, and the docs wrap-up
+
+- The gate's slot became the `Held` enum (`Run`, `Undo`, `Redo`) in
+  `main.rs` rather than `IdleGate<trash::Target>`: `idle.rs` stays generic and
+  untouched, and `finished` matches on what drained. A drained undo or redo
+  that does not start (another step out, or its entry no longer on top) falls
+  through to the usual `resync.finished` re-listing.
+- Trash entries are removed by id (`Undo::remove_trash`), not popped, as the
+  Tauri `history.remove(entry)` is by identity: judgments can be pushed above
+  the entry while its restore is out. The redo entry gets a fresh id.
+- The Tauri `trashed` pushes a run without clearing `redoable`; the plan asks
+  for a new run to clear the redo history, so `record_trash` clears it, and
+  a redo's new run (`redone_trash`) keeps the rest of the redo history, as a
+  redone judgment batch does.
+- `Undo::clear` became `drop_judgments`, used by both the folder open and the
+  sidecar format switch (the Tauri reopen also only drops `isJudgments`).
+- After an undo outside the open folder only a change seen meanwhile
+  re-lists (`resync.finished`, then `Resync::open` before `relist`, keeping
+  the rule); after one in the open folder the restored files join `all`,
+  `refilter(current, keep_scroll)` runs and the folder re-lists. A run's own
+  end still always re-lists the open folder, as in Step 7.
+- The sidecar variants of `restoredStatus` / `undoneTrash` / `restoredCount`
+  (`what = "sidecars"`) are part 2's `Delete Sidecars…`, so `restored_status`
+  and `undone_trash` count `Restored::restored` alone.
+- `native:check` passed at the first run; a `bash` heredoc holding the Python
+  edit script failed to parse again (`unexpected EOF`), so the scripts went
+  through the Write tool, as Steps 3-7 found.
+
 ## Deferred issues (todo candidates)
+
+The pending manual checks of Steps 2-8, for the user's bulk check, come
+first, in step order; the other deferred issues follow them.
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
   GUI clicks cannot be driven headless. The step's checkbox was ticked on the
@@ -264,17 +295,6 @@
      click `a`: it resumes at the file it was left at.
   5. Press `ctrl+alt+arrowleft` (`toggleLeft`): the pane hides and the
      preview widens; press again: it is back.
-- The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending
-  value across folders: a position pushed in folder A while a write is out
-  is replaced by B's first push if B is opened and paged before that write
-  settles, so A reopens one file earlier. The Tauri `lastViewedWriter` has
-  the same shape. Basis: Step 2's second-open review of `opened`. Files:
-  `crates/native/src/viewed.rs`, `crates/app/ui/src/resume.ts`.
-- The launch's eviction (`eviction`, joined by the first listing only) is not
-  awaited by a second open started before the first listing joined it, so
-  that listing's `Scan::prepare` may run before the eviction. Only reachable
-  by opening two folders within the eviction's run at launch. Basis: Step 2's
-  concurrent-open guard. File: `crates/native/src/main.rs` (`list`).
 - **Pending manual check (Step 3, Windows).** Basis: Step 3's Done-when; the
   watcher-driven re-list, the window activation and the right-click menu
   cannot be driven headless. The step's checkbox was ticked on the automated
@@ -375,17 +395,6 @@
      current file alone.
   8. In a JPEG-only folder under `D:\Photos\tests\`, Shift click selects a
      range, but the judgment keys change nothing.
-- The MCP companion still treats the selection as the current file: its
-  `selected` reports the current file alone and `select_photos` with several
-  paths is refused, though the native view now has a multi-selection
-  (`selection::selection_of` is ported and unused, `allow(dead_code)`, for
-  it). Basis: Step 5's port of `selection.ts` (the Tauri `selectPhotos`).
-  Files: `crates/native/src/companion.rs`, `crates/native/src/selection.rs`,
-  `crates/native/src/main.rs` (`mcp_request`).
-- The status line does not show the Tauri position's ` · N selected` suffix
-  for a multi-selection (`renderMeta` in `main.ts`). Basis: Step 5's
-  wiring; the Done-when does not ask for it. Files:
-  `crates/native/src/main.rs` (`status`), `crates/app/ui/src/main.ts`.
 - **Pending manual check (Step 6, Windows).** Basis: Step 6's Done-when;
   the right-click menu, the clipboard and Explorer cannot be driven
   headless. The step's checkbox was ticked on the automated criteria
@@ -459,3 +468,61 @@
      for the files the canceled pass left (`scanning` again).
   6. Repeat 5 but open another folder under `D:\Photos\tests\` from the tree
      before the scan ends: nothing is moved and the waiting note goes.
+- **Pending manual check (Step 8, Windows).** Basis: Step 8's Done-when;
+  the restore from the Recycle Bin, the redo and the strip's reaction cannot
+  be driven headless. The step's checkbox was ticked on the automated
+  criteria (`history.rs` and `trash.rs` tests, `mise run ci`, `mise run
+  native:check`). Setup: copy a few ARWs, one with both a `.xmp` and a `.dop`,
+  into `D:\Photos\tests\20261113-gpui-tree-trash\undo\a\` and a few into
+  `...\undo\b\`; `cargo build` in `crates/native` (rename a locked
+  `riffle-native.exe` aside, never kill it); run on `...\undo\a` with a fresh
+  `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`. Trash only these copies.
+  Steps and expected results:
+  1. Once the scan is over, give the RAW with the `.xmp` and `.dop` three
+     stars, `Move to Trash…` it and confirm. `Ctrl+Z`: the pane says
+     `Restored 1 file from the Trash`, the RAW and both sidecars are back in
+     `...\undo\a` (and gone from the Recycle Bin), the strip shows the file
+     again with its three stars, the current file and the selection unmoved.
+  2. `Ctrl+Shift+Z`: `moving to Trash 0 / 1` shows briefly, the three files
+     are in the Recycle Bin again, the pane says `Moved 1 file to the Trash`;
+     `Ctrl+Z` brings them back once more.
+  3. Rate a file, trash it, `Ctrl+Z` twice: the first brings the file back,
+     the second undoes its rating (`Undid <name>`).
+  4. Trash a file in `a`, open `b` from the tree, `Ctrl+Z`: the file is back
+     in `a` (Explorer), `b`'s strip is unchanged; opening `a` again lists it.
+  5. During a scan (a fresh `--index` on a larger copy), trash a file, then
+     `Ctrl+Z` while the re-listing's scan runs: the pane says `Undo Move to
+     Trash: waiting for the scan to finish`, the scan is not canceled, and the
+     restore runs at its end.
+  6. Press `Ctrl+Z` twice quickly on a trash entry: one restore only (the log
+     has one `trash: undo of run` line).
+  7. `Delete Permanently…` a file, `Ctrl+Z`: nothing comes back (the undo
+     reaches the judgment beneath it, if any, or does nothing).
+  8. Empty the test file from the Recycle Bin by hand after trashing it, then
+     `Ctrl+Z`: the pane says `Restored 0 files from the Trash, 1 failed` (or
+     the failure count of its sidecars too) and the notes name the file with
+     `could not restore from the Trash: not in the Trash (emptied or restored
+     by hand)`; nothing is left to redo.
+- The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending
+  value across folders: a position pushed in folder A while a write is out
+  is replaced by B's first push if B is opened and paged before that write
+  settles, so A reopens one file earlier. The Tauri `lastViewedWriter` has
+  the same shape. Basis: Step 2's second-open review of `opened`. Files:
+  `crates/native/src/viewed.rs`, `crates/app/ui/src/resume.ts`.
+- The launch's eviction (`eviction`, joined by the first listing only) is not
+  awaited by a second open started before the first listing joined it, so
+  that listing's `Scan::prepare` may run before the eviction. Only reachable
+  by opening two folders within the eviction's run at launch. Basis: Step 2's
+  concurrent-open guard. File: `crates/native/src/main.rs` (`list`).
+- The MCP companion still treats the selection as the current file: its
+  `selected` reports the current file alone and `select_photos` with several
+  paths is refused, though the native view now has a multi-selection
+  (`selection::selection_of` is ported and unused, `allow(dead_code)`, for
+  it). Basis: Step 5's port of `selection.ts` (the Tauri `selectPhotos`).
+  Files: `crates/native/src/companion.rs`, `crates/native/src/selection.rs`,
+  `crates/native/src/main.rs` (`mcp_request`).
+- The status line does not show the Tauri position's ` · N selected` suffix
+  for a multi-selection (`renderMeta` in `main.ts`). Basis: Step 5's
+  wiring; the Done-when does not ask for it. Files:
+  `crates/native/src/main.rs` (`status`), `crates/app/ui/src/main.ts`.
