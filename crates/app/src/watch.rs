@@ -20,7 +20,3 @@ pub fn spawn(app: tauri::AppHandle) -> Watch {
 pub fn set(app: &tauri::AppHandle, dir: &str, owner: &str) {
     riffle_backend::watch::set(&app.state::<Watch>(), dir, owner);
 }
-
-pub fn release_under(app: &tauri::AppHandle, dir: &str) -> Option<(String, String)> {
-    riffle_backend::watch::release_under(&app.state::<Watch>(), dir)
-}

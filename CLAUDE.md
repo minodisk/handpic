@@ -150,7 +150,18 @@ loopback Streamable HTTP endpoint on `MCP_PORT` with its seven tools, started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
 callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
-`mcp_enabled_setting`, the stored `mcpEnabled` rule), and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
+`mcp_enabled_setting`, the stored `mcpEnabled` rule), `src/rename.rs` the
+folder and RAW file rename (`check_name`, `folder_target`, `file_plan` /
+`file_run`, and `rename_folder`, which releases the watcher and the tree
+watches around the rename and carries the index rows and the recorded trash
+runs along, given them in a `Context`), `src/datefolder.rs` the `Rename by
+Capture Date…` plan (`plan_of` from the index's capture times, else the file
+head; `preview`) and the split (`split_folder`, over the same `Context`),
+`src/foldersidecars.rs` the counting, the rewrite and the delete of a
+folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
+`delete_run`, which records the run and clears the judgments), none of the
+three checking for a scan, which is the caller's, `src/text.rs` the
+`SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
 (the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
@@ -186,9 +197,13 @@ home and volume roots, one folder's subfolders and RAW count, and
 `reveal_folder`, the right-click item that reveals a folder, or from the
 strip's menu a file, in the OS file manager under the per-platform
 `REVEAL_LABEL`), `src/rename.rs` the
-`rename_folder` command (it checks the new name, releases the folder watcher,
-renames the folder and carries its index rows to the new path),
-`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands
+`rename_folder` and `rename_file` commands, wrappers over the backend's
+`rename` that drain the sidecar writer, refuse a running scan under the
+`Scans` lock and stop the embedding pass (the folder's: it checks the new
+name, releases the folder watcher, renames the folder and carries its index
+rows to the new path),
+`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands,
+wrappers over the backend's `datefolder` with the same guards
 (`date_folder_preview` plans from the capture dates of the photos directly in
 the folder a rename to its one `YYYY-MM-DD` or a split into one sibling folder
 per date, with the undated files and any colliding target; `date_folder_run`
@@ -209,7 +224,8 @@ the backend's watcher emitting `folder-changed` and `src/treewatch.rs` the folde
 its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
 `src/foldersidecars.rs`
 the folder menu's `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-commands (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
+commands, wrappers over the backend's `foldersidecars` with the writer drain
+and the scan refusal (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
 folder's index rows dirty and push them through the sidecar writer, patching
 only the judgment fields of the current format's sidecars, and
 `delete_sidecars_preview` / `delete_sidecars_run` move those sidecars to the
