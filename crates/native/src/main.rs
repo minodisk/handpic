@@ -59,11 +59,10 @@ use futures::{
 };
 use gpui::{
     Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
-    Entity,
-    FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point,
-    RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
-    UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
-    fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
+    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels,
+    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign,
+    TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored,
+    canvas, deferred, div, fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, Undo};
