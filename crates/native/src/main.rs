@@ -18,6 +18,7 @@ mod peaking;
 mod resync;
 mod scan;
 mod settings;
+mod sort;
 mod strip;
 mod thumbs;
 mod timing;
@@ -61,7 +62,7 @@ use peaking::{Peaking, View};
 use resync::Resync;
 use riffle_backend::{
     exif::{self, Metadata},
-    index::{self, Index},
+    index::{self, Focus, Index, IndexedFile},
     listing::canonicalize,
     sidecar::{self, Writer},
     watch::{self, Watch},
@@ -74,6 +75,7 @@ use riffle_core::{
 };
 use scan::{Event, Listed, Prepared, Running, Scan};
 use settings::Settings;
+use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
@@ -162,22 +164,50 @@ fn file_name(path: &Path) -> String {
 /// The files shown: the listing in natural order, narrowed by `--size` and
 /// `--max`. The index always reconciles the whole listing, so a measurement
 /// run never drops rows.
-fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Vec<PathBuf> {
+fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Vec<String> {
     scan::natural_order(files)
         .into_iter()
         .filter(|p| wanted.is_none_or(|size| guarded(|| preview_size(p)) == Ok(size)))
         .take(max.unwrap_or(usize::MAX))
+        .map(|p| p.to_string_lossy().into_owned())
         .collect()
 }
 
+/// What the index has of a listed file that the strip's order reads, and
+/// the filter will.
+struct Facts {
+    #[expect(dead_code, reason = "the filter's orientation section reads it")]
+    orientation: u16,
+    capture_time: Option<String>,
+    subsec: Option<String>,
+    #[expect(
+        dead_code,
+        reason = "the filter's Face focus and Eyes sections read it"
+    )]
+    focus: Option<Focus>,
+}
+
+impl From<&IndexedFile> for Facts {
+    fn from(file: &IndexedFile) -> Self {
+        Self {
+            orientation: file.orientation,
+            capture_time: file.capture_time.clone(),
+            subsec: file.subsec.clone(),
+            focus: file.focus,
+        }
+    }
+}
+
+/// The listed files' judgments and facts by path.
+type Entries = (HashMap<String, State>, HashMap<String, Facts>);
+
 struct Opened {
     listed: Listed,
-    shown: Vec<PathBuf>,
+    shown: Vec<String>,
     /// `None` without an index.
     todo: Option<Result<Prepared, String>>,
-    /// The listed files' judgments; `None` without an index or when the read
-    /// failed.
-    judgments: Option<HashMap<String, State>>,
+    /// `None` without an index or when the read failed.
+    entries: Option<Entries>,
     /// The file the folder was left at, to resume at.
     last_viewed: Option<String>,
     /// The folder's files the index has as viewed.
@@ -199,24 +229,37 @@ fn remembered(reader: &Mutex<Index>, dir: &str) -> (Option<String>, HashSet<Stri
     (last_viewed, viewed.into_iter().collect())
 }
 
-/// The judgment of each of the folder's files the index has, after the
-/// sidecar pass; `None` when the read fails.
-fn judgments_of(reader: &Mutex<Index>, dir: &str) -> Option<HashMap<String, State>> {
+/// The judgment and the facts of each of the folder's files the index has,
+/// after the sidecar pass, from one `entries` read; `None` when it fails.
+fn entries_of(reader: &Mutex<Index>, dir: &str) -> Option<Entries> {
     let entries = index::lock(reader)
         .entries(dir)
-        .inspect_err(|e| log::warn!("failed to read the judgments of {dir}: {e}"))
+        .inspect_err(|e| log::warn!("failed to read the entries of {dir}: {e}"))
         .ok()?;
-    Some(
-        entries
-            .iter()
-            .map(|file| (file.path.clone(), State::from(file)))
-            .collect(),
-    )
+    let judgments = entries
+        .iter()
+        .map(|file| (file.path.clone(), State::from(file)))
+        .collect();
+    let facts = entries
+        .iter()
+        .map(|file| (file.path.clone(), Facts::from(file)))
+        .collect();
+    Some((judgments, facts))
 }
 
 struct Riffle {
     focus: FocusHandle,
+    /// The listing in natural order, narrowed by `--size` / `--max`: the
+    /// Tauri `allFiles`.
+    all: Vec<String>,
+    /// `all` in the order in force, what the pager, the strip and the pane
+    /// index into; only the open and `refilter` rebuild it.
     files: Vec<PathBuf>,
+    /// The listed files' facts by path, from the index.
+    facts: HashMap<String, Facts>,
+    /// The sort key the user has; a view-only folder is in capture order
+    /// whatever it is (`viewonly::sort_for`).
+    sort: SortKey,
     pager: Pager,
     status: SharedString,
     index: Result<Arc<Mutex<Index>>, String>,
@@ -239,9 +282,12 @@ struct Riffle {
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
-    /// Bumped by every listing, so a preview read for the previous one is
-    /// dropped.
+    /// Bumped by every listing, so a read of the index for the previous one
+    /// is dropped.
     listing: u64,
+    /// Bumped by every listing and every rebuild of `files`, so a preview
+    /// read for an index into an older `files` is dropped.
+    order: u64,
     watch: Arc<Watch>,
     resync: Resync,
     last_viewed: Latest<(String, String)>,
@@ -381,7 +427,10 @@ impl Riffle {
         }
         Self {
             focus,
+            all: Vec::new(),
             files: Vec::new(),
+            facts: HashMap::new(),
+            sort: settings.sort,
             pager: Pager::new(0),
             status: "no folder".into(),
             index,
@@ -398,6 +447,7 @@ impl Riffle {
             wanted: None,
             max: None,
             listing: 0,
+            order: 0,
             watch: Arc::new(watch),
             resync: Resync::default(),
             last_viewed: Latest::default(),
@@ -549,9 +599,9 @@ impl Riffle {
                     let todo = index.map(|index| {
                         Scan::prepare(&index, writer.as_deref(), &listed, format, &names)
                     });
-                    let judgments = reader
+                    let entries = reader
                         .as_ref()
-                        .and_then(|reader| judgments_of(reader, &listed.dir));
+                        .and_then(|reader| entries_of(reader, &listed.dir));
                     let (last_viewed, viewed) = match reader {
                         Some(reader) if !carry => remembered(&reader, &listed.dir),
                         _ => Default::default(),
@@ -561,7 +611,7 @@ impl Riffle {
                         listed,
                         shown,
                         todo,
-                        judgments,
+                        entries,
                         last_viewed,
                         viewed,
                     })
@@ -577,7 +627,7 @@ impl Riffle {
             listed,
             shown,
             todo,
-            judgments,
+            entries,
             last_viewed,
             viewed,
         } = match opened {
@@ -590,40 +640,41 @@ impl Riffle {
             }
         };
         self.listing += 1;
+        self.order += 1;
         self.view_only = viewonly::is_view_only(&listed.files);
         self.marks.clear();
-        let paths = path_strings(&shown);
+        self.dir = Some(listed.dir.clone());
+        let entries = entries.unwrap_or_default();
         // A re-listing that leaves the same file current keeps its crop.
         let mut same_file = false;
         if carry {
-            same_file = !paths.is_empty()
-                && path_strings(&self.files).get(self.pager.current())
-                    == paths.get(resync::carried_current(
-                        &path_strings(&self.files),
-                        &paths,
-                        self.pager.current(),
-                    ));
-            self.carry(&paths);
+            let was = self.current_path();
+            let previous = std::mem::replace(&mut self.all, shown);
+            self.set_entries(entries);
+            self.refilter(was.clone(), true, Some(&previous), cx);
+            same_file = was.is_some() && was == self.current_path();
         } else {
-            self.pager = Pager::new(paths.len());
-            if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
-                self.pager.go(Move::To(at));
-            }
+            self.all = shown;
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
             self.undo.clear();
             self.step_note = None;
             self.write_errors.clear();
+            self.set_entries(entries);
+            let paths = self.ordered();
+            self.pager = Pager::new(paths.len());
+            if let Some(at) = last_viewed.and_then(|last| paths.iter().position(|p| *p == last)) {
+                self.pager.go(Move::To(at));
+            }
             self.strip = Strip::new(&paths);
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
             let old = self.thumbs.reset();
             self.retire(old);
+            self.files = paths.iter().map(PathBuf::from).collect();
+            self.mark_strip();
         }
-        self.files = shown;
-        self.dir = Some(listed.dir.clone());
-        self.set_judgments(judgments.unwrap_or_default());
         if carry {
             self.remember(cx);
         }
@@ -682,14 +733,81 @@ impl Riffle {
         cx.notify();
     }
 
-    /// Move the pager, the strip and the loaded thumbnails from the shown
-    /// files onto their re-listing `paths`: the current file stays current
-    /// (or gives way to its nearest listed neighbour) and the strip keeps the
-    /// same files in view.
-    fn carry(&mut self, paths: &[String]) {
+    /// `all` in the sort in force.
+    fn ordered(&self) -> Vec<String> {
+        let key = viewonly::sort_for(self.view_only, self.sort);
+        sort::order_files(key, &self.all, |path| {
+            let facts = self.facts.get(path);
+            SortFacts {
+                capture_time: facts.and_then(|f| f.capture_time.clone()),
+                subsec: facts.and_then(|f| f.subsec.clone()),
+                rating: self.judgments.get(path).and_then(|s| match s.flag {
+                    Flag::Reject => Some(-1),
+                    _ => s.rating.map(|r| r as i8),
+                }),
+            }
+        })
+    }
+
+    /// Rebuild `files` from `all` in the order in force, as the Tauri
+    /// `refilter`, landing on `anchor` when it is in the new list, else on
+    /// the current file or its nearest neighbour still in it. `keep_scroll`
+    /// keeps the same files in view; otherwise the current file is scrolled
+    /// into view. `previous`, the listing a re-listing replaced, rebuilds
+    /// even an unchanged list, and its caller reads the current preview again
+    /// itself. Whether the current file changed.
+    fn refilter(
+        &mut self,
+        anchor: Option<String>,
+        keep_scroll: bool,
+        previous: Option<&[String]>,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let next = self.ordered();
+        let old = path_strings(&self.files);
+        if previous.is_none() && next == old {
+            return false;
+        }
+        let current = anchor
+            .and_then(|a| next.iter().position(|p| *p == a))
+            .unwrap_or_else(|| resync::carried_current(&old, &next, self.pager.current()));
+        let shown = self
+            .shown
+            .as_ref()
+            .and_then(|(at, _)| old.get(*at).cloned());
+        let moved = self.carry(&next, current, keep_scroll);
+        self.order += 1;
+        if let (Some((at, _)), Some(path)) = (&mut self.shown, &shown)
+            && let Some(to) = next.iter().position(|p| p == path)
+        {
+            *at = to;
+        }
+        self.files = next.iter().map(PathBuf::from).collect();
+        self.mark_strip();
+        self.strip_moved(cx);
+        if previous.is_none() {
+            if moved {
+                self.remember(cx);
+            }
+            // The order's bump dropped a preview read still out.
+            if moved || shown != self.current_path() {
+                self.request(Instant::now(), cx);
+            }
+            if moved {
+                self.read_focus(cx);
+                self.zoom_page(cx);
+            }
+        }
+        moved
+    }
+
+    /// Move the pager, the strip and the loaded thumbnails from `files` onto
+    /// `paths` with `current` the current index: the strip keeps the same
+    /// files in view with `keep_scroll`, else scrolls the current file into
+    /// view, as it does when the current file changed. Whether it changed.
+    fn carry(&mut self, paths: &[String], current: usize, keep_scroll: bool) -> bool {
         let previous = path_strings(&self.files);
         let was = self.pager.current();
-        let current = resync::carried_current(&previous, paths, was);
         let offset =
             strip::carried_offset(&previous, paths, self.strip.offset(), self.strip_width, was);
         let loaded: Vec<usize> = self.thumbs.loaded().collect();
@@ -701,11 +819,15 @@ impl Riffle {
         self.strip = Strip::new(paths);
         self.strip.scroll_to(offset, self.strip_width);
         self.strip.keep(moves.into_values());
-        if previous.get(was) != paths.get(current) {
+        let moved = previous.get(was) != paths.get(current);
+        if moved {
             self.dwell.cancel();
             self.dwell_timer = None;
+        }
+        if moved || !keep_scroll {
             self.strip.scroll_into_view(current, self.strip_width);
         }
+        moved
     }
 
     fn scanned(&mut self, event: Event, cx: &mut Context<Self>) {
@@ -738,7 +860,7 @@ impl Riffle {
                 self.scan_status.extracted();
                 self.failed = summary.errors;
                 self.strip.refresh();
-                self.read_judgments(cx);
+                self.read_entries(cx);
             }
             Event::FacesProgress {
                 done, total, ready, ..
@@ -761,8 +883,8 @@ impl Riffle {
     }
 
     /// Keep the folder's judgments, the view's own for a file judged since
-    /// the open, and hand the shown files' to the strip.
-    fn set_judgments(&mut self, mut judgments: HashMap<String, State>) {
+    /// the open, and its facts.
+    fn set_entries(&mut self, (mut judgments, facts): Entries) {
         self.seen = judgments.keys().cloned().collect();
         for path in &self.touched {
             match self.judgments.get(path) {
@@ -771,29 +893,36 @@ impl Riffle {
             };
         }
         self.judgments = judgments;
+        self.facts = facts;
+    }
+
+    /// Hand the shown files' judgments to the strip.
+    fn mark_strip(&mut self) {
         for (index, path) in self.files.iter().enumerate() {
             let state = self.judgments.get(path.to_string_lossy().as_ref()).cloned();
             self.strip.set_judgment(index, state);
         }
     }
 
-    /// Read the judgments again once pass 1 has written the files' rows: the
-    /// index returns a file only once pass 1 has extracted it, so on a fresh
-    /// index the open's read has nothing.
-    fn read_judgments(&mut self, cx: &mut Context<Self>) {
+    /// Read the judgments and the facts again once pass 1 has written the
+    /// files' rows, and reorder: the index returns a file only once pass 1
+    /// has extracted it, so on a fresh index the open's read has nothing.
+    fn read_entries(&mut self, cx: &mut Context<Self>) {
         let (Some(reader), Some(dir)) = (self.reader.clone(), self.dir.clone()) else {
             return;
         };
         let listing = self.listing;
         cx.spawn(async move |this, cx| {
-            let judgments = cx
-                .background_spawn(async move { judgments_of(&reader, &dir) })
+            let entries = cx
+                .background_spawn(async move { entries_of(&reader, &dir) })
                 .await;
             this.update(cx, |this, cx| {
-                if let Some(judgments) = judgments
+                if let Some(entries) = entries
                     && listing == this.listing
                 {
-                    this.set_judgments(judgments);
+                    this.set_entries(entries);
+                    this.refilter(this.current_path(), true, None, cx);
+                    this.mark_strip();
                     cx.notify();
                 }
             })
@@ -851,6 +980,7 @@ impl Riffle {
             }]);
             self.touched.insert(path.clone());
             self.set_state(&path, after.clone());
+            self.refilter(Some(path.clone()), false, None, cx);
             self.store(path, own, after, label_known, entry, cx);
         }
         if self.settings.auto_advance && judgment::advances_after(cmd) {
@@ -889,6 +1019,7 @@ impl Riffle {
                 cx,
             );
         }
+        self.refilter(self.current_path(), false, None, cx);
         let verb = if redo { "Redid" } else { "Undid" };
         let note = match stepped.move_to {
             Some(path) => {
@@ -951,6 +1082,7 @@ impl Riffle {
                     this.touched.remove(&path);
                     this.undo.forget(entry, &path);
                     this.set_state(&path, before);
+                    this.refilter(this.current_path(), true, None, cx);
                     this.write_failed(path, e);
                     cx.notify();
                 }
@@ -1240,14 +1372,14 @@ impl Riffle {
         self.sent = at;
         let path = self.files[index].clone();
         let slots = self.slots.clone();
-        let listing = self.listing;
+        let order = self.order;
         cx.spawn(async move |this, cx| {
             let loaded = cx
                 .background_spawn(async move { guarded(|| load(&path, &slots)) })
                 .await;
             let received = Instant::now();
             this.update(cx, |this, cx| {
-                if listing != this.listing {
+                if order != this.order {
                     if let Ok(loaded) = loaded {
                         this.retire(Some(loaded.image));
                     }
@@ -1960,9 +2092,10 @@ fn main() {
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take().as_deref());
     log::info!(
-        "settings: sidecarFormat={} autoAdvance={}",
+        "settings: sidecarFormat={} autoAdvance={} sortOrder={}",
         settings.format.setting(),
-        settings.auto_advance
+        settings.auto_advance,
+        settings.sort.setting()
     );
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();

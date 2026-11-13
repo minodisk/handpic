@@ -12,13 +12,19 @@ use riffle_backend::{
 use riffle_core::xmp::LabelNames;
 use serde_json::{Map, Value};
 
-use crate::datadir::{IDENTIFIER, LEGACY_IDENTIFIERS};
+use crate::{
+    datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
+    sort::SortKey,
+};
 
 pub struct Settings {
     pub format: SidecarFormat,
     pub names: LabelNames,
     pub keymap: Keymap,
     pub auto_advance: bool,
+    /// The strip's order at startup; the native menu's changes are not
+    /// written back.
+    pub sort: SortKey,
 }
 
 /// The settings in `path` (`--settings`), else in the first `settings.json`
@@ -83,12 +89,14 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .get("autoAdvance")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::load_from;
+    use crate::sort::SortKey;
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
     use riffle_core::xmp::LabelNames;
     use std::{fs, path::Path};
@@ -105,13 +113,14 @@ mod tests {
         write(
             &file,
             r#"{"sidecarFormat":"both","labelNames":{"red":"Rot"},"autoAdvance":false,
-                "shortcuts":{"pick":["k"]}}"#,
+                "shortcuts":{"pick":["k"]},"sortOrder":"rating"}"#,
         );
         let s = load_from(Some(&file), None);
         assert_eq!(s.format, SidecarFormat::Both);
         assert_eq!(s.names.red, "Rot");
         assert_eq!(s.names.blue, LabelNames::default().blue);
         assert!(!s.auto_advance);
+        assert_eq!(s.sort, SortKey::Rating);
         let pick = s.keymap.bindings().into_iter().find(|b| b.action == "pick");
         assert_eq!(pick.unwrap().keys, ["k"]);
     }
@@ -127,6 +136,7 @@ mod tests {
             assert_eq!(s.names, LabelNames::default());
             assert_eq!(s.keymap, Keymap::defaults());
             assert!(s.auto_advance);
+            assert_eq!(s.sort, SortKey::Name);
         }
     }
 
@@ -136,6 +146,21 @@ mod tests {
         let file = dir.path().join("s.json");
         write(&file, r#"{"autoAdvance":"no"}"#);
         assert!(load_from(Some(&file), None).auto_advance);
+    }
+
+    #[test]
+    fn a_stored_recommended_or_unknown_sort_order_is_mapped() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("s.json");
+        for (stored, key) in [
+            (r#"{"sortOrder":"capture"}"#, SortKey::Capture),
+            (r#"{"sortOrder":"recommended"}"#, SortKey::Capture),
+            (r#"{"sortOrder":"size"}"#, SortKey::Name),
+            (r#"{"sortOrder":3}"#, SortKey::Name),
+        ] {
+            write(&file, stored);
+            assert_eq!(load_from(Some(&file), None).sort, key);
+        }
     }
 
     #[test]

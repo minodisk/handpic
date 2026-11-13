@@ -164,7 +164,7 @@ so port Step 7 stays open after this plan with only those sections left.
 
 ## Steps
 
-- [ ] Step 1: The sort order: `sort.rs`, the view's `all` / `files` split and one `refilter`, capture order in a view-only folder
+- [x] Step 1: The sort order: `sort.rs`, the view's `all` / `files` split and one `refilter`, capture order in a view-only folder
   - Done when:
     - `crates/native/src/sort.rs` is a pure model with unit tests: `SortKey
       { Name, Capture, Rating }` (with `Recommended` left out; `SortKey::

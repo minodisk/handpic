@@ -113,9 +113,11 @@ app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
 ### The settings are the Tauri app's, read-only (Inferred)
 
 `settings.rs` reads the Tauri app's `settings.json` (`sidecarFormat`,
-`labelNames`, `shortcuts`, `autoAdvance`) with the backend's rules
+`labelNames`, `shortcuts`, `autoAdvance`, `sortOrder`) with the backend's rules
 (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
-`Keymap::from_overrides`, `autoAdvance` on unless a boolean says off), so a
+`Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
+`SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read as
+capture order until port Step 9 brings the ranking), so a
 native judgment writes the same sidecars with the same label names and keys
 as the Tauri app on the same folder (the user's store says `"both"`). The
 file is `--settings <path>`, else the first that exists of
@@ -230,6 +232,40 @@ the status line's `n/total`).
 - Rule: a file still being copied in changes size between events, so each
   debounced event re-extracts it (`todo=1 removed=1`) until the copy ends;
   that is expected, not a loop.
+
+### The listing and the shown list are two lists, rebuilt by one `refilter` (Measured)
+
+The view keeps `all` (the listing in natural order narrowed by `--size` /
+`--max`, the Tauri `allFiles`) apart from `files` (`all` in the sort in force,
+later also filtered), which the pager, the strip, the thumbnails, the hot
+list, `current_path`, the status line and the pane's `n / total` index into.
+The order reads `facts` (each listed file's orientation, capture time, subsec
+and `Focus`, keyed by the listed path) and the judgments, both from the one
+`Index::entries` read at the open and at pass 1's `Done`. A view-only folder
+is in capture order whatever the key (`viewonly::sort_for`), the key kept for
+the next RAW folder. On a fresh index the open has no facts, so a capture
+order starts as name order and settles at pass 1's `Done`, the current file
+kept: an `--auto 5` run on 6 copied ARWs under `"capture"` paged in capture
+order from there, `"rating"` put the rated files first and the rejected one
+last, and a JPEG folder under `"name"` paged in capture order.
+
+- Rule: only the open and `refilter` rebuild `files`. `refilter` orders `all`,
+  returns early when the list is unchanged (unless a re-listing passes its
+  previous listing), else carries the pager, the strip and the loaded
+  thumbnails onto the new list (`carry`), landing on the anchor, else the
+  current file or its nearest neighbour still listed. It runs after a
+  judgment, an undo / redo, a failed store's revert, pass 1's `Done` and a
+  re-listing; it never runs per page.
+- Rule: a rebuild bumps `order`, which drops a preview read still out for an
+  index into the old `files` (the pager is replaced, so its in-flight flag is
+  gone), and `refilter` re-requests the current preview whenever the image on
+  screen is not the current file's. `listing` still guards the index reads,
+  so a judgment's reorder does not drop the entries read of pass 1's `Done`.
+- Rule: a judgment's and a step's `refilter` scroll the current file into view
+  (the Tauri `keepScroll` false); `Done` and a re-listing keep the same files in
+  view (`carried_offset`).
+- Measured: `order_files` over 1,000 paths takes 0.4-0.5 ms in a release
+  test build and 13-17 ms in the debug one (natord dominates the name order).
 
 ### The native app keeps its own index (Inferred)
 
