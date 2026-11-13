@@ -177,7 +177,7 @@ native app no longer depends on the Tauri app for any of them.
 
 ## Steps
 
-- [ ] Step 1: The settings store: a SQLite file seeded once from the Tauri `settings.json`
+- [x] Step 1: The settings store: a SQLite file seeded once from the Tauri `settings.json`
   - Done when:
     - `crates/backend/src/store.rs` (`riffle_backend::store`) is a key /
       JSON-value store over one SQLite file: one table (`key TEXT PRIMARY

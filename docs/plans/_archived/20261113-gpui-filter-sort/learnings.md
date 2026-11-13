@@ -211,7 +211,8 @@
   `on_mouse_down`"; mouse clicks cannot be driven headless. Steps: build
   `crates/native` (`cargo build`, NASM on `PATH`), run `riffle-native
   D:\Photos\tests\20261113-filter-sort\menu\raw --index <fresh path>
-  --settings D:\Photos\tests\20261113-filter-sort\settings-name.json`.
+  --settings <fresh .sqlite path> --import-settings
+  D:\Photos\tests\20261113-filter-sort\settings-name.json`.
   Expected: `Sort ▾` and `Filter ▾` sit at the status row's right end and the
   preview is the same size as before. Click `Filter ▾`: the menu opens upward
   over the strip, its right edge on the button's; check `Picked`, then `Red`:
@@ -253,7 +254,9 @@
   runs above covered the page order headlessly, not key presses or the drawn
   text. Steps: build `crates/native` (`cargo build`, NASM on `PATH`), run
   `riffle-native D:\Photos\tests\20261113-filter-sort\filter\raw --index <fresh
-  path> --settings D:\Photos\tests\20261113-filter-sort\settings-filter-untagged.json`.
+  path> --settings <fresh .sqlite path> --import-settings
+  D:\Photos\tests\20261113-filter-sort\settings-filter-untagged.json` (a fresh
+  `--settings` store for each JSON named below, imported the same way).
   Expected: once pass 1 ends the strip shows the 5 unflagged files (HX95
   absent) and the pane's total is 5; `p` on the current file hides it and
   lands on the next shown file, with no second move from auto-advance; `Ctrl+Z`
@@ -273,7 +276,9 @@
   runs above covered the page order headlessly, not the strip's drawing or a
   key press. Steps: build `crates/native` (`cargo build`, NASM on `PATH`), run
   `riffle-native D:\Photos\tests\20261113-filter-sort\sort\raw --index <fresh
-  path> --settings D:\Photos\tests\20261113-filter-sort\settings-rating.json`.
+  path> --settings <fresh .sqlite path> --import-settings
+  D:\Photos\tests\20261113-filter-sort\settings-rating.json` (a fresh
+  `--settings` store for each JSON named below, imported the same way).
   Expected: the strip shows HX99, RX0, RX0M2, RX100M2, RX100M3, HX95 (dimmed)
   once pass 1 ends; on RX100M2 press `3`: the strip reorders at once with
   RX100M2 right after HX99, it stays current (outlined, preview unchanged),
@@ -289,7 +294,10 @@
   headlessly, not the strip's drawing or the `f` marks. Steps: build
   `crates/native` (`cargo build`, NASM on `PATH`), run `riffle-native
   D:\Photos\tests\20261113-filter-sort\faces --index <fresh path> --settings
-  D:\Photos\tests\20261113-filter-sort\settings-filter-good.json`. Expected:
+  <fresh .sqlite path> --import-settings
+  D:\Photos\tests\20261113-filter-sort\settings-filter-good.json` (a fresh
+  `--settings` store for each JSON named below, imported the same way).
+  Expected:
   the strip starts empty and fills in while `analyzing n / m` runs, ending with
   DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, each with a bright green `f`
   mark. With `settings-filter-closed.json` only DSC03068 shows. Once Step 4's

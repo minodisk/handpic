@@ -500,6 +500,7 @@ impl Riffle {
             max,
             index: _,
             settings: _,
+            import_settings: _,
             log: _,
         } = args;
         let prompt = folder.is_none().then(|| {
@@ -2429,13 +2430,18 @@ fn main() {
     logger::install(args.log.take());
     riffle_backend::diagnostics::install_panic_hook();
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
-    let settings = settings::load(args.settings.take().as_deref());
+    let settings = settings::load(args.settings.take(), args.import_settings.take().as_deref());
     log::info!(
-        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?}",
+        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?} store={}",
         settings.format.setting(),
         settings.auto_advance,
         settings.sort.setting(),
-        settings.filter
+        settings.filter,
+        if settings.store.is_some() {
+            "open"
+        } else {
+            "none"
+        }
     );
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();

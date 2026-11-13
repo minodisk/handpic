@@ -83,7 +83,7 @@ formatting shared by the meta pane (`Metadata`, `metadata`) and the filter menu,
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 `docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
-and the user's overrides, persisted in the `shortcuts` key, `src/index.rs` the SQLite folder index,
+and the user's overrides, persisted in the `shortcuts` key, `src/store.rs` the native app's settings store (one key / JSON-value SQLite file, seeded once when new, never deleted or recreated), `src/index.rs` the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
 and the files shown in the preview in the separate `views` table (kept by
 eviction, dropped by Clear Cache), which gives the ranking its negatives
@@ -213,14 +213,16 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
 its own index at `<cache dir>/com.minodisk.handpic.native/index.sqlite` (or
-`--index <path>`) and holds the product's identifiers (`IDENTIFIER`, the
+`--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
+(or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/settings.rs`
-reads the Tauri app's `settings.json` read-only (`--settings <path>`, else the
-`IDENTIFIER` folder's under the config dir, else a `LEGACY_IDENTIFIERS` one's)
-into the sidecar format, the label names, the keymap, auto-advance, the
+reads the backend's settings store, a new one seeded once from a Tauri
+`settings.json`, only read (`--import-settings <path>`, else, without
+`--settings`, the `IDENTIFIER` folder's under the config dir, else a
+`LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
 sort key and the remembered filter, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies

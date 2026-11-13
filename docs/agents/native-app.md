@@ -110,27 +110,44 @@ app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
 - Rule: a Tauri-free helper the native app needs moves into the backend, it is
   not copied, so the two apps cannot drift in what they read and show.
 
-### The settings are the Tauri app's, read-only (Inferred)
+### The settings live in the native app's own store, seeded once (Inferred)
 
-`settings.rs` reads the Tauri app's `settings.json` (`sidecarFormat`,
-`labelNames`, `shortcuts`, `autoAdvance`, `sortOrder`) with the backend's rules
-(`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
+`settings.rs` reads the native app's settings store
+(`riffle_backend::store`): one SQLite file, one `settings` table of
+`key TEXT PRIMARY KEY` / `value TEXT NOT NULL` (JSON), WAL, the schema
+version in `user_version`. It is `--settings <path>`, else
+`settings.sqlite` in the `IDENTIFIER` folder under the config dir
+(`datadir::settings_path`), next to the Tauri app's `settings.json`. The
+values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
+`sortOrder`, `filter`) go through the one `from_values` with the backend's
+rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
 `Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
-`SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read as
-capture order until port Step 9 brings the ranking), so a
-native judgment writes the same sidecars with the same label names and keys
-as the Tauri app on the same folder (the user's store says `"both"`). The
-file is `--settings <path>`, else the first that exists of
-`<config dir>/<IDENTIFIER>/settings.json` and each
-`<config dir>/<LEGACY_IDENTIFIERS[i]>/settings.json`, so it is found before
-and after the Handpic rename's migration. A missing, unreadable or non-object
-file is logged once with the paths tried and gives the defaults (`Xmp`, the
-English names, the default keymap, auto-advance on). The native app never
-writes it; its settings UI is port Step 9.
+`SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read
+as capture order and left stored as it is, `Stored::from_setting`).
 
-- Rule: every debug or hand-check run passes `--settings` with a test file,
-  or it picks up the user's real format, and `--log` with a file in the test
-  folder, or it appends to the native app's own `Handpic.log`.
+Only a new store (no schema yet: a missing file or a zero-byte one left by a
+crash) is seeded, once, with every key of a Tauri `settings.json` verbatim,
+the schema and the values committed in one transaction. The seed is
+`--import-settings <path>` when given; else, only without `--settings`, the
+first that exists of `<config dir>/<IDENTIFIER>/settings.json` and each
+`<config dir>/<LEGACY_IDENTIFIERS[i]>/settings.json`; with `--settings` and no
+`--import-settings` nothing is seeded and nothing under the config dir is
+read. The JSON is only read, never written, and never read again once the
+store exists, so the two apps' settings diverge from then on. The log names
+the store and, for a new one, how many keys were seeded from which file (or
+the paths tried).
+
+The store is never deleted or recreated, unlike the index (a cache): a file
+that is not a database, or one with a newer `user_version`, is an error left
+as it was, and the app runs on the defaults (`Xmp`, the English names, the
+default keymap, auto-advance on) with `Settings::store` `None`, so nothing is
+written; the startup `settings:` line ends `store=none`.
+
+- Rule: every debug or hand-check run passes `--settings` with a test store
+  (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
+  test JSON when it needs seeded values, or it opens and seeds the user's real
+  store; and `--log` with a file in the test folder, or it appends to the
+  native app's own `Handpic.log`.
 
 ### The folder open reads the sidecars before pass 1 (Measured)
 

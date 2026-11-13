@@ -7,5 +7,6 @@ pub mod output;
 pub mod photolab;
 pub mod shortcuts;
 pub mod sidecar;
+pub mod store;
 pub mod trash;
 pub mod watch;
