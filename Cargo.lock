@@ -3759,8 +3759,6 @@ dependencies = [
 name = "riffle-app"
 version = "1.10.0"
 dependencies = [
- "axum",
- "base64 0.22.1",
  "chrono",
  "dirs",
  "log",
@@ -3768,7 +3766,6 @@ dependencies = [
  "rfd",
  "riffle-backend",
  "riffle-core",
- "rmcp",
  "serde",
  "serde_json",
  "sysinfo",
@@ -3781,15 +3778,14 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
- "tokio",
- "tokio-util",
- "tower",
 ]
 
 [[package]]
 name = "riffle-backend"
 version = "1.10.0"
 dependencies = [
+ "axum",
+ "base64 0.22.1",
  "log",
  "mozjpeg",
  "notify",
@@ -3797,12 +3793,16 @@ dependencies = [
  "percent-encoding",
  "reqwest",
  "riffle-core",
+ "rmcp",
  "rusqlite",
  "rustls",
  "serde",
  "serde_json",
  "sha2",
  "sysinfo",
+ "tokio",
+ "tokio-util",
+ "tower",
  "trash",
  "windows 0.62.2",
 ]

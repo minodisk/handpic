@@ -55,6 +55,15 @@ pub fn raw_only(path: &Path, what: &str) -> Result<(), String> {
     }
 }
 
+/// Extract a file's IFD0 preview JPEG along with the Orientation, reading only
+/// the bounded prefix the metadata and the preview need rather than the whole
+/// 48 MB file.
+pub fn read_preview(path: &Path) -> Result<(u16, Vec<u8>), String> {
+    let (arw, jpeg) =
+        riffle_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok((arw.orientation, jpeg))
+}
+
 /// Detect the faces of a file's preview through the scan's own
 /// `detect_around`, so the region and the threshold match the faces the
 /// focus candidate cue picks from, for display only.

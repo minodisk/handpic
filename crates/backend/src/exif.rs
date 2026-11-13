@@ -1,6 +1,8 @@
 //! Display formatting of the shooting settings, shared by the metadata pane
 //! and the index.
 
+use std::path::Path;
+
 use riffle_core::arw::{excluded_dsc, Rational, Shot};
 
 /// A numeric setting: `value` to sort by, `label` to show.
@@ -367,6 +369,17 @@ pub struct Metadata {
     pub exposure_bias: Option<String>,
     pub focus_distance: Option<String>,
     pub captured_at: Option<String>,
+}
+
+/// The pane's `Metadata` of the file at `path`, read from the bounded
+/// prefix the preview needs.
+pub fn read_metadata(path: &Path) -> Result<Metadata, String> {
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let arw =
+        riffle_core::reader::read_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(metadata(name, &arw.shot))
 }
 
 /// The pane's `Metadata` of the file `name` whose shooting settings are `shot`.

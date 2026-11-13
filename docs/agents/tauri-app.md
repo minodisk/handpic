@@ -1680,11 +1680,13 @@ detection, and before the crop decode and model) and stops early.
 
 ### The MCP server runs on Tauri's runtime; `rmcp` 3.4 macro traps (Hit)
 
-`crates/app/src/mcp.rs` serves `rmcp`'s `StreamableHttpService` through
-`axum::serve` on `tauri::async_runtime` (Tauri's tokio multi-thread runtime);
-no dedicated runtime thread was needed. `tokio` is a direct dependency only
-for its `net`, `sync` and `time` features, and the tests drive the server with
-`tauri::async_runtime::block_on`, so no tokio `macros` / `rt` dev features.
+The backend's `crates/backend/src/mcp.rs` serves `rmcp`'s
+`StreamableHttpService` through `axum::serve`, spawned with a bare
+`tokio::spawn`; the Tauri app's `crates/app/src/mcp.rs` calls it on
+`tauri::async_runtime` (Tauri's tokio multi-thread runtime), so no dedicated
+runtime thread was needed. `tokio` is a backend dependency for its `net`,
+`rt`, `sync` and `time` features, and the backend's tests drive the server on
+a current-thread runtime of their own, so no tokio `macros` feature.
 
 - `#[tool_router]` on an impl with no `#[tool]` fn does not compile in 3.4.1;
   an intentionally empty router needs `#[tool_router(allow_empty)]`.

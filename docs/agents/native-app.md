@@ -75,6 +75,13 @@ in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
 `&Runs` and a `progress(done, total)` callback; the Tauri commands keep the
 writer flush, the `Scans` lock and its `SCAN_RUNNING` refusal, the
 `trash-progress` emit and the log line around them.
+The MCP companion's server (`mcp::Mcp`) takes a `Bridge` built over a send
+callback and returns each switch's `McpState`; the Tauri app's `mcp.rs` owns
+`mcp-request`, the main-window check and the `mcp-state` emit. The server
+spawns its tasks with a bare `tokio::spawn`, so `Mcp::switch` and `Mcp::stop`
+must run inside a tokio runtime: the Tauri app calls them from async commands,
+a task on `tauri::async_runtime` and `tauri::async_runtime::block_on`, which
+all enter Tauri's runtime; the native app has to own one.
 
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.
@@ -111,8 +118,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 
 The folder-open sidecar pass (`sidecar::reconcile_of`, with `SidecarError`
 and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
-`exif::metadata(name, &shot)`) and the stored `labelNames` value
-(`sidecar::label_names_setting` / `label_names_value`) moved out of
+`exif::metadata(name, &shot)`), the stored `labelNames` value
+(`sidecar::label_names_setting` / `label_names_value`), the metadata and
+preview reads (`exif::read_metadata`, `ondemand::read_preview`) and the stored
+`mcpEnabled` value (`mcp::mcp_enabled_setting`) moved out of
 `crates/app/src/commands.rs` so the native app can call them; the Tauri
 commands call them from there. `raw_only` stayed in `crates/app`: the native
 app's view-only rule is the frontend's `viewonly.ts`, ported on its own.

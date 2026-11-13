@@ -29,13 +29,7 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-store = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-window-state = "2"
-rmcp = { version = "3", features = ["server", "macros", "transport-streamable-http-server"] }
-tokio-util = "0.7"
-base64 = "0.22"
-axum = "0.8"
-tokio = { version = "1", features = ["net", "sync", "time"] }
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 [dev-dependencies]
 mozjpeg = "0.10"
-tower = { version = "0.5", features = ["util"] }

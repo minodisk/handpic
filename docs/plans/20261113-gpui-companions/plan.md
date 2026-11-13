@@ -192,7 +192,7 @@ before going on.
       extra setup, and record the result in `learnings.md`.
     - `index::with_suffix` and `index::lock` are already the backend's.
 
-- [ ] Step 4: Move the MCP server, its tools and the bridge into `crates/backend`
+- [x] Step 4: Move the MCP server, its tools and the bridge into `crates/backend`
   - Done when: `crates/backend/src/mcp.rs` holds `MCP_PORT`, the instructions,
     `Bridge` with a public constructor over a send callback, `Request` with
     fields a non-serializing caller can read, the `Companion` handler with its

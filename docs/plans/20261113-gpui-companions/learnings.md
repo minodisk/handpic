@@ -71,3 +71,66 @@
   among them `reqwest`, `rustls`, `ring`, `hyper`, `hyper-rustls`,
   `rustls-platform-verifier` (with `jni` / `security-framework` for other
   platforms), `tower` / `tower-http`, `webpki-root-certs` and `base64`.
+
+## Step 4: the MCP server, its tools and the bridge in `crates/backend`
+
+- The tokio context: bare `tokio::spawn` / `tokio::task::spawn_blocking`,
+  not a `Handle` passed in. Verified against Tauri 2.11.6's
+  `async_runtime.rs`: its `spawn` enters the runtime before spawning, its
+  `block_on` is tokio's `Runtime::block_on` / `Handle::block_on`, which both
+  enter the context. So every Tauri caller of the moved code runs inside
+  Tauri's runtime: `set_mcp_enabled` / `mcp_enabled` are async commands
+  (run on `tauri::async_runtime`), `setup`'s switch runs in a
+  `tauri::async_runtime::spawn` task, and the exit's `stop` runs under
+  `tauri::async_runtime::block_on`. The rmcp handlers that call
+  `spawn_blocking` run inside the server's own spawned task. Step 5's native
+  app has to call `Mcp::switch` / `stop` inside the runtime it owns (for
+  example `runtime.block_on` or a task spawned on it).
+- The seam: the backend's `mcp::Mcp` (was `AppMcp`) with `new(bridge,
+  index)`, `reply`, and async `state` / `switch` / `stop` methods; `switch`
+  returns the `McpState` and emits nothing. `Bridge::new(send)` is public and
+  `Request`'s `id` / `kind` / `args` are public fields (still `Serialize`
+  for the Tauri emit). The Tauri `mcp.rs` keeps `AppMcp(Mcp)`, whose `new`
+  now takes the `AppHandle` and builds the `mcp-request` bridge (with the
+  "main window is not open" check), plus `state` / `switch` (with the
+  `mcp-state` emit) / `stop`; `main.rs`'s `AppMcp::new` call changed shape.
+- `read_metadata` moved to `riffle_backend::exif` and `read_preview` to
+  `riffle_backend::ondemand`; `commands.rs` imports them, so its commands and
+  tests are unchanged. `mcp_enabled_setting` moved to `riffle_backend::mcp`
+  and gained a test there (it had none).
+- `rmcp`, `axum`, `tokio`, `tokio-util`, `base64` and the `tower` dev
+  dependency left `crates/app/Cargo.toml` entirely. The backend's `tokio`
+  adds `rt` (for `tokio::spawn` without relying on another crate's feature
+  unification, which the native workspace does not share with Tauri); the
+  tests use a current-thread runtime and `io-util` as a dev feature.
+- A new backend test, `a_client_over_loopback_initializes_and_lists_the_tools`,
+  binds a real loopback port and drives `initialize` (reading the
+  `Mcp-Session-Id` header), `notifications/initialized` (202) and
+  `tools/list` over raw HTTP/1.1, checking the server name `handpic` and the
+  seven tool names. The SSE response of a POST closes after its one message,
+  so reading to the end with `Connection: close` works.
+- `get_info`'s version is now `riffle-backend`'s `CARGO_PKG_VERSION`, which
+  release-please bumps with the app's (both 1.10.0 now).
+- The `log` lines `failed to start the MCP server` and `the MCP server
+  stopped` now come under target `riffle_backend::mcp`.
+- `crates/native/Cargo.lock` gained 23 packages, among them `rmcp` /
+  `rmcp-macros`, `axum` / `axum-core`, `tokio-util`, `tokio-stream`,
+  `tokio-macros`, `sse-stream`, `matchit` and a second `sha2` (0.11, rmcp's,
+  next to the backend's 0.10); `mise run native:check` passed without other
+  setup.
+
+## Deferred issues (todo candidates)
+
+- Pending manual check (Step 4, the Tauri app's MCP toggle on the moved
+  server): on Windows, in a Tauri app built from this branch, turn the MCP
+  server on in the settings modal, connect an MCP client to
+  `http://127.0.0.1:41917/mcp`, call `get_view` and `show_photo`, then turn
+  the server off and on again and quit the app. Expected: the settings show
+  the server on port 41917 with no error, the client lists the seven tools
+  and the calls answer as before, the toggle frees and rebinds the port, and
+  the app quits without hanging (the 2 s stop timeout). Basis: Step 4 moved
+  the server onto bare `tokio::spawn` in `crates/backend/src/mcp.rs`, whose
+  Tauri callers are `crates/app/src/mcp.rs`, `crates/app/src/commands.rs`
+  (`set_mcp_enabled`, `mcp_enabled`, `mcp_reply`) and `crates/app/src/main.rs`
+  (setup's switch, the exit's `stop`); the step's checkbox was ticked on the
+  automated criteria (the backend's loopback test and the moved tests).
