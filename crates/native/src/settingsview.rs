@@ -196,14 +196,17 @@ impl SettingsView {
     /// A valid new pattern is handed to the main view to store; an invalid
     /// one shows its reason in the example line and the stored one stays.
     fn commit_pattern(&mut self, pattern: String, cx: &mut Context<Self>) {
-        self.status = None;
         match settingsmodal::pattern_change(&self.import_pattern, &pattern) {
             Ok(Some(pattern)) => {
+                self.status = None;
                 self.import_pattern = pattern.clone();
                 cx.emit(Change::ImportPattern(pattern));
             }
             Ok(None) => {}
-            Err(e) => self.example = Err(e),
+            Err(e) => {
+                self.status = None;
+                self.example = Err(e);
+            }
         }
         cx.notify();
     }
