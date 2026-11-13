@@ -150,7 +150,7 @@ before going on.
     - Leave the `println!` timing lines (`page`, `zoom`, the summary) on
       stdout.
 
-- [ ] Step 2: Move the CPU and disk sampler into `crates/backend`
+- [x] Step 2: Move the CPU and disk sampler into `crates/backend`
   - Done when: `crates/backend/src/perf.rs` holds the sampler (the `Sample`
     payload, the per-platform disk readers, `Readings`, the thread's loop and
     the start / stop state) and reports each sample through a callback;

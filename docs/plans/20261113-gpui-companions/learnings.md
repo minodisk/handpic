@@ -27,3 +27,21 @@
   `log: _` there too.
 - Python's text-mode write on Windows turned `args.rs` into CRLF; write with
   `newline=''` when editing files through a script.
+
+## Step 2: the CPU and disk sampler in `crates/backend`
+
+- The seam is `perf::Sampler::start(on_sample)` with
+  `on_sample: impl FnMut(Sample) -> Result<(), E: Display>` and a separate
+  `stop()`, rather than one `set(enabled, ...)`: stopping needs no callback.
+  The callback returns a `Result` so the warn-once on a failed report stays
+  in the backend; the Tauri wrapper is just
+  `move |sample| app.emit("perf-sample", sample)`. The backend's warn line now
+  reads `perf sample report failed: ...` under target
+  `riffle_backend::perf`, since the backend names no event.
+- `windows` (`Win32_System_Performance`) left `crates/app/Cargo.toml`
+  entirely (only `perf.rs` used it); `sysinfo` stays there for
+  `commands.rs`.
+- `crates/native/Cargo.lock` gains `sysinfo 0.39.6` next to GPUI's
+  `sysinfo 0.31.4` (two versions, so the plan's "already resolves `sysinfo`"
+  did not save a crate), plus `objc2-io-kit` for its macOS build; `windows
+  0.62.2` was already in the lock.
