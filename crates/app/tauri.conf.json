@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/@tauri-apps/cli/schema.json",
   "productName": "Handpic",
-  "version": "1.10.0",
+  "version": "2.0.0",
   "identifier": "dev.minodisk.handpic",
   "build": {
     "devUrl": "http://localhost:1420",
@@ -44,11 +44,17 @@
     },
     "linux": {
       "deb": {
-        "replaces": ["riffle"],
-        "conflicts": ["riffle"]
+        "replaces": [
+          "riffle"
+        ],
+        "conflicts": [
+          "riffle"
+        ]
       },
       "rpm": {
-        "obsoletes": ["riffle"]
+        "obsoletes": [
+          "riffle"
+        ]
       }
     }
   },
