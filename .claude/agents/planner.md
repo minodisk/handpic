@@ -62,6 +62,15 @@ You are given:
 - Aim for 3–7 steps. Far more suggests the split is too fine; far fewer suggests
   a single PR is too big
 
+## Writing the acceptance criteria
+
+Write the check lines of a step's "Done when" against what the agents run:
+`mise run ci:local` passing locally and the PR's GitHub checks passing. Do not
+write "`mise run ci` passes" or "`mise run native:check` passes" as a local
+gate: no agent runs either full task locally (the full root workspace build has
+run this host out of memory), and `ci:local` leaves the Tauri crate, the
+frontend tests and the dependent crates' tests to the PR's checks.
+
 ## Writing the implementation approach
 
 **Write only what is known; omit it when it is not.** Writing down what you do

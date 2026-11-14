@@ -2853,3 +2853,48 @@ Run each check with `--settings <fresh test store>` and `--log <test file>`, nev
 #### TODO
 
 - [ ] Read the build time of each leg of the `native` CI job (Windows, Linux, macOS) on the `gpui-component-dep` PR. Done when every leg finishes inside `timeout-minutes: 30` with margin. Otherwise raise the timeout and record it in the "gpui-pre snapshot" entry of `docs/agents/native-app.md`.
+
+### Tooling: format JSON and YAML without node once the Tauri app is gone
+
+#### Background
+
+`mise run lint` and `mise run ci:local` (`tools/ci/local.sh`) run `vp check`,
+which formats JSON, YAML and TOML through oxfmt from `vite-plus`, so both need
+node and `pnpm install` even for a change that touches no frontend code (a
+plan's `.json`, a workflow `.yml`, a `Cargo.toml`). Once the Tauri app and
+`crates/app/ui` are removed, the only reason left for node in those checks is
+that formatting. A standalone Rust formatter installed through mise, such as
+dprint (its JSON, YAML and TOML plugins), would do the same without node.
+Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
+Files: `mise.toml` (`[tasks.lint]`, `[tasks.fmt]`), `vite.config.ts`
+(`fmt.ignorePatterns`), `tools/ci/local.sh` (`vp_extensions`, the
+`vp-check` check), `.github/workflows/ci.yml` (the `lint` job's node setup).
+
+#### TODO
+
+- [ ] When the Tauri app and `crates/app/ui` are removed, move the JSON / YAML
+      (and TOML) formatting from vp (oxfmt through pnpm) to a standalone
+      formatter installed through mise, such as dprint, carrying over
+      `vite.config.ts`'s ignore patterns, and drop node and pnpm from
+      `[tasks.lint]`, `[tasks.fmt]` and `tools/ci/local.sh`. Done when
+      `mise run lint` and `mise run ci:local` run with no node installed.
+
+### Agents: a cold Rust `ci:local` is moved to the background by the Bash tool after 180 s
+
+#### Background
+
+During Step 1 the Bash tool moved a foreground command to the background after
+about 180 s even with `timeout: 600000`, and the cold Rust `ci:local` runs hit
+this. `.claude/agents/implementer.md` (step 7) and
+`.claude/agents/local-review-addresser.md` tell the agent to run the check in
+the foreground so the exit code is observable, and say nothing about the run
+being backgrounded anyway.
+Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
+
+#### TODO
+
+- [ ] Reproduce the behavior once with a cold `ci:local`. If it holds, add to
+      both agent definitions that an exit code arriving as a task notification
+      is acceptable and is waited for, not retried, and that the rule is only
+      about not choosing `run_in_background` yourself. Done when both
+      definitions say what to do when the Bash tool backgrounds the run.

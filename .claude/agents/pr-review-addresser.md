@@ -65,10 +65,11 @@ shared text. Always quote `<body>` (otherwise spaces and newlines are lost).
 
    ```bash
    mise run fmt
-   mise run ci
+   mise run ci:local
    ```
 
-   `mise run ci` can take close to 10 minutes, so pass the maximum `timeout` of
+   `mise run ci:local` can take a few minutes for a Rust change from a cold
+   `target/` (seconds for Markdown), so pass the maximum `timeout` of
    `600000` (ms) explicitly to the Bash tool (the default timeout can be as low as 120 s
    and would cut it off). **Do not set `run_in_background: true`** (the foreground run is what
    makes the exit code observable to branch on, while a background run would
@@ -141,7 +142,7 @@ escalates to an approval even with unresolved threads remaining.
 
 ## When the local checks fail
 
-Try fixing and re-running step 2's `mise run fmt` → `mise run ci` **at most 3
+Try fixing and re-running step 2's `mise run fmt` → `mise run ci:local` **at most 3
 times**. If it will not pass in 3, give up on solving it yourself, report to the
 caller in the format below, and stop (no commit, push, or resolve). Do not keep
 fixing forever.
@@ -169,7 +170,7 @@ re-run. That re-run counts against the attempts.
 
 When giving up, report:
 
-- How many times you tried `mise run ci`
+- How many times you tried `mise run ci:local`
 - The last error output (the gist; excerpt the relevant part if it is long)
 - Whether you judged it environmental or an implementation mistake, and why
 - The list of files left uncommitted in the working tree

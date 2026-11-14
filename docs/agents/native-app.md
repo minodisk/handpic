@@ -192,11 +192,29 @@ separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
 as it does `riffle-core`. A dependency added to the backend also lands in
 `crates/native/Cargo.lock`, and clippy lints the backend only from the root.
 
-- Rule: check a backend change with both `mise run ci` and
-  `mise run native:check`. `mise run ci` runs only `lint` and `test` of the
-  root workspace, so it never covers `crates/native`. This holds for a change
-  to the app's identifier or to `native`'s own files (`datadir`, `logger`,
-  `settings`) as well as for a backend change.
+- Rule: a backend change needs both workspaces checked. `mise run ci` runs
+  only `lint` and `test` of the root workspace, so it never covers
+  `crates/native`. The agents run `mise run ci:local` locally
+  (`tools/ci/local.sh`), which checks only the changed crates: for a
+  `crates/core` or `crates/backend` change, clippy and the tests of that root
+  package plus the native clippy; for a `crates/native` change (the app's
+  identifier, `datadir`, `logger`, `settings` and the rest), the native clippy
+  and tests. The PR's `test` and `native` jobs, on all three platforms, run
+  the rest: the root workspace's other crates and the native tests a backend
+  change can break. Neither full task is run locally as a gate.
+- Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
+  workspace to be safe. `cargo clippy -p` / `cargo test -p` of `riffle-core`,
+  `riffle-backend` or `riffle-cli` never compiles `tauri` or `riffle-app` (their
+  graphs are 161 / 317 / 169 crates against 537 for `riffle-app`). The
+  largest check's process-tree peak was 5.5 GB (the native test) and a cold
+  `crates/core` change peaked at 3.3 GB, so the earlier out-of-memory kills
+  came from the full root workspace, not from `ci:local`. The selected root
+  packages go to one `cargo clippy` and one `cargo test` call (a `--package`
+  each), because three separate cold calls for every check at once took 594 s,
+  at the Bash tool's 600 s limit, against 382 s in one call. Cold wall times:
+  Markdown or frontend only under 10 s, `crates/cli` 66 s,
+  `crates/native` 154 s, `crates/backend` 199 s, `crates/core` 265 s. Source:
+  `docs/plans/_archived/20261114-light-local-ci/learnings.md`, Step 1.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.

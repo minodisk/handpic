@@ -56,7 +56,9 @@ workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
 `mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
 the repository root never sees it. It depends on `crates/backend`, the
 Tauri-free library shared with `crates/app` and a member of the root workspace,
-so a backend change is checked by both `mise run ci` and `mise run native:check`.
+so a backend change is checked by both `mise run ci` and `mise run native:check`
+(or, as the agents do, by `mise run ci:local` and the PR's checks; see
+[Checks](#checks)).
 
 NASM is a hard prerequisite on x86 and x86_64: the crate's `build.rs` fails
 without it. `mozjpeg-sys` otherwise falls back to a build without SIMD with
@@ -90,6 +92,24 @@ the formatting check of the crate is part of `mise run lint`.
 - Frontend tests run with `pnpm exec vp test` (`pnpm exec vp test watch` while
   developing); `mise run test` runs them once.
 - `mise run ci` runs both, as CI does. Node 24 comes from `mise install`.
+- `mise run ci:local` is the light check the agents run before every commit or
+  push (`tools/ci/local.sh`). It selects each check from the branch's changed
+  paths: the working tree against `git merge-base HEAD origin/main`, committed
+  and uncommitted, plus untracked files, with no fetch. A Markdown-only change
+  runs only the offline `lychee` check (also run when a file was deleted or
+  renamed); a frontend, JSON, YAML or TOML change runs `vp check`; a changed
+  shell script is shellchecked, a workflow change runs `actionlint`, and a bash
+  test runs when its script changed. A Rust change runs the `cargo fmt` check
+  of its workspace and `cargo clippy -p` / `cargo test -p` of only the changed
+  root packages (`riffle-core`, `riffle-backend`, `riffle-cli`; the root
+  `Cargo.toml` / `Cargo.lock` count as all three), the native clippy for a
+  `crates/native`, `crates/core` or `crates/backend` change, and the native
+  tests for a `crates/native` change. A change to `mise.toml` or
+  `.shellcheckrc`, or a missing merge base, runs every check. It prints what it
+  selected and what it left out. It never builds the Tauri crate
+  (`riffle-app`) or runs the frontend tests, and does not test the crates that
+  depend on a changed one: the PR's `lint`, `test` (three platforms) and
+  `native` jobs cover those.
 
 ## Adding a Lightroom label preset language
 

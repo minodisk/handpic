@@ -71,12 +71,13 @@ pnpm install --frozen-lockfile
 pnpm exec vp check
 cargo fmt --all -- --check
 cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
-shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh
+shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh
 bash .claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 bash .claude/skills/merge-settings/scripts/merge.test.sh
+bash tools/ci/local.test.sh
 """
 
 [tasks.test]
@@ -132,4 +133,12 @@ run = """
 set -euo pipefail
 mise run lint
 mise run test
+"""
+
+[tasks."ci:local"]
+description = "Run only the checks the branch's changed paths call for (never the Tauri crate or the frontend tests); GitHub Actions runs the rest"
+shell = "bash -c"
+run = """
+set -euo pipefail
+bash tools/ci/local.sh
 """

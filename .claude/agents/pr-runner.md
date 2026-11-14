@@ -52,7 +52,7 @@ mise run fmt
 ```
 
 **Settle fmt before the commit.** Leave fmt until after and the diff it produces
-stays uncommitted in the working tree; the local `mise run ci` passes because it
+stays uncommitted in the working tree; the local `mise run ci:local` passes because it
 sees the formatted tree, while the commit that gets pushed is unformatted, so
 **only the fmt check on GitHub fails** (the same reason and the same order as
 the platform-specific `commit-push` implementation).
@@ -88,10 +88,11 @@ push, so do not use CI as your safety net. fmt is already done in 1, so run only
 ci here.
 
 ```bash
-mise run ci
+mise run ci:local
 ```
 
-`mise run ci` can take close to 10 minutes, so pass the maximum `timeout` of
+`mise run ci:local` can take a few minutes for a Rust change from a cold
+`target/` (seconds for Markdown), so pass the maximum `timeout` of
 `600000` (ms) explicitly to the Bash tool (the default timeout can be as low as 120 s
 and would cut it off). **Do not set `run_in_background: true`** — same reason as the waiting in
 §4: the foreground run is what makes the exit code observable to branch on,
@@ -100,19 +101,19 @@ while a background run would hand the watching to a task notification.
 **On a failure, do not read the log and fix it yourself.** The log flowing into
 `pr-runner`'s context is unavoidable, but **do not read its content; judge on
 the exit code alone**. Start `pr-check-fixer` with `run_in_background: false`,
-telling it "local CI (`mise run ci`) is failing; there is no run ID", then end
+telling it "local CI (`mise run ci:local`) is failing; there is no run ID", then end
 your turn and wait for its hand-back (see "Dispatching a child and waiting for
 its hand-back").
 
 Branch on its return value. This retry runs **at most 3 times**.
 
-- `FIXED` or `NOT_FIXABLE`: re-run `mise run ci` to check, and return to the
+- `FIXED` or `NOT_FIXABLE`: re-run `mise run ci:local` to check, and return to the
   loop (if it still will not pass in 3, return `aborted`, reason:
   `local_ci_failure`)
 - `LOCAL_CHECK_FAILED`: the child used up its own limit (3) and gave up.
   **Return `aborted` (reason: `local_ci_failure`) immediately without
   re-dispatching**, attaching the child's give-up report verbatim (so the
-  child's 3 and your 3 do not multiply into running `mise run ci` up to 9 times)
+  child's 3 and your 3 do not multiply into running `mise run ci:local` up to 9 times)
 
 Once it passes, push. Add `-u` when there is no upstream.
 
@@ -544,7 +545,7 @@ Report to the caller:
 
 - The shared text's platform commands map to these execution paths:
   - `commit-push`: `bash .claude/skills/develop/scripts/commit-push.sh` (runs
-    `mise run ci` inside; pass the Bash tool's `timeout: 600000`)
+    `mise run ci:local` inside; pass the Bash tool's `timeout: 600000`)
   - `create-pr`: `bash .claude/skills/pr/scripts/create-pr.sh`
   - `wait-pr-actionable`: `bash .claude/skills/pr/scripts/wait-pr-actionable.sh`
     (pass the Bash tool's `timeout: 600000`)

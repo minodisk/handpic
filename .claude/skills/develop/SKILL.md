@@ -95,10 +95,10 @@ must contain:
   message**. By contract, `pr-runner` returns `aborted`
   (`missing_commit_message`) when there is a diff but no message
 
-`pr-runner` takes care of `mise run fmt` → commit → `mise run ci` → push → PR
+`pr-runner` takes care of `mise run fmt` → commit → `mise run ci:local` → push → PR
 creation → watching checks → resolving conflicts, fixing CI failures, and
 addressing review feedback. **The main agent never calls `commit-push.sh`**
-(concentrating commits in `pr-runner` means the full CI runs once, and CI
+(concentrating commits in `pr-runner` means the local check runs once, and CI
 failures are handled in exactly one place). Neither CI logs nor diffs reach the
 main agent.
 
@@ -291,7 +291,7 @@ Write `planner`'s output (the full plan.md) to `{plan-dir}/plan.md` **with the
 reformatting is needed.
 
 **Do not commit here.** The commit happens in 1.3, by `pr-runner`, after it runs
-`mise run fmt`, and `mise run ci` runs afterwards.
+`mise run fmt`, and `mise run ci:local` runs afterwards.
 
 Record the in-flight plan path in auto memory (`MEMORY.md`) — auto memory is a
 user settings file outside the repository, so it is not under git:

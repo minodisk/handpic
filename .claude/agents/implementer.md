@@ -60,10 +60,20 @@ You are given:
    learnings.md updates are verified too, which means always after the Markdown
    updates):
    - Formatting: `mise run fmt`
-   - Everything: `mise run ci`
-   - `mise run ci` can take close to 10 minutes, so pass the maximum `timeout`
-     of `600000` (ms) explicitly to the Bash tool (the default timeout
-     can be as low as 120 s and would cut it off). **Do not set `run_in_background: true`** (the foreground
+   - The checks: `mise run ci:local`. It runs only what the branch's changed
+     paths call for (`tools/ci/local.sh`): the link check for Markdown,
+     `vp check` for the frontend, clippy and the tests of the changed crates. It
+     never builds the Tauri crate or runs the frontend tests, and it does not
+     test the crates that depend on a changed one; the PR's GitHub checks run
+     all of that
+   - A plan's Done-when that names `mise run ci` or `mise run native:check`
+     is met by `mise run ci:local` passing here and the PR's GitHub checks
+     passing. Run neither full task locally as a gate (the full root
+     workspace build has run this host out of memory)
+   - `mise run ci:local` takes seconds for Markdown but can take a few
+     minutes for a Rust change from a cold `target/`, so pass the maximum
+     `timeout` of `600000` (ms) explicitly to the Bash tool (the default
+     timeout can be as low as 120 s and would cut it off). **Do not set `run_in_background: true`** (the foreground
      run is what makes the exit code observable to branch on, while a
      background run would hand the watching to a task notification)
 8. `git add` **only the files this step actually changed** (the implementation
@@ -77,7 +87,7 @@ You are given:
 
 ## When the local checks fail
 
-Try fixing and re-running `mise run fmt` → `mise run ci` **at most 3 times**. If
+Try fixing and re-running `mise run fmt` → `mise run ci:local` **at most 3 times**. If
 it will not pass in 3, give up on solving it yourself, report to the caller in
 the format below, and stop (without committing). Do not keep fixing forever.
 
@@ -104,7 +114,7 @@ re-run. That re-run counts against the attempts.
 
 When giving up, report:
 
-- How many times you tried `mise run ci`
+- How many times you tried `mise run ci:local`
 - The last error output (the gist; excerpt the relevant part if it is long)
 - Whether you judged it environmental or an implementation mistake, and why
 - What you tried along the way (if anything)
