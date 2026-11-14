@@ -459,7 +459,7 @@ folder operation.
       notes (`write_failed`, cleared by the next open as the Tauri `errors`
       are). The one event variant Step 3 left out is
       `Event::FolderOp(folderops::Message)`.
-- [ ] Step 5: Import…
+- [x] Step 5: Import…
   - Done when:
     - `crates/native/src/import.rs` is a port of `import.ts` with
       `import.test.ts`'s cases: `size_text`, `total_line`, `folder_rows`,
@@ -519,6 +519,15 @@ folder operation.
     - The app's quit sets the run's cancel flag; a file in flight is dropped
       under its `TEMP_SUFFIX` name as in the Tauri app. Record what a quit
       mid-run leaves behind.
+    - As landed: `ImportFlow` keeps no `dir` and its `started` only says
+      whether the dialog steps aside (no early `done`, no cancel to pass on:
+      the run id is handed out by `run`). The shared dialog's `Content`
+      gained `lists` (a heading and its items after the rows) for the
+      collisions and the undated files. `open_from_tree` now returns the
+      open's `Task`, which the import awaits before reporting; a fresh
+      listing clears the import's result line (`FolderOps::clear_imported`)
+      as the Tauri open clears `imported`. `failure_text` is test-only: the
+      pane words a failure the same way through `write_failed`.
 - [ ] Step 6: Rename by Capture Date…, and what follows a folder rename
   - Done when:
     - `crates/native/src/datefolder.rs` is a port of `datefolder.ts` with
@@ -734,3 +743,4 @@ folder operation.
 (2026-11-14) Step 2 complete
 (2026-11-14) Step 3 complete
 (2026-11-14) Step 4 complete
+(2026-11-14) Step 5 complete

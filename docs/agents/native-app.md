@@ -1797,9 +1797,10 @@ leaves it there.
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 
 The tree menu's folder operations (so far `Rewrite Sidecars from Index…`,
-`Delete Sidecars…` and `Sequence JPEG Timestamps…`) open one dialog,
+`Delete Sidecars…`, `Sequence JPEG Timestamps…` and `Import…`) open one dialog,
 `dialog::Dialog`: its `Content` (title, lines, rows, each with an optional
-accent part and a muted flag, notes, errors, reason, running note), the run
+accent part and a muted flag, headed lists after the rows, notes, errors,
+reason, running note), the run
 button's label and `Style` (primary or destructive), and which enabled button
 has the focus (the run button, or Cancel when the run is disabled). A run
 that cannot be canceled disables both buttons (`set_running`); a cancelable
@@ -1842,6 +1843,26 @@ the menu arm, the key guard, the render child and the gate's `Held` variant.
   ended run is dropped; the result comes back through a `oneshot` awaited by
   `cx.spawn`. The quit sets the flag through a `cx.on_app_quit` subscription
   kept only while the run is under way, and waits for nothing.
+- Rule: `Import…` has the sequencer's shape (no gate, no scan, no index,
+  no open folder needed; a `std::thread`, an `AtomicBool`, the quit's
+  subscription), reads the root and the pattern from `Settings` (never
+  writing them) and keeps the previewed `Plan` in `FolderOps`, so the run
+  copies what the dialog showed. The thread sends the created folders
+  through one `oneshot`, then the result through another, both awaited in
+  order by one `cx.spawn`: the first folder opens through `open_from_tree`
+  (which returns the open's `Task`), and the report waits for that task,
+  since a fresh listing clears `write_errors` and the import's result line.
+  Progress is sent only when the copied count changes, not per buffer. The
+  dialog steps aside (`FolderOps::aside`) once the folders exist, `Import…`
+  brings it back, Escape on it steps aside again and Cancel cancels. While
+  the flow is busy, `FolderOps::busy` keeps the settings, the trash dialog
+  and the other folder flows shut, as `importFlow.busy` does in the Tauri
+  app; `import_busy` is the flag the folder rename refuses on.
+- Rule: a quit mid-import sets the flag and waits for nothing: the copy
+  removes the temp file of the file in flight when it sees the flag, but a
+  process that exits first can leave that file under its `.handpic-tmp` name in
+  the destination; the files already copied stay, and a second import skips
+  them by name and size.
 - Not verified headless: the dialog, its keys and the runs; the hand checks
   are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 

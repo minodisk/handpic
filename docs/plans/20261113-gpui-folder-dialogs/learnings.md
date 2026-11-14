@@ -121,6 +121,40 @@
   `failureText` words it, and which the next folder open clears, as the
   Tauri `errors.clear()` does.
 
+## Step 5: Import…
+
+- The settings plan had fully landed: `Settings::import_root` /
+  `import_pattern` were already read with the backend's `root_setting` /
+  `pattern_setting` and kept current by the settings modal's `Change`
+  events, so the import only reads them when it starts.
+- Ordering: the thread sends the created folders through one `oneshot` and
+  the result through a second; one `cx.spawn` awaits them in that order, so
+  the run's end can never be handled before its start, which is why the
+  Tauri flow's early `done` is not ported. The open of the first folder is
+  `open_from_tree`, changed to return the open's `Task` (its two callers
+  detach it), and the report awaits it: the native open's non-carry listing
+  clears `write_errors`, as the Tauri open clears `errors`, so reporting
+  first would wipe the run's failures.
+- `run_plan`'s progress callback fires per buffer written; the thread sends
+  a message only when `files_done` changes, so the channel carries one
+  message per file.
+- `FolderOps::busy` now includes the import for its whole run, dialog aside
+  or not, which shuts the settings modal, the trash dialog and the other
+  folder flows meanwhile, as `importFlow.busy` does in `main.ts`.
+  `import_busy` is the flag Step 7's rename refuses on.
+- A quit mid-import sets the cancel flag and waits for nothing. The copy
+  deletes the in-flight temp file when it sees the flag, but if the process
+  exits first the file can stay under its `.handpic-tmp` name in the
+  destination folder; the files copied before stay and a second import skips
+  them by name and size. The same holds for the Tauri app.
+- Python's text-mode write on Windows turned edited files' line endings to
+  CRLF; write with `newline=''`. `plan.md` was CRLF in this worktree before
+  the step (git normalizes it, so it showed no diff).
+- Checks run per the caller's memory constraint (no root `mise run ci`):
+  `mise run fmt`, and in `crates/native` `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings`, `cargo test` (756 passed). The backend was
+  not touched.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 3, Windows, the user's).** Basis: Step 3's
@@ -207,3 +241,47 @@
      covers the window) and `Ctrl+,` does not open the settings; a second
      `Sequence JPEG Timestamps…` right after the first (before its dialog
      opens) does nothing.
+- **Pending manual check (Step 5, Windows, the user's).** Basis: Step 5's
+  Done-when; the dialog, the run's progress, the open of the first date
+  folder, the reopen and the cancel cannot be driven headless. The step's
+  checkbox was ticked on the automated criteria (`import.rs`, `context.rs`
+  and `dialog.rs` tests, `cargo clippy`, `cargo test` in `crates/native`).
+  Setup, only under `D:\Photos\tests\20261113-gpui-folder-dialogs\`:
+  - Copy into `...\import-src\` RAWs shot on two dates, a few with a `.xmp`
+    and a `.dop` next to them, a few JPEGs of those dates, and one file with
+    no capture date (e.g. a JPEG stripped of its Exif) as `undated.jpg`.
+  - Write `...\settings-step5.json` holding
+    `{"importRoot": "D:\\Photos\\tests\\20261113-gpui-folder-dialogs\\import-dst"}`
+    and `...\settings-step5-noroot.json` holding `{}`.
+  - `cargo build` in `crates/native` (rename a locked `riffle-native.exe`
+    aside, never kill it). Delete `index-step5.sqlite` and
+    `settings-step5.sqlite` first, then run
+    `crates\native\target\debug\riffle-native.exe D:\Photos\tests\20261113-gpui-folder-dialogs\import-src --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step5.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.sqlite --import-settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.json --log D:\Photos\tests\20261113-gpui-folder-dialogs\step5.log`.
+
+  Steps and expected results:
+  1. Right-click `import-src`: `Import…` is enabled. Pick it: the pane shows
+     `reading …\import-src…`, then the dialog: `Source: …\import-src`,
+     `n files (… MB) to copy into 2 folders`, one row per date folder
+     (`…\import-dst\YYYY\YYYY-MM-DD  k files, … MB`), and under `Without a
+     capture date, not copied:` the undated file. `Run` is outlined; Tab
+     moves to `Cancel`; Escape closes it.
+  2. Again, then `Run`: the first date folder opens in the strip and the
+     tree, the dialog steps aside, the pane shows `importing n / m` counting
+     up while the strip fills; at the end the pane shows `Imported n files
+     (… MB)` and the strip holds every copied RAW.
+  3. With a larger source (or a slow disk), during a run pick `Import…` again
+     from any folder: the dialog comes back with `Cancel` focused and the
+     running note; Escape hides it and the run goes on; `Import…` again, then
+     `Cancel`: the run stops, the dialog closes, the pane says `Import
+     canceled, k files copied`; no `.handpic-tmp` file is left.
+  4. `Import…` on `import-src` again: the note says `Nothing left to copy:
+     every dated file is already there.` and `Run` is dimmed.
+  5. Replace one copied file in `import-dst` with another file of a different
+     size under the same name, then `Import…`: it is listed under `Already
+     at the destination with another size, not copied:` as `NAME  in
+     YYYY-MM-DD`.
+  6. Quit, delete `settings-step5.sqlite`, and launch again with
+     `--import-settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5-noroot.json`:
+     `Import…` shows `the destination folder is not set (Settings > Import)`
+     and `Run` is dimmed.
+  7. `step5.log` holds one `import: files=… bytes=… mb_per_s=…` line per run.
