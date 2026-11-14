@@ -2,7 +2,8 @@
 //! way, the one-flow-at-a-time rule, the shared confirmation dialog
 //! (`dialog.rs`) and its drawing, and the dispatch of a folder menu action.
 //! So far `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-//! (`sidecars.rs`) and `Sequence JPEG Timestamps…` (`sequence.rs`); the
+//! (`sidecars.rs`), `Sequence JPEG Timestamps…` (`sequence.rs`) and
+//! `Import…` (`import.rs`); the
 //! window's view keeps one `FolderOps`, and this module adds to its `impl`,
 //! as a child module reaches its private fields.
 
@@ -13,11 +14,12 @@ use std::time::Instant;
 
 use futures::channel::oneshot;
 use gpui::{
-    AnyElement, ClickEvent, Context, FontWeight, HighlightStyle, StyledText, Subscription,
+    AnyElement, ClickEvent, Context, FontWeight, HighlightStyle, StyledText, Subscription, Task,
     deferred, div, prelude::*, px, relative, rgb, rgba,
 };
 use riffle_backend::{
     foldersidecars::{self, DeletePreview, Preview, Summary},
+    import::{self as importer, ImportSettings, Plan, Ran as Imported},
     listing::canonicalize,
     sequence::{self as sequencer, Ran as Sequenced},
     sidecar,
@@ -26,6 +28,7 @@ use riffle_backend::{
 };
 
 use crate::dialog::{self, Button, Content, Dialog, Row, Style};
+use crate::import::{self, ImportFlow};
 use crate::judgment::State;
 use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
@@ -48,12 +51,35 @@ pub struct FolderOps {
     sequence_cancel: Option<Arc<AtomicBool>>,
     sequence_quit: Option<Subscription>,
     sequencing: Option<String>,
+    import: ImportFlow,
+    /// The plan the import dialog shows, which its run copies.
+    import_plan: Option<ImportPlan>,
+    import_previews: u64,
+    /// The import dialog while its run goes on with the dialog aside.
+    aside: Option<Dialog>,
+    import_cancel: Option<Arc<AtomicBool>>,
+    import_quit: Option<Subscription>,
+    /// The import's reading or progress note, then its result, which stays
+    /// until the next open of a folder or import.
+    importing: Option<String>,
+    imported: Option<String>,
 }
 
 impl FolderOps {
     /// A folder flow is under way, from its preview to its run's end.
     pub fn busy(&self) -> bool {
-        self.sidecars.busy() || self.sequence.busy()
+        self.sidecars.busy() || self.sequence.busy() || self.import_busy()
+    }
+
+    /// An import is under way, its dialog shown or not; a folder rename is
+    /// refused meanwhile.
+    pub fn import_busy(&self) -> bool {
+        self.import.busy()
+    }
+
+    /// A folder was opened afresh: the last import's result goes.
+    pub fn clear_imported(&mut self) {
+        self.imported = None;
     }
 
     pub fn dialog_open(&self) -> bool {
@@ -62,7 +88,10 @@ impl FolderOps {
 
     /// The pane's note of a run under way.
     pub fn note(&self) -> Option<String> {
-        self.sequencing.clone()
+        self.sequencing
+            .clone()
+            .or_else(|| self.importing.clone())
+            .or_else(|| self.imported.clone())
     }
 }
 
@@ -72,6 +101,17 @@ impl FolderOps {
 pub enum Message {
     /// How far the sequencing run `run` got.
     SequenceProgress { run: u64, done: usize, total: usize },
+    /// How many files the import run `run` has copied.
+    ImportProgress { run: u64, done: usize, total: usize },
+}
+
+/// A previewed import: its id, the source and the destination root the run's
+/// log line names, and the plan.
+struct ImportPlan {
+    id: u64,
+    source: String,
+    root: String,
+    plan: Plan,
 }
 
 /// What a sidecar preview read.
@@ -108,6 +148,7 @@ impl Riffle {
             context::Action::RewriteSidecars => Kind::Rewrite,
             context::Action::DeleteSidecars => Kind::Delete,
             context::Action::SequenceTimestamps => return self.start_sequence(path, cx),
+            context::Action::ImportFolder => return self.start_import(path, cx),
             _ => return,
         };
         self.request_sidecars(Target { kind, dir: path }, cx);
@@ -135,6 +176,7 @@ impl Riffle {
         if self.settings_view.read(cx).is_open()
             || self.trash.busy()
             || self.folderops.sequence.busy()
+            || self.folderops.import.busy()
             || !self.folderops.sidecars.start(target.clone())
         {
             return;
@@ -362,6 +404,7 @@ impl Riffle {
         if self.settings_view.read(cx).is_open()
             || self.trash.busy()
             || self.folderops.sidecars.busy()
+            || self.folderops.import.busy()
             || !self.folderops.sequence.start(dir.clone())
         {
             return;
@@ -516,6 +559,254 @@ impl Riffle {
         cx.notify();
     }
 
+    /// `Import…`: while a run is under way with its dialog aside, show the
+    /// dialog again; else plan the import of every photo under `dir` into
+    /// the import settings' root and pattern on a background task, the
+    /// pane saying it reads meanwhile. It neither waits for a scan nor
+    /// touches the index, and needs no open folder. Nothing starts while the
+    /// settings, the trash dialog or another folder flow is open or busy.
+    fn start_import(&mut self, dir: String, cx: &mut Context<Self>) {
+        if self.settings_view.read(cx).is_open()
+            || self.trash.busy()
+            || self.folderops.sidecars.busy()
+            || self.folderops.sequence.busy()
+        {
+            return;
+        }
+        if self.folderops.import.reopen() {
+            self.menus.close();
+            self.context.close();
+            self.folderops.dialog = self.folderops.aside.take();
+            cx.notify();
+            return;
+        }
+        if !self.folderops.import.start() {
+            return;
+        }
+        self.folderops.imported = None;
+        self.folderops.importing = Some(format!("reading {dir}…"));
+        self.folderops.import_previews += 1;
+        let id = self.folderops.import_previews;
+        let settings = ImportSettings {
+            root: self.settings.import_root.clone(),
+            pattern: self.settings.import_pattern.clone(),
+        };
+        cx.spawn(async move |this, cx| {
+            let read = dir.clone();
+            let previewed = cx
+                .background_spawn(async move {
+                    let source = canonicalize(&read);
+                    if let Some(reason) = importer::refusal(&settings) {
+                        let empty = Plan {
+                            destinations: Vec::new(),
+                            undated: Vec::new(),
+                        };
+                        let mut preview = importer::summarize(None, source, &empty);
+                        preview.refusal = Some(reason);
+                        return Ok((preview, None));
+                    }
+                    let plan = importer::plan_dir(Path::new(&source), &settings)?;
+                    let preview = importer::summarize(Some(id), source.clone(), &plan);
+                    Ok((
+                        preview,
+                        Some(ImportPlan {
+                            id,
+                            source,
+                            root: settings.root,
+                            plan,
+                        }),
+                    ))
+                })
+                .await;
+            this.update(cx, |this, cx| this.import_previewed(dir, previewed, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The plan came back: its dialog opens, the plan kept for the run, or
+    /// the failure goes to the pane's notes keyed by the folder and the flow
+    /// ends.
+    fn import_previewed(
+        &mut self,
+        dir: String,
+        previewed: Result<(importer::Preview, Option<ImportPlan>), String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.folderops.importing = None;
+        match previewed {
+            Ok((preview, plan)) if self.folderops.import.previewed(preview.id) => {
+                let mut lines = vec![format!("Source: {}", preview.source)];
+                if preview.refusal.is_none() {
+                    lines.push(import::total_line(&preview));
+                }
+                let content = Content {
+                    title: "Import".to_owned(),
+                    lines,
+                    rows: rows(import::folder_rows(&preview)),
+                    lists: vec![
+                        (
+                            import::COLLISIONS_HEADING.to_owned(),
+                            import::collision_items(&preview),
+                        ),
+                        (import::UNDATED_HEADING.to_owned(), preview.undated.clone()),
+                    ],
+                    notes: import::import_note(&preview).into_iter().collect(),
+                    running_note: import::RUNNING_NOTE.to_owned(),
+                    ..Content::default()
+                };
+                self.menus.close();
+                self.context.close();
+                self.folderops.import_plan = plan;
+                self.folderops.dialog = Some(Dialog::new(
+                    content,
+                    "Run",
+                    Style::Primary,
+                    import::can_run(&preview),
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.folderops.import.fail();
+                self.write_failed(dir, e);
+            }
+        }
+        cx.notify();
+    }
+
+    /// The run button: a thread of its own creates the destination folders,
+    /// then copies the plan the dialog showed with a cancel flag, its
+    /// progress through the view's channel tagged with its id. Once the
+    /// folders exist the first opens as a click in the tree opens it and the
+    /// dialog steps aside; the run's report waits for that open, which
+    /// clears the notes. The app's quit only sets the flag.
+    fn run_import(&mut self, cx: &mut Context<Self>) {
+        let Some((preview, run)) = self.folderops.import.run() else {
+            return;
+        };
+        let Some(ImportPlan {
+            source, root, plan, ..
+        }) = self
+            .folderops
+            .import_plan
+            .take()
+            .filter(|plan| plan.id == preview)
+        else {
+            self.folderops.import.fail();
+            self.folderops.dialog = None;
+            return;
+        };
+        if let Some(dialog) = &mut self.folderops.dialog {
+            dialog.set_running_cancelable();
+        }
+        self.folderops.importing = Some(import::progress_status(0, 0));
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.folderops.import_cancel = Some(cancel.clone());
+        self.folderops.import_quit = Some({
+            let cancel = cancel.clone();
+            cx.on_app_quit(move |_, _| {
+                cancel.store(true, Ordering::Relaxed);
+                async {}
+            })
+        });
+        let events = self.events.clone();
+        let (folders_sent, folders) = oneshot::channel();
+        let (reply, ran) = oneshot::channel();
+        let from = source.clone();
+        std::thread::spawn(move || {
+            let prepared = importer::prepare(&plan);
+            let _ = folders_sent.send(prepared.folders.clone());
+            let mut last = None;
+            let ran = importer::run_plan(prepared, &cancel, |p, _| {
+                if last != Some(p.files_done) {
+                    last = Some(p.files_done);
+                    let _ = events.unbounded_send(Event::FolderOp(Message::ImportProgress {
+                        run,
+                        done: p.files_done,
+                        total: p.files_total,
+                    }));
+                }
+            });
+            log::info!("{}", importer::log_line(&from, &root, &ran));
+            let _ = reply.send(ran);
+        });
+        cx.spawn(async move |this, cx| {
+            let opening = match folders.await {
+                Ok(folders) => this
+                    .update(cx, |this, cx| this.import_started(run, &folders, cx))
+                    .ok()
+                    .flatten(),
+                Err(_) => None,
+            };
+            if let Some(opening) = opening {
+                opening.await;
+            }
+            let ran = ran.await.unwrap_or_else(|_| Imported {
+                copied: 0,
+                skipped: 0,
+                failed: vec![importer::Failure {
+                    path: source,
+                    message: "the import stopped unexpectedly".to_owned(),
+                }],
+                canceled: false,
+                bytes: 0,
+                elapsed_ms: 0,
+                folders: Vec::new(),
+            });
+            this.update(cx, |this, cx| this.import_ran(run, ran, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The run `run` created its destination `folders`: its dialog steps
+    /// aside unless a cancel was asked for, and the first folder opens.
+    fn import_started(
+        &mut self,
+        run: u64,
+        folders: &[String],
+        cx: &mut Context<Self>,
+    ) -> Option<Task<()>> {
+        if !self.folderops.import.accepts(run) {
+            return None;
+        }
+        if self.folderops.import.started(run) {
+            self.folderops.aside = self.folderops.dialog.take();
+        }
+        cx.notify();
+        let first = folders.first()?;
+        Some(self.open_from_tree(first.clone(), cx))
+    }
+
+    /// The run `run` ended: the dialog closes, the failures go to the notes,
+    /// the result stays in them, and the open folder is re-listed when it is
+    /// one of the run's, so a file that landed before its watch was set
+    /// shows.
+    fn import_ran(&mut self, run: u64, ran: Imported, cx: &mut Context<Self>) {
+        if !self.folderops.import.done(run) {
+            return;
+        }
+        self.folderops.dialog = None;
+        self.folderops.aside = None;
+        self.folderops.importing = None;
+        self.folderops.import_cancel = None;
+        self.folderops.import_quit = None;
+        for failure in &ran.failed {
+            self.write_failed(failure.path.clone(), failure.message.clone());
+        }
+        self.folderops.imported = Some(import::done_status(&ran));
+        let opens = self
+            .dir
+            .as_deref()
+            .is_some_and(|dir| trash::opens_target(dir, &ran.folders, IGNORE_CASE));
+        if opens && self.resync.changed() {
+            self.relist(cx);
+        }
+        cx.notify();
+    }
+
     /// A message of a folder operation's run; one of an ended run is
     /// dropped.
     pub(crate) fn folder_op_message(&mut self, message: Message, cx: &mut Context<Self>) {
@@ -526,11 +817,33 @@ impl Riffle {
                     cx.notify();
                 }
             }
+            Message::ImportProgress { run, done, total } => {
+                if self.folderops.import.accepts(run) {
+                    self.folderops.importing = Some(import::progress_status(done, total));
+                    cx.notify();
+                }
+            }
         }
     }
 
-    fn dismiss_folder_dialog(&mut self, cx: &mut Context<Self>) {
-        if self.folderops.sequence.is_open() {
+    /// The dialog's Cancel, or Escape when `key`.
+    fn dismiss_folder_dialog(&mut self, key: bool, cx: &mut Context<Self>) {
+        if self.folderops.import.is_open() {
+            match self.folderops.import.dismiss(key) {
+                import::Dismiss::Close => {
+                    self.folderops.dialog = None;
+                    self.folderops.import_plan = None;
+                }
+                import::Dismiss::Aside => self.folderops.aside = self.folderops.dialog.take(),
+                import::Dismiss::Cancel => {
+                    if let Some(cancel) = &self.folderops.import_cancel {
+                        cancel.store(true, Ordering::Relaxed);
+                    }
+                }
+                import::Dismiss::None => {}
+            }
+            cx.notify();
+        } else if self.folderops.sequence.is_open() {
             match self.folderops.sequence.dismiss() {
                 sequence::Dismiss::Close => self.folderops.dialog = None,
                 sequence::Dismiss::Cancel => {
@@ -549,10 +862,11 @@ impl Riffle {
 
     fn press_folder_dialog(&mut self, button: Button, cx: &mut Context<Self>) {
         match button {
+            Button::Run if self.folderops.import.is_open() => self.run_import(cx),
             Button::Run if self.folderops.sequence.is_open() => self.run_sequence(cx),
             Button::Run if self.folderops.sidecars.is_open() => self.run_sidecars(cx),
             Button::Run => {}
-            Button::Cancel => self.dismiss_folder_dialog(cx),
+            Button::Cancel => self.dismiss_folder_dialog(false, cx),
         }
     }
 
@@ -562,7 +876,7 @@ impl Riffle {
             return;
         };
         match dialog.key(name) {
-            dialog::Key::Dismiss => self.dismiss_folder_dialog(cx),
+            dialog::Key::Dismiss => self.dismiss_folder_dialog(true, cx),
             dialog::Key::Press(button) => self.press_folder_dialog(button, cx),
             dialog::Key::Swallow => cx.notify(),
         }
@@ -609,6 +923,8 @@ impl Riffle {
                 }))
         };
         let muted = |text: &String| div().text_color(rgb(MUTED_COLOR)).child(text.clone());
+        let lists_empty =
+            content.rows.is_empty() && content.lists.iter().all(|(_, items)| items.is_empty());
         Some(
             deferred(
                 div()
@@ -647,7 +963,7 @@ impl Riffle {
                                     .child(content.title.clone()),
                             )
                             .children(content.lines.iter().map(|line| div().child(line.clone())))
-                            .when(!content.rows.is_empty(), |d| {
+                            .when(!lists_empty, |d| {
                                 d.child(
                                     div()
                                         .id("folder-dialog-rows")
@@ -671,7 +987,23 @@ impl Riffle {
                                                             },
                                                         )]),
                                                 )
-                                        })),
+                                        }))
+                                        .children(
+                                            content
+                                                .lists
+                                                .iter()
+                                                .filter(|(_, items)| !items.is_empty())
+                                                .map(|(heading, items)| {
+                                                    div()
+                                                        .flex()
+                                                        .flex_col()
+                                                        .pt_2()
+                                                        .child(heading.clone())
+                                                        .children(items.iter().map(|item| {
+                                                            div().child(format!("\u{2022} {item}"))
+                                                        }))
+                                                }),
+                                        ),
                                 )
                             })
                             .children(content.notes.iter().map(|note| div().child(note.clone())))

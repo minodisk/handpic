@@ -13,6 +13,7 @@ mod folderops;
 mod history;
 mod hold;
 mod idle;
+mod import;
 mod judgment;
 mod keys;
 mod logger;
@@ -850,10 +851,10 @@ impl Riffle {
         self.opens.load(Ordering::SeqCst)
     }
 
-    /// A click on a folder's name in the tree: open it whole, without the
-    /// command line's `--size` / `--max`.
-    fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) {
-        self.open(PathBuf::from(path), None, None, cx).detach();
+    /// A click on a folder's name in the tree, or an import's first folder:
+    /// open it whole, without the command line's `--size` / `--max`.
+    fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) -> Task<()> {
+        self.open(PathBuf::from(path), None, None, cx)
     }
 
     /// `open`: the OS folder picker, its folder opened as a click in the
@@ -1648,7 +1649,7 @@ impl Riffle {
                 Some(TreeCommand::Expand(path) | TreeCommand::Collapse(path)) => {
                     self.tree_toggle(path, cx);
                 }
-                Some(TreeCommand::Open(path)) => self.open_from_tree(path, cx),
+                Some(TreeCommand::Open(path)) => self.open_from_tree(path, cx).detach(),
                 None => {}
             }
         } else if let Some(typed) = keys::typed_char(keystroke) {
@@ -2105,6 +2106,7 @@ impl Riffle {
             self.undo.drop_judgments();
             self.step_note = None;
             self.write_errors.clear();
+            self.folderops.clear_imported();
             self.filter.clear_exif();
             self.kept_anchor.clear();
             self.set_entries(entries);
@@ -3816,7 +3818,7 @@ impl Riffle {
             )
             .children(count)
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                this.open_from_tree(path.clone(), cx);
+                this.open_from_tree(path.clone(), cx).detach();
             }))
             .on_mouse_down(
                 MouseButton::Right,

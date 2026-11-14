@@ -92,7 +92,7 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
         Action::SequenceTimestamps,
         "Sequence JPEG Timestamps…",
     )]);
-    groups.push(vec![pending(Action::ImportFolder, "Import…")]);
+    groups.push(vec![command(Action::ImportFolder, "Import…")]);
     groups
 }
 
@@ -326,7 +326,7 @@ mod tests {
                     Action::SequenceTimestamps,
                     "Sequence JPEG Timestamps…"
                 )],
-                vec![pending(Action::ImportFolder, "Import…")],
+                vec![command(Action::ImportFolder, "Import…")],
             ]
         );
     }
@@ -366,14 +366,7 @@ mod tests {
             .filter(|item| item.disabled)
             .map(|item| item.action)
             .collect();
-        assert_eq!(
-            disabled,
-            vec![
-                Action::RenameFolder,
-                Action::RenameByDate,
-                Action::ImportFolder,
-            ]
-        );
+        assert_eq!(disabled, vec![Action::RenameFolder, Action::RenameByDate]);
     }
 
     #[test]

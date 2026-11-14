@@ -37,13 +37,17 @@ impl From<String> for Row {
 }
 
 /// What the dialog shows, top to bottom: the title, its text lines, a list
-/// of rows (which scrolls when long), the notes, the errors, the reason the
-/// run is disabled, and, while the run is under way, the running note.
+/// of rows and then each further list under its heading (scrolling together
+/// when long), the notes, the errors, the reason the run is disabled, and,
+/// while the run is under way, the running note.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Content {
     pub title: String,
     pub lines: Vec<String>,
     pub rows: Vec<Row>,
+    /// Lists after the rows, each a heading and its items; an empty one is
+    /// not shown.
+    pub lists: Vec<(String, Vec<String>)>,
     pub notes: Vec<String>,
     pub errors: Vec<String>,
     pub reason: Option<String>,
