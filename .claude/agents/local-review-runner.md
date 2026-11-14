@@ -82,13 +82,14 @@ fail with `nothing to commit`. What the script does:
   history)
 - Stops with an error if the index is not empty
 - Commits and pushes if the history directory has a diff (untracked included),
-  running `mise run fmt` → `mise run ci` before pushing
+  running `mise run fmt` → `mise run ci:local` before pushing
 - Pushes only if there is no diff
 
 Permissions and sandbox handling for running the script follow the platform
 contract at the end.
 
-The script runs `mise run ci` internally and can take close to 10 minutes. Pass
+The script runs `mise run ci:local` internally, which can take a few minutes
+for a Rust change from a cold `target/` (seconds for Markdown). Pass
 the maximum `timeout` of `600000` (ms) to the Bash tool explicitly, and **do not
 set `run_in_background: true`** (the foreground run is what makes the exit
 code observable to branch on, while a background run would hand the watching
@@ -112,7 +113,7 @@ Check the addresser's terminal state.
   and stopped without committing. **Do not go to the Review phase and do not run
   "3. Commit the history"**: end the loop and return the terminal state
   `LOCAL_CHECK_FAILED` to the caller. `commit-review-history.sh` runs
-  `mise run fmt` → `mise run ci` over the whole working tree before pushing, so
+  `mise run fmt` → `mise run ci:local` over the whole working tree before pushing, so
   calling it right after the addresser failed that ci three times in a row will
   not pass (especially on a round with dismissals, where the addresser has
   written `### Dismissed` and the history directory is guaranteed to have a

@@ -192,11 +192,16 @@ separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
 as it does `riffle-core`. A dependency added to the backend also lands in
 `crates/native/Cargo.lock`, and clippy lints the backend only from the root.
 
-- Rule: check a backend change with both `mise run ci` and
-  `mise run native:check`. `mise run ci` runs only `lint` and `test` of the
-  root workspace, so it never covers `crates/native`. This holds for a change
-  to the app's identifier or to `native`'s own files (`datadir`, `logger`,
-  `settings`) as well as for a backend change.
+- Rule: a backend change needs both workspaces checked. `mise run ci` runs
+  only `lint` and `test` of the root workspace, so it never covers
+  `crates/native`. The agents run `mise run ci:local` locally
+  (`tools/ci/local.sh`), which checks only the changed crates: for a
+  `crates/core` or `crates/backend` change, clippy and the tests of that root
+  package plus the native clippy; for a `crates/native` change (the app's
+  identifier, `datadir`, `logger`, `settings` and the rest), the native clippy
+  and tests. The PR's `test` and `native` jobs, on all three platforms, run
+  the rest: the root workspace's other crates and the native tests a backend
+  change can break. Neither full task is run locally as a gate.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.

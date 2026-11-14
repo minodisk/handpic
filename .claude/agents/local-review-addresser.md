@@ -76,8 +76,9 @@ You are given:
      the develop wrap-up phase's job)
 5. Run the local checks **against all the changes** (code fixes + the review
    file update), always after the Markdown updates:
-   - `mise run fmt` → `mise run ci`
-   - `mise run ci` can take close to 10 minutes, so pass the maximum `timeout`
+   - `mise run fmt` → `mise run ci:local`
+   - `mise run ci:local` can take a few minutes for a Rust change from a cold
+     `target/` (seconds for Markdown), so pass the maximum `timeout`
      of `600000` (ms) explicitly to the Bash tool (the default timeout
      can be as low as 120 s and would cut it off). **Do not set `run_in_background: true`** (the foreground
      run is what makes the exit code observable to branch on, while a
@@ -92,7 +93,7 @@ You are given:
 
 ## When the local checks fail
 
-Try fixing and re-running step 5's `mise run fmt` → `mise run ci` **at most 3
+Try fixing and re-running step 5's `mise run fmt` → `mise run ci:local` **at most 3
 times**. If it will not pass in 3, give up on solving it yourself, report to the
 caller in the format below, and stop (without committing). Do not keep fixing
 forever.
@@ -120,7 +121,7 @@ and re-run. That re-run counts against the attempts.
 
 When giving up, report:
 
-- How many times you tried `mise run ci`
+- How many times you tried `mise run ci:local`
 - The last error output (the gist; excerpt the relevant part if it is long)
 - Whether you judged it environmental or an implementation mistake, and why
 - What you tried along the way (if anything)

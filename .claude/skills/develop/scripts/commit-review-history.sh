@@ -17,7 +17,7 @@
 #   2. Guarantee the index is empty (leftover staged changes contradict
 #      commit-push.sh's premise, so fail explicitly)
 #   3. If the target directory has a diff (untracked included), commit and push
-#      with commit-push.sh (which runs mise run fmt → mise run ci before pushing)
+#      with commit-push.sh (which runs mise run fmt → mise run ci:local before pushing)
 #   4. With no diff, push only (the case where the preceding Address phase
 #      already committed and pushed. A new branch may have no upstream, so push
 #      with the same judgment commit-push.sh uses)

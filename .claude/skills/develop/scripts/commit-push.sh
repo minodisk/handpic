@@ -11,8 +11,10 @@ set -euo pipefail
 # `.git/config`, which under the sandbox always fails with
 # `could not lock config file ...: Operation not permitted` (measured).
 #
-# Always run `mise run fmt` → `mise run ci` before pushing. Both run over the
-# whole repository with no arguments. Only the <path>... given as arguments go
+# Always run `mise run fmt` → `mise run ci:local` before pushing. fmt runs over
+# the whole repository; ci:local runs the checks the branch's changed paths
+# select, uncommitted ones included (tools/ci/local.sh), and leaves the rest to
+# the PR's GitHub checks. Only the <path>... given as arguments go
 # into the commit (`git add "$@"`), so a file formatted outside that set just
 # stays in the working tree uncommitted. This assumes it is called with an empty
 # index (no staged changes), so it fails if there are any (the guard below).
@@ -52,7 +54,7 @@ for path in "$@"; do
 done
 
 mise run fmt
-mise run ci
+mise run ci:local
 
 # Wait for the lock *after* fmt/ci. They take tens of seconds, so waiting
 # beforehand tells you nothing about availability at the moment the index is
