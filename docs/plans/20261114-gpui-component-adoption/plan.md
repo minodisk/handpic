@@ -180,7 +180,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
   over `settingsmodal::SettingsModal::key` / `stops`, a backdrop whose
   press closes it, a vertical tab list beside the content, local `button` /
   `checkbox` / `radio` helpers, `overflow_y_scroll` lists without a visible
-  scrollbar, and seven `TextInput` entities (six label names, the import
+  scrollbar, and six `TextInput` entities (five label names, the import
   pattern). `textinput.rs` is used only by `settingsview.rs`;
   `unicode-segmentation` only by `textinput.rs`. The tree's keyboard is a
   flag in the view (`tree_keys`), not GPUI focus. The colors are `u32`

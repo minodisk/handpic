@@ -34,7 +34,7 @@
 
 - `origin/main` at the start (`22d6e6a0`) had no other user of
   `textinput.rs`: the folder-dialogs plan's Step 7 (the tree's inline
-  rename) has not landed, so only the settings modal's seven fields moved.
+  rename) has not landed, so only the settings modal's six fields (the five label names and the import pattern) moved.
   That plan's Step 7 text still names `textinput.rs`; it needs its owner's
   one-line edit (see the deferred issue below), and the PR description says
   so.
