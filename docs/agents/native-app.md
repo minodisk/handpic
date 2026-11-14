@@ -1421,6 +1421,35 @@ the `page` line and goes into `Summary`. A stale preview drawn on the way
   cost is the `on()` check in `paint` and in `loaded`.
 
 
+### One progress bar sits on the status row's top edge (Inferred)
+
+`progress.rs` holds the bar's model: `fraction`, a port of `progress.ts`'s
+`progressWidth` (0 while `total` is 0, never above 1), and `shown`, which
+picks the `(done, total)` the bar shows when several operations run: a Move
+to Trash, Delete Permanently or trash redo run first (`Riffle.trashing`, the
+counts the pane's note is formatted from with `trash::progress_status`), then
+a folder operation's run, then the scan's running pass
+(`scan::Status::running`, pass 1's before pass 2's, the two sharing the one
+bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
+`MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
+width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
+gpui-component's progress element: nothing calls `gpui_component::init` yet
+(see "gpui-component is a dependency only").
+
+- Rule: the bar is `absolute` inside the status row (made `relative`), on
+  its top edge, so showing or hiding it changes no layout: the canvas's
+  `viewport` cell, the fit scale, a 1:1 crop and the peaking layer are not
+  recomputed by it. The status row stays with every pane hidden, so the bar
+  does too. Do not give it a flex row of its own.
+- Rule: the bar adds no `notify` or timer; it is redrawn by the notifies the
+  scan's `Progress` / `FacesProgress` and the trash's `TrashProgress` already
+  make, and it goes wherever `scan_status.clear()` and `trashing = None` do.
+- Rule: pass 2 starts at `(0, 0)` and pass 1 can start at a total of 0, so
+  the track shows empty there.
+- Another operation with a count (Sequence JPEG Timestamps, Import) feeds it
+  by passing its `(done, total)` as `shown`'s `folder_op` argument, `None`
+  today, from the state its own progress messages update.
+
 ### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
 
 GPUI at the pinned rev has no text input element. `textinput.rs` is a port
