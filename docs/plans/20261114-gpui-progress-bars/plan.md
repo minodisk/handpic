@@ -118,3 +118,5 @@ window-wide bar slot; operations without a total stay as text this time.
       whether a scan with nothing to do flashes an empty track.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete

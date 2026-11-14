@@ -30,3 +30,14 @@
   the GUI was not run here. Basis: plan Step 1's Done-when (the hand check);
   files `crates/native/src/main.rs` (`progress_bar`),
   `crates/native/src/progress.rs`.
+- Sequence JPEG Timestamps and Import do not yet feed the bar's `folder_op`
+  input: `progress::shown`'s `folder_op` argument is `None` in `main.rs`'s
+  `progress_bar`. Wire their `(done, total)` callbacks into it. Basis: the
+  plan's inventory table (plan.md lines 25-26), review Round 1 item 2; files
+  `crates/native/src/progress.rs`, `crates/native/src/main.rs`.
+- The trash undo / redo, Rewrite Sidecars and Delete Sidecars runs have no
+  progress callback, so the bar shows nothing for them. Add one to the
+  backend's `trash` / `foldersidecars` runs and feed the bar. Basis: the
+  plan's inventory table (plan.md lines 25-26), review Round 1 item 2; files
+  `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`,
+  `crates/native/src/progress.rs`.
