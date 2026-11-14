@@ -339,7 +339,7 @@ them; their contents are deliberately coarse.
     `partial.rs`, focus peaking (`e`), and the `eyes_of` on-demand path.
   - Pass 2, the `f` overlays (mark, face boxes, face mesh) and `eyes_of`
     were done by `../20261110-gpui-focus-marks/plan.md`.
-- [ ] Step 8: Dialogs, folder tree and folder operations
+- [x] Step 8: Dialogs, folder tree and folder operations
   - Done when: the folder tree with its watchers and volume roots, the
     strip's right-click menu (reveal, copy path / name, Move to Trash…,
     Delete Permanently…), Rename, Rename by Capture Date…, Import…,
@@ -630,3 +630,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) A native addition the milestones did not list: the progress bar fed by the scan and by Move to Trash / Delete Permanently, through `../20261114-gpui-progress-bars/plan.md`
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
 - (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../_archived/20261114-gpui-folder-drop/plan.md`
+- (2026-11-14) Step 8 complete: the folder tree and the strip's menu (`../_archived/20261113-gpui-tree-trash/plan.md`), the empty state, folder drag-and-drop (`../_archived/20261114-gpui-folder-drop/plan.md`) and the folder operation dialogs (`../_archived/20261113-gpui-folder-dialogs/plan.md`) have all landed
