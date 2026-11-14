@@ -577,10 +577,17 @@ mod tests {
         write(&json, r#"{"sidecarFormat":"both"}"#);
         drop(load_from(Some(store.clone()), Some(&json), None));
         write(&json, r#"{"sidecarFormat":"dop"}"#);
-        assert_eq!(
-            load_from(Some(store), Some(&json), None).format,
-            SidecarFormat::Both
-        );
+        // The first load's writer thread closes the store a moment after the
+        // drop, and Windows refuses a second open until then.
+        let mut format = SidecarFormat::Xmp;
+        for _ in 0..50 {
+            format = load_from(Some(store.clone()), Some(&json), None).format;
+            if format == SidecarFormat::Both {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(format, SidecarFormat::Both);
     }
 
     #[test]
