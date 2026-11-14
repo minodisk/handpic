@@ -2907,7 +2907,7 @@ Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
 
 #### TODO
 
-- [ ] On Windows, launch the native app without a folder (`mise run native:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Click here to choose a folder. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
+- [ ] On Windows, launch the native app without a folder (`mise run native:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
 - [ ] On Windows, open a folder without RAW or JPEG files. Expect "This folder has no RAW or JPEG files." in the preview area, and a click on it does nothing.
 - [ ] On Windows, set a filter that hides every file. Expect "No files match the current filter." in the preview area.
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
@@ -2954,3 +2954,18 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 
 - [ ] On Windows and macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `riffle-native`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
 - [ ] On Windows and macOS, in `riffle-native` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
+
+### Native: real-device check of the folder drop (gpui-folder-drop)
+
+#### Background
+
+`gpui-folder-drop` ported the Tauri window drop to the GPUI app (`crates/native`): a dropped folder opens through `open(path, None, None, cx)`, a dropped file opens its parent, and a drop of none or several paths shows `Drop a single folder or RAW file.` on the status line. While an OS file drag is over the window, a 3px `--ring` outline is drawn. CI and the unit tests of `dropped.rs` cover which single path a drop names and which folder it resolves to, and `mise run ci:local` passed. Nobody has dropped anything onto the running window: the drop, the outline drawing and clearing, and the swallowing of a drop by an occluded dialog are unverified. Step 1's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-folder-drop/plan.md` (the pending check is also in `learnings.md` in the same folder). Files: `crates/native/src/main.rs` (`drop_paths`, `drop_outline`), `crates/native/src/dropped.rs`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows, with `mise run native:dev` running, drag a folder from Explorer over the window. Expect a 3px `#737373` outline on the main area (tree, preview, meta pane), also while the pointer is over the strip or the status row. Drop it: the folder opens and is revealed in the tree, and the outline goes.
+- [ ] On Windows, drop one file (a RAW, then a non-RAW such as a `.txt`). Expect its parent folder to open and the file not to be selected.
+- [ ] On Windows, drop two folders at once. Expect nothing to open and the status line to read `Drop a single folder or RAW file.`
+- [ ] On Windows, open the settings modal (`ctrl+,`) and drop a folder over it. Expect nothing to open (the occluded layer swallows the drop).
+- [ ] On Windows, drag a folder into the window and back out without dropping. Expect the outline to clear.
+- [ ] Record the results in `learnings.md` and turn the "Not verified in the running app" bullet of "A folder dropped onto the window opens, a later drop winning" in `docs/agents/native-app.md` into a Measured one.

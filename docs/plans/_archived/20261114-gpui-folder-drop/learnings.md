@@ -46,3 +46,13 @@
   Record the results in this file and turn the "Not verified in the running
   app" bullet of "A folder dropped onto the window opens, a later drop
   winning" in `docs/agents/native-app.md` into a Measured one.
+- Restore the "Drop a folder onto the window" clause when the native
+  empty-state port lands (a follow-up for that PR). At `origin/main`
+  `6f1e7936` no native module held the no-folder text, so this feature left
+  it untouched. Change: when the empty-state port (section "A launch without
+  a folder shows only the tree" in `docs/agents/native-app.md`) adds the
+  no-folder text, use the Tauri `OPEN_TEXT` verbatim,
+  `Drop a folder onto the window, or click here to choose one.`, since the
+  drop now works. Done when: the native no-folder text carries that clause
+  and the empty-state section of `native-app.md` matches. Attach it to an
+  existing empty-state todo entry if there is one.

@@ -621,4 +621,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) A native addition the milestones did not list: the progress bar fed by the scan and by Move to Trash / Delete Permanently, through `../20261114-gpui-progress-bars/plan.md`
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
-- (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../20261114-gpui-folder-drop/plan.md`
+- (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../_archived/20261114-gpui-folder-drop/plan.md`

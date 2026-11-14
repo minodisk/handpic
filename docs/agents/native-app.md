@@ -1672,7 +1672,7 @@ neither a directory nor a file opens nothing and puts the Tauri
 - Not verified in the running app: the drop of a folder, of a file and of
   two folders, a drop while a dialog is open, and the outline drawing and
   clearing on leave and drop, on Windows (the pending hand check in
-  `../plans/20261114-gpui-folder-drop/learnings.md`). macOS and Linux file
+  `../plans/_archived/20261114-gpui-folder-drop/learnings.md`). macOS and Linux file
   drop delivery is covered by the CI build only.
 
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
