@@ -301,7 +301,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
       `--auto` page timings in kind (one quick run, not the A/B gate); if it
       visibly does, stop and record it.
 
-- [ ] Step 2: Replace `textinput.rs` with gpui-component's `Input`
+- [x] Step 2: Replace `textinput.rs` with gpui-component's `Input`
   - Done when:
     - The settings modal's six label name fields and the Import tab's
       pattern field are `InputState` entities drawn with `Input`, and
