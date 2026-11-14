@@ -132,12 +132,18 @@ mod tests {
 
     #[test]
     fn no_key_bound() {
-        assert_eq!(open_hint(&open(&[])), "Drop a folder onto the window, or click here to choose one.");
+        assert_eq!(
+            open_hint(&open(&[])),
+            "Drop a folder onto the window, or click here to choose one."
+        );
     }
 
     #[test]
     fn no_open_binding() {
-        assert_eq!(open_hint(&[]), "Drop a folder onto the window, or click here to choose one.");
+        assert_eq!(
+            open_hint(&[]),
+            "Drop a folder onto the window, or click here to choose one."
+        );
     }
 
     #[test]
