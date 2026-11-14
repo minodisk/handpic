@@ -206,3 +206,5 @@ Once this is done, in the native app:
 - **Out of scope.** The application menu bar and the Tauri user guide.
 
 ## Progress
+
+- (2026-11-14) Step 1 implemented; the Windows hand check is pending on the user (see learnings.md)
