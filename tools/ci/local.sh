@@ -41,8 +41,9 @@ bash_tests=(
 )
 
 # The extensions vp's formatter handles: the main extensions of each language
-# oxfmt 0.68.0 (the one vite-plus 0.3.3 ships) formats, checked by running it
-# over one file of each. `.md` is left out (vite.config.ts ignores it); the
+# oxfmt 0.68.0 (the one vite-plus 0.3.3 ships) formats, probed by running it
+# over one file of each, except `xhtml` and `pcss`, which come from its
+# linguist table. `.md` is left out (vite.config.ts ignores it); the
 # formatter's other ignored paths still select `vp check`, harmlessly.
 vp_extensions=(
 	js jsx mjs cjs ts tsx mts cts
@@ -81,7 +82,7 @@ function select_checks() {
 	esac
 
 	local fmt_root=0 fmt_native=0 vp=0 actionlint=0 lychee=0 native=0
-	local -A packages=() tests=() scripts=()
+	local packages=' ' tests=' ' scripts=''
 	local path ext pattern any=0
 	while IFS= read -r path; do
 		[[ -n "${path}" ]] || continue
@@ -97,13 +98,13 @@ function select_checks() {
 		fi
 		case "${path}" in
 		Cargo.toml | Cargo.lock)
-			packages[riffle-core]=1
-			packages[riffle-backend]=1
-			packages[riffle-cli]=1
+			packages+="riffle-core "
+			packages+="riffle-backend "
+			packages+="riffle-cli "
 			;;
-		crates/core/*) packages[riffle-core]=1 ;;
-		crates/backend/*) packages[riffle-backend]=1 ;;
-		crates/cli/*) packages[riffle-cli]=1 ;;
+		crates/core/*) packages+="riffle-core " ;;
+		crates/backend/*) packages+="riffle-backend " ;;
+		crates/cli/*) packages+="riffle-cli " ;;
 		crates/native/*) native=1 ;;
 		esac
 		case "${path}" in
@@ -118,7 +119,7 @@ function select_checks() {
 		esac
 		for pattern in "${shellcheck_patterns[@]}"; do
 			if [[ "${path}" =~ ${pattern} ]]; then
-				scripts["${path}"]=1
+				scripts+="${path}"$'\n'
 			fi
 		done
 		case "${path}" in
@@ -126,15 +127,15 @@ function select_checks() {
 		esac
 		case "${path}" in
 		.claude/skills/merge/scripts/check-merge-approval.sh | .claude/skills/merge/scripts/check-merge-approval.test.sh)
-			tests[.claude/skills/merge/scripts/check-merge-approval.test.sh]=1
+			tests+=".claude/skills/merge/scripts/check-merge-approval.test.sh "
 			;;
 		.claude/skills/merge/scripts/wait-post-merge-runs.sh | .claude/skills/merge/scripts/wait-post-merge-runs.test.sh)
-			tests[.claude/skills/merge/scripts/wait-post-merge-runs.test.sh]=1
+			tests+=".claude/skills/merge/scripts/wait-post-merge-runs.test.sh "
 			;;
 		.claude/skills/merge-settings/scripts/merge.js | .claude/skills/merge-settings/scripts/merge.test.sh)
-			tests[.claude/skills/merge-settings/scripts/merge.test.sh]=1
+			tests+=".claude/skills/merge-settings/scripts/merge.test.sh "
 			;;
-		tools/ci/*) tests[tools/ci/local.test.sh]=1 ;;
+		tools/ci/*) tests+="tools/ci/local.test.sh " ;;
 		esac
 		if [[ "${path}" == *.md ]]; then
 			lychee=1
@@ -152,14 +153,14 @@ function select_checks() {
 	if [[ "${all}" -eq 1 ]]; then
 		fmt_root=1 fmt_native=1 vp=1 actionlint=1 lychee=1 native=1
 		for package in "${root_packages[@]}"; do
-			packages["${package}"]=1
+			packages+="${package} "
 		done
 		for test in "${bash_tests[@]}"; do
-			tests["${test}"]=1
+			tests+="${test} "
 		done
 	fi
 	local native_clippy="${native}"
-	if [[ -n "${packages[riffle-core]:-}" || -n "${packages[riffle-backend]:-}" ]]; then
+	if [[ "${packages}" == *" riffle-core "* || "${packages}" == *" riffle-backend "* ]]; then
 		native_clippy=1
 	fi
 
@@ -168,19 +169,19 @@ function select_checks() {
 	[[ "${vp}" -eq 0 ]] || echo "vp-check"
 	if [[ "${all}" -eq 1 ]]; then
 		echo "shellcheck-all"
-	elif [[ "${#scripts[@]}" -gt 0 ]]; then
-		printf 'shellcheck %s\n' "${!scripts[@]}" | LC_ALL=C sort
+	elif [[ -n "${scripts}" ]]; then
+		printf '%s' "${scripts}" | LC_ALL=C sort -u | while IFS= read -r path; do echo "shellcheck ${path}"; done
 	fi
 	[[ "${actionlint}" -eq 0 ]] || echo "actionlint"
 	[[ "${lychee}" -eq 0 ]] || echo "lychee"
 	for test in "${bash_tests[@]}"; do
-		[[ -z "${tests[${test}]:-}" ]] || echo "bash-test ${test}"
+		[[ "${tests}" != *" ${test} "* ]] || echo "bash-test ${test}"
 	done
 	for package in "${root_packages[@]}"; do
-		[[ -z "${packages[${package}]:-}" ]] || echo "clippy ${package}"
+		[[ "${packages}" != *" ${package} "* ]] || echo "clippy ${package}"
 	done
 	for package in "${root_packages[@]}"; do
-		[[ -z "${packages[${package}]:-}" ]] || echo "test ${package}"
+		[[ "${packages}" != *" ${package} "* ]] || echo "test ${package}"
 	done
 	[[ "${native_clippy}" -eq 0 ]] || echo "clippy native"
 	[[ "${native}" -eq 0 ]] || echo "test native"
@@ -306,7 +307,7 @@ function main() {
 
 	cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
-	local base mode lines selected=()
+	local base mode lines check selected=()
 	if base="$(git merge-base HEAD origin/main 2>/dev/null)"; then
 		lines="$(changed_paths "${base}")"
 		if [[ "${lines##*$'\n'}" == moved=1 ]]; then
@@ -315,10 +316,10 @@ function main() {
 			mode=none
 		fi
 		lines="${lines%moved=?}"
-		mapfile -t selected < <(select_checks "${mode}" <<<"${lines%$'\n'}")
+		while IFS= read -r check; do selected+=("${check}"); done < <(select_checks "${mode}" <<<"${lines%$'\n'}")
 	else
 		echo "ci:local: no merge base with origin/main; running every check."
-		mapfile -t selected < <(select_checks all </dev/null)
+		while IFS= read -r check; do selected+=("${check}"); done < <(select_checks all </dev/null)
 	fi
 
 	if [[ "${#selected[@]}" -eq 0 ]]; then
@@ -326,24 +327,20 @@ function main() {
 		return 0
 	fi
 
-	local check skipped=() joined
-	joined="$(printf '%s
-' "${selected[@]}" | sed 's/^shellcheck.*/shellcheck/')"
+	local skipped=() joined
+	joined="$(printf '%s\n' "${selected[@]}" | sed 's/^shellcheck.*/shellcheck/')"
 	while IFS= read -r check; do
 		grep -qxF "${check}" <<<"${joined}" || skipped+=("${check}")
 	done < <(every_check)
-	if grep -q '^shellcheck ' <<<"$(printf '%s
-' "${selected[@]}")"; then
+	if grep -q '^shellcheck ' <<<"$(printf '%s\n' "${selected[@]}")"; then
 		skipped+=("shellcheck of the unchanged scripts")
 	fi
 	skipped+=("riffle-app (never built locally)" "the frontend tests (vp test, never run locally)")
 
 	echo "ci:local selected:"
-	printf '  %s
-' "${selected[@]}"
+	printf '  %s\n' "${selected[@]}"
 	echo "ci:local skipped (left to GitHub Actions):"
-	printf '  %s
-' "${skipped[@]}"
+	printf '  %s\n' "${skipped[@]}"
 
 	# The root packages' clippy runs and test runs go to cargo as one call each,
 	# so a run over several packages builds them in one parallel graph.
