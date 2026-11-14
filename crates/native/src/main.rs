@@ -31,6 +31,7 @@ mod resync;
 mod scan;
 mod selection;
 mod sequence;
+mod session;
 mod settings;
 mod settingsmodal;
 mod settingsview;
@@ -361,6 +362,9 @@ struct Riffle {
     next_scan: u64,
     /// The open folder's canonical path, the key of its index rows.
     dir: Option<String>,
+    /// Whether the folder and the window geometry are remembered for the
+    /// next launch; off under `--auto`.
+    remember: bool,
     /// Bumped by every open, without a lock: a listing or a reveal of an
     /// earlier open is dropped.
     opens: Arc<AtomicU64>,
@@ -512,12 +516,14 @@ struct Riffle {
 }
 
 impl Riffle {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         focus: FocusHandle,
         index: Result<Indexes, String>,
         settings: Settings,
         mcp_port: Option<u16>,
         prefetch: bool,
+        remember: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
@@ -525,7 +531,14 @@ impl Riffle {
             Ok((writer, reader)) => (Ok(writer), Some(reader)),
             Err(e) => (Err(e), None),
         };
-        cx.observe_window_bounds(window, |this, window, cx| {
+        // Held by the quit handler, not the view, as the writer's drain is.
+        let geometry: Arc<Mutex<Option<session::Geometry>>> = Arc::default();
+        let observed = geometry.clone();
+        cx.observe_window_bounds(window, move |this, window, cx| {
+            let geometry = window_geometry(window, cx);
+            if remember && geometry.is_usable() {
+                *observed.lock().unwrap() = Some(geometry);
+            }
             this.strip_width = f32::from(window.viewport_size().width);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
@@ -606,7 +619,13 @@ impl Riffle {
             })
         };
         let writes = settings.writes.clone();
+        let loaded = settings.window.clone();
         App::on_app_quit(cx, move |_| {
+            if let Some(geometry) = geometry.lock().unwrap().take()
+                && Some(&geometry) != loaded.as_ref()
+            {
+                writes.set("windowBounds", geometry.setting());
+            }
             let drained = writes.drain(settings::DRAIN_TIMEOUT);
             log::info!("quit: settings writes drained={drained}");
             async {}
@@ -681,6 +700,7 @@ impl Riffle {
             scan_focus: None,
             next_scan: 0,
             dir: None,
+            remember,
             opens: Arc::default(),
             watching_lock: Arc::default(),
             tree: Tree::default(),
@@ -1993,6 +2013,13 @@ impl Riffle {
         self.marks.clear();
         self.clear_ring(cx);
         self.dir = Some(listed.dir.clone());
+        let folder = context::shown_path(&listed.dir);
+        if self.remember && self.settings.last_folder.as_ref() != Some(&folder) {
+            self.settings
+                .writes
+                .set("lastFolder", folder.as_str().into());
+            self.settings.last_folder = Some(folder);
+        }
         self.filter.set_output_known(outputs.found.is_some());
         self.outputs = outputs.found;
         self.outputs_listing = outputs.listing;
@@ -4635,6 +4662,69 @@ fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
     Ok((index, reader))
 }
 
+fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
+    session::Rect {
+        x: f32::from(bounds.origin.x),
+        y: f32::from(bounds.origin.y),
+        width: f32::from(bounds.size.width),
+        height: f32::from(bounds.size.height),
+    }
+}
+
+/// The window's restore bounds and display; a fullscreen window is kept by
+/// its restore bounds, windowed.
+fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
+    let (bounds, maximized) = match window.window_bounds() {
+        WindowBounds::Windowed(bounds) | WindowBounds::Fullscreen(bounds) => (bounds, false),
+        WindowBounds::Maximized(bounds) => (bounds, true),
+    };
+    session::Geometry {
+        bounds: rect_of(bounds),
+        maximized,
+        display: window
+            .display(cx)
+            .and_then(|display| display.uuid().ok())
+            .map(|uuid| uuid.to_string()),
+    }
+}
+
+/// Where the window opens: the saved geometry placed on a display, else
+/// centered at 1600x1000.
+fn window_placement(
+    saved: Option<&session::Geometry>,
+    cx: &App,
+) -> (Option<gpui::DisplayId>, WindowBounds) {
+    let displays = cx.displays();
+    let screens: Vec<session::Screen> = displays
+        .iter()
+        .map(|display| session::Screen {
+            uuid: display.uuid().ok().map(|uuid| uuid.to_string()),
+            bounds: rect_of(display.bounds()),
+            visible: rect_of(display.visible_bounds()),
+        })
+        .collect();
+    let Some((saved, (index, rect))) =
+        saved.and_then(|saved| Some((saved, session::place(saved, &screens)?)))
+    else {
+        let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
+        return (None, WindowBounds::Windowed(bounds));
+    };
+    let bounds = Bounds::new(
+        point(px(rect.x), px(rect.y)),
+        size(px(rect.width), px(rect.height)),
+    );
+    log::info!(
+        "window: restored on display {index} at {rect:?} maximized={}",
+        saved.maximized
+    );
+    let display_id = Some(displays[index].id());
+    if saved.maximized {
+        (display_id, WindowBounds::Maximized(bounds))
+    } else {
+        (display_id, WindowBounds::Windowed(bounds))
+    }
+}
+
 fn main() {
     let mut args = match args::parse(env::args_os().skip(1)) {
         Ok(args) => args,
@@ -4661,16 +4751,25 @@ fn main() {
     );
     let mcp_port = args.mcp_port;
     let prefetch = !args.no_prefetch;
+    let remember = args.auto.is_none();
+    args.folder = session::startup_folder(
+        args.folder.take(),
+        settings.last_folder.as_deref(),
+        !remember,
+        Path::is_dir,
+    );
+    let saved = settings.window.clone().filter(|_| remember);
     application().run(move |cx: &mut App| {
         cx.on_window_closed(|cx, _| cx.quit()).detach();
-        let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
+        let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
         cx.open_window(
             WindowOptions {
                 titlebar: Some(TitlebarOptions {
                     title: Some("Handpic".into()),
                     ..Default::default()
                 }),
-                window_bounds: Some(WindowBounds::Windowed(bounds)),
+                window_bounds: Some(window_bounds),
+                display_id,
                 ..Default::default()
             },
             |window, cx| {
@@ -4678,7 +4777,9 @@ fn main() {
                     let focus = cx.focus_handle();
                     window.focus(&focus, cx);
                     Riffle::start(args, cx);
-                    Riffle::new(focus, index, settings, mcp_port, prefetch, window, cx)
+                    Riffle::new(
+                        focus, index, settings, mcp_port, prefetch, remember, window, cx,
+                    )
                 })
             },
         )

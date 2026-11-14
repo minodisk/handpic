@@ -203,11 +203,12 @@ version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
 (`datadir::settings_path`), next to the Tauri app's `settings.json`. The
 values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
-`sortOrder`, `filter`) go through the one `from_values` with the backend's
+`sortOrder`, `filter`, `lastFolder`, `windowBounds`) go through the one `from_values` with the backend's
 rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
 `Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
 `SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read
-as capture order and left stored as it is, `Stored::from_setting`).
+as capture order and left stored as it is, `Stored::from_setting`, a string
+`lastFolder`, `session::Geometry::from_setting`).
 
 Only a new store (no schema yet: a missing file or a zero-byte one left by a
 crash) is seeded, once, with every key of a Tauri `settings.json` verbatim,
@@ -1349,9 +1350,13 @@ and `Event::Cancel` (Escape).
 
 ### A launch without a folder shows only the tree (Inferred)
 
-`start` opens the command line's folder, if any, and nothing else: the OS
-folder picker (`cx.prompt_for_paths`) is no longer shown at launch, and a
-folder is opened from the left pane's tree. With no folder open the window
+`start` opens the folder `main()` chose (`session::startup_folder`: the
+command line's, else the remembered `lastFolder` while it is still a
+directory and `--auto` is off), and nothing else: the OS folder picker
+(`cx.prompt_for_paths`) is not shown at launch, and a folder is opened from
+the left pane's tree. A remembered folder opens through the same `open` as
+the command line's, so it is revealed in the tree and resumes at its last
+viewed file. When neither gives a folder the window
 shows the tree, an empty preview and strip, and `no folder` on the status
 line; every handler already tolerated `dir: None` and an empty `files` (the
 pager's `go` and `request` are no-ops at length 0, `judge` and `step` need a
@@ -1360,6 +1365,60 @@ current path, `zoom::toggle` needs files, the strip's hit test finds no cell).
 When it was still used, `cx.prompt_for_paths` with `PathPromptOptions {
 directories: true, files: false }` was the OS folder dialog; Enter on a typed
 path navigated into the folder, and a second Enter selected it (Measured).
+
+### A launch restores the last folder and the window (Measured)
+
+`session.rs` holds the rules, free of GPUI types: `startup_folder`, the
+`Geometry` stored under `windowBounds` (the restore bounds in GPUI's logical
+pixels, `maximized` and the display's UUID as text; `from_setting` reads a
+malformed value, a non-finite position or size or a size that is not positive
+as nothing), and `place`, which picks the display (the saved UUID's when the
+saved bounds intersect it, else the first display they intersect, else none:
+the centered 1600x1000 default) and moves and shrinks the bounds into that
+display's visible bounds. `main()` passes that display's `display_id` with
+`WindowBounds::Maximized` or `Windowed`: on Windows GPUI keeps given bounds
+only when their center is on the `display_id`'s display (else the primary
+one's) and otherwise silently uses its own default size, so the display and
+the clamp are both needed.
+
+- Rule: `lastFolder` is the Tauri app's key and plain-string value, so a store
+  seeded from a Tauri `settings.json` reopens the Tauri app's last folder on
+  the first launch. It is written where a listing sets `self.dir`, every open
+  (the command line's included), as `context::shown_path` of the canonical
+  path (a `\\?\` verbatim path would not reveal in the tree), and only when it
+  differs from the last value, so a watcher re-listing writes nothing.
+- Rule: the geometry is written once, by the settings quit handler before its
+  drain, from an `Arc<Mutex<Option<Geometry>>>` the `observe_window_bounds`
+  callback keeps current, and only when it differs from what was loaded. The
+  handler holds the cell, not the view. A fullscreen window is kept by its
+  restore bounds, windowed. A crash or a kill loses the session's geometry,
+  not its folder.
+- Rule: closing the window on Windows fires the bounds observer once more
+  while the handle is going: `GetWindowPlacement` fails (`failed to get window
+  placement` in the log) and `window_bounds` reports the frame insets around
+  an empty rectangle (`x 8, y 19, width -16, height -39` here), so the
+  observer keeps only a positive size (`Geometry::is_usable`). Without it the
+  close button stored that value.
+- Rule: `--auto` suppresses both restores and both writes, so a benchmark
+  opens at the default size with only its own folder and leaves the store as
+  it was. `--settings`, `--index` and `--log` suppress nothing.
+- Measured (2026-11-14, Windows 11, one display at 96 DPI, a test store,
+  quitting through the title bar's close message): a window moved to the
+  outer rectangle (200, 150)-(1400, 950) stored `x 146, y 169, width 1184,
+  height 761` and reopened at exactly that rectangle; GPUI's restore bounds
+  are not the outer rectangle, but they round-trip. A maximized quit stored
+  `maximized: true`, reopened maximized and un-maximized to the same
+  rectangle; a minimized quit stored the restore bounds. Bounds far off the
+  display opened at the default; an unknown UUID opened on the display the
+  bounds intersect. `--auto 1` left both keys unchanged, and a renamed
+  remembered folder opened nothing.
+- Not seen yet: a quit with `q`, a snapped window, a second monitor (with a
+  different scale factor), and the taskbar docked at the top or left (the
+  restore bounds are in workspace coordinates there, the clamp compares them
+  with the display's screen coordinates): the pending check in
+  `../plans/20261114-gpui-session-restore/learnings.md`. macOS and Linux are
+  covered by the CI build and the unit tests only; Wayland cannot place a
+  window, so only the size can come back there.
 
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
 
@@ -1778,7 +1837,11 @@ See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md
   `AppActivate` + `SendKeys` does not reach the app and may type into whatever
   window has focus, so never use it. Close a run by PID with
   `CloseMainWindow`; never for every `riffle-native` process, because other
-  sessions run their own.
+  sessions run their own. `Get-Process riffle-native` returns every leftover
+  instance, so take the one you started by PID (`Select-Object -First 1` only
+  when you know it is the only one), or the `IntPtr` argument becomes an
+  array. `.ps1` files are blocked by the execution policy here, so pass the
+  script with `-Command`.
 - Rule: other sessions' `mise run ci`, `cargo` and `riffle-native` processes
   spoil runs (17 of 25 B attempts and 1 of 11 A attempts were discarded in the
   Step 6 session of

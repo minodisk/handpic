@@ -24,6 +24,7 @@ use serde_json::{Map, Value};
 use crate::{
     datadir::{self, IDENTIFIER, LEGACY_IDENTIFIERS},
     filter::Stored,
+    session::Geometry,
     sort::SortKey,
 };
 
@@ -44,6 +45,11 @@ pub struct Settings {
     /// pattern, an invalid stored one read as the default.
     pub import_root: String,
     pub import_pattern: String,
+    /// The folder of the previous session (`lastFolder`, the Tauri app's
+    /// key), written on every open.
+    pub last_folder: Option<String>,
+    /// The window's geometry at the last quit (`windowBounds`).
+    pub window: Option<Geometry>,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -245,6 +251,11 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
         import_root: import::root_setting(values.get("importRoot")),
         import_pattern: import::pattern_setting(values.get("importPattern")),
+        last_folder: values
+            .get("lastFolder")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
+        window: Geometry::from_setting(values.get("windowBounds")),
         writes: Writes::spawn(None),
     }
 }
@@ -255,6 +266,7 @@ mod tests {
     use crate::{
         datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
         filter::{FilterFlag, Stored},
+        session::{Geometry, Rect},
         sort::SortKey,
     };
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
@@ -375,6 +387,36 @@ mod tests {
             (s.import_root.as_str(), s.import_pattern.as_str()),
             ("", "%Y/%F")
         );
+    }
+
+    #[test]
+    fn the_session_keys_are_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(
+            dir.path(),
+            "valid",
+            r#"{"lastFolder":"D:\\Photos","windowBounds":{"x":10,"y":20,"width":800,"height":600,"maximized":true,"display":"u"}}"#,
+        );
+        assert_eq!(s.last_folder.as_deref(), Some("D:\\Photos"));
+        assert_eq!(
+            s.window,
+            Some(Geometry {
+                bounds: Rect {
+                    x: 10.,
+                    y: 20.,
+                    width: 800.,
+                    height: 600.
+                },
+                maximized: true,
+                display: Some("u".into()),
+            })
+        );
+        let s = seeded(
+            dir.path(),
+            "invalid",
+            r#"{"lastFolder":3,"windowBounds":{"x":10}}"#,
+        );
+        assert_eq!((s.last_folder, s.window), (None, None));
     }
 
     #[test]

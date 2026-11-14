@@ -2803,3 +2803,18 @@ Files: `crates/native/src/perf.rs`, `crates/native/src/perfgraph.rs`, `crates/na
 - [ ] On Windows, press `z` with the overlay on. Expected: the band sits over the fit view and the 1:1 view without moving them.
 - [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
 - [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.
+
+### Native: real-device checks of the restored window and last folder (gpui-session-restore)
+
+#### Background
+
+`gpui-session-restore` made the GPUI native app (`crates/native`) reopen the last folder and the window's position, size, display and maximized state on a launch without arguments (`session.rs`, the `lastFolder` and `windowBounds` keys of the settings store, written on open and in the quit handler). Step 1 was ticked on its automated criteria (the `session.rs` unit tests, `mise run ci`, `mise run native:check`) and a hand check on one Windows 11 display at 96 DPI: a moved and resized window, a maximized quit, a minimized quit, bounds off every display, an unknown display UUID, a relaunch without arguments, a renamed remembered folder, and `--auto 1 <other folder>`. Never exercised: quitting with `q`, a window snapped to a screen half, a second monitor (especially one with a different scale factor), a taskbar docked at the top or left, paging to a file before the quit, and a visual check of `--auto`'s centered default. macOS and Linux are covered by the CI build and the unit tests only. Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store. Record the results as `(Measured)` in `docs/agents/native-app.md` ("A launch restores the last folder and the window") and remove that section's "Not seen yet" bullet. Plan: `docs/plans/_archived/20261114-gpui-session-restore/plan.md`. Files: `crates/native/src/session.rs`, `crates/native/src/main.rs`, `crates/native/src/settings.rs`.
+
+#### TODO
+
+- [ ] On Windows, move and resize the window, quit with `q`, relaunch. Expected: the same place and size.
+- [ ] On Windows, snap the window to a screen half, quit, relaunch. Expected: it opens on-screen at the restore bounds.
+- [ ] On Windows with a second monitor, ideally with a different scale factor, move the window there, quit, relaunch, both windowed and maximized. Expected: the window comes back on that monitor, windowed and maximized respectively.
+- [ ] On Windows with the taskbar docked at the top or left, move the window, quit, relaunch. Record whether the position drifts by the taskbar's size (`rcNormalPosition` is in workspace coordinates). Fix only if it drifts.
+- [ ] On Windows, open a folder from the tree, page a few files, quit, relaunch without arguments. Expected: that folder is revealed in the tree at that file. Relaunch with another folder as the argument. Expected: the argument's folder opens.
+- [ ] On Windows, run `--auto 3 <folder>`. Expected: the window visibly opens centered at 1600x1000 whatever is stored.
