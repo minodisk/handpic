@@ -37,3 +37,9 @@
   lock, `mise run native:check`); the `native` CI job on Windows, Linux and
   macOS runs on the PR. Related: `crates/native/Cargo.toml`,
   `crates/native/Cargo.lock`, `docs/agents/native-app.md`.
+- CI timing check (from the learnings extraction): read the build time of
+  each leg of the `native` CI job (Windows, Linux, macOS) on this PR against
+  `timeout-minutes: 30`; the lock change makes each leg's first run a nearly
+  cold build of a larger graph. Done when every leg finishes inside the
+  timeout with margin; otherwise raise the timeout and record it in the
+  "gpui-pre snapshot" entry of `docs/agents/native-app.md`.
