@@ -349,7 +349,7 @@ them; their contents are deliberately coarse.
     that opens the folder picker and the `open` key, no RAW or JPEG files,
     everything filtered out, a failed preview) was done by
     `../20261114-gpui-empty-state/plan.md`, and the folder drag-and-drop
-    onto the window by `../20261114-gpui-folder-drop/plan.md`, which
+    onto the window by `../_archived/20261114-gpui-folder-drop/plan.md`, which
     restored `empty.ts`'s "Drop a folder onto the window" clause.
 - [ ] Step 9: Settings, pass 3 and the companions
   - Done when: the settings modal (sidecar format, label names, shortcuts,

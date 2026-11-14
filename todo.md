@@ -2969,3 +2969,13 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 - [ ] On Windows, open the settings modal (`ctrl+,`) and drop a folder over it. Expect nothing to open (the occluded layer swallows the drop).
 - [ ] On Windows, drag a folder into the window and back out without dropping. Expect the outline to clear.
 - [ ] Record the results in `learnings.md` and turn the "Not verified in the running app" bullet of "A folder dropped onto the window opens, a later drop winning" in `docs/agents/native-app.md` into a Measured one.
+
+### Native: make the settings writer close its store on drop (flaky seed reload test)
+
+#### Background
+
+`settings::tests::a_second_load_does_not_reread_a_changed_seed` in `crates/native/src/settings.rs` failed on the Windows CI job of PR #1052 (unrelated to that PR's change): the test reopened the settings store while the previous `Writes` still held it. The CI fix only added a retry in the test, with no production change. The cleaner fix is for `Writes` to close its store when dropped, so the test needs no retry.
+
+#### TODO
+
+- [ ] Make `Writes` in `crates/native/src/settings.rs` close its store on drop, and remove the retry from `a_second_load_does_not_reread_a_changed_seed`. Done when the test passes on Windows without the retry.
