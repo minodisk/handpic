@@ -236,3 +236,5 @@ Decisions already made by the user:
   frame rows; the two apps' panes no longer list the same rows there.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
