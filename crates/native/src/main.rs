@@ -47,7 +47,6 @@ mod settingsview;
 mod sidecars;
 mod sort;
 mod strip;
-mod textinput;
 mod theme;
 mod thumbs;
 mod timing;

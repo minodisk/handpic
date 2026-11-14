@@ -6,9 +6,10 @@
 
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyDownEvent, MouseButton, PathPromptOptions, SharedString, Window, deferred, div,
-    prelude::*, px, rgb, rgba,
+    FontWeight, KeyDownEvent, MouseButton, PathPromptOptions, Pixels, SharedString, Window,
+    deferred, div, prelude::*, px, rgb, rgba, transparent_black,
 };
+use gpui_component::input::{Input, InputEvent, InputState};
 
 use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
 use riffle_core::{i18n, xmp::LabelNames};
@@ -18,8 +19,11 @@ use crate::{
     MUTED_COLOR, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
     settings::Settings,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, Step, TABS, Tab},
-    textinput::{self, TextInput},
 };
+
+/// The height of the port the fields replaced: a 13 px line at GPUI's
+/// default line height, 3 px of padding and the border on each side.
+const FIELD_HEIGHT: Pixels = px(29.);
 
 /// What the main view applies.
 pub enum Change {
@@ -50,13 +54,13 @@ pub struct SettingsView {
     keymap: Keymap,
     label_names: LabelNames,
     /// The Sidecar tab's name fields, in `LABEL_COLORS` order.
-    name_fields: Vec<Entity<TextInput>>,
+    name_fields: Vec<Entity<InputState>>,
     /// The language `Reset` fills in, an index into `i18n::presets()`.
     language: usize,
     /// The stored destination root and pattern.
     import_root: String,
     import_pattern: String,
-    pattern_field: Entity<TextInput>,
+    pattern_field: Entity<InputState>,
     /// Where today's photos would go under the field's pattern, or why it is
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
@@ -69,21 +73,25 @@ impl SettingsView {
     pub fn new(window: &mut Window, cx: &mut Context<Self>) -> Self {
         let name_fields: Vec<_> = LABEL_COLORS
             .iter()
-            .map(|_| cx.new(|cx| TextInput::new(window, cx)))
+            .map(|_| cx.new(|cx| InputState::new(window, cx)))
             .collect();
         for field in &name_fields {
             cx.subscribe_in(field, window, |this, _, event, window, cx| {
-                this.name_field(*event, window, cx);
+                if commits(event) {
+                    this.commit_name_fields(window, cx);
+                }
             })
             .detach();
         }
-        let pattern_field = cx.new(|cx| TextInput::new(window, cx));
+        let pattern_field = cx.new(|cx| InputState::new(window, cx));
         cx.subscribe_in(&pattern_field, window, |this, _, event, _, cx| {
-            this.pattern_field(*event, cx);
+            if commits(event) {
+                this.commit_pattern_field(cx);
+            } else if matches!(event, InputEvent::Change) {
+                this.show_example(cx);
+            }
         })
         .detach();
-        cx.observe(&pattern_field, |this, _, cx| this.show_example(cx))
-            .detach();
         Self {
             focus: cx.focus_handle(),
             tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
@@ -119,44 +127,40 @@ impl SettingsView {
         self.import_root = settings.import_root.clone();
         self.import_pattern = settings.import_pattern.clone();
         let pattern = self.import_pattern.clone();
-        self.pattern_field
-            .update(cx, |field, cx| field.set_text(&pattern, window, cx));
+        show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
     }
 
-    fn show_names(&mut self, names: LabelNames, window: &Window, cx: &mut Context<Self>) {
+    fn show_names(&mut self, names: LabelNames, window: &mut Window, cx: &mut Context<Self>) {
         for (field, text) in self
             .name_fields
             .iter()
             .zip(settingsmodal::label_texts(&names))
         {
-            field.update(cx, |field, cx| field.set_text(text, window, cx));
+            show(field, text, window, cx);
         }
         self.label_names = names;
     }
 
-    /// A name field committed (Enter, or it lost the focus) or was left with
-    /// Escape. Escape commits too, then closes the modal: the Tauri field's
-    /// `change` fires when the closing dialog takes its focus.
-    fn name_field(&mut self, event: textinput::Event, window: &mut Window, cx: &mut Context<Self>) {
+    /// A name field committed: Enter, the focus left it, or Escape, which
+    /// then closes the modal (`key_down`), as the Tauri field's `change`
+    /// fires when the closing dialog takes its focus.
+    fn commit_name_fields(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let texts: Vec<String> = self
             .name_fields
             .iter()
-            .map(|field| field.read(cx).text().to_owned())
+            .map(|field| field.read(cx).value().to_string())
             .collect();
         let texts = std::array::from_fn(|at| texts[at].as_str());
         self.commit_names(settingsmodal::label_names_of(texts), window, cx);
-        if event == textinput::Event::Cancel && self.model.is_open() {
-            self.close(cx);
-        }
     }
 
     /// Shows `names` back in the fields and hands them to the main view when
     /// they differ from those in force.
-    fn commit_names(&mut self, names: LabelNames, window: &Window, cx: &mut Context<Self>) {
+    fn commit_names(&mut self, names: LabelNames, window: &mut Window, cx: &mut Context<Self>) {
         let current = self.label_names.clone();
         self.show_names(names.clone(), window, cx);
         if let Some(names) = settingsmodal::label_change(&current, names) {
@@ -176,21 +180,18 @@ impl SettingsView {
     /// The example for the pattern in the field, a local call, so it follows
     /// every edit without the Tauri frontend's debounce.
     fn show_example(&mut self, cx: &mut Context<Self>) {
-        let example = import::today_example(&self.import_root, self.pattern_field.read(cx).text());
+        let example =
+            import::today_example(&self.import_root, &self.pattern_field.read(cx).value());
         if example != self.example {
             self.example = example;
             cx.notify();
         }
     }
 
-    /// The pattern field committed or was left with Escape, which commits
-    /// too and then closes, as a name field does.
-    fn pattern_field(&mut self, event: textinput::Event, cx: &mut Context<Self>) {
-        let pattern = self.pattern_field.read(cx).text().to_owned();
+    /// The pattern field committed, as a name field does.
+    fn commit_pattern_field(&mut self, cx: &mut Context<Self>) {
+        let pattern = self.pattern_field.read(cx).value().to_string();
         self.commit_pattern(pattern, cx);
-        if event == textinput::Event::Cancel && self.model.is_open() {
-            self.close(cx);
-        }
     }
 
     /// A valid new pattern is handed to the main view to store; an invalid
@@ -212,9 +213,9 @@ impl SettingsView {
     }
 
     /// An example pattern button: it fills the field and commits.
-    fn use_pattern(&mut self, pattern: &str, window: &Window, cx: &mut Context<Self>) {
-        self.pattern_field
-            .update(cx, |field, cx| field.set_text(pattern, window, cx));
+    fn use_pattern(&mut self, pattern: &str, window: &mut Window, cx: &mut Context<Self>) {
+        show(&self.pattern_field, pattern, window, cx);
+        self.show_example(cx);
         self.commit_pattern(pattern.to_owned(), cx);
     }
 
@@ -275,7 +276,16 @@ impl SettingsView {
         }
         cx.stop_propagation();
         match key {
-            ModalKey::Close => self.close(cx),
+            ModalKey::Close => {
+                // Escape in a field commits it first: the field's `Escape`
+                // action propagates, so the key goes on to here.
+                if self.pattern_field.focus_handle(cx).is_focused(window) {
+                    self.commit_pattern_field(cx);
+                } else if self.editing(window, cx) {
+                    self.commit_name_fields(window, cx);
+                }
+                self.close(cx);
+            }
             ModalKey::Focus(Step::Next) => window.focus_next(cx),
             ModalKey::Focus(Step::Previous) => window.focus_prev(cx),
             ModalKey::Add(key) => {
@@ -388,7 +398,7 @@ impl SettingsView {
             }))
     }
 
-    fn content(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn content(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let content = div()
             .flex()
             .flex_col()
@@ -415,7 +425,7 @@ impl SettingsView {
                     )
                 }))
                 .when(settingsmodal::writes_xmp(self.format), |d| {
-                    d.child(self.label_names(cx))
+                    d.child(self.label_names(window, cx))
                 }),
             Tab::Shortcuts => {
                 content
@@ -426,14 +436,14 @@ impl SettingsView {
                         cx.listener(|this, _: &ClickEvent, _, cx| this.edit(Edit::ResetAll, cx)),
                     )))
             }
-            Tab::Import => content.child(self.import(cx)),
+            Tab::Import => content.child(self.import(window, cx)),
         }
     }
 
     /// The Tauri paragraph, the read-only root with `Choose…` and its note,
     /// the pattern field, the example line, the example patterns and the
     /// specifier table.
-    fn import(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn import(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (example, refused) = match &self.example {
             Ok(example) => (example.clone(), false),
             Err(reason) => (reason.clone(), true),
@@ -484,7 +494,11 @@ impl SettingsView {
                     .font_weight(FontWeight::SEMIBOLD)
                     .child("Folder pattern"),
             )
-            .child(div().w(px(240.)).child(self.pattern_field.clone()))
+            .child(
+                div()
+                    .w(px(240.))
+                    .child(field(&self.pattern_field, window, cx)),
+            )
             .child(
                 div()
                     .when(refused, |d| d.text_color(rgb(ERROR_COLOR)))
@@ -526,7 +540,7 @@ impl SettingsView {
     /// The Tauri paragraph, a name field per color, the languages `Reset`
     /// chooses from (GPUI has no select element: a wrapping row of them,
     /// the chosen one lit) and `Reset`.
-    fn label_names(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn label_names(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .flex()
             .flex_col()
@@ -541,13 +555,13 @@ impl SettingsView {
                 LABEL_COLORS
                     .iter()
                     .zip(&self.name_fields)
-                    .map(|(color, field)| {
+                    .map(|(color, state)| {
                         div()
                             .flex()
                             .items_center()
                             .gap_2()
                             .child(div().w(px(64.)).flex_none().child(*color))
-                            .child(div().w(px(240.)).child(field.clone()))
+                            .child(div().w(px(240.)).child(field(state, window, cx)))
                     }),
             )
             .child(
@@ -732,7 +746,7 @@ impl SettingsView {
                     .min_h_0()
                     .gap_3()
                     .child(self.tab_list(cx))
-                    .child(self.content(cx)),
+                    .child(self.content(window, cx)),
             )
             .children(self.status.clone().map(|status| {
                 div()
@@ -741,6 +755,39 @@ impl SettingsView {
                     .child(status)
             }))
     }
+}
+
+/// Enter or the focus leaving a field commits it.
+fn commits(event: &InputEvent) -> bool {
+    matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur)
+}
+
+/// Shows `text` in `field`, left alone when it already does, so a commit
+/// that changes nothing keeps the caret and the undo history.
+fn show(field: &Entity<InputState>, text: &str, window: &mut Window, cx: &mut gpui::App) {
+    if field.read(cx).value().as_ref() != text {
+        field.update(cx, |field, cx| field.set_value(text, window, cx));
+    }
+}
+
+/// A field drawn as the port it replaced: the `INPUT_BORDER` border, in
+/// `PRIMARY_COLOR` while focused, no fill, and its size and radius.
+fn field(state: &Entity<InputState>, window: &Window, cx: &gpui::App) -> impl IntoElement {
+    let focused = state.focus_handle(cx).is_focused(window);
+    let input = Input::new(state)
+        .focus_bordered(false)
+        .bg(transparent_black())
+        .border_color(if focused {
+            rgb(PRIMARY_COLOR)
+        } else {
+            rgba(INPUT_BORDER)
+        })
+        .rounded_sm()
+        .px(px(8.))
+        .py(px(3.))
+        .text_size(px(13.));
+    // `Input::h` is a multi-line height; the frame's own is `Styled`'s.
+    Styled::h(input, FIELD_HEIGHT)
 }
 
 /// A small outlined button; a click, Enter or Space on it when focused runs

@@ -180,7 +180,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
   over `settingsmodal::SettingsModal::key` / `stops`, a backdrop whose
   press closes it, a vertical tab list beside the content, local `button` /
   `checkbox` / `radio` helpers, `overflow_y_scroll` lists without a visible
-  scrollbar, and seven `TextInput` entities (six label names, the import
+  scrollbar, and six `TextInput` entities (five label names, the import
   pattern). `textinput.rs` is used only by `settingsview.rs`;
   `unicode-segmentation` only by `textinput.rs`. The tree's keyboard is a
   flag in the view (`tree_keys`), not GPUI focus. The colors are `u32`
@@ -301,9 +301,9 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
       `--auto` page timings in kind (one quick run, not the A/B gate); if it
       visibly does, stop and record it.
 
-- [ ] Step 2: Replace `textinput.rs` with gpui-component's `Input`
+- [x] Step 2: Replace `textinput.rs` with gpui-component's `Input`
   - Done when:
-    - The settings modal's six label name fields and the Import tab's
+    - The settings modal's five label name fields and the Import tab's
       pattern field are `InputState` entities drawn with `Input`, and
       `crates/native/src/textinput.rs` is deleted along with
       `unicode-segmentation` if nothing else uses it.
@@ -867,3 +867,4 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 ## Progress
 
 - (2026-11-14) Step 1 complete
+- (2026-11-14) Step 2 complete

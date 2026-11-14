@@ -45,7 +45,7 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
   while the Tauri app lives there: both crates are in its lock, so a workspace
   patch would swap them for Zed's forks in the shipped app.
 
-### gpui-component is initialized; nothing is drawn from it yet (Inferred)
+### gpui-component is initialized; only `Input` is drawn from it (Inferred)
 
 `gpui-component` `=0.9.1` is compiled on all three platforms.
 `gpui_component::init(cx)` runs first in the `application().run` closure,
@@ -64,8 +64,10 @@ keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foregro
 (`rounded_lg`, the dialog boxes). The fields it does not name (the
 `button_*`, `*_hover` / `*_active` shades, `list_*`, ...) keep `Default
 Dark`'s values. Nothing calls `Theme::sync_system_appearance` or observes
-the window appearance, so a light OS setting leaves the app dark. No source
-file draws a component and the window's content is not wrapped in `Root`.
+the window appearance, so a light OS setting leaves the app dark. The only
+component drawn is `Input`, the settings modal's text fields (see "Text is
+typed through gpui-component's `Input`"), and the window's content is not
+wrapped in `Root`.
 The window root's own black and white stay; the theme is for components.
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
@@ -929,7 +931,7 @@ folder is not re-listed.
 - Rule: a label names change takes the same path (`switch_names`, both
   through `reset_sidecars` under the `format_switch` lock). While the format
   writes XMP the Sidecar tab shows the five name fields
-  (`textinput.rs`), a row of `i18n::presets()` languages and `Reset`; a
+  (`Input`), a row of `i18n::presets()` languages and `Reset`; a
   field's commit (Enter or blur; Escape commits and closes, as the Tauri
   field's `change` fires when the closing dialog takes its focus) or `Reset`
   normalizes the five with `sidecar::label_names_setting`, shows them back
@@ -947,9 +949,10 @@ folder is not re-listed.
 `%Y/%F`). The Import tab shows the root read-only with `Choose…`, the
 `importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
 `IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
-`textinput.rs` field and the example line, `import::today_example` (the
-native crate has no `chrono`), recomputed in a `cx.observe` on the field on
-every notify, so with no debounce; a refusal shows in the error color. A
+`Input` field and the example line, `import::today_example` (the
+native crate has no `chrono`), recomputed on the field's every
+`InputEvent::Change` (and after an example button's `set_value`), so with no
+debounce; a refusal shows in the error color. A
 commit (Enter, blur, Escape then close) or an example button goes through
 `settingsmodal::pattern_change`: a valid new pattern emits
 `Change::ImportPattern`, which the window writes and keeps in `settings`; an
@@ -1517,8 +1520,8 @@ a folder operation's run, then the scan's running pass
 bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
 `MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
 width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's progress element: no component is drawn yet (see
-"gpui-component is initialized; nothing is drawn from it yet").
+gpui-component's progress element: only `Input` is drawn from it (see
+"gpui-component is initialized; only `Input` is drawn from it").
 
 - Rule: the bar is `absolute` inside the status row (made `relative`), on
   its top edge, so showing or hiding it changes no layout: the canvas's
@@ -1538,51 +1541,69 @@ gpui-component's progress element: no component is drawn yet (see
   shows nothing for them. A new operation needs a `(done, total)` callback
   before it can feed the bar.
 
-### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
+### Text is typed through gpui-component's `Input` (Inferred)
 
-GPUI at the pinned rev has no text input element. `textinput.rs` is a port
-of `crates/gpui/examples/input.rs` (Apache-2.0, the source named in its
-header): a focusable `div` around a custom `Element` that shapes one line,
-paints the caret, the selection and the IME's marked text underlined, and
-registers the entity as the window's input handler
-(`window.handle_input` with an `ElementInputHandler`) on every paint, so the
-platform's text input and IME reach `EntityInputHandler`'s
-`replace_text_in_range` / `replace_and_mark_text_in_range` only while the
-input is focused. The owner reads the text with `text`, sets it with
-`set_text` and hears `Event::Commit` (Enter, or the focus left: `cx.on_blur`)
-and `Event::Cancel` (Escape).
+The settings modal's text fields (the label names, the import pattern) are
+`gpui_component::input::InputState` entities drawn with `Input`; GPUI at the
+pinned rev has no text input of its own. The state registers itself as the
+window's input handler while focused, so the platform's text input and the
+IME reach its `EntityInputHandler`. The view reads the text with `value`, sets
+it with `set_value` (which emits no `Change` and clears the undo history, so
+`settingsview.rs`'s `show` leaves a field already showing the text alone) and
+subscribes to `InputEvent`:
 
-- Rule: the editing keys (backspace, delete, the arrows and Shift+arrows,
-  Home / End, select-all, copy, cut, paste, Enter, Escape) are taken in the
-  input's own `on_key_down` from `keys::key_name`, the clipboard ones on
-  `ctrl+` on Windows and Linux and `meta+` (cmd) on macOS. The example binds
-  them with `actions!` and `cx.bind_keys` as `cmd-a` / `cmd-c` / `cmd-v` /
-  `cmd-x` only, so on Windows Ctrl+A and the rest did nothing there; here
-  nothing enters GPUI's global keymap, so the pager's key path is unchanged.
+| Owner's meaning | `InputEvent` / key |
+| --- | --- |
+| commit | `PressEnter` (Enter) or `Blur` (the focus left the field) |
+| commit, then close the modal | Escape: no event; the `Escape` action propagates on a single-line input, so the key reaches `SettingsView::key_down` as `ModalKey::Close`, which commits the focused field and closes |
+| the text changed | `Change` (the pattern's example line follows it) |
+
+- Rule: the editing keys are the `Input` key context's bindings (see the
+  table in "gpui-component is initialized"), dispatched as actions before
+  any key-down listener. A handled one stops there, so it reaches neither the
+  box's `key_down` nor the window's keymap; `Enter`, `Escape` and the
+  `IndentInline` / `OutdentInline` of `tab` / `shift-tab` propagate on a
+  single-line input, so the box's handler still sees Escape and Tab
+  (`ModalKey::Close`, `ModalKey::Focus`). The fields stay in the modal's tab
+  order: the state's focus handle is a tab stop and the frame's is not.
 - Rule: a stopped key down types nothing on Windows. `gpui_windows`'s message
   loop calls `translate_accelerator` first, which dispatches `WM_KEYDOWN` to
-  the window; when a listener stopped it (`propagate` false) the loop skips
-  `TranslateMessage`, so no `WM_CHAR` follows. A consumed editing key
-  therefore never also inserts a character, and a key meant to be typed must
-  not be stopped by anything on the dispatch path: the settings box's handler
-  lets a key it does not take go on while a name field is focused
+  the window; when an action handler or a listener stopped it (`propagate`
+  false) the loop skips `TranslateMessage`, so no `WM_CHAR` follows. A
+  consumed editing key therefore never also inserts a character, and a key
+  meant to be typed must not be stopped by anything on the dispatch path: no
+  `Input` binding is a bare printable key, the settings box's handler lets a
+  key it does not take go on while a field is focused
   (`settingsmodal::stops`), and the window's root handler returns without
   stopping it while the modal is open. `WM_CHAR` then reaches the focused
-  input's handler. A key the IME takes arrives as `VK_PROCESSKEY`, for which
-  `MapVirtualKeyW` gives no character, so GPUI raises no `KeyDownEvent` and
-  `TranslateMessage` always runs: composition never passes through the
-  listeners, and Enter or Backspace inside a composition stay the IME's.
-- Seen running (the user, 2026-11-14, Windows, the example itself built
-  standalone at the pinned rev): Japanese IME composition, the candidate
-  window placed at the text and the commit all work. Not yet seen in the
-  native app (the settings' label name fields, the tree's rename field): the
-  pending checks in `../plans/20261113-gpui-settings/learnings.md` and
-  `../plans/20261113-gpui-folder-dialogs/learnings.md`.
-- Limits kept from the example: one line, no horizontal scroll (long text is
-  clipped), no undo, no word movement, no double-click selection. Its third
-  test (one selection rectangle on a 10 000-character line) needs a shaped
-  line and so GPUI's `test-support`, which this crate does not enable; it is
-  ported onto the rectangle helper (`span`).
+  state's handler; a propagated Enter, Escape or Tab gives a control
+  character, which `parse_char_message` drops. A key the IME takes arrives
+  as `VK_PROCESSKEY`, for which `MapVirtualKeyW` gives no character, so GPUI
+  raises no `KeyDownEvent` and `TranslateMessage` always runs: composition
+  never passes through the bindings or the listeners, and Enter or Backspace
+  inside a composition stay the IME's.
+- Rule: the look is the port's, set per field (`settingsview.rs`'s `field`):
+  `focus_bordered(false)` drops the component's focus ring (the theme's
+  `ring`), and the border is `INPUT_BORDER`, `PRIMARY_COLOR` while the
+  state's handle is focused, with no fill, `rounded_sm`, 8 / 3 px padding,
+  13 px text and a 29 px height (`FIELD_HEIGHT`, a 13 px line at GPUI's
+  default line height plus the padding and border). These are `Styled`
+  refinements, applied after the component's own size and theme styling;
+  `Input::h` is the multi-line height, so the frame's is set through
+  `Styled::h`. The caret and selection colors are `Default Dark`'s, which
+  `theme.rs` does not map.
+- Rule: a right-click opens the component's edit menu (Cut, Copy, Paste,
+  Select All) as an OS-native menu on Windows and macOS (`native_menu`),
+  which needs no `Root`. On Linux it is a drawn `PopupMenu` held by `Root`'s
+  overlay, and without `Root` mounted `WindowState::native_menu_overlay`
+  finds none, so nothing opens.
+- What the component adds over the port it replaced (`textinput.rs`, GPUI's
+  `input.rs` example): undo / redo, word movement and deletion, horizontal
+  scroll of a long text, double-click word selection and the right-click
+  menu.
+- Not verified headless: the typing, the IME, the commits, the look and the
+  right-click menu; the hand check is pending in
+  `../plans/20261114-gpui-component-adoption/learnings.md`.
 
 ### A launch without a folder shows only the tree (Inferred)
 
