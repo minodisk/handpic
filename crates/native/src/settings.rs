@@ -24,8 +24,8 @@ use serde_json::{Map, Value};
 use crate::{
     datadir::{self, IDENTIFIER, LEGACY_IDENTIFIERS},
     filter::Stored,
-    session::Geometry,
     panels::Panels,
+    session::Geometry,
     sort::SortKey,
 };
 
@@ -270,8 +270,8 @@ mod tests {
     use crate::{
         datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
         filter::{FilterFlag, Stored},
-        session::{Geometry, Rect},
         panels::Panels,
+        session::{Geometry, Rect},
         sort::SortKey,
     };
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
