@@ -15,6 +15,12 @@ pub enum Action {
     RefreshFolder,
     ExpandAll,
     CollapseAll,
+    RenameFolder,
+    RenameByDate,
+    RewriteSidecars,
+    DeleteSidecars,
+    SequenceTimestamps,
+    ImportFolder,
     SelectAll,
     RevealFile,
     CopyFileName,
@@ -45,9 +51,20 @@ fn command(action: Action, label: &str) -> Item {
     }
 }
 
+/// A folder operation whose step of the folder dialogs plan has not landed
+/// yet: present in the menu, disabled.
+fn pending(action: Action, label: &str) -> Item {
+    Item {
+        disabled: true,
+        ..command(action, label)
+    }
+}
+
 /// The folder tree's menu: the reveal item, labeled per platform, then
 /// copying the folder's path or name, then re-listing it, then, not on a
-/// root (home or a volume), expanding or collapsing every subfolder under it.
+/// root (home or a volume), renaming it and expanding or collapsing every
+/// subfolder under it, then rewriting or deleting its sidecars, sequencing
+/// its JPEG timestamps and importing it.
 pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
     let mut groups = vec![
         vec![command(Action::RevealFolder, reveal_label)],
@@ -59,10 +76,23 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
     ];
     if !root {
         groups.push(vec![
+            pending(Action::RenameFolder, "Rename…"),
+            pending(Action::RenameByDate, "Rename by Capture Date…"),
+        ]);
+        groups.push(vec![
             command(Action::ExpandAll, "Expand All"),
             command(Action::CollapseAll, "Collapse All"),
         ]);
     }
+    groups.push(vec![
+        command(Action::RewriteSidecars, "Rewrite Sidecars from Index…"),
+        command(Action::DeleteSidecars, "Delete Sidecars…"),
+    ]);
+    groups.push(vec![pending(
+        Action::SequenceTimestamps,
+        "Sequence JPEG Timestamps…",
+    )]);
+    groups.push(vec![pending(Action::ImportFolder, "Import…")]);
     groups
 }
 
@@ -266,11 +296,11 @@ mod tests {
 
     const REVEAL: &str = "Reveal in Finder";
 
-    /// Ported from `context.test.ts`'s `folderMenuGroups` cases, less the
-    /// items part 2 adds (the renames, the sidecars, the sequencing and the
-    /// import).
+    /// Ported from `context.test.ts`'s `folderMenuGroups` cases; the items
+    /// whose step has not landed yet are disabled.
     #[test]
-    fn folder_groups_hold_the_reveal_the_copy_the_refresh_then_the_expand_and_collapse_items() {
+    fn folder_groups_hold_the_reveal_copy_refresh_rename_expand_sidecar_sequence_and_import_items()
+    {
         assert_eq!(
             folder_groups(REVEAL, false),
             vec![
@@ -281,15 +311,28 @@ mod tests {
                 ],
                 vec![command(Action::RefreshFolder, "Refresh")],
                 vec![
+                    pending(Action::RenameFolder, "Rename…"),
+                    pending(Action::RenameByDate, "Rename by Capture Date…"),
+                ],
+                vec![
                     command(Action::ExpandAll, "Expand All"),
                     command(Action::CollapseAll, "Collapse All"),
                 ],
+                vec![
+                    command(Action::RewriteSidecars, "Rewrite Sidecars from Index…"),
+                    command(Action::DeleteSidecars, "Delete Sidecars…"),
+                ],
+                vec![pending(
+                    Action::SequenceTimestamps,
+                    "Sequence JPEG Timestamps…"
+                )],
+                vec![pending(Action::ImportFolder, "Import…")],
             ]
         );
     }
 
     #[test]
-    fn a_root_has_no_expand_or_collapse_all() {
+    fn a_root_has_no_rename_or_expand_items_and_keeps_import() {
         let actions: Vec<Vec<Action>> = folder_groups(REVEAL, true)
             .into_iter()
             .map(|group| group.into_iter().map(|item| item.action).collect())
@@ -300,17 +343,38 @@ mod tests {
                 vec![Action::RevealFolder],
                 vec![Action::CopyPath, Action::CopyFolderName],
                 vec![Action::RefreshFolder],
+                vec![Action::RewriteSidecars, Action::DeleteSidecars],
+                vec![Action::SequenceTimestamps],
+                vec![Action::ImportFolder],
             ]
         );
     }
 
     #[test]
-    fn folder_items_have_no_shortcut_no_checked_state_and_are_enabled() {
+    fn folder_items_have_no_shortcut_or_checked_state() {
         for item in folder_groups(REVEAL, false).into_iter().flatten() {
             assert_eq!(item.shortcut, "");
             assert_eq!(item.checked, None);
-            assert!(!item.disabled);
         }
+    }
+
+    #[test]
+    fn only_the_folder_items_whose_step_has_not_landed_are_disabled() {
+        let disabled: Vec<Action> = folder_groups(REVEAL, false)
+            .into_iter()
+            .flatten()
+            .filter(|item| item.disabled)
+            .map(|item| item.action)
+            .collect();
+        assert_eq!(
+            disabled,
+            vec![
+                Action::RenameFolder,
+                Action::RenameByDate,
+                Action::SequenceTimestamps,
+                Action::ImportFolder,
+            ]
+        );
     }
 
     #[test]

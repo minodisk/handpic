@@ -412,7 +412,11 @@ full-window dialog and runs through the backend's `trash::trash_listed` /
 `trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding
 a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one
 held operation, a later request replacing it, and the in-flight count no
-listing starts under; `cancels_scan`, a port of `idle.ts`), and `src/peaking.rs`
+listing starts under; `cancels_scan`, a port of `idle.ts`), `src/dialog.rs` the
+confirmation dialog model the folder operations share, `src/folderops.rs` the
+folder menu's operations (the flow under way, one at a time, their dialog
+drawn as a `deferred` layer), `src/sidecars.rs` the port of `sidecars.ts`
+(`Rewrite Sidecars from Index…` / `Delete Sidecars…`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

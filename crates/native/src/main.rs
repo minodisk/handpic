@@ -2,12 +2,14 @@ mod args;
 mod companion;
 mod context;
 mod datadir;
+mod dialog;
 mod exif;
 mod eyes;
 mod facemesh;
 mod faces;
 mod filter;
 mod focus;
+mod folderops;
 mod history;
 mod hold;
 mod idle;
@@ -29,6 +31,7 @@ mod selection;
 mod settings;
 mod settingsmodal;
 mod settingsview;
+mod sidecars;
 mod sort;
 mod strip;
 mod textinput;
@@ -235,6 +238,7 @@ fn held_label(held: &HeldOp) -> String {
         HeldOp::Run(target) => format!("held run in {}", target.dir),
         HeldOp::Undo(entry) => format!("held undo of run {}", entry.run_id),
         HeldOp::Redo(entry) => format!("held redo of run {}", entry.run_id),
+        HeldOp::Sidecars(target) => format!("held {} of {}", target.kind.label(), target.dir),
     }
 }
 
@@ -243,11 +247,12 @@ fn held_label(held: &HeldOp) -> String {
 type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
 
 /// What the gate holds for the listing or scan under way: a confirmed run,
-/// or the undo or redo of one.
+/// or the undo or redo of one, or a folder's sidecar rewrite or delete.
 enum HeldOp {
     Run(trash::Target),
     Undo(TrashEntry),
     Redo(TrashEntry),
+    Sidecars(sidecars::Target),
 }
 
 struct Opened {
@@ -390,6 +395,8 @@ struct Riffle {
     context: context::Menu,
     /// The strip's `Move to Trash…` / `Delete Permanently…` dialog.
     trash: trash::TrashFlow,
+    /// The folder menu's operations and their dialog.
+    folderops: folderops::FolderOps,
     /// A confirmed run, or a run's undo or redo, held for the listing or
     /// scan under way; in flight while one runs, which no listing or scan
     /// starts under.
@@ -684,6 +691,7 @@ impl Riffle {
             tree_syncing: None,
             context: context::Menu::default(),
             trash: trash::TrashFlow::default(),
+            folderops: folderops::FolderOps::default(),
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
@@ -1028,6 +1036,7 @@ impl Riffle {
         if self.trashing.is_some()
             || paths.is_empty()
             || self.settings_view.read(cx).is_open()
+            || self.folderops.busy()
             || !self.trash.start(trash::Target {
                 dir,
                 paths: paths.to_vec(),
@@ -1135,7 +1144,7 @@ impl Riffle {
                 started.elapsed().as_millis()
             );
             this.update(cx, |this, cx| {
-                this.trashed(vec![dir], mode, own, false, result, cx);
+                this.trashed(vec![dir], mode, trash::What::Files, own, false, result, cx);
             })
             .ok();
         })
@@ -1147,10 +1156,15 @@ impl Riffle {
     /// moved something on the undo history, drop what a delete took from
     /// the histories, and re-list the open folder, which also rescans what
     /// a canceled scan left, or open the folder asked for meanwhile.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the Tauri `trashed`'s parameters"
+    )]
     fn trashed(
         &mut self,
         dirs: Vec<String>,
         mode: trash::Mode,
+        what: trash::What,
         own: bool,
         redo: bool,
         result: Result<riffle_backend::trash::Summary, String>,
@@ -1183,12 +1197,15 @@ impl Riffle {
                     self.undo
                         .without_paths(&summary.moved.iter().cloned().collect());
                 }
+                if what == trash::What::Sidecars {
+                    self.sidecars_trashed(&dirs, &summary);
+                }
                 if let Some(run_id) = summary.run_id {
                     let count = summary.moved.len();
                     if redo {
-                        self.undo.redone_trash(run_id, count, dirs);
+                        self.undo.redone_trash(run_id, count, what, dirs);
                     } else {
-                        self.undo.record_trash(run_id, count, dirs);
+                        self.undo.record_trash(run_id, count, what, dirs);
                     }
                 }
                 for failure in &summary.failed {
@@ -1197,7 +1214,7 @@ impl Riffle {
                         format!("{}: {}", mode.failure(), failure.message),
                     );
                 }
-                self.step_note = Some(trash::trashed_status(mode, &summary));
+                self.step_note = Some(trash::trashed_status(mode, what, &summary));
             }
             Err(e) => {
                 log::error!("trash: {} in {dirs:?} failed: {e}", mode.label());
@@ -1217,10 +1234,11 @@ impl Riffle {
     /// An undo or a redo with the run `entry` on top: through the gate,
     /// waiting for a listing or scan under way without canceling it.
     fn step_trash(&mut self, entry: TrashEntry, redo: bool, cx: &mut Context<Self>) {
+        let (undo, redo_label) = entry.what.step_labels();
         let (label, held) = if redo {
-            ("Redo Move to Trash", HeldOp::Redo(entry))
+            (redo_label, HeldOp::Redo(entry))
         } else {
-            ("Undo Move to Trash", HeldOp::Undo(entry))
+            (undo, HeldOp::Undo(entry))
         };
         let busy = self.resync.busy() || self.gate.in_flight();
         match self.gate.request(label, held, busy) {
@@ -1230,7 +1248,7 @@ impl Riffle {
             Some(HeldOp::Redo(entry)) => {
                 self.redo_trash(entry, cx);
             }
-            Some(HeldOp::Run(_)) => {}
+            Some(_) => {}
             None => log::info!("trash: {label} held for the scan's end"),
         }
         cx.notify();
@@ -1288,7 +1306,7 @@ impl Riffle {
                         format!("could not restore from the Trash: {}", failure.message),
                     );
                 }
-                self.step_note = Some(trash::restored_status(&restored));
+                self.step_note = Some(trash::restored_status(&restored, entry.what, entry.count));
                 let opens = self
                     .dir
                     .as_deref()
@@ -1387,7 +1405,15 @@ impl Riffle {
                     Err(e) if !trash::still_held(e) => this.undo.remove_trash(entry.id),
                     Err(_) => {}
                 }
-                this.trashed(entry.dirs, trash::Mode::Trash, false, true, result, cx);
+                this.trashed(
+                    entry.dirs,
+                    trash::Mode::Trash,
+                    entry.what,
+                    false,
+                    true,
+                    result,
+                    cx,
+                );
             })
             .ok();
         })
@@ -1424,7 +1450,7 @@ impl Riffle {
                 self.tree.collapse_all(&path);
                 self.tree_changed(cx);
             }
-            _ => {}
+            action => self.folder_op(action, path, cx),
         }
     }
 
@@ -1722,6 +1748,7 @@ impl Riffle {
                     return;
                 }
             }
+            Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
             None => {}
         }
         if self.resync.finished() {
@@ -2371,6 +2398,9 @@ impl Riffle {
         let name = keys::key_name(keystroke);
         if self.trash.busy() {
             return self.trash_key_down(name.as_deref(), held, cx);
+        }
+        if self.folderops.dialog_open() {
+            return self.folder_dialog_key(name.as_deref(), cx);
         }
         let Some(name) = name else {
             return;
@@ -4180,6 +4210,7 @@ impl Render for Riffle {
             .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
             .children(self.trash_dialog(cx))
+            .children(self.folder_dialog(cx))
     }
 }
 

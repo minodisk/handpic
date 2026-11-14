@@ -154,4 +154,12 @@ mod tests {
         assert!(!cancels_scan(Some("Delete Sidecars")));
         assert!(!cancels_scan(None));
     }
+
+    #[test]
+    fn cancels_scan_for_neither_folder_sidecar_operation() {
+        assert!(!cancels_scan(Some("Rewrite Sidecars from Index")));
+        assert!(!cancels_scan(Some("Delete Sidecars")));
+        assert!(!cancels_scan(Some("Undo Delete Sidecars")));
+        assert!(!cancels_scan(Some("Redo Delete Sidecars")));
+    }
 }

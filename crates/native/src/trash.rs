@@ -43,6 +43,33 @@ fn files(count: usize) -> &'static str {
     if count == 1 { "file" } else { "files" }
 }
 
+/// What a recorded run moved: RAWs with their sidecars or JPEGs (`Move to
+/// Trash…`), or sidecars alone (`Delete Sidecars…`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum What {
+    #[default]
+    Files,
+    Sidecars,
+}
+
+impl What {
+    /// The idle gate's labels of a held undo and redo of such a run.
+    pub fn step_labels(self) -> (&'static str, &'static str) {
+        match self {
+            What::Files => ("Undo Move to Trash", "Redo Move to Trash"),
+            What::Sidecars => ("Undo Delete Sidecars", "Redo Delete Sidecars"),
+        }
+    }
+}
+
+fn noun(count: usize, what: What) -> &'static str {
+    match what {
+        What::Files => files(count),
+        What::Sidecars if count == 1 => "sidecar",
+        What::Sidecars => "sidecars",
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Text {
     pub title: &'static str,
@@ -103,11 +130,11 @@ pub fn progress_status(mode: Mode, done: usize, total: usize) -> String {
 }
 
 /// What the pane says once a run came back.
-pub fn trashed_status(mode: Mode, summary: &Summary) -> String {
+pub fn trashed_status(mode: Mode, what: What, summary: &Summary) -> String {
     let count = summary.moved.len();
     let went = match mode {
-        Mode::Trash => format!("Moved {count} {} to the Trash", files(count)),
-        Mode::Delete => format!("Deleted {count} {}", files(count)),
+        Mode::Trash => format!("Moved {count} {} to the Trash", noun(count, what)),
+        Mode::Delete => format!("Deleted {count} {}", noun(count, what)),
     };
     if summary.failed.is_empty() {
         went
@@ -116,11 +143,21 @@ pub fn trashed_status(mode: Mode, summary: &Summary) -> String {
     }
 }
 
-/// What the pane says once an undo came back: the files that came back,
-/// and how many failed.
-pub fn restored_status(restored: &Restored) -> String {
-    let count = restored.restored.len();
-    let back = format!("Restored {count} {} from the Trash", files(count));
+/// How many of the files of a run of `what` that moved `count` came back:
+/// the RAWs and JPEGs `restored` lists, or, for a run of sidecars, which it
+/// never lists, those that did not fail.
+pub fn restored_count(restored: &Restored, what: What, count: usize) -> usize {
+    match what {
+        What::Files => restored.restored.len(),
+        What::Sidecars => count.saturating_sub(restored.failed.len()),
+    }
+}
+
+/// What the pane says once an undo of a run of `what` that moved `count`
+/// came back: the files that came back, and how many failed.
+pub fn restored_status(restored: &Restored, what: What, count: usize) -> String {
+    let count = restored_count(restored, what, count);
+    let back = format!("Restored {count} {} from the Trash", noun(count, what));
     if restored.failed.is_empty() {
         back
     } else {
@@ -396,15 +433,19 @@ mod tests {
     #[test]
     fn trashed_status_counts_the_files_it_moved_and_appends_the_failures() {
         assert_eq!(
-            trashed_status(Mode::Trash, &summary(&["/a.ARW"], 0)),
+            trashed_status(Mode::Trash, What::Files, &summary(&["/a.ARW"], 0)),
             "Moved 1 file to the Trash"
         );
         assert_eq!(
-            trashed_status(Mode::Trash, &summary(&["/a.ARW", "/b.ARW", "/c.ARW"], 0)),
+            trashed_status(
+                Mode::Trash,
+                What::Files,
+                &summary(&["/a.ARW", "/b.ARW", "/c.ARW"], 0)
+            ),
             "Moved 3 files to the Trash"
         );
         assert_eq!(
-            trashed_status(Mode::Trash, &summary(&["/b.ARW", "/c.ARW"], 1)),
+            trashed_status(Mode::Trash, What::Files, &summary(&["/b.ARW", "/c.ARW"], 1)),
             "Moved 2 files to the Trash, 1 failed"
         );
     }
@@ -412,15 +453,23 @@ mod tests {
     #[test]
     fn trashed_status_of_a_delete_says_the_files_were_deleted() {
         assert_eq!(
-            trashed_status(Mode::Delete, &summary(&["/a.ARW", "/b.ARW"], 0)),
+            trashed_status(
+                Mode::Delete,
+                What::Files,
+                &summary(&["/a.ARW", "/b.ARW"], 0)
+            ),
             "Deleted 2 files"
         );
         assert_eq!(
-            trashed_status(Mode::Delete, &summary(&["/a.ARW"], 0)),
+            trashed_status(Mode::Delete, What::Files, &summary(&["/a.ARW"], 0)),
             "Deleted 1 file"
         );
         assert_eq!(
-            trashed_status(Mode::Delete, &summary(&["/a.ARW", "/b.ARW"], 1)),
+            trashed_status(
+                Mode::Delete,
+                What::Files,
+                &summary(&["/a.ARW", "/b.ARW"], 1)
+            ),
             "Deleted 2 files, 1 failed"
         );
     }
@@ -445,19 +494,60 @@ mod tests {
     #[test]
     fn restored_status_counts_the_files_that_came_back() {
         assert_eq!(
-            restored_status(&restored(&["/a.ARW"], 0)),
+            restored_status(&restored(&["/a.ARW"], 0), What::Files, 0),
             "Restored 1 file from the Trash"
         );
         assert_eq!(
-            restored_status(&restored(&["/a.ARW", "/b.ARW"], 0)),
+            restored_status(&restored(&["/a.ARW", "/b.ARW"], 0), What::Files, 0),
             "Restored 2 files from the Trash"
+        );
+    }
+
+    /// `trash.test.ts`'s `sidecar runs` cases.
+    #[test]
+    fn trashed_status_counts_the_sidecars_moved() {
+        assert_eq!(
+            trashed_status(
+                Mode::Trash,
+                What::Sidecars,
+                &summary(&["/a.xmp", "/b.xmp"], 0)
+            ),
+            "Moved 2 sidecars to the Trash"
+        );
+        assert_eq!(
+            trashed_status(Mode::Trash, What::Sidecars, &summary(&["/a.xmp"], 0)),
+            "Moved 1 sidecar to the Trash"
+        );
+        assert_eq!(
+            trashed_status(
+                Mode::Trash,
+                What::Sidecars,
+                &summary(&["/a.xmp", "/b.xmp"], 1)
+            ),
+            "Moved 2 sidecars to the Trash, 1 failed"
+        );
+    }
+
+    #[test]
+    fn restored_status_counts_the_sidecars_that_did_not_fail() {
+        assert_eq!(
+            restored_status(&restored(&[], 0), What::Sidecars, 3),
+            "Restored 3 sidecars from the Trash"
+        );
+        assert_eq!(
+            restored_status(&restored(&[], 1), What::Sidecars, 3),
+            "Restored 2 sidecars from the Trash, 1 failed"
+        );
+        assert_eq!(
+            restored_status(&restored(&[], 0), What::Sidecars, 1),
+            "Restored 1 sidecar from the Trash"
         );
     }
 
     #[test]
     fn restored_status_appends_the_failures() {
         assert_eq!(
-            restored_status(&restored(&["/b.ARW"], 2)),
+            restored_status(&restored(&["/b.ARW"], 2), What::Files, 0),
             "Restored 1 file from the Trash, 2 failed"
         );
     }

@@ -64,3 +64,79 @@
   threads. The two preview tests moved; the `begin` test stays in the app.
 - `crates/native/Cargo.lock` gained only `chrono` under `riffle-backend`
   (chrono was already in the lock through `riffle-core`).
+
+## Step 3: the folder menu's items, the shared dialog, and the folder sidecar operations
+
+- `folderops.rs` is a child module of `main.rs` with an `impl Riffle` block,
+  not an entity: a child module reaches the view's private fields, methods
+  and the color constants, and its own methods called from `main.rs` need
+  `pub(crate)`.
+- No `Event` variant: the preview and the runs come back through
+  `cx.spawn` + `update`, and nothing here reports progress. Step 4 adds the
+  variant its run's progress needs.
+- Part 1's `TrashEntry` had no `what`, and its `undone_trash` counted
+  `Restored::restored`, which never lists a sidecar, so an undone sidecar run
+  would have had nothing to redo. It gained `what: trash::What`, and
+  `trash::restored_count` ports `restoredCount` (a sidecar run counts the
+  sidecars that did not fail). `trashed_status` / `restored_status` take the
+  `What`, and the gate's undo / redo labels come from it (`Undo Delete
+  Sidecars`).
+- A sidecar delete ends in part 1's `trashed` rather than a copy of it: it
+  already leaves the in-flight count, records the run, writes the failures,
+  sets the status and re-lists (or opens the deferred folder). The Tauri run
+  re-reads the entries instead of re-listing (`rescan = false`); the native
+  `trashed` re-lists, which reads the cleared rows back too.
+- `resync.hold()` is taken only when a folder is open: `trashed` and the
+  rewrite's end release it through `Resync::open` / `finished` only on that
+  path, and a hold with no folder open would leave every later request held.
+- The dialog's Enter and Space both press the focused button, as a focused
+  HTML button and part 1's trash dialog do; the plan's Done-when names Enter
+  only.
+- `clippy::too_many_arguments` fired once `trashed` took `what`; it carries an
+  `#[expect]` naming the Tauri `trashed`'s parameters.
+
+## Deferred issues (todo candidates)
+
+- **Pending manual check (Step 3, Windows, the user's).** Basis: Step 3's
+  Done-when; the dialog, its keys and the runs on disk cannot be driven
+  headless. The step's checkbox was ticked on the automated criteria
+  (`dialog.rs`, `sidecars.rs`, `context.rs`, `trash.rs`, `history.rs` and
+  `idle.rs` tests, `mise run ci`, `mise run native:check`). Setup: copy a
+  dozen ARWs, a few with a `.xmp` and a `.dop` next to them, into
+  `D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars\`, and two JPEGs
+  alone into `...\jpeg-only\`; `cargo build` in `crates/native` (rename a
+  locked `riffle-native.exe` aside, never kill it); run
+  `crates\native\target\debug\riffle-native.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step3.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step3.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step3.log`
+  with `index-step3.sqlite` deleted first (a fresh index). Only these copies.
+  Steps and expected results:
+  1. Right-click `sidecars` in the tree: the menu shows `Rename…` and
+     `Rename by Capture Date…` (dimmed), `Expand All` / `Collapse All`,
+     `Rewrite Sidecars from Index…` / `Delete Sidecars…`, `Sequence JPEG
+     Timestamps…` (dimmed), `Import…` (dimmed). On a root (home or a drive)
+     the rename and expand groups are gone.
+  2. Pick `Rewrite Sidecars from Index…` right after the launch, while pass
+     1 runs: the pane shows `Rewrite Sidecars from Index: waiting for the
+     scan to finish`, the scan is not canceled, and the dialog opens once
+     the scan ends. Do the same with `Delete Sidecars…`.
+  3. Judge a few files (stars, a pick, a label), then `Rewrite Sidecars from
+     Index…`: the dialog lists `n files with a judgment`, `m files without
+     one (any existing sidecar is cleared)` (and the skipped count when some
+     RAW has no row) and `Rewrite the XMP sidecars of k files in sidecars?`;
+     `Rewrite` is outlined; Tab moves the outline to `Cancel` and back;
+     Escape closes it. Again with `Rewrite`: the buttons dim, the running
+     note shows, the dialog closes and the pane says `Rewrote the sidecars
+     of k files in sidecars`; the `.xmp` files carry the judgments.
+  4. `Delete Sidecars…`: the dialog lists the per-kind counts and sizes
+     (`n XMP sidecars (… KB)`) and `Move n sidecars (…) of sidecars to the
+     Trash?` with a red `Move to Trash`. Confirm: the sidecars are in the
+     Recycle Bin, the strip's marks are gone, the pane says `Moved n
+     sidecars to the Trash`. `Ctrl+Z`: `Restored n sidecars from the
+     Trash`, the sidecars are back and the marks return after the
+     re-listing; `Ctrl+Shift+Z` moves them again.
+  5. Right-click `jpeg-only` and pick either item: the pane says
+     `jpeg-only: rewriting sidecars applies to RAW files only` (or
+     `deleting …`) and no dialog opens.
+  6. While a dialog is open, a click on the tree or the strip does nothing
+     and no key reaches the strip. With a request waiting during a scan,
+     open another folder from the tree: the waiting note goes and no dialog
+     opens.
