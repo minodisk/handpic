@@ -434,7 +434,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
       Lucide catalog; do not use it). Adding the asset source has no
       per-frame cost.
 
-- [ ] Step 4: The look of the Sort / Filter menus and the right-click menus
+- [x] Step 4: The look of the Sort / Filter menus and the right-click menus
   - Done when:
     - The open Sort and Filter menus and the tree's and strip's right-click
       menus read the theme (popover background and foreground, border,
@@ -869,3 +869,4 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 - (2026-11-14) Step 1 complete
 - (2026-11-14) Step 2 complete
 - (2026-11-14) Step 3 complete
+- (2026-11-14) Step 4 complete

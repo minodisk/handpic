@@ -151,6 +151,53 @@
   `muted_foreground`, `accent` and `primary`, the same values as the
   constants it read.
 
+## Step 4: the look of the Sort / Filter menus and the right-click menus
+
+- `origin/main` was at `26e4e15d` (Step 3's #1061), as the branch.
+- The rows follow `popup_menu.rs`'s `render_item` and `menu_item.rs` at
+  0.9.1: `px(0.5 rem)`, `py_0`, `h(1.625 rem)` (26 px at the window's 16 px
+  rem; `Small` is 20 px with half the radius), `rounded(theme.radius)`,
+  `gap_x_1`, a 12 px (`xsmall`) icon column holding `IconName::Check` or
+  `Icon::empty()`, the list `p_1` with `gap_y_0p5` between rows, hover
+  `accent` / `accent_foreground`, a disabled row in `muted_foreground` with
+  no hover (the old one was at 50 % opacity), the key binding at the row's
+  right end after `justify_between` / `gap_3` in `muted_foreground` at
+  `text_xs`, and the separator a 2 px `border_b` in `border` at `my_0p5`,
+  `mx_neg_1`. The text stays 13 px (`render_item` sets `text_sm`, 14 px).
+  The rows are taller than before (26 px against about 22), so the Filter
+  menu reaches its height cap sooner.
+- `popover_style` was not used for the surface: its edge is a ring shadow in
+  `foreground` at a fixed alpha plus `shadow-md`, not `theme.border`; the
+  Done-when names `border`, so the surface is `popover` / `popover_foreground`
+  / a 1 px `border` / `radius` set by hand.
+- The scrollbar: `overflow_y_scrollbar()` (`Scrollable`) puts the caller's
+  element inside a `size_full` wrapper and makes it the scrolled content, so
+  the `occlude()` / `on_mouse_down_out` / border would be on the content,
+  which is as tall as all the rows (`on_mouse_down_out` tests `hitbox`
+  bounds, so a press below the visible menu but inside the content would not
+  count as outside) and scrolls with them. `PopupMenu`'s own layout was taken
+  instead: the surface stays the outer element, the row list inside it is
+  `overflow_y_scroll().track_scroll(&handle)` with the max height, and the
+  surface carries `vertical_scrollbar(&handle)` (an `absolute().inset_0()`
+  overlay with no hitbox of its own besides the bar's). The press on the bar
+  is inside the surface, so it is not a press outside.
+- The `ScrollHandle` has to outlive a frame, so it lives on the view
+  (`menu_scroll`, `context_scroll`). `window.use_keyed_state` would have
+  needed `window` threaded into `status_row` / `menu_button`, the latter
+  then at clippy's `too_many_arguments` limit. Before, the offset was GPUI's
+  element state, dropped while the menu was not drawn, so a menu reopened at
+  its top; the handle is replaced on every press of a menu's button and on
+  every right-click open to keep that.
+- The scrollbar's mouse-down listener (`gpui-base`'s `scrollbar.rs`) stops
+  propagation in the bubble phase, and it is registered after (so runs
+  before) the popover's own bubble listeners. The right-click popover's
+  `on_any_mouse_down`, which hands the keyboard back from the tree, became
+  `capture_any_mouse_down` so a press on the bar still does that. The
+  Sort / Filter popover has no bubble listener of its own.
+- Wheel scrolling and the occlusion are unchanged in kind (the row list is
+  the scroll area as before); dragging the thumb runs through the bar's own
+  `window.on_mouse_event` listeners. Neither was seen on screen here.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, Windows, the user's). Basis: Step 1's
@@ -267,3 +314,47 @@
       check (new).
     - Click the backdrop: the modal closes. Reopen and click the close `×`:
       it closes. After closing, the arrows page again.
+- Pending manual check (Step 4, Windows, the user's). Basis: Step 4's
+  Done-when (the four menus' look and the behavior list by hand); the step's
+  checkbox was ticked on the automated criteria (`mise run ci:local`, the
+  `menu.rs` and `context.rs` unit tests unchanged; the crate has no GPUI view
+  test). Related file: `crates/native/src/main.rs` (`popover`,
+  `context_popover`, `menu_surface`, `menu_separator`, `menu_item`,
+  `menu_row`, `context_row`, `menu_pressed`, `tree_context`,
+  `strip_context`).
+  - Build and launch as in the Step 2 check above, on a copy under
+    `D:\Photos\tests\20261114-gpui-component-adoption\` with a fresh
+    `--index` and a test `--settings`, on a folder with bursts and EXIF
+    variety so the Filter menu is long.
+  - Look: open the Sort menu, the Filter menu, the tree's right-click menu
+    and the strip's: each is the `#171717` surface with the white-10 %
+    border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover,
+    the component's check icon at the left of a checked item, the headings
+    muted and indented to the labels, the separators across the menu's
+    padding, the strip menu's shortcuts at the right end in muted 12 px, a
+    disabled item muted with no hover; they read as the same family as the
+    settings modal's controls.
+  - Behavior, each line by hand:
+    - The Sort menu opens above its button with the right edges aligned;
+      the Filter menu likewise. A right-click menu opens at the pointer and
+      flips near the window's right and bottom edges, staying inside.
+    - An outside press closes an open Sort / Filter menu: in the strip, in
+      the preview, and on the menu's own button (which does not reopen it).
+    - A Sort / Filter item click applies (the strip reorders or refilters)
+      and leaves the menu open.
+    - With the Filter menu open: `escape` closes it; the arrows page; `e`,
+      `z`, `f` toggle their overlays; the burst keys act; the menu stays
+      open through all but `escape`.
+    - Make the window short so the Filter menu exceeds its cap: it scrolls
+      by the wheel, a scrollbar shows while scrolling, dragging the thumb
+      scrolls it, and a press on the scrollbar does not close the menu.
+      Close and reopen it: it opens at its top.
+    - A right-click menu closes on any key; `escape` stops there, another key
+      (e.g. an arrow) also acts. An outside press closes it; a right press on
+      another row opens that row's menu.
+    - Click in the tree (it takes the keyboard), right-click a folder: the
+      tree keeps the keyboard while the menu is open; press on the menu (an
+      item, or its scrollbar in a short window): the tree hands the keyboard
+      back (the arrows page the photos, the cursor outline goes).
+    - With a menu open, nothing takes the GPUI focus: closing it leaves the
+      keys working on the window as before.

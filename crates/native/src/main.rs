@@ -83,11 +83,12 @@ use futures::{
 use gpui::{
     Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
     Entity, ExternalPaths, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton,
-    MouseDownEvent, PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollStrategy,
-    SharedString, Task, TextAlign, TitlebarOptions, UniformListScrollHandle, Window, WindowBounds,
-    WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative,
-    rgb, rgba, size, svg, uniform_list,
+    MouseDownEvent, PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle,
+    ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions, UniformListScrollHandle,
+    Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill, outline, point,
+    prelude::*, px, relative, rgb, rgba, size, svg, uniform_list,
 };
+use gpui_component::{ActiveTheme, Icon, IconName, Sizable, scroll::ScrollableElement};
 use gpui_platform::application;
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -350,6 +351,9 @@ struct Riffle {
     kept_anchor: filter::KeptAnchor,
     /// The status row's sort or filter menu, while one is open.
     menus: Menus,
+    /// The open sort or filter menu's scroll, new on every press of a menu's
+    /// button so a menu opens at its top.
+    menu_scroll: ScrollHandle,
     /// The listed files with an export, `None` while the folder gives no
     /// answer, and the listing the answer is about (`filter::output_of`).
     outputs: Option<HashSet<String>>,
@@ -420,6 +424,8 @@ struct Riffle {
     tree_syncing: Option<Task<()>>,
     /// The right-click menu, while one is open.
     context: context::Menu,
+    /// The open right-click menu's scroll, new on every open.
+    context_scroll: ScrollHandle,
     /// The strip's `Move to Trash…` / `Delete Permanently…` dialog.
     trash: trash::TrashFlow,
     /// The folder menu's operations and their dialog.
@@ -708,6 +714,7 @@ impl Riffle {
             exif_groups: exif::Groups::default(),
             kept_anchor: filter::KeptAnchor::default(),
             menus: Menus::default(),
+            menu_scroll: ScrollHandle::new(),
             outputs: None,
             outputs_listing: HashSet::new(),
             outputs_failure: None,
@@ -745,6 +752,7 @@ impl Riffle {
             tree_watched: None,
             tree_syncing: None,
             context: context::Menu::default(),
+            context_scroll: ScrollHandle::new(),
             trash: trash::TrashFlow::default(),
             folderops: folderops::FolderOps::default(),
             gate: idle::IdleGate::default(),
@@ -1094,6 +1102,7 @@ impl Riffle {
             .tree_rows
             .iter()
             .any(|row| row.path == path && row.depth == 0);
+        self.context_scroll = ScrollHandle::new();
         self.context.open_folder(
             (f32::from(at.x), f32::from(at.y)),
             path,
@@ -1130,6 +1139,7 @@ impl Riffle {
             paths.len(),
             self.trashing.is_some(),
         );
+        self.context_scroll = ScrollHandle::new();
         self.context
             .open_files((f32::from(at.x), f32::from(at.y)), focused, paths, groups);
         cx.notify();
@@ -4007,6 +4017,7 @@ impl Riffle {
 
     /// A press on a menu's button.
     fn menu_pressed(&mut self, which: Which, at: Point<Pixels>, cx: &mut Context<Self>) {
+        self.menu_scroll = ScrollHandle::new();
         self.menus.toggle(which, (f32::from(at.x), f32::from(at.y)));
         cx.notify();
     }
@@ -4162,28 +4173,17 @@ impl Riffle {
     }
 
     fn popover(&self, rows: Vec<Row>, max_height: Pixels, cx: &mut Context<Self>) -> AnyElement {
-        div()
+        let rows: Vec<AnyElement> = rows
+            .into_iter()
+            .enumerate()
+            .map(|(at, row)| menu_row(at, row, cx))
+            .collect();
+        menu_surface(rows, max_height, &self.menu_scroll, cx)
             .id("menu")
-            .occlude()
             .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, _, cx| {
                 this.menu_dismissed(e, cx);
             }))
-            .flex()
-            .flex_col()
             .min_w(px(180.))
-            .max_h(max_height)
-            .overflow_y_scroll()
-            .p_1()
-            .bg(rgb(PANE_COLOR))
-            .border_1()
-            .border_color(rgba(BORDER_COLOR))
-            .rounded_md()
-            .text_size(px(13.))
-            .children(
-                rows.into_iter()
-                    .enumerate()
-                    .map(|(at, row)| menu_row(at, row, cx)),
-            )
             .into_any_element()
     }
 
@@ -4196,43 +4196,26 @@ impl Riffle {
         let mut rows: Vec<AnyElement> = Vec::new();
         for (group, items) in open.groups.iter().enumerate() {
             if group > 0 {
-                rows.push(
-                    div()
-                        .h(px(1.))
-                        .my_1()
-                        .bg(rgba(BORDER_COLOR))
-                        .into_any_element(),
-                );
+                rows.push(menu_separator(cx));
             }
             for item in items {
                 rows.push(context_row(rows.len(), item, cx));
             }
         }
-        let popover = div()
+        let popover = menu_surface(rows, max_height, &self.context_scroll, cx)
             .id("context-menu")
-            .occlude()
             .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
                 this.context.close();
                 cx.notify();
             }))
             // A press on the menu is one outside the tree, also where the
             // menu is drawn over the pane, as a Tauri menu button takes the
-            // focus.
-            .on_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+            // focus. In the capture phase, since the scrollbar stops a press
+            // on it from bubbling.
+            .capture_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
                 this.set_tree_keys(false, cx);
             }))
-            .flex()
-            .flex_col()
-            .min_w(px(180.))
-            .max_h(max_height)
-            .overflow_y_scroll()
-            .p_1()
-            .bg(rgb(PANE_COLOR))
-            .border_1()
-            .border_color(rgba(BORDER_COLOR))
-            .rounded_md()
-            .text_size(px(13.))
-            .children(rows);
+            .min_w(px(180.));
         Some(
             div()
                 .absolute()
@@ -4587,23 +4570,103 @@ fn drop_outline() -> impl IntoElement {
         .group_drag_over::<ExternalPaths>(DROP_GROUP, lit)
 }
 
+/// An open menu's surface, `occlude()`d, the theme's popover with its border
+/// and radius, holding `rows` in a list that scrolls past `max_height` under
+/// the component's scrollbar, as `PopupMenu` draws its own.
+fn menu_surface(
+    rows: Vec<AnyElement>,
+    max_height: Pixels,
+    scroll: &ScrollHandle,
+    cx: &Context<Riffle>,
+) -> gpui::Div {
+    let theme = cx.theme();
+    div()
+        .occlude()
+        .relative()
+        .flex()
+        .flex_col()
+        .bg(theme.popover)
+        .text_color(theme.popover_foreground)
+        .border_1()
+        .border_color(theme.border)
+        .rounded(theme.radius)
+        .text_size(px(13.))
+        .child(
+            div()
+                .id("items")
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .p_1()
+                // Less the surface's border, so the whole menu stays within
+                // `max_height`.
+                .max_h(max_height - px(2.))
+                .overflow_y_scroll()
+                .track_scroll(scroll)
+                .children(rows),
+        )
+        .vertical_scrollbar(scroll)
+}
+
+/// `PopupMenu`'s separator: the theme's border, across the list's padding.
+fn menu_separator(cx: &Context<Riffle>) -> AnyElement {
+    div()
+        .my(px(2.))
+        .mx(px(-4.))
+        .border_b(px(2.))
+        .border_color(cx.theme().border)
+        .into_any_element()
+}
+
+/// A menu row as `PopupMenu` lays one out: its height and padding, the check
+/// mark's column, the theme's radius, and the accent on hover, or the muted
+/// text while disabled.
+fn menu_item(
+    id: impl Into<gpui::ElementId>,
+    checked: bool,
+    disabled: bool,
+    cx: &Context<Riffle>,
+) -> gpui::Stateful<gpui::Div> {
+    let theme = cx.theme();
+    let (accent, accent_foreground) = (theme.accent, theme.accent_foreground);
+    let row = div()
+        .id(id)
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap_1()
+        .h(px(MENU_ROW))
+        .px(px(MENU_PAD))
+        .rounded(theme.radius)
+        .child(
+            if checked {
+                Icon::new(IconName::Check)
+            } else {
+                Icon::empty()
+            }
+            .xsmall(),
+        );
+    if disabled {
+        row.text_color(theme.muted_foreground)
+    } else {
+        row.cursor_pointer()
+            .hover(move |s| s.bg(accent).text_color(accent_foreground))
+    }
+}
+
 /// One row of an open menu: an item's check mark, swatch and text, or a
 /// section's separator or heading.
 fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
     let item = match row {
-        Row::Separator => {
-            return div()
-                .h(px(1.))
-                .my_1()
-                .bg(rgba(BORDER_COLOR))
-                .into_any_element();
-        }
+        Row::Separator => return menu_separator(cx),
         Row::Heading(text) => {
+            // Indented to the item labels, past the check mark's column.
             return div()
-                .pl(px(MENU_INDENT))
+                .pl(px(MENU_PAD + MENU_ICON + 4.))
+                .pr(px(MENU_PAD))
                 .py(px(3.))
                 .text_size(px(11.))
-                .text_color(rgb(MUTED_COLOR))
+                .text_color(cx.theme().muted_foreground)
                 .child(text)
                 .into_any_element();
         }
@@ -4666,64 +4729,53 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
             })),
     };
     let action = item.action;
-    div()
-        .id(("menu-item", at))
-        .flex()
-        .items_center()
-        .gap_2()
-        .pr_3()
-        .py(px(3.))
-        .rounded_sm()
-        .cursor_pointer()
-        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+    menu_item(("menu-item", at), item.checked, false, cx)
         .child(
             div()
-                .w(px(MENU_INDENT))
-                .flex_none()
-                .text_center()
-                .child(if item.checked { "\u{2713}" } else { "" }),
+                .flex()
+                .items_center()
+                .gap_2()
+                .children(lead)
+                .child(label),
         )
-        .children(lead)
-        .child(label)
         .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action.clone(), cx)))
         .into_any_element()
 }
 
-/// One item of the right-click menu: its check mark, label and shortcut,
-/// dimmed and inert while disabled.
+/// One item of the right-click menu: its check mark, its label and its
+/// shortcut at the right end, in the muted color and inert while disabled.
 fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> AnyElement {
     let action = item.action;
-    let row = div()
-        .id(("context-item", at))
-        .flex()
-        .items_center()
-        .gap_2()
-        .pr_3()
-        .py(px(3.))
-        .rounded_sm()
-        .child(div().w(px(MENU_INDENT)).flex_none().text_center().child(
-            if item.checked == Some(true) {
-                "\u{2713}"
-            } else {
-                ""
-            },
-        ))
-        .child(div().flex_1().child(item.label.clone()))
-        .child(
-            div()
-                .text_size(px(11.))
-                .text_color(rgb(MUTED_COLOR))
-                .child(item.shortcut.clone()),
-        );
+    let muted = cx.theme().muted_foreground;
+    let row = menu_item(
+        ("context-item", at),
+        item.checked == Some(true),
+        item.disabled,
+        cx,
+    )
+    .child(
+        div()
+            .flex_1()
+            .flex()
+            .items_center()
+            .justify_between()
+            .gap_3()
+            .child(item.label.clone())
+            .child(
+                div()
+                    .flex_none()
+                    .text_xs()
+                    .text_color(muted)
+                    .child(item.shortcut.clone()),
+            ),
+    );
     if item.disabled {
-        return row.opacity(0.5).into_any_element();
+        return row.into_any_element();
     }
-    row.cursor_pointer()
-        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
-        .on_click(cx.listener(move |this, _, window, cx| {
-            this.context_action(action, window, cx);
-        }))
-        .into_any_element()
+    row.on_click(cx.listener(move |this, _, window, cx| {
+        this.context_action(action, window, cx);
+    }))
+    .into_any_element()
 }
 
 struct StripCell {
@@ -4784,8 +4836,10 @@ const BORDER_COLOR: u32 = 0xffffff1a;
 const OVERLAY_COLOR: u32 = 0x00000099;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
-/// The leading column a checked item's check mark sits in.
-const MENU_INDENT: f32 = 20.;
+/// `PopupMenu`'s row height at its default size (1.625 rem at the window's
+/// 16 px rem) and its horizontal padding (0.5 rem).
+const MENU_ROW: f32 = 26.;
+const MENU_PAD: f32 = 8.;
 /// The filter menu's icons, as the Tauri `.face`.
 const MENU_ICON: f32 = 12.;
 
