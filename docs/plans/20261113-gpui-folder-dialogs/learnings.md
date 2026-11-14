@@ -235,11 +235,11 @@
   `folderops.rs`, `sidecars.rs`, `sequence.rs`, `import.rs`, `datefolder.rs`
   and `rename.rs` in the `crates/native` sentence and the backend's
   `rename.rs`, `datefolder.rs`, `foldersidecars.rs`, `import.rs` and
-  `sequence.rs`. The port plan's Step 8 is ticked with its Progress line, and
+  `sequence.rs`. The port plan's Step 8 gained its Progress line, and
   the strip's `Rename…` and the tree's multi-folder selection are recorded
-  there as left out. Its Step 8 note still says folder drag-and-drop onto
-  the window is not ported (another change); the tick follows the caller's
-  instruction.
+  there as left out. Revised by the user's decision: the port's Step 8 stays
+  open, since folder drag-and-drop onto the window (#1052) is still missing;
+  its Progress line says so.
 - Checks run per the caller's memory constraint (no root `mise run ci`):
   `mise run fmt`, and in `crates/native` `cargo fmt --check`, `cargo clippy
   --all-targets -- -D warnings`, `cargo test` (855 passed). The backend was

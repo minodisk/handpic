@@ -680,6 +680,11 @@ folder operation.
       canceled` after its listing. A `Commit` while the window is inactive
       is ignored (GPUI blurs on deactivation); a row scrolled out of the
       tree's range confirms its edit.
+    - As landed, the port plan: by the user's decision (2026-11-14) its
+      Step 8 stays open, since folder drag-and-drop onto the window (#1052)
+      is still missing; its Progress line says the folder operation dialogs
+      are done, the strip's `Rename…` and the multi-folder selection are
+      left out, and drag-and-drop remains. Step 7 is complete regardless.
 
 ## Trade-offs and risks
 
