@@ -35,7 +35,35 @@ by `gpui` / `gpui_platform`.
 
 Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
-driver at run time. macOS needs the Xcode CLT (Metal), Windows only MSVC.
+driver at run time. The `native` CI job's Linux leg installs exactly these.
+macOS needs the Xcode CLT (Metal), Windows only MSVC.
+
+- Rule: add a package to the CI job's apt step only when a build error names
+  it, and keep this list equal to that step.
+
+### macOS compiles its shaders with `xcrun metal` at build time (Inferred)
+
+`gpui_apple`'s build script runs `xcrun metal` and `xcrun metallib` unless
+`gpui_platform`'s `runtime_shaders` feature is on, so an Xcode without the
+Metal toolchain fails the build there, not at run time. `macos-latest` is
+arm64, where `build.rs` returns before the NASM check.
+
+- Rule: if a macOS build fails at `xcrun metal`, install the toolchain
+  (`xcodebuild -downloadComponent MetalToolchain`) rather than turning on
+  `runtime_shaders` for every build.
+
+### The `native` CI job runs on all three platforms (Inferred)
+
+It is a matrix over `windows-latest`, `ubuntu-latest` and `macos-latest` with
+`fail-fast` off, each leg running the same `mise exec rust@1.98.1 -- cargo
+clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
+`$USERPROFILE/nasm` to `PATH` itself. Nothing under `crates/native/src` is
+`cfg(windows)`-only, and `tree.rs`'s path helpers work on strings, so its
+`C:\` and UNC test paths do not depend on the host's `std::path`.
+
+- Rule: code reached only under one platform's `cfg` must not fail
+  `-D warnings` on the other two; give it a `cfg_attr(..., expect(dead_code))`
+  or the same `cfg`.
 
 ### Without NASM, mozjpeg silently loses SIMD (Measured)
 

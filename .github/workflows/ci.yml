@@ -105,13 +105,30 @@ jobs:
         run: mise run test
 
   # crates/native is its own Cargo workspace on its own toolchain, so neither
-  # job above sees it. Windows only until the switch-over milestone of the
-  # gpui-port plan adds the other two platforms.
+  # job above sees it. It runs on all three platforms like the test job, with
+  # fail-fast off for the same reason.
   native:
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      # GPUI's Linux platform links against fontconfig, Wayland, X11 and
+      # xkbcommon, and renders through Vulkan.
+      - name: Install the Linux GPUI dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libfontconfig-dev \
+            libwayland-dev \
+            libx11-xcb-dev \
+            libxkbcommon-x11-dev \
+            libvulkan1
 
       - uses: jdx/mise-action@v2
         with:
@@ -135,13 +152,16 @@ jobs:
       # `mise run native:check` runs its task through `bash -c`, and on Windows
       # the build script behind that shell did not find nasm ("program not
       # found") even with the directory on PATH. Run the same two commands
-      # through `mise exec`, which hands cargo the environment directly.
+      # through `mise exec`, which hands cargo the environment directly, on
+      # every platform so the job has one command path.
       - name: Lint and test the native app
         shell: bash
         working-directory: crates/native
         run: |
-          nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
-          export PATH="$PATH:$nasm_dir"
+          if [ "$RUNNER_OS" = Windows ]; then
+            nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
+            export PATH="$PATH:$nasm_dir"
+          fi
           mise exec rust@1.98.1 -- nasm -v
           mise exec rust@1.98.1 -- cargo clippy --all-targets -- -D warnings
           mise exec rust@1.98.1 -- cargo test
