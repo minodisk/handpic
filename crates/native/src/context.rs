@@ -51,15 +51,6 @@ fn command(action: Action, label: &str) -> Item {
     }
 }
 
-/// A folder operation whose step of the folder dialogs plan has not landed
-/// yet: present in the menu, disabled.
-fn pending(action: Action, label: &str) -> Item {
-    Item {
-        disabled: true,
-        ..command(action, label)
-    }
-}
-
 /// The folder tree's menu: the reveal item, labeled per platform, then
 /// copying the folder's path or name, then re-listing it, then, not on a
 /// root (home or a volume), renaming it and expanding or collapsing every
@@ -76,7 +67,7 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
     ];
     if !root {
         groups.push(vec![
-            pending(Action::RenameFolder, "Rename…"),
+            command(Action::RenameFolder, "Rename…"),
             command(Action::RenameByDate, "Rename by Capture Date…"),
         ]);
         groups.push(vec![
@@ -296,8 +287,7 @@ mod tests {
 
     const REVEAL: &str = "Reveal in Finder";
 
-    /// Ported from `context.test.ts`'s `folderMenuGroups` cases; the items
-    /// whose step has not landed yet are disabled.
+    /// Ported from `context.test.ts`'s `folderMenuGroups` cases.
     #[test]
     fn folder_groups_hold_the_reveal_copy_refresh_rename_expand_sidecar_sequence_and_import_items()
     {
@@ -311,7 +301,7 @@ mod tests {
                 ],
                 vec![command(Action::RefreshFolder, "Refresh")],
                 vec![
-                    pending(Action::RenameFolder, "Rename…"),
+                    command(Action::RenameFolder, "Rename…"),
                     command(Action::RenameByDate, "Rename by Capture Date…"),
                 ],
                 vec![
@@ -359,14 +349,14 @@ mod tests {
     }
 
     #[test]
-    fn only_the_folder_items_whose_step_has_not_landed_are_disabled() {
+    fn no_folder_item_is_disabled() {
         let disabled: Vec<Action> = folder_groups(REVEAL, false)
             .into_iter()
             .flatten()
             .filter(|item| item.disabled)
             .map(|item| item.action)
             .collect();
-        assert_eq!(disabled, vec![Action::RenameFolder]);
+        assert_eq!(disabled, vec![]);
     }
 
     #[test]

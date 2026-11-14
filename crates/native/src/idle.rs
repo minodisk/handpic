@@ -129,6 +129,32 @@ mod tests {
         assert_eq!(gate.waiting(), None);
     }
 
+    /// `idle.test.ts`'s "a held operation replaced by a later request fires
+    /// its cancel once": the view's `gate_request` discards first, so a held
+    /// rename replaced by a later request is handed back once, to clear its
+    /// pending name and say it was canceled.
+    #[test]
+    fn a_held_rename_is_handed_back_once_before_a_later_request_replaces_it() {
+        let mut gate = IdleGate::default();
+        assert_eq!(gate.request("Rename…", 'a', true), None);
+        assert_eq!(gate.discard(), Some('a'));
+        assert_eq!(gate.request("Move to Trash", 'b', true), None);
+        assert_eq!(gate.waiting(), Some("Move to Trash"));
+        assert_eq!(gate.drain(), Some('b'));
+        assert_eq!(gate.discard(), None);
+    }
+
+    /// `idle.test.ts`'s "drain runs without firing cancel": a drained rename
+    /// is not handed back to a later discard (a folder switch).
+    #[test]
+    fn a_drained_rename_is_not_handed_back_to_a_later_discard() {
+        let mut gate = IdleGate::default();
+        gate.request("Rename…", 'a', true);
+        assert_eq!(gate.drain(), Some('a'));
+        assert_eq!(gate.discard(), None);
+        assert_eq!(gate.waiting(), None);
+    }
+
     #[test]
     fn the_in_flight_count_clears_once_every_operation_settled() {
         let mut gate = IdleGate::<char>::default();

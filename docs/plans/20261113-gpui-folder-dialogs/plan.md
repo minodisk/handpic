@@ -599,7 +599,7 @@ folder operation.
       before and after the rename; Step 7's inline rename calls it the same
       way. The `notify` 8.2.2 check is the test `datefolder::watch_release`
       in the native crate.
-- [ ] Step 7: Rename…: the tree's inline rename, held during a scan; and port Step 8's wrap-up
+- [x] Step 7: Rename…: the tree's inline rename, held during a scan; and port Step 8's wrap-up
   - Done when:
     - `crates/native/src/rename.rs` is a port of `rename.ts`'s folder parts
       with the matching cases of `rename.test.ts`: `edit_key`,
@@ -671,6 +671,20 @@ folder operation.
     - The slow click needs a timer (`SLOW_CLICK_DELAY`, 500 ms) disarmed by
       any other click or key, as `folders.ts` does; port its arming rule
       from there rather than from memory.
+    - As landed: the wiring is in `folderops.rs` (`tree_name`,
+      `start_rename`, `gate_request`, `run_rename`); `rename.rs` is the pure
+      model, `edit_key` test-only since `textinput.rs` takes Enter and
+      Escape itself. Every gate request goes through `gate_request`, which
+      discards first so a held rename replaced by any request clears its
+      pending name, and an open's dropped rename notes `Rename… was
+      canceled` after its listing. A `Commit` while the window is inactive
+      is ignored (GPUI blurs on deactivation); a row scrolled out of the
+      tree's range confirms its edit.
+    - As landed, the port plan: by the user's decision (2026-11-14) its
+      Step 8 stays open, since folder drag-and-drop onto the window (#1052)
+      is still missing; its Progress line says the folder operation dialogs
+      are done, the strip's `Rename…` and the multi-folder selection are
+      left out, and drag-and-drop remains. Step 7 is complete regardless.
 
 ## Trade-offs and risks
 
@@ -754,3 +768,4 @@ folder operation.
 (2026-11-14) Step 4 complete
 (2026-11-14) Step 5 complete
 (2026-11-14) Step 6 complete
+(2026-11-14) Step 7 complete

@@ -197,6 +197,54 @@
   --all-targets -- -D warnings`, `cargo test` (804 passed). The backend was
   not touched.
 
+## Step 7: the tree's inline rename, and the wrap-up
+
+- `textinput.rs` (the settings plan's) already took `ctrl+a` / `c` / `x` /
+  `v` on Windows and Linux; it only gained `select_all`. A fresh input entity
+  is made per edit (`TextInput::new` needs the `Window`), so `context_action`
+  now takes the `Window` and the menu's `Rename…` goes to `start_rename`
+  rather than through `folder_action`.
+- GPUI blurs the focused element when the window deactivates (the focus path
+  of an inactive frame is empty, `window.rs`'s focus phase), so the input's
+  `Commit` arrives on an app switch too; it is ignored while
+  `!window.is_window_active()`, the Tauri `document.hasFocus()` check.
+- A row scrolled out of the tree's `uniform_list` range is not laid out, so
+  its input loses the focus and the edit confirms; the Tauri input stays in
+  the DOM. Recorded in `native-app.md`, not worked around.
+- The native `IdleGate::request` drops a replaced operation silently, so a
+  held rename replaced by a trash, undo or sidecar request would have kept
+  its pending name forever. `gate_request` discards first and hands a
+  dropped rename to `held_dropped` (clear its mark, `Rename… was canceled`
+  unless a rename of the same folder replaced it); every request site uses
+  it. An open's discard sets the note after its listing (`note_after`), as
+  the Tauri open does, since the fresh listing clears the status.
+- `PendingRename`'s marks carry an id, standing in for the Tauri mark's
+  object identity.
+- A click on the open folder's name no longer reopens it (the Tauri tree
+  stops that click too); a Ctrl or Shift click still does.
+- The input in a 22 px row: its padding and border take 8 px, so the wrapper
+  sets the line height to 14 px. Not seen on screen.
+- `main.rs` gained: `mod rename;`, `HeldOp::Rename` and its `held_label` and
+  `finished` arms, the open's discard through `held_dropped`, the
+  `refuse_renaming` guard in `open_from_tree`, `gate_request` at the two
+  trash request sites, the key guard, the `Window` in `context_action`, the
+  slow click's disarm in the tree pane's two press listeners, and the row's
+  name from `tree_name`.
+- Wrap-up: every pending manual check of Steps 3-7 is under `## Deferred
+  issues (todo candidates)` below. `CLAUDE.md` names `dialog.rs`,
+  `folderops.rs`, `sidecars.rs`, `sequence.rs`, `import.rs`, `datefolder.rs`
+  and `rename.rs` in the `crates/native` sentence and the backend's
+  `rename.rs`, `datefolder.rs`, `foldersidecars.rs`, `import.rs` and
+  `sequence.rs`. The port plan's Step 8 gained its Progress line, and
+  the strip's `Rename…` and the tree's multi-folder selection are recorded
+  there as left out. Revised by the user's decision: the port's Step 8 stays
+  open, since folder drag-and-drop onto the window (#1052) is still missing;
+  its Progress line says so.
+- Checks run per the caller's memory constraint (no root `mise run ci`):
+  `mise run fmt`, and in `crates/native` `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings`, `cargo test` (855 passed). The backend was
+  not touched.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 3, Windows, the user's).** Basis: Step 3's
@@ -380,3 +428,61 @@
      files, and the pane says `Split two-dates into … (a), … (b)`.
   9. The item on the renamed `one-date` folder: `YYYY-MM-DD is already named
      its capture date.`, `Nothing to rename.`, and `Run` dimmed.
+- **Pending manual check (Step 7, Windows, the user's).** Basis: Step 7's
+  Done-when; the inline editor, its keys, the Japanese IME in it, the slow
+  click and the held rename cannot be driven headless. The step's checkbox
+  was ticked on the automated criteria (`rename.rs`, `idle.rs` and
+  `context.rs` tests, `cargo clippy`, `cargo test` in `crates/native`).
+  Setup, only under `D:\Photos\tests\20261113-gpui-folder-dialogs\step7\`:
+  - `Photos\`: a few dozen RAWs (enough for pass 1 to run for several
+    seconds on a fresh index), a few with a `.xmp`; `Photos\sub\` with a
+    couple of RAWs.
+  - `taken\`: an empty folder, a sibling of `Photos`.
+  - `other\`: a few RAWs.
+
+  `cargo build` in `crates/native` (rename a locked `riffle-native.exe`
+  aside, never kill it). Delete `index-step7.sqlite` and
+  `settings-step7.sqlite` first, then run
+  `crates\native\target\debug\riffle-native.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step7\Photos --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step7.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step7.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step7.log`.
+  Only these copies. Steps and expected results:
+  1. Wait for the scan to end, judge two files and page to the third. Right
+     click `Photos`, `Rename…`: the row's name becomes a field holding
+     `Photos`, all selected. Type `Shots` and Enter: the row reads `Shots` in
+     the same place, the strip keeps its files, judgments and position, the
+     tree keeps the keyboard (the arrows move its cursor), and `step7.log`
+     shows `rename: …Photos renamed to …Shots` with no pass 1 work after it.
+  2. `Rename…` again, type `shots` (case only) and Enter: the row reads
+     `shots`.
+  3. `Rename…`, type `a/b`, Enter: the status says `a/b: a name cannot
+     contain '/'` and the row keeps its name. Again with `taken`: `taken
+     already exists`.
+  4. `Rename…`, type something, Escape: the name is unchanged, nothing is
+     renamed. `Rename…`, clear the field, Enter: nothing happens. While the
+     field is open, `a`, `1`, `p`, `Ctrl+Z`, the arrows and Space edit the
+     text only (no judgment, no paging, no tree move); `Ctrl+A`, `Ctrl+C`,
+     `Ctrl+X`, `Ctrl+V` work in the field.
+  5. `Rename…`, switch to another app with Alt+Tab and back: the field is
+     still open. Click the strip: the edit confirms.
+  6. With the Japanese IME on, `Rename…`, type `しゃしん` and convert to
+     `写真`: the composition is underlined in the field, the candidate window
+     sits at the field, Enter inside the composition commits the conversion
+     only, a second Enter renames the folder to `写真`.
+  7. Quit, delete `index-step7.sqlite`, launch again with the same command
+     (the folder as renamed in step 6). During pass 1, rename the open
+     folder to `Later`: the row shows `◷ Later` in muted italics (hovering
+     says `Renames when the scan finishes`), the pane says `Rename…: waiting
+     for the scan to finish`, the scan goes on; when it ends the folder is
+     renamed and reopened.
+  8. Again during a fresh scan (delete the index, relaunch): rename to
+     `Later2`, then `Rename…` on the pending row and type the real name
+     back: the row shows the real name and the status says `Rename… was
+     canceled`. Rename to `Later3` and, still during the scan, click `other`
+     in the tree: `other` opens and the status says `Rename… was canceled`;
+     the first folder keeps its name.
+  9. Open `Photos`'s renamed folder, wait, then click its name once and wait
+     half a second: the field opens. Double-click the name: no field opens.
+     Click it once and press a key or click elsewhere within half a second:
+     no field opens. A single click on a root's name or on another folder's
+     name opens that folder as before.
+  10. While an import runs (Step 5's check), confirm a rename: the status
+      says `Rename… is unavailable while an import runs`.

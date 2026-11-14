@@ -351,6 +351,13 @@ them; their contents are deliberately coarse.
     `../20261114-gpui-empty-state/plan.md`, and the folder drag-and-drop
     onto the window by `../_archived/20261114-gpui-folder-drop/plan.md`, which
     restored `empty.ts`'s "Drop a folder onto the window" clause.
+  - The folder operation dialogs (Rename, Rename by Capture Date…,
+    Import…, Sequence JPEG Timestamps…, Rewrite / Delete Sidecars…) were
+    done by `../_archived/20261113-gpui-folder-dialogs/plan.md`. Left out of
+    the port by the user's decision (2026-11-13): the strip menu's
+    `Rename…` (`rename_file`, one RAW with its sidecars) and the tree's
+    multi-folder selection, which nothing consumes (the folder menu acts on
+    the one folder right-clicked).
 - [ ] Step 9: Settings, pass 3 and the companions
   - Done when: the settings modal (sidecar format, label names, shortcuts,
     Import tab, `aiEnabled` with the model download), pass 3 embeddings,
@@ -619,6 +626,7 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: the performance overlay (`d`), through [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md) (Step 9 stays open)
 - (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
+- (2026-11-14) Step 8: the folder operation dialogs, through `../_archived/20261113-gpui-folder-dialogs/plan.md`; the strip's `Rename…` and the tree's multi-folder selection are left out of the port; folder drag-and-drop onto the window remains (#1052) (Step 8 stays open)
 - (2026-11-14) A native addition the milestones did not list: the progress bar fed by the scan and by Move to Trash / Delete Permanently, through `../20261114-gpui-progress-bars/plan.md`
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
 - (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../_archived/20261114-gpui-folder-drop/plan.md`
