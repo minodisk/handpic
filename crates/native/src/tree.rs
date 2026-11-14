@@ -232,6 +232,70 @@ impl Tree {
             self.collapse(&dir);
         }
     }
+
+    /// The folder `old_path` was renamed to `new_name` at `new_path`: it and
+    /// every node under it are re-keyed with their state (expansion,
+    /// listing, count) kept, and its entry in its parent's children is
+    /// replaced and re-sorted case-insensitively, as a listing sorts. A stale
+    /// node already under `new_path` is dropped. `tree.ts`'s `renameFolder`.
+    pub fn rename_folder(
+        &mut self,
+        old_path: &str,
+        new_path: &str,
+        new_name: &str,
+        ignore_case: bool,
+    ) {
+        let renamed = fold(old_path, ignore_case);
+        let stale = |path: &str| {
+            rebase(path, old_path, new_path, ignore_case).is_none()
+                && rebase(path, new_path, new_path, ignore_case).is_some()
+        };
+        let moved = |name: &str, path: &str| match rebase(path, old_path, new_path, ignore_case) {
+            Some(rebased) if fold(path, ignore_case) == renamed => (new_name.to_owned(), rebased),
+            Some(rebased) => (name.to_owned(), rebased),
+            None => (name.to_owned(), path.to_owned()),
+        };
+        let child = |c: &Child| {
+            let (name, path) = moved(&c.name, &c.path);
+            Child {
+                name,
+                path,
+                is_link: c.is_link,
+            }
+        };
+        let list = |children: &[Child]| {
+            let mut out: Vec<Child> = children
+                .iter()
+                .filter(|c| !stale(&c.path))
+                .map(child)
+                .collect();
+            if children
+                .iter()
+                .any(|c| fold(&c.path, ignore_case) == renamed)
+            {
+                out.sort_by_cached_key(|c| c.name.to_lowercase());
+            }
+            out
+        };
+        self.nodes = std::mem::take(&mut self.nodes)
+            .into_values()
+            .filter(|node| !stale(&node.path))
+            .map(|node| {
+                let (name, path) = moved(&node.name, &node.path);
+                let children = node.children.as_deref().map(list);
+                (
+                    path.clone(),
+                    Node {
+                        name,
+                        path,
+                        children,
+                        ..node
+                    },
+                )
+            })
+            .collect();
+        self.roots = self.roots.iter().map(child).collect();
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -508,9 +572,8 @@ pub fn relation(path: &str, dir: &str, ignore_case: bool) -> Option<Relation> {
 
 /// The path under `new_dir` that `path` had under `old_dir`, or `None` when
 /// `path` is neither `old_dir` nor under it; the rest of `path` is joined
-/// onto `new_dir` in `path`'s own spelling. Only `respell` uses it so far;
-/// part 2's folder rename re-keys the tree with it.
-fn rebase(path: &str, old_dir: &str, new_dir: &str, ignore_case: bool) -> Option<String> {
+/// onto `new_dir` in `path`'s own spelling.
+pub fn rebase(path: &str, old_dir: &str, new_dir: &str, ignore_case: bool) -> Option<String> {
     let target = fold(path, ignore_case);
     let prefix = fold(old_dir, ignore_case);
     if target == prefix {
@@ -527,8 +590,7 @@ fn rebase(path: &str, old_dir: &str, new_dir: &str, ignore_case: bool) -> Option
 }
 
 /// Ported from `tree.test.ts`. Left out: the multi-folder selection
-/// (`clickSelect`, `pruneSelection`), the public `rebase` and
-/// `renameFolder`, which are part 2's.
+/// (`clickSelect`, `pruneSelection`).
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1496,5 +1558,99 @@ mod tests {
             rebase("d:/photos/2026/Raw", "D:\\Photos", "D:\\Shoots", false),
             None
         );
+    }
+
+    fn renamed_tree() -> Tree {
+        let mut tree = with_roots(&[home()]);
+        tree.expand("/home/me");
+        tree.set_children(
+            "/home/me",
+            0,
+            vec![
+                child("a", "/home/me/a"),
+                child("b", "/home/me/b"),
+                child("c", "/home/me/c"),
+            ],
+        );
+        tree.expand("/home/me/a");
+        tree.set_children("/home/me/a", 2, vec![child("x", "/home/me/a/x")]);
+        tree.expand("/home/me/a/x");
+        tree.set_children("/home/me/a/x", 1, Vec::new());
+        tree
+    }
+
+    #[test]
+    fn rename_folder_re_keys_the_folder_and_everything_under_it_keeping_their_state() {
+        let mut tree = renamed_tree();
+        tree.rename_folder("/home/me/a", "/home/me/a1", "a1", false);
+        assert_eq!(drawn(&tree), ["0:me", "1:a1", "2:x", "1:b", "1:c"]);
+        assert!(!tree.has("/home/me/a"));
+        assert_eq!(
+            tree.nodes.get("/home/me/a1"),
+            Some(&Node {
+                name: "a1".into(),
+                path: "/home/me/a1".into(),
+                children: Some(vec![child("x", "/home/me/a1/x")]),
+                expanded: true,
+                raw_count: Some(2),
+                failed: None,
+            })
+        );
+        assert_eq!(tree.nodes["/home/me/a1/x"].raw_count, Some(1));
+    }
+
+    #[test]
+    fn rename_folder_re_sorts_the_parents_children_case_insensitively() {
+        let mut tree = renamed_tree();
+        tree.rename_folder("/home/me/a", "/home/me/Bz", "Bz", false);
+        assert_eq!(drawn(&tree), ["0:me", "1:b", "1:Bz", "2:x", "1:c"]);
+    }
+
+    #[test]
+    fn rename_folder_drops_a_stale_node_already_at_the_new_path() {
+        let mut tree = renamed_tree();
+        tree.set_children(
+            "/home/me",
+            0,
+            vec![child("a", "/home/me/a"), child("d", "/home/me/d")],
+        );
+        tree.rename_folder("/home/me/a", "/home/me/d", "d", false);
+        assert_eq!(drawn(&tree), ["0:me", "1:d", "2:x"]);
+        assert_eq!(tree.nodes["/home/me/d"].raw_count, Some(2));
+    }
+
+    #[test]
+    fn rename_folder_ignoring_case_re_keys_a_node_whose_key_differs_in_case() {
+        let mut tree = renamed_tree();
+        tree.rename_folder("/home/me/A", "/home/me/a1", "a1", true);
+        assert_eq!(drawn(&tree), ["0:me", "1:a1", "2:x", "1:b", "1:c"]);
+        assert!(!tree.has("/home/me/a"));
+        assert_eq!(tree.nodes["/home/me/a1/x"].raw_count, Some(1));
+        let mut kept = renamed_tree();
+        kept.rename_folder("/home/me/A", "/home/me/a1", "a1", false);
+        assert_eq!(kept, renamed_tree());
+    }
+
+    #[test]
+    fn rename_folder_ignoring_case_keeps_the_state_of_a_case_only_rename() {
+        let mut tree = renamed_tree();
+        tree.rename_folder("/home/me/a", "/home/me/A", "A", true);
+        assert_eq!(drawn(&tree), ["0:me", "1:A", "2:x", "1:b", "1:c"]);
+        assert!(!tree.has("/home/me/a"));
+        assert_eq!(tree.nodes["/home/me/A"].raw_count, Some(2));
+    }
+
+    #[test]
+    fn rename_folder_ignoring_case_drops_a_stale_node_at_the_new_path_in_another_case() {
+        let mut tree = renamed_tree();
+        tree.set_children(
+            "/home/me",
+            0,
+            vec![child("a", "/home/me/a"), child("D", "/home/me/D")],
+        );
+        tree.rename_folder("/home/me/a", "/home/me/d", "d", true);
+        assert_eq!(drawn(&tree), ["0:me", "1:d", "2:x"]);
+        assert!(!tree.has("/home/me/D"));
+        assert_eq!(tree.nodes["/home/me/d"].raw_count, Some(2));
     }
 }

@@ -311,6 +311,19 @@ impl Undo {
         }
     }
 
+    /// Rewrite the folders of every run to the Trash in both histories
+    /// through `f`, leaving the batches of judgments as they are, e.g. to
+    /// follow a folder rename (`undo.ts`'s `mapTrashDirs`).
+    pub fn map_trash_dirs(&mut self, f: impl Fn(&str) -> String) {
+        for history in [&mut self.undo, &mut self.redo] {
+            history.update(|entry| {
+                if let Entry::Trash(run) = entry {
+                    run.dirs = run.dirs.iter().map(|dir| f(dir)).collect();
+                }
+            });
+        }
+    }
+
     /// Another folder opened: its judgments go, and the runs to the Trash
     /// stay, to bring their files back into the folder they left.
     pub fn drop_judgments(&mut self) {
@@ -743,5 +756,27 @@ mod tests {
         assert_eq!(left.changes.len(), 1);
         assert_eq!(left.changes[0].path, "/a/2.ARW");
         assert_eq!(undo.undo(|_| true, |_| State::default()), None);
+    }
+
+    /// `undo.test.ts`'s `mapTrashDirs` case, over both histories.
+    #[test]
+    fn mapping_the_trash_dirs_rewrites_the_runs_and_leaves_the_batches() {
+        let mut undo = Undo::new();
+        undo.record(vec![judged("/a/1.ARW", stars(1))]);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned(), "/b".to_owned()]);
+        undo.redo.push(Entry::Trash(run()));
+        undo.map_trash_dirs(|dir| {
+            if dir == "/a" {
+                "/z".to_owned()
+            } else {
+                dir.to_owned()
+            }
+        });
+        assert_eq!(undo.top_trash(false).unwrap().dirs, ["/z", "/b"]);
+        assert_eq!(undo.top_trash(true).unwrap().dirs, ["/z"]);
+        let top = undo.top_trash(false).unwrap();
+        undo.remove_trash(top.id);
+        let left = undo.undo(|_| true, |_| State::default()).unwrap();
+        assert_eq!(left.changes[0].path, "/a/1.ARW");
     }
 }

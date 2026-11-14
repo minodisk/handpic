@@ -155,6 +155,48 @@
   --all-targets -- -D warnings`, `cargo test` (756 passed). The backend was
   not touched.
 
+## Step 6: Rename by Capture Date…, and what follows a folder rename
+
+- `notify` 8.2.2 (the native lock): `datefolder::watch_release`, a test in
+  the native crate (the backend's tests cannot run from the native
+  workspace), puts the open folder's watcher on a temp folder and tree
+  watches on it, its parent and its subfolder, checks a plain
+  `std::fs::rename` of it fails on Windows, then that the backend's
+  `rename_folder` renames it, that `watch::set` on the new path reports a
+  file written there, and that `split_folder` empties and removes a watched
+  folder. It passed five runs in a row (about 0.5 s each).
+- Windows refuses a folder's rename while any handle to a file inside it is
+  open, even one opened with `FILE_SHARE_DELETE` (as Rust's `File::open`
+  opens): checked with a PowerShell `FileStream` and `Directory.Move`. The
+  native reads inside the open folder (preview, prefetch, on-demand faces /
+  eyes, 1:1 crop) are open-read-close with no memory map, and the scan is
+  refused before the run, so only a read in flight at that instant can
+  refuse the rename; the backend then puts the watcher back and the status
+  shows the OS error. No extra guard was added.
+- `Riffle::dir` and a trash entry's `dirs` are canonical (`\\?\` on Windows)
+  while the tree's paths are not, so `folder_renamed` takes both spellings:
+  the tree, its open row, its cursor and a deferred open are rebased over
+  the tree's spelling, the trash entries and the reopen over the canonical
+  pair the background task computes before and after the rename. The reopen
+  opens `context::shown_path` of the rebased canonical path.
+- The reopen is `open`, the tree-click path: its non-carry listing drops the
+  undo histories' judgment batches, as the Tauri folder switch does, and
+  clears the status, so the warning (and a split's status when the first
+  date folder opens) is set after the open's task (`open_with_note`).
+- A split's `tree_refresh` of the parent also forgets the watched set last
+  handed over: the split released the tree watches under the folder, and an
+  unchanged set would not have been sent again.
+- `main.rs` gained only `mod datefolder;`: `folder_action`'s fallthrough arm
+  already routes the item to `folderops`.
+- `folderops.rs` is CRLF in this worktree, so the edit scripts normalized the
+  line endings before matching. A bash heredoc holding a Python script with
+  backslashes in its strings mangled the Windows paths (`\t`, `\2`); the
+  scripts and texts went through files in the scratchpad instead.
+- Checks run per the caller's memory constraint (no root `mise run ci`):
+  `mise run fmt`, and in `crates/native` `cargo fmt --check`, `cargo clippy
+  --all-targets -- -D warnings`, `cargo test` (804 passed). The backend was
+  not touched.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 3, Windows, the user's).** Basis: Step 3's
@@ -285,3 +327,56 @@
      `Import…` shows `the destination folder is not set (Settings > Import)`
      and `Run` is dimmed.
   7. `step5.log` holds one `import: files=… bytes=… mb_per_s=…` line per run.
+- **Pending manual check (Step 6, Windows, the user's).** Basis: Step 6's
+  Done-when; the dialog, the tree row following in place, the reopen and the
+  undo of a trash run across the rename cannot be driven headless. The
+  step's checkbox was ticked on the automated criteria (`datefolder.rs`
+  including `watch_release`, `tree.rs`, `history.rs` and `context.rs` tests,
+  `cargo clippy`, `cargo test` in `crates/native`). Setup, only under
+  `D:\Photos\tests\20261113-gpui-folder-dialogs\step6\`:
+  - `one-date\`: a few RAWs shot on one day, a couple with a `.xmp`.
+  - `three-dates\`: JPEGs only, shot on three days, plus one JPEG stripped of
+    its Exif saved as `undated.jpg` (a JPEG-only folder lists its JPEGs, so
+    the undated file counts).
+  - `two-dates\`: RAWs shot on two days, nothing undated.
+  - `collide\`: RAWs shot on one day (its sibling is created in step 6).
+  - No two folders share a shooting day, so no target collides by accident.
+
+  `cargo build` in `crates/native` (rename a locked `riffle-native.exe`
+  aside, never kill it). Delete `index-step6.sqlite` and
+  `settings-step6.sqlite` first, then run
+  `crates\native\target\debug\riffle-native.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step6\one-date --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step6.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step6.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step6.log`.
+  Only these copies. Steps and expected results:
+  1. Right after the launch, while pass 1 runs, right-click `one-date` and
+     pick `Rename by Capture Date…`: no dialog opens and the pane says `a
+     scan is running; wait for it to finish`.
+  2. Once the scan ends, judge two files (stars, a pick), move one other RAW
+     to the Trash from the strip's menu, and page to the fourth file.
+  3. `Rename by Capture Date…` on `one-date`: the dialog says `Rename
+     one-date to YYYY-MM-DD?` and one row `YYYY-MM-DD  n files`; `Run` is
+     outlined, Tab moves to `Cancel`, Escape closes it.
+  4. Again, then `Run`: the buttons dim, the running note shows, the dialog
+     closes, the tree row now reads `YYYY-MM-DD` in the same place (its
+     parent's children re-sorted), the strip shows the same files with the
+     same judgments on the fourth file, and `step6.log` shows `datefolder:
+     … renamed to …` followed by `scan reconcile: dir=…\YYYY-MM-DD todo=0`
+     (no pass 1 work).
+  5. `Ctrl+Z`: the RAW moved to the Trash in step 2 comes back into the
+     renamed folder (`Restored 1 file from the Trash`).
+  6. Open `collide`, wait for its scan, pick the item and note the date in
+     the dialog, Cancel; create an empty folder of that `YYYY-MM-DD` name
+     next to `collide`; the item again: the dialog shows `YYYY-MM-DD already
+     exists next to collide; nothing is merged.`, `Run` is dimmed and
+     `Cancel` focused.
+  7. Open `three-dates`, wait for its scan, then the item: `Split
+     three-dates into 3 folders by capture date?`, three rows, `Without a
+     capture date, 1 file stays in three-dates: undated.jpg` and
+     `three-dates is removed if it ends up empty.`. `Run`: three sibling date
+     folders appear in the tree, the pane says `Split three-dates into …
+     (a), … (b), … (c); three-dates kept (1 left)`, and the strip re-lists
+     `three-dates` with only `undated.jpg`.
+  8. Open `two-dates`, wait for its scan, then the item and `Run`:
+     `two-dates` leaves the tree, the first date folder opens with its
+     files, and the pane says `Split two-dates into … (a), … (b)`.
+  9. The item on the renamed `one-date` folder: `YYYY-MM-DD is already named
+     its capture date.`, `Nothing to rename.`, and `Run` dimmed.

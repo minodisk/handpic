@@ -228,9 +228,9 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
   The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
-  "The tree follows the disk through one `TreeWatch`"); `release_under` is
-  not called yet, so re-check the rename path when part 2's folder rename
-  needs it.
+  "The tree follows the disk through one `TreeWatch`"), and so does the
+  folder rename's release path (see "A folder rename releases the watches,
+  then follows in the tree and reopens").
 
 ### The judgments' Tauri-free pieces live in the backend (Inferred)
 
@@ -1689,7 +1689,10 @@ answered); `add_roots` skips the roots already shown.
   workspace (a path dependency with dev-dependencies is not testable there),
   hence the throwaway.
 - Rule: on Windows a watch pins its folder's ancestors against a rename;
-  nothing in the native app renames yet, so `with_released` is not called.
+  the folder rename and the date split go through the backend's
+  `rename::rename_folder` / `datefolder::split_folder`, which call
+  `with_released` (see "A folder rename releases the watches, then follows in
+  the tree and reopens").
 
 ### The right-click menu is a deferred popover at the pointer (Inferred)
 
@@ -1953,6 +1956,65 @@ the menu arm, the key guard, the render child and the gate's `Held` variant.
   them by name and size.
 - Not verified headless: the dialog, its keys and the runs; the hand checks
   are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+
+### A folder rename releases the watches, then follows in the tree and reopens (Measured)
+
+`Rename by Capture Date…` (`datefolder.rs`, run from `folderops.rs`) renames
+a folder to its one capture date through the backend's `rename_folder`, or
+splits it into one sibling folder per date through `split_folder`, both on
+`background_spawn` with the view's `Watch`, `TreeWatch`, write index and
+`Runs` in a `rename::Context`. The backend releases the open folder's watcher
+(`watch::release_under`, whose `settle` waits for notify's server to close the
+handle) and the tree watches on the folder and under it (`with_released`,
+holding the `TreeWatch` lock across the move) around the disk work, and puts
+the watcher back when the rename fails or the split leaves the folder.
+
+- Measured (`datefolder::watch_release`, a test in this crate so it runs on
+  `crates/native/Cargo.lock`'s `notify` 8.2.2, on Windows): with the open
+  folder's watcher on a folder and tree watches on it, its parent and its
+  subfolder, a plain `std::fs::rename` of the folder fails; `rename_folder`
+  renames it, a `watch::set` on the new path then reports a file written
+  there within the debounce, and `split_folder` moves every file out and
+  removes the folder while it is watched. Five runs in a row passed, each in
+  about 0.5 s.
+- Measured (a PowerShell check on Windows 11, NTFS): any open handle to a
+  file inside a folder refuses the folder's rename, `FILE_SHARE_DELETE` or
+  not. The native app's reads inside the open folder (the preview, a
+  prefetch, the on-demand faces and eyes, the 1:1 crop) open, read and close
+  the file, with no memory map, and the scan is refused before the run by
+  the scan rule below, so the window is a read in flight at the moment of
+  the rename; a rename refused that way reports the OS error in the status
+  and leaves the folder, its watcher and its index rows as they were.
+- Rule: the date rename is not held by the gate: with a listing, a scan or a
+  run under way (`Resync::busy` or the gate's in-flight count) the preview
+  and the run are refused with `SCAN_RUNNING` in the status. The run holds
+  the in-flight count and the resync as a sidecar run does, so no listing
+  or scan starts under it, and drains the judgment stores and the sidecar
+  writer first.
+- Rule: every folder rename ends in `folderops`' `folder_renamed`, a port of
+  `main.ts`'s `folderRenamed`: `Tree::rename_folder` re-keys the node and
+  everything under it with their state, the tree's open row and cursor
+  follow (`tree::rebase` over the tree's spelling), the trash runs of both
+  histories follow (`Undo::map_trash_dirs` over the canonical paths, which is
+  how a run's `dirs` and `Riffle::dir` are spelled; the backend's
+  `Runs::rename_dir` already moved the recorded runs), and the tree's watched
+  set is handed over afresh. When the open folder is the renamed one or under
+  it, it is reopened under the new path as a tree click opens it; the
+  non-carry listing drops the judgment batches of the undo histories as any
+  folder switch does, and the judgments and the last viewed file come back
+  from the index rows `Index::rename_dir` carried, so nothing is
+  re-extracted. A warning, and a split's status, are set once that open has
+  landed, since its fresh listing clears the status.
+- Rule: a split re-lists the parent in the tree (`tree_refresh`, which also
+  hands the watched set over again, since the split released the tree
+  watches under the folder). When the split folder was the open one it is
+  re-listed if it remains (its watcher put back by the backend), else the
+  first date folder opens; a folder the tree asked for during the run opens
+  instead. A file that failed to move goes to the notes as `<name>: could
+  not move: <message>`.
+- Not verified headless: the dialog, the tree row following in place and
+  the reopen keeping the strip's judgments and position; the hand check is
+  pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 
 ## Timings
 
