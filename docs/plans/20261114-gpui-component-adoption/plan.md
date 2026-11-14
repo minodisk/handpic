@@ -374,7 +374,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
       keep it from opening rather than mounting `Root` here.
     - `editing()` reads `InputState::focus_handle`.
 
-- [ ] Step 3: The settings modal's controls: buttons, the checkbox, radios and scrollbars
+- [x] Step 3: The settings modal's controls: buttons, the checkbox, radios and scrollbars
   - Done when:
     - `settingsview.rs`'s local `button`, `checkbox` and `radio` helpers
       are gone: the small outlined buttons (`Choose…`, `Reset`, the
@@ -868,3 +868,4 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 
 - (2026-11-14) Step 1 complete
 - (2026-11-14) Step 2 complete
+- (2026-11-14) Step 3 complete

@@ -14,6 +14,7 @@ path = "src/main.rs"
 gpui = { package = "gpui-pre", version = "=0.3.12" }
 gpui_platform = { package = "gpui-pre-platform", version = "=0.3.12" }
 gpui-component = "=0.9.1"
+gpui-kit-assets = "=0.9.1"
 riffle-core = { path = "../core" }
 riffle-backend = { path = "../backend" }
 mozjpeg = "0.10"

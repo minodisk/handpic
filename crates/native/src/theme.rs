@@ -5,8 +5,8 @@ use gpui::{App, Pixels, px, rgb, rgba};
 use gpui_component::{Theme, ThemeColor, ThemeMode};
 
 use crate::{
-    ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
-    MUTED_FILL, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, RING_COLOR,
+    ACCENT_COLOR, BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER,
+    MUTED_COLOR, MUTED_FILL, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, RING_COLOR,
 };
 
 /// `style.css`'s `--background`, which nothing outside the components paints.
@@ -51,6 +51,12 @@ fn map(colors: &mut ThemeColor) {
     colors.ring = rgba(RING_COLOR).into();
     colors.overlay = rgba(OVERLAY_COLOR).into();
     colors.scrollbar_thumb = rgba(BORDER_COLOR).into();
+    // `Button`'s default variant. `Default Dark` derives these at load and
+    // `update` does not derive them again from the colors above.
+    colors.button = rgba(BUTTON_FILL).into();
+    colors.button_hover = rgb(ACCENT_COLOR).into();
+    colors.button_active = rgb(ACCENT_COLOR).into();
+    colors.button_foreground = rgb(FOREGROUND_COLOR).into();
 }
 
 #[cfg(test)]
@@ -86,5 +92,9 @@ mod tests {
         assert_eq!(colors.ring, hex(0x737373ff));
         assert_eq!(colors.overlay, hex(0x00000099));
         assert_eq!(colors.scrollbar_thumb, hex(0xffffff1a));
+        assert_eq!(colors.button, hex(0xffffff0b));
+        assert_eq!(colors.button_hover, hex(0x262626ff));
+        assert_eq!(colors.button_active, hex(0x262626ff));
+        assert_eq!(colors.button_foreground, hex(0xfafafaff));
     }
 }
