@@ -126,6 +126,42 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 """
 
+[tasks."native:bundle:macos"]
+description = "Build Handpic.app from the GPUI app under crates/native/target (macOS; release, or the profile given as its argument, e.g. `debug`)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+usage = 'arg "[profile]" default="release"'
+run = """
+set -euo pipefail
+profile="${usage_profile:-release}"
+if [ "$profile" = debug ]; then
+  cargo build
+else
+  cargo build --profile "$profile"
+fi
+app="target/$profile/Handpic.app"
+rm -rf "$app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp packaging/macos/Info.plist "$app/Contents/Info.plist"
+cp "target/$profile/riffle-native" "$app/Contents/MacOS/riffle-native"
+cp ../app/icons/icon.icns "$app/Contents/Resources/icon.icns"
+echo "$app"
+"""
+
+[tasks."native:install:linux"]
+description = "Install the GPUI app for the current user (Linux): the release binary to ~/.local/bin, its .desktop file and icon under ~/.local/share"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo build --release
+install -Dm755 target/release/riffle-native "$HOME/.local/bin/riffle-native"
+install -Dm644 packaging/linux/dev.minodisk.handpic.desktop "$HOME/.local/share/applications/dev.minodisk.handpic.desktop"
+install -Dm644 ../app/icons/128x128@2x.png "$HOME/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png"
+"""
+
 [tasks.ci]
 description = "Run the same checks CI runs, locally"
 shell = "bash -c"

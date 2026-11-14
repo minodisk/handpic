@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Handpic
+Comment=A culling app for RAW photos
+Exec=riffle-native
+Icon=dev.minodisk.handpic
+StartupWMClass=dev.minodisk.handpic
+Terminal=false
+Categories=Graphics;Photography;

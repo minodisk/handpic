@@ -4,6 +4,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=PATH");
     println!("cargo:rerun-if-env-changed=RIFFLE_NATIVE_ALLOW_NO_SIMD");
 
+    if env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "windows") {
+        embed_icon();
+    }
+
     let arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
     if arch != "x86" && arch != "x86_64" {
         return;
@@ -27,6 +31,24 @@ fn main() {
     );
     std::process::exit(1);
 }
+
+// GPUI loads the window class's icon as resource ID 1 of the exe, which is
+// what `set_icon` writes.
+#[cfg(windows)]
+fn embed_icon() {
+    let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/icons/icon.ico");
+    let icon = icon.to_str().expect("the manifest dir is UTF-8");
+    println!("cargo:rerun-if-changed={icon}");
+    let mut res = winresource::WindowsResource::new();
+    res.set_icon(icon);
+    if let Err(e) = res.compile() {
+        eprintln!("embedding {icon} failed: {e}");
+        std::process::exit(1);
+    }
+}
+
+#[cfg(not(windows))]
+fn embed_icon() {}
 
 fn check_nasm() -> Result<(), String> {
     // mozjpeg-sys probes plain `nasm` from PATH and ignores `NASM`, so this does too.
