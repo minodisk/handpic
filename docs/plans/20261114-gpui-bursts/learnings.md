@@ -19,6 +19,23 @@
 - The badge reuses `overlay::HALO` (made `pub`) for its eight dark copies
   rather than the stars' single 1 px copy, closer to `text-shadow: 0 0 2px`.
 
+## Step 2
+
+- The plan said the Tauri `sharpness` map is filled from `folder_entries`
+  only; it is also patched by `faces-progress` (`applySharpnessReady` in
+  `focus.ts`), with or without a focus. `Facts.sharpness` follows both:
+  `From<&IndexedFile>` and `apply_face_ready`, which now takes the score for
+  any file with facts (a JPEG too), and the `pending_faces` replay after an
+  entries read covers the snapshot race as it does for the focus.
+- `burst::reject_rest` returns `companion::Change`s so `judge_paths` (one
+  entry, `touched`, one anchored `refilter`, a store per change, no
+  auto-advance) serves it unchanged; undo and redo needed no change, since
+  `step` already has the one-file / several-files rule and the failed-store
+  `forget`.
+- `companion::View` takes `&HashMap<String, Facts>` for the sharpness rather
+  than a closure: `mcp_request`'s `view(this)` returns the snapshot, so a
+  closure local to it could not outlive the call.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, from the plan's Trade-off 7; the step's
@@ -34,3 +51,18 @@
   (view-only) folder, and do nothing while the folder tree has the
   keyboard. Files: `crates/native/src/main.rs` (`paint_strip`,
   `move_burst`), `crates/native/src/burst.rs`.
+- Pending manual check (Step 2, from the plan's Trade-off 7; the step's
+  checkbox was ticked on the automated criteria): on Windows and macOS, in
+  `riffle-native` on test copies of a burst folder, put the current file in a
+  burst of three or more (one member already rejected, one hidden by a
+  filter) and press `shift+x`. Expected: every other member not yet rejected
+  turns rejected (its `.xmp` / `.dop` gets the reject flag with the stars and
+  label kept, the hidden one too), the current file stays current, nothing
+  advances; `Ctrl+Z` restores them with `Undid N files` and leaves the
+  current file, `Ctrl+Shift+Z` redoes with `Redid N files`; on a two-frame
+  burst the undo moves to the other frame. Nothing happens in a JPEG
+  folder or on a singleton. With MCP on, `get_view`'s `burst` lists the
+  members with their sharpness and judgments, `visible: false` on the
+  hidden one. Files: `crates/native/src/main.rs` (`reject_rest`,
+  `mcp_request`), `crates/native/src/burst.rs`,
+  `crates/native/src/companion.rs`.

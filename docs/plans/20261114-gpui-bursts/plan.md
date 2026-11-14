@@ -158,7 +158,7 @@ implementing.
     - In the port plan add only one sub-bullet under Step 9 and one Progress
       line (decided, Trade-off 4); the folder-dialogs session appends to the
       same Progress list.
-- [ ] Step 2: `rejectRest` with its undo, and the MCP companion's `burst`
+- [x] Step 2: `rejectRest` with its undo, and the MCP companion's `burst`
   - Done when:
     - `rejectRest` rejects every other member of the current file's burst
       over the whole listing (a member the filter hides too), skipping the

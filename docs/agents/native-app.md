@@ -372,6 +372,15 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   `writes` next to `changed`; do not fold the two into one test. A failed
   undo / redo store also drops its file from the entry it pushed onto the
   other history (the Tauri `step` passes no `onFail` for that entry).
+- Rule: `rejectRest` is not a `judgment::Command`: the selection neither
+  widens nor narrows it. `burst::reject_rest` builds its changes, every other
+  member of the current file's burst over `all` (a member the filter hides
+  too) that is not a reject yet, flagged reject with its stars and label kept
+  and its label known when `seen`; `judge_paths` records them as one entry
+  (the redo history cleared), applies them, refilters once on the current
+  file and stores each, with no auto-advance. Nothing happens in a view-only
+  folder, with no file shown or outside a burst of two or more; its undo is
+  the ordinary `step`.
 
 ### The selection is keyed by path and ends every `refilter` (Inferred)
 
@@ -466,8 +475,13 @@ A `curl` check on test copies found the stars, the pick and the label in each
 
 Not supported yet, each refused with a message naming the native app: compare
 and a `select_photos` with several paths. `selected` is the current file
-alone, `burst` is always empty (no `burst.ts` port), and `current.eyes` is
-present only once the `f` overlay has judged the file.
+alone, and `current.eyes` is present only once the `f` overlay has judged the
+file. `burst` is the Tauri `burstOf` over the view's `bursts` (empty for a
+burst of one, else every member in position order, a hidden one with
+`visible: false`); each frame's `sharpness` is `Facts.sharpness`, set from the
+entries read and patched by pass 2's `ready` files (`apply_face_ready`), as
+the Tauri `sharpness` map is filled from `folder_entries` and patched by
+`faces-progress` (`applySharpnessReady`).
 
 - Rule: a test run with MCP on passes `--mcp-port` with a free port other
   than 41917 (the user's Tauri app may hold it), seeds `"mcpEnabled": true`
@@ -1285,8 +1299,8 @@ the view"), takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
-`judgment::Command::from_action`, `undo` / `redo` to `history::Undo`, and any
-other action (`rejectRest`, ...) is logged at `debug` until its step lands. A
+`judgment::Command::from_action`, `undo` / `redo` to `history::Undo`,
+`rejectRest` to `reject_rest`, and any other action is logged at `debug` until its step lands. A
 later step's key (peaking `e`) is added as its keymap action (`peaking`) in
 that `match`, not as a literal key: a literal `"e"` arm placed after the action
 arms never fires with the default keymap, because the catch-all

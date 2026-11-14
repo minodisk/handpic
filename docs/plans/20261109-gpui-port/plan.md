@@ -620,3 +620,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: the performance overlay (`d`), through [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md) (Step 9 stays open)
 - (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md`; folder drag-and-drop onto the window is not ported yet, so the no-folder text omits the drop clause (Step 8 stays open)
+- (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)

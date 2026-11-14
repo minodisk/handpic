@@ -2,9 +2,15 @@
 //! times lie within a gap of each other. An impossible date (a month 00, a
 //! day 32) is no capture time here, where `Date.UTC` rolls it over.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::sort::{self, SortFacts, SortKey};
+use riffle_core::Flag;
+
+use crate::{
+    companion::Change,
+    judgment::State,
+    sort::{self, SortFacts, SortKey},
+};
 
 /// The largest gap between two frames of one burst. Leica files carry whole
 /// seconds only, so anything below 1 s would split every Leica burst.
@@ -188,6 +194,39 @@ pub fn burst_frame_step(ids: &[i64], current: usize, direction: isize) -> usize 
         Some(next) if next < ids.len() && ids[next] == ids[current] => next,
         _ => current,
     }
+}
+
+/// `rejectRest`: every other member of `current`'s burst over `all` (so one
+/// the filter hides too) that is not a reject yet, rejected with its stars
+/// and label kept, its label known when the index has told the view it.
+/// Empty for a file outside a burst of two or more.
+pub fn reject_rest(
+    all: &[String],
+    current: &str,
+    members: &HashMap<String, BurstMember>,
+    state_of: impl Fn(&str) -> State,
+    seen: &HashSet<String>,
+) -> Vec<Change> {
+    let Some(burst) = members.get(current).filter(|m| m.size > 1).map(|m| m.burst) else {
+        return Vec::new();
+    };
+    all.iter()
+        .filter(|path| {
+            path.as_str() != current && members.get(path.as_str()).map(|m| m.burst) == Some(burst)
+        })
+        .filter_map(|path| {
+            let before = state_of(path);
+            (before.flag != Flag::Reject).then(|| Change {
+                path: path.clone(),
+                after: State {
+                    flag: Flag::Reject,
+                    ..before.clone()
+                },
+                before,
+                label_known: seen.contains(path),
+            })
+        })
+        .collect()
 }
 
 /// `burst.test.ts`.
@@ -522,5 +561,131 @@ mod tests {
         let split = [0, 1, 0];
         assert_eq!(burst_frame_step(&split, 0, 1), 0);
         assert_eq!(burst_frame_step(&split, 2, -1), 2);
+    }
+}
+
+#[cfg(test)]
+mod reject_rest_tests {
+    use std::collections::{HashMap, HashSet};
+
+    use riffle_core::Flag;
+
+    use super::{BurstMember, reject_rest};
+    use crate::{companion::Change, judgment::State};
+
+    fn member(burst: usize, position: usize, size: usize) -> BurstMember {
+        BurstMember {
+            burst,
+            position,
+            size,
+        }
+    }
+
+    fn all() -> Vec<String> {
+        ["/d/a", "/d/b", "/d/c", "/d/d", "/d/x"]
+            .map(str::to_owned)
+            .to_vec()
+    }
+
+    fn members() -> HashMap<String, BurstMember> {
+        HashMap::from([
+            ("/d/a".to_owned(), member(0, 0, 4)),
+            ("/d/b".to_owned(), member(0, 1, 4)),
+            ("/d/c".to_owned(), member(0, 2, 4)),
+            ("/d/d".to_owned(), member(0, 3, 4)),
+            ("/d/x".to_owned(), member(1, 0, 1)),
+        ])
+    }
+
+    fn state(rating: Option<u8>, flag: Flag, label: Option<&str>) -> State {
+        State {
+            rating,
+            flag,
+            label: label.map(Into::into),
+        }
+    }
+
+    fn rejected(path: &str, before: State, label_known: bool) -> Change {
+        Change {
+            path: path.into(),
+            after: State {
+                flag: Flag::Reject,
+                ..before.clone()
+            },
+            before,
+            label_known,
+        }
+    }
+
+    #[test]
+    fn rejects_every_other_member_keeping_stars_and_label() {
+        let judgments = HashMap::from([
+            ("/d/a".to_owned(), state(Some(4), Flag::Pick, Some("Red"))),
+            ("/d/c".to_owned(), state(Some(2), Flag::None, None)),
+        ]);
+        let seen = HashSet::from(["/d/a".to_owned(), "/d/c".to_owned()]);
+        let changes = reject_rest(
+            &all(),
+            "/d/b",
+            &members(),
+            |p| judgments.get(p).cloned().unwrap_or_default(),
+            &seen,
+        );
+        assert_eq!(
+            changes,
+            vec![
+                rejected("/d/a", state(Some(4), Flag::Pick, Some("Red")), true),
+                rejected("/d/c", state(Some(2), Flag::None, None), true),
+                rejected("/d/d", State::default(), false),
+            ]
+        );
+    }
+
+    #[test]
+    fn skips_the_members_already_rejected() {
+        let judgments = HashMap::from([
+            ("/d/a".to_owned(), state(Some(1), Flag::Reject, None)),
+            ("/d/d".to_owned(), state(None, Flag::Reject, Some("Blue"))),
+        ]);
+        let changes = reject_rest(
+            &all(),
+            "/d/b",
+            &members(),
+            |p| judgments.get(p).cloned().unwrap_or_default(),
+            &HashSet::new(),
+        );
+        let paths: Vec<&str> = changes.iter().map(|c| c.path.as_str()).collect();
+        assert_eq!(paths, ["/d/c"]);
+    }
+
+    #[test]
+    fn includes_a_member_the_filter_hides() {
+        // `all` is the whole listing, so "/d/c" counts whether or not the
+        // filter shows it.
+        let changes = reject_rest(
+            &all(),
+            "/d/a",
+            &members(),
+            |_| State::default(),
+            &HashSet::new(),
+        );
+        let paths: Vec<&str> = changes.iter().map(|c| c.path.as_str()).collect();
+        assert_eq!(paths, ["/d/b", "/d/c", "/d/d"]);
+    }
+
+    #[test]
+    fn is_empty_for_a_singleton_or_an_ungrouped_file() {
+        for current in ["/d/x", "/d/new"] {
+            assert!(
+                reject_rest(
+                    &all(),
+                    current,
+                    &members(),
+                    |_| State::default(),
+                    &HashSet::new()
+                )
+                .is_empty()
+            );
+        }
     }
 }

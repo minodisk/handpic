@@ -2595,6 +2595,7 @@ impl Riffle {
             (_, Some("selectAll")) => self.select_all(cx),
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
+            (_, Some("rejectRest")) => self.reject_rest(cx),
             (_, Some(action)) => match Command::from_action(action) {
                 Some(cmd) => self.judge(cmd, cx),
                 None => log::debug!("key: {action} is not handled yet"),
@@ -2697,6 +2698,26 @@ impl Riffle {
                 cx,
             );
         }
+    }
+
+    /// `rejectRest`: reject the other members of the current file's burst,
+    /// over the whole listing, as one undo entry through `judge_paths`.
+    fn reject_rest(&mut self, cx: &mut Context<Self>) {
+        if self.view_only {
+            return;
+        }
+        let Some(current) = self.current_path() else {
+            return;
+        };
+        let changes = burst::reject_rest(
+            &self.all,
+            &current,
+            &self.bursts,
+            |p| self.judgments.get(p).cloned().unwrap_or_default(),
+            &self.seen,
+        );
+        self.judge_paths(changes, cx);
+        cx.notify();
     }
 
     /// Undo (or with `redo`, redo) the newest judgment through the same
@@ -4241,6 +4262,8 @@ impl Riffle {
                 view_only: this.view_only,
                 judgments: &this.judgments,
                 seen: &this.seen,
+                bursts: &this.bursts,
+                facts: &this.facts,
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self));
