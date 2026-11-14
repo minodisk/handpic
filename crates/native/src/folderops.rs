@@ -48,7 +48,7 @@ use crate::textinput::{self, TextInput};
 use crate::tree::{self, IGNORE_CASE};
 use crate::{
     BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
-    PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context, trash,
+    OVERLAY_COLOR, PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context, trash,
 };
 
 /// The folder operations' view state: the flows, the one dialog, laid out
@@ -1278,7 +1278,7 @@ impl Riffle {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgba(0x00000099))
+                    .bg(rgba(OVERLAY_COLOR))
                     .child(
                         div()
                             .id("folder-dialog-box")
