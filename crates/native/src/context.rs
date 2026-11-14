@@ -88,7 +88,7 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
         command(Action::RewriteSidecars, "Rewrite Sidecars from Index…"),
         command(Action::DeleteSidecars, "Delete Sidecars…"),
     ]);
-    groups.push(vec![pending(
+    groups.push(vec![command(
         Action::SequenceTimestamps,
         "Sequence JPEG Timestamps…",
     )]);
@@ -322,7 +322,7 @@ mod tests {
                     command(Action::RewriteSidecars, "Rewrite Sidecars from Index…"),
                     command(Action::DeleteSidecars, "Delete Sidecars…"),
                 ],
-                vec![pending(
+                vec![command(
                     Action::SequenceTimestamps,
                     "Sequence JPEG Timestamps…"
                 )],
@@ -371,7 +371,6 @@ mod tests {
             vec![
                 Action::RenameFolder,
                 Action::RenameByDate,
-                Action::SequenceTimestamps,
                 Action::ImportFolder,
             ]
         );

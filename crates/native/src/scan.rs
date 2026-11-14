@@ -100,6 +100,8 @@ pub enum Event {
         done: usize,
         total: usize,
     },
+    /// A message of a folder operation's run.
+    FolderOp(crate::folderops::Message),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its

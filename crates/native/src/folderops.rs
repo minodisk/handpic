@@ -2,49 +2,76 @@
 //! way, the one-flow-at-a-time rule, the shared confirmation dialog
 //! (`dialog.rs`) and its drawing, and the dispatch of a folder menu action.
 //! So far `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-//! (`sidecars.rs`); the window's view keeps one `FolderOps`, and this module
-//! adds to its `impl`, as a child module reaches its private fields.
+//! (`sidecars.rs`) and `Sequence JPEG Timestamps…` (`sequence.rs`); the
+//! window's view keeps one `FolderOps`, and this module adds to its `impl`,
+//! as a child module reaches its private fields.
 
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use futures::channel::oneshot;
 use gpui::{
-    AnyElement, ClickEvent, Context, FontWeight, deferred, div, prelude::*, px, relative, rgb, rgba,
+    AnyElement, ClickEvent, Context, FontWeight, HighlightStyle, StyledText, Subscription,
+    deferred, div, prelude::*, px, relative, rgb, rgba,
 };
 use riffle_backend::{
     foldersidecars::{self, DeletePreview, Preview, Summary},
     listing::canonicalize,
+    sequence::{self as sequencer, Ran as Sequenced},
     sidecar,
     text::{SCAN_RUNNING, SIZE_BASE, format_bytes},
     trash::Summary as TrashSummary,
 };
 
-use crate::dialog::{self, Button, Content, Dialog, Style};
+use crate::dialog::{self, Button, Content, Dialog, Row, Style};
 use crate::judgment::State;
+use crate::scan::Event;
+use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
 use crate::tree::IGNORE_CASE;
 use crate::{
     BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
-    PANE_COLOR, PRIMARY_COLOR, Riffle, context, trash,
+    PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, context, trash,
 };
 
-/// The folder operations' view state: the flow under way and its dialog,
-/// laid out only while open.
+/// The folder operations' view state: the flows, the one dialog, laid out
+/// only while open, and the sequencing run under way.
 #[derive(Default)]
 pub struct FolderOps {
     sidecars: SidecarFlow,
+    sequence: SequenceFlow,
     dialog: Option<Dialog>,
+    /// The sequencing run's cancel flag, which the app's quit sets too
+    /// (`sequence_quit`), and how far the run got, in the pane's notes.
+    sequence_cancel: Option<Arc<AtomicBool>>,
+    sequence_quit: Option<Subscription>,
+    sequencing: Option<String>,
 }
 
 impl FolderOps {
     /// A folder flow is under way, from its preview to its run's end.
     pub fn busy(&self) -> bool {
-        self.sidecars.busy()
+        self.sidecars.busy() || self.sequence.busy()
     }
 
     pub fn dialog_open(&self) -> bool {
         self.dialog.is_some()
     }
+
+    /// The pane's note of a run under way.
+    pub fn note(&self) -> Option<String> {
+        self.sequencing.clone()
+    }
+}
+
+/// A message of a folder operation's run, sent from its thread into the
+/// view's channel.
+#[derive(Clone, Copy, Debug)]
+pub enum Message {
+    /// How far the sequencing run `run` got.
+    SequenceProgress { run: u64, done: usize, total: usize },
 }
 
 /// What a sidecar preview read.
@@ -80,6 +107,7 @@ impl Riffle {
         let kind = match action {
             context::Action::RewriteSidecars => Kind::Rewrite,
             context::Action::DeleteSidecars => Kind::Delete,
+            context::Action::SequenceTimestamps => return self.start_sequence(path, cx),
             _ => return,
         };
         self.request_sidecars(Target { kind, dir: path }, cx);
@@ -106,6 +134,7 @@ impl Riffle {
     pub(crate) fn start_sidecars(&mut self, target: Target, cx: &mut Context<Self>) {
         if self.settings_view.read(cx).is_open()
             || self.trash.busy()
+            || self.folderops.sequence.busy()
             || !self.folderops.sidecars.start(target.clone())
         {
             return;
@@ -161,8 +190,8 @@ impl Riffle {
                     Previewed::Rewrite(preview) => (
                         Content {
                             title: "Rewrite Sidecars from Index".to_owned(),
-                            rows: sidecars::rewrite_rows(&preview),
-                            note: Some(sidecars::rewrite_total_line(&preview, name)),
+                            rows: rows(sidecars::rewrite_rows(&preview)),
+                            notes: vec![sidecars::rewrite_total_line(&preview, name)],
                             running_note: sidecars::REWRITE_RUNNING_NOTE.to_owned(),
                             ..Content::default()
                         },
@@ -172,8 +201,8 @@ impl Riffle {
                     Previewed::Delete(preview) => (
                         Content {
                             title: "Delete Sidecars".to_owned(),
-                            rows: sidecars::delete_rows(&preview),
-                            note: Some(sidecars::delete_total_line(&preview, name)),
+                            rows: rows(sidecars::delete_rows(&preview)),
+                            notes: vec![sidecars::delete_total_line(&preview, name)],
                             running_note: sidecars::DELETE_RUNNING_NOTE.to_owned(),
                             ..Content::default()
                         },
@@ -325,8 +354,194 @@ impl Riffle {
         self.mark_strip();
     }
 
+    /// `Sequence JPEG Timestamps…`: read the preview of `dir` on a background
+    /// task. It neither waits for a scan nor touches it or the index, and
+    /// needs no open folder. Nothing starts while the settings, the trash
+    /// dialog or another folder flow is open or busy.
+    fn start_sequence(&mut self, dir: String, cx: &mut Context<Self>) {
+        if self.settings_view.read(cx).is_open()
+            || self.trash.busy()
+            || self.folderops.sidecars.busy()
+            || !self.folderops.sequence.start(dir.clone())
+        {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let read = dir.clone();
+            let previewed = cx
+                .background_spawn(async move { sequencer::preview(Path::new(&read)) })
+                .await;
+            this.update(cx, |this, cx| this.sequence_previewed(dir, previewed, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The preview came back: its dialog opens, or the failure goes to the
+    /// pane's notes keyed by the folder and the flow ends.
+    fn sequence_previewed(
+        &mut self,
+        dir: String,
+        previewed: Result<sequencer::Preview, String>,
+        cx: &mut Context<Self>,
+    ) {
+        match previewed {
+            Ok(preview) if self.folderops.sequence.previewed() => {
+                let mut lines = vec![
+                    format!("Source: {dir}"),
+                    format!("Output: {}", preview.output_dir),
+                ];
+                lines.extend(sequence::rebuild_notice(&preview).map(str::to_owned));
+                let content = Content {
+                    title: "Sequence JPEG Timestamps".to_owned(),
+                    lines,
+                    rows: preview
+                        .rows
+                        .iter()
+                        .map(|row| {
+                            let parts = sequence::row_parts(row);
+                            Row {
+                                text: parts.head + &parts.same,
+                                accent: parts.diff,
+                                muted: row.old == row.new,
+                            }
+                        })
+                        .collect(),
+                    notes: vec![
+                        sequence::written_line(&preview.rows, &preview.output_dir),
+                        sequence::capture_time_line(&preview.rows),
+                    ],
+                    errors: preview.failed.iter().map(sequence::failure_text).collect(),
+                    running_note: sequence::RUNNING_NOTE.to_owned(),
+                    ..Content::default()
+                };
+                self.menus.close();
+                self.context.close();
+                self.folderops.dialog = Some(Dialog::new(
+                    content,
+                    "Run",
+                    Style::Primary,
+                    !preview.rows.is_empty(),
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.folderops.sequence.fail();
+                self.write_failed(dir, e);
+            }
+        }
+        cx.notify();
+    }
+
+    /// The run button: the run goes on a thread of its own with a cancel
+    /// flag, its progress through the view's channel tagged with its id, the
+    /// dialog's Cancel left enabled to cancel it. The app's quit only sets
+    /// the flag.
+    fn run_sequence(&mut self, cx: &mut Context<Self>) {
+        let Some((dir, run)) = self.folderops.sequence.run() else {
+            return;
+        };
+        if let Some(dialog) = &mut self.folderops.dialog {
+            dialog.set_running_cancelable();
+        }
+        self.folderops.sequencing = Some(sequence::progress_status(0, 0));
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.folderops.sequence_cancel = Some(cancel.clone());
+        self.folderops.sequence_quit = Some({
+            let cancel = cancel.clone();
+            cx.on_app_quit(move |_, _| {
+                cancel.store(true, Ordering::Relaxed);
+                async {}
+            })
+        });
+        let events = self.events.clone();
+        let (reply, ran) = oneshot::channel();
+        let started = Instant::now();
+        let path = dir.clone();
+        std::thread::spawn(move || {
+            let ran = sequencer::run(Path::new(&path), &cancel, |done, total| {
+                let _ = events.unbounded_send(Event::FolderOp(Message::SequenceProgress {
+                    run,
+                    done,
+                    total,
+                }));
+            });
+            let _ = reply.send(ran);
+        });
+        cx.spawn(async move |this, cx| {
+            let ran = ran.await.unwrap_or_else(|_| Sequenced {
+                output_dir: String::new(),
+                written: 0,
+                total: 0,
+                failed: vec![sequencer::Failure {
+                    path: dir.clone(),
+                    message: "the run stopped unexpectedly".to_owned(),
+                }],
+                canceled: false,
+            });
+            log::info!(
+                "sequence: {dir} written={} total={} failed={} canceled={} in {}ms",
+                ran.written,
+                ran.total,
+                ran.failed.len(),
+                ran.canceled,
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| this.sequence_ran(run, ran, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The run `run` ended: the dialog closes, the failures go to the notes,
+    /// the status says what it wrote, and the output folder is revealed
+    /// unless the run was canceled or wrote nothing.
+    fn sequence_ran(&mut self, run: u64, ran: Sequenced, cx: &mut Context<Self>) {
+        if !self.folderops.sequence.done(run) {
+            return;
+        }
+        self.folderops.dialog = None;
+        self.folderops.sequencing = None;
+        self.folderops.sequence_cancel = None;
+        self.folderops.sequence_quit = None;
+        for failure in &ran.failed {
+            self.write_failed(failure.path.clone(), failure.message.clone());
+        }
+        self.step_note = sequence::done_status(&ran);
+        if let Some(out) = sequence::reveal_after(&ran) {
+            cx.reveal_path(Path::new(out));
+        }
+        cx.notify();
+    }
+
+    /// A message of a folder operation's run; one of an ended run is
+    /// dropped.
+    pub(crate) fn folder_op_message(&mut self, message: Message, cx: &mut Context<Self>) {
+        match message {
+            Message::SequenceProgress { run, done, total } => {
+                if self.folderops.sequence.accepts(run) {
+                    self.folderops.sequencing = Some(sequence::progress_status(done, total));
+                    cx.notify();
+                }
+            }
+        }
+    }
+
     fn dismiss_folder_dialog(&mut self, cx: &mut Context<Self>) {
-        if self.folderops.sidecars.dismiss() {
+        if self.folderops.sequence.is_open() {
+            match self.folderops.sequence.dismiss() {
+                sequence::Dismiss::Close => self.folderops.dialog = None,
+                sequence::Dismiss::Cancel => {
+                    if let Some(cancel) = &self.folderops.sequence_cancel {
+                        cancel.store(true, Ordering::Relaxed);
+                    }
+                }
+                sequence::Dismiss::None => {}
+            }
+            cx.notify();
+        } else if self.folderops.sidecars.dismiss() {
             self.folderops.dialog = None;
             cx.notify();
         }
@@ -334,6 +549,7 @@ impl Riffle {
 
     fn press_folder_dialog(&mut self, button: Button, cx: &mut Context<Self>) {
         match button {
+            Button::Run if self.folderops.sequence.is_open() => self.run_sequence(cx),
             Button::Run if self.folderops.sidecars.is_open() => self.run_sidecars(cx),
             Button::Run => {}
             Button::Cancel => self.dismiss_folder_dialog(cx),
@@ -354,9 +570,9 @@ impl Riffle {
 
     /// The open folder dialog: a full-window `occlude()`d layer, so no press
     /// reaches what is under it, with the title, the lines, the rows
-    /// (scrolling inside the dialog when long), the note, the reason, the
-    /// running note while the run is under way, and the two buttons, the
-    /// focused one outlined.
+    /// (scrolling inside the dialog when long, an accent part in the pick
+    /// color), the notes, the errors, the reason, the running note while the
+    /// run is under way, and the two buttons, the focused one outlined.
     pub(crate) fn folder_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let dialog = self.folderops.dialog.as_ref()?;
         let content = &dialog.content;
@@ -440,15 +656,31 @@ impl Riffle {
                                         .flex_shrink(1.)
                                         .min_h_0()
                                         .overflow_y_scroll()
-                                        .children(
-                                            content
-                                                .rows
-                                                .iter()
-                                                .map(|row| div().child(format!("\u{2022} {row}"))),
-                                        ),
+                                        .children(content.rows.iter().map(|row| {
+                                            let text = format!("\u{2022} {}", row.text);
+                                            let accent = text.len()..text.len() + row.accent.len();
+                                            div()
+                                                .when(row.muted, |d| d.text_color(rgb(MUTED_COLOR)))
+                                                .child(
+                                                    StyledText::new(text + &row.accent)
+                                                        .with_highlights([(
+                                                            accent,
+                                                            HighlightStyle {
+                                                                color: Some(rgb(PICK_COLOR).into()),
+                                                                ..HighlightStyle::default()
+                                                            },
+                                                        )]),
+                                                )
+                                        })),
                                 )
                             })
-                            .children(content.note.as_ref().map(|note| div().child(note.clone())))
+                            .children(content.notes.iter().map(|note| div().child(note.clone())))
+                            .children(
+                                content
+                                    .errors
+                                    .iter()
+                                    .map(|e| div().text_color(rgb(ERROR_COLOR)).child(e.clone())),
+                            )
                             .children(content.reason.as_ref().map(muted))
                             .when(dialog.running(), |d| d.child(muted(&content.running_note)))
                             .child(
@@ -473,4 +705,8 @@ impl Riffle {
             .into_any_element(),
         )
     }
+}
+
+fn rows(texts: Vec<String>) -> Vec<Row> {
+    texts.into_iter().map(Row::from).collect()
 }

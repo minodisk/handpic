@@ -410,7 +410,7 @@ folder operation.
       labels from it and `restored` words its status with it. The dialog's
       `Content` has no field order per operation: the sidecar dialogs put
       their total line in `note`, after the rows, as the Tauri HTML does.
-- [ ] Step 4: Sequence JPEG Timestamps…
+- [x] Step 4: Sequence JPEG Timestamps…
   - Done when:
     - `crates/native/src/sequence.rs` is a port of `sequence.ts` with
       `sequence.test.ts`'s cases: `row_parts`, `rebuild_notice`,
@@ -452,6 +452,13 @@ folder operation.
       test module.
     - A run's messages carry its id, as the scan's do, so a late message of
       an ended run is dropped.
+    - As landed: the shared dialog's `Content` gained rows with an accent
+      part and a muted flag, `notes` (replacing the one `note`) and `errors`,
+      and `Dialog::set_running_cancelable` keeps Cancel enabled during the
+      run. The preview's and the run's failures go to the pane's keyed error
+      notes (`write_failed`, cleared by the next open as the Tauri `errors`
+      are). The one event variant Step 3 left out is
+      `Event::FolderOp(folderops::Message)`.
 - [ ] Step 5: Import…
   - Done when:
     - `crates/native/src/import.rs` is a port of `import.ts` with
@@ -726,3 +733,4 @@ folder operation.
 (2026-11-14) Step 1 complete
 (2026-11-14) Step 2 complete
 (2026-11-14) Step 3 complete
+(2026-11-14) Step 4 complete
