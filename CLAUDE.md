@@ -266,8 +266,14 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled` and the import root and pattern, and writes them back in order on one thread
-(`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
+sort key, the remembered filter, `mcpEnabled`, the import root and pattern, `lastFolder` and `windowBounds`, and writes them back in order on one thread
+(`Writes`, drained on quit), `src/session.rs` what a launch restores
+(`startup_folder`: the command line's folder, else the remembered
+`lastFolder` while still a directory; `Geometry`, the window's restore
+bounds, maximized state and display UUID under `windowBounds`; `place`, the
+saved display, else one the bounds intersect, else the centered default,
+with the bounds clamped into its visible area; all off under `--auto`), the
+folder written on every open, the geometry on quit, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
