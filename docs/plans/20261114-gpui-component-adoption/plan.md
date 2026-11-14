@@ -876,3 +876,4 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 - (2026-11-14) Step 5 complete
 - (2026-11-14) Step 6 complete
 - (2026-11-14) Step 7 complete
+- (2026-11-15) Step 8 complete
