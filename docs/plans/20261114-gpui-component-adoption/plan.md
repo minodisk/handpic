@@ -641,7 +641,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
     - This step sets the pattern Step 7 reuses; keep the shell options and
       the open / close plumbing in one place both can call.
 
-- [ ] Step 7: The folder operations' shared dialog as a `Dialog`
+- [x] Step 7: The folder operations' shared dialog as a `Dialog`
   - Done when:
     - `folderops.rs` opens the dialog every folder operation shares
       (Rewrite Sidecars from Index, Delete Sidecars, Sequence JPEG
@@ -875,3 +875,4 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 - (2026-11-14) Step 4 complete
 - (2026-11-14) Step 5 complete
 - (2026-11-14) Step 6 complete
+- (2026-11-14) Step 7 complete

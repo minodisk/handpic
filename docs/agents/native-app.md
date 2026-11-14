@@ -124,8 +124,9 @@ focus and starts as before) and returns `Root::new(view, window, cx)` as the
 window's root view. Nothing reads the window's root by its type:
 `on_app_quit`, the bounds saved on quit, `SettingsView`'s `Change::Closed`
 focus restore and the tree's keyboard flag hold the view, its focus handle or
-the `Window`, so they are unchanged. The trash dialog is the one component
-dialog so far (see "The trash dialog is a component `Dialog`").
+the `Window`, so they are unchanged. The trash dialog and the folder
+operations' dialog are component dialogs (see "The trash dialog is a
+component `Dialog`").
 
 What `Root` adds to every frame, read at 0.9.1: its own `div` (the `Root` key
 context and the `Tab` / `TabPrev` / `Copy` handlers), gpui-base's
@@ -2393,19 +2394,43 @@ The tree menu's folder operations (so far `Rewrite Sidecars from Index…`,
 `dialog::Dialog`: its `Content` (title, lines, rows, each with an optional
 accent part and a muted flag, headed lists after the rows, notes, errors,
 reason, running note), the run
-button's label and `Style` (primary or destructive), and which enabled button
-has the focus (the run button, or Cancel when the run is disabled). A run
-that cannot be canceled disables both buttons (`set_running`); a cancelable
-one keeps Cancel enabled and focused (`set_running_cancelable`). `Dialog::key` gives
-Escape as `Dismiss` (the flow decides: a non-cancelable run ignores it), Tab
-/ Shift+Tab cycle the enabled buttons, Enter or Space press the focused one,
-and every other key is swallowed. The trash dialog was not moved onto it.
+button's label and `Style` (primary or destructive), which buttons are
+enabled, and the button the focus goes to (`Dialog::focus`: the run button,
+or Cancel when the run is disabled). A run that cannot be canceled disables
+both buttons (`set_running`); a cancelable one keeps Cancel enabled and moves
+the focus there (`set_running_cancelable`). `Dialog::key` gives Escape as
+`Dismiss` (the flow decides: a non-cancelable run ignores it), lets Enter or
+Space go on to the focused button while one is enabled, and swallows every
+other key. The trash dialog was not moved onto it.
+
+The dialog is a gpui-component `Dialog` in `Root`'s layer, built by
+`folderops.rs`'s `folder_dialog` inside `modal.rs`'s shell exactly as the
+trash dialog is (see "The trash dialog is a component `Dialog`"): the same
+`Modal` plumbing (`folder_modal`), the same `modal::backdrop` drawn while
+`folderops.dialog_open()`, and a footer `capture_key_down` asking
+`folder_dialog_key` before the focused `Button` presses itself. The title is
+the component's, the lines its content, the rows and lists its body, which
+scrolls under the component's scrollbar when long, and the notes, errors,
+reason and running note sit in the footer above the `primary()` or
+`danger()` run `Button` and Cancel, on focus handles the view keeps
+(`folder_buttons`).
+
+- Rule: `follow_folder_dialog` runs wherever `folderops.dialog` changes: it
+  opens the dialog when one is shown and closes it when none is. The
+  import's stepping aside is a close with the flow alive (the focus goes
+  back to the app's view), and `Import…` bringing it back a new opening.
+- Rule: the builder focuses `Dialog::focus` on its first run of an opening
+  and again whenever that changes (a `Cell` per opening), so a cancelable
+  run's start moves the focus from the now disabled run button to Cancel
+  and a Tab the user pressed is never undone. Tab / Shift+Tab are `Root`'s
+  focus trap over the enabled buttons.
 
 `folderops.rs` is a child module of `main.rs` holding `FolderOps` (the flow
 under way and the open dialog) and an `impl Riffle` block: a child module
 reaches the view's private fields, methods and color constants, so the
-operations need no entity of their own and `main.rs` gains only the field,
-the menu arm, the key guard, the render child and the gate's `Held` variant.
+operations need no entity of their own and `main.rs` gains only the fields
+(the flows, the `Modal`, the buttons' focus), the menu arm, the key guard,
+the backdrop's condition and the gate's `Held` variant.
 
 - Rule: one flow at a time: a start does nothing while the settings modal is
   open, the trash flow is busy or another folder flow is busy, and the trash
@@ -2456,7 +2481,9 @@ the menu arm, the key guard, the render child and the gate's `Held` variant.
   the destination; the files already copied stay, and a second import skips
   them by name and size.
 - Not verified headless: the dialog, its keys and the runs; the hand checks
-  are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+  are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md` and,
+  for the component `Dialog`,
+  `../plans/20261114-gpui-component-adoption/learnings.md`.
 
 ### A folder rename releases the watches, then follows in the tree and reopens (Measured)
 

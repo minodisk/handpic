@@ -1,8 +1,9 @@
 //! The confirmation dialog the folder operations share, kept pure: what it
-//! shows, its run button and Cancel, which of the enabled buttons has the
-//! focus, and what a key does while it is open. The Tauri app gives each
-//! operation its own HTML dialog with the settings modal's key decisions;
-//! `folderops.rs` draws this one for all of them.
+//! shows, its run button and Cancel, which of them are enabled, which one the
+//! focus goes to, and what a key does while it is open. The focus itself and
+//! the Tab walk between the buttons are GPUI's, in the component `Dialog`
+//! `folderops.rs` draws for all of them. The Tauri app gives each operation
+//! its own HTML dialog with the settings modal's key decisions.
 
 /// The run button's look: `primary`, or `destructive` for a run that moves
 /// files away.
@@ -54,15 +55,16 @@ pub struct Content {
     pub running_note: String,
 }
 
-/// What a key does while the dialog is open. Every key stops there.
+/// What a key does while the dialog is open. Tab and Shift+Tab never get
+/// here: `Root`'s focus trap walks the enabled buttons.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Key {
     /// Escape: the operation decides whether the dialog closes, or what a
     /// run under way does.
     Dismiss,
-    /// The focused button pressed.
-    Press(Button),
-    /// Nothing, or only the focus moved.
+    /// Enter or Space, left to the focused button, which presses itself.
+    Press,
+    /// Nothing; the key stops there.
     Swallow,
 }
 
@@ -75,12 +77,10 @@ pub struct Dialog {
     running: bool,
     /// Cancel stays enabled while the run is under way.
     cancelable: bool,
-    focused: Button,
 }
 
 impl Dialog {
-    /// A dialog asking with `content`, its focus on the run button, or on
-    /// Cancel when the run is disabled.
+    /// A dialog asking with `content`.
     pub fn new(content: Content, run_label: &str, style: Style, run_enabled: bool) -> Self {
         Self {
             content,
@@ -89,11 +89,6 @@ impl Dialog {
             run_enabled,
             running: false,
             cancelable: false,
-            focused: if run_enabled {
-                Button::Run
-            } else {
-                Button::Cancel
-            },
         }
     }
 
@@ -103,11 +98,10 @@ impl Dialog {
     }
 
     /// The run started and Cancel cancels it: the run button disabled, the
-    /// focus on Cancel and the running note shown.
+    /// focus moved to Cancel and the running note shown.
     pub fn set_running_cancelable(&mut self) {
         self.running = true;
         self.cancelable = true;
-        self.focused = Button::Cancel;
     }
 
     pub fn running(&self) -> bool {
@@ -121,29 +115,24 @@ impl Dialog {
         }
     }
 
-    /// The focused button, `None` while no button is enabled.
-    pub fn focused(&self) -> Option<Button> {
-        self.enabled(self.focused).then_some(self.focused)
+    /// The button the focus goes to, on the dialog's opening and again
+    /// whenever this changes: the run button, or Cancel when the run is
+    /// disabled or a cancelable run is under way; `None` while no button is
+    /// enabled, the focus staying on the disabled button that has it.
+    pub fn focus(&self) -> Option<Button> {
+        [Button::Run, Button::Cancel]
+            .into_iter()
+            .find(|&button| self.enabled(button))
     }
 
     /// A key, `key` as `keys::key_name` names it (`None` for a lone
-    /// modifier): Escape asks to dismiss, Tab and Shift+Tab cycle the
-    /// enabled buttons, Enter (or Space, as on a focused HTML button) presses
-    /// the focused one, and every other key is swallowed.
-    pub fn key(&mut self, key: Option<&str>) -> Key {
+    /// modifier): Escape asks to dismiss, Enter (or Space, as on a focused
+    /// HTML button) goes on to the focused button while one is enabled, and
+    /// every other key is swallowed.
+    pub fn key(&self, key: Option<&str>) -> Key {
         match key {
             Some("escape") => Key::Dismiss,
-            Some("tab" | "shift+tab") => {
-                let other = match self.focused {
-                    Button::Run => Button::Cancel,
-                    Button::Cancel => Button::Run,
-                };
-                if self.enabled(other) {
-                    self.focused = other;
-                }
-                Key::Swallow
-            }
-            Some("enter" | "space") => self.focused().map_or(Key::Swallow, Key::Press),
+            Some("enter" | "space") if self.focus().is_some() => Key::Press,
             _ => Key::Swallow,
         }
     }
@@ -171,7 +160,7 @@ mod tests {
     #[test]
     fn the_focus_starts_on_the_run_button() {
         let d = dialog(true);
-        assert_eq!(d.focused(), Some(Button::Run));
+        assert_eq!(d.focus(), Some(Button::Run));
         assert!(d.enabled(Button::Run));
         assert!(d.enabled(Button::Cancel));
         assert!(!d.running());
@@ -180,48 +169,34 @@ mod tests {
     #[test]
     fn the_focus_starts_on_cancel_when_the_run_is_disabled() {
         let d = dialog(false);
-        assert_eq!(d.focused(), Some(Button::Cancel));
+        assert_eq!(d.focus(), Some(Button::Cancel));
         assert!(!d.enabled(Button::Run));
+        assert!(d.enabled(Button::Cancel));
     }
 
     #[test]
-    fn tab_and_shift_tab_cycle_the_enabled_buttons() {
-        let mut d = dialog(true);
-        assert_eq!(d.key(Some("tab")), Key::Swallow);
-        assert_eq!(d.focused(), Some(Button::Cancel));
-        assert_eq!(d.key(Some("tab")), Key::Swallow);
-        assert_eq!(d.focused(), Some(Button::Run));
-        assert_eq!(d.key(Some("shift+tab")), Key::Swallow);
-        assert_eq!(d.focused(), Some(Button::Cancel));
-    }
-
-    #[test]
-    fn tab_stays_on_cancel_when_the_run_is_disabled() {
-        let mut d = dialog(false);
-        d.key(Some("tab"));
-        assert_eq!(d.focused(), Some(Button::Cancel));
-        d.key(Some("shift+tab"));
-        assert_eq!(d.focused(), Some(Button::Cancel));
-    }
-
-    #[test]
-    fn enter_and_space_press_the_focused_button() {
-        let mut d = dialog(true);
-        assert_eq!(d.key(Some("enter")), Key::Press(Button::Run));
-        assert_eq!(d.key(Some("space")), Key::Press(Button::Run));
-        d.key(Some("tab"));
-        assert_eq!(d.key(Some("enter")), Key::Press(Button::Cancel));
-        assert_eq!(dialog(false).key(Some("enter")), Key::Press(Button::Cancel));
+    fn enter_and_space_go_on_to_the_focused_button() {
+        for run_enabled in [true, false] {
+            let d = dialog(run_enabled);
+            assert_eq!(d.key(Some("enter")), Key::Press);
+            assert_eq!(d.key(Some("space")), Key::Press);
+        }
     }
 
     #[test]
     fn escape_asks_to_dismiss_and_every_other_key_is_swallowed() {
-        let mut d = dialog(true);
+        let d = dialog(true);
         assert_eq!(d.key(Some("escape")), Key::Dismiss);
-        for key in [Some("p"), Some("ctrl+z"), Some("arrowleft"), None] {
+        for key in [
+            Some("p"),
+            Some("ctrl+z"),
+            Some("arrowleft"),
+            Some("shift+enter"),
+            Some("ctrl+space"),
+            None,
+        ] {
             assert_eq!(d.key(key), Key::Swallow, "{key:?}");
         }
-        assert_eq!(d.focused(), Some(Button::Run));
     }
 
     #[test]
@@ -231,24 +206,21 @@ mod tests {
         assert!(d.running());
         assert!(!d.enabled(Button::Run));
         assert!(!d.enabled(Button::Cancel));
-        assert_eq!(d.focused(), None);
+        assert_eq!(d.focus(), None);
         assert_eq!(d.key(Some("enter")), Key::Swallow);
-        assert_eq!(d.key(Some("tab")), Key::Swallow);
-        assert_eq!(d.focused(), None);
+        assert_eq!(d.key(Some("space")), Key::Swallow);
         assert_eq!(d.key(Some("escape")), Key::Dismiss);
     }
 
     #[test]
-    fn a_cancelable_run_keeps_cancel_enabled_and_focused() {
+    fn a_cancelable_run_keeps_cancel_enabled_and_moves_the_focus_there() {
         let mut d = dialog(true);
         d.set_running_cancelable();
         assert!(d.running());
         assert!(!d.enabled(Button::Run));
         assert!(d.enabled(Button::Cancel));
-        assert_eq!(d.focused(), Some(Button::Cancel));
-        assert_eq!(d.key(Some("tab")), Key::Swallow);
-        assert_eq!(d.focused(), Some(Button::Cancel));
-        assert_eq!(d.key(Some("enter")), Key::Press(Button::Cancel));
+        assert_eq!(d.focus(), Some(Button::Cancel));
+        assert_eq!(d.key(Some("enter")), Key::Press);
         assert_eq!(d.key(Some("escape")), Key::Dismiss);
     }
 }

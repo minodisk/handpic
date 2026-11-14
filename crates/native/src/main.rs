@@ -442,6 +442,10 @@ struct Riffle {
     trash_buttons: [FocusHandle; 2],
     /// The folder menu's operations and their dialog.
     folderops: folderops::FolderOps,
+    /// That dialog in `Root`'s layer, open while a flow shows it.
+    folder_modal: modal::Modal,
+    /// The focus of its run and Cancel buttons.
+    folder_buttons: [FocusHandle; 2],
     /// A confirmed run, or a run's undo or redo, held for the listing or
     /// scan under way; in flight while one runs, which no listing or scan
     /// starts under.
@@ -769,6 +773,8 @@ impl Riffle {
             trash_modal: modal::Modal::new(window.window_handle()),
             trash_buttons: [cx.focus_handle(), cx.focus_handle()],
             folderops: folderops::FolderOps::default(),
+            folder_modal: modal::Modal::new(window.window_handle()),
+            folder_buttons: [cx.focus_handle(), cx.focus_handle()],
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
@@ -2644,14 +2650,11 @@ impl Riffle {
         if self.settings_view.read(cx).is_open() {
             return;
         }
-        // The dialog in `Root`'s layer has the keys while the flow is busy.
-        if self.trash.busy() {
+        // The dialog in `Root`'s layer has the keys while one is open.
+        if self.trash.busy() || self.folderops.dialog_open() {
             return;
         }
         let name = keys::key_name(keystroke);
-        if self.folderops.dialog_open() {
-            return self.folder_dialog_key(name.as_deref(), cx);
-        }
         if self.rename_owns_keys() {
             return;
         }
@@ -4519,8 +4522,9 @@ impl Render for Riffle {
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
             .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
-            .children(self.trash.busy().then(|| modal::backdrop(cx)))
-            .children(self.folder_dialog(cx))
+            .children(
+                (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
+            )
     }
 }
 

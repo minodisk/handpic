@@ -456,9 +456,12 @@ that keeps a press from moving the focus) and runs through the backend's `trash:
 a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one
 held operation, a later request replacing it, and the in-flight count no
 listing starts under; `cancels_scan`, a port of `idle.ts`), `src/dialog.rs` the
-confirmation dialog model the folder operations share, `src/folderops.rs` the
+confirmation dialog model the folder operations share (the content, which
+buttons are enabled, the one the focus goes to, and what Escape, Enter and
+Space do), `src/folderops.rs` the
 folder menu's operations (the flow under way, one at a time, their dialog
-drawn as a `deferred` layer), `src/sidecars.rs` the port of `sidecars.ts`
+opened as a gpui-component `Dialog` through `modal.rs` like the trash
+dialog's), `src/sidecars.rs` the port of `sidecars.ts`
 (`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/sequence.rs` the
 port of `sequence.ts` (`Sequence JPEG Timestamps…`), `src/import.rs` the port
 of `import.ts` (`Import…`), `src/datefolder.rs` the port of `datefolder.ts`

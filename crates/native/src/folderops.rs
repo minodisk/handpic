@@ -9,6 +9,7 @@
 //! window's view keeps one `FolderOps`, and this module adds to its `impl`,
 //! as a child module reaches its private fields.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,11 +17,14 @@ use std::time::Instant;
 
 use futures::channel::oneshot;
 use gpui::{
-    AnyElement, ClickEvent, Context, Entity, Focusable, FontWeight, HighlightStyle, KeyDownEvent,
-    MouseButton, ScrollStrategy, StyledText, Subscription, Task, Window, deferred, div, prelude::*,
-    px, relative, rgb, rgba, transparent_black,
+    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, FontWeight,
+    HighlightStyle, KeyDownEvent, MouseButton, ScrollStrategy, SharedString, StyledText,
+    Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
 use gpui_component::{
+    Disableable,
+    button::{Button as UiButton, ButtonVariants},
+    dialog::{self as component, DialogFooter},
     input::{Input, InputEvent, InputState},
     tooltip::Tooltip,
 };
@@ -50,8 +54,8 @@ use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
 use crate::tree::{self, IGNORE_CASE};
 use crate::{
-    BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
-    OVERLAY_COLOR, PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context, trash,
+    ERROR_COLOR, HeldOp, MUTED_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context,
+    keys, trash,
 };
 
 /// The folder operations' view state: the flows, the one dialog, laid out
@@ -296,6 +300,7 @@ impl Riffle {
                 self.menus.close();
                 self.context.close();
                 self.folderops.dialog = Some(Dialog::new(content, run, style, true));
+                self.follow_folder_dialog(cx);
             }
             Ok(_) => {}
             Err(e) => {
@@ -316,6 +321,7 @@ impl Riffle {
         if self.resync.busy() || self.gate.in_flight() {
             self.folderops.sidecars.end();
             self.folderops.dialog = None;
+            self.follow_folder_dialog(cx);
             self.step_note = Some(SCAN_RUNNING.to_owned());
             cx.notify();
             return;
@@ -385,6 +391,7 @@ impl Riffle {
     fn sidecars_ran(&mut self, name: &str, dir: String, ran: Ran, cx: &mut Context<Self>) {
         self.folderops.sidecars.end();
         self.folderops.dialog = None;
+        self.follow_folder_dialog(cx);
         let result = match ran {
             Ran::Deleted(result) => {
                 return self.trashed(
@@ -509,6 +516,7 @@ impl Riffle {
                     Style::Primary,
                     !preview.rows.is_empty(),
                 ));
+                self.follow_folder_dialog(cx);
             }
             Ok(_) => {}
             Err(e) => {
@@ -588,6 +596,7 @@ impl Riffle {
             return;
         }
         self.folderops.dialog = None;
+        self.follow_folder_dialog(cx);
         self.folderops.sequencing = None;
         self.folderops.sequence_cancel = None;
         self.folderops.sequence_quit = None;
@@ -620,6 +629,7 @@ impl Riffle {
             self.menus.close();
             self.context.close();
             self.folderops.dialog = self.folderops.aside.take();
+            self.follow_folder_dialog(cx);
             cx.notify();
             return;
         }
@@ -708,6 +718,7 @@ impl Riffle {
                     Style::Primary,
                     import::can_run(&preview),
                 ));
+                self.follow_folder_dialog(cx);
             }
             Ok(_) => {}
             Err(e) => {
@@ -738,6 +749,7 @@ impl Riffle {
         else {
             self.folderops.import.fail();
             self.folderops.dialog = None;
+            self.follow_folder_dialog(cx);
             return;
         };
         if let Some(dialog) = &mut self.folderops.dialog {
@@ -817,6 +829,7 @@ impl Riffle {
         }
         if self.folderops.import.started(run) {
             self.folderops.aside = self.folderops.dialog.take();
+            self.follow_folder_dialog(cx);
         }
         cx.notify();
         let first = folders.first()?;
@@ -833,6 +846,7 @@ impl Riffle {
         }
         self.folderops.dialog = None;
         self.folderops.aside = None;
+        self.follow_folder_dialog(cx);
         self.folderops.importing = None;
         self.folderops.import_cancel = None;
         self.folderops.import_quit = None;
@@ -916,6 +930,7 @@ impl Riffle {
                     Style::Primary,
                     reason.is_none(),
                 ));
+                self.follow_folder_dialog(cx);
             }
             Ok(_) => {}
             Err(e) => {
@@ -941,6 +956,7 @@ impl Riffle {
         if self.resync.busy() || self.gate.in_flight() {
             self.folderops.date.end();
             self.folderops.dialog = None;
+            self.follow_folder_dialog(cx);
             self.step_note = Some(SCAN_RUNNING.to_owned());
             cx.notify();
             return;
@@ -1030,6 +1046,7 @@ impl Riffle {
         self.gate.leave_in_flight();
         self.folderops.date.end();
         self.folderops.dialog = None;
+        self.follow_folder_dialog(cx);
         let (split, canonical) = match ran {
             Ok(DateRan::Renamed(renamed, canonical)) => {
                 return self.folder_renamed(&dir, &renamed.path, canonical, renamed.warning, cx);
@@ -1185,6 +1202,7 @@ impl Riffle {
                 }
                 import::Dismiss::None => {}
             }
+            self.follow_folder_dialog(cx);
             cx.notify();
         } else if self.folderops.sequence.is_open() {
             match self.folderops.sequence.dismiss() {
@@ -1196,9 +1214,11 @@ impl Riffle {
                 }
                 sequence::Dismiss::None => {}
             }
+            self.follow_folder_dialog(cx);
             cx.notify();
         } else if self.folderops.sidecars.dismiss() || self.folderops.date.dismiss() {
             self.folderops.dialog = None;
+            self.follow_folder_dialog(cx);
             cx.notify();
         }
     }
@@ -1214,173 +1234,180 @@ impl Riffle {
         }
     }
 
-    /// Every key stops here while the dialog is open.
-    pub(crate) fn folder_dialog_key(&mut self, name: Option<&str>, cx: &mut Context<Self>) {
-        let Some(dialog) = &mut self.folderops.dialog else {
-            return;
+    /// A key pressed in the dialog; true when it goes on to the focused
+    /// button, which presses itself on Enter or Space. Every other key
+    /// stops in the dialog.
+    fn folder_dialog_key(&mut self, name: Option<&str>, cx: &mut Context<Self>) -> bool {
+        let Some(dialog) = &self.folderops.dialog else {
+            return false;
         };
         match dialog.key(name) {
-            dialog::Key::Dismiss => self.dismiss_folder_dialog(true, cx),
-            dialog::Key::Press(button) => self.press_folder_dialog(button, cx),
-            dialog::Key::Swallow => cx.notify(),
+            dialog::Key::Dismiss => {
+                self.dismiss_folder_dialog(true, cx);
+                false
+            }
+            dialog::Key::Press => true,
+            dialog::Key::Swallow => false,
         }
     }
 
-    /// The open folder dialog: a full-window `occlude()`d layer, so no press
-    /// reaches what is under it, with the title, the lines, the rows
-    /// (scrolling inside the dialog when long, an accent part in the pick
-    /// color), the notes, the errors, the reason, the running note while the
-    /// run is under way, and the two buttons, the focused one outlined.
-    pub(crate) fn folder_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let dialog = self.folderops.dialog.as_ref()?;
-        let content = &dialog.content;
-        let focused = dialog.focused();
-        let button = |id: &'static str, label: String, which: Button| {
-            let filled = which == Button::Run;
-            let button = div()
-                .id(id)
-                .px(px(12.))
-                .py(px(4.8))
-                .rounded_md()
-                .border_1()
-                .text_size(px(13.6))
-                .font_weight(FontWeight::MEDIUM)
-                .map(|d| match (focused == Some(which), filled) {
-                    (true, true) => d.border_color(rgb(FOREGROUND_COLOR)),
-                    (true, false) => d.border_color(rgb(PRIMARY_COLOR)),
-                    (false, true) => d.border_color(rgba(0)),
-                    (false, false) => d.border_color(rgba(INPUT_BORDER)),
-                })
-                .map(|d| match (filled, dialog.style) {
-                    (true, Style::Destructive) => d.bg(rgb(ERROR_COLOR)),
-                    (true, Style::Primary) => d.bg(rgb(PRIMARY_COLOR)).text_color(rgb(PANE_COLOR)),
-                    (false, _) => d.bg(rgba(BUTTON_FILL)),
-                })
-                .child(label);
-            if !dialog.enabled(which) {
-                return button.opacity(0.5);
+    /// Open the dialog when a flow shows one and close it when none is
+    /// shown (a run's end, a dismissal, the import stepping aside), called
+    /// wherever `folderops.dialog` changes, the only places it opens or
+    /// closes. The focus goes to `Dialog::focus` on the opening and again
+    /// whenever that changes (a cancelable run's start moves it to Cancel).
+    pub(crate) fn follow_folder_dialog(&mut self, cx: &mut Context<Self>) {
+        if self.folderops.dialog.is_none() {
+            self.folder_modal.close(cx);
+            return;
+        }
+        let this = cx.weak_entity();
+        let buttons = self.folder_buttons.clone();
+        let focused = Cell::new(None);
+        self.folder_modal.open(cx, move |shell, window, cx| {
+            let focus = this
+                .upgrade()
+                .and_then(|view| view.read(cx).folderops.dialog.as_ref()?.focus());
+            if focus.is_some() && focused.replace(focus) != focus {
+                let at = match focus {
+                    Some(Button::Run) => 0,
+                    _ => 1,
+                };
+                buttons[at].focus(window, cx);
             }
-            button
-                .cursor_pointer()
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.press_folder_dialog(which, cx);
-                }))
+            folder_dialog(shell, &this, &buttons, cx)
+        });
+    }
+}
+
+/// The open folder dialog, inside `modal`'s shell, rebuilt from the view's
+/// `folderops.dialog` on every rebuild of the dialog layer: the title, the
+/// lines, the rows (in the component's body, which scrolls under its
+/// scrollbar when long, an accent part in the pick color), then in the
+/// footer the notes, the errors, the reason, the running note while the run
+/// is under way, and the run and Cancel buttons on the focus handles
+/// `buttons` holds. Its keys reach `folder_dialog_key` before the focused
+/// button sees them.
+fn folder_dialog(
+    shell: component::Dialog,
+    this: &WeakEntity<Riffle>,
+    buttons: &[FocusHandle; 2],
+    cx: &mut App,
+) -> component::Dialog {
+    let Some(view) = this.upgrade() else {
+        return shell;
+    };
+    let Some(dialog) = &view.read(cx).folderops.dialog else {
+        return shell;
+    };
+    let content = &dialog.content;
+    let button = |id: &'static str, label: String, which: Button| {
+        let this = this.clone();
+        let at = match which {
+            Button::Run => 0,
+            Button::Cancel => 1,
         };
-        let muted = |text: &String| div().text_color(rgb(MUTED_COLOR)).child(text.clone());
-        let lists_empty =
-            content.rows.is_empty() && content.lists.iter().all(|(_, items)| items.is_empty());
-        Some(
-            deferred(
+        UiButton::new(id)
+            .track_focus(&buttons[at])
+            .px(px(12.))
+            .disabled(!dialog.enabled(which))
+            .child(
                 div()
-                    .id("folder-dialog-backdrop")
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size_full()
-                    .occlude()
+                    .text_size(px(13.6))
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(label),
+            )
+            .on_click(move |_: &ClickEvent, _, cx| {
+                this.update(cx, |this, cx| this.press_folder_dialog(which, cx))
+                    .ok();
+            })
+    };
+    let run = button("folder-dialog-run", dialog.run_label.clone(), Button::Run);
+    let run = match dialog.style {
+        Style::Primary => run.primary(),
+        Style::Destructive => run.danger(),
+    };
+    let muted = |text: &String| div().text_color(rgb(MUTED_COLOR)).child(text.clone());
+    let lists_empty =
+        content.rows.is_empty() && content.lists.iter().all(|(_, items)| items.is_empty());
+    let lines: Vec<SharedString> = content.lines.iter().cloned().map(Into::into).collect();
+    let keys = this.clone();
+    shell
+        .title(content.title.clone())
+        .when(!lines.is_empty(), |shell| {
+            shell.content(move |body, _, _| {
+                body.gap_2()
+                    .children(lines.iter().map(|line| div().child(line.clone())))
+            })
+        })
+        .when(!lists_empty, |shell| {
+            shell.child(
+                div()
                     .flex()
-                    .items_center()
-                    .justify_center()
-                    .bg(rgba(OVERLAY_COLOR))
-                    .child(
+                    .flex_col()
+                    .children(content.rows.iter().map(|row| {
+                        let text = format!("\u{2022} {}", row.text);
+                        let accent = text.len()..text.len() + row.accent.len();
                         div()
-                            .id("folder-dialog-box")
-                            .occlude()
-                            .flex()
-                            .flex_col()
-                            .gap_2()
-                            .w(px(640.))
-                            .max_w(relative(0.9))
-                            .max_h(relative(0.9))
-                            .px_4()
-                            .py_3()
-                            .bg(rgb(PANE_COLOR))
-                            .border_1()
-                            .border_color(rgba(BORDER_COLOR))
-                            .rounded_lg()
-                            .text_color(rgb(FOREGROUND_COLOR))
-                            .text_size(px(13.))
-                            .child(
-                                div()
-                                    .text_size(px(16.))
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .child(content.title.clone()),
-                            )
-                            .children(content.lines.iter().map(|line| div().child(line.clone())))
-                            .when(!lists_empty, |d| {
-                                d.child(
-                                    div()
-                                        .id("folder-dialog-rows")
-                                        .flex()
-                                        .flex_col()
-                                        .flex_shrink(1.)
-                                        .min_h_0()
-                                        .overflow_y_scroll()
-                                        .children(content.rows.iter().map(|row| {
-                                            let text = format!("\u{2022} {}", row.text);
-                                            let accent = text.len()..text.len() + row.accent.len();
-                                            div()
-                                                .when(row.muted, |d| d.text_color(rgb(MUTED_COLOR)))
-                                                .child(
-                                                    StyledText::new(text + &row.accent)
-                                                        .with_highlights([(
-                                                            accent,
-                                                            HighlightStyle {
-                                                                color: Some(rgb(PICK_COLOR).into()),
-                                                                ..HighlightStyle::default()
-                                                            },
-                                                        )]),
-                                                )
-                                        }))
-                                        .children(
-                                            content
-                                                .lists
-                                                .iter()
-                                                .filter(|(_, items)| !items.is_empty())
-                                                .map(|(heading, items)| {
-                                                    div()
-                                                        .flex()
-                                                        .flex_col()
-                                                        .pt_2()
-                                                        .child(heading.clone())
-                                                        .children(items.iter().map(|item| {
-                                                            div().child(format!("\u{2022} {item}"))
-                                                        }))
-                                                }),
-                                        ),
-                                )
-                            })
-                            .children(content.notes.iter().map(|note| div().child(note.clone())))
-                            .children(
-                                content
-                                    .errors
-                                    .iter()
-                                    .map(|e| div().text_color(rgb(ERROR_COLOR)).child(e.clone())),
-                            )
-                            .children(content.reason.as_ref().map(muted))
-                            .when(dialog.running(), |d| d.child(muted(&content.running_note)))
-                            .child(
+                            .when(row.muted, |d| d.text_color(rgb(MUTED_COLOR)))
+                            .child(StyledText::new(text + &row.accent).with_highlights([(
+                                accent,
+                                HighlightStyle {
+                                    color: Some(rgb(PICK_COLOR).into()),
+                                    ..HighlightStyle::default()
+                                },
+                            )]))
+                    }))
+                    .children(
+                        content
+                            .lists
+                            .iter()
+                            .filter(|(_, items)| !items.is_empty())
+                            .map(|(heading, items)| {
                                 div()
                                     .flex()
-                                    .flex_none()
-                                    .justify_end()
-                                    .gap_2()
-                                    .child(button(
-                                        "folder-dialog-run",
-                                        dialog.run_label.clone(),
-                                        Button::Run,
-                                    ))
-                                    .child(button(
-                                        "folder-dialog-cancel",
-                                        "Cancel".to_owned(),
-                                        Button::Cancel,
-                                    )),
-                            ),
+                                    .flex_col()
+                                    .pt_2()
+                                    .child(heading.clone())
+                                    .children(
+                                        items
+                                            .iter()
+                                            .map(|item| div().child(format!("\u{2022} {item}"))),
+                                    )
+                            }),
                     ),
             )
-            .into_any_element(),
+        })
+        .footer(
+            div()
+                .flex()
+                .flex_col()
+                .gap_2()
+                .capture_key_down(move |e: &KeyDownEvent, window, cx| {
+                    let name = keys::key_name(&e.keystroke);
+                    let press = keys
+                        .update(cx, |this, cx| this.folder_dialog_key(name.as_deref(), cx))
+                        .unwrap_or(false);
+                    if !press {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }
+                })
+                .children(content.notes.iter().map(|note| div().child(note.clone())))
+                .children(
+                    content
+                        .errors
+                        .iter()
+                        .map(|e| div().text_color(rgb(ERROR_COLOR)).child(e.clone())),
+                )
+                .children(content.reason.as_ref().map(muted))
+                .when(dialog.running(), |d| d.child(muted(&content.running_note)))
+                .child(DialogFooter::new().child(run).child(button(
+                    "folder-dialog-cancel",
+                    "Cancel".to_owned(),
+                    Button::Cancel,
+                ))),
         )
-    }
 }
 
 /// The tree's inline rename, a port of `folders.ts`'s editor and

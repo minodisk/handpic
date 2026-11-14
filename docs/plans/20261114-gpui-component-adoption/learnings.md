@@ -343,6 +343,48 @@
   sources at the pinned rev (`gpui-component` / `gpui-base` 0.9.1,
   `gpui-pre` 0.3.12); the hand checks are below.
 
+## Step 7: the folder operations' dialog as a `Dialog`
+
+- `origin/main` was at `660a4d50` (Step 6's #1065), as the branch; the
+  folder-dialogs plan was complete and archived, so all five dialogs
+  (Rewrite / Delete Sidecars, Sequence, Import, Rename by Capture Date) were
+  converted at once.
+- No second mechanism: the view keeps a second `modal::Modal`
+  (`folder_modal`) and two focus handles (`folder_buttons`) next to the
+  trash ones, and the one `modal::backdrop` is drawn while either flow has
+  a dialog. `folderops.dialog` is assigned in 17 places;
+  `follow_folder_dialog` is called after each, rather than following the
+  model in `render`, so the open and close land before the next frame as
+  Step 6's do.
+- The focus is set from `Dialog::focus` on the builder's first run of an
+  opening and again only when that value changes (a `Cell<Option<Button>>`
+  per opening), not once as the trash dialog does: a cancelable run
+  (Sequence, Import) disables the focused run button, which keeps the focus
+  (Step 6's finding), so Enter would no longer press Cancel; the change of
+  `focus()` from Run to Cancel moves it. A user's Tab is never undone, since
+  the value does not change on a Tab. The import's dialog coming back is a
+  new opening whose first run focuses Cancel.
+- The component `Dialog` puts its title, its `content` builder, then its
+  children (the body, `flex_1` + `overflow_y_scrollbar`) in one shrinking
+  column, with the footer outside it. So the lines are the content (gap set
+  back to 8 px; the shell's `py_3` would make it 12), the rows and lists
+  the body, which scrolls under the component's scrollbar, and the notes,
+  errors, reason and running note go in the footer above the buttons, which
+  keeps the old order and keeps them in view while the rows scroll. The
+  scroll state is keyed by `caller_id`, stable across rebuilds.
+- The box's height cap is now the component's (the viewport less its `lg`
+  margin on each side) instead of the old 90 %; the width (640 px), the
+  padding and the text sizes are as before. The buttons take the look Step
+  6 recorded (32 px `Button`s, hover colors, the theme's focus ring,
+  `Button`'s disabled look instead of 50 % opacity); the primary run button
+  is `primary()` on Step 3's `button_primary*` mapping.
+- `dialog::Key::Press` lost its button: the focused `Button` presses itself
+  (Step 6), so the model only says whether Enter / Space go on (while any
+  button is enabled) and `folder_dialog_key` returns that to the footer's
+  capture listener. `key_down` returns at once while `dialog_open()`, as it
+  does while the trash flow is busy.
+- Nothing here was run on screen; the hand checks are below.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, Windows, the user's). Basis: Step 1's
@@ -594,3 +636,54 @@
       file and `Move to Trash…`, Escape: the tree still has the keyboard
       (arrows move the tree's cursor). The same after a run.
     - After every close, the arrows page and `tab` toggles the side panes.
+- Pending manual check (Step 7, Windows, the user's). Basis: Step 7's
+  Done-when (the folder dialogs' look and every key, click and flow path);
+  the step's checkbox was ticked on the automated criteria (`mise run
+  ci:local`, the `dialog.rs` tests and the unchanged `sidecars.rs`,
+  `sequence.rs`, `import.rs` and `datefolder.rs` tests; the crate has no GPUI
+  view test). Related files: `crates/native/src/folderops.rs`
+  (`follow_folder_dialog`, `folder_dialog`, `folder_dialog_key`),
+  `crates/native/src/dialog.rs`, `crates/native/src/modal.rs`,
+  `crates/native/src/main.rs` (`key_down`, the backdrop's condition).
+  - Build: `cargo build --manifest-path crates/native/Cargo.toml` (rename a
+    locked `riffle-native.exe` aside first; do not kill it).
+  - Launch on a copy:
+    `crates/native/target/debug/riffle-native.exe --index <fresh temp>/index.sqlite --settings <test>/settings.sqlite D:\Photos\tests\20261114-gpui-component-adoption\<copy>`,
+    with the settings' Import root set to a test folder under the same
+    directory.
+  - Steps and expected results (a fresh copy for each destructive run):
+    - From the tree's right-click menu, open each of `Rewrite Sidecars from
+      Index…`, `Delete Sidecars…`, `Sequence JPEG Timestamps…`, `Import…`
+      and `Rename by Capture Date…`: a 640 px dark box with the title, the
+      text, the row list, the notes, a run button (light for a primary run,
+      red for Delete Sidecars) and Cancel, the window dimmed, no close
+      button, no animation; the run button has the focus ring.
+    - Tab, Shift+Tab, Tab: the ring goes Cancel, run, Cancel. Enter on
+      Cancel closes; reopen, Space on the run button runs it; reopen,
+      Escape closes; any other key (`f`, an arrow, `ctrl+,`) does nothing.
+    - A press on the dimmed backdrop or on the box's text (also a
+      double-click near the top edge): nothing happens, the window does not
+      move, and Enter still presses the focused button.
+    - A dialog whose run is disabled (e.g. Rename by Capture Date on a
+      folder whose target collides): the ring is on Cancel; Tab keeps it
+      there; Enter closes.
+    - A long list (Import of a big folder, or Rename by Capture Date with
+      many undated files): the rows scroll by the wheel inside the box and
+      a scrollbar shows; dragging its thumb scrolls them; the notes and the
+      buttons stay in view; Enter still presses the focused button after.
+    - Sequence: run it on a big folder; the run button turns disabled, the
+      ring moves to Cancel, the running note shows and the pane's progress
+      moves; Enter (or Escape) cancels.
+    - Import: run it; the dialog steps aside once the folders exist, the
+      keys work on the window again; `ctrl+,` does nothing; `Import…` from
+      the tree brings the dialog back with the ring on Cancel; Escape steps
+      it aside again; bring it back and click Cancel: the import cancels.
+    - Rewrite Sidecars / Rename by Capture Date during a run: Escape does
+      nothing, both buttons look disabled, the dialog closes at the run's
+      end.
+    - Open a folder and press `Rewrite Sidecars from Index…` during pass 1:
+      the dialog opens when the scan ends.
+    - Click in the tree (it takes the keyboard), then run each dialog to a
+      close (Escape, Cancel, a run's end): the tree still has the keyboard
+      (arrows move its cursor). Then rename a folder inline (a slow second
+      click on its name): the editor works, Enter commits, Escape cancels.
