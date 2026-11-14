@@ -48,9 +48,12 @@ impl Rect {
     fn within(&self, area: &Rect) -> Rect {
         let width = self.width.min(area.width);
         let height = self.height.min(area.height);
+        // Not `clamp`: it panics when the upper bound rounds below `area.x`.
+        let max_x = (area.x + area.width - width).max(area.x);
+        let max_y = (area.y + area.height - height).max(area.y);
         Rect {
-            x: self.x.clamp(area.x, area.x + area.width - width),
-            y: self.y.clamp(area.y, area.y + area.height - height),
+            x: self.x.min(max_x).max(area.x),
+            y: self.y.min(max_y).max(area.y),
             width,
             height,
         }
@@ -170,6 +173,14 @@ mod tests {
             maximized: false,
             display: display.map(Into::into),
         }
+    }
+
+    #[test]
+    fn a_window_larger_than_a_fractionally_placed_area_does_not_panic() {
+        let area = rect(79.96, 38.4, 1365.6, 800.);
+        let fitted = rect(0., 0., 4000., 3000.).within(&area);
+        assert!(fitted.x >= area.x && fitted.y >= area.y);
+        assert!(fitted.width <= area.width && fitted.height <= area.height);
     }
 
     #[test]
