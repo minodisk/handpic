@@ -1878,7 +1878,7 @@ subscribes to `InputEvent`:
   menu.
 - Not verified headless: the typing, the IME, the commits, the look and the
   right-click menu; the hand check is pending in
-  `../plans/20261114-gpui-component-adoption/learnings.md`.
+  `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
 
 ### A launch without a folder shows only the tree (Inferred)
 
@@ -2510,7 +2510,7 @@ the backdrop's condition and the gate's `Held` variant.
 - Not verified headless: the dialog, its keys and the runs; the hand checks
   are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md` and,
   for the component `Dialog`,
-  `../plans/20261114-gpui-component-adoption/learnings.md`.
+  `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
 
 ### A folder rename releases the watches, then follows in the tree and reopens (Measured)
 
@@ -2807,7 +2807,7 @@ each, `--auto 60`, warm index, prefetch on (57 of 60 pages hit the ring in
 every run): median p50 `keypressToPixels` -0.60 ms on ARW and +0.16 ms on
 RAF, `frameWait` -0.76 / -0.26 ms, `paint` and `present` within 0.05 ms;
 `frameWait`'s p50 stayed in 8.8-10.4 ms in every run. See
-[the plan's learnings](../plans/20261114-gpui-component-adoption/learnings.md).
+[the plan's learnings](../plans/_archived/20261114-gpui-component-adoption/learnings.md).
 
 - Rule: the `page` lines are printed to stdout, not to the `--log` file; a
   measurement script reads the process's stdout.

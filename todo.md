@@ -3110,3 +3110,82 @@ Files: `crates/native/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/na
 - [ ] On Windows, over a cell with a tooltip, click, ctrl / shift click, right-click and wheel. Expect them to still select, open the menu and scroll.
 - [ ] On Windows, rename a folder during a scan and hover the tree's pending rename icon. Expect the `PENDING_TITLE` tooltip as before, now in gpui-component's style.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and "when at hand" for the other two).
+
+### Native: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
+
+`gpui-component-adoption` called `gpui_component::init` with a Neutral dark theme map, replaced `textinput.rs` with `Input`, moved the settings modal's controls to `Button` / `Checkbox` / `Radio` with scrollbars, gave the Sort / Filter and right-click menus the theme's look, mounted `Root`, and turned the trash / delete dialog, the folder operations' dialog and the settings modal into `Dialog`s. `mise run ci:local`, the pure models' unit tests, the keymap tests and the Step 5 A/B latency gate cover the build and the rules. The crate has no GPUI view test and `--auto` cannot click, so the IME, focus, Tab order, outside click, Escape behavior and look of every step were never exercised on screen. Plan: `docs/plans/_archived/20261114-gpui-component-adoption/plan.md`. Files: `crates/native/src/main.rs`, `crates/native/src/theme.rs`, `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/folderops.rs`, `crates/native/src/dialog.rs`, `crates/native/src/trash.rs`, `crates/native/src/modal.rs`, `crates/native/src/icons.rs`, `docs/agents/native-app.md`.
+
+Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, with a fresh `--index` and a test `--settings`. Build with `cargo build --manifest-path crates/native/Cargo.toml` (rename a locked `riffle-native.exe` aside, do not kill it). Launch with `crates/native/target/debug/riffle-native.exe --index <fresh temp>/index.sqlite --settings <test>/settings.sqlite D:\Photos\tests\20261114-gpui-component-adoption\<copy>`.
+
+#### TODO
+
+- [ ] On Windows (Step 1: init and theme), page with the arrows, press `tab` (the side panes toggle), `f`, `z`, `e`, `d`, open and close the Sort / Filter menus, open the settings with `ctrl+,` and type a label name with the Japanese IME, open a right-click menu on the strip and on the tree, open and cancel the trash dialog, and press `ctrl+shift+i` (the component inspector opens, debug build). Expect everything to look and behave as on `main`, with only `ctrl+shift+i` new. Then run once with `--auto 20` and compare the timing lines with a `main` build's: they should be the same in kind (not the A/B gate).
+- [ ] On Windows (Step 2: `Input`), in the settings' Sidecar tab check that the name fields show the stored names with a 1 px white-15 % border, no fill, and the same height and text size as `main` within a pixel or two, and that the focused one has the `#e5e5e5` border and no extra ring. Then:
+  - Type a label name with the Japanese IME: the composition is underlined, the candidate window sits at the caret, and Enter inside the composition commits the composition, not the field.
+  - Commit with Enter, with a click elsewhere in the box and with Tab (Tab and Shift+Tab move between the modal's stops from inside a field), then reopen the modal and see the names stored.
+  - Escape in a field closes the modal with the edited name kept. `Reset` and a language pick show their names in the fields.
+  - In the Import tab type a pattern with and without the IME: the example line follows each key, an invalid pattern shows its refusal in red on commit, and an example pattern button fills the field and its example.
+  - `ctrl+a` then typing replaces the text; `ctrl+c` / `ctrl+x` / `ctrl+v` work; `ctrl+z` undoes (new).
+  - Right-click in a field: no panic, and the OS-native Cut / Copy / Paste / Select All menu shows and works.
+  - A key typed in a field (`f`, `z`, `d`, the arrows) acts in the field only.
+  - After closing the modal the arrows page again.
+- [ ] On Windows (Step 2 catch-up: the tree's inline rename editor, ported to `Input` without being seen on screen), start a rename from the tree (a slow second click on the open folder's name, or the right-click `Rename…`). Expect an editor with the whole name selected, a `#e5e5e5` border, no fill, 13 px text, fitting the row's height. Then:
+  - Type a new name with the Japanese IME: Enter inside the composition commits the composition, not the rename.
+  - Commit with Enter: the folder is renamed and the tree has the keyboard again. Start another and commit with a click elsewhere: renamed as well.
+  - Start another and press Escape: nothing is renamed, the name comes back, the tree has the keyboard.
+  - Switch to another app with the editor open: no rename until the window comes back.
+- [ ] On Windows (Step 3: settings controls), open `ctrl+,` and expect the last tab focused. Walk every tab with the keyboard only: Tab and Shift+Tab walk the tab, then each control in order (format radios, name fields, languages and `Reset`, auto-advance, each row's chips' `×`, `+`, `Reset` and `Reset all`, the root's `Choose…`, the pattern, the example patterns, the close `×`) and wrap. ArrowUp / ArrowDown / Home / End on the focused tab select and focus another. Then:
+  - Space and Enter on each control kind press it: a button, the auto-advance checkbox (flips, check mark draws), a format radio (switches, the folder re-lists). Flip auto-advance and switch the sidecar format with the mouse.
+  - Type a label name, then click a format radio, a language or `Reset` without Enter: the name is committed first. Same in the Import tab with `Choose…` or an example pattern.
+  - Keyboard Shortcuts tab: `+` then `tab` adds a chip, likewise `enter` and `space`; a chip's `×` removes it; `+` then `home` shows the refusal in the status line; `Reset` and `Reset all` restore.
+  - Scroll the Shortcuts list and the Import tab (short window) with the wheel: a scrollbar shows; drag its thumb and the list follows.
+  - Look: outlined buttons about as on `main` (24 px, 13 px labels, faint fill, white-15 % border, `#262626` hover), the chosen language lit with the `#e5e5e5` border, a focused control with the `#737373` ring, the checked radio a filled circle with a check (new).
+  - Click the backdrop: the modal closes. Reopen and click `×`: it closes. After closing the arrows page again.
+- [ ] On Windows (Step 4: menus), the Sort, Filter, tree right-click and strip right-click menus are the `#171717` surface with a white-10 % border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover, the check icon at the left of a checked item, muted headings, separators across the padding, the strip menu's shortcuts muted 12 px at the right end, and a disabled item muted with no hover. Use a folder with bursts and EXIF variety so the Filter menu is long. Then:
+  - Sort and Filter open above their button with the right edges aligned; a right-click menu opens at the pointer and flips near the right and bottom edges.
+  - An outside press closes an open Sort / Filter menu (in the strip, in the preview, and on the menu's own button, which does not reopen it). An item click applies and leaves the menu open.
+  - With the Filter menu open: `escape` closes it, the arrows page, `e` / `z` / `f` toggle their overlays, the burst keys act, and the menu stays open through all but `escape`.
+  - Make the window short so the Filter menu exceeds its cap: it scrolls by wheel, shows a scrollbar, dragging the thumb scrolls it, a press on the scrollbar does not close it, and reopening starts at the top.
+  - A right-click menu closes on any key, with `escape` stopping there and another key (an arrow) also acting. An outside press closes it, and a right press on another row opens that row's menu.
+  - Click in the tree (it takes the keyboard), right-click a folder: the tree keeps the keyboard while the menu is open. Press on the menu (an item, or its scrollbar in a short window): the tree hands the keyboard back.
+  - With a menu open nothing takes the GPUI focus.
+- [ ] On Windows (Step 5: `Root`), everything looks as on `main` (menus' rows, settings buttons and fields, empty state's text the same size). Then:
+  - `tab` toggles the side panes. Bind `shift+tab` to an action in the Keyboard Shortcuts tab (e.g. `toggleStrip`): `shift+tab` acts.
+  - In the settings modal Tab / Shift+Tab walk its stops (from a field too), and the Shortcuts tab's `+` then `tab` adds `tab` as a chip.
+  - IME in a label name composes and commits as before.
+  - `ctrl+c` in a settings field with text selected copies it; `ctrl+c` outside does what the keymap binds it to, if anything.
+  - The menus close on an outside press. The trash dialog's Tab / Shift+Tab move between its buttons, Enter runs the focused one, Escape cancels.
+  - Click in the tree, use the arrows there, press `escape` or click the preview: the keyboard comes back to the photos.
+  - Quit with `q` and relaunch without a folder: the last folder and the window's place and size come back.
+- [ ] On macOS (Step 5: `Root::new`'s window hit-test forwarder), click on every pane (tree, preview, strip, meta pane) and on the status row's buttons, and drag the title bar. Expect each to land where it should. Also repeat the Windows Step 5 list when at hand.
+- [ ] On Linux (Step 5: client-side decorations), launch on GNOME Wayland and on an X11 session. Expect the window's edges to look acceptable (record what the frame, shadow and resize bands look like), resizing from the edge to work, and a right-click in a settings field to open Cut / Copy / Paste / Select All (a drawn `PopupMenu` on Linux).
+- [ ] On Windows (Step 6: trash / delete dialog), use a fresh copy for each destructive run.
+  - Right-click a strip file, `Move to Trash…`: a 640 px dark (`#171717`) box with the title, the line, a red run button and Cancel, the window dimmed, no close button, no animation, and the focus ring on the run button.
+  - Enter moves the file to the Trash; again with Space; again with a click on the run button. The dialog closes when the run ends and the pane says `Moved 1 file to the Trash`.
+  - Tab, Shift+Tab, Tab: the ring goes Cancel, run, Cancel. Enter on Cancel and Escape close without moving anything.
+  - A press on the dimmed backdrop (also a double-click, and near the top edge) or on the box's text does nothing, the window does not move or maximize, and Enter still presses the focused button.
+  - `ctrl+,` and a paging key while open do nothing, and the wheel over the strip behind does not scroll.
+  - `Delete Permanently…` opens on Cancel. Enter, Space, `shift+enter`, `ctrl+space` do nothing (on Cancel, and after Tab on the run button). Hold Enter from before the menu item's click: nothing happens. Double-click the menu item so the second click lands on the run button: nothing is deleted. A single click on the run button deletes.
+  - Escape during a long run does nothing, and both buttons look disabled until it closes.
+  - Press `Move to Trash…` during pass 1: the dialog closes, the scan stops, and the run happens at the scan's end without the dialog.
+  - `ctrl+z` after a move brings the file back.
+  - With the tree holding the keyboard before the dialog opened, Escape and a run's end both leave it holding it. After every close the arrows page and `tab` toggles the side panes.
+- [ ] On Windows (Step 7: folder operations' dialog), with the settings' Import root set to a test folder under the same test directory, open each of `Rewrite Sidecars from Index…`, `Delete Sidecars…`, `Sequence JPEG Timestamps…`, `Import…` and `Rename by Capture Date…` from the tree's right-click menu. Expect a 640 px dark box with the title, text, row list, notes, a run button (light for primary, red for Delete Sidecars) and Cancel, the window dimmed, no close button, no animation, and the ring on the run button. Then:
+  - Tab, Shift+Tab, Tab: ring goes Cancel, run, Cancel. Enter on Cancel closes; Space on the run button runs it; Escape closes; any other key (`f`, an arrow, `ctrl+,`) does nothing.
+  - A press on the backdrop or the box's text (also a double-click near the top edge) does nothing, the window does not move, and Enter still presses the focused button.
+  - A disabled run (e.g. Rename by Capture Date on a colliding target): ring on Cancel, Tab keeps it there, Enter closes.
+  - A long list: rows scroll by wheel inside the box with a scrollbar, thumb drag scrolls, and notes and buttons stay in view.
+  - Sequence on a big folder: the run button turns disabled, the ring moves to Cancel, the running note shows, the pane's progress moves, and Enter or Escape cancels.
+  - Import: the dialog steps aside once the folders exist and the window's keys work; `ctrl+,` does nothing; `Import…` brings the dialog back with the ring on Cancel; Escape steps it aside again; Cancel cancels the import.
+  - Rewrite Sidecars / Rename by Capture Date during a run: Escape does nothing, both buttons look disabled, and the dialog closes at the run's end.
+  - An operation pressed during pass 1 opens its dialog when the scan ends.
+  - After each close the tree still has the keyboard, and an inline rename then works (Enter commits, Escape cancels).
+- [ ] On Windows (Step 8: settings modal as a `Dialog`), `ctrl+,` opens the settings centered, 90 % of the window up to 860 px wide and 80 % up to 720 px high, the window dimmed, the title row with `×`, the tab list, content and status line as before, no animation, and the last tab selected with the focus ring. Then:
+  - Close by each path, reopening between: Escape; a press on the dimmed area; `×`; a typed label name then Escape (committed); a typed pattern then Escape. After each close the arrows page.
+  - On every tab, Tab forward through every control and wrap, then Shift+Tab back: the same stops in the same order as before. ArrowUp / ArrowDown on the focused tab move between tabs. Enter and Space press the focused button, checkbox and radio.
+  - Keyboard Shortcuts: `+` then `enter` adds; again `space`, `tab`, `shift+tab`, `ctrl+alt+1` are each added as typed; `+` then `escape` ends the capture with the dialog open; `+` then `q` shows `"q" is taken by this app`; `+` then a key bound elsewhere shows the backend's refusal.
+  - IME (Japanese) in a label name and in the import pattern composes in place and commits into the field.
+  - Import tab `Choose…`: the OS folder picker opens, and after choosing or canceling the root shows and Tab still walks the dialog.
+  - With it open, paging keys, `f`, `tab` and `ctrl+z` do nothing on the window, and a click on the strip or the tree closes the settings without acting on what was under the pointer.
+  - Click in the tree, `ctrl+,`, close by Escape: the arrows still move the tree's cursor.
+  - While a folder operation's dialog is open (or the import has stepped aside), `ctrl+,` does not open the settings.
