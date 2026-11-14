@@ -24,8 +24,10 @@
   `mise exec rust@1.98.1 -- nasm -v` still runs on every leg; if the action
   leaves no `nasm` on macOS, guard that line (or the action) with the
   architecture rather than dropping it on x86.
-- Cold durations and cache sizes of the two new legs are to be recorded here
-  once the PR's first run finishes.
+- First run, all green with no fixes needed (nasm, Metal toolchain and apt
+  packages all sufficed as written). `native` leg durations (cold cache):
+  ubuntu-latest 6m07s, macos-latest 11m05s, windows-latest 11m19s. Cache
+  sizes were not recorded.
 
 ## Deferred issues (todo candidates)
 
