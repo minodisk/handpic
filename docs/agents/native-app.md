@@ -1354,7 +1354,7 @@ and `Event::Cancel` (Escape).
 command line's, else the remembered `lastFolder` while it is still a
 directory and `--auto` is off), and nothing else: the OS folder picker
 (`cx.prompt_for_paths`) is not shown at launch, and a folder is opened from
-the left pane's tree. A remembered folder opens through the same `open` as
+the left pane's tree or from the picker on `open` (see below). A remembered folder opens through the same `open` as
 the command line's, so it is revealed in the tree and resumes at its last
 viewed file. When neither gives a folder the window
 shows the tree, an empty preview and strip, and `no folder` on the status
@@ -1362,7 +1362,7 @@ line; every handler already tolerated `dir: None` and an empty `files` (the
 pager's `go` and `request` are no-ops at length 0, `judge` and `step` need a
 current path, `zoom::toggle` needs files, the strip's hit test finds no cell).
 
-When it was still used, `cx.prompt_for_paths` with `PathPromptOptions {
+When the launch still used it, `cx.prompt_for_paths` with `PathPromptOptions {
 directories: true, files: false }` was the OS folder dialog; Enter on a typed
 path navigated into the folder, and a second Enter selected it (Measured).
 
@@ -1420,6 +1420,26 @@ the clamp are both needed.
   covered by the CI build and the unit tests only; Wayland cannot place a
   window, so only the size can come back there.
 
+### `open` shows the OS folder picker, a later open winning (Inferred)
+
+The `open` action (`ctrl+o`, `meta+o` on macOS) is `pick_folder`, the Tauri
+`openFolder`: it reads the `opens` counter, calls `cx.prompt_for_paths` with
+the options of the settings' `Choose…` (`directories: true, files: false,
+multiple: false`) and, in a `cx.spawn`, opens the chosen folder through
+`open(path, None, None)`, as a click in the tree does (whole, without
+`--size` / `--max`, revealed in the tree).
+
+- Rule: the answer is dropped when the picker was canceled, or when `opens`
+  moved on while it was up (a folder opened from the tree meanwhile wins).
+  A picker error (`Ok(Err(e))`) goes to the status line through `fail`.
+- Rule: `open` runs while the tree has the keyboard (`TREE_PASSTHROUGH`) and
+  not while the settings, the trash dialog or a folder dialog is open, since
+  `key_down` returns before the keymap then.
+- Not verified in the running app: whether a second `open` while the picker
+  is up shows a second dialog, and whether the window's focus returns to the
+  photo when it closes (the pending hand check in
+  `../plans/20261114-gpui-pane-toggles/learnings.md`).
+
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
 
 The left pane (220 px, the Tauri `#side`) sits beside the preview canvas and
@@ -1458,8 +1478,40 @@ strip needed one because `uniform_list` is vertical only.
   stopping the old scan or the eviction is still deleting rows.
 - Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
-  with it hidden by `toggleLeft`. Not measured in the running app. The toggle
-  lasts for the session only and re-cuts a 1:1 crop through `zoom_resized`.
+  with it hidden by `toggleLeft`. Not measured in the running app. A pane
+  change re-cuts a 1:1 crop through `zoom_resized`.
+
+### The panes are one `Panels` value, stored under `panels` (Inferred)
+
+`panels.rs` is the port of `panels.ts` and of the Tauri `panels_setting`:
+`Panels { left, strip, right }`, all shown by default, `toggle(Panel)`,
+`toggle_sides` (Lightroom's Tab: hide both side panes when either is shown,
+else show both), `from_setting` and `setting`. `settings.rs` reads it into
+`Settings.panels`, and the view holds it as `panels`. `toggleLeft`,
+`toggleRight`, `toggleStrip` and `toggleSides` all go through
+`change_panels`, the port of `changePanels`.
+
+- Rule: `change_panels` sets the panes, hands the keyboard back from the tree
+  when the left pane is now hidden (by `toggleLeft` and `toggleSides` alike),
+  re-cuts a 1:1 crop (`zoom_resized`), writes `panels` as
+  `{"left": bool, "strip": bool, "right": bool}` and repaints. The preview
+  canvas is `flex_1`, so it takes the space a hidden pane frees.
+- Rule: the stored value is the Tauri key and shape, so a store seeded from
+  the Tauri `settings.json` comes up with the Tauri app's panes; a missing or
+  non-boolean entry, or a value that is not an object, means shown.
+- Rule: under `--auto` every pane starts shown whatever the store holds, and
+  nothing is written to `panels` (`remember_panels` off, set in `main` on the
+  value `Riffle::new` returns, inside the `cx.new` closure). It is not a
+  parameter because `Riffle::new` already takes seven arguments, and an eighth
+  trips `clippy::too_many_arguments` (`-D warnings` in CI). Another
+  launch-only suppression flag has the same choice: set a field after `new`, or
+  add `#[allow]` as `tauri-app.md` does for `Writer::set`.
+- Rule: hiding the strip removes only its own `div`; the status row (the
+  status line and `Sort` / `Filter`) stays, unlike the Tauri app, where the
+  menus sit in the strip's header. The strip's bookkeeping (range, thumbnails)
+  keeps running while it is hidden.
+- Not measured: the toggles on macOS and Linux are covered by the CI build
+  and the unit tests only.
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
@@ -1557,12 +1609,14 @@ mouse listeners were the smaller change.
   right press in the pane does neither. A press on the right-click menu hands
   it back too (`on_any_mouse_down` on the popover, which is `occlude()`d and
   may be drawn over the pane), as a Tauri menu button takes the focus.
-  `escape` and hiding the pane (`toggleLeft`) hand it back as well. The
+  `escape` and hiding the pane (`toggleLeft`, `toggleSides`) hand it back as
+  well. The
   type-ahead buffer starts over whenever the keyboard moves.
 - Rule: while the tree has it, `tree_key_down` takes `escape`, the arrows,
   `home` / `end`, `enter` and any printable key without Ctrl / Alt / Meta
   (type-ahead); any other key runs its action only when
-  `treekeys::tree_gate` lets it through (`toggleLeft` today) and is
+  `treekeys::tree_gate` lets it through (`open` and the four pane toggles,
+  `TREE_PASSTHROUGH`) and is
   otherwise swallowed, so `q`, the judgment keys, paging and undo never reach
   the photo. The cursor row is outlined in `--sidebar-ring` only while the
   tree has the keyboard.

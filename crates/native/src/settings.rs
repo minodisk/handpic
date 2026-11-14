@@ -24,6 +24,7 @@ use serde_json::{Map, Value};
 use crate::{
     datadir::{self, IDENTIFIER, LEGACY_IDENTIFIERS},
     filter::Stored,
+    panels::Panels,
     session::Geometry,
     sort::SortKey,
 };
@@ -50,6 +51,8 @@ pub struct Settings {
     pub last_folder: Option<String>,
     /// The window's geometry at the last quit (`windowBounds`).
     pub window: Option<Geometry>,
+    /// The panes shown at startup; a pane toggle writes them back.
+    pub panels: Panels,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -256,6 +259,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .and_then(Value::as_str)
             .map(str::to_owned),
         window: Geometry::from_setting(values.get("windowBounds")),
+        panels: Panels::from_setting(values.get("panels")),
         writes: Writes::spawn(None),
     }
 }
@@ -266,6 +270,7 @@ mod tests {
     use crate::{
         datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
         filter::{FilterFlag, Stored},
+        panels::Panels,
         session::{Geometry, Rect},
         sort::SortKey,
     };
@@ -417,6 +422,34 @@ mod tests {
             r#"{"lastFolder":3,"windowBounds":{"x":10}}"#,
         );
         assert_eq!((s.last_folder, s.window), (None, None));
+    }
+
+    #[test]
+    fn the_panels_are_read_with_their_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(dir.path(), "left", r#"{"panels":{"left":false}}"#);
+        assert_eq!(
+            s.panels,
+            Panels {
+                left: false,
+                strip: true,
+                right: true,
+            }
+        );
+        let s = seeded(
+            dir.path(),
+            "odd",
+            r#"{"panels":{"left":"no","strip":false,"right":null}}"#,
+        );
+        assert_eq!(
+            s.panels,
+            Panels {
+                left: true,
+                strip: false,
+                right: true,
+            }
+        );
+        assert_eq!(seeded(dir.path(), "none", "{}").panels, Panels::default());
     }
 
     #[test]
