@@ -1595,6 +1595,44 @@ leaves it there.
 - Not verified headless: the restore from the Recycle Bin and the redo; the
   hand checks are pending in `../plans/20261113-gpui-tree-trash/learnings.md`.
 
+### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
+
+The tree menu's folder operations (so far `Rewrite Sidecars from Index…` and
+`Delete Sidecars…`) open one dialog, `dialog::Dialog`: its `Content` (title,
+lines, rows, note, reason, running note), the run button's label and
+`Style` (primary or destructive), and which enabled button has the focus
+(the run button, or Cancel when the run is disabled). `Dialog::key` gives
+Escape as `Dismiss` (the flow decides: a non-cancelable run ignores it), Tab
+/ Shift+Tab cycle the enabled buttons, Enter or Space press the focused one,
+and every other key is swallowed. The trash dialog was not moved onto it.
+
+`folderops.rs` is a child module of `main.rs` holding `FolderOps` (the flow
+under way and the open dialog) and an `impl Riffle` block: a child module
+reaches the view's private fields, methods and color constants, so the
+operations need no entity of their own and `main.rs` gains only the field,
+the menu arm, the key guard, the render child and the gate's `Held` variant.
+
+- Rule: one flow at a time: a start does nothing while the settings modal is
+  open, the trash flow is busy or another folder flow is busy, and the trash
+  dialog's start refuses while a folder flow is busy.
+- Rule: a sidecar request goes through the trash's `IdleGate` as
+  `Held::Sidecars` under `Rewrite Sidecars from Index` / `Delete Sidecars`;
+  neither cancels the scan, the pane's waiting note comes from
+  `gate.waiting()`, `finished` drains it into the preview, and an open drops
+  it. The preview reads on `background_spawn` through the read-only
+  connection; the run, refused with `SCAN_RUNNING` when `Resync::busy` or a
+  run is in flight, holds the gate's in-flight count and the resync as a
+  trash run does.
+- Rule: a sidecar delete ends in `trashed` with `trash::What::Sidecars`: its
+  run goes on the undo history as a `TrashEntry` whose `what` words the
+  statuses (`Moved 2 sidecars to the Trash`, `Restored …`) and the gate
+  labels (`Undo Delete Sidecars`); the shown judgments are cleared when the
+  open folder was the target (`sidecars_trashed`). A sidecar run's undo
+  counts the sidecars that did not fail, since `Restored::restored` lists
+  RAWs and JPEGs only (`trash::restored_count`).
+- Not verified headless: the dialog, its keys and the runs; the hand checks
+  are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+
 ## Timings
 
 ### `keypressToPixels` differs from the Tauri app's (Inferred)

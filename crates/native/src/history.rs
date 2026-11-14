@@ -8,6 +8,7 @@ use std::collections::{HashSet, VecDeque};
 use riffle_backend::trash::Restored;
 
 use crate::judgment::State;
+use crate::trash::{self, What};
 
 /// The bound `main.ts` gives both of its histories.
 pub const LIMIT: usize = 100;
@@ -71,13 +72,15 @@ pub struct Batch {
 }
 
 /// One run to the Trash, undone by restoring it: the backend's `run_id`,
-/// the RAWs (or JPEGs) it moved and the folders it ran in. `id` names the
-/// entry, as a batch's does.
+/// the RAWs (or JPEGs, or the sidecars of a `Delete Sidecars…` run) it moved,
+/// what they were, and the folders it ran in. `id` names the entry, as a
+/// batch's does.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrashEntry {
     pub id: u64,
     pub run_id: u64,
     pub count: usize,
+    pub what: What,
     pub dirs: Vec<String>,
 }
 
@@ -89,10 +92,10 @@ pub enum Entry {
 }
 
 /// The redo entry of the undone run `entry`: the backend keeps only the
-/// files that came back, so it counts those alone, and there is nothing to
-/// redo when none came back.
+/// files that came back, so it counts those alone (the RAWs, or the sidecars
+/// of a sidecar run), and there is nothing to redo when none came back.
 pub fn undone_trash(entry: &TrashEntry, restored: &Restored) -> Option<TrashEntry> {
-    match restored.restored.len() {
+    match trash::restored_count(restored, entry.what, entry.count) {
         0 => None,
         count => Some(TrashEntry {
             count,
@@ -204,23 +207,24 @@ impl Undo {
 
     /// A run to the Trash that moved something: the newest undo entry, and
     /// nothing is redoable any more.
-    pub fn record_trash(&mut self, run_id: u64, count: usize, dirs: Vec<String>) {
-        self.push_trash(run_id, count, dirs);
+    pub fn record_trash(&mut self, run_id: u64, count: usize, what: What, dirs: Vec<String>) {
+        self.push_trash(run_id, count, what, dirs);
         self.redo.clear();
     }
 
     /// The redo of a run, a new run: the newest undo entry, the rest of the
     /// redo history kept, as a redone batch keeps it.
-    pub fn redone_trash(&mut self, run_id: u64, count: usize, dirs: Vec<String>) {
-        self.push_trash(run_id, count, dirs);
+    pub fn redone_trash(&mut self, run_id: u64, count: usize, what: What, dirs: Vec<String>) {
+        self.push_trash(run_id, count, what, dirs);
     }
 
-    fn push_trash(&mut self, run_id: u64, count: usize, dirs: Vec<String>) {
+    fn push_trash(&mut self, run_id: u64, count: usize, what: What, dirs: Vec<String>) {
         let id = self.id();
         self.undo.push(Entry::Trash(TrashEntry {
             id,
             run_id,
             count,
+            what,
             dirs,
         }));
     }
@@ -324,6 +328,7 @@ fn is_empty_batch(entry: &Entry) -> bool {
 mod tests {
     use super::{Batch, Change, Entry, History, Judged, TrashEntry, Undo, step, undone_trash};
     use crate::judgment::State;
+    use crate::trash::What;
     use riffle_backend::trash::{Failure, Restored};
     use riffle_core::Flag;
     use std::collections::{HashMap, HashSet};
@@ -617,6 +622,7 @@ mod tests {
             id: 9,
             run_id: 1,
             count: 2,
+            what: What::Files,
             dirs: vec!["/a".to_owned()],
         }
     }
@@ -628,6 +634,28 @@ mod tests {
             Some(TrashEntry { count: 1, ..run() })
         );
         assert_eq!(undone_trash(&run(), &restored(&[], 0)), None);
+    }
+
+    /// `undo.test.ts`'s sidecar run case.
+    #[test]
+    fn an_undone_sidecar_run_is_redone_over_the_sidecars_that_did_not_fail() {
+        let sidecars = TrashEntry {
+            count: 3,
+            what: What::Sidecars,
+            ..run()
+        };
+        assert_eq!(
+            undone_trash(&sidecars, &restored(&[], 1)),
+            Some(TrashEntry {
+                count: 2,
+                ..sidecars.clone()
+            })
+        );
+        assert_eq!(
+            undone_trash(&sidecars, &restored(&[], 0)),
+            Some(sidecars.clone())
+        );
+        assert_eq!(undone_trash(&sidecars, &restored(&[], 3)), None);
     }
 
     #[test]
@@ -648,7 +676,7 @@ mod tests {
     fn another_folder_drops_the_judgments_and_keeps_the_trash_runs() {
         let mut undo = Undo::new();
         undo.record(vec![judged("/a/1.ARW", stars(1))]);
-        undo.record_trash(1, 2, vec!["/a".to_owned()]);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned()]);
         undo.record(vec![judged("/a/2.ARW", stars(2))]);
         undo.drop_judgments();
         let top = undo.top_trash(false).unwrap();
@@ -663,12 +691,12 @@ mod tests {
         let mut undo = Undo::new();
         undo.record(vec![judged("1", stars(1))]);
         undo.undo(|_| true, |_| State::default());
-        undo.record_trash(1, 1, vec!["/a".to_owned()]);
+        undo.record_trash(1, 1, What::Files, vec!["/a".to_owned()]);
         assert_eq!(undo.redo(|_| true, |_| State::default()), None);
         let entry = undo.top_trash(false).unwrap();
         undo.record(vec![judged("2", stars(2))]);
         undo.undo(|_| true, |_| State::default());
-        undo.redone_trash(2, 1, vec!["/a".to_owned()]);
+        undo.redone_trash(2, 1, What::Files, vec!["/a".to_owned()]);
         assert_ne!(undo.top_trash(false).unwrap().id, entry.id);
         assert!(undo.redo(|_| true, |_| State::default()).is_some());
     }
@@ -676,7 +704,7 @@ mod tests {
     #[test]
     fn an_undone_run_moves_to_the_redo_history_when_anything_came_back() {
         let mut undo = Undo::new();
-        undo.record_trash(1, 2, vec!["/a".to_owned()]);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned()]);
         let entry = undo.top_trash(false).unwrap();
         assert!(undo.on_top(entry.id, false));
         undo.record(vec![judged("/a/3.ARW", stars(3))]);
@@ -692,7 +720,7 @@ mod tests {
     #[test]
     fn an_undone_run_with_nothing_back_leaves_nothing_to_redo() {
         let mut undo = Undo::new();
-        undo.record_trash(1, 2, vec!["/a".to_owned()]);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned()]);
         let entry = undo.top_trash(false).unwrap();
         undo.undone(&entry, &restored(&[], 2));
         assert_eq!(undo.top_trash(false), None);
@@ -707,7 +735,7 @@ mod tests {
             judged("/a/2.ARW", stars(2)),
         ]);
         undo.record(vec![judged("/a/1.ARW", stars(3))]);
-        undo.record_trash(1, 2, vec!["/a".to_owned()]);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned()]);
         undo.without_paths(&HashSet::from(["/a/1.ARW".to_owned()]));
         let top = undo.top_trash(false).unwrap();
         undo.remove_trash(top.id);

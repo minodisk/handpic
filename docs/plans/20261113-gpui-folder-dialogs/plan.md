@@ -314,7 +314,7 @@ folder operation.
       `Plan` next to its flow instead.
     - Independent of Step 1 in content; kept apart from it for review size
       (about 1,900 lines move here, about 2,100 there).
-- [ ] Step 3: The folder menu's items, the shared dialog, and Rewrite Sidecars from Index… / Delete Sidecars…
+- [x] Step 3: The folder menu's items, the shared dialog, and Rewrite Sidecars from Index… / Delete Sidecars…
   - Done when:
     - `context.rs`'s `folder_groups` offers part 2's items in the Tauri
       order with `context.test.ts`'s cases: `Rename…` and `Rename by Capture
@@ -398,6 +398,18 @@ folder operation.
     - The preview reads the index through the connection the native app
       already has; `rewrite` needs the write connection and the sidecar
       `Writer` the view spawned.
+    - As landed (deviations from the Done-when's `main.rs` list): no event
+      variant was added, since the preview and the runs report through
+      `cx.spawn` + `update` and have no progress (Step 4 adds the variant for
+      its run's progress). The gate's slot is part 1's `Held` enum in
+      `main.rs`, so it gained `Held::Sidecars` with its `held_label` and
+      `finished` drain arms; `confirm_trash` refuses while a folder flow is
+      busy (the one-flow rule's other side). Part 1's trash entry gained
+      `what` (`trash::What`), so `trashed` takes it (its sidecar branch
+      calls `folderops`' `sidecars_trashed`), `step_trash` takes its gate
+      labels from it and `restored` words its status with it. The dialog's
+      `Content` has no field order per operation: the sidecar dialogs put
+      their total line in `note`, after the rows, as the Tauri HTML does.
 - [ ] Step 4: Sequence JPEG Timestamps…
   - Done when:
     - `crates/native/src/sequence.rs` is a port of `sequence.ts` with
@@ -713,3 +725,4 @@ folder operation.
 
 (2026-11-14) Step 1 complete
 (2026-11-14) Step 2 complete
+(2026-11-14) Step 3 complete
