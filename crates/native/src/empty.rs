@@ -9,9 +9,7 @@ use crate::{filter::FILTERED_TEXT, settingsmodal::display_key};
 pub const NO_FILES_TEXT: &str = "This folder has no RAW or JPEG files.";
 pub const PREVIEW_FAILED_TEXT: &str = "The preview of this file could not be shown.";
 
-/// `empty.ts`'s text less its drop clause: folder drag-and-drop is not
-/// ported yet.
-const OPEN_TEXT: &str = "Click here to choose a folder.";
+const OPEN_TEXT: &str = "Drop a folder onto the window, or click here to choose one.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum State {
@@ -112,7 +110,7 @@ mod tests {
     fn the_default_key() {
         assert_eq!(
             open_hint(&open(&["o"])),
-            "Click here to choose a folder. Or press o."
+            "Drop a folder onto the window, or click here to choose one. Or press o."
         );
     }
 
@@ -120,7 +118,7 @@ mod tests {
     fn several_keys() {
         assert_eq!(
             open_hint(&open(&["o", "ctrl+o"])),
-            "Click here to choose a folder. Or press o or ctrl+o."
+            "Drop a folder onto the window, or click here to choose one. Or press o or ctrl+o."
         );
     }
 
@@ -128,18 +126,18 @@ mod tests {
     fn a_rebound_key() {
         assert_eq!(
             open_hint(&open(&["space"])),
-            "Click here to choose a folder. Or press Space."
+            "Drop a folder onto the window, or click here to choose one. Or press Space."
         );
     }
 
     #[test]
     fn no_key_bound() {
-        assert_eq!(open_hint(&open(&[])), "Click here to choose a folder.");
+        assert_eq!(open_hint(&open(&[])), "Drop a folder onto the window, or click here to choose one.");
     }
 
     #[test]
     fn no_open_binding() {
-        assert_eq!(open_hint(&[]), "Click here to choose a folder.");
+        assert_eq!(open_hint(&[]), "Drop a folder onto the window, or click here to choose one.");
     }
 
     #[test]
@@ -148,7 +146,7 @@ mod tests {
         assert_eq!(text(State::None, &bindings), None);
         assert_eq!(
             text(State::NoFolder, &bindings).as_deref(),
-            Some("Click here to choose a folder. Or press o.")
+            Some("Drop a folder onto the window, or click here to choose one. Or press o.")
         );
         assert_eq!(
             text(State::NoFiles, &bindings).as_deref(),

@@ -1505,7 +1505,8 @@ and `Event::Cancel` (Escape).
 command line's, else the remembered `lastFolder` while it is still a
 directory and `--auto` is off), and nothing else: the OS folder picker
 (`cx.prompt_for_paths`) is not shown at launch, and a folder is opened from
-the left pane's tree or from the picker on `open` (see below). A remembered folder opens through the same `open` as
+the left pane's tree, from the picker on `open` or by a drop onto the window
+(see below). A remembered folder opens through the same `open` as
 the command line's, so it is revealed in the tree and resumes at its last
 viewed file. When neither gives a folder the window
 shows the tree, the no-folder hint in the preview area (see "The preview
@@ -1625,13 +1626,54 @@ the message is an `absolute`, full-size, centered child in `MUTED_COLOR` at
   page's held crop (`zoom::arrived`).
 - Rule: `dir` is set when the listing arrives, as Tauri's `openDir`, so the
   hint shows while the first open's listing runs.
-- The no-folder text drops `empty.ts`'s "Drop a folder onto the window"
-  clause: folder drag-and-drop is not ported yet (a separate change ports it
-  and restores the clause).
+- The no-folder text is `empty.ts`'s, with its "Drop a folder onto the
+  window" clause (see the drop section below).
 - Not verified in the running app: the message's placement, the click
   opening the picker, the key clause following a rebinding, and the failed
   preview message on `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef` (the
   pending hand check in `../plans/20261114-gpui-empty-state/learnings.md`).
+### A folder dropped onto the window opens, a later drop winning (Inferred)
+
+The root `div` of the window's `render` takes the drop
+(`on_drop::<ExternalPaths>`, `drop_paths`), a port of the Tauri
+`tauri://drag-drop` listener and `dropped_dir`, whose pure rules are in
+`dropped.rs` (copied, since the native crate must not depend on
+`crates/app`). One dropped folder opens through `open(path, None, None)`, as
+a click in the tree does; one dropped file, of any kind, opens its parent
+folder, the file not selected; no path, several paths, or a path that is
+neither a directory nor a file opens nothing and puts the Tauri
+`Drop a single folder or RAW file.` (`DROP_TEXT`) on the status line.
+
+- Rule: the directory test is a `stat`, run on `cx.background_executor()`
+  as Tauri runs it in `spawn_blocking`, then `open` in `this.update`.
+- Rule: drops are ordered among themselves by the view's `drops` counter, the
+  port of `dropCounter`: a drop whose resolve finishes after a later drop
+  opens nothing. Unlike `pick_folder`, a drop is not dropped because `opens`
+  moved on while it resolved; Tauri mints its folder token only after the
+  path has resolved. `open` defers under a running trash or delete as for
+  any open, so the drop has no gate of its own.
+- Rule: GPUI fires `on_drop` only on a hovered hitbox, and the settings
+  modal, the trash dialog and the folder dialogs are `occlude()`d layers, so
+  a drop over an open dialog does not reach the root and is ignored (as a
+  click in the tree is blocked by the same layers), where Tauri's drop is
+  window-wide except under its format gate.
+- Rule: while an OS file drag is over the window, the main area (the tree,
+  the preview and the meta pane, the Tauri `#main`) shows the Tauri
+  `body.dragging #main` outline, 3px in `--ring`: `drop_outline`, an
+  absolute child laid over that area, so the outline covers its content as
+  the CSS `outline-offset: -3px` does instead of shrinking it. GPUI applies
+  a drag-over style only to an element with a hitbox, and only while its own
+  hitbox (`drag_over::<ExternalPaths>`) or its group's
+  (`group_drag_over::<ExternalPaths>` on the root's `DROP_GROUP`) is under
+  the drag, so the outline carries both: the first gives it the hitbox, the
+  second lights it over the strip and the status row too. GPUI clears the
+  drag on a drop or when it leaves the window (`FileDropEvent::Exited`
+  refreshes the window).
+- Not verified in the running app: the drop of a folder, of a file and of
+  two folders, a drop while a dialog is open, and the outline drawing and
+  clearing on leave and drop, on Windows (the pending hand check in
+  `../plans/20261114-gpui-folder-drop/learnings.md`). macOS and Linux file
+  drop delivery is covered by the CI build only.
 
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
 

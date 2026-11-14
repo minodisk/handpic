@@ -348,10 +348,9 @@ them; their contents are deliberately coarse.
   - The preview area's empty state (`empty.ts`: no folder, with the click
     that opens the folder picker and the `open` key, no RAW or JPEG files,
     everything filtered out, a failed preview) was done by
-    `../20261114-gpui-empty-state/plan.md`. Not ported yet: folder
-    drag-and-drop onto the window (a separate change is porting it); until
-    it lands the no-folder text omits `empty.ts`'s "Drop a folder onto the
-    window" clause.
+    `../20261114-gpui-empty-state/plan.md`, and the folder drag-and-drop
+    onto the window by `../20261114-gpui-folder-drop/plan.md`, which
+    restored `empty.ts`'s "Drop a folder onto the window" clause.
 - [ ] Step 9: Settings, pass 3 and the companions
   - Done when: the settings modal (sidecar format, label names, shortcuts,
     Import tab, `aiEnabled` with the model download), pass 3 embeddings,
@@ -619,6 +618,7 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 10, sub-milestone 1: the `native` CI job on three platforms and the packaging / updater decision, through `../20261114-gpui-ci-packaging/plan.md` (Step 10 stays open)
 - (2026-11-14) Step 9: the performance overlay (`d`), through [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md) (Step 9 stays open)
 - (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
-- (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md`; folder drag-and-drop onto the window is not ported yet, so the no-folder text omits the drop clause (Step 8 stays open)
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) A native addition the milestones did not list: the progress bar fed by the scan and by Move to Trash / Delete Permanently, through `../20261114-gpui-progress-bars/plan.md`
+- (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
+- (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../20261114-gpui-folder-drop/plan.md`

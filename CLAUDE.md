@@ -467,7 +467,13 @@ missing or non-boolean entry meaning shown), which the window's
 `toggleSides`, the left pane giving up the keyboard when hidden, a 1:1 crop
 re-cut and `panels` written (neither read nor written under `--auto`), next to
 `open`, the OS folder picker whose folder opens as a click in the tree does
-unless another open came first.
+unless another open came first, and `src/dropped.rs` the rules of a drop onto
+the window (a port of the Tauri `dropped_dir`: `single`, the one path a drop
+names, `dropped_dir`, a directory as is and a file by its parent, and
+`DROP_TEXT`, the status line's refusal), which the window's root `div` takes
+through `on_drop::<ExternalPaths>`, resolving off the UI thread, a later drop
+winning, and opening the folder as a click in the tree does, while
+`drop_outline` draws the Tauri drag outline over the main area.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
