@@ -76,7 +76,198 @@
 - The local `python` heredoc edits wrote CRLF on Windows (text mode); the
   file had to be converted back to LF. Write with `newline=''` or binary.
 
+## Step 3: the tree follows the disk, and its right-click menu
+
+- The watched set is handed over from `tree_changed`, so every path that
+  changes the tree (expand, collapse, a listing, a reveal step, a watcher
+  re-list, `Refresh`) syncs the watcher without a call of its own. The chain
+  is a `Task<()>` that awaits the previous one before `TreeWatch::set`; the
+  previous task is moved into the new one, so it is never dropped (which
+  would cancel it).
+- `notify` 8.2.2 (the native lock) was checked with a throwaway test in the
+  native crate driving the backend's `TreeWatch`: collapse (`unwatch` +
+  `settle`) took 0.1-0.3 ms, a re-expand watched again, no event arrived
+  while collapsed, and the parent folder could be renamed after the last
+  collapse. `cargo test -p riffle-backend` from `crates/native` is refused
+  ("requires dev-dependencies and is not a member of the workspace"), hence
+  the throwaway; recorded in `native-app.md`.
+- `Refresh` on the open folder also re-lists it through `Resync`, as the
+  Tauri menu's `resync("refresh")` does (`opensTarget`, `Same` only). The plan
+  did not list this; it is three lines and keeps the port's behaviour.
+- GPUI's Windows `reveal_path` needs a parent folder (`target.parent()`),
+  so revealing a root (`D:\`) would only log an error; the menu opens a root
+  with `open_with_system` instead. The tree's paths never carry `\\?\`, so the
+  prefix question is Step 6's (strip files); it stays unverified.
+- `context::Open` holds the pointer position as `(f32, f32)`, so it cannot
+  derive `Eq`; the tests compare its fields.
+- The `bash` heredoc holding the large Rust edit failed to parse
+  (`unexpected EOF while looking for matching '`), so the edit script went
+  into a scratchpad file written with the Write tool and run with `python`.
+
+## Step 4: the tree's keyboard
+
+- Focus model: one `tree_keys` flag on the view, checked in `key_down` right
+  after the right-click menu's close, not a second `FocusHandle`. The pane
+  gives it on a left press (`on_mouse_down(Left)`) and hands it back from
+  `on_mouse_down_out` (capture phase, any button), so the press outside still
+  reaches its own handler. A right press in the pane does neither.
+- `on_mouse_down_out` is bounds-based (`hitbox.contains(mouse_position)`), so
+  a press on the right-click menu where it is drawn over the pane would not
+  hand the keys back while one beyond the pane would. The popover's own
+  `on_any_mouse_down` hands them back, matching the Tauri menu's buttons,
+  which take the focus. The pane's own left listener does not fire there,
+  since the popover is `occlude()`d.
+- The Tauri app leaves the keyboard with the tree after opening a folder from
+  it (`openFolder` -> `openDirectory` never calls `folders.blur()`; only
+  `changePanels` hiding the pane does), so the native app does the same.
+- `tree_key` takes the drawn rows rather than the tree: `Row::expandable` is
+  `tree.ts`'s `canExpand`, so the rows the view already keeps suffice.
+- `typed_char` (in `keys.rs`) uses the keystroke's `key_char` first:
+  `key_name` lower-cases Shift+A and names the space bar `space`. Read from
+  `gpui_windows`' `process_key` (`ToUnicode`, control characters dropped),
+  not seen in the running app.
+- `Typed::at` is an `Option<Instant>` (the TS `-Infinity` start), so the
+  tests build their times from one `Instant::now()` plus offsets.
+- `Expand All` is a loop over an explicit stack of chains rather than the TS
+  recursive `walk`, which an `async` closure cannot recurse into without
+  boxing; pushing a listed folder's children in reverse keeps the depth-first
+  order, and the "chain still expanded" check runs before each child as in
+  the TS.
+- Python edit scripts passed through a `bash` heredoc lost backslashes (a
+  replacement holding `r"D:\a"` did not match, and a `\x` in the text broke
+  the script); scripts holding backslashes went into scratchpad files written
+  with the Write tool instead, or `sed` by line number.
+
+## Step 5: the strip's multi-selection
+
+- `go` now selects the landed file alone only when the current file changed
+  (`main.ts`'s `move` returns early at the ends, keeping a multi-selection),
+  and the old body became `focus_on`, the move without touching the
+  selection. A Ctrl / Shift click, the extend keys and the MCP `show` set the
+  selection themselves and call `focus_on`; the MCP `show` then selects the
+  file alone even when it was already current, as the Tauri `showPhoto`.
+- `selection::judgments` takes `seen` per path instead of the TS `force`
+  callback and keeps a file when `judgment::writes` holds, so `changed` and
+  `writes` stay two functions and the `ClearAll`-on-an-unseen-file rule is
+  the same one the single-file judge used. The TS "a batch with no change is
+  empty unless forced" case is ported as `ClearAll` on blank files, seen
+  versus unseen, since the native `Command` has no identity command.
+- The strip keeps the selected cells as indices (`Strip::set_selected`
+  through its `index_of`), set on every selection change and after each
+  `refilter` (whose `carry` rebuilds the strip), as `strip.ts`'s
+  `setSelected`, so the paint maps no path per frame.
+- `settle(.., true)` is used by a new folder's open (the landed file alone)
+  and `settle(.., false)` by `refilter`; the native open resolves the resume
+  target before the first `refilter`, so the Tauri `pendingResume` case
+  never arises after the open.
+- A Python edit script in a `bash` heredoc failed with `unexpected EOF while
+  looking for matching '` (a long script with many quotes); a heredoc into a
+  file under `$TMP` ran, but still turned `\t` and `\2` in a Windows path
+  into a tab and a control character, as Step 4 found. Scripts holding a
+  backslash go into a file written with the Write tool.
+
+## Step 6: the strip's right-click menu
+
+- The shell refuses the verbatim prefix: `SHParseDisplayName` (what GPUI's
+  Windows `reveal_path` goes through, via the desktop folder's
+  `ParseDisplayName`) returned `E_INVALIDARG` for
+  `\\?\C:\Windows\notepad.exe` and `S_OK` without it, measured from a
+  PowerShell `Add-Type` P/Invoke. So the strip's reveal passes
+  `context::shown_path`, a port of `trash.ts`'s `shownPath`, now in
+  `context.rs`; Step 7's `trash.rs` can use it from there rather than port
+  it again. The copy items write the listed path as is, prefix and all, as
+  the Tauri app does (the listing is under the canonical folder, so on
+  Windows the copied path carries `\\?\`).
+- The context popover dropped `.snap_to_window()`: `anchored`'s default
+  `SwitchAnchor` flips the menu to the pointer's other side and still snaps
+  it inside, as the Tauri `menuPosition` and the Done-when's "flipping"
+  expect; snapping alone would push a menu opened on the bottom strip over
+  the pointer. This changes the tree's menu too.
+- `Keymap::accelerator_for` is the Tauri menu bar's accelerator spelling, so
+  the shortcut text is a port of `displayKey` (`space` -> `Space`) over
+  `Keymap::bindings()`, built only when the menu opens.
+- `Move to Trash…` / `Delete Permanently…` are disabled by passing
+  `trashing = true` from `strip_context` until Step 7, which should pass its
+  in-flight state there and handle `Action::TrashFiles` / `DeleteFiles` in
+  `files_action`.
+- The judgment items call `judge`, which takes the targets from the
+  selection when picked, as the Tauri `runAction`; the copy items use the
+  targets taken when the menu opened, as the Tauri `paths`.
+- `context_action` is split into `folder_action` / `files_action` on the
+  closed menu's `Target`; the folder match gained a `_ => {}` arm for the
+  strip's actions.
+- A PowerShell script with `\\?\` written through a `bash` heredoc lost a
+  backslash again (and a Python heredoc turned `\n` in `\notepad.exe` into a
+  newline in a doc edit); write such text with the Write or Edit tools.
+
+## Step 7: Move to Trash… and Delete Permanently…
+
+- `trash.rs` does not port `shownPath` again: the dialog shows no path, and
+  `context::shown_path` (Step 6) is the one copy. The sidecar variants of
+  `trashedStatus` (`what = "sidecars"`) are part 2's (`Delete Sidecars…`);
+  `trashed_status(mode, &Summary)` takes the backend's `Summary` directly.
+- `IdleGate` is generic over the held operation (`IdleGate<trash::Target>`)
+  rather than holding closures: a closure over `&mut Riffle` cannot be
+  stored in the view. `request(label, op, busy)` returns the op to run now;
+  the Tauri `cancel` callback has no user yet (part 2's rename), so a
+  replaced or discarded op is simply returned / dropped, and the cancel
+  cases of `idle.test.ts` became "the replaced one is never drained".
+- The gate's "busy" is `Resync::busy`, not `scan_status.scanning()`: the
+  Tauri `scanRunning` is set before `scan_folder`'s listing, and the native
+  listing (reconcile, sidecar pass) is as much a race with a move as the
+  scan is. A run held during the listing is canceled in `opened` right after
+  `Scan::start`, as the Tauri `start_scan` `.then` does.
+- `ClickEvent::click_count()` is 1 for a keyboard click at the pinned rev,
+  not the DOM's 0, so the run button's handler passes 0 when
+  `is_keyboard()`. The buttons have no `tab_index`, so no keyboard click
+  reaches them anyway; `tab` / Enter / Space are `TrashFlow::key`'s.
+- The guard against a listing mid-run: `relist` returns while in flight,
+  `open` defers into `deferred_open` (only the tree can open then: the
+  dialog occludes the window during a run it owns, so this is a drained
+  held run), a watcher change and `Refresh` are deferred by `Resync::hold`,
+  and `TreeChanged` lists only a tree folder. The run's end then either
+  opens the deferred folder or `Resync::open` + `relist` once.
+- The trashed status goes to `step_note` (the pane line under the meta
+  rows), not `status`: the re-listing reads the current preview again and
+  `loaded` rewrites `status`, so the line would vanish at once.
+- Python on Windows writes `\r\n` in text mode; the first `main.rs` edit
+  turned four files CRLF. Use `newline=''` on `open`, or `sed -i 's/\r$//'`
+  afterwards. A long Python heredoc through `bash -c` also failed to parse
+  (`unexpected EOF while looking for matching '`); a script file in the
+  scratchpad run with `python <file>` worked.
+
+## Step 8: Trash undo and redo, and the docs wrap-up
+
+- The gate's slot became the `Held` enum (`Run`, `Undo`, `Redo`) in
+  `main.rs` rather than `IdleGate<trash::Target>`: `idle.rs` stays generic and
+  untouched, and `finished` matches on what drained. A drained undo or redo
+  that does not start (another step out, or its entry no longer on top) falls
+  through to the usual `resync.finished` re-listing.
+- Trash entries are removed by id (`Undo::remove_trash`), not popped, as the
+  Tauri `history.remove(entry)` is by identity: judgments can be pushed above
+  the entry while its restore is out. The redo entry gets a fresh id.
+- The Tauri `trashed` pushes a run without clearing `redoable`; the plan asks
+  for a new run to clear the redo history, so `record_trash` clears it, and
+  a redo's new run (`redone_trash`) keeps the rest of the redo history, as a
+  redone judgment batch does.
+- `Undo::clear` became `drop_judgments`, used by both the folder open and the
+  sidecar format switch (the Tauri reopen also only drops `isJudgments`).
+- After an undo outside the open folder only a change seen meanwhile
+  re-lists (`resync.finished`, then `Resync::open` before `relist`, keeping
+  the rule); after one in the open folder the restored files join `all`,
+  `refilter(current, keep_scroll)` runs and the folder re-lists. A run's own
+  end still always re-lists the open folder, as in Step 7.
+- The sidecar variants of `restoredStatus` / `undoneTrash` / `restoredCount`
+  (`what = "sidecars"`) are part 2's `Delete Sidecars…`, so `restored_status`
+  and `undone_trash` count `Restored::restored` alone.
+- `native:check` passed at the first run; a `bash` heredoc holding the Python
+  edit script failed to parse again (`unexpected EOF`), so the scripts went
+  through the Write tool, as Steps 3-7 found.
+
 ## Deferred issues (todo candidates)
+
+The pending manual checks of Steps 2-8, for the user's bulk check, come
+first, in step order; the other deferred issues follow them.
 
 - **Pending manual check (Step 2, Windows).** Basis: Step 2's Done-when;
   GUI clicks cannot be driven headless. The step's checkbox was ticked on the
@@ -104,6 +295,215 @@
      click `a`: it resumes at the file it was left at.
   5. Press `ctrl+alt+arrowleft` (`toggleLeft`): the pane hides and the
      preview widens; press again: it is back.
+- **Pending manual check (Step 3, Windows).** Basis: Step 3's Done-when; the
+  watcher-driven re-list, the window activation and the right-click menu
+  cannot be driven headless. The step's checkbox was ticked on the automated
+  criteria (`context.rs` tests, `mise run ci`, `mise run native:check`, and
+  the `notify` 8.2.2 throwaway test). Setup as Step 2's (copies under
+  `D:\Photos\tests\20261113-gpui-tree-trash\tree\`, `cargo build` in
+  `crates/native`, a fresh `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`). Steps and expected results:
+  1. Launch on `...\tree\a`, so `...\tree` is expanded. In Explorer, create
+     a subfolder `c` in `...\tree`: it appears in the tree within about a
+     second, `tree` staying expanded. Rename `c` to `d`: the row follows.
+     Delete `d`: the row goes, and no error shows in the pane's notes.
+  2. Collapse `tree`, create `e` under it in Explorer: nothing happens (no
+     re-list in the log); expand `tree`: `e` is listed. Remove `e`.
+  3. Right-click a folder row (`b`): a menu opens at the pointer with the
+     reveal item (`Reveal in File Explorer`), `Copy Path`, `Copy Folder
+     Name` and `Refresh`; `escape` closes it, and so does a left or right
+     press elsewhere (a right press on another row opens that row's menu).
+  4. The reveal item opens Explorer on `tree` with `b` selected; on a root
+     (`D:\`) it opens the drive. `Copy Path` then pasting gives the row's
+     full path (e.g. `D:\Photos\tests\20261113-gpui-tree-trash\tree\b`);
+     `Copy Folder Name` gives `b`.
+  5. With `tree` collapsed, create `f` under it in Explorer, then
+     right-click `tree` and pick `Refresh`: expanding it lists `f` with no
+     wait on a re-list. `Refresh` on the open folder `a` re-lists its files.
+     Remove `f`.
+  6. Switch to another app and back: the tree does not flicker or collapse
+     (the roots are re-read and the known ones skipped); with a USB drive
+     plugged in meanwhile, its volume appears as a new root.
+- **Pending manual check (Step 4, Windows).** Basis: Step 4's Done-when;
+  the tree's keyboard, its focus model and the menu's `Expand All` /
+  `Collapse All` cannot be driven headless. The step's checkbox was ticked on
+  the automated criteria (`tree.rs`, `treekeys.rs`, `keys.rs` and
+  `context.rs` tests, `mise run ci`, `mise run native:check`). Setup as Step
+  2's (copies under `D:\Photos\tests\20261113-gpui-tree-trash\tree\`, with
+  `a` and `b` holding a few ARWs and `b` holding nested subfolders, e.g.
+  `b\20a\x`, `b\20b`, `b\c\d`; `cargo build` in `crates/native`, a fresh
+  `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`). Steps and expected results:
+  1. Launch on `...\tree\a`. Press `3`: `a`'s current file is rated (the
+     photo has the keyboard).
+  2. Click the expander of `b`: `b` expands and the tree takes the keyboard;
+     the outline sits on the cursor row (`a`, where the open's reveal put
+     it). Down / Up move the outline one row, Home / End to the first and
+     last rows, and an off-screen row scrolls into view.
+  3. With the cursor on `b`: Right on collapsed `b` expands it, Right again
+     moves to its first child; Left on that child goes back to `b`, Left on
+     expanded `b` collapses it, Left again goes to `tree`.
+  4. Expand `b` and type `20` quickly: the cursor jumps to `20a`; tap `2`
+     repeatedly: it cycles through the folders starting with `2`.
+  5. With the tree focused, `3`, `p`, the arrows and `Ctrl+Z` change no photo
+     and no judgment, and `q` does not quit; `ctrl+alt+arrowleft`
+     (`toggleLeft`) hides the pane, after which `3` rates again (hiding the
+     pane hands the keys back); show the pane again.
+  6. Click a row, press `escape`: `3` rates again. Click a row, then click
+     the preview: `3` rates again. With the photo holding the keys, right-click
+     a row and close the menu with `escape`: `3` still rates (the right-click
+     gave nothing). Click a row, right-click another, `escape`: the menu
+     closes and the tree keeps the keys (a second `escape` hands them back).
+  7. Move the cursor to `b` and press Enter: `b` opens (strip, preview,
+     status follow), the cursor and highlight sit on `b`, and the tree keeps
+     the keyboard (Down still moves the cursor). Open only folders under
+     `D:\Photos\tests\`.
+  8. Right-click `b` (not a root): the menu ends with `Expand All` /
+     `Collapse All`; on a root (`D:\`) they are absent. `Expand All` on `b`
+     expands `b` and every folder under it, one listing at a time;
+     `Collapse All` on `b` collapses everything under `b`, `b` staying
+     expanded. A folder created in Explorer under an expanded one still
+     appears (the watch set follows).
+- **Pending manual check (Step 5, Windows).** Basis: Step 5's Done-when;
+  modifier clicks, the extend keys and the painted selection cannot be
+  driven headless. The step's checkbox was ticked on the automated criteria
+  (`selection.rs`, `strip.rs` and `judgment.rs` tests, `mise run ci`, `mise
+  run native:check`). Setup: copy ten or so ARWs into
+  `D:\Photos\tests\20261113-gpui-tree-trash\select\`; `cargo build` in
+  `crates/native` (rename a locked `riffle-native.exe` aside, never kill
+  it); run on that folder with a fresh `--index` and an explicit
+  `--settings` under `D:\Photos\tests\20261113-gpui-tree-trash\`, with
+  Auto-advance on. Steps and expected results:
+  1. Click a cell, Shift click the one four cells on: five cells are
+     selected (the current one outlined in white, the other four filled
+     dark gray with a gray border), and the focus is on the Shift-clicked
+     cell.
+  2. Ctrl click one of the middle four: it drops out of the selection and the
+     focus stays put. Ctrl click the current cell: nothing changes.
+  3. Press `3`: the four selected files get three stars on their cells, the
+     focus does not advance, and each one's `.xmp` says `xmp:Rating="3"`.
+  4. `Ctrl+Z` once: all four are back to their previous stars, the current
+     file unmoved, and the pane notes `Undid 4 files`; `Ctrl+Shift+Z` puts
+     the three stars back with `Redid 4 files`.
+  5. Click a cell, `Shift+Right` twice: three cells selected and the focus
+     on the last; `Shift+Left` once: two; `Left`: the focus moves and only
+     that cell is selected.
+  6. `Ctrl+A`: every cell selected, the focus kept; `p`: every file is
+     picked (green dot) as one undo entry (`Ctrl+Z` notes `Undid N files`).
+  7. Filter to unrated (Filter menu), select three cells and press `2`: the
+     three leave the strip and the selection; the selection is the new
+     current file alone.
+  8. In a JPEG-only folder under `D:\Photos\tests\`, Shift click selects a
+     range, but the judgment keys change nothing.
+- **Pending manual check (Step 6, Windows).** Basis: Step 6's Done-when;
+  the right-click menu, the clipboard and Explorer cannot be driven
+  headless. The step's checkbox was ticked on the automated criteria
+  (`context.rs` tests, `mise run ci`, `mise run native:check`, and the
+  `SHParseDisplayName` measurement of the verbatim prefix). Setup: copy ten
+  or so ARWs into `D:\Photos\tests\20261113-gpui-tree-trash\menu\` and a few
+  JPEGs into `...\menu-jpeg\`; `cargo build` in `crates/native` (rename a
+  locked `riffle-native.exe` aside, never kill it); run on `...\menu` with a
+  fresh `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`. Steps and expected results:
+  1. Select three cells (click, Shift click), right-click one of them that
+     is not the current file: the menu opens at the pointer (on a cell near
+     the right edge it opens to the pointer's left; on the bottom strip it
+     opens above the pointer), the three stay selected and the focus moves
+     to the right-clicked cell.
+  2. The menu holds `Select All` (`ctrl+a`), the reveal item (`Reveal in
+     File Explorer`), `Copy Path` / `Copy File Name`, the flag, star and
+     label groups with their keys (`p`, `x`, `u`, `1`-`5`, `0`,
+     `ctrl+alt+1`-`7`, `ctrl+alt+0`) and the focused file's flag, stars and
+     label checked, then `Move 3 Files to Trash…` and `Delete 3 Files
+     Permanently…`, both dimmed and inert.
+  3. `Copy Path` then paste: three full paths, one per line, in strip order
+     (they start with `\\?\` on Windows); `Copy File Name`: the three names.
+  4. `2 stars`: the three files get two stars (and their `.xmp`s say so),
+     one undo entry; open the menu again: `2 stars` is checked.
+  5. The reveal item opens Explorer on `...\menu` with the focused file
+     selected.
+  6. Right-click a cell outside the selection: it alone is selected and
+     focused. Right-click the strip's empty area right of the last cell:
+     nothing opens. `Select All` selects every cell.
+  7. A press on the preview, or `escape`, closes the menu; a left click on
+     a cell still pages.
+  8. Open `...\menu-jpeg` (from the tree): the menu has no flag, star or
+     label groups.
+  9. The tree's right-click menu near the window's bottom edge opens above
+     the pointer (it flips now instead of only snapping).
+- **Pending manual check (Step 7, Windows).** Basis: Step 7's Done-when;
+  the dialog, its keys and clicks, the Recycle Bin and the cancel of a
+  running scan cannot be driven headless. The step's checkbox was ticked on
+  the automated criteria (`trash.rs`, `idle.rs`, `history.rs` and
+  `resync.rs` tests, `mise run ci`, `mise run native:check`). Setup: copy
+  ten or so ARWs, a few with both a `.xmp` and a `.dop` next to them, into
+  `D:\Photos\tests\20261113-gpui-tree-trash\trash\`, and a few hundred into
+  `...\trash-large\`; `cargo build` in `crates/native` (rename a locked
+  `riffle-native.exe` aside, never kill it); run with a fresh `--index` and
+  an explicit `--settings` under `D:\Photos\tests\20261113-gpui-tree-trash\`.
+  Trash and delete only these copies. Steps and expected results:
+  1. On `...\trash`, once the scan is over, right-click a RAW that has a
+     `.xmp` and a `.dop`, pick `Move to Trash…`: the dialog says `Move to
+     Trash` / `Move 1 file to the Trash?` with `Move to Trash` (outlined) and
+     `Cancel`; `tab` moves the outline to `Cancel` and back; `enter`
+     confirms. The three files are in the Recycle Bin, the strip moves to
+     the neighbour, the pane says `Moved 1 file to the Trash`, and the log
+     has a `trash: moved=1 failed=0 run_id=Some(..)` line.
+  2. Select three cells, right-click one: the menu says `Move 3 Files to
+     Trash…`; the dialog's line is `Move 3 files to the Trash?`; `escape`
+     closes it and nothing moves; `Cancel` does the same.
+  3. Right-click a cell, `Delete Permanently…`: the dialog opens with
+     `Cancel` outlined; `tab` to `Delete Permanently`, then `enter` and
+     `space` do nothing, a double-click on `Delete Permanently` does nothing,
+     one click deletes. The file and its sidecars are gone and not in the
+     Recycle Bin; the pane says `Deleted 1 file`; a judgment made on it
+     before is no longer undoable (`ctrl+z` skips it).
+  4. While the dialog is open, `q`, the judgment keys, `ctrl+,` and clicks on
+     the tree, the strip and the status row's menus do nothing.
+  5. Open `...\trash-large` on a fresh `--index`; during pass 1 (`scanning
+     n/N` in the status line) pick `Move to Trash…` on one file and confirm:
+     the dialog closes at once, the pane says `Move to Trash: waiting for
+     the scan to finish`, the scan ends early, then `moving to Trash 0 / 1`
+     shows briefly, the file goes, the folder re-lists and the scan resumes
+     for the files the canceled pass left (`scanning` again).
+  6. Repeat 5 but open another folder under `D:\Photos\tests\` from the tree
+     before the scan ends: nothing is moved and the waiting note goes.
+- **Pending manual check (Step 8, Windows).** Basis: Step 8's Done-when;
+  the restore from the Recycle Bin, the redo and the strip's reaction cannot
+  be driven headless. The step's checkbox was ticked on the automated
+  criteria (`history.rs` and `trash.rs` tests, `mise run ci`, `mise run
+  native:check`). Setup: copy a few ARWs, one with both a `.xmp` and a `.dop`,
+  into `D:\Photos\tests\20261113-gpui-tree-trash\undo\a\` and a few into
+  `...\undo\b\`; `cargo build` in `crates/native` (rename a locked
+  `riffle-native.exe` aside, never kill it); run on `...\undo\a` with a fresh
+  `--index` and an explicit `--settings` under
+  `D:\Photos\tests\20261113-gpui-tree-trash\`. Trash only these copies.
+  Steps and expected results:
+  1. Once the scan is over, give the RAW with the `.xmp` and `.dop` three
+     stars, `Move to Trash…` it and confirm. `Ctrl+Z`: the pane says
+     `Restored 1 file from the Trash`, the RAW and both sidecars are back in
+     `...\undo\a` (and gone from the Recycle Bin), the strip shows the file
+     again with its three stars, the current file and the selection unmoved.
+  2. `Ctrl+Shift+Z`: `moving to Trash 0 / 1` shows briefly, the three files
+     are in the Recycle Bin again, the pane says `Moved 1 file to the Trash`;
+     `Ctrl+Z` brings them back once more.
+  3. Rate a file, trash it, `Ctrl+Z` twice: the first brings the file back,
+     the second undoes its rating (`Undid <name>`).
+  4. Trash a file in `a`, open `b` from the tree, `Ctrl+Z`: the file is back
+     in `a` (Explorer), `b`'s strip is unchanged; opening `a` again lists it.
+  5. During a scan (a fresh `--index` on a larger copy), trash a file, then
+     `Ctrl+Z` while the re-listing's scan runs: the pane says `Undo Move to
+     Trash: waiting for the scan to finish`, the scan is not canceled, and the
+     restore runs at its end.
+  6. Press `Ctrl+Z` twice quickly on a trash entry: one restore only (the log
+     has one `trash: undo of run` line).
+  7. `Delete Permanently…` a file, `Ctrl+Z`: nothing comes back (the undo
+     reaches the judgment beneath it, if any, or does nothing).
+  8. Empty the test file from the Recycle Bin by hand after trashing it, then
+     `Ctrl+Z`: the pane says `Restored 0 files from the Trash, 1 failed` (or
+     the failure count of its sidecars too) and the notes name the file with
+     `could not restore from the Trash: not in the Trash (emptied or restored
+     by hand)`; nothing is left to redo.
 - The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending
   value across folders: a position pushed in folder A while a write is out
   is replaced by B's first push if B is opened and paged before that write
@@ -115,3 +515,14 @@
   that listing's `Scan::prepare` may run before the eviction. Only reachable
   by opening two folders within the eviction's run at launch. Basis: Step 2's
   concurrent-open guard. File: `crates/native/src/main.rs` (`list`).
+- The MCP companion still treats the selection as the current file: its
+  `selected` reports the current file alone and `select_photos` with several
+  paths is refused, though the native view now has a multi-selection
+  (`selection::selection_of` is ported and unused, `allow(dead_code)`, for
+  it). Basis: Step 5's port of `selection.ts` (the Tauri `selectPhotos`).
+  Files: `crates/native/src/companion.rs`, `crates/native/src/selection.rs`,
+  `crates/native/src/main.rs` (`mcp_request`).
+- The status line does not show the Tauri position's ` · N selected` suffix
+  for a multi-selection (`renderMeta` in `main.ts`). Basis: Step 5's
+  wiring; the Done-when does not ask for it. Files:
+  `crates/native/src/main.rs` (`status`), `crates/app/ui/src/main.ts`.

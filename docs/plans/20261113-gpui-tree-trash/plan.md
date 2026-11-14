@@ -342,7 +342,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - A canceled picker already left the view with `dir: None`, so most
       paths tolerate it; the step walks every handler once rather than
       trusting that.
-- [ ] Step 3: The tree follows the disk, and its right-click menu
+- [x] Step 3: The tree follows the disk, and its right-click menu
   - Done when:
     - The view holds one `riffle_backend::treewatch::TreeWatch` whose
       callback sends a new `Event::TreeChanged(String)` into the scan's
@@ -388,7 +388,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - On Windows a watch pins the folder's ancestors against a rename
       (`treewatch.rs`'s module comment); this plan renames nothing, so
       `with_released` is not called from the native app yet.
-- [ ] Step 4: The tree's keyboard: focus, the cursor, Left / Right / Enter, type-ahead, Expand All / Collapse All
+- [x] Step 4: The tree's keyboard: focus, the cursor, Left / Right / Enter, type-ahead, Expand All / Collapse All
   - Done when:
     - `tree.rs` gains, with the matching cases of `tree.test.ts`: `step`
       (`up` / `down` stopping at the ends, `home` / `end`, a cursor not
@@ -452,7 +452,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - `toggleRight`, `toggleStrip`, `toggleSides` and `open` are in
       `TREE_PASSTHROUGH` but the native app handles none of them; port the
       set as it is so they pass once they exist.
-- [ ] Step 5: The strip's multi-selection: Ctrl / Shift click, the extend keys, Select All, judgments on the whole selection
+- [x] Step 5: The strip's multi-selection: Ctrl / Shift click, the extend keys, Select All, judgments on the whole selection
   - Done when:
     - `crates/native/src/selection.rs` is a pure model with unit tests, a
       port of `selection.ts` with `selection.test.ts`'s cases: `Selection
@@ -508,7 +508,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
     - Read the exact focus and anchor behaviour of a Ctrl and a Shift click
       from `main.ts`'s strip click handler and `selection.ts` rather than
       from memory; record anything `selection.ts` alone does not say.
-- [ ] Step 6: The strip's right-click menu: Select All, reveal, copy and the judgment groups
+- [x] Step 6: The strip's right-click menu: Select All, reveal, copy and the judgment groups
   - Done when:
     - `context.rs` gains `strip_groups(bindings, state, reveal_label,
       view_only, count, trashing)`, a port of `contextMenuGroups` with the
@@ -553,7 +553,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       through `Command::from_action` like a key.
     - Record whether the copied path carries the `\\?\` prefix on Windows.
       The Tauri app writes the listed path as it is; do the same.
-- [ ] Step 7: Move to Trash… and Delete Permanently…: the dialog, the run, its progress, the hold during a scan
+- [x] Step 7: Move to Trash… and Delete Permanently…: the dialog, the run, its progress, the hold during a scan
   - Done when:
     - `crates/native/src/trash.rs` is a pure model with unit tests, a port
       of `trash.ts` with the matching cases of `trash.test.ts`:
@@ -628,7 +628,7 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
       second mechanism.
     - The run id the backend returns is kept for Step 8; this step only
       logs it.
-- [ ] Step 8: Trash undo and redo, and the plan's docs wrap-up
+- [x] Step 8: Trash undo and redo, and the plan's docs wrap-up
   - Done when:
     - `history.rs`: an undo entry is a judgment batch or a trash run
       (`run_id`, `count`, `dirs`), ported from `undo.ts` with its tests:
@@ -752,3 +752,9 @@ strip menu's `Rename…`. Port Step 8 stays open until then.
 
 - (2026-11-13) Step 1 complete
 - (2026-11-14) Step 2 complete
+- (2026-11-14) Step 3 complete
+- (2026-11-14) Step 4 complete
+- (2026-11-14) Step 5 complete
+- (2026-11-14) Step 6 complete
+- (2026-11-14) Step 7 complete
+- (2026-11-14) Step 8 complete

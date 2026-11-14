@@ -39,8 +39,30 @@ pub fn key_name(keystroke: &Keystroke) -> Option<String> {
     Some(name)
 }
 
-/// Each bound key's action, built once from the keymap, which stays as it is
-/// until the settings UI (port Step 9).
+/// The character a printable key types, Shift or not, for the tree's
+/// type-ahead (`folders.ts`'s `typeKey`), or `None` with Ctrl, Alt or Meta
+/// held. `key_name` lower-cases a shifted letter and names the space bar
+/// `space`, so the keystroke's own `key_char` comes first: `A` for Shift+A,
+/// ` ` for the space bar. Without one, a one-character key is the character.
+pub fn typed_char(keystroke: &Keystroke) -> Option<String> {
+    let m = &keystroke.modifiers;
+    if m.control || m.alt || m.platform || keystroke.is_modifier_key() {
+        return None;
+    }
+    let one = |s: &str| {
+        let mut chars = s.chars();
+        matches!((chars.next(), chars.next()), (Some(c), None) if !c.is_control())
+    };
+    match &keystroke.key_char {
+        Some(typed) if one(typed) => Some(typed.clone()),
+        _ if keystroke.key == "space" => Some(" ".to_owned()),
+        _ if one(&keystroke.key) => Some(keystroke.key.clone()),
+        _ => None,
+    }
+}
+
+/// Each bound key's action, built from the keymap, and built again whenever
+/// the Keyboard Shortcuts tab edits it.
 pub struct Bindings(HashMap<String, &'static str>);
 
 impl Bindings {
@@ -61,7 +83,7 @@ impl Bindings {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bindings, key_name};
+    use super::{Bindings, key_name, typed_char};
     use gpui::{Keystroke, Modifiers};
     use riffle_backend::shortcuts::Keymap;
 
@@ -96,6 +118,34 @@ mod tests {
         for (keystroke, name) in cases {
             assert_eq!(key_name(&keystroke).as_deref(), Some(name));
         }
+    }
+
+    #[test]
+    fn a_printable_key_types_its_own_character() {
+        let typed = |key: &str, key_char: Option<&str>, shift: bool| {
+            let mut keystroke = stroke(key, false, false, shift);
+            keystroke.key_char = key_char.map(str::to_owned);
+            typed_char(&keystroke)
+        };
+        assert_eq!(typed("a", Some("A"), true).as_deref(), Some("A"));
+        assert_eq!(typed("2", Some("2"), false).as_deref(), Some("2"));
+        assert_eq!(typed("space", Some(" "), false).as_deref(), Some(" "));
+        assert_eq!(typed("space", None, false).as_deref(), Some(" "));
+        assert_eq!(typed("p", None, false).as_deref(), Some("p"));
+        assert_eq!(typed("f1", None, false), None);
+        assert_eq!(typed("enter", None, false), None);
+        assert_eq!(typed("shift", None, true), None);
+    }
+
+    #[test]
+    fn a_key_with_ctrl_alt_or_meta_types_nothing() {
+        let mut keystroke = stroke("a", true, false, false);
+        keystroke.key_char = Some("a".into());
+        assert_eq!(typed_char(&keystroke), None);
+        assert_eq!(typed_char(&stroke("a", false, true, false)), None);
+        let mut meta = stroke("a", false, false, false);
+        meta.modifiers.platform = true;
+        assert_eq!(typed_char(&meta), None);
     }
 
     #[test]

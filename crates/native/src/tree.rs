@@ -1,9 +1,13 @@
 //! The folder tree's state, kept pure: which folders are known, listed and
-//! expanded, and the path spelling its nodes are keyed by. A port of the
-//! state half of the Tauri app's `tree.ts`; the window draws `rows` and fills
-//! the tree from `riffle_backend::folders`.
+//! expanded, the path spelling its nodes are keyed by, and where its keyboard
+//! moves the cursor. A port of the Tauri app's `tree.ts` less the
+//! multi-folder selection; the window draws `rows` and fills the tree from
+//! `riffle_backend::folders`.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use riffle_backend::folders::FolderNode;
 
@@ -18,7 +22,6 @@ pub struct Child {
     pub path: String,
     /// A symlink or junction, which `Expand All` lists without descending,
     /// since it can point back at an ancestor.
-    #[allow(dead_code)]
     pub is_link: bool,
 }
 
@@ -70,6 +73,20 @@ impl Tree {
 
     pub fn has(&self, path: &str) -> bool {
         self.nodes.contains_key(path)
+    }
+
+    pub fn is_expanded(&self, path: &str) -> bool {
+        self.nodes.get(path).is_some_and(|node| node.expanded)
+    }
+
+    /// The drawn children of the known folder `path`, empty until it is
+    /// listed.
+    pub fn drawn_children_of(&self, path: &str) -> Vec<Child> {
+        self.nodes
+            .get(path)
+            .and_then(|node| self.drawn_children(node))
+            .map(|children| children.into_iter().cloned().collect())
+            .unwrap_or_default()
     }
 
     fn known(&mut self, folders: &[Child]) {
@@ -177,7 +194,6 @@ impl Tree {
     /// The folders the tree watches: the expanded ones among the drawn rows,
     /// sorted. A node left expanded under a collapsed parent is not drawn, so
     /// it is not watched.
-    #[allow(dead_code)]
     pub fn watched_folders(&self) -> Vec<String> {
         let mut out: Vec<String> = self
             .rows()
@@ -188,6 +204,163 @@ impl Tree {
         out.sort();
         out
     }
+
+    /// The listed folders under `path`, depth first, through the children
+    /// the tree draws: a folder not yet listed ends its branch, and a root
+    /// drawn elsewhere is left to its own row. Empty for an unknown path.
+    pub fn descendants(&self, path: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        self.descend(path, &mut out);
+        out
+    }
+
+    fn descend(&self, dir: &str, out: &mut Vec<String>) {
+        let Some(node) = self.nodes.get(dir) else {
+            return;
+        };
+        for child in self.drawn_children(node).unwrap_or_default() {
+            if self.nodes.contains_key(&child.path) {
+                out.push(child.path.clone());
+                self.descend(&child.path, out);
+            }
+        }
+    }
+
+    /// Collapses every folder under `path`, leaving `path` itself as it is.
+    pub fn collapse_all(&mut self, path: &str) {
+        for dir in self.descendants(path) {
+            self.collapse(&dir);
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepKey {
+    Up,
+    Down,
+    Home,
+    End,
+}
+
+/// The path of the row the keyboard cursor moves to, or `None` when there is
+/// no row. `Up` / `Down` stop at the ends; a cursor not among `rows` (none
+/// yet, or its parent collapsed) lands on the first row.
+pub fn step(rows: &[Row], cursor: Option<&str>, key: StepKey) -> Option<String> {
+    let last = rows.len().checked_sub(1)?;
+    let at = rows
+        .iter()
+        .position(|row| Some(row.path.as_str()) == cursor);
+    let to = match (key, at) {
+        (StepKey::Home, _) => 0,
+        (StepKey::End, _) => last,
+        (_, None) => 0,
+        (StepKey::Up, Some(at)) => at.saturating_sub(1),
+        (StepKey::Down, Some(at)) => (at + 1).min(last),
+    };
+    Some(rows[to].path.clone())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreeKey {
+    Left,
+    Right,
+    Enter,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TreeCommand {
+    Focus(String),
+    Expand(String),
+    Collapse(String),
+    Open(String),
+}
+
+/// What `Right` / `Left` / `Enter` do on the cursor row, following the
+/// WAI-ARIA tree pattern, or `None` when the key does nothing there (or the
+/// cursor is not among the drawn rows).
+pub fn tree_key(rows: &[Row], cursor: Option<&str>, key: TreeKey) -> Option<TreeCommand> {
+    let at = rows
+        .iter()
+        .position(|row| Some(row.path.as_str()) == cursor)?;
+    let row = &rows[at];
+    match key {
+        TreeKey::Enter => Some(TreeCommand::Open(row.path.clone())),
+        TreeKey::Right => {
+            if !row.expandable {
+                None
+            } else if !row.expanded {
+                Some(TreeCommand::Expand(row.path.clone()))
+            } else {
+                rows.get(at + 1)
+                    .filter(|child| child.depth > row.depth)
+                    .map(|child| TreeCommand::Focus(child.path.clone()))
+            }
+        }
+        TreeKey::Left => {
+            if row.expanded && row.expandable {
+                return Some(TreeCommand::Collapse(row.path.clone()));
+            }
+            rows[..at]
+                .iter()
+                .rev()
+                .find(|parent| parent.depth < row.depth)
+                .map(|parent| TreeCommand::Focus(parent.path.clone()))
+        }
+    }
+}
+
+/// The type-ahead buffer: the text typed so far and when its last key came.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Typed {
+    pub text: String,
+    pub at: Option<Instant>,
+}
+
+pub const TYPE_AHEAD_TIMEOUT: Duration = Duration::from_millis(500);
+
+/// The type-ahead buffer after typing `typed` at `now`: appended while the
+/// keys come within `timeout` of each other, else started over.
+pub fn append_typed(buffer: &Typed, typed: &str, now: Instant, timeout: Duration) -> Typed {
+    let within = buffer
+        .at
+        .is_some_and(|at| now.saturating_duration_since(at) <= timeout);
+    Typed {
+        text: if within {
+            format!("{}{typed}", buffer.text)
+        } else {
+            typed.to_owned()
+        },
+        at: Some(now),
+    }
+}
+
+/// The path of the row whose name starts with `prefix` (case-insensitive),
+/// searching down from the cursor and wrapping to the top, or `None` when
+/// none does. A single character (or one repeated, as a tapped letter gives)
+/// starts past the cursor, so tapping cycles through the matches; a longer
+/// prefix starts at the cursor, so it keeps the row its first letter found.
+pub fn type_ahead(rows: &[Row], cursor: Option<&str>, prefix: &str) -> Option<String> {
+    let mut needle = prefix.to_lowercase();
+    let first = needle.chars().next()?;
+    if rows.is_empty() {
+        return None;
+    }
+    let repeated = needle.chars().all(|c| c == first);
+    if repeated {
+        needle = first.to_string();
+    }
+    let at = rows
+        .iter()
+        .position(|row| Some(row.path.as_str()) == cursor);
+    let start = match at {
+        None => 0,
+        Some(at) if repeated => at + 1,
+        Some(at) => at,
+    };
+    (0..rows.len())
+        .map(|i| &rows[(start + i) % rows.len()])
+        .find(|row| row.name.to_lowercase().starts_with(&needle))
+        .map(|row| row.path.clone())
 }
 
 fn is_windows_path(path: &str) -> bool {
@@ -353,11 +526,9 @@ fn rebase(path: &str, old_dir: &str, new_dir: &str, ignore_case: bool) -> Option
     Some(rebased)
 }
 
-/// Ported from `tree.test.ts`. Left out: the keyboard (`step`, `treeKey`,
-/// `appendTyped`, `typeAhead`) and `descendants` / `collapseAll`, which come
-/// with the tree's keyboard step; the multi-folder selection (`clickSelect`,
-/// `pruneSelection`), the public `rebase` and `renameFolder`, which are
-/// part 2's.
+/// Ported from `tree.test.ts`. Left out: the multi-folder selection
+/// (`clickSelect`, `pruneSelection`), the public `rebase` and
+/// `renameFolder`, which are part 2's.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -539,6 +710,440 @@ mod tests {
         tree.expand("/media/me/card");
         tree.expand("/home/me");
         assert_eq!(tree.watched_folders(), ["/home/me", "/media/me/card"]);
+    }
+
+    /// me > (a > b > c, d), every one listed and expanded.
+    fn nested() -> Tree {
+        let mut tree = with_roots(&[home()]);
+        tree.expand("/home/me");
+        tree.set_children(
+            "/home/me",
+            0,
+            vec![child("a", "/home/me/a"), child("d", "/home/me/d")],
+        );
+        tree.expand("/home/me/a");
+        tree.set_children("/home/me/a", 0, vec![child("b", "/home/me/a/b")]);
+        tree.expand("/home/me/a/b");
+        tree.set_children("/home/me/a/b", 0, vec![child("c", "/home/me/a/b/c")]);
+        tree.expand("/home/me/a/b/c");
+        tree.set_children("/home/me/a/b/c", 0, vec![]);
+        tree.expand("/home/me/d");
+        tree
+    }
+
+    #[test]
+    fn descendants_walk_the_listed_folders_under_a_path_depth_first() {
+        assert_eq!(
+            nested().descendants("/home/me"),
+            ["/home/me/a", "/home/me/a/b", "/home/me/a/b/c", "/home/me/d"]
+        );
+    }
+
+    #[test]
+    fn collapse_all_collapses_every_nested_folder_and_keeps_the_clicked_one_expanded() {
+        let mut tree = nested();
+        tree.collapse_all("/home/me");
+        assert!(tree.is_expanded("/home/me"));
+        for path in ["/home/me/a", "/home/me/a/b", "/home/me/a/b/c", "/home/me/d"] {
+            assert!(!tree.is_expanded(path));
+        }
+        assert_eq!(drawn(&tree), ["0:me", "1:a", "1:d"]);
+    }
+
+    #[test]
+    fn collapse_all_leaves_the_folders_outside_the_clicked_one_as_they_are() {
+        let mut tree = nested();
+        tree.collapse_all("/home/me/a");
+        assert!(tree.is_expanded("/home/me/a"));
+        assert!(!tree.is_expanded("/home/me/a/b"));
+        assert!(tree.is_expanded("/home/me/d"));
+    }
+
+    #[test]
+    fn collapse_all_of_an_unknown_path_leaves_the_tree_as_is() {
+        let tree = nested();
+        assert!(tree.descendants("/nope").is_empty());
+        let mut changed = tree.clone();
+        changed.collapse_all("/nope");
+        assert_eq!(changed, tree);
+    }
+
+    #[test]
+    fn collapse_all_skips_a_folder_not_yet_listed() {
+        let mut tree = with_roots(&[home()]);
+        tree.expand("/home/me");
+        tree.set_children("/home/me", 0, vec![child("a", "/home/me/a")]);
+        tree.expand("/home/me/a");
+        assert!(tree.descendants("/home/me/a").is_empty());
+        let mut changed = tree.clone();
+        changed.collapse_all("/home/me/a");
+        assert_eq!(changed, tree);
+        assert_eq!(tree.descendants("/home/me"), ["/home/me/a"]);
+    }
+
+    #[test]
+    fn drawn_children_of_a_folder_keep_whether_they_are_links() {
+        let mut tree = with_roots(&[home()]);
+        assert!(tree.drawn_children_of("/home/me").is_empty());
+        let link = Child {
+            is_link: true,
+            ..child("l", "/home/me/l")
+        };
+        tree.set_children("/home/me", 0, vec![child("a", "/home/me/a"), link.clone()]);
+        assert_eq!(
+            tree.drawn_children_of("/home/me"),
+            vec![child("a", "/home/me/a"), link]
+        );
+        assert!(tree.drawn_children_of("/nope").is_empty());
+    }
+
+    /// me > (Pictures > 2026), card
+    fn stepped() -> Tree {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.expand("/home/me");
+        tree.set_children("/home/me", 0, vec![child("Pictures", "/home/me/Pictures")]);
+        tree.expand("/home/me/Pictures");
+        tree.set_children(
+            "/home/me/Pictures",
+            0,
+            vec![child("2026", "/home/me/Pictures/2026")],
+        );
+        tree
+    }
+
+    #[test]
+    fn step_down_and_up_walk_the_visible_rows_across_depth() {
+        let rows = stepped().rows();
+        let to = |cursor, key| step(&rows, Some(cursor), key);
+        assert_eq!(
+            to("/home/me", StepKey::Down).as_deref(),
+            Some("/home/me/Pictures")
+        );
+        assert_eq!(
+            to("/home/me/Pictures", StepKey::Down).as_deref(),
+            Some("/home/me/Pictures/2026")
+        );
+        assert_eq!(
+            to("/home/me/Pictures/2026", StepKey::Down).as_deref(),
+            Some("/media/me/card")
+        );
+        assert_eq!(
+            to("/media/me/card", StepKey::Up).as_deref(),
+            Some("/home/me/Pictures/2026")
+        );
+        assert_eq!(
+            to("/home/me/Pictures", StepKey::Up).as_deref(),
+            Some("/home/me")
+        );
+    }
+
+    #[test]
+    fn step_down_and_up_between_siblings() {
+        let rows = with_roots(&[home(), card()]).rows();
+        assert_eq!(
+            step(&rows, Some("/home/me"), StepKey::Down).as_deref(),
+            Some("/media/me/card")
+        );
+        assert_eq!(
+            step(&rows, Some("/media/me/card"), StepKey::Up).as_deref(),
+            Some("/home/me")
+        );
+    }
+
+    #[test]
+    fn step_clamps_at_both_ends() {
+        let rows = stepped().rows();
+        assert_eq!(
+            step(&rows, Some("/home/me"), StepKey::Up).as_deref(),
+            Some("/home/me")
+        );
+        assert_eq!(
+            step(&rows, Some("/media/me/card"), StepKey::Down).as_deref(),
+            Some("/media/me/card")
+        );
+    }
+
+    #[test]
+    fn step_home_and_end_are_the_first_and_last_rows() {
+        let rows = stepped().rows();
+        assert_eq!(
+            step(&rows, Some("/home/me/Pictures"), StepKey::Home).as_deref(),
+            Some("/home/me")
+        );
+        assert_eq!(
+            step(&rows, Some("/home/me/Pictures"), StepKey::End).as_deref(),
+            Some("/media/me/card")
+        );
+        assert_eq!(
+            step(&rows, None, StepKey::End).as_deref(),
+            Some("/media/me/card")
+        );
+    }
+
+    #[test]
+    fn step_from_a_missing_or_stale_cursor_lands_on_the_first_row() {
+        let mut tree = stepped();
+        tree.collapse("/home/me");
+        let rows = tree.rows();
+        for key in [StepKey::Up, StepKey::Down] {
+            assert_eq!(step(&rows, None, key).as_deref(), Some("/home/me"));
+            assert_eq!(
+                step(&rows, Some("/home/me/Pictures/2026"), key).as_deref(),
+                Some("/home/me")
+            );
+        }
+    }
+
+    #[test]
+    fn step_in_an_empty_tree_has_no_row() {
+        for key in [StepKey::Up, StepKey::Down, StepKey::Home, StepKey::End] {
+            assert_eq!(step(&[], None, key), None);
+            assert_eq!(step(&[], Some("/home/me"), key), None);
+        }
+    }
+
+    const PICTURES: &str = "/home/me/Pictures";
+    const EMPTY: &str = "/home/me/empty";
+    const Y2026: &str = "/home/me/Pictures/2026";
+    const HOME: &str = "/home/me";
+    const CARD: &str = "/media/me/card";
+
+    /// me > (Pictures > 2026, empty), card
+    fn keyed() -> Tree {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.expand(HOME);
+        tree.set_children(
+            HOME,
+            0,
+            vec![child("Pictures", PICTURES), child("empty", EMPTY)],
+        );
+        tree.set_children(EMPTY, 0, vec![]);
+        tree.expand(PICTURES);
+        tree.set_children(PICTURES, 0, vec![child("2026", Y2026)]);
+        tree
+    }
+
+    fn key(tree: &Tree, cursor: Option<&str>, key: TreeKey) -> Option<TreeCommand> {
+        tree_key(&tree.rows(), cursor, key)
+    }
+
+    fn collapsed(mut tree: Tree, path: &str) -> Tree {
+        tree.collapse(path);
+        tree
+    }
+
+    fn expanded(mut tree: Tree, path: &str) -> Tree {
+        tree.expand(path);
+        tree
+    }
+
+    #[test]
+    fn right_expands_a_collapsed_row_that_can_expand_listed_or_not() {
+        assert_eq!(
+            key(&collapsed(keyed(), HOME), Some(HOME), TreeKey::Right),
+            Some(TreeCommand::Expand(HOME.into()))
+        );
+        assert_eq!(
+            key(&keyed(), Some(CARD), TreeKey::Right),
+            Some(TreeCommand::Expand(CARD.into()))
+        );
+    }
+
+    #[test]
+    fn right_on_an_expanded_row_enters_its_first_child() {
+        assert_eq!(
+            key(&keyed(), Some(HOME), TreeKey::Right),
+            Some(TreeCommand::Focus(PICTURES.into()))
+        );
+    }
+
+    #[test]
+    fn right_does_nothing_on_a_leaf_or_an_expanded_row_still_listing() {
+        assert_eq!(key(&keyed(), Some(EMPTY), TreeKey::Right), None);
+        assert_eq!(
+            key(&expanded(keyed(), CARD), Some(CARD), TreeKey::Right),
+            None
+        );
+    }
+
+    #[test]
+    fn left_collapses_an_expanded_row_even_one_still_listing() {
+        assert_eq!(
+            key(&keyed(), Some(PICTURES), TreeKey::Left),
+            Some(TreeCommand::Collapse(PICTURES.into()))
+        );
+        assert_eq!(
+            key(&expanded(keyed(), CARD), Some(CARD), TreeKey::Left),
+            Some(TreeCommand::Collapse(CARD.into()))
+        );
+    }
+
+    #[test]
+    fn left_on_a_collapsed_row_or_a_leaf_goes_to_the_parent() {
+        assert_eq!(
+            key(&keyed(), Some(Y2026), TreeKey::Left),
+            Some(TreeCommand::Focus(PICTURES.into()))
+        );
+        assert_eq!(
+            key(&keyed(), Some(EMPTY), TreeKey::Left),
+            Some(TreeCommand::Focus(HOME.into()))
+        );
+        assert_eq!(
+            key(&collapsed(keyed(), PICTURES), Some(PICTURES), TreeKey::Left),
+            Some(TreeCommand::Focus(HOME.into()))
+        );
+    }
+
+    #[test]
+    fn left_on_an_expanded_leaf_goes_to_the_parent() {
+        assert_eq!(
+            key(&expanded(keyed(), EMPTY), Some(EMPTY), TreeKey::Left),
+            Some(TreeCommand::Focus(HOME.into()))
+        );
+    }
+
+    #[test]
+    fn left_does_nothing_on_a_collapsed_root() {
+        assert_eq!(key(&keyed(), Some(CARD), TreeKey::Left), None);
+        assert_eq!(
+            key(&collapsed(keyed(), HOME), Some(HOME), TreeKey::Left),
+            None
+        );
+    }
+
+    #[test]
+    fn enter_opens_the_cursor_row() {
+        assert_eq!(
+            key(&keyed(), Some(Y2026), TreeKey::Enter),
+            Some(TreeCommand::Open(Y2026.into()))
+        );
+    }
+
+    #[test]
+    fn a_missing_or_stale_cursor_does_nothing() {
+        let tree = collapsed(keyed(), HOME);
+        for k in [TreeKey::Left, TreeKey::Right, TreeKey::Enter] {
+            assert_eq!(key(&tree, None, k), None);
+            assert_eq!(key(&tree, Some(Y2026), k), None);
+            assert_eq!(key(&Tree::default(), None, k), None);
+        }
+    }
+
+    #[test]
+    fn append_typed_appends_within_the_timeout_and_starts_over_after_it() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let first = append_typed(&Typed::default(), "p", ms(1000), TYPE_AHEAD_TIMEOUT);
+        assert_eq!(
+            first,
+            Typed {
+                text: "p".into(),
+                at: Some(ms(1000))
+            }
+        );
+        assert_eq!(
+            append_typed(&first, "i", ms(1500), TYPE_AHEAD_TIMEOUT).text,
+            "pi"
+        );
+        assert_eq!(
+            append_typed(&first, "i", ms(1501), TYPE_AHEAD_TIMEOUT).text,
+            "i"
+        );
+        assert_eq!(
+            append_typed(&first, "i", ms(1100), Duration::from_millis(50)).text,
+            "i"
+        );
+    }
+
+    /// me, (Pictures, Pix, desktop, Downloads, My Photos), card
+    fn typed_rows() -> Vec<Row> {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.expand(HOME);
+        tree.set_children(
+            HOME,
+            0,
+            ["Pictures", "Pix", "desktop", "Downloads", "My Photos"]
+                .iter()
+                .map(|name| child(name, &format!("/home/me/{name}")))
+                .collect(),
+        );
+        tree.rows()
+    }
+
+    #[test]
+    fn a_prefix_lands_on_the_first_folder_it_starts_case_insensitively() {
+        assert_eq!(
+            type_ahead(&typed_rows(), Some(HOME), "PI").as_deref(),
+            Some("/home/me/Pictures")
+        );
+        assert_eq!(
+            type_ahead(&typed_rows(), Some(HOME), "pix").as_deref(),
+            Some("/home/me/Pix")
+        );
+    }
+
+    #[test]
+    fn typing_on_keeps_the_row_the_first_letter_found() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let mut buffer = append_typed(&Typed::default(), "p", ms(1000), TYPE_AHEAD_TIMEOUT);
+        let first = type_ahead(&typed_rows(), Some(HOME), &buffer.text);
+        assert_eq!(first.as_deref(), Some("/home/me/Pictures"));
+        buffer = append_typed(&buffer, "i", ms(1200), TYPE_AHEAD_TIMEOUT);
+        assert_eq!(
+            type_ahead(&typed_rows(), first.as_deref(), &buffer.text).as_deref(),
+            Some("/home/me/Pictures")
+        );
+    }
+
+    #[test]
+    fn a_tapped_letter_cycles_through_its_folders_and_wraps_around() {
+        let t0 = Instant::now();
+        let ms = |n: u64| t0 + Duration::from_millis(n);
+        let mut buffer = append_typed(&Typed::default(), "d", ms(1000), TYPE_AHEAD_TIMEOUT);
+        let mut cursor = type_ahead(&typed_rows(), Some(HOME), &buffer.text);
+        assert_eq!(cursor.as_deref(), Some("/home/me/desktop"));
+        buffer = append_typed(&buffer, "d", ms(1100), TYPE_AHEAD_TIMEOUT);
+        assert_eq!(buffer.text, "dd");
+        cursor = type_ahead(&typed_rows(), cursor.as_deref(), &buffer.text);
+        assert_eq!(cursor.as_deref(), Some("/home/me/Downloads"));
+        buffer = append_typed(&buffer, "d", ms(1200), TYPE_AHEAD_TIMEOUT);
+        assert_eq!(
+            type_ahead(&typed_rows(), cursor.as_deref(), &buffer.text).as_deref(),
+            Some("/home/me/desktop")
+        );
+    }
+
+    #[test]
+    fn the_search_wraps_to_the_top() {
+        assert_eq!(
+            type_ahead(&typed_rows(), Some(CARD), "me").as_deref(),
+            Some(HOME)
+        );
+    }
+
+    #[test]
+    fn a_space_inside_a_name() {
+        assert_eq!(
+            type_ahead(&typed_rows(), Some(HOME), "my p").as_deref(),
+            Some("/home/me/My Photos")
+        );
+    }
+
+    #[test]
+    fn no_match_leaves_the_cursor() {
+        assert_eq!(type_ahead(&typed_rows(), Some(HOME), "zz"), None);
+        assert_eq!(type_ahead(&typed_rows(), Some(HOME), "pic!"), None);
+        assert_eq!(type_ahead(&[], None, "a"), None);
+    }
+
+    #[test]
+    fn a_missing_or_stale_cursor_searches_from_the_first_row() {
+        assert_eq!(type_ahead(&typed_rows(), None, "m").as_deref(), Some(HOME));
+        assert_eq!(
+            type_ahead(&typed_rows(), Some("/gone"), "m").as_deref(),
+            Some(HOME)
+        );
     }
 
     fn win_home() -> Child {

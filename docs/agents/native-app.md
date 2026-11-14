@@ -152,9 +152,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
-  The native app does not call `release_under` / `settle` yet, so that
-  `configure` still queues behind `Unwatch` on 8.2.2 (see `tauri-app.md`) is
-  unverified; re-check it when the folder rename (port Step 8) needs it.
+  The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
+  "The tree follows the disk through one `TreeWatch`"); `release_under` is
+  not called yet, so re-check the rename path when part 2's folder rename
+  needs it.
 
 ### The judgments' Tauri-free pieces live in the backend (Inferred)
 
@@ -209,6 +210,17 @@ as it was, and the app runs on the defaults (`Xmp`, the English names, the
 default keymap, auto-advance on) with no store behind `Settings::writes`, so
 nothing is written; the startup `settings:` line ends `store=none`.
 
+- Rule: `Store::open` reads `user_version` before it sets `journal_mode = WAL`,
+  so a store with a newer schema is refused before its header is touched
+  (switching a rollback-journal database to WAL rewrites the header). The
+  schema and the seed are then written in one `BEGIN IMMEDIATE` transaction
+  that re-reads `user_version`, so two processes opening one new store cannot
+  both seed it, and (`PRAGMA user_version` being transactional) a store is
+  never found with the table but no version. A JSON file opened with
+  `Connection::open` succeeds and fails only at the first query ("file is not
+  a database"), leaving its bytes as they were; keep that order if the open
+  is ever reworked.
+
 Every write goes through `Settings::writes` (`settings::Writes`): a
 `set(key, value)` or `delete(key)` is sent to one `settings-store` thread,
 which applies them to the store in the order given, so two quick changes of
@@ -248,8 +260,8 @@ no sidecar's mtime moved.
 
 ### A judgment goes view, row, writer (Measured)
 
-A judgment key on the current file (none in a view-only folder) applies
-`judgment::apply` to the view's map and the strip's cell at once, then on
+A judgment key on the strip's selection (none in a view-only folder) applies
+`judgment::apply` to the view's map and the strip's cells at once, then on
 `cx.background_spawn` runs `judgment::store`: `Index::set_rating` on the
 writer connection, then `Writer::set`, the Tauri `set_rating`'s order, so a
 crash between the two leaves the row dirty. A failure of either puts the
@@ -266,14 +278,17 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   paths judged since the open), whose state a later `entries` read, such as
   the one at pass 1's `Done`, does not replace, as the Tauri `touched` set.
 - Rule: undo and redo go through the same path. A judgment that writes
-  records its file's state before it as one `history::Undo` entry (a batch,
-  for the selection of port Step 8) and clears the redo history; `Ctrl+Z` /
+  records its files' states before it as one `history::Undo` entry (a batch
+  over the selection's targets) and clears the redo history; `Ctrl+Z` /
   `Ctrl+Shift+Z` pop an entry, push the files' current states onto the other
   history, apply the popped states as a key would (view, row, writer) and
-  move to the file. Each entry has an id, so a failed store drops its file
+  move to the file of a one-file entry, selecting it alone when the focus
+  moves (`selection::restore`); an entry of several files leaves the current
+  file and notes `Undid N files` / `Redid N files`. Each entry has an id, so a failed store drops its file
   from the entry it belongs to (`Undo::forget`, the Tauri `forgetOnFail`).
-  Another folder's open clears both histories; a re-listing keeps them and a
-  step drops the files no longer listed.
+  Another folder's open drops the judgment batches of both histories and
+  keeps the trash runs; a re-listing keeps them and a step drops the files
+  no longer listed.
 - Rule: `label_known` for a store follows the Tauri `send` rule: the entry was
   seen, or (for an undo / redo, which has no command) the restored label
   differs from the current one. A `ClearAll` on a file whose entry was not seen
@@ -281,6 +296,36 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   `writes` next to `changed`; do not fold the two into one test. A failed
   undo / redo store also drops its file from the entry it pushed onto the
   other history (the Tauri `step` passes no `onFail` for that entry).
+
+### The selection is keyed by path and ends every `refilter` (Inferred)
+
+`selection.rs` is `selection.ts` over the native `judgment` types: a
+`Selection { selected, anchor }` of listed paths, the current file always a
+member. The view holds one; `set_selection` hands its paths to the strip
+(`Strip::set_selected`, indices through the strip's `index_of`), which paints
+a selected cell other than the current one as `.cell.selected` (the `--muted`
+fill and a `--ring` border), so nothing maps paths per frame.
+
+- Rule: `go` (paging, `home` / `end`, auto-advance, a one-file undo) selects
+  the landed file alone only when the current file changed, as `main.ts`'s
+  `move`; `focus_on` is the move without touching the selection, which a
+  Ctrl / Shift click, `extendPrevious` / `extendNext` and the MCP `show`
+  use after setting the selection themselves. A Ctrl click (Cmd on macOS;
+  either modifier, as `strip.ts` reads `metaKey || ctrlKey`) toggles the cell
+  and keeps the focus; a Shift click selects the range from the anchor and
+  moves the focus to the clicked cell; a plain click selects it alone, also
+  on the current cell. `selectAll` selects every shown file with the focus
+  kept. None of them is refused in a view-only folder.
+- Rule: every `refilter` that rebuilds `files` ends with `settle(.., false)`,
+  that is `prune`, so a file a judgment or the filter hides leaves the
+  selection; a new folder's open lands with `settle(.., true)`, the landed
+  file alone. A re-listing goes through `refilter` and so prunes.
+- Rule: a judgment's targets are `selection::targets` (the focused file alone
+  while one or none is selected) and its changes `selection::judgments`: the
+  value decided once from the current file, each file kept on the fields the
+  command does not touch, the current file first, a file left out unless
+  `judgment::writes` holds for it (its `seen` per path). Auto-advance needs
+  exactly one target (`should_advance`'s `targets`).
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
@@ -311,6 +356,52 @@ process exits with the scan running, as before.
   `Scan::stop`: it must not reconcile while the old scan writes. A scan being
   stopped that way when the app quits is not in the holder, so the quit does
   not wait for it.
+
+### The MCP companion answers from the view, one channel hop away (Measured)
+
+With `mcpEnabled` true in the settings store, `mcp.rs` builds a tokio
+current-thread runtime on one named `mcp` thread, which runs the backend's
+`Mcp::switch(true)` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
+quit handler's signal and runs `Mcp::stop` (logged as `quit: MCP server
+stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). With it off or missing there
+is no runtime, no thread and no server. A bind failure is logged with the
+`mcp: McpState` line and the app runs on. The backend's `Bridge` send callback
+only puts the request into the view's channel as `scan::Event::Mcp`; the
+view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
+returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
+with the file selected alone,
+`toggle_zoom`, or `judge_paths`) and replies through `Mcp::reply`.
+`get_photo` and `get_preview` never reach the view: the backend reads them on
+tokio's blocking pool against the index's read-only connection, outside
+`ReadSlots`, as in the Tauri app.
+
+`set_judgment` goes the judgment keys' way: `companion.rs` merges the given
+fields over each photo's own state (an omitted field kept, a rating of 0 and a
+null label clearing), keeps only the photos it changes, with the label known
+when the entry was seen or the call changed the label (the Tauri `send`
+rule), and `judge_paths` records them as one `history::Undo` entry, marks them
+`touched`, applies them, refilters once with the current file kept, and stores
+each under that entry's id. There is no auto-advance, and a view-only folder
+refuses with `viewonly.ts`'s message. The reply lists every given photo's
+resulting stars, flag and label, the unchanged ones too. The tool's English
+color names are what `judgment::State.label` holds, so no mapping is needed.
+A `curl` check on test copies found the stars, the pick and the label in each
+`.xmp` and the `ratings` row after `--auto` quit.
+
+Not supported yet, each refused with a message naming the native app: compare
+and a `select_photos` with several paths. `selected` is the current file
+alone, `burst` is always empty (no `burst.ts` port), and `current.eyes` is
+present only once the `f` overlay has judged the file.
+
+- Rule: a test run with MCP on passes `--mcp-port` with a free port other
+  than 41917 (the user's Tauri app may hold it), seeds `"mcpEnabled": true`
+  through `--import-settings` into a fresh `--settings` store, and passes
+  `--log` with a file in the test folder, next to `--index`.
+- Rule: on Git Bash, give `curl` the JSON body on stdin
+  (`--data-binary @- <<< "$body"`); a `--data` argument with `\` escapes
+  reaches the server mangled. The session id is the `Mcp-Session-Id` header of
+  the `initialize` reply, and `set_judgment` paths are matched as the index
+  keys them (`\\?\`-prefixed on Windows), not canonicalized.
 
 ### A folder change re-lists, never mid-scan (Measured)
 
@@ -494,6 +585,165 @@ dimmed, shows capture order and keeps the stored key.
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
   read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
   `../plans/_archived/20261113-gpui-filter-sort/learnings.md`.
+
+### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
+
+`settingsview.rs`'s `SettingsView` is an `Entity` the window holds and adds as
+its root's last child; `settingsmodal.rs` is its pure model (the open state,
+the selected tab, the shortcut row capturing a key, `modal.ts`'s key rule,
+`tabs.ts`'s vertical `nextTab`). While closed its
+`render` returns `Empty`, one zero-size layout node. While open it is
+`deferred(div().absolute().top_0().left_0().size_full())`: in taffy an
+absolute child is placed against its parent, here the window's root, so it
+covers the window, and `deferred` paints it after everything else. The
+backdrop and the box are both `occlude()`d: the backdrop's `on_mouse_down`
+closes it (the box blocks the backdrop's hitbox, so a press inside the box
+does not), and the strip's `on_mouse_down` and `on_scroll`, the menus'
+buttons and the root's focus-on-press all check their hitbox, which
+`BlockMouse` drops from the hit test (`window.rs`'s `hit_test` stops at the
+first blocking hitbox, for scroll too). The tabs are Sidecar, Culling,
+Keyboard Shortcuts and Import (no Cache, MCP or Debug); the modal keeps the
+tab across opens and focuses it on open, as the Tauri `open` does.
+
+A change is emitted as a `settingsview::Change`; the window applies it in its
+`subscribe_in` callback (the main view stays the owner of the values):
+`AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`Keymap` replaces the keymap (next section),
+`Closed` focuses the window's handle again.
+The status line under the box shows `NOT_SAVED` while the settings store did
+not open.
+
+- Rule: the key routing. GPUI dispatches a `KeyDownEvent` along the path from
+  the root to the focused node, capture phase root first, then bubble from the
+  focused node up (`dispatch_key_down_up_event`). The box has its own focus
+  handle (`track_focus`) and an `on_key_down` that calls
+  `cx.stop_propagation()` on every key, so a key with the focus inside the
+  modal never reaches the root's handler; the root's `key_down` also returns
+  at once while the modal is open, for a focus left on the root. `ctrl+,`
+  (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally after
+  `home` / `end` / `q`, closes an open sort or filter menu, and opens the
+  modal; the keymap refuses to bind it.
+- Rule: Tab and Shift+Tab are not built in. The box's handler calls
+  `window.focus_next` / `focus_prev`, which walk the whole window's rendered
+  tab stops and wrap; the modal's controls are the only tab stops (the root's
+  handle comes from `cx.focus_handle()`, `tab_stop` false), so the cycle stays
+  inside the modal. A control is `.id(..).tab_index(0)`; each tab tracks a
+  handle of the view's with `tab_stop(selected)`, the Tauri roving
+  `tabindex`, so only the selected tab is in the cycle and ArrowUp /
+  ArrowDown / Home / End on it select and focus another (`next_tab`).
+- Rule: Enter and Space on a focused control come for free: a focusable
+  element with `on_click` turns a key down then up of either into a
+  `ClickEvent::Keyboard` (`div.rs`), and its listener runs before the box's
+  bubble-phase handler stops the event.
+- Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
+  features (`aiEnabled` with the model download, pass 3, genres, the ranking,
+  `recommended`); a seeded `aiEnabled` key stays in the store, unread.
+- Not verified headless (mouse clicks and the modal's keys cannot be driven
+  by `--auto`): the clicks, the occlusion, the focus cycle and the keyboard
+  click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at
+  the pinned rev; the hand check is pending in
+  `../plans/20261113-gpui-settings/learnings.md`.
+
+### The keymap is edited in the modal and replaced whole (Inferred)
+
+The Keyboard Shortcuts tab lists `Keymap::bindings()` in order, labeled by
+`settingsmodal::shortcut_label` (`settings.ts`'s `shortcutLabels`), each key a
+chip (`display_key`: `space` as `Space`) with a `×`, then `+` or `Press a
+key...`, then `Reset`; `Reset all` is under the scrolling list. The view
+edits its own copy of the keymap, read from the window on every open, through
+`settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
+refusal shows the backend's message on the status line and leaves the copy
+as it was, a success emits `Change::Keymap`, on which the window replaces
+`settings.keymap` and `bindings` (`Bindings::new`) and writes
+`Keymap::overrides()` under `shortcuts`, deleting the key when there are none
+(`Writes::shortcuts`, the Tauri `update_keymap` rule).
+
+- Rule: the capture sees the raw key in the box's handler. `+` sets
+  `capturing` and focuses the box itself, since the pressed `+` is replaced by
+  the prompt and a focus left on a node no longer drawn would send the key to
+  the window's root, whose handler returns while the modal is open; a `×`
+  focuses the box after its edit for the same reason. The next named key
+  (`key_name`, a lone modifier ignored) is added, Escape cancels, and a tab
+  switch or a close cancels (`SettingsModal::select` / `close`).
+- Rule: `settingsmodal::APP_KEYS` (`home`, `end`, `q`) are refused with
+  `"<key>" is taken by this app`: `key_down` takes them before the keymap, so
+  a binding would never fire. `escape` cannot be captured (it cancels) and
+  `ctrl+,` / `meta+,` the backend refuses as a menu accelerator. The folder
+  tree's keys (arrows, Home / End, Enter, Escape, type-ahead) are not
+  refused: they are taken only while the tree has the keyboard, when the
+  keymap's photo actions are swallowed anyway (`treekeys.rs`).
+- Not verified headless: the clicks, the capture and the names a shifted
+  digit and Ctrl+Alt+digit arrive under ("Every keystroke goes through the
+  keymap"); the hand check is pending in
+  `../plans/20261113-gpui-settings/learnings.md`.
+
+### A sidecar format switch is the Tauri order, shared (Inferred)
+
+The Sidecar tab's three rows (`settingsmodal::FORMATS`) emit
+`Change::SidecarFormat` only for a format other than the one shown
+(`format_change`); the window's `switch_format` sets `settings.format` at
+once, so the next judgment, from a key or the MCP companion's
+`set_judgment` alike, is queued in the new format. Then, on the background
+executor and under the view's `format_switch` lock (one switch at a time), it first checks
+its format against `format_latest`, the one last asked for, written on the main
+thread, and does nothing when a later click superseded it, so back-to-back
+switches end persisted as the radio shows (the Tauri `AppSwitchLock` gets the
+same by re-checking the current format inside the lock). Otherwise it drains the judgment stores
+(`judgment::Queue::drain`: a store queued before the switch carries the old
+format and must reach the writer before its flush) and runs the backend's
+`sidecar::switch_to`: the writer's flush (`sidecar::DRAIN_TIMEOUT`),
+`sidecarFormat` persisted through `Settings::writes`, `Index::reset_sidecars`.
+The Tauri `switch_format` calls the same `switch_to` after its own state
+write, so the two apps share one copy of that order. Back on the main thread
+it clears `touched`, the undo histories and the step note, as the Tauri
+reopen (`openDirectory`) clears `touched` and the judgment entries of its
+histories, and re-lists the open folder with `relist`, whose
+`sidecar::reconcile_of` runs only after the reset. A failure goes to the
+modal's status line (`SettingsView::failed`) and, as in the Tauri app, the
+folder is not re-listed.
+
+- Rule: a listing already under way when the format changes reconciles with
+  the format it captured at its start; the switch's own re-listing comes
+  after the reset and supersedes it (`opens` token), so the view ends on the
+  new format's judgments.
+- Rule: a label names change takes the same path (`switch_names`, both
+  through `reset_sidecars` under the `format_switch` lock). While the format
+  writes XMP the Sidecar tab shows the five name fields
+  (`textinput.rs`), a row of `i18n::presets()` languages and `Reset`; a
+  field's commit (Enter or blur; Escape commits and closes, as the Tauri
+  field's `change` fires when the closing dialog takes its focus) or `Reset`
+  normalizes the five with `sidecar::label_names_setting`, shows them back
+  and emits `Change::LabelNames` only when they differ. The window then
+  writes `labelNames` and puts the names in force on the main thread (a
+  judgment queued before keeps the names it carries; overlapping changes end
+  stored as the fields show, so no `format_latest`-style guard), and off it
+  drains the stores and runs `sidecar::switch_to` with nothing left to
+  persist, then re-lists.
+
+### The Import tab stores a root and a valid pattern, nothing reads them yet (Inferred)
+
+`Settings` reads `importRoot` and `importPattern` with the backend's
+`import::root_setting` / `pattern_setting` (an invalid stored pattern reads as
+`%Y/%F`). The Import tab shows the root read-only with `Choose…`, the
+`importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
+`IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
+`textinput.rs` field and the example line, `import::today_example` (the
+native crate has no `chrono`), recomputed in a `cx.observe` on the field on
+every notify, so with no debounce; a refusal shows in the error color. A
+commit (Enter, blur, Escape then close) or an example button goes through
+`settingsmodal::pattern_change`: a valid new pattern emits
+`Change::ImportPattern`, which the window writes and keeps in `settings`; an
+invalid one leaves the stored one and shows its reason.
+
+- Rule: `Choose…` calls `cx.prompt_for_paths` (directories only) from the
+  view and awaits it in a `cx.spawn`; the answer comes on a later turn and the
+  view entity lives as long as the window, so `Change::ImportRoot` is emitted
+  and written whether or not the modal is still open. It sets only the root,
+  so a pattern still being typed stays in the field. A dialog error (Linux)
+  goes to the status line.
+- Not verified headless: the OS dialog, the typing and the buttons; the hand
+  check is pending in `../plans/20261113-gpui-settings/learnings.md`.
+  `Import…` itself is port Step 8's.
 
 ### The native app keeps its own index (Inferred)
 
@@ -851,7 +1101,10 @@ machine: another session's `cargo` build fails the gate, so redo the slot.
 held in `ctrl+alt+shift+meta+` order (`platform` is `meta`), then the key
 lower-cased, GPUI's `left` / `right` / `up` / `down` as `arrowleft` ...
 `arrowdown`; a lone modifier has no name. `Bindings` maps each bound key to
-its action once at startup. The window's handler takes `home`, `end` and `q`
+its action, built at startup and again on every Keyboard Shortcuts edit
+(`self.bindings` replaced, the lookup still one `HashMap` read). The window's handler, past the tree's gate while
+the tree has the keyboard ("The tree takes the keyboard through one flag in
+the view"), takes `home`, `end` and `q`
 literally first (the native app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
@@ -949,9 +1202,50 @@ overlay comes about 50-60 ms after the image; the held-key measurement showed
 no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
 resize (Sobel 4-6 ms).
 
-### IME handling is unverified (Inferred)
+### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
 
-It exists in `gpui_windows`; nothing has exercised it yet.
+GPUI at the pinned rev has no text input element. `textinput.rs` is a port
+of `crates/gpui/examples/input.rs` (Apache-2.0, the source named in its
+header): a focusable `div` around a custom `Element` that shapes one line,
+paints the caret, the selection and the IME's marked text underlined, and
+registers the entity as the window's input handler
+(`window.handle_input` with an `ElementInputHandler`) on every paint, so the
+platform's text input and IME reach `EntityInputHandler`'s
+`replace_text_in_range` / `replace_and_mark_text_in_range` only while the
+input is focused. The owner reads the text with `text`, sets it with
+`set_text` and hears `Event::Commit` (Enter, or the focus left: `cx.on_blur`)
+and `Event::Cancel` (Escape).
+
+- Rule: the editing keys (backspace, delete, the arrows and Shift+arrows,
+  Home / End, select-all, copy, cut, paste, Enter, Escape) are taken in the
+  input's own `on_key_down` from `keys::key_name`, the clipboard ones on
+  `ctrl+` on Windows and Linux and `meta+` (cmd) on macOS. The example binds
+  them with `actions!` and `cx.bind_keys` as `cmd-a` / `cmd-c` / `cmd-v` /
+  `cmd-x` only, so on Windows Ctrl+A and the rest did nothing there; here
+  nothing enters GPUI's global keymap, so the pager's key path is unchanged.
+- Rule: a stopped key down types nothing on Windows. `gpui_windows`'s message
+  loop calls `translate_accelerator` first, which dispatches `WM_KEYDOWN` to
+  the window; when a listener stopped it (`propagate` false) the loop skips
+  `TranslateMessage`, so no `WM_CHAR` follows. A consumed editing key
+  therefore never also inserts a character, and a key meant to be typed must
+  not be stopped by anything on the dispatch path: the settings box's handler
+  lets a key it does not take go on while a name field is focused
+  (`settingsmodal::stops`), and the window's root handler returns without
+  stopping it while the modal is open. `WM_CHAR` then reaches the focused
+  input's handler. A key the IME takes arrives as `VK_PROCESSKEY`, for which
+  `MapVirtualKeyW` gives no character, so GPUI raises no `KeyDownEvent` and
+  `TranslateMessage` always runs: composition never passes through the
+  listeners, and Enter or Backspace inside a composition stay the IME's.
+- Seen running (the user, 2026-11-14, Windows, the example itself built
+  standalone at the pinned rev): Japanese IME composition, the candidate
+  window placed at the text and the commit all work. Not yet seen in the
+  native app (the settings' label name fields): the pending check in
+  `../plans/20261113-gpui-settings/learnings.md`.
+- Limits kept from the example: one line, no horizontal scroll (long text is
+  clipped), no undo, no word movement, no double-click selection. Its third
+  test (one selection rectangle on a 10 000-character line) needs a shaped
+  line and so GPUI's `test-support`, which this crate does not enable; it is
+  ported onto the rectangle helper (`span`).
 
 ### A launch without a folder shows only the tree (Inferred)
 
@@ -1007,6 +1301,227 @@ strip needed one because `uniform_list` is vertical only.
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
   with it hidden by `toggleLeft`. Not measured in the running app. The toggle
   lasts for the session only and re-cuts a 1:1 crop through `zoom_resized`.
+
+### The tree follows the disk through one `TreeWatch` (Measured)
+
+The view holds one `riffle_backend::treewatch::TreeWatch` whose callback sends
+`Event::TreeChanged(path)` (the tree's spelling) into the scan's channel.
+`tree_changed`, which every change of the tree runs, computes
+`Tree::watched_folders` and, when it differs from the set last handed over,
+hands the whole set to `TreeWatch::set` on `background_spawn`, each hand-over
+awaiting the one before it (the Tauri `set_tree_watches` chain), so two sets
+never apply out of order. `TreeChanged` re-lists the node only while it is
+still expanded and drawn (the event and a collapse can cross); a failed
+re-list is logged and leaves the node as it was, since deleting a folder
+usually fails its own re-list before its parent's removes the row. The
+menu's `Refresh` re-lists the folder expanded or not and forgets the set
+last handed over, so the next change sends it again and a watch that failed
+is retried; on the open folder it also re-lists the folder as a watcher
+change would (through `Resync`). The roots are read again whenever the
+window becomes active (`observe_window_activation`, once the first read has
+answered); `add_roots` skips the roots already shown.
+
+- Measured (a throwaway test against `crates/native/Cargo.lock`'s `notify`
+  8.2.2 on Windows): `set` of one folder took 0.4-0.6 ms, a collapse
+  (`unwatch` then `settle`) 0.1-0.3 ms, five collapse / expand rounds each
+  stopped and resumed the events (none for a change while collapsed, one
+  ~500 ms after a change once expanded again), and renaming the folder's
+  parent after the last collapse succeeded, so the handle was released. The
+  `configure` that queued behind `Unwatch` (`tauri-app.md`) does not stall
+  here. `TreeWatch` is a backend test, which cannot run from the native
+  workspace (a path dependency with dev-dependencies is not testable there),
+  hence the throwaway.
+- Rule: on Windows a watch pins its folder's ancestors against a rename;
+  nothing in the native app renames yet, so `with_released` is not called.
+
+### The right-click menu is a deferred popover at the pointer (Inferred)
+
+`context.rs` holds the menus' items and the open menu (`Menu`: where it was
+opened, in window coordinates, and its target, a tree folder or the strip's
+focused file and targets); `main.rs` maps them to `div`s. A right press
+(`on_mouse_down(MouseButton::Right, ..)`) on a tree row opens the folder
+menu, and one on a strip cell (the strip's wrapping `div`, `strip::hit_test`
+giving the cell) the strip's menu, closing the status row's menus. The
+popover is `div().absolute()` holding `deferred(anchored().position(at))`:
+`anchored`'s default `AnchoredPositionMode::Window` takes the
+`MouseDownEvent`'s window position as is, and its default fit,
+`AnchoredFitMode::SwitchAnchor`, puts the menu on the pointer's other side
+when it overflows an edge and then still snaps it inside, as the Tauri
+`menuPosition`. `snap_to_window` would only shift it, so a menu opened on
+the strip at the window's bottom would cover the pointer. It is
+`occlude()`d with `on_mouse_down_out` closing it on any press outside, of
+any button, so a right press on another row closes the menu in the capture
+phase and opens that row's in the bubble phase; any key closes it (`escape` stops there,
+the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is dimmed with no
+handler.
+
+- Rule: the strip's right-click follows the Tauri strip's `contextmenu`
+  handler: a cell outside the selection becomes the selection alone, one
+  inside keeps it, and the focus moves to the cell either way; the strip's
+  empty area opens nothing. The menu's targets are `selection::targets`,
+  taken when it opens. Its judgment items carry the keymap's action names
+  (`Action::Judge`) and run through `Command::from_action` and `judge` as a
+  key does, so they act on the selection as it is when picked; each item's
+  shortcut is its action's first key, shown as `keys.ts`'s `displayKey`
+  (`space` as `Space`), not `Keymap::accelerator_for`, which spells keys for
+  the Tauri menu bar.
+- Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
+  item in its parent through the desktop folder's `ParseDisplayName` (`open_target_in_explorer`)
+  and only logs a failure. A root (`D:\`) has no parent, so the folder menu
+  opens it with `cx.open_with_system` instead. The tree's paths never carry
+  the verbatim `\\?\` prefix, but the strip's files do (the index's
+  canonical folder). The shell refuses a prefixed path: `SHParseDisplayName`
+  returned `E_INVALIDARG` (`0x80070057`) for `\\?\C:\Windows\notepad.exe` and
+  `S_OK` without the prefix (measured from PowerShell, 2026-11-14), so the
+  strip's reveal passes `context::shown_path` (`trash.ts`'s `shownPath`).
+- Rule: the copy items write the tree's spelling of the path and the row's
+  name, or the strip's targets' listed paths (prefix and all, as the Tauri
+  app writes them) and file names, one per line, through
+  `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
+- Not verified headless: the hand checks are pending in
+  `../plans/20261113-gpui-tree-trash/learnings.md`.
+
+### The tree takes the keyboard through one flag in the view (Inferred)
+
+The window keeps its one `FocusHandle`; `tree_keys` on the view says whether
+the tree has the keyboard, and `key_down` checks it right after the
+right-click menu's close and before every other arm (the literal `home` /
+`end` / `q`, the status row's menus' `escape`, the keymap's actions). A
+second `FocusHandle` on the pane would give the same routing, but the gate
+must also sit before those literal arms in the window's handler, and a press
+outside the pane must still reach its own handler, so a flag and the pane's
+mouse listeners were the smaller change.
+
+- Rule: a left press in the pane (`on_mouse_down(Left)`) gives the tree the
+  keyboard; a press of any button outside it (`on_mouse_down_out`, the
+  capture phase, so the press still reaches its target) hands it back; a
+  right press in the pane does neither. A press on the right-click menu hands
+  it back too (`on_any_mouse_down` on the popover, which is `occlude()`d and
+  may be drawn over the pane), as a Tauri menu button takes the focus.
+  `escape` and hiding the pane (`toggleLeft`) hand it back as well. The
+  type-ahead buffer starts over whenever the keyboard moves.
+- Rule: while the tree has it, `tree_key_down` takes `escape`, the arrows,
+  `home` / `end`, `enter` and any printable key without Ctrl / Alt / Meta
+  (type-ahead); any other key runs its action only when
+  `treekeys::tree_gate` lets it through (`toggleLeft` today) and is
+  otherwise swallowed, so `q`, the judgment keys, paging and undo never reach
+  the photo. The cursor row is outlined in `--sidebar-ring` only while the
+  tree has the keyboard.
+- Rule: opening a folder from the tree, by a click on its name or `enter`,
+  leaves the keyboard with the tree, as in the Tauri app (`folders.ts`'s
+  `openFolder` and `main.ts`'s `openDirectory` never blur the tree); the
+  open's reveal puts the cursor on the opened folder.
+- Inferred from `gpui_windows`' `process_key`: type-ahead takes the
+  keystroke's own `key_char` (`keys::typed_char`), since `key_name`
+  lower-cases a shifted letter and names the space bar `space`. `key_char` is
+  `ToUnicode`'s character with a control character dropped, so `enter`,
+  `tab` and `escape` type nothing. Type-ahead with an IME on is not a goal.
+- Rule: `Expand All` walks one listing at a time on `background_spawn`, depth
+  first through an explicit stack of chains (no async recursion), skips a
+  link (`is_link`), stops a branch whose chain was collapsed or dropped
+  meanwhile and marks and reports a folder that fails, going on with the
+  rest. `Collapse All` is `Tree::collapse_all`. The watch set follows through
+  `tree_changed`.
+
+### The trash dialog is a layer of the window, its focus in the model (Inferred)
+
+The strip menu's `Move to Trash…` and `Delete Permanently…` open one dialog,
+drawn by `main.rs`'s `trash_dialog` as the settings modal is (a `deferred`,
+`occlude()`d `absolute` layer over the window's root) but without an entity
+or a focus handle of its own: `trash::TrashFlow` holds the phase (idle,
+asking, running) and which of its two buttons has the focus, and the
+window's `key_down` hands every key to it first, before the right-click
+menu's close and the tree's gate, while it is busy. The buttons take mouse
+clicks only (no `tab_index`), so `tab` and Enter are the model's.
+
+- Rule: the delete dialog opens on Cancel and takes only a single mouse click
+  on its run button as a yes. `ClickEvent::click_count` is 1 for a keyboard
+  click at the pinned rev (`interactive.rs`), so the handler passes 0 when
+  `is_keyboard()`, the DOM's `detail`; `KeyDownEvent.is_held` (set from the
+  repeat bit on Windows, `gpui_windows`' `events.rs`) is passed along with
+  the keystroke for `swallowed_by_delete`.
+- Rule: while a run is in flight (not held) the dialog stays open with both
+  buttons disabled, so the window takes no click and no key until it comes
+  back, as the Tauri dialog's running phase.
+
+### A trash or delete goes through the gate, and nothing lists under it (Inferred)
+
+The native app has no `Scans` lock; one view thread decides when a listing
+starts, so the guard is `idle::IdleGate` plus `resync.rs`. A confirmed run
+asks the gate with "busy" being `Resync::busy` (a listing or its scan under
+way) or a run in flight: idle, it runs at once on `background_spawn`
+(`judgment::Queue::drain`, then `Writer::flush`, both `DRAIN_TIMEOUT`, then
+`trash::trash_listed` with the view's `Arc<trash::Runs>` or
+`trash::delete_listed`, progress through the view's event channel as
+`Event::TrashProgress`); busy, it is held, the dialog closes and the scan is
+canceled without a join (`Running::cancel`), so it still ends through `Done`
+and `FacesDone`, whose `finished` drains the gate first. A run held while the
+listing itself ran has no scan yet; `opened` cancels the scan it starts when
+`cancels_scan(gate.waiting())`.
+
+- Rule: while a run is in flight the gate's in-flight count is up and
+  `Resync::hold` keeps the resync busy, so a watcher change or a tree
+  `Refresh` is deferred; `relist` returns at once (a sidecar format switch);
+  an `open` (the tree's) is kept in `deferred_open` and runs at the run's
+  end. The run's end calls `Resync::open` (dropping the pending change) and
+  re-lists once, which also rescans what a canceled scan left. `TreeChanged`
+  lists a tree folder only, never the open one.
+- Rule: every caller of `relist` (a sidecar format switch included) calls
+  `Resync::open` first, so `Resync::busy` covers the listing it starts and a
+  trash or delete waits for it.
+- Rule: a folder open discards a held run; a held run that drains while a
+  dialog is asking is dropped, as the Tauri closure checks `trashFlow.busy`.
+- Rule: the run's result goes to the pane: `trashed_status` in the
+  `step_note` line (the Tauri `note`), each failure through `write_failed`
+  (`<name>: could not move to the Trash: <message>`), and after a delete the
+  deleted files' judgments leave both histories (`Undo::without_paths`). A
+  move whose `Summary::run_id` is set pushes its run on the undo history
+  (see the next entry).
+- Not verified headless: the dialog, its keys and clicks, the Recycle Bin
+  and the cancel of a running pass 1; the hand checks are pending in
+  `../plans/20261113-gpui-tree-trash/learnings.md`.
+
+### A trash run is undone through the same gate, and outlives a folder switch (Inferred)
+
+`history.rs`'s entry is `Entry::Judgments(Batch)` or `Entry::Trash(TrashEntry
+{ id, run_id, count, dirs })`, the Tauri `undo.ts` `Entry`. A move that
+recorded a run pushes it and clears the redo history (`record_trash`); a
+redo's new run is pushed without clearing it (`redone_trash`), as a redone
+batch is. `step` and `Undo::forget` see only batches: the view's `step`
+looks at the top first (`top_trash`) and hands a run to `step_trash`, as the
+Tauri `step` does, so `history::step` returns `None` with a run on top and
+leaves it there.
+
+- Rule: an undo or a redo of a run goes through `idle::IdleGate` as the run
+  does, held under `Undo Move to Trash` / `Redo Move to Trash` while a
+  listing or scan is under way and drained at `finished`, but it never
+  cancels the scan (`cancels_scan` is false for those labels). The gate's
+  slot is the `Held` enum (`Run`, `Undo`, `Redo`) in `main.rs`.
+- Rule: the entry stays on its history until the backend answers
+  (`trash_step` names the one out, and every undo or redo key does nothing
+  meanwhile); a drained step runs only while its entry is still on top
+  (`Undo::on_top`), and entries are removed by id (`remove_trash`), not
+  popped, since judgments may have been pushed above it meanwhile. A
+  refusal other than `RUN_GONE` / `UNDONE_GONE` (`trash::still_held`)
+  leaves it where it was.
+- Rule: the restore (`trash::undo_run`, which lists the Recycle Bin on
+  Windows) runs on `background_spawn` with no progress; the redo
+  (`trash::redo_run`) drains the judgment queue and flushes the writer first,
+  as a run does, and reports through `Event::TrashProgress` and `trashed`.
+  Both hold `Resync` and the gate's in-flight count, so nothing lists under
+  them, and a tree open meanwhile waits in `deferred_open`.
+- Rule: when the open folder is one of the run's `dirs` (`opens_target`),
+  the restored files directly in it (`restored_into`, compared through
+  `context::shown_path` as the backend spells them canonically) join `all` at
+  once and `refilter` runs, so a second undo already reaches their
+  judgments, and the folder is re-listed with the current file and the
+  selection kept. Otherwise only a change seen meanwhile re-lists.
+- Rule: another folder's open, and a sidecar format switch, drop only the
+  judgment batches (`Undo::drop_judgments`); the runs stay, so a run made in
+  one folder is undone from another, its files going back to theirs. A
+  delete records no run and is not undoable.
+- Not verified headless: the restore from the Recycle Bin and the redo; the
+  hand checks are pending in `../plans/20261113-gpui-tree-trash/learnings.md`.
 
 ## Timings
 

@@ -59,6 +59,8 @@ pub struct Strip {
     failed: HashSet<usize>,
     /// The judged cells' stars, flag and label.
     judgments: HashMap<usize, State>,
+    /// The selected cells, as `strip.ts`'s `selected`; painted unless current.
+    selected: HashSet<usize>,
 }
 
 /// The color a label tints the cell's name band with: one of the seven
@@ -288,6 +290,18 @@ impl Strip {
         };
     }
 
+    /// Mark the cells of the selected `paths`; a path not listed is ignored.
+    pub fn set_selected<'a>(&mut self, paths: impl IntoIterator<Item = &'a String>) {
+        self.selected = paths
+            .into_iter()
+            .filter_map(|path| self.index_of.get(path).copied())
+            .collect();
+    }
+
+    pub fn is_selected(&self, index: usize) -> bool {
+        self.selected.contains(&index)
+    }
+
     pub fn marks(&self, index: usize) -> Marks {
         self.judgments
             .get(&index)
@@ -360,6 +374,17 @@ mod tests {
                 .map(|i| format!("D:/a/{i}.ARW"))
                 .collect::<Vec<_>>(),
         )
+    }
+
+    #[test]
+    fn marks_the_selected_paths_it_lists() {
+        let mut s = strip(5);
+        let paths = ["D:/a/1.ARW", "D:/a/3.ARW", "D:/b/9.ARW"].map(String::from);
+        s.set_selected(&paths);
+        let selected: Vec<_> = (0..5).filter(|&i| s.is_selected(i)).collect();
+        assert_eq!(selected, [1, 3]);
+        s.set_selected(&[]);
+        assert!(!s.is_selected(1));
     }
 
     #[test]

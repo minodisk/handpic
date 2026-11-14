@@ -107,7 +107,7 @@ counting as scanning; the passes run on worker threads below normal OS
 priority (the second and third lower still) and take the on-screen files first
 through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
-`sidecarFormat` key of the settings store, next to the configurable
+`sidecarFormat` key of the settings store, a switch's drain, persist and index reset (`switch_to`), next to the configurable
 `xmp:Label` names per color persisted in the `labelNames` key
 (`label_names_setting`), and the folder-open sidecar pass (`reconcile_of`),
 `src/listing.rs`
@@ -160,7 +160,14 @@ head; `preview`) and the split (`split_folder`, over the same `Context`),
 `src/foldersidecars.rs` the counting, the rewrite and the delete of a
 folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
 `delete_run`, which records the run and clears the judgments), none of the
-three checking for a scan, which is the caller's, `src/text.rs` the
+three checking for a scan, which is the caller's, `src/import.rs` the
+import's settings rules (`format_date`, `validate_pattern`, `root_setting`,
+`pattern_setting`, `example`, `today_example`) and its plan and run (`walk`, `plan`,
+`plan_dir`, `summarize`, `refusal`, `prepare`, which creates the destination
+folders, `run_plan`, with a cancel flag and a progress callback, and
+`log_line`), `src/sequence.rs` the `Sequence JPEG Timestamps…` preview and
+run over `riffle_core::sequence` (`preview`, `run`, with a cancel flag and a
+`(done, total)` callback), neither touching the index, `src/text.rs` the
 `SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app`
@@ -210,13 +217,14 @@ per date, with the undated files and any colliding target; `date_folder_run`
 re-plans and either renames through `rename_folder`'s path or moves each dated
 file with its sidecars and index rows into its date folder, leaving the
 undated ones and removing the original folder only when it ends up empty),
-`src/import.rs` the folder menu's `Import…`: the destination root and the
+`src/import.rs` the folder menu's `Import…`, over the backend's `import`:
+the destination root and the
 date-only folder pattern (chrono strftime, `%Y/%F` by default) of the
 settings' `Import` tab, persisted in the `importRoot` and `importPattern`
 keys, `import_preview`, which plans every RAW and JPEG under the folder, each
 RAW with its sidecars, into date folders (copy, skip on the same name and
-size, collision on another size, undated), and `import_run` /
-`import_cancel`, which create the folders, copy the plan through
+size, collision on another size, undated) and keeps the plan for the run, and
+`import_run` / `import_cancel`, which create the folders, copy the plan through
 `riffle_core::copy`, stream `import-progress` / `import-done` and log one
 `import:` line per run,
 `src/watch.rs`
@@ -230,7 +238,7 @@ folder's index rows dirty and push them through the sidecar writer, patching
 only the judgment fields of the current format's sidecars, and
 `delete_sidecars_preview` / `delete_sidecars_run` move those sidecars to the
 OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
-`Sequence JPEG Timestamps…` commands (`sequence_preview`,
+`Sequence JPEG Timestamps…` commands over the backend's `sequence` (`sequence_preview`,
 `sequence_run`, `sequence_cancel`) and their `sequence-progress` /
 `sequence-done` events, `src/output.rs` the `outputs_of` command behind the
 strip's `Output` filter, over the backend's `output`, and
@@ -258,7 +266,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter and `mcpEnabled`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled` and the import root and pattern, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
@@ -276,6 +284,11 @@ file a refilter or a re-listing lands on; the listed files' `Facts` and
 without the `Face focus` help; `apply`, what a click on an item does, the
 window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons,
+`src/settingsmodal.rs` the settings modal's model (open state, tab, the key
+rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
+its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
+holding the Sidecar tab's format and label names, the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
+`src/textinput.rs` a single-line text input entity ported from GPUI's `input.rs` example (IME through `EntityInputHandler`, its editing keys in its own `on_key_down`, `Commit` on Enter or blur, `Cancel` on Escape),
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
@@ -283,9 +296,14 @@ window writing the changed sort or filter; `Menus`, which one is open), which th
 `label_known`, `advances_after`, `should_advance`, a port of the Tauri `judge` and `advance.ts`)
 and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
 window spawns at startup and drains in `App::on_app_quit`, `src/history.rs`
-the undo and redo of the judgments (`History`, a port of `undo.ts`'s bounded
-stack, `step`, the Tauri `step` rule, and `Undo`, the open folder's two
-histories, cleared when another folder opens), `src/scan.rs` lists a folder with its sidecars and reads which of its files have an export (`outputs`, for the filter's `Output` section), reconciles the
+the undo and redo of the judgments and the moves to the Trash (`History`, a
+port of `undo.ts`'s bounded stack, its `Entry` a judgment `Batch` or a
+`TrashEntry`, `step`, the Tauri `step` rule, `undone_trash`, and `Undo`, the
+two histories, whose judgment batches go when another folder opens and whose
+trash runs stay), `src/selection.rs` the strip's
+multi-selection (`Selection`, a port of `selection.ts`: `click`, `extend`,
+`all`, `prune`, `settle`, `restore`, `targets` and `judgments`, a command's
+changes over the targets, its value decided from the current file), `src/scan.rs` lists a folder with its sidecars and reads which of its files have an export (`outputs`, for the filter's `Output` section), reconciles the
 index with the whole listing, reads back the changed sidecars
 (`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
 to the writer with no debounce) and
@@ -310,8 +328,9 @@ companion's server (the backend's `Mcp` on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
-over a snapshot of the view: the current file as the selection, no burst, and
-compare, several photos and `set_judgment` refused), and `src/viewed.rs` the
+over a snapshot of the view: the current file as the selection, no burst,
+compare and several photos refused, and `set_judgment`'s changes, one undo
+entry through the judgment keys' view, row and writer path), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
@@ -358,8 +377,37 @@ left pane's folder tree (a port of the state half of `tree.ts`: the roots,
 each folder's listed children, expansion, RAW count and failed listing, the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
-draws as a `uniform_list`, fills from the backend's `folders` and expands
-down to the open folder on every open, and `src/peaking.rs`
+draws as a `uniform_list`, fills from the backend's `folders`, expands
+down to the open folder on every open, keeps following the disk through the
+backend's `treewatch` on its expanded, drawn folders (`watched_folders`) and
+re-reads the roots when the window becomes active, and its keyboard (the
+cursor's `step`, `tree_key`'s Left / Right / Enter, the type-ahead's
+`append_typed` / `type_ahead`, and `collapse_all`), which the tree takes on a
+click in its pane and hands back on `escape` or a press elsewhere,
+`src/treekeys.rs` the keymap actions that still run while the tree has the
+keyboard (`TREE_PASSTHROUGH`, `tree_gate`, a port of `treekeys.ts`),
+`src/context.rs` the
+right-click menus (a port of `context.ts`: the items with their action, label,
+shortcut, checked and disabled state, `folder_groups`, the tree's reveal,
+`Copy Path`, `Copy Folder Name`, `Refresh` and, off a root, `Expand All` /
+`Collapse All`, `strip_groups`, the strip's `Select All`, reveal, `Copy Path`
+/ `Copy File Name`, the judgment groups checked from the focused file (left
+out in a view-only folder) and `Move to Trash…` / `Delete Permanently…`,
+`shown_path`, a path without the Windows verbatim prefix the shell refuses,
+and `Menu`, the open menu's
+position and target), which the window draws as a `deferred` / `anchored`
+popover at the pointer, `src/trash.rs` the strip's `Move to Trash…` /
+`Delete Permanently…` (a port of `trash.ts`: `dialog_text`, the delete
+dialog's `swallowed_by_delete` and `confirms_delete`, `progress_status`,
+`trashed_status` and `TrashFlow`, idle / asking / running with the focused
+button; for the undo, `restored_status`, `restored_into`, `still_held` and
+`opens_target`), which the window draws as a `deferred`, `occlude()`d
+full-window dialog and runs through the backend's `trash::trash_listed` /
+`trash::delete_listed` on a background task, undoing a run with
+`trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding
+a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one
+held operation, a later request replacing it, and the in-flight count no
+listing starts under; `cancels_scan`, a port of `idle.ts`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

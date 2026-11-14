@@ -13,7 +13,7 @@ use std::{
 };
 
 use riffle_backend::{
-    mcp,
+    import, mcp,
     shortcuts::Keymap,
     sidecar::{self, SidecarFormat},
     store::Store,
@@ -40,6 +40,10 @@ pub struct Settings {
     /// The MCP companion's server is on (`mcpEnabled`, by the backend's
     /// rule).
     pub mcp_enabled: bool,
+    /// The Import tab's destination root, empty while not set, and folder
+    /// pattern, an invalid stored one read as the default.
+    pub import_root: String,
+    pub import_pattern: String,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -50,10 +54,6 @@ pub const DRAIN_TIMEOUT: Duration = Duration::from_secs(2);
 
 enum Write {
     Set(String, Value),
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
-    )]
     Delete(String),
     Barrier(mpsc::Sender<()>),
 }
@@ -109,12 +109,19 @@ impl Writes {
         self.send(Write::Set(key.to_owned(), value));
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "Step 5's shortcut editor deletes `shortcuts`")
-    )]
     pub fn delete(&self, key: &str) {
         self.send(Write::Delete(key.to_owned()));
+    }
+
+    /// `keymap`'s overrides under `shortcuts`, the key deleted when there are
+    /// none, as the Tauri `update_keymap` saves them.
+    pub fn shortcuts(&self, keymap: &Keymap) {
+        let overrides = keymap.overrides();
+        if overrides.as_object().is_some_and(|o| o.is_empty()) {
+            self.delete("shortcuts");
+        } else {
+            self.set("shortcuts", overrides);
+        }
     }
 
     fn send(&self, write: Write) {
@@ -236,6 +243,8 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
         mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
+        import_root: import::root_setting(values.get("importRoot")),
+        import_pattern: import::pattern_setting(values.get("importPattern")),
         writes: Writes::spawn(None),
     }
 }
@@ -343,6 +352,29 @@ mod tests {
         {
             assert_eq!(seeded(dir.path(), &i.to_string(), stored).mcp_enabled, on);
         }
+    }
+
+    #[test]
+    fn the_import_settings_are_read_with_the_backend_rules() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(
+            dir.path(),
+            "valid",
+            r#"{"importRoot":"D:\\Photos","importPattern":"%Y/%m"}"#,
+        );
+        assert_eq!(
+            (s.import_root.as_str(), s.import_pattern.as_str()),
+            ("D:\\Photos", "%Y/%m")
+        );
+        let s = seeded(
+            dir.path(),
+            "invalid",
+            r#"{"importRoot":3,"importPattern":"%H"}"#,
+        );
+        assert_eq!(
+            (s.import_root.as_str(), s.import_pattern.as_str()),
+            ("", "%Y/%F")
+        );
     }
 
     #[test]
@@ -519,6 +551,27 @@ mod tests {
         assert_eq!(stored.get("labelNames"), Some(&json!({"red": "Rot"})));
         assert_eq!(stored.get("filter"), Some(&json!({})));
         assert!(!stored.contains_key("autoAdvance"));
+    }
+
+    #[test]
+    fn the_shortcuts_are_stored_as_overrides_and_deleted_without_any() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(dir.path(), "s", r#"{"shortcuts":{"pick":["k"]}}"#);
+        let path = dir.path().join("s.sqlite");
+        let mut keymap = Keymap::defaults();
+        keymap.add("reject", "j").unwrap();
+        s.writes.shortcuts(&keymap);
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        assert_eq!(
+            values(&path).get("shortcuts"),
+            Some(&json!({"reject": ["x", "j"]}))
+        );
+        keymap.reset_all();
+        s.writes.shortcuts(&keymap);
+        assert!(s.writes.drain(Duration::from_secs(5)));
+        assert!(!values(&path).contains_key("shortcuts"));
+        let reloaded = load_from(Some(path), None, None);
+        assert_eq!(reloaded.keymap, Keymap::defaults());
     }
 
     #[test]

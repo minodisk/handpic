@@ -1,5 +1,6 @@
 mod args;
 mod companion;
+mod context;
 mod datadir;
 mod exif;
 mod eyes;
@@ -9,6 +10,7 @@ mod filter;
 mod focus;
 mod history;
 mod hold;
+mod idle;
 mod judgment;
 mod keys;
 mod logger;
@@ -22,12 +24,18 @@ mod pager;
 mod peaking;
 mod resync;
 mod scan;
+mod selection;
 mod settings;
+mod settingsmodal;
+mod settingsview;
 mod sort;
 mod strip;
+mod textinput;
 mod thumbs;
 mod timing;
+mod trash;
 mod tree;
+mod treekeys;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -55,14 +63,15 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, ContentMask, Context, Corners, FocusHandle,
-    FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels, Point, RenderImage,
-    ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
-    UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div,
-    fill, outline, point, prelude::*, px, rgb, rgba, size, uniform_list,
+    Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
+    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels,
+    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign,
+    TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored,
+    canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba, size,
+    uniform_list,
 };
 use gpui_platform::application;
-use history::{Judged, Undo};
+use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
 use image::{Frame, RgbaImage};
 use judgment::{Command, State};
@@ -77,7 +86,8 @@ use riffle_backend::{
     folders::{self, Folder},
     index::{self, Index},
     listing::canonicalize,
-    sidecar::{self, Writer},
+    sidecar::{self, SidecarFormat, Writer},
+    treewatch::TreeWatch,
     watch::{self, Watch},
 };
 use riffle_core::{
@@ -85,14 +95,18 @@ use riffle_core::{
     arw::FocusLocation,
     reader,
     scan::{Paused, ReadSlots, ScanFocus},
+    xmp::LabelNames,
 };
 use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
+use selection::Selection;
 use settings::Settings;
+use settingsview::{Change, SettingsView};
 use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint};
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Summary};
-use tree::{Child, IGNORE_CASE, Relation, Tree};
+use tree::{Child, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
+use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
 
@@ -187,9 +201,26 @@ fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Ve
         .collect()
 }
 
+/// What the log calls a held operation dropped by an open.
+fn held_label(held: &Held) -> String {
+    match held {
+        Held::Run(target) => format!("held run in {}", target.dir),
+        Held::Undo(entry) => format!("held undo of run {}", entry.run_id),
+        Held::Redo(entry) => format!("held redo of run {}", entry.run_id),
+    }
+}
+
 /// The listed files' judgments and facts by path, and the folder's EXIF
 /// groups.
 type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
+
+/// What the gate holds for the listing or scan under way: a confirmed run,
+/// or the undo or redo of one.
+enum Held {
+    Run(trash::Target),
+    Undo(TrashEntry),
+    Redo(TrashEntry),
+}
 
 struct Opened {
     listed: Listed,
@@ -307,12 +338,47 @@ struct Riffle {
     tree_open: Option<String>,
     tree_open_row: Option<usize>,
     tree_scroll: UniformListScrollHandle,
+    /// The tree has the keyboard: a click in its pane gave it, `escape` or a
+    /// press elsewhere hands it back to the photo.
+    tree_keys: bool,
+    /// The tree's keyboard cursor, drawn while it has the keyboard, its row
+    /// while drawn, and the type-ahead typed so far.
+    tree_cursor: Option<String>,
+    tree_cursor_row: Option<usize>,
+    typed: Typed,
     /// The roots have been read; an open before that waits in
     /// `reveal_wanted`.
     roots_loaded: bool,
     reveal_wanted: Option<String>,
     /// The last folder listing of the tree that failed, until another open.
     tree_note: Option<String>,
+    /// The watcher on the tree's expanded, drawn folders, the set last handed
+    /// to it (`None` to hand the next one over whatever it is), and the
+    /// latest hand-over, which awaits the one before it.
+    tree_watch: Arc<TreeWatch>,
+    tree_watched: Option<Vec<String>>,
+    tree_syncing: Option<Task<()>>,
+    /// The right-click menu, while one is open.
+    context: context::Menu,
+    /// The strip's `Move to Trash…` / `Delete Permanently…` dialog.
+    trash: trash::TrashFlow,
+    /// A confirmed run, or a run's undo or redo, held for the listing or
+    /// scan under way; in flight while one runs, which no listing or scan
+    /// starts under.
+    gate: idle::IdleGate<Held>,
+    /// The recorded runs to the Trash, for undo.
+    runs: Arc<riffle_backend::trash::Runs>,
+    /// The undo entry whose restore or redo is out, so a second undo or
+    /// redo does nothing until it comes back.
+    trash_step: Option<u64>,
+    /// The judgments and `seen` membership of the files a Move to Trash
+    /// took, kept for an undo landing before the re-listing reads them back.
+    trashed_state: HashMap<String, (Option<State>, bool)>,
+    /// How far the run in flight got, in the pane's notes.
+    trashing: Option<String>,
+    /// A folder the tree opened while a run was in flight, opened whole at
+    /// its end (only the launch's open has `--size` / `--max`).
+    deferred_open: Option<PathBuf>,
     /// The left pane is shown (`toggleLeft`).
     left_pane: bool,
     /// `--size` and `--max`, which a re-listing applies again.
@@ -342,6 +408,8 @@ struct Riffle {
     view_only: bool,
     settings: Settings,
     bindings: Bindings,
+    /// The settings modal, laid out only while open.
+    settings_view: Entity<SettingsView>,
     /// The open folder's judgments by listed path.
     judgments: HashMap<String, State>,
     /// The paths the index last returned an entry for, whose label is known.
@@ -353,9 +421,17 @@ struct Riffle {
     writer: Option<Arc<Writer>>,
     /// The judgment stores, run in the order of the keys.
     stores: judgment::Queue,
+    /// Held by a sidecar format switch off the main thread, one at a time.
+    format_switch: Arc<Mutex<()>>,
+    /// The format last asked for, written on the main thread; a switch task that
+    /// finds it differs from its own is superseded and does nothing.
+    format_latest: Arc<Mutex<SidecarFormat>>,
     /// The open folder's undo and redo histories.
     undo: Undo,
-    /// `Undid <name>` / `Redid <name>` until the view moves on.
+    /// The strip's multi-selection; the current file is always a member.
+    selection: Selection,
+    /// `Undid <name>` / `Redid <name>`, or a run's `trash::trashed_status`,
+    /// until the view moves on.
     step_note: Option<String>,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
@@ -464,19 +540,56 @@ impl Riffle {
             })
             .detach();
         }
-        cx.spawn(async move |this, cx| {
-            let roots = cx
-                .background_spawn(async { folders::roots(dirs::home_dir()) })
-                .await;
-            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        Self::read_roots(cx);
+        // A volume mounted since shows up when the window becomes active.
+        cx.observe_window_activation(window, |this, window, cx| {
+            if window.is_window_active() && this.roots_loaded {
+                Self::read_roots(cx);
+            }
         })
         .detach();
+        let tree_watch = {
+            let events = events.clone();
+            TreeWatch::spawn(move |dir| {
+                let _ = events.unbounded_send(Event::TreeChanged(dir));
+            })
+        };
         let writes = settings.writes.clone();
         App::on_app_quit(cx, move |_| {
             let drained = writes.drain(settings::DRAIN_TIMEOUT);
             log::info!("quit: settings writes drained={drained}");
             async {}
         })
+        .detach();
+        let settings_view = cx.new(|cx| SettingsView::new(window, cx));
+        cx.subscribe_in(
+            &settings_view,
+            window,
+            |this, _, change, window, cx| match *change {
+                Change::AutoAdvance(on) => {
+                    this.settings.auto_advance = on;
+                    this.settings.writes.set("autoAdvance", on.into());
+                }
+                Change::SidecarFormat(format) => this.switch_format(format, cx),
+                Change::LabelNames(ref names) => this.switch_names(names.clone(), cx),
+                Change::Keymap(ref keymap) => {
+                    this.bindings = Bindings::new(keymap);
+                    this.settings.writes.shortcuts(keymap);
+                    this.settings.keymap = keymap.clone();
+                }
+                Change::ImportRoot(ref root) => {
+                    this.settings.writes.set("importRoot", root.as_str().into());
+                    this.settings.import_root = root.clone();
+                }
+                Change::ImportPattern(ref pattern) => {
+                    this.settings
+                        .writes
+                        .set("importPattern", pattern.as_str().into());
+                    this.settings.import_pattern = pattern.clone();
+                }
+                Change::Closed => window.focus(&this.focus, cx),
+            },
+        )
         .detach();
         Self {
             mcp: mcp::start(
@@ -524,9 +637,24 @@ impl Riffle {
             tree_open: None,
             tree_open_row: None,
             tree_scroll: UniformListScrollHandle::new(),
+            tree_keys: false,
+            tree_cursor: None,
+            tree_cursor_row: None,
+            typed: Typed::default(),
             roots_loaded: false,
             reveal_wanted: None,
             tree_note: None,
+            tree_watch: Arc::new(tree_watch),
+            tree_watched: None,
+            tree_syncing: None,
+            context: context::Menu::default(),
+            trash: trash::TrashFlow::default(),
+            gate: idle::IdleGate::default(),
+            runs: Arc::default(),
+            trash_step: None,
+            trashed_state: HashMap::new(),
+            trashing: None,
+            deferred_open: None,
             left_pane: true,
             wanted: None,
             max: None,
@@ -545,13 +673,17 @@ impl Riffle {
             shown: None,
             view_only: false,
             bindings: Bindings::new(&settings.keymap),
+            format_latest: Arc::new(Mutex::new(settings.format)),
             settings,
+            settings_view,
             judgments: HashMap::new(),
             seen: HashSet::new(),
             touched: HashSet::new(),
             writer,
             stores,
+            format_switch: Arc::default(),
             undo: Undo::new(),
+            selection: Selection::default(),
             step_note: None,
             notes: Vec::new(),
             write_errors: Vec::new(),
@@ -606,6 +738,14 @@ impl Riffle {
         max: Option<usize>,
         cx: &mut Context<Self>,
     ) -> Task<()> {
+        // No listing starts under a run; its end opens the folder.
+        if self.gate.in_flight() {
+            self.deferred_open = Some(folder);
+            return Task::ready(());
+        }
+        if let Some(held) = self.gate.discard() {
+            log::info!("trash: {} dropped by an open", held_label(&held));
+        }
         self.opens.fetch_add(1, Ordering::SeqCst);
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
@@ -626,6 +766,19 @@ impl Riffle {
         self.open(PathBuf::from(path), None, None, cx).detach();
     }
 
+    /// Read the roots on a background task; `add_roots` skips the ones
+    /// already shown, so this also runs again on the window's activation,
+    /// where a failure is not reported.
+    fn read_roots(cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let roots = cx
+                .background_spawn(async { folders::roots(dirs::home_dir()) })
+                .await;
+            this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        })
+        .detach();
+    }
+
     fn roots_read(&mut self, roots: Vec<folders::FolderNode>, cx: &mut Context<Self>) {
         self.tree.add_roots(roots.into_iter().map(Child::from));
         self.roots_loaded = true;
@@ -635,7 +788,8 @@ impl Riffle {
         }
     }
 
-    /// Rebuild the tree's rows and find the open folder's among them.
+    /// Rebuild the tree's rows, find the open folder's among them and hand a
+    /// changed watched set to the tree's watcher.
     fn tree_changed(&mut self, cx: &mut Context<Self>) {
         self.tree_rows = self.tree.rows();
         self.tree_open_row = self.tree_open.as_ref().and_then(|open| {
@@ -643,7 +797,722 @@ impl Riffle {
                 tree::relation(&row.path, open, IGNORE_CASE) == Some(Relation::Same)
             })
         });
+        self.tree_cursor_row = self
+            .tree_cursor
+            .as_ref()
+            .and_then(|cursor| self.tree_rows.iter().position(|row| &row.path == cursor));
+        self.sync_tree_watches(cx);
         cx.notify();
+    }
+
+    /// Hand the watched set to the tree's watcher off the main thread, after
+    /// the previous hand-over, so they apply in order; an unchanged set is
+    /// not sent. A collapse releases watches, which waits on the watcher.
+    fn sync_tree_watches(&mut self, cx: &mut Context<Self>) {
+        let dirs = self.tree.watched_folders();
+        if self.tree_watched.as_ref() == Some(&dirs) {
+            return;
+        }
+        self.tree_watched = Some(dirs.clone());
+        let previous = self.tree_syncing.take();
+        let watch = self.tree_watch.clone();
+        self.tree_syncing = Some(cx.background_spawn(async move {
+            if let Some(previous) = previous {
+                previous.await;
+            }
+            watch.set(&dirs);
+        }));
+    }
+
+    /// The tree's watcher saw `dir` change: re-list it while it is still
+    /// expanded and drawn. A failed re-list is a background refresh's and
+    /// leaves the folder as it was: deleting a folder often fails its own
+    /// re-list first, and its parent's re-list removes the row.
+    fn tree_folder_changed(&mut self, dir: String, cx: &mut Context<Self>) {
+        if !self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == dir && row.expanded)
+        {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            match listed {
+                Ok(folder) => {
+                    this.update(cx, |this, cx| {
+                        this.tree_listed(&dir, Ok(folder), false);
+                        this.tree_changed(cx);
+                    })
+                    .ok();
+                }
+                Err(e) => log::warn!("failed to re-list the subfolders of {dir}: {e}"),
+            }
+        })
+        .detach();
+    }
+
+    /// The tree menu's `Refresh`: re-list the folder, expanded or not, and
+    /// hand the watched set over again, so a watch that failed is retried.
+    /// The open folder itself is re-listed as a watcher change would.
+    fn tree_refresh(&mut self, dir: String, cx: &mut Context<Self>) {
+        let open = self
+            .tree_open
+            .as_ref()
+            .is_some_and(|open| tree::relation(open, &dir, IGNORE_CASE) == Some(Relation::Same));
+        if open && self.dir.is_some() && self.resync.changed() {
+            self.relist(cx);
+        }
+        cx.spawn(async move |this, cx| {
+            let listing = dir.clone();
+            let listed = cx
+                .background_spawn(async move { folders::list(Path::new(&listing)) })
+                .await;
+            this.update(cx, |this, cx| {
+                this.tree_listed(&dir, listed, true);
+                this.tree_watched = None;
+                this.tree_changed(cx);
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A right-click on a tree row: its menu at the pointer, the status row's
+    /// menus closed.
+    fn tree_context(
+        &mut self,
+        at: Point<Pixels>,
+        path: String,
+        name: String,
+        cx: &mut Context<Self>,
+    ) {
+        self.menus.close();
+        let root = self
+            .tree_rows
+            .iter()
+            .any(|row| row.path == path && row.depth == 0);
+        self.context.open_folder(
+            (f32::from(at.x), f32::from(at.y)),
+            path,
+            name,
+            folders::REVEAL_LABEL,
+            root,
+        );
+        cx.notify();
+    }
+
+    /// A right-click on the strip at `at`, `x` from its left edge, as the
+    /// Tauri strip's `contextmenu` handler: a cell outside the selection
+    /// becomes the selection alone, one inside keeps it, the focus moves to
+    /// the cell, and the menu opens on the selection's targets. The strip's
+    /// empty area opens nothing.
+    fn strip_context(&mut self, at: Point<Pixels>, x: f32, cx: &mut Context<Self>) {
+        let Some(index) = self.strip.hit_test(x) else {
+            return;
+        };
+        let files = path_strings(&self.files);
+        if !self.selection.selected.contains(&files[index]) {
+            self.set_selection(selection::single(Some(&files[index])));
+        }
+        self.focus_on(Move::To(index), cx);
+        self.menus.close();
+        let focused = files[self.pager.current()].clone();
+        let paths = selection::targets(&self.selection, &files, self.pager.current());
+        let state = self.judgments.get(&focused).cloned().unwrap_or_default();
+        let groups = context::strip_groups(
+            &self.settings.keymap.bindings(),
+            &state,
+            folders::REVEAL_LABEL,
+            self.view_only,
+            paths.len(),
+            self.trashing.is_some(),
+        );
+        self.context
+            .open_files((f32::from(at.x), f32::from(at.y)), focused, paths, groups);
+        cx.notify();
+    }
+
+    /// A click on an item of the right-click menu.
+    fn context_action(&mut self, action: context::Action, cx: &mut Context<Self>) {
+        match self.context.close() {
+            Some(context::Target::Folder { path, name }) => {
+                self.folder_action(action, path, name, cx);
+            }
+            Some(context::Target::Files { focused, paths }) => {
+                self.files_action(action, &focused, &paths, cx);
+            }
+            None => {}
+        }
+        cx.notify();
+    }
+
+    /// An item of the strip's menu: the reveal acts on the focused file, the
+    /// copy items on the targets, one per line, as listed; a judgment runs
+    /// as its key does.
+    fn files_action(
+        &mut self,
+        action: context::Action,
+        focused: &str,
+        paths: &[String],
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            context::Action::SelectAll => self.select_all(cx),
+            context::Action::RevealFile => cx.reveal_path(Path::new(&context::shown_path(focused))),
+            context::Action::CopyPath => {
+                cx.write_to_clipboard(ClipboardItem::new_string(paths.join("\n")));
+            }
+            context::Action::CopyFileName => {
+                let names: Vec<String> = paths.iter().map(|p| file_name(Path::new(p))).collect();
+                cx.write_to_clipboard(ClipboardItem::new_string(names.join("\n")));
+            }
+            context::Action::Judge(action) => {
+                if let Some(cmd) = Command::from_action(action) {
+                    self.judge(cmd, cx);
+                }
+            }
+            context::Action::TrashFiles => self.confirm_trash(paths, trash::Mode::Trash, cx),
+            context::Action::DeleteFiles => self.confirm_trash(paths, trash::Mode::Delete, cx),
+            _ => {}
+        }
+    }
+
+    /// Ask whether to move `paths`, files of the open folder taken when the
+    /// menu opened, to the Trash, or to delete them. Refused while a run is
+    /// in flight or the dialog is open.
+    fn confirm_trash(&mut self, paths: &[String], mode: trash::Mode, cx: &mut Context<Self>) {
+        let Some(dir) = self.dir.clone() else { return };
+        if self.trashing.is_some()
+            || paths.is_empty()
+            || self.settings_view.read(cx).is_open()
+            || !self.trash.start(trash::Target {
+                dir,
+                paths: paths.to_vec(),
+                mode,
+            })
+        {
+            return;
+        }
+        self.menus.close();
+        cx.notify();
+    }
+
+    /// The dialog's run button, by a click with `click_count` (0 for a key):
+    /// a delete takes a single mouse click only. Through the gate: at once
+    /// with no listing or scan under way, the dialog staying open until the
+    /// run comes back; else held for the scan's end, the dialog closed and
+    /// the scan canceled, as its files are about to go.
+    fn confirm_run(&mut self, click_count: usize, cx: &mut Context<Self>) {
+        if self
+            .trash
+            .target()
+            .is_some_and(|t| t.mode == trash::Mode::Delete)
+            && !trash::confirms_delete(click_count)
+        {
+            return;
+        }
+        let Some(target) = self.trash.run() else {
+            return;
+        };
+        let busy = self.resync.busy() || self.gate.in_flight();
+        let label = target.mode.label();
+        match self.gate.request(label, Held::Run(target), busy) {
+            Some(Held::Run(target)) => self.run_trash(target, true, cx),
+            Some(_) => {}
+            None => {
+                log::info!("trash: {label} held for the scan's end");
+                self.trash.end();
+                self.scan.cancel();
+                // The canceled scan leaves files unscanned, whatever becomes
+                // of the held run.
+                if self.resync.changed() {
+                    self.relist(cx);
+                }
+            }
+        }
+        cx.notify();
+    }
+
+    fn dismiss_trash(&mut self, cx: &mut Context<Self>) {
+        if self.trash.dismiss() {
+            cx.notify();
+        }
+    }
+
+    /// Every key stops here while the dialog is open.
+    fn trash_key_down(&mut self, name: Option<&str>, held: bool, cx: &mut Context<Self>) {
+        match self.trash.key(name, held) {
+            trash::Key::Dismiss => self.dismiss_trash(cx),
+            trash::Key::Run => self.confirm_run(0, cx),
+            trash::Key::Swallow => cx.notify(),
+        }
+    }
+
+    /// Move `target`'s files to the Trash, or delete them, on a background
+    /// task: the judgment stores still queued, then the sidecar writer, are
+    /// flushed first, so no write lands on a file being moved. No listing
+    /// or scan starts until it comes back (`gate`, `resync`). `own` when the
+    /// dialog is still open for it, to close at the end.
+    fn run_trash(&mut self, target: trash::Target, own: bool, cx: &mut Context<Self>) {
+        let trash::Target { dir, paths, mode } = target;
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        self.trashing = Some(trash::progress_status(mode, 0, paths.len()));
+        let (stores, writer, runs, events) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.runs.clone(),
+            self.events.clone(),
+        );
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let ran = dir.clone();
+            let result = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    let progress = |done, total| {
+                        let _ = events.unbounded_send(Event::TrashProgress { mode, done, total });
+                    };
+                    match mode {
+                        trash::Mode::Trash => {
+                            riffle_backend::trash::trash_listed(&ran, &paths, &runs, progress)
+                        }
+                        trash::Mode::Delete => {
+                            riffle_backend::trash::delete_listed(&ran, &paths, progress)
+                        }
+                    }
+                })
+                .await;
+            log::info!(
+                "trash: {} in {dir} in {}ms",
+                mode.label(),
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| {
+                this.trashed(vec![dir], mode, own, false, result, cx);
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// A run, or a redo (`redo`), came back: report it, push a run that
+    /// moved something on the undo history, drop what a delete took from
+    /// the histories, and re-list the open folder, which also rescans what
+    /// a canceled scan left, or open the folder asked for meanwhile.
+    fn trashed(
+        &mut self,
+        dirs: Vec<String>,
+        mode: trash::Mode,
+        own: bool,
+        redo: bool,
+        result: Result<riffle_backend::trash::Summary, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.gate.leave_in_flight();
+        self.trashing = None;
+        if own {
+            self.trash.end();
+        }
+        match result {
+            Ok(summary) => {
+                log::info!(
+                    "trash: moved={} failed={} run_id={:?}",
+                    summary.moved.len(),
+                    summary.failed.len(),
+                    summary.run_id
+                );
+                for path in &summary.moved {
+                    self.touched.remove(path);
+                    if mode == trash::Mode::Trash {
+                        let state = self.judgments.get(path).cloned();
+                        let seen = self.seen.contains(path);
+                        if state.is_some() || seen {
+                            self.trashed_state.insert(path.clone(), (state, seen));
+                        }
+                    }
+                }
+                if mode == trash::Mode::Delete && !summary.moved.is_empty() {
+                    self.undo
+                        .without_paths(&summary.moved.iter().cloned().collect());
+                }
+                if let Some(run_id) = summary.run_id {
+                    let count = summary.moved.len();
+                    if redo {
+                        self.undo.redone_trash(run_id, count, dirs);
+                    } else {
+                        self.undo.record_trash(run_id, count, dirs);
+                    }
+                }
+                for failure in &summary.failed {
+                    self.write_failed(
+                        failure.path.clone(),
+                        format!("{}: {}", mode.failure(), failure.message),
+                    );
+                }
+                self.step_note = Some(trash::trashed_status(mode, &summary));
+            }
+            Err(e) => {
+                log::error!("trash: {} in {dirs:?} failed: {e}", mode.label());
+                self.step_note = Some(e);
+            }
+        }
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if self.dir.is_some() {
+            // The re-listing covers any change seen during the run.
+            self.resync.open();
+            self.relist(cx);
+        }
+        cx.notify();
+    }
+
+    /// An undo or a redo with the run `entry` on top: through the gate,
+    /// waiting for a listing or scan under way without canceling it.
+    fn step_trash(&mut self, entry: TrashEntry, redo: bool, cx: &mut Context<Self>) {
+        let (label, held) = if redo {
+            ("Redo Move to Trash", Held::Redo(entry))
+        } else {
+            ("Undo Move to Trash", Held::Undo(entry))
+        };
+        let busy = self.resync.busy() || self.gate.in_flight();
+        match self.gate.request(label, held, busy) {
+            Some(Held::Undo(entry)) => {
+                self.undo_trash(entry, cx);
+            }
+            Some(Held::Redo(entry)) => {
+                self.redo_trash(entry, cx);
+            }
+            Some(Held::Run(_)) => {}
+            None => log::info!("trash: {label} held for the scan's end"),
+        }
+        cx.notify();
+    }
+
+    /// Restore the run `entry` from the Trash on a background task; it stays
+    /// on the history until the backend answers. False when another step is
+    /// out or the entry is no longer on top, as nothing then runs.
+    fn undo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
+        if self.trash_step.is_some() || !self.undo.on_top(entry.id, false) {
+            return false;
+        }
+        self.trash_step = Some(entry.id);
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        let runs = self.runs.clone();
+        let run_id = entry.run_id;
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move { riffle_backend::trash::undo_run(&runs, run_id) })
+                .await;
+            log::info!(
+                "trash: undo of run {run_id} in {}ms: {:?}",
+                started.elapsed().as_millis(),
+                result.as_ref().map(|r| (r.restored.len(), r.failed.len()))
+            );
+            this.update(cx, |this, cx| this.restored(entry, result, cx))
+                .ok();
+        })
+        .detach();
+        true
+    }
+
+    /// An undo came back: the entry moves to the redo history when anything
+    /// came back, a refusal other than the run being gone leaves it
+    /// undoable, and when the open folder was among the run's folders the
+    /// restored files join `all` at once, the current file and the
+    /// selection kept, before the re-listing brings their judgments.
+    fn restored(
+        &mut self,
+        entry: TrashEntry,
+        result: Result<riffle_backend::trash::Restored, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.trash_step = None;
+        self.gate.leave_in_flight();
+        let mut refresh = false;
+        match result {
+            Ok(restored) => {
+                self.undo.undone(&entry, &restored);
+                for failure in &restored.failed {
+                    self.write_failed(
+                        failure.path.clone(),
+                        format!("could not restore from the Trash: {}", failure.message),
+                    );
+                }
+                self.step_note = Some(trash::restored_status(&restored));
+                let opens = self
+                    .dir
+                    .as_deref()
+                    .is_some_and(|dir| trash::opens_target(dir, &entry.dirs, IGNORE_CASE));
+                if !opens {
+                    for path in &restored.restored {
+                        self.trashed_state.remove(path);
+                    }
+                }
+                if let Some(dir) = self.dir.clone()
+                    && trash::opens_target(&dir, &entry.dirs, IGNORE_CASE)
+                {
+                    refresh = true;
+                    let back =
+                        trash::restored_into(&dir, &restored.restored, &self.all, IGNORE_CASE);
+                    if !back.is_empty() {
+                        self.all.extend(back);
+                        trash::carry_stash(
+                            &mut self.trashed_state,
+                            &self.all,
+                            &mut self.judgments,
+                            &mut self.seen,
+                        );
+                        self.view_only = viewonly::is_view_only(&self.all);
+                        self.refilter(self.current_path(), true, None, cx);
+                        self.mark_strip();
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("trash: undo of run {} failed: {e}", entry.run_id);
+                if !trash::still_held(&e) {
+                    self.undo.remove_trash(entry.id);
+                }
+                self.step_note = Some(e);
+            }
+        }
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if refresh {
+            self.resync.open();
+            self.relist(cx);
+        } else if self.resync.finished() {
+            // A change seen in the open folder during the restore.
+            self.resync.open();
+            self.relist(cx);
+        }
+        cx.notify();
+    }
+
+    /// Move what the undo of `entry` brought back to the Trash again, with
+    /// no dialog, as a new run; it stays on the redo history until the
+    /// backend answers. False when another step or a run is out or the entry
+    /// is no longer on top, as nothing then runs.
+    fn redo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
+        if self.trash_step.is_some() || self.trashing.is_some() || !self.undo.on_top(entry.id, true)
+        {
+            return false;
+        }
+        self.trash_step = Some(entry.id);
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        self.trashing = Some(trash::progress_status(trash::Mode::Trash, 0, entry.count));
+        let (stores, writer, runs, events) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.runs.clone(),
+            self.events.clone(),
+        );
+        let run_id = entry.run_id;
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    riffle_backend::trash::redo_run(&runs, run_id, |done, total| {
+                        let _ = events.unbounded_send(Event::TrashProgress {
+                            mode: trash::Mode::Trash,
+                            done,
+                            total,
+                        });
+                    })
+                })
+                .await;
+            log::info!(
+                "trash: redo of run {run_id} in {}ms",
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| {
+                this.trash_step = None;
+                match &result {
+                    Ok(_) => this.undo.remove_trash(entry.id),
+                    Err(e) if !trash::still_held(e) => this.undo.remove_trash(entry.id),
+                    Err(_) => {}
+                }
+                this.trashed(entry.dirs, trash::Mode::Trash, false, true, result, cx);
+            })
+            .ok();
+        })
+        .detach();
+        cx.notify();
+        true
+    }
+
+    /// An item of the folder tree's menu.
+    fn folder_action(
+        &mut self,
+        action: context::Action,
+        path: String,
+        name: String,
+        cx: &mut Context<Self>,
+    ) {
+        match action {
+            context::Action::RevealFolder => {
+                let path = Path::new(&path);
+                // A root has no parent folder to select it in, so it opens.
+                if path.parent().is_some() {
+                    cx.reveal_path(path);
+                } else {
+                    cx.open_with_system(path);
+                }
+            }
+            context::Action::CopyPath => cx.write_to_clipboard(ClipboardItem::new_string(path)),
+            context::Action::CopyFolderName => {
+                cx.write_to_clipboard(ClipboardItem::new_string(name));
+            }
+            context::Action::RefreshFolder => self.tree_refresh(path, cx),
+            context::Action::ExpandAll => self.tree_expand_all(path, cx),
+            context::Action::CollapseAll => {
+                self.tree.collapse_all(&path);
+                self.tree_changed(cx);
+            }
+            _ => {}
+        }
+    }
+
+    /// The menu's `Expand All`: expand `path` and every subfolder under it,
+    /// listing each as an expander click does, one listing at a time, as
+    /// `folders.ts`'s `expandAll`. A branch stops once a folder on its chain
+    /// was collapsed or dropped meanwhile; a folder that fails to list is
+    /// marked and reported and the rest go on; a link is not descended into,
+    /// since it can loop back on an ancestor.
+    fn tree_expand_all(&mut self, path: String, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let mut chains = vec![vec![path]];
+            while let Some(chain) = chains.pop() {
+                let Some(dir) = chain.last().cloned() else {
+                    continue;
+                };
+                let walking = this.update(cx, |this, cx| {
+                    let parents = &chain[..chain.len() - 1];
+                    if !parents.iter().all(|p| this.tree.is_expanded(p)) || !this.tree.has(&dir) {
+                        return false;
+                    }
+                    this.tree.expand(&dir);
+                    this.tree_changed(cx);
+                    true
+                });
+                match walking {
+                    Ok(true) => {}
+                    Ok(false) => continue,
+                    Err(_) => return,
+                }
+                let listing = dir.clone();
+                let listed = cx
+                    .background_spawn(async move { folders::list(Path::new(&listing)) })
+                    .await;
+                let Ok(children) = this.update(cx, |this, cx| {
+                    let listed = this.tree_listed(&dir, listed, true).is_some();
+                    this.tree_changed(cx);
+                    if listed {
+                        this.tree.drawn_children_of(&dir)
+                    } else {
+                        Vec::new()
+                    }
+                }) else {
+                    return;
+                };
+                for child in children.into_iter().rev().filter(|child| !child.is_link) {
+                    let mut next = chain.clone();
+                    next.push(child.path);
+                    chains.push(next);
+                }
+            }
+        })
+        .detach();
+    }
+
+    /// Give the tree the keyboard, or with `false` hand it back to the photo;
+    /// the type-ahead starts over either way.
+    fn set_tree_keys(&mut self, keys: bool, cx: &mut Context<Self>) {
+        if self.tree_keys != keys {
+            self.tree_keys = keys;
+            self.typed = Typed::default();
+            cx.notify();
+        }
+    }
+
+    fn move_tree_cursor(&mut self, to: String, cx: &mut Context<Self>) {
+        self.tree_cursor_row = self.tree_rows.iter().position(|row| row.path == to);
+        self.tree_cursor = Some(to);
+        if let Some(row) = self.tree_cursor_row {
+            self.tree_scroll
+                .scroll_to_item(row, ScrollStrategy::Nearest);
+        }
+        cx.notify();
+    }
+
+    /// A key while the tree has the keyboard, as `folders.ts`'s `keydown`:
+    /// `escape` hands the keys back, the arrows and `home` / `end` move the
+    /// cursor, left / right / `enter` act on its row, and a printable key
+    /// without Ctrl / Alt / Meta is type-ahead. False when the tree did not
+    /// consume the key.
+    fn tree_key_down(&mut self, keystroke: &Keystroke, name: &str, cx: &mut Context<Self>) -> bool {
+        let step = match name {
+            "arrowup" => Some(StepKey::Up),
+            "arrowdown" => Some(StepKey::Down),
+            "home" => Some(StepKey::Home),
+            "end" => Some(StepKey::End),
+            _ => None,
+        };
+        let key = match name {
+            "arrowleft" => Some(TreeKey::Left),
+            "arrowright" => Some(TreeKey::Right),
+            "enter" => Some(TreeKey::Enter),
+            _ => None,
+        };
+        if name == "escape" {
+            self.set_tree_keys(false, cx);
+        } else if let Some(step) = step {
+            if let Some(to) = tree::step(&self.tree_rows, self.tree_cursor.as_deref(), step) {
+                self.move_tree_cursor(to, cx);
+            }
+        } else if let Some(key) = key {
+            match tree::tree_key(&self.tree_rows, self.tree_cursor.as_deref(), key) {
+                Some(TreeCommand::Focus(path)) => self.move_tree_cursor(path, cx),
+                Some(TreeCommand::Expand(path) | TreeCommand::Collapse(path)) => {
+                    self.tree_toggle(path, cx);
+                }
+                Some(TreeCommand::Open(path)) => self.open_from_tree(path, cx),
+                None => {}
+            }
+        } else if let Some(typed) = keys::typed_char(keystroke) {
+            self.typed = tree::append_typed(
+                &self.typed,
+                &typed,
+                Instant::now(),
+                tree::TYPE_AHEAD_TIMEOUT,
+            );
+            if let Some(to) = tree::type_ahead(
+                &self.tree_rows,
+                self.tree_cursor.as_deref(),
+                &self.typed.text,
+            ) {
+                self.move_tree_cursor(to, cx);
+            }
+        } else {
+            return false;
+        }
+        true
     }
 
     /// A listing of the tree's `dir` answered: its children, or `None` with
@@ -767,6 +1636,7 @@ impl Riffle {
                 if let Some(end) = chain.last() {
                     this.tree_open = Some(end.clone());
                 }
+                this.tree_cursor = this.tree_open.clone();
                 this.tree_changed(cx);
                 if let Some(row) = this.tree_open_row {
                     this.tree_scroll
@@ -793,6 +1663,28 @@ impl Riffle {
 
     /// The listing and its scan are over: run the re-listing that waited.
     fn finished(&mut self, cx: &mut Context<Self>) {
+        // The run held for this scan runs now, the re-listing at its end
+        // taking the change that waited; a dialog opened meanwhile drops it.
+        match self.gate.drain() {
+            Some(Held::Run(target)) if !self.trash.busy() => {
+                return self.run_trash(target, false, cx);
+            }
+            Some(Held::Run(target)) => log::info!(
+                "trash: held run in {} dropped by an open dialog",
+                target.dir
+            ),
+            Some(Held::Undo(entry)) => {
+                if self.undo_trash(entry, cx) {
+                    return;
+                }
+            }
+            Some(Held::Redo(entry)) => {
+                if self.redo_trash(entry, cx) {
+                    return;
+                }
+            }
+            None => {}
+        }
         if self.resync.finished() {
             self.relist(cx);
         }
@@ -800,8 +1692,116 @@ impl Riffle {
 
     fn relist(&mut self, cx: &mut Context<Self>) {
         let Some(dir) = self.dir.clone() else { return };
+        // A run's end re-lists.
+        if self.gate.in_flight() {
+            return;
+        }
         log::info!("resync: dir={dir}");
         self.list(PathBuf::from(dir), true, cx).detach();
+    }
+
+    /// The settings' sidecar format switch: the next judgment is queued in
+    /// `format` at once; off the main thread, one switch at a time, the
+    /// judgments queued before it reach the writer and `sidecar::switch_to`
+    /// drains, persists and resets the index; then the open folder is listed
+    /// again, its histories cleared as the Tauri reopen clears them.
+    fn switch_format(&mut self, format: SidecarFormat, cx: &mut Context<Self>) {
+        if format == self.settings.format {
+            return;
+        }
+        log::info!(
+            "sidecar format: {} -> {}",
+            self.settings.format.setting(),
+            format.setting()
+        );
+        self.settings.format = format;
+        *index::lock(&self.format_latest) = format;
+        let (index, writer) = (self.index.clone().ok(), self.writer.clone());
+        let (stores, writes) = (self.stores.clone(), self.settings.writes.clone());
+        let latest = self.format_latest.clone();
+        self.reset_sidecars(
+            move || {
+                if *index::lock(&latest) != format {
+                    // A later click superseded this one; its task
+                    // switches to the format the user ended on.
+                    return Ok(false);
+                }
+                stores.drain(sidecar::DRAIN_TIMEOUT);
+                sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |format| {
+                    writes.set("sidecarFormat", format.setting().into());
+                    Ok(())
+                })
+                .map(|()| true)
+            },
+            cx,
+        );
+    }
+
+    /// The settings' label names change: written and in force at once, so a
+    /// judgment queued before it keeps the names it was made under and the
+    /// next one takes the new ones; then the rest of a format switch, with
+    /// nothing left to persist (the writes are ordered on this thread, so
+    /// overlapping changes end stored as the fields show).
+    fn switch_names(&mut self, names: LabelNames, cx: &mut Context<Self>) {
+        if names == self.settings.names {
+            return;
+        }
+        log::info!("label names: {:?} -> {names:?}", self.settings.names);
+        self.settings
+            .writes
+            .set("labelNames", sidecar::label_names_value(&names));
+        self.settings.names = names;
+        let (index, writer) = (self.index.clone().ok(), self.writer.clone());
+        let (stores, format) = (self.stores.clone(), self.settings.format);
+        self.reset_sidecars(
+            move || {
+                stores.drain(sidecar::DRAIN_TIMEOUT);
+                sidecar::switch_to(format, writer.as_deref(), index.as_ref(), |_| Ok(()))
+                    .map(|()| true)
+            },
+            cx,
+        );
+    }
+
+    /// Runs `job` off the main thread, one at a time with the other sidecar
+    /// switches; when it did its switch (`Ok(true)`) the open folder is
+    /// listed again, its histories cleared as the Tauri reopen clears them.
+    /// A failure goes to the settings' status line, with no re-listing.
+    fn reset_sidecars(
+        &mut self,
+        job: impl FnOnce() -> Result<bool, String> + Send + 'static,
+        cx: &mut Context<Self>,
+    ) {
+        let lock = self.format_switch.clone();
+        cx.spawn(async move |this, cx| {
+            let switched = cx
+                .background_spawn(async move {
+                    let _guard = index::lock(&lock);
+                    job()
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                let switched = match switched {
+                    Ok(true) => Ok(()),
+                    Ok(false) => return,
+                    Err(e) => Err(e),
+                };
+                if let Err(e) = switched {
+                    log::error!("failed to switch the sidecars: {e}");
+                    this.settings_view.update(cx, |view, cx| view.failed(e, cx));
+                    return;
+                }
+                this.touched.clear();
+                this.undo.drop_judgments();
+                this.step_note = None;
+                // Mark the listing busy so a trash or delete waits for it.
+                this.resync.open();
+                this.relist(cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// Watch and list the folder and, with an index, reconcile it once the
@@ -936,7 +1936,7 @@ impl Riffle {
             self.dwell.reset(viewed);
             self.dwell_timer = None;
             self.touched.clear();
-            self.undo.clear();
+            self.undo.drop_judgments();
             self.step_note = None;
             self.write_errors.clear();
             self.filter.clear_exif();
@@ -961,6 +1961,8 @@ impl Riffle {
             self.retire(old);
             self.files = paths.iter().map(PathBuf::from).collect();
             self.mark_strip();
+            let landed = selection::settle(&self.selection, &paths, self.pager.current(), true);
+            self.set_selection(landed);
         }
         if carry {
             self.remember(cx);
@@ -1014,6 +2016,10 @@ impl Riffle {
                     self.events.clone(),
                 );
                 self.scan.put(scan);
+                // A run held while the listing ran had no scan to cancel yet.
+                if idle::cancels_scan(self.gate.waiting()) {
+                    self.scan.cancel();
+                }
             }
             (Some(Err(e)), _) => {
                 log::error!("failed to prepare the scan of {}: {e}", listed.dir);
@@ -1107,6 +2113,8 @@ impl Riffle {
         }
         self.files = next.iter().map(PathBuf::from).collect();
         self.mark_strip();
+        let settled = selection::settle(&self.selection, &next, current, false);
+        self.set_selection(settled);
         self.strip_moved(cx);
         if next.is_empty() {
             self.status = filter::FILTERED_TEXT.into();
@@ -1167,7 +2175,16 @@ impl Riffle {
             | Event::FacesProgress { scan, .. }
             | Event::FacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
+            Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
+            Event::TrashProgress { mode, done, total } => {
+                // The last message can land after the run came back.
+                if self.trashing.is_some() {
+                    self.trashing = Some(trash::progress_status(*mode, *done, *total));
+                    cx.notify();
+                }
+                return;
+            }
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
                 cx.notify();
@@ -1214,7 +2231,11 @@ impl Riffle {
                 self.scan_status.clear();
                 self.finished(cx);
             }
-            Event::Changed(_) | Event::SidecarError { .. } | Event::Mcp(_) => {}
+            Event::Changed(_)
+            | Event::TreeChanged(_)
+            | Event::SidecarError { .. }
+            | Event::Mcp(_)
+            | Event::TrashProgress { .. } => {}
         }
         self.pump(cx);
         cx.notify();
@@ -1231,6 +2252,12 @@ impl Riffle {
             };
         }
         self.judgments = judgments;
+        trash::carry_stash(
+            &mut self.trashed_state,
+            &self.all,
+            &mut self.judgments,
+            &mut self.seen,
+        );
         self.facts = facts;
         self.filter.prune_exif(&groups);
         self.exif_groups = groups;
@@ -1275,18 +2302,57 @@ impl Riffle {
     }
 
     /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
-    /// native app's own keys, and `escape` while a menu is open; an action
-    /// not handled yet is only logged.
-    fn key_down(&mut self, keystroke: &Keystroke, cx: &mut Context<Self>) {
-        let Some(name) = keys::key_name(keystroke) else {
+    /// native app's own keys, `ctrl+,` (`meta+,` on macOS) opens the settings,
+    /// and `escape` while a menu is open; an action not handled yet is only
+    /// logged. Nothing gets through while the settings are open. While the
+    /// tree has the keyboard it takes the key first, and of the rest only
+    /// `tree_gate`'s actions run.
+    fn key_down(
+        &mut self,
+        keystroke: &Keystroke,
+        held: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.settings_view.read(cx).is_open() {
+            return;
+        }
+        let name = keys::key_name(keystroke);
+        if self.trash.busy() {
+            return self.trash_key_down(name.as_deref(), held, cx);
+        }
+        let Some(name) = name else {
             return;
         };
         let action = self.bindings.action_for(&name);
         log::debug!("key: {name} action={action:?}");
+        // Any key closes the right-click menu; only `escape` stops there, as
+        // in the Tauri app's keydown handler.
+        if self.context.is_open() {
+            self.context.close();
+            cx.notify();
+            if name == "escape" {
+                return;
+            }
+        }
+        if self.tree_keys
+            && (self.tree_key_down(keystroke, &name, cx)
+                || treekeys::tree_gate(action) == Gate::Swallow)
+        {
+            return;
+        }
         match (name.as_str(), action) {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
             ("q", _) => self.quit(cx),
+            (name, _) if name == settingsmodal::OPEN_KEY => {
+                self.menus.close();
+                let settings = &self.settings;
+                self.settings_view.update(cx, |view, cx| {
+                    view.open(settings, window, cx);
+                });
+                cx.notify();
+            }
             ("escape", _) if self.menus.is_open() => {
                 self.menus.close();
                 cx.notify();
@@ -1298,9 +2364,16 @@ impl Riffle {
             (_, Some("peaking")) => self.toggle_peaking(cx),
             (_, Some("toggleLeft")) => {
                 self.left_pane = !self.left_pane;
+                // A hidden pane must not keep the keyboard.
+                if !self.left_pane {
+                    self.set_tree_keys(false, cx);
+                }
                 self.zoom_resized(cx);
                 cx.notify();
             }
+            (_, Some("extendPrevious")) => self.extend(-1, cx),
+            (_, Some("extendNext")) => self.extend(1, cx),
+            (_, Some("selectAll")) => self.select_all(cx),
             (_, Some("undo")) => self.step(false, cx),
             (_, Some("redo")) => self.step(true, cx),
             (_, Some(action)) => match Command::from_action(action) {
@@ -1311,9 +2384,11 @@ impl Riffle {
         }
     }
 
-    /// A judgment key on the current file: the view and the strip first, then
-    /// the row and the writer in the background. Auto-advance moves on after
-    /// the stars and the flags, also when the file already held the value.
+    /// A judgment key on the selection's targets, its value decided from the
+    /// current file: the view and the strip first, then the row and the
+    /// writer per changed file in the background, all as one undo entry.
+    /// Auto-advance moves on after the stars and the flags on a single
+    /// target, also when the file already held the value.
     fn judge(&mut self, cmd: Command, cx: &mut Context<Self>) {
         if self.view_only {
             return;
@@ -1322,30 +2397,100 @@ impl Riffle {
             return;
         };
         self.step_note = None;
-        let own = self.judgments.get(&path).cloned().unwrap_or_default();
-        let after = judgment::apply(&own, &own, cmd);
-        let seen = self.seen.contains(&path);
-        if judgment::writes(seen, &own, &after, cmd) {
-            let label_known = judgment::label_known(seen, &own, &after, cmd);
-            let entry = self.undo.record(vec![Judged {
-                path: path.clone(),
-                state: own.clone(),
-            }]);
-            self.touched.insert(path.clone());
-            self.set_state(&path, after.clone());
+        let files = path_strings(&self.files);
+        let targets = selection::targets(&self.selection, &files, self.pager.current());
+        let changes = selection::judgments(
+            &targets,
+            &path,
+            |p| self.judgments.get(p).cloned().unwrap_or_default(),
+            cmd,
+            |p| self.seen.contains(p),
+        );
+        if !changes.is_empty() {
+            let entry = self.undo.record(
+                changes
+                    .iter()
+                    .map(|change| Judged {
+                        path: change.path.clone(),
+                        state: change.before.clone(),
+                    })
+                    .collect(),
+            );
+            for change in &changes {
+                self.touched.insert(change.path.clone());
+                self.set_state(&change.path, change.after.clone());
+            }
             self.refilter(Some(path.clone()), false, None, cx);
-            self.store(path.clone(), own, after, label_known, entry, cx);
+            for change in changes {
+                let seen = self.seen.contains(&change.path);
+                let label_known = judgment::label_known(seen, &change.before, &change.after, cmd);
+                self.store(
+                    change.path,
+                    change.before,
+                    change.after,
+                    label_known,
+                    entry,
+                    cx,
+                );
+            }
         }
         let still_current = self.current_path() == Some(path);
-        if judgment::should_advance(cmd, self.settings.auto_advance, still_current) {
+        if judgment::should_advance(
+            cmd,
+            targets.len(),
+            self.settings.auto_advance,
+            still_current,
+        ) {
             self.go(Move::NextClamped, cx);
         }
         cx.notify();
     }
 
+    /// The MCP companion's `set_judgment`: `changes` as one undo entry,
+    /// through the same view-row-writer path as a key, the current file
+    /// staying current and no auto-advance.
+    fn judge_paths(&mut self, changes: Vec<companion::Change>, cx: &mut Context<Self>) {
+        if changes.is_empty() {
+            return;
+        }
+        self.step_note = None;
+        let entry = self.undo.record(
+            changes
+                .iter()
+                .map(|change| Judged {
+                    path: change.path.clone(),
+                    state: change.before.clone(),
+                })
+                .collect(),
+        );
+        for change in &changes {
+            self.touched.insert(change.path.clone());
+            self.set_state(&change.path, change.after.clone());
+        }
+        self.refilter(self.current_path(), false, None, cx);
+        for change in changes {
+            self.store(
+                change.path,
+                change.before,
+                change.after,
+                change.label_known,
+                entry,
+                cx,
+            );
+        }
+    }
+
     /// Undo (or with `redo`, redo) the newest judgment through the same
     /// view-row-writer path as a key, moving to its file.
+    /// A run to the Trash on top is restored or moved again instead
+    /// (`step_trash`), and nothing steps while one is out.
     fn step(&mut self, redo: bool, cx: &mut Context<Self>) {
+        if self.trash_step.is_some() {
+            return;
+        }
+        if let Some(entry) = self.undo.top_trash(redo) {
+            return self.step_trash(entry, redo, cx);
+        }
         if self.view_only {
             return;
         }
@@ -1377,12 +2522,19 @@ impl Riffle {
         // A file the filter now hides leaves the current file where it is.
         let anchor = match &stepped.move_to {
             Some(path) if self.passes(path) => Some(path.clone()),
-            _ => shown,
+            _ => shown.clone(),
         };
         self.refilter(anchor, false, None, cx);
         let verb = if redo { "Redid" } else { "Undid" };
         let note = match stepped.move_to {
             Some(path) => {
+                let restored = selection::restore(
+                    &self.selection,
+                    &path_strings(&self.files),
+                    shown.as_deref(),
+                    &path,
+                );
+                self.set_selection(restored);
                 let name = file_name(Path::new(&path));
                 match self.files.iter().position(|f| f.to_string_lossy() == path) {
                     Some(at) => {
@@ -1509,9 +2661,48 @@ impl Riffle {
         }));
     }
 
+    /// Move to `to` and, when the current file changed, select it alone, as
+    /// a paging key leaves the selection.
     fn go(&mut self, to: Move, cx: &mut Context<Self>) {
+        if self.focus_on(to, cx) {
+            self.select_current();
+        }
+    }
+
+    fn select_current(&mut self) {
+        let current = self.current_path();
+        self.set_selection(selection::single(current.as_deref()));
+    }
+
+    fn set_selection(&mut self, selection: Selection) {
+        self.selection = selection;
+        self.strip.set_selected(&self.selection.selected);
+    }
+
+    /// `extendPrevious` / `extendNext`: move the focus by `delta` and select
+    /// the range from the anchor to it.
+    fn extend(&mut self, delta: isize, cx: &mut Context<Self>) {
+        let files = path_strings(&self.files);
+        let (extended, at) =
+            selection::extend(&self.selection, &files, self.pager.current(), delta);
+        self.set_selection(extended);
+        self.focus_on(Move::To(at), cx);
+        cx.notify();
+    }
+
+    /// `selectAll`: every shown file, the focus kept.
+    fn select_all(&mut self, cx: &mut Context<Self>) {
+        let all = selection::all(&path_strings(&self.files), self.pager.current());
+        self.set_selection(all);
+        cx.notify();
+    }
+
+    /// Move to `to` without touching the selection. Whether the current file
+    /// changed.
+    fn focus_on(&mut self, to: Move, cx: &mut Context<Self>) -> bool {
         let key = Instant::now();
-        if self.pager.go(to) {
+        let moved = self.pager.go(to);
+        if moved {
             self.key = Some(key);
             self.step_note = None;
             self.dwell.cancel();
@@ -1524,6 +2715,7 @@ impl Riffle {
             self.read_focus(cx);
             self.zoom_page(cx);
         }
+        moved
     }
 
     fn toggle_marks(&mut self, cx: &mut Context<Self>) {
@@ -1689,10 +2881,19 @@ impl Riffle {
         cx.notify();
     }
 
-    fn strip_clicked(&mut self, x: f32, cx: &mut Context<Self>) {
-        if let Some(index) = self.strip.hit_test(x) {
-            self.go(Move::To(index), cx);
-        }
+    /// A click on a cell, as `main.ts`'s strip click handler: a toggle only
+    /// changes the selection; a range or a plain click also moves the focus
+    /// to the clicked file.
+    fn strip_clicked(&mut self, x: f32, modifiers: selection::Modifiers, cx: &mut Context<Self>) {
+        let Some(at) = self.strip.hit_test(x) else {
+            return;
+        };
+        let files = path_strings(&self.files);
+        let focused = self.pager.current();
+        let clicked = selection::click(&self.selection, &files, focused, at, modifiers);
+        self.set_selection(clicked);
+        self.focus_on(Move::To(if modifiers.toggle { focused } else { at }), cx);
+        cx.notify();
     }
 
     /// A vertical wheel scrolls the strip sideways too, as the Tauri strip's.
@@ -1721,6 +2922,7 @@ impl Riffle {
                         .into()
                 }),
                 current: index == current,
+                selected: index != current && self.strip.is_selected(index),
                 marks: self.strip.marks(index),
             })
             .collect()
@@ -2104,6 +3306,16 @@ impl Riffle {
                     .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
             )
             .children(
+                self.trashing
+                    .clone()
+                    .or_else(|| {
+                        self.gate
+                            .waiting()
+                            .map(|label| format!("{label}: waiting for the scan to finish"))
+                    })
+                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+            )
+            .children(
                 self.notes
                     .iter()
                     .cloned()
@@ -2117,9 +3329,18 @@ impl Riffle {
     }
 
     /// The left-hand folder tree: a `uniform_list`, so only the rows on
-    /// screen are laid out.
+    /// screen are laid out. A left press in it gives it the keyboard, a press
+    /// of any button outside it hands the keyboard back, and a right press in
+    /// it does neither.
     fn tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseDownEvent, _, cx| this.set_tree_keys(true, cx)),
+            )
+            .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.set_tree_keys(false, cx);
+            }))
             .w(px(PANE_WIDTH))
             .flex_none()
             .h_full()
@@ -2173,6 +3394,7 @@ impl Riffle {
                     .child(count.to_string())
             });
         let path = row.path.clone();
+        let (menu_path, menu_name) = (row.path.clone(), row.name.clone());
         div()
             .id(("tree-row", at))
             .h(px(TREE_ROW_HEIGHT))
@@ -2183,6 +3405,12 @@ impl Riffle {
             .pl(px(4. + row.depth as f32 * 12.))
             .pr_2()
             .rounded_sm()
+            .border_1()
+            .border_color(if self.tree_keys && self.tree_cursor_row == Some(at) {
+                rgba(RING_COLOR)
+            } else {
+                rgba(0x00000000)
+            })
             .cursor_pointer()
             .whitespace_nowrap()
             .hover(|s| s.bg(rgb(ACCENT_COLOR)))
@@ -2202,6 +3430,12 @@ impl Riffle {
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                 this.open_from_tree(path.clone(), cx);
             }))
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                    this.tree_context(e.position, menu_path.clone(), menu_name.clone(), cx);
+                }),
+            )
             .into_any_element()
     }
 
@@ -2359,6 +3593,161 @@ impl Riffle {
             .into_any_element()
     }
 
+    /// The open right-click menu at the pointer, drawn after the rest of the
+    /// window and over it, flipped and kept inside the window; laid out only
+    /// while open.
+    fn context_popover(&self, max_height: Pixels, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let open = self.context.open()?;
+        let (x, y) = open.at;
+        let mut rows: Vec<AnyElement> = Vec::new();
+        for (group, items) in open.groups.iter().enumerate() {
+            if group > 0 {
+                rows.push(
+                    div()
+                        .h(px(1.))
+                        .my_1()
+                        .bg(rgba(BORDER_COLOR))
+                        .into_any_element(),
+                );
+            }
+            for item in items {
+                rows.push(context_row(rows.len(), item, cx));
+            }
+        }
+        let popover = div()
+            .id("context-menu")
+            .occlude()
+            .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.context.close();
+                cx.notify();
+            }))
+            // A press on the menu is one outside the tree, also where the
+            // menu is drawn over the pane, as a Tauri menu button takes the
+            // focus.
+            .on_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.set_tree_keys(false, cx);
+            }))
+            .flex()
+            .flex_col()
+            .min_w(px(180.))
+            .max_h(max_height)
+            .overflow_y_scroll()
+            .p_1()
+            .bg(rgb(PANE_COLOR))
+            .border_1()
+            .border_color(rgba(BORDER_COLOR))
+            .rounded_md()
+            .text_size(px(13.))
+            .children(rows);
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                // `anchored`'s default fit flips the menu to the pointer's
+                // other side near an edge, as the Tauri `menuPosition`.
+                .child(deferred(
+                    anchored().position(point(px(x), px(y))).child(popover),
+                ))
+                .into_any_element(),
+        )
+    }
+
+    /// The `Move to Trash…` / `Delete Permanently…` dialog while it asks or
+    /// runs: a full-window `occlude()`d layer, so no press reaches what is
+    /// under it, with the title, the line and the two buttons. The focused
+    /// button is kept in `TrashFlow` and outlined; while running both are
+    /// disabled.
+    fn trash_dialog(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let target = self.trash.target()?;
+        let text = trash::dialog_text(target.mode, target.paths.len());
+        let running = self.trash.running();
+        let focused = self.trash.focused();
+        let button = |id: &'static str, label: &'static str, which: trash::Button| {
+            let destructive = which == trash::Button::Run;
+            let button = div()
+                .id(id)
+                .px(px(12.))
+                .py(px(4.8))
+                .rounded_md()
+                .border_1()
+                .text_size(px(13.6))
+                .font_weight(FontWeight::MEDIUM)
+                .map(|d| match (!running && focused == which, destructive) {
+                    (true, _) => d.border_color(rgb(PRIMARY_COLOR)),
+                    (false, true) => d.border_color(rgba(0)),
+                    (false, false) => d.border_color(rgba(INPUT_BORDER)),
+                })
+                .bg(if destructive {
+                    rgb(ERROR_COLOR)
+                } else {
+                    rgba(BUTTON_FILL)
+                })
+                .child(label);
+            if running {
+                return button.opacity(0.5);
+            }
+            button
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, e: &ClickEvent, _, cx| match which {
+                    trash::Button::Run => {
+                        let count = if e.is_keyboard() { 0 } else { e.click_count() };
+                        this.confirm_run(count, cx);
+                    }
+                    trash::Button::Cancel => this.dismiss_trash(cx),
+                }))
+        };
+        Some(
+            deferred(
+                div()
+                    .id("trash-backdrop")
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .occlude()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .bg(rgba(0x00000099))
+                    .child(
+                        div()
+                            .id("trash-box")
+                            .occlude()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .w(px(640.))
+                            .max_w(relative(0.9))
+                            .px_4()
+                            .py_3()
+                            .bg(rgb(PANE_COLOR))
+                            .border_1()
+                            .border_color(rgba(BORDER_COLOR))
+                            .rounded_lg()
+                            .text_color(rgb(FOREGROUND_COLOR))
+                            .text_size(px(13.))
+                            .child(
+                                div()
+                                    .text_size(px(16.))
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .child(text.title),
+                            )
+                            .child(div().child(text.line))
+                            .child(
+                                div()
+                                    .flex()
+                                    .justify_end()
+                                    .gap_2()
+                                    .child(button("trash-run", text.run, trash::Button::Run))
+                                    .child(button("trash-cancel", "Cancel", trash::Button::Cancel)),
+                            ),
+                    ),
+            )
+            .into_any_element(),
+        )
+    }
+
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
     fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
@@ -2372,15 +3761,30 @@ impl Riffle {
                 sort: this.sort.setting(),
                 filtered: this.filter.is_active(),
                 eyes: current.and_then(|path| this.marks.eyes(&path)),
+                view_only: this.view_only,
+                judgments: &this.judgments,
+                seen: &this.seen,
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self));
-        match action {
-            Ok(Some(companion::Action::Show(at))) => self.go(Move::To(at), cx),
-            Ok(Some(companion::Action::ToggleZoom)) => self.toggle_zoom(cx),
-            Ok(None) | Err(_) => {}
-        }
-        let reply = action.map(|_| companion::get_view(&view(self)));
+        let reply = match action {
+            Ok(Some(companion::Action::Judge { changes, judged })) => {
+                self.judge_paths(changes, cx);
+                Ok(judged)
+            }
+            Ok(action) => {
+                match action {
+                    Some(companion::Action::Show(at)) => {
+                        self.focus_on(Move::To(at), cx);
+                        self.select_current();
+                    }
+                    Some(companion::Action::ToggleZoom) => self.toggle_zoom(cx),
+                    _ => {}
+                }
+                Ok(companion::get_view(&view(self)))
+            }
+            Err(e) => Err(e),
+        };
         if let Some(server) = &self.mcp {
             server.reply(request.id, reply);
         }
@@ -2414,9 +3818,9 @@ impl Render for Riffle {
             .bg(rgb(0x000000))
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
-            .on_key_down(
-                cx.listener(|this, e: &KeyDownEvent, _, cx| this.key_down(&e.keystroke, cx)),
-            )
+            .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
+                this.key_down(&e.keystroke, e.is_held, window, cx);
+            }))
             .child(
                 div()
                     .flex_1()
@@ -2502,10 +3906,21 @@ impl Render for Riffle {
                     .w_full()
                     .h(px(strip::STRIP_HEIGHT))
                     .on_mouse_down(
-                        MouseButton::Left,
+                        MouseButton::Right,
                         cx.listener(|this, e: &MouseDownEvent, _, cx| {
                             // The strip spans the window from its left edge.
-                            this.strip_clicked(f32::from(e.position.x), cx);
+                            this.strip_context(e.position, f32::from(e.position.x), cx);
+                        }),
+                    )
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                            let modifiers = selection::Modifiers {
+                                toggle: e.modifiers.control || e.modifiers.platform,
+                                range: e.modifiers.shift,
+                            };
+                            // The strip spans the window from its left edge.
+                            this.strip_clicked(f32::from(e.position.x), modifiers, cx);
                         }),
                     )
                     .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
@@ -2520,6 +3935,9 @@ impl Render for Riffle {
                     ),
             )
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
+            .child(self.settings_view.clone())
+            .children(self.context_popover(window.viewport_size().height - px(40.), cx))
+            .children(self.trash_dialog(cx))
     }
 }
 
@@ -2612,6 +4030,41 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         .into_any_element()
 }
 
+/// One item of the right-click menu: its check mark, label and shortcut,
+/// dimmed and inert while disabled.
+fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> AnyElement {
+    let action = item.action;
+    let row = div()
+        .id(("context-item", at))
+        .flex()
+        .items_center()
+        .gap_2()
+        .pr_3()
+        .py(px(3.))
+        .rounded_sm()
+        .child(div().w(px(MENU_INDENT)).flex_none().text_center().child(
+            if item.checked == Some(true) {
+                "\u{2713}"
+            } else {
+                ""
+            },
+        ))
+        .child(div().flex_1().child(item.label.clone()))
+        .child(
+            div()
+                .text_size(px(11.))
+                .text_color(rgb(MUTED_COLOR))
+                .child(item.shortcut.clone()),
+        );
+    if item.disabled {
+        return row.opacity(0.5).into_any_element();
+    }
+    row.cursor_pointer()
+        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+        .on_click(cx.listener(move |this, _, _, cx| this.context_action(action, cx)))
+        .into_any_element()
+}
+
 struct StripCell {
     /// From the strip's left edge.
     x: f32,
@@ -2620,6 +4073,8 @@ struct StripCell {
     /// `Some` on a cell the scan failed on, with why.
     failure: Option<SharedString>,
     current: bool,
+    /// Selected and not current.
+    selected: bool,
     marks: Marks,
 }
 
@@ -2634,6 +4089,8 @@ const MUTED_COLOR: u32 = 0xa1a1a1;
 const ERROR_COLOR: u32 = 0xff6467;
 const PLACEHOLDER: u32 = 0x262626;
 const CURRENT_OUTLINE: u32 = 0xe5e5e5;
+/// `style.css`'s `--muted`, a selected cell's fill.
+const MUTED_FILL: u32 = 0x262626;
 const NAME_COLOR: u32 = 0xd4d4d4;
 const FAILURE_COLOR: u32 = 0xa3a3a3;
 /// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
@@ -2651,6 +4108,8 @@ const FLAG_DOT: f32 = 7.;
 const PRIMARY_COLOR: u32 = 0xe5e5e5;
 const FOREGROUND_COLOR: u32 = 0xfafafa;
 const ACCENT_COLOR: u32 = 0x262626;
+/// `style.css`'s `--sidebar-ring`, the tree cursor's outline.
+const RING_COLOR: u32 = 0x737373ff;
 const BORDER_COLOR: u32 = 0xffffff1a;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
@@ -2685,6 +4144,10 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 rgb(CURRENT_OUTLINE),
                 Default::default(),
             ));
+        } else if cell.selected {
+            // `.cell.selected`: `--muted` behind, a `--ring` border.
+            window.paint_quad(fill(cell_bounds, rgb(MUTED_FILL)));
+            window.paint_quad(outline(cell_bounds, rgba(RING_COLOR), Default::default()));
         }
         window.with_content_mask(
             Some(ContentMask {

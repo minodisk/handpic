@@ -1,7 +1,9 @@
 /// When a change the folder watcher reported is acted on, as the Tauri
 /// frontend's `resync` / `resyncPending`: never while the open folder is being
 /// listed or scanned (a re-listing would cancel and restart that scan), but
-/// once it is over, and a burst of changes meanwhile collapses into one.
+/// once it is over, and a burst of changes meanwhile collapses into one. A
+/// move to the Trash or a delete in flight holds it busy the same way, and
+/// its end re-lists through `open`.
 #[derive(Default)]
 pub struct Resync {
     /// A listing or a scan of the open folder is under way.
@@ -16,6 +18,18 @@ impl Resync {
     pub fn open(&mut self) {
         self.busy = true;
         self.pending = false;
+    }
+
+    /// A listing or a scan of the open folder, or a run holding it, is
+    /// under way.
+    pub fn busy(&self) -> bool {
+        self.busy
+    }
+
+    /// A run on the open folder's files starts: busy until its re-listing
+    /// ends, a change meanwhile kept for then.
+    pub fn hold(&mut self) {
+        self.busy = true;
     }
 
     /// The watcher reported a change. Whether to re-list now; otherwise it
@@ -73,5 +87,17 @@ mod tests {
         assert!(!r.changed());
         r.open();
         assert!(!r.finished());
+    }
+
+    #[test]
+    fn a_held_run_defers_a_change_and_its_relisting_drops_it() {
+        let mut r = Resync::default();
+        assert!(!r.busy());
+        r.hold();
+        assert!(r.busy());
+        assert!(!r.changed());
+        r.open();
+        assert!(!r.finished());
+        assert!(!r.busy());
     }
 }
