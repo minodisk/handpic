@@ -35,8 +35,9 @@
   `progress_bar`. Wire their `(done, total)` callbacks into it. Basis: the
   plan's inventory table (plan.md lines 25-26), review Round 1 item 2; files
   `crates/native/src/progress.rs`, `crates/native/src/main.rs`.
-- The trash undo / redo, Rewrite Sidecars and Delete Sidecars runs have no
-  progress callback, so the bar shows nothing for them. Add one to the
+- The trash undo, Rewrite Sidecars and Delete Sidecars runs have no
+  progress callback (`trash::undo_run` takes none; `redo_run` does and
+  already feeds the bar), so the bar shows nothing for them. Add one to the
   backend's `trash` / `foldersidecars` runs and feed the bar. Basis: the
   plan's inventory table (plan.md lines 25-26), review Round 1 item 2; files
   `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`,

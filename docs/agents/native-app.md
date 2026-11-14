@@ -1449,6 +1449,10 @@ gpui-component's progress element: nothing calls `gpui_component::init` yet
 - Another operation with a count (Sequence JPEG Timestamps, Import) feeds it
   by passing its `(done, total)` as `shown`'s `folder_op` argument, `None`
   today, from the state its own progress messages update.
+- The trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress
+  callback in the backend (`trash::undo_run`, `foldersidecars`), so the bar
+  shows nothing for them. A new operation needs a `(done, total)` callback
+  before it can feed the bar.
 
 ### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
 
