@@ -45,22 +45,64 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
   while the Tauri app lives there: both crates are in its lock, so a workspace
   patch would swap them for Zed's forks in the shipped app.
 
-### gpui-component is a dependency only; nothing calls `init` yet (Inferred)
+### gpui-component is initialized; nothing is drawn from it yet (Inferred)
 
-`gpui-component` `=0.9.1` is compiled on all three platforms but no source
-file uses it and nothing calls `gpui_component::init`. `init` sets a global
-`Theme`, registers context-scoped key bindings (`gpui-base`'s `Root` binds
-`tab`, `shift-tab`, `cmd-c` / `ctrl-c`) and, in debug builds, a global
-`ctrl-shift-i` / `cmd-alt-i` inspector binding: the first time anything would
-enter GPUI's keymap here. None of its optional features (`tree-sitter*`,
-`syntect`, `speech`, `inspector`, `decimal`, `gpui-fast`) is on, and it does
-not depend on `gpui-pre-platform`, so it turns on no `runtime_shaders`
+`gpui-component` `=0.9.1` is compiled on all three platforms.
+`gpui_component::init(cx)` runs first in the `application().run` closure,
+before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
+to dark (`Theme::change(ThemeMode::Dark, ..)`, the built-in `Default Dark`)
+and maps it over it in a second `Theme::update`, since a mode switch reloads
+the registered theme over color edits made in the same closure. The mapping
+reads `main.rs`'s color constants (one source of each color; the canvases
+keep reading them): `background` `#0a0a0a`, `foreground` and every
+`*_foreground` on a dark surface `#fafafa`, `popover` `#171717`, `primary`
+`#e5e5e5` on `primary_foreground` `#171717`, `secondary`, `muted` and
+`accent` `#262626`, `muted_foreground` `#a1a1a1`, `danger` `#ff6467`,
+`border` and `scrollbar_thumb` white at 10 %, `input` white at 15 %, `ring`
+`#737373`, `overlay` the backdrops' `#00000099`, `font_size` 13 px, `radius`
+6 px (`rounded_md`, the buttons and menus) and `radius_lg` 8 px
+(`rounded_lg`, the dialog boxes). The fields it does not name (the
+`button_*`, `*_hover` / `*_active` shades, `list_*`, ...) keep `Default
+Dark`'s values. Nothing calls `Theme::sync_system_appearance` or observes
+the window appearance, so a light OS setting leaves the app dark. No source
+file draws a component and the window's content is not wrapped in `Root`.
+The window root's own black and white stay; the theme is for components.
+
+None of its optional features (`tree-sitter*`, `syntect`, `speech`,
+`inspector`, `decimal`, `gpui-fast`) is on, and it does not depend on
+`gpui-pre-platform`, so it turns on no `runtime_shaders`
 (`cargo tree -e features -i gpui-pre-platform` shows only the default
 `multithreaded`).
 
-- Rule: the first feature adopting a component calls `init`, checks those
-  bindings against the app's keymap (`keys.rs`, `treekeys.rs`, the settings
-  box's key path) and decides on `Root` and the icon assets.
+`init` puts the first bindings into GPUI's keymap. As verified at 0.9.1
+(`gpui-component` and `gpui-base`), every one is scoped to a key context
+except the inspector's, and none is a multi-keystroke sequence, so none adds
+a pending-key delay. GPUI dispatches a matching binding's action before any
+key-down listener, so a binding that matches takes the key from
+`Riffle::key_down`:
+
+| Context | Keys | Action |
+| --- | --- | --- |
+| none (debug builds, or the `inspector` feature) | `ctrl-shift-i` (`cmd-alt-i` on macOS) | `ToggleInspector`, a global `cx.on_action` that toggles GPUI's inspector |
+| `Root` | `tab`, `shift-tab`, `ctrl-c` (`cmd-c` on macOS) | `Tab` / `TabPrev`, which move the focus and do not propagate; `Copy`, which propagates when no text is selected |
+| `Input` | the editing keys, `enter` / `escape`, `tab` / `shift-tab`, the arrows, Home / End, word and line movement, undo / redo, the clipboard keys | the input's own; `PressEnter`, `Escape` and the indents propagate on a single-line input |
+| `Dialog` (only with `.keyboard(true)`) | `escape`, `enter` | `dialog::Cancel`, `dialog::Confirm` |
+| `Popover`, `PopupMenu`, `Select`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
+
+- Rule: the inspector binding is left in place. In a debug build
+  `ctrl+shift+i` opens the inspector and a user binding on it is shadowed;
+  a release build has no such binding. No default of
+  `crates/backend/src/shortcuts.rs` and none of `settingsmodal::APP_KEYS`
+  uses it.
+- Rule: `Root` is not mounted yet. Once it is, its `tab` / `shift-tab` would
+  take the default `toggleSides` (`tab`) and any user binding on
+  `shift+tab` before the keymap sees them; the step that mounts it decides
+  how the keymap keeps them.
+- Rule: a version bump of `gpui-component` re-reads the bindings: grep
+  `KeyBinding::new` in both crates for a `None` context and for the `Root`
+  context, and update the table.
+- Rule: the first feature drawing a component decides on the icon assets
+  (`gpui_kit_assets::Assets`, not a direct dependency yet).
 
 ### The license notices are due at packaging (Inferred)
 
@@ -1433,8 +1475,8 @@ a folder operation's run, then the scan's running pass
 bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
 `MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
 width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's progress element: nothing calls `gpui_component::init` yet
-(see "gpui-component is a dependency only").
+gpui-component's progress element: no component is drawn yet (see
+"gpui-component is initialized; nothing is drawn from it yet").
 
 - Rule: the bar is `absolute` inside the status row (made `relative`), on
   its top edge, so showing or hiding it changes no layout: the canvas's

@@ -45,6 +45,7 @@ mod sidecars;
 mod sort;
 mod strip;
 mod textinput;
+mod theme;
 mod thumbs;
 mod timing;
 mod trash;
@@ -5078,6 +5079,8 @@ fn main() {
     );
     let saved = settings.window.clone().filter(|_| remember);
     application().run(move |cx: &mut App| {
+        gpui_component::init(cx);
+        theme::apply(cx);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
         cx.open_window(

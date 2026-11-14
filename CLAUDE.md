@@ -261,7 +261,10 @@ its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
-under `RUST_LOG=debug`), `src/settings.rs`
+under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
+global `Theme`, which `gpui_component::init` installs at startup, to dark
+and maps it to the app's Neutral dark tokens from `main.rs`'s color
+constants (`apply`, not following the OS appearance), `src/settings.rs`
 reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a

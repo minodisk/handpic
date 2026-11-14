@@ -241,7 +241,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 
 ## Steps
 
-- [ ] Step 1: Call `gpui_component::init`, map the `Theme` to the Neutral dark look, and record the key bindings
+- [x] Step 1: Call `gpui_component::init`, map the `Theme` to the Neutral dark look, and record the key bindings
   - Done when:
     - `gpui_component::init(cx)` runs once at startup, before the window
       opens. No component is drawn yet and the window's content is not
