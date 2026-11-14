@@ -7,10 +7,10 @@
   constant block were as the plan describes, so the edit there is two lines
   plus `mod theme;`.
 - Neither `background` (`#0a0a0a`) nor the backdrops' `#00000099` had a
-  constant in `main.rs` (the window root is black, the three backdrops write
-  `rgba(0x00000099)` inline). `theme.rs` holds them as `BACKGROUND_COLOR` and
-  `OVERLAY_COLOR` rather than adding constants to `main.rs`; the inline
-  backdrop literals stay until the dialogs move to `Dialog` (Steps 6-8).
+  constant in `main.rs` (the window root is black, the three backdrops wrote
+  the overlay inline). `OVERLAY_COLOR` now lives in `main.rs` and the three
+  backdrops and `theme.rs` read it (one source); `background` stays
+  `theme.rs`'s own `BACKGROUND_COLOR`, which nothing else paints.
 - The radii follow what the native app draws, not `style.css`: GPUI's
   `rounded_md` is 6 px (the buttons, the menus) and `rounded_lg` 8 px (the
   dialog boxes), so `radius` is 6 px and `radius_lg` 8 px. The settings

@@ -53,13 +53,13 @@ before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
 to dark (`Theme::change(ThemeMode::Dark, ..)`, the built-in `Default Dark`)
 and maps it over it in a second `Theme::update`, since a mode switch reloads
 the registered theme over color edits made in the same closure. The mapping
-reads `main.rs`'s color constants (one source of each color; the canvases
-keep reading them): `background` `#0a0a0a`, `foreground` and every
+reads `main.rs`'s color constants (one source of each color, the overlay included, which the three backdrops read; the canvases
+keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foreground` and every
 `*_foreground` on a dark surface `#fafafa`, `popover` `#171717`, `primary`
 `#e5e5e5` on `primary_foreground` `#171717`, `secondary`, `muted` and
 `accent` `#262626`, `muted_foreground` `#a1a1a1`, `danger` `#ff6467`,
 `border` and `scrollbar_thumb` white at 10 %, `input` white at 15 %, `ring`
-`#737373`, `overlay` the backdrops' `#00000099`, `font_size` 13 px, `radius`
+`#737373`, `overlay` `#00000099`, `font_size` 13 px, `radius`
 6 px (`rounded_md`, the buttons and menus) and `radius_lg` 8 px
 (`rounded_lg`, the dialog boxes). The fields it does not name (the
 `button_*`, `*_hover` / `*_active` shades, `list_*`, ...) keep `Default

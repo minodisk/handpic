@@ -6,13 +6,11 @@ use gpui_component::{Theme, ThemeColor, ThemeMode};
 
 use crate::{
     ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
-    MUTED_FILL, PANE_COLOR, PRIMARY_COLOR, RING_COLOR,
+    MUTED_FILL, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, RING_COLOR,
 };
 
 /// `style.css`'s `--background`, which nothing outside the components paints.
 const BACKGROUND_COLOR: u32 = 0x0a0a0a;
-/// The backdrop behind the app's dialogs and the settings modal.
-const OVERLAY_COLOR: u32 = 0x00000099;
 /// The text size of the app's controls.
 const FONT_SIZE: Pixels = px(13.);
 /// `rounded_md`, the buttons' and menus' radius, and `rounded_lg`, the dialog
