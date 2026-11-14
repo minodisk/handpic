@@ -1274,6 +1274,34 @@ overlay comes about 50-60 ms after the image; the held-key measurement showed
 no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
 resize (Sobel 4-6 ms).
 
+### The performance overlay is a band painted last in the preview canvas (Inferred)
+
+`d` (the keymap's `performance`) toggles `perfgraph.rs`'s `Overlay`. Showing
+it starts recording in `perf.rs`'s `Perf`, the backend's `perf::Sampler`,
+whose thread only sends `Event::Perf` into the view's one channel (the
+sample is stamped with `Instant::now()` when the view takes it, as the Tauri
+listener stamps `performance.now()`), and a 500 ms `cx.notify()` loop held as
+an `Option<Task<()>>`; hiding it stops all three and drops what was
+recorded. `Sampler::stop` only signals, so one late sample can still arrive
+and the model drops it. The graph is painted by the preview canvas's closure
+after the image, the 1:1 crop and the `f` marks, and also with no image, as
+the bottom 120 px of the canvas's bounds under a content mask, so it moves
+neither view and takes no input.
+
+A switch's latency point is completed in the same `cx.defer` as the `page`
+line, from the same `timing::Stages`, its value `keypress_to_pixels` and its
+bar the eight native stages stacked (they do not sum to the value, see
+"`keypressToPixels` differs from the Tauri app's"). A page no key or strip
+click turned (an open, a refilter, a re-listing) starts at `switched`, the
+time `request` was last called, and is built only while the overlay is on;
+the `pending` slot carries whether it was keyed, and only a keyed one prints
+the `page` line and goes into `Summary`. A stale preview drawn on the way
+(`stale`) and a failed one add no point.
+
+- Rule: with the overlay off nothing samples, records or redraws; the only
+  cost is the `on()` check in `paint` and in `loaded`.
+
+
 ### Text is typed through `textinput.rs`, the port of GPUI's input example (Inferred)
 
 GPUI at the pinned rev has no text input element. `textinput.rs` is a port

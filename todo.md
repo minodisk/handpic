@@ -2789,3 +2789,17 @@ The test failed once in four `cargo test` runs of the native workspace during `g
 #### TODO
 
 - [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).
+
+### Native: real-device check of the performance overlay on `d`
+
+`gpui-perf-overlay` ported the Tauri app's performance overlay to the GPUI app: the keymap action `performance` (default key `d`) toggles a 120 px band along the bottom of the preview area that plots the last 60 s of Handpic's and the system's CPU, Handpic's read throughput, the system's disk busy time and one stacked bar per preview switch, with a one-line legend. CI and the unit tests cover the pure model (`crates/native/src/perf.rs`) and the graph layout (`crates/native/src/perfgraph.rs`), and `mise run native:check` passes. The agent could not see the window, so the drawing, the 500 ms motion and the bars were never exercised; the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-perf-overlay/plan.md`.
+
+Files: `crates/native/src/perf.rs`, `crates/native/src/perfgraph.rs`, `crates/native/src/main.rs`, `crates/native/src/scan.rs` (`Event::Perf`).
+
+#### TODO
+
+- [ ] On Windows, in a release build of `crates/native`, open a folder with `mise run native:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight native stage names fading, with `<n> MB/s  <n> ms` at the right.
+- [ ] On Windows, with the overlay on, switch previews with an arrow key, with a strip click and by opening a folder from the tree. Expected: one red stacked bar per preview switch, and the key or click works as before.
+- [ ] On Windows, press `z` with the overlay on. Expected: the band sits over the fit view and the 1:1 view without moving them.
+- [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
+- [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.

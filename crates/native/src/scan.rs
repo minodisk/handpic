@@ -100,6 +100,8 @@ pub enum Event {
         done: usize,
         total: usize,
     },
+    /// A performance overlay sample from the sampler's thread.
+    Perf(riffle_backend::perf::Sample),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its

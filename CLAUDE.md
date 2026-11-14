@@ -416,11 +416,22 @@ listing starts under; `cancels_scan`, a port of `idle.ts`), `src/dialog.rs` the
 confirmation dialog model the folder operations share, `src/folderops.rs` the
 folder menu's operations (the flow under way, one at a time, their dialog
 drawn as a `deferred` layer), `src/sidecars.rs` the port of `sidecars.ts`
-(`Rewrite Sidecars from Index…` / `Delete Sidecars…`), and `src/peaking.rs`
+(`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the
-background executor, the fit view's image resized to its drawn size first).
+background executor, the fit view's image resized to its drawn size first),
+`src/perf.rs` the performance overlay's data (`Perf`, a port of `perf.ts`:
+the backend's `perf::Sample`s stamped on arrival and the per-switch
+`timing::Stages` of the last `WINDOW`, recording only while on, the latency
+axis maximum never below `LATENCY_FLOOR` and the read axis maximum never
+below `READ_FLOOR_BPS`; `latency_start`, the key else the selection change),
+and `src/perfgraph.rs` the overlay on `d` (`Overlay`: the backend's
+`perf::Sampler`, whose samples reach the view as `Event::Perf`, and a 500 ms
+redraw, both only while shown; the pure layout, `x_of`, `y_of`, `stack` over
+the native `page` line's stages and `shown`; `paint`, a port of `drawPerf`
+as a 120 px band along the bottom of the preview canvas over the fit view
+and the 1:1 crop alike).
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
