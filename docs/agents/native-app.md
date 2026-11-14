@@ -94,6 +94,23 @@ runtime on its one `mcp` thread, which runs the switch, waits for the quit's
 signal and runs the stop. `Mcp::with_port` binds another port than
 `MCP_PORT`, for the native `--mcp-port`.
 
+The CPU and disk sampler and the AI model's state follow the same seam.
+`perf::Sampler::start(on_sample)` takes an
+`impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
+(stopping needs no callback); the callback returns a `Result` so the warn-once
+on a failed report stays in the backend (`perf sample report failed: ...`,
+target `riffle_backend::perf`), and the Tauri wrapper is only
+`app.emit("perf-sample", sample)`. `ai::Ai` is a cloneable `Arc` over the
+status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
+`Ai::new`, so the download thread holds a clone of the `Ai` itself and
+reports progress and the final state through that callback; `switch` also
+returns the state. The `on_state` callback returns nothing because the Tauri
+app always ignored `ai-state` emit errors. The download's and the server's
+`log` lines now sit under `riffle_backend::ai` / `riffle_backend::mcp`, not
+`riffle_app::*`, so grep for the backend target. A native consumer takes these
+as they are rather than copying the Tauri wrapper. Source:
+`docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
+
 - Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
   take a callback or the state itself.
 - Rule: a backend body that changes a folder on disk leaves the scan check to
@@ -945,7 +962,14 @@ as `key: <name> action=…` for every keystroke, and not GPUI's.
 under the native app's own folder, or to `--log <path>` (see
 `app-log.md`'s "The GPUI app's log"), with one `write` per line on a
 `Mutex<File>` opened for append and the size kept in memory; past 1 MB it
-starts anew as the Tauri app's does. `main` installs it once the arguments
+starts anew as the Tauri app's does: `File::create` (truncate) and a replaced
+handle, never `set_len` or a remove on the open file, because on Windows a
+file open for append cannot be truncated by `set_len` and a remove while the
+handle is open can leave the name pending deletion. The timestamp is a
+hand-written civil-from-days, not `chrono` / `time`, so the native lock does not
+grow (turning on the features a direct dependency needs could pull further
+crates in). `Riffle::start` destructures `Args` exhaustively, so a new flag
+needs a `name: _` there too. `main` installs it once the arguments
 are parsed and the backend's panic hook right after it. The `page` / `zoom`
 timing lines stay `println!` to stdout.
 

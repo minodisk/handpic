@@ -245,6 +245,15 @@
 
 ## Deferred issues (todo candidates)
 
+- Flaky native settings-store tests. After #1020 merged, main's CI `native`
+  job failed in `settings::tests::reads_the_stored_values` and
+  `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`
+  (stored `sidecarFormat` `both` read back as `xmp`); rerunning the failed job
+  passed (run 43465601803). The tests come from the settings store
+  (#1008 / #1012), not this plan; the likely cause is the store's writer thread
+  not having flushed the seed before the reopen. Done when the tests wait for
+  the writer (or the seed is written synchronously) and pass repeatedly.
+
 - Pending manual check (Step 4, the Tauri app's MCP toggle on the moved
   server): on Windows, in a Tauri app built from this branch, turn the MCP
   server on in the settings modal, connect an MCP client to
