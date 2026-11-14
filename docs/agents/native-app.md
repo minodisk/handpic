@@ -1824,7 +1824,11 @@ See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md
   `AppActivate` + `SendKeys` does not reach the app and may type into whatever
   window has focus, so never use it. Close a run by PID with
   `CloseMainWindow`; never for every `riffle-native` process, because other
-  sessions run their own.
+  sessions run their own. `Get-Process riffle-native` returns every leftover
+  instance, so take the one you started by PID (`Select-Object -First 1` only
+  when you know it is the only one), or the `IntPtr` argument becomes an
+  array. `.ps1` files are blocked by the execution policy here, so pass the
+  script with `-Command`.
 - Rule: other sessions' `mise run ci`, `cargo` and `riffle-native` processes
   spoil runs (17 of 25 B attempts and 1 of 11 A attempts were discarded in the
   Step 6 session of

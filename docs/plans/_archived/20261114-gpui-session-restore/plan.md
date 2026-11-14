@@ -228,3 +228,5 @@ Decisions 1-6 below were approved by the user as recommended (2026-11-14).
   Tauri app's latest.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
