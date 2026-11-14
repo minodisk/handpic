@@ -45,7 +45,7 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
   while the Tauri app lives there: both crates are in its lock, so a workspace
   patch would swap them for Zed's forks in the shipped app.
 
-### gpui-component is initialized; only the settings modal draws from it (Inferred)
+### gpui-component is initialized; the settings modal and the tree's inline rename draw from it (Inferred)
 
 `gpui-component` `=0.9.1` is compiled on all three platforms.
 `gpui_component::init(cx)` runs first in the `application().run` closure,
@@ -71,7 +71,8 @@ the window appearance, so a light OS setting leaves the app dark. The
 components drawn are the settings modal's: `Input` (its text fields, see
 "Text is typed through gpui-component's `Input`"), `Button`, `Checkbox`,
 `Radio` and `ScrollableElement`'s scrollbar (see "The settings modal is its
-own entity"). The window's content is not wrapped in `Root`.
+own entity"), and the tree's inline rename's `Input` (see "The tree's inline
+rename is a text input in the row"). The window's content is not wrapped in `Root`.
 The window root's own black and white stay; the theme is for components.
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
@@ -1559,9 +1560,9 @@ a folder operation's run, then the scan's running pass
 bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
 `MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
 width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's progress element: only the settings modal draws from it
-(see "gpui-component is initialized; only the settings modal draws from
-it").
+gpui-component's progress element: only the settings modal and the tree's
+inline rename draw from it (see "gpui-component is initialized; the settings
+modal and the tree's inline rename draw from it").
 
 - Rule: the bar is `absolute` inside the status row (made `relative`), on
   its top edge, so showing or hiding it changes no layout: the canvas's
@@ -2254,22 +2255,22 @@ the watcher back when the rename fails or the split leaves the folder.
 ### The tree's inline rename is a text input in the row, held by the gate (Inferred)
 
 `Rename…` in the folder menu, or a slow second click on the open folder's
-name, puts a fresh `textinput::TextInput` in place of the row's name
-(`folderops`' `tree_name`), its text the name (or the pending one) selected
-whole (`TextInput::select_all`) and focused. The edit is keyed by the row's
+name, puts a fresh gpui-component `InputState` (drawn with `Input`) in place of the
+row's name (`folderops`' `tree_name`), its text the name (or the pending one)
+selected whole (`InputState::select_all`) and focused. The edit is keyed by the row's
 path, not its index, so a re-listing of the tree keeps it with its text and
 selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
 `PendingRename`, `SlowClick`, `RenamesInFlight`).
 
-- Rule: a live edit owns the keyboard. The input takes Enter, Escape and its
-  editing keys in its own `on_key_down` and stops them; every other key goes
-  on unstopped (on Windows a stopped key types nothing) and the window's
+- Rule: a live edit owns the keyboard. The `Input` takes its editing keys as
+  its key context's actions (see "Text is typed through gpui-component's
+  `Input`"); every other key goes on unstopped (on Windows a stopped key types nothing) and the window's
   `key_down` returns for it right after the dialogs' guards
   (`rename_owns_keys`), so neither the tree's keyboard nor the keymap sees
   it. A key the IME takes raises no `KeyDownEvent`, so composition never
   reaches a listener.
-- Rule: the input's `Commit` (Enter, or the focus left) confirms and its
-  `Cancel` (Escape) cancels, once (`commit`); the edit and its subscription
+- Rule: the input's `InputEvent::PressEnter` or `Blur` (Enter, or the
+  focus left) confirms and Escape cancels, once (`commit`); the edit and its subscription
   are dropped at once, so the lost focus that follows an Enter decides
   nothing. A `Commit` while the window is inactive is ignored: GPUI blurs the
   focused element when the window deactivates (the focus path of an inactive
