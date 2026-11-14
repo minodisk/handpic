@@ -9,14 +9,21 @@ use gpui::{
     FontWeight, KeyDownEvent, MouseButton, PathPromptOptions, Pixels, SharedString, Window,
     deferred, div, prelude::*, px, rgb, rgba, transparent_black,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::{
+    ActiveTheme, Selectable, Sizable,
+    button::{Button, ButtonVariants},
+    checkbox::Checkbox,
+    input::{Input, InputEvent, InputState},
+    radio::Radio,
+    scroll::ScrollableElement,
+};
 
 use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
-    ACCENT_COLOR, BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER,
-    MUTED_COLOR, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
+    ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
+    OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
     settings::Settings,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, Step, TABS, Tab},
 };
@@ -259,6 +266,15 @@ impl SettingsView {
             .any(|field| field.focus_handle(cx).is_focused(window))
     }
 
+    /// A pointer press on a component control keeps the focus where it was,
+    /// so one pressed while a field has it moves it to the box first, and
+    /// the field commits on its blur as when the press focused the control.
+    fn leave_field(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.editing(window, cx) {
+            window.focus(&self.focus, cx);
+        }
+    }
+
     fn close(&mut self, cx: &mut Context<Self>) {
         self.model.close();
         cx.emit(Change::Closed);
@@ -362,6 +378,14 @@ impl SettingsView {
     }
 
     fn tab_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (border, foreground, muted, accent, primary) = (
+            theme.border,
+            theme.foreground,
+            theme.muted_foreground,
+            theme.accent,
+            theme.primary,
+        );
         div()
             .flex()
             .flex_col()
@@ -370,7 +394,7 @@ impl SettingsView {
             .w(px(180.))
             .pr_3()
             .border_r_1()
-            .border_color(rgba(BORDER_COLOR))
+            .border_color(border)
             .children(TABS.iter().enumerate().map(|(at, &tab)| {
                 let selected = tab == self.model.tab;
                 div()
@@ -382,17 +406,11 @@ impl SettingsView {
                     .border_1()
                     .border_color(rgba(0))
                     .text_size(px(13.6))
-                    .text_color(rgb(if selected {
-                        FOREGROUND_COLOR
-                    } else {
-                        MUTED_COLOR
-                    }))
-                    .when(selected, |d| {
-                        d.bg(rgb(ACCENT_COLOR)).font_weight(FontWeight::SEMIBOLD)
-                    })
+                    .text_color(if selected { foreground } else { muted })
+                    .when(selected, |d| d.bg(accent).font_weight(FontWeight::SEMIBOLD))
                     .cursor_pointer()
-                    .hover(|s| s.bg(rgb(ACCENT_COLOR)).text_color(rgb(FOREGROUND_COLOR)))
-                    .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
+                    .hover(move |s| s.bg(accent).text_color(foreground))
+                    .focus_visible(move |s| s.border_color(primary))
                     .child(tab.label())
                     .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.select(tab, cx)))
             }))
@@ -407,22 +425,29 @@ impl SettingsView {
             .gap_2()
             .text_size(px(13.));
         match self.model.tab {
-            Tab::Culling => content.child(checkbox(
-                "auto-advance",
-                self.auto_advance,
-                "Auto-advance after a star, reject or pick",
-                cx.listener(|this, _: &ClickEvent, _, cx| this.flip_auto_advance(cx)),
-            )),
+            Tab::Culling => content.child(
+                Checkbox::new("auto-advance")
+                    .small()
+                    .checked(self.auto_advance)
+                    .label("Auto-advance after a star, reject or pick")
+                    .px_2()
+                    .py(px(2.))
+                    .text_size(px(13.))
+                    .on_click(cx.listener(|this, _: &bool, _, cx| this.flip_auto_advance(cx))),
+            ),
             Tab::Sidecar => content
                 .children(FORMATS.iter().map(|&(format, label)| {
-                    radio(
-                        format.setting(),
-                        format == self.format,
-                        label,
-                        cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    Radio::new(format.setting())
+                        .small()
+                        .checked(format == self.format)
+                        .label(label)
+                        .px_2()
+                        .py(px(2.))
+                        .text_size(px(13.))
+                        .on_click(cx.listener(move |this, _: &bool, window, cx| {
+                            this.leave_field(window, cx);
                             this.choose_format(format, cx);
-                        }),
-                    )
+                        }))
                 }))
                 .when(settingsmodal::writes_xmp(self.format), |d| {
                     d.child(self.label_names(window, cx))
@@ -430,11 +455,13 @@ impl SettingsView {
             Tab::Shortcuts => {
                 content
                     .child(self.shortcuts(cx))
-                    .child(div().flex().justify_end().child(button(
-                        "shortcuts-reset-all".into(),
-                        "Reset all",
-                        cx.listener(|this, _: &ClickEvent, _, cx| this.edit(Edit::ResetAll, cx)),
-                    )))
+                    .child(div().flex().justify_end().child(
+                        small_button("shortcuts-reset-all", "Reset all").on_click(
+                            cx.listener(|this, _: &ClickEvent, _, cx| {
+                                this.edit(Edit::ResetAll, cx)
+                            }),
+                        ),
+                    ))
             }
             Tab::Import => content.child(self.import(window, cx)),
         }
@@ -455,7 +482,6 @@ impl SettingsView {
             .flex_1()
             .min_h_0()
             .gap_2()
-            .overflow_y_scroll()
             .child(div().child(settingsmodal::IMPORT_NOTE))
             .child(
                 div()
@@ -479,11 +505,14 @@ impl SettingsView {
                             .text_color(rgb(MUTED_COLOR))
                             .child(self.import_root.clone()),
                     )
-                    .child(button(
-                        "import-root-choose".into(),
-                        "Choose\u{2026}",
-                        cx.listener(|this, _: &ClickEvent, _, cx| this.choose_root(cx)),
-                    )),
+                    .child(
+                        small_button("import-root-choose", "Choose\u{2026}").on_click(cx.listener(
+                            |this, _: &ClickEvent, window, cx| {
+                                this.leave_field(window, cx);
+                                this.choose_root(cx);
+                            },
+                        )),
+                    ),
             )
             .children(
                 settingsmodal::root_note(&self.import_root)
@@ -510,13 +539,12 @@ impl SettingsView {
                         .iter()
                         .enumerate()
                         .map(|(at, &pattern)| {
-                            button(
-                                ("import-pattern", at).into(),
-                                pattern,
-                                cx.listener(move |this, _: &ClickEvent, window, cx| {
+                            small_button(("import-pattern", at), pattern).on_click(cx.listener(
+                                move |this, _: &ClickEvent, window, cx| {
+                                    this.leave_field(window, cx);
                                     this.use_pattern(pattern, window, cx);
-                                }),
-                            )
+                                },
+                            ))
                         }),
                 ),
             )
@@ -535,6 +563,7 @@ impl SettingsView {
                         },
                     )),
             )
+            .overflow_y_scrollbar()
     }
 
     /// The Tauri paragraph, a name field per color, the languages `Reset`
@@ -572,32 +601,23 @@ impl SettingsView {
                     .gap(px(4.))
                     .children(i18n::presets().iter().enumerate().map(|(at, preset)| {
                         let chosen = at == self.language;
-                        div()
-                            .id(("label-language", at))
-                            .tab_index(0)
-                            .px(px(6.))
-                            .rounded_sm()
-                            .border_1()
-                            .border_color(rgba(if chosen { 0 } else { INPUT_BORDER }))
-                            .when(chosen, |d| {
-                                d.bg(rgb(ACCENT_COLOR)).border_color(rgb(PRIMARY_COLOR))
-                            })
-                            .cursor_pointer()
-                            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
-                            .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
-                            .child(preset.name.clone())
-                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        small_button(("label-language", at), preset.name.clone())
+                            .selected(chosen)
+                            .when(chosen, |b| b.border_color(rgb(PRIMARY_COLOR)))
+                            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
+                                this.leave_field(window, cx);
                                 this.language = at;
                                 cx.notify();
                             }))
                     }))
-                    .child(button(
-                        "label-names-reset".into(),
-                        "Reset",
-                        cx.listener(|this, _: &ClickEvent, window, cx| {
-                            this.reset_names(window, cx)
-                        }),
-                    )),
+                    .child(
+                        small_button("label-names-reset", "Reset").on_click(cx.listener(
+                            |this, _: &ClickEvent, window, cx| {
+                                this.leave_field(window, cx);
+                                this.reset_names(window, cx)
+                            },
+                        )),
+                    ),
             )
     }
 
@@ -611,7 +631,6 @@ impl SettingsView {
             .flex_col()
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
             .children(
                 self.keymap
                     .bindings()
@@ -649,9 +668,7 @@ impl SettingsView {
                                             .rounded_sm()
                                             .bg(rgb(ACCENT_COLOR))
                                             .child(shown)
-                                            .child(button(
-                                                ("remove", k).into(),
-                                                "\u{d7}",
+                                            .child(small_button(("remove", k), "\u{d7}").on_click(
                                                 cx.listener(
                                                     move |this, _: &ClickEvent, window, cx| {
                                                         this.edit(
@@ -670,25 +687,23 @@ impl SettingsView {
                                             .child("Press a key...")
                                             .into_any_element()
                                     } else {
-                                        button(
-                                            "add".into(),
-                                            "+",
-                                            cx.listener(move |this, _: &ClickEvent, window, cx| {
-                                                this.capture(action, window, cx);
-                                            }),
-                                        )
-                                        .into_any_element()
+                                        small_button("add", "+")
+                                            .on_click(cx.listener(
+                                                move |this, _: &ClickEvent, window, cx| {
+                                                    this.capture(action, window, cx);
+                                                },
+                                            ))
+                                            .into_any_element()
                                     }),
                             )
-                            .child(button(
-                                "reset".into(),
-                                "Reset",
-                                cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            .child(small_button("reset", "Reset").on_click(cx.listener(
+                                move |this, _: &ClickEvent, _, cx| {
                                     this.edit(Edit::Reset(action), cx);
-                                }),
-                            ))
+                                },
+                            )))
                     }),
             )
+            .overflow_y_scrollbar()
     }
 
     fn dialog(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -724,18 +739,12 @@ impl SettingsView {
                             .child("Settings"),
                     )
                     .child(
-                        div()
-                            .id("settings-close")
-                            .tab_index(0)
+                        Button::new("settings-close")
+                            .ghost()
+                            .small()
                             .px(px(6.4))
                             .rounded_sm()
-                            .border_1()
-                            .border_color(rgba(0))
-                            .text_size(px(19.))
-                            .cursor_pointer()
-                            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
-                            .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
-                            .child("\u{d7}")
+                            .child(div().text_size(px(19.)).child("\u{d7}"))
                             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.close(cx))),
                     ),
             )
@@ -790,109 +799,16 @@ fn field(state: &Entity<InputState>, window: &Window, cx: &gpui::App) -> impl In
     Styled::h(input, FIELD_HEIGHT)
 }
 
-/// A small outlined button; a click, Enter or Space on it when focused runs
-/// `on_click`. `id` is unique within its row, whose own id scopes it.
-fn button(
-    id: ElementId,
-    label: &'static str,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .tab_index(0)
-        .flex_none()
+/// A small outlined button: `Button`'s default variant on the theme's
+/// `button` fill and `input` border, at the size and radius of the buttons it
+/// replaced, with their 13 px label. `id` is unique within its row, whose own
+/// id scopes it.
+fn small_button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> Button {
+    Button::new(id)
+        .small()
         .px(px(6.))
         .rounded_sm()
-        .border_1()
-        .border_color(rgba(INPUT_BORDER))
-        .bg(rgba(BUTTON_FILL))
-        .cursor_pointer()
-        .hover(|s| s.bg(rgb(ACCENT_COLOR)))
-        .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
-        .child(label)
-        .on_click(on_click)
-}
-
-/// A checkbox row: the box, checked or not, then its label; a click, Enter or
-/// Space on the focused row flips it.
-fn checkbox(
-    id: &'static str,
-    checked: bool,
-    label: &'static str,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .tab_index(0)
-        .flex()
-        .items_center()
-        .gap_2()
-        .px_2()
-        .py(px(2.))
-        .rounded_sm()
-        .border_1()
-        .border_color(rgba(0))
-        .cursor_pointer()
-        .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
-        .child(
-            div()
-                .size(px(14.))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_sm()
-                .border_1()
-                .border_color(rgba(INPUT_BORDER))
-                .text_size(px(11.))
-                .when(checked, |d| {
-                    d.bg(rgb(PRIMARY_COLOR))
-                        .text_color(rgb(PANE_COLOR))
-                        .child("\u{2713}")
-                }),
-        )
-        .child(label)
-        .on_click(on_click)
-}
-
-/// A radio row: the round box, filled when selected, then its label; a click,
-/// Enter or Space on the focused row selects it.
-fn radio(
-    id: &'static str,
-    selected: bool,
-    label: &'static str,
-    on_click: impl Fn(&ClickEvent, &mut Window, &mut gpui::App) + 'static,
-) -> impl IntoElement {
-    div()
-        .id(id)
-        .tab_index(0)
-        .flex()
-        .items_center()
-        .gap_2()
-        .px_2()
-        .py(px(2.))
-        .rounded_sm()
-        .border_1()
-        .border_color(rgba(0))
-        .cursor_pointer()
-        .focus_visible(|s| s.border_color(rgb(PRIMARY_COLOR)))
-        .child(
-            div()
-                .size(px(14.))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .rounded_full()
-                .border_1()
-                .border_color(rgba(INPUT_BORDER))
-                .when(selected, |d| {
-                    d.border_color(rgb(PRIMARY_COLOR))
-                        .child(div().size(px(6.)).rounded_full().bg(rgb(PRIMARY_COLOR)))
-                }),
-        )
-        .child(label)
-        .on_click(on_click)
+        .child(div().text_size(px(13.)).child(label.into()))
 }
 
 impl Render for SettingsView {

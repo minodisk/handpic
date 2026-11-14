@@ -24,9 +24,9 @@ Moving from the Zed git rev `b5cd310b` to the snapshot changed no source
 file. The plan: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md).
 
 - Rule: the native crate never picks a GPUI version of its own. An upgrade
-  moves `gpui-component`, `gpui-pre` and `gpui-pre-platform` together in one
-  deliberate chore PR (all three exact pins), and records the API changes met
-  at the bump here.
+  moves `gpui-component`, `gpui-kit-assets`, `gpui-pre` and
+  `gpui-pre-platform` together in one deliberate chore PR (all four exact
+  pins), and records the API changes met at the bump here.
 - Rule: `cargo tree` shows one GPUI: no package from
   `git+https://github.com/zed-industries/zed`, `gpui-pre` at one version. Two
   GPUIs have distinct types, so no gpui-component element could join the
@@ -45,7 +45,7 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
   while the Tauri app lives there: both crates are in its lock, so a workspace
   patch would swap them for Zed's forks in the shipped app.
 
-### gpui-component is initialized; only `Input` is drawn from it (Inferred)
+### gpui-component is initialized; only the settings modal draws from it (Inferred)
 
 `gpui-component` `=0.9.1` is compiled on all three platforms.
 `gpui_component::init(cx)` runs first in the `application().run` closure,
@@ -61,13 +61,17 @@ keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foregro
 `border` and `scrollbar_thumb` white at 10 %, `input` white at 15 %, `ring`
 `#737373`, `overlay` `#00000099`, `font_size` 13 px, `radius`
 6 px (`rounded_md`, the buttons and menus) and `radius_lg` 8 px
-(`rounded_lg`, the dialog boxes). The fields it does not name (the
-`button_*`, `*_hover` / `*_active` shades, `list_*`, ...) keep `Default
-Dark`'s values. Nothing calls `Theme::sync_system_appearance` or observes
-the window appearance, so a light OS setting leaves the app dark. The only
-component drawn is `Input`, the settings modal's text fields (see "Text is
-typed through gpui-component's `Input`"), and the window's content is not
-wrapped in `Root`.
+(`rounded_lg`, the dialog boxes), and `Button`'s default variant: `button`
+`BUTTON_FILL` (white at 4 %), `button_hover` and `button_active` `#262626`,
+`button_foreground` `#fafafa`. `Default Dark` derives the `button_*`,
+`*_hover` / `*_active` and `list_*` fields at load and `Theme::update` does
+not derive them again, so the fields it does not name keep `Default Dark`'s
+values. Nothing calls `Theme::sync_system_appearance` or observes
+the window appearance, so a light OS setting leaves the app dark. The
+components drawn are the settings modal's: `Input` (its text fields, see
+"Text is typed through gpui-component's `Input`"), `Button`, `Checkbox`,
+`Radio` and `ScrollableElement`'s scrollbar (see "The settings modal is its
+own entity"). The window's content is not wrapped in `Root`.
 The window root's own black and white stay; the theme is for components.
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
@@ -104,9 +108,11 @@ key-down listener, so a binding that matches takes the key from
   `KeyBinding::new` in both crates for a `None` context and for the `Root`
   context, and update the table.
 - Rule: the app already has its own `AssetSource` (`icons.rs`); GPUI takes
-  one per application, so a feature drawing a component's icons composes
-  `gpui_kit_assets::Assets` with it (see "The icons are Lucide SVGs served by
-  one `AssetSource`").
+  one per application, so `Icons` falls back to `gpui_kit_assets::Assets`
+  (`gpui-kit-assets` `=0.9.1`, the components' own icon set, not the
+  whole-catalog `AllAssets`) for the icons the components draw, the
+  `Checkbox`'s and the checked `Radio`'s `icons/check.svg` so far (see "The
+  icons are Lucide SVGs served by one `AssetSource`").
 
 ### The license notices are due at packaging (Inferred)
 
@@ -792,9 +798,9 @@ dimmed, shows capture order and keeps the stored key.
 the rendered alpha mask in the element's `text_color`, so a stroked Lucide
 icon and a filled derivative both draw in one color. `icons.rs` holds the
 SVG strings as constants, a path constant per icon (`icons/<name>.svg`), and
-`Icons`, whose `load` answers those paths with borrowed bytes and anything
-else with `None`; `main()` registers it with
-`application().with_assets(icons::Icons)`.
+`Icons`, whose `load` answers those paths with borrowed bytes and any other
+from `gpui_kit_assets::Assets`, a path in neither with `None`; `main()`
+registers it with `application().with_assets(icons::Icons)`.
 
 - Rule: to add an icon, copy it verbatim from `lucide-static` at the version
   the header names (v1.48.0, as `crates/app/ui/src/icons.ts`), add its SVG
@@ -803,10 +809,13 @@ else with `None`; `main()` registers it with
   any Feather-derived icon (the list in `LICENSE-lucide`). The full notice is
   `crates/native/LICENSE-lucide`, a copy of the Tauri app's, not a reference
   into `crates/app`.
-- Rule: GPUI keeps one `AssetSource` per application. Another source (say
-  `gpui_kit_assets::Assets`) is composed with `Icons`, the own paths first,
+- Rule: GPUI keeps one `AssetSource` per application. Another source (here
+  `gpui_kit_assets::Assets`) is composed with `Icons`, the own paths first
+  (`icons/star.svg` and `icons/square.svg` are in both; the app's win),
   never registered in its place: a missing asset draws nothing and fails no
-  build. `icons.rs`'s test checks every path loads an SVG.
+  build. `icons.rs`'s tests check every own path loads an SVG, the own path
+  wins, `icons/check.svg` loads from `Assets` and an unknown path loads
+  nothing.
 
 ### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
 
@@ -849,14 +858,44 @@ not open.
   `window.focus_next` / `focus_prev`, which walk the whole window's rendered
   tab stops and wrap; the modal's controls are the only tab stops (the root's
   handle comes from `cx.focus_handle()`, `tab_stop` false), so the cycle stays
-  inside the modal. A control is `.id(..).tab_index(0)`; each tab tracks a
-  handle of the view's with `tab_stop(selected)`, the Tauri roving
-  `tabindex`, so only the selected tab is in the cycle and ArrowUp /
-  ArrowDown / Home / End on it select and focus another (`next_tab`).
-- Rule: Enter and Space on a focused control come for free: a focusable
-  element with `on_click` turns a key down then up of either into a
-  `ClickEvent::Keyboard` (`div.rs`), and its listener runs before the box's
+  inside the modal. The controls are gpui-component's `Button` (the outlined
+  `small_button`s: `Choose…`, the example patterns, the languages, `Reset`,
+  `+`, a chip's `×`, `Reset all`; the ghost close `×`), `Checkbox`
+  (auto-advance) and `Radio` (the three formats, standalone, not a
+  `RadioGroup`, whose arrow-key roving would change the cycle), each a tab
+  stop at the default `tab_index(0)` with a focus handle of its own (keyed
+  state, or `track_focus`), and the `Input` fields. The tabs stay hand-drawn
+  `div`s on the theme's tokens: each tracks a handle of the view's with
+  `tab_stop(selected)`, the Tauri roving `tabindex`, so only the selected tab
+  is in the cycle and ArrowUp / ArrowDown / Home / End on it select and focus
+  another (`next_tab`). `TabBar` is horizontal only.
+- Rule: Enter and Space on a focused control come for free: the Base
+  `Button`, `Checkbox` and `Radio` under the components are `div`s with
+  `on_click`, which turn a key down then up of either into a
+  `ClickEvent::Keyboard` (`div.rs`), and their listener runs before the box's
   bubble-phase handler stops the event.
+- Rule: a pointer press on a component control does not move the focus (each
+  calls `window.prevent_default()` on mouse down, which also keeps the box's
+  focus-on-press from running). So a control pressed while a field has the
+  focus calls `leave_field` first, which focuses the box, and the field
+  commits on its `Blur` as it did when the press focused the old control.
+- Rule: the look. The outlined buttons are `Button`'s default variant at
+  `.small()` (24 px tall) with `px(6.)`, `rounded_sm` and a 13 px label
+  child (the variant's own label is `text_sm`, 14 px at the window's 16 px
+  rem, and its content style is crate-private), on the mapped `button` fill
+  and `input` border; the chosen language is `.selected(true)`
+  (`button_active`) with the `PRIMARY_COLOR` border. `Checkbox` and `Radio`
+  are `.small()` (a 14 px indicator) with a 13 px `text_size`; a checked
+  `Radio` is the component's filled circle with the check mark, not the old
+  ring and dot. The focus ring is the theme's: `focus_ring` is on in
+  `Default Dark`, so a focused control gets the `ring` border and a ring
+  outside it.
+- Rule: the Import tab's and the Keyboard Shortcuts tab's lists are
+  `overflow_y_scrollbar()` (`ScrollableElement`), which wraps the list in a
+  root carrying its size and an inner scroll area, with the theme's
+  scrollbar in its default `ScrollbarMode::Scrolling` (shown while
+  scrolling, fading after). Nothing scrolls a focused row into view, before
+  or after.
 - Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
   features (`aiEnabled` with the model download, pass 3, genres, the ranking,
   `recommended`); a seeded `aiEnabled` key stays in the store, unread.
@@ -1520,8 +1559,9 @@ a folder operation's run, then the scan's running pass
 bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
 `MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
 width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's progress element: only `Input` is drawn from it (see
-"gpui-component is initialized; only `Input` is drawn from it").
+gpui-component's progress element: only the settings modal draws from it
+(see "gpui-component is initialized; only the settings modal draws from
+it").
 
 - Rule: the bar is `absolute` inside the status row (made `relative`), on
   its top edge, so showing or hiding it changes no layout: the canvas's

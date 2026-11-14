@@ -1,5 +1,6 @@
 //! The Lucide icons the app draws, served to GPUI's `svg().path(..)` by
-//! `Icons`, the application's one `AssetSource`.
+//! `Icons`, the application's one `AssetSource`, which falls back to
+//! `gpui_kit_assets::Assets` for the icons gpui-component's controls draw.
 
 // Lucide `star`, `square`, `rectangle-vertical`, `rectangle-horizontal` and
 // `scan-face` icons, lucide-static v1.48.0
@@ -22,6 +23,7 @@
 use std::borrow::Cow;
 
 use gpui::{AssetSource, Result, SharedString};
+use gpui_kit_assets::Assets;
 
 pub const STAR: &str = "icons/star.svg";
 pub const STAR_FILLED: &str = "icons/star-filled.svg";
@@ -62,19 +64,27 @@ const SVGS: [(&str, &str); 8] = [
 pub struct Icons;
 
 impl AssetSource for Icons {
+    /// The own paths first; any other from the components' set, a path in
+    /// neither loading nothing (`Assets` errs on it).
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        Ok(SVGS
-            .iter()
-            .find(|(known, _)| *known == path)
-            .map(|(_, svg)| Cow::Borrowed(svg.as_bytes())))
+        match SVGS.iter().find(|(known, _)| *known == path) {
+            Some((_, svg)) => Ok(Some(Cow::Borrowed(svg.as_bytes()))),
+            None => Ok(Assets.load(path).unwrap_or(None)),
+        }
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
-        Ok(SVGS
+        let mut paths: Vec<SharedString> = SVGS
             .iter()
             .filter(|(known, _)| known.starts_with(path))
             .map(|(known, _)| SharedString::from(*known))
-            .collect())
+            .collect();
+        for other in Assets.list(path)? {
+            if !paths.contains(&other) {
+                paths.push(other);
+            }
+        }
+        Ok(paths)
     }
 }
 
@@ -101,14 +111,30 @@ mod tests {
     }
 
     #[test]
+    fn an_own_path_wins_over_the_components_one() {
+        let bytes = Icons.load(STAR).unwrap().unwrap();
+        assert_eq!(bytes.as_ref(), STAR_SVG.as_bytes());
+    }
+
+    #[test]
+    fn a_component_icon_loads_from_their_set() {
+        let bytes = Icons.load("icons/check.svg").unwrap().expect("check");
+        assert!(bytes.starts_with(b"<svg"));
+    }
+
+    #[test]
     fn an_unknown_path_loads_nothing() {
-        assert!(Icons.load("icons/check.svg").unwrap().is_none());
+        assert!(Icons.load("icons/no-such-icon.svg").unwrap().is_none());
         assert!(Icons.load("").unwrap().is_none());
     }
 
     #[test]
-    fn the_listing_names_the_icons_under_the_prefix() {
-        assert_eq!(Icons.list("icons/").unwrap().len(), SVGS.len());
+    fn the_listing_names_each_icon_under_the_prefix_once() {
+        let listed = Icons.list("icons/").unwrap();
+        for (path, _) in SVGS {
+            assert_eq!(listed.iter().filter(|p| p.as_ref() == path).count(), 1);
+        }
+        assert!(listed.iter().any(|p| p.as_ref() == "icons/check.svg"));
         assert!(Icons.list("fonts/").unwrap().is_empty());
     }
 }

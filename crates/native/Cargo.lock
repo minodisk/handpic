@@ -5594,6 +5594,7 @@ dependencies = [
  "dirs 6.0.0",
  "futures",
  "gpui-component",
+ "gpui-kit-assets",
  "gpui-pre",
  "gpui-pre-platform",
  "image",

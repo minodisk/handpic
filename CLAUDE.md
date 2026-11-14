@@ -304,11 +304,14 @@ click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons, its leads Lucide icons
 from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
-the application's one `AssetSource`, to `svg().path(..)`),
+the application's one `AssetSource`, to `svg().path(..)`, falling back to
+`gpui_kit_assets::Assets` for the icons gpui-component's controls draw),
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
 rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
-its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box
-holding the Sidecar tab's format and label names (gpui-component `Input` fields), the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
+its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box,
+a hand-drawn vertical tab list beside gpui-component controls (`Button`,
+`Checkbox`, `Radio`, `Input`, and the scrolling lists' scrollbars),
+holding the Sidecar tab's format radios and label names (`Input` fields), the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
