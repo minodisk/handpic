@@ -169,3 +169,8 @@ gpui-kit maintainer's crates.io snapshots instead of Zed's repository) on
   conflicts with this one in `Cargo.lock`; resolve by re-resolving.
 
 ## Progress
+
+- 2026-11-14: Step 1 done. GPUI moved to `gpui-pre` / `gpui-pre-platform`
+  `=0.3.12` (renamed with `package =`), `gpui-component` `=0.9.1` added as a
+  dependency only, no source change. `native:check` passed locally. The manual
+  run check and the CI legs are still pending, as recorded in `learnings.md`.
