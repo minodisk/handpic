@@ -21,7 +21,7 @@ keeps the `gpui` names. That is the exact version `gpui-component` 0.9.1
 pins. Zed pins Rust 1.98.1 at that commit, and so does
 `crates/native/mise.toml`; the published crates declare no `rust-version`.
 Moving from the Zed git rev `b5cd310b` to the snapshot changed no source
-file. The plan: [gpui-component-dep](../plans/20261114-gpui-component-dep/plan.md).
+file. The plan: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md).
 
 - Rule: the native crate never picks a GPUI version of its own. An upgrade
   moves `gpui-component`, `gpui-pre` and `gpui-pre-platform` together in one
