@@ -23,6 +23,7 @@ mod meta;
 mod orient;
 mod overlay;
 mod pager;
+mod panels;
 mod peaking;
 mod perf;
 mod perfgraph;
@@ -71,11 +72,11 @@ use futures::{
 };
 use gpui::{
     Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
-    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, Pixels,
-    Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task, TextAlign,
-    TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions, anchored,
-    canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba, size,
-    uniform_list,
+    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent,
+    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task,
+    TextAlign, TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions,
+    anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba,
+    size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, TrashEntry, Undo};
@@ -86,6 +87,7 @@ use keys::Bindings;
 use menu::{Lead, Menus, Row, Which};
 use meta::Shown;
 use pager::{Finished, Move, Pager};
+use panels::{Panel, Panels};
 use peaking::{Peaking, View};
 use prefetch::{Heading, Ring};
 use resync::Resync;
@@ -420,8 +422,11 @@ struct Riffle {
     /// A folder the tree opened while a run was in flight, opened whole at
     /// its end (only the launch's open has `--size` / `--max`).
     deferred_open: Option<PathBuf>,
-    /// The left pane is shown (`toggleLeft`).
-    left_pane: bool,
+    /// The panes shown (`toggleLeft`, `toggleRight`, `toggleStrip`,
+    /// `toggleSides`).
+    panels: Panels,
+    /// A pane change is written to `panels`; off under `--auto`.
+    remember_panels: bool,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -726,7 +731,14 @@ impl Riffle {
             trashed_state: HashMap::new(),
             trashing: None,
             deferred_open: None,
-            left_pane: true,
+            // `--auto` starts with every pane shown and leaves the stored
+            // panes alone.
+            panels: if remember {
+                settings.panels
+            } else {
+                Panels::default()
+            },
+            remember_panels: remember,
             wanted: None,
             max: None,
             listing: 0,
@@ -841,6 +853,54 @@ impl Riffle {
     /// command line's `--size` / `--max`.
     fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) {
         self.open(PathBuf::from(path), None, None, cx).detach();
+    }
+
+    /// `open`: the OS folder picker, its folder opened as a click in the
+    /// tree opens it, unless another open came first while it was up.
+    fn pick_folder(&mut self, cx: &mut Context<Self>) {
+        let opens = self.opens();
+        let chosen = cx.prompt_for_paths(PathPromptOptions {
+            files: false,
+            directories: true,
+            multiple: false,
+            prompt: None,
+        });
+        cx.spawn(async move |this, cx| {
+            let chosen = match chosen.await {
+                Ok(Ok(Some(paths))) => paths.into_iter().next(),
+                Ok(Ok(None)) | Err(_) => None,
+                Ok(Err(e)) => {
+                    this.update(cx, |this, cx| {
+                        this.fail(&format!("open folder: {e}"));
+                        cx.notify();
+                    })
+                    .ok();
+                    None
+                }
+            };
+            let Some(folder) = chosen else { return };
+            this.update(cx, |this, cx| {
+                if this.opens() == opens {
+                    this.open(folder, None, None, cx).detach();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Show the panes `panels`: a hidden left pane gives up the keyboard, a
+    /// 1:1 crop is re-cut for the new canvas, and the panes are remembered.
+    fn change_panels(&mut self, panels: Panels, cx: &mut Context<Self>) {
+        self.panels = panels;
+        if !panels.left {
+            self.set_tree_keys(false, cx);
+        }
+        self.zoom_resized(cx);
+        if self.remember_panels {
+            self.settings.writes.set("panels", panels.setting());
+        }
+        cx.notify();
     }
 
     /// Read the roots on a background task; `add_roots` skips the ones
@@ -2495,15 +2555,11 @@ impl Riffle {
                 self.perf
                     .toggle(move |sample| events.unbounded_send(Event::Perf(sample)), cx);
             }
-            (_, Some("toggleLeft")) => {
-                self.left_pane = !self.left_pane;
-                // A hidden pane must not keep the keyboard.
-                if !self.left_pane {
-                    self.set_tree_keys(false, cx);
-                }
-                self.zoom_resized(cx);
-                cx.notify();
-            }
+            (_, Some("open")) => self.pick_folder(cx),
+            (_, Some("toggleLeft")) => self.change_panels(self.panels.toggle(Panel::Left), cx),
+            (_, Some("toggleRight")) => self.change_panels(self.panels.toggle(Panel::Right), cx),
+            (_, Some("toggleStrip")) => self.change_panels(self.panels.toggle(Panel::Strip), cx),
+            (_, Some("toggleSides")) => self.change_panels(self.panels.toggle_sides(), cx),
             (_, Some("extendPrevious")) => self.extend(-1, cx),
             (_, Some("extendNext")) => self.extend(1, cx),
             (_, Some("selectAll")) => self.select_all(cx),
@@ -4155,7 +4211,7 @@ impl Render for Riffle {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .children(self.left_pane.then(|| self.tree_pane(cx)))
+                    .children(self.panels.left.then(|| self.tree_pane(cx)))
                     .child(
                         canvas(
                             |_, _, _| {},
@@ -4232,9 +4288,9 @@ impl Render for Riffle {
                         .flex_1()
                         .h_full(),
                     )
-                    .child(self.meta_pane()),
+                    .children(self.panels.right.then(|| self.meta_pane())),
             )
-            .child(
+            .children(self.panels.strip.then(|| {
                 div()
                     .w_full()
                     .h(px(strip::STRIP_HEIGHT))
@@ -4265,8 +4321,8 @@ impl Render for Riffle {
                             move |bounds, _, window, cx| paint_strip(&cells, bounds, window, cx),
                         )
                         .size_full(),
-                    ),
-            )
+                    )
+            }))
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
             .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))

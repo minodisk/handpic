@@ -266,7 +266,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, the import root and pattern, `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, `lastFolder` and `windowBounds`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -432,12 +432,20 @@ the backend's `perf::Sample`s stamped on arrival and the per-switch
 `timing::Stages` of the last `WINDOW`, recording only while on, the latency
 axis maximum never below `LATENCY_FLOOR` and the read axis maximum never
 below `READ_FLOOR_BPS`; `latency_start`, the key else the selection change),
-and `src/perfgraph.rs` the overlay on `d` (`Overlay`: the backend's
+`src/perfgraph.rs` the overlay on `d` (`Overlay`: the backend's
 `perf::Sampler`, whose samples reach the view as `Event::Perf`, and a 500 ms
 redraw, both only while shown; the pure layout, `x_of`, `y_of`, `stack` over
 the native `page` line's stages and `shown`; `paint`, a port of `drawPerf`
 as a 120 px band along the bottom of the preview canvas over the fit view
-and the 1:1 crop alike).
+and the 1:1 crop alike), and `src/panels.rs` the panes shown (`Panels`, a
+port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
+`from_setting` and `setting`, the `panels` value of the settings store, a
+missing or non-boolean entry meaning shown), which the window's
+`change_panels` sets on `toggleLeft`, `toggleRight`, `toggleStrip` and
+`toggleSides`, the left pane giving up the keyboard when hidden, a 1:1 crop
+re-cut and `panels` written (neither read nor written under `--auto`), next to
+`open`, the OS folder picker whose folder opens as a click in the tree does
+unless another open came first.
 
 The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
 in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
