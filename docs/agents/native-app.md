@@ -769,8 +769,29 @@ dimmed, shows capture order and keeps the stored key.
   top-right corner), so no bounds need reading back, and `deferred` paints it
   after everything else. The popover is `occlude()`d, so the strip's
   `on_mouse_down`, which checks `hitbox.is_hovered`, does not see a press
-  inside it, and its height is capped at the window's less 40 px with
-  `overflow_y_scroll`. Nothing is laid out while both menus are closed.
+  inside it, and its height is capped at the window's less 40 px: its row
+  list (`main.rs`'s `menu_surface`, shared with the right-click menu) is
+  `overflow_y_scroll` with `track_scroll` on a `ScrollHandle` the view keeps
+  (`menu_scroll`, new on every press of a menu's button, so a menu opens at
+  its top), and the popover carries gpui-component's scrollbar over it
+  (`ScrollableElement::vertical_scrollbar`), as `PopupMenu` lays out its own.
+  The scrollbar is a child of the popover, so a press on it is not one
+  outside (`on_mouse_down_out`). Nothing is laid out while both menus are
+  closed.
+- Rule: the look comes from gpui-component's theme (`cx.theme()`), not the
+  `u32` constants: the popover's `popover` fill, `popover_foreground` text,
+  1 px `border` and `radius`; the headings in `muted_foreground`; the
+  separators `PopupMenu`'s (a 2 px `border` line across the list's padding);
+  the rows `PopupMenu`'s item at its default size (26 px tall, 8 px side
+  padding, the theme's radius, `accent` / `accent_foreground` on hover, a
+  12 px column with the component's `IconName::Check` for a checked item;
+  `menu_item`), the text kept at 13 px. The leads keep their own colors.
+  `PopupMenu`, `Popover` and `ContextMenu` are not used: they take the GPUI
+  focus (the window routes every key through its own handler on its one
+  focus handle), and `PopupMenu::activate` always dismisses the menu, where
+  a Sort / Filter item click applies and leaves it open. Their row element
+  (`MenuItemElement`) is `pub(crate)`, so the rows are this app's `div`s
+  styled the same.
 - Rule: `on_mouse_down_out` (a capture-phase listener, run before any
   bubble-phase `on_mouse_down`) on the popover closes it on any press outside,
   including one on its own button, whose bubble-phase `on_mouse_down` then
@@ -783,7 +804,7 @@ dimmed, shows capture order and keeps the stored key.
   keymap's actions like `home` / `end` / `q`, and only while a menu is open,
   so a user binding on `escape` still works otherwise (no default binding
   uses it). Every other key goes through the window's handler as before, so
-  paging, `e`, `z` and `f` work with a menu open.
+  paging, `e`, `z`, `f` and the burst keys work with a menu open.
 - Measured: the preview canvas stays 1380 x 852 logical px in the default
   1600 x 1000 window with the two buttons in the status row (12 px text),
   the same as the plain status line, so the fit scale is unchanged.
@@ -1948,8 +1969,16 @@ the strip at the window's bottom would cover the pointer. It is
 `occlude()`d with `on_mouse_down_out` closing it on any press outside, of
 any button, so a right press on another row closes the menu in the capture
 phase and opens that row's in the bubble phase; any key closes it (`escape` stops there,
-the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is dimmed with no
-handler.
+the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is in
+`muted_foreground` with no hover and no handler.
+
+- Rule: the look is the sort and filter menus' (`menu_surface`,
+  `menu_separator`, `menu_item`; see "The sort and filter menus are deferred
+  popovers over the window" for the theme tokens and why `PopupMenu`,
+  `Popover` and `ContextMenu` are not used), each item's shortcut at the
+  row's right end in `muted_foreground` at `text_xs`, as `PopupMenu` places
+  its key binding. A menu taller than the window less 40 px scrolls under the
+  component's scrollbar on `context_scroll`, new on every open.
 
 - Rule: the strip's right-click follows the Tauri strip's `contextmenu`
   handler: a cell outside the selection becomes the selection alone, one
@@ -1992,8 +2021,9 @@ mouse listeners were the smaller change.
   keyboard; a press of any button outside it (`on_mouse_down_out`, the
   capture phase, so the press still reaches its target) hands it back; a
   right press in the pane does neither. A press on the right-click menu hands
-  it back too (`on_any_mouse_down` on the popover, which is `occlude()`d and
-  may be drawn over the pane), as a Tauri menu button takes the focus.
+  it back too (`capture_any_mouse_down` on the popover, which is `occlude()`d
+  and may be drawn over the pane; the capture phase, since the scrollbar stops
+  a press on it from bubbling), as a Tauri menu button takes the focus.
   `escape` and hiding the pane (`toggleLeft`, `toggleSides`) hand it back as
   well. The
   type-ahead buffer starts over whenever the keyboard moves.
