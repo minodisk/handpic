@@ -36,7 +36,7 @@ and the thumbnail requests follow.
 
 The folder operations' dialog row list (`folderops.rs`), the one other
 scrolling area without a scrollbar, is not part of this plan: Step 7 of
-[the gpui-component adoption plan](../20261114-gpui-component-adoption/plan.md)
+[the gpui-component adoption plan](../../20261114-gpui-component-adoption/plan.md)
 gives it one.
 
 ## Steps
