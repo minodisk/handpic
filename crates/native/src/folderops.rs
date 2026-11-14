@@ -86,12 +86,15 @@ impl FolderOps {
         self.dialog.is_some()
     }
 
-    /// The pane's note of a run under way.
+    /// The pane's note of a sequencing run under way.
     pub fn note(&self) -> Option<String> {
-        self.sequencing
-            .clone()
-            .or_else(|| self.importing.clone())
-            .or_else(|| self.imported.clone())
+        self.sequencing.clone()
+    }
+
+    /// The pane's import line: the run's note, else its result. It is drawn
+    /// as its own line, so it hides no other note.
+    pub fn import_note(&self) -> Option<String> {
+        self.importing.clone().or_else(|| self.imported.clone())
     }
 }
 

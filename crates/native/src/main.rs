@@ -3706,6 +3706,11 @@ impl Riffle {
                     .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
             )
             .children(
+                self.folderops
+                    .import_note()
+                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+            )
+            .children(
                 self.notes
                     .iter()
                     .cloned()
