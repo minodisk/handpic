@@ -383,7 +383,13 @@ a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 `Analysis` group from the rows the caller passes), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 `viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and
-which keeps such a folder in capture order (`sort_for`), and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
+which keeps such a folder in capture order (`sort_for`), `src/empty.rs` why
+the preview area shows no photo (a port of `empty.ts`: `state`, no folder, no
+listed file, no shown file, then a failed preview of the current file; `text`,
+`NO_FILES_TEXT`, `filter::FILTERED_TEXT` and `PREVIEW_FAILED_TEXT`; and
+`open_hint`, the no-folder message with the `open` action's keys, still
+without the Tauri drop clause), which the window centers over the preview
+canvas, the no-folder message opening the folder picker on a click, and `src/zoom.rs` the 1:1 view on `z` (`CROP_MAX`,
 `crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
 one read in flight, an earlier page's crop held on screen until the current

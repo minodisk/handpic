@@ -2898,3 +2898,17 @@ Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
       is acceptable and is waited for, not retried, and that the rule is only
       about not choosing `run_in_background` yourself. Done when both
       definitions say what to do when the Bash tool backgrounds the run.
+
+### Native: real-device checks of the empty state in the preview area
+
+#### Background
+
+`gpui-empty-state` ported the Tauri app's empty state to the GPUI app (`crates/native`): the preview area now shows a centered muted message for no folder (the click opens the folder picker), no RAW or JPEG files, a filter hiding every file, and a failed preview of the current file. CI and the unit tests cover the pure module (`empty.rs`: the state judgment and the open hint, ported from `empty.test.ts`). The message layer, the click and the canvas wrapper were never exercised, because the implementing session could not run the native window. Plan: `docs/plans/_archived/20261114-gpui-empty-state/plan.md`. Files: `crates/native/src/empty.rs`, `crates/native/src/main.rs` (`render`, `empty_message`).
+
+#### TODO
+
+- [ ] On Windows, launch the native app without a folder (`mise run native:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Click here to choose a folder. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
+- [ ] On Windows, open a folder without RAW or JPEG files. Expect "This folder has no RAW or JPEG files." in the preview area, and a click on it does nothing.
+- [ ] On Windows, set a filter that hides every file. Expect "No files match the current filter." in the preview area.
+- [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
+- [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
