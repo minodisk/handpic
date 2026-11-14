@@ -2818,3 +2818,18 @@ Files: `crates/native/src/perf.rs`, `crates/native/src/perfgraph.rs`, `crates/na
 - [ ] On Windows with the taskbar docked at the top or left, move the window, quit, relaunch. Record whether the position drifts by the taskbar's size (`rcNormalPosition` is in workspace coordinates). Fix only if it drifts.
 - [ ] On Windows, open a folder from the tree, page a few files, quit, relaunch without arguments. Expected: that folder is revealed in the tree at that file. Relaunch with another folder as the argument. Expected: the argument's folder opens.
 - [ ] On Windows, run `--auto 3 <folder>`. Expected: the window visibly opens centered at 1600x1000 whatever is stored.
+
+### Native: real-device checks of the pane toggles and Open Folder (gpui-pane-toggles)
+
+`gpui-pane-toggles` made `open`, `toggleRight`, `toggleStrip` and `toggleSides` run in the GPUI app (`crates/native`) and remembered the panes under the `panels` key of the settings store, `toggleLeft` included. Unit tests cover the pure rules (`panels.rs`, `settings.rs`'s load of `panels`), and `mise run ci` and `mise run native:check` pass. A launch with `--auto` on a store holding `{"panels":{"left":false}}` quit cleanly and left the store unchanged. Nobody has run the picker or the toggles in the window, or seen what the window drew: the picker, the canvas resize, the 1:1 re-cut, the hidden strip's bookkeeping, the keyboard hand-back, the persistence across a quit and a relaunch, and a rebound key are all unchecked. Plan: `docs/plans/_archived/20261114-gpui-pane-toggles/plan.md`. Files: `crates/native/src/main.rs` (`pick_folder`, `change_panels`, `render`), `crates/native/src/panels.rs`, `crates/native/src/settings.rs`.
+
+Run each check with `--settings <fresh test store>` and `--log <test file>`, never the real store. When done, record the results and update `docs/agents/native-app.md`'s "Not verified" note on the picker.
+
+#### TODO
+
+- [ ] On Windows, press `ctrl+o` and pick a folder: it opens and the tree reveals it. Press it again and cancel: nothing changes. Press it again with the tree holding the keyboard. Also note whether a second `ctrl+o` while the picker is up opens a second dialog (if so, a flag on the view that ignores the press is needed) and whether the culling keys work right after the picker closes without a click.
+- [ ] On Windows, press `ctrl+alt+arrowright`, `ctrl+alt+arrowdown`, `ctrl+alt+arrowleft` and `tab`, each twice, with a photo shown, again at 1:1 (`z`) and with peaking on (`e`). Expect the canvas to resize and the 1:1 crop to be re-cut. With the strip hidden, paging, judging and the `Sort` / `Filter` menus still work, and showing the strip again draws it around the current file with its thumbnails. The perf overlay (`d`) still sits along the canvas's bottom with the panes hidden.
+- [ ] On Windows, give the tree the keyboard and hide the left pane with `tab`. Expect the arrow keys to page the photos again.
+- [ ] On Windows, hide the right pane and the strip, quit with `q` and relaunch: both are still hidden. Repeat, quitting with the title bar's close button.
+- [ ] On Windows, put `{"panels": {"left": false}}` in a Tauri-style `settings.json` and launch with `--import-settings` on a new store: the tree is hidden and the other two panes are shown.
+- [ ] On Windows, rebind one of the four actions in the Keyboard Shortcuts tab: the new key runs it.

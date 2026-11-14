@@ -1500,8 +1500,12 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   the Tauri `settings.json` comes up with the Tauri app's panes; a missing or
   non-boolean entry, or a value that is not an object, means shown.
 - Rule: under `--auto` every pane starts shown whatever the store holds, and
-  nothing is written to `panels` (`remember_panels` off, set in `main` after
-  `Riffle::new`).
+  nothing is written to `panels` (`remember_panels` off, set in `main` on the
+  value `Riffle::new` returns, inside the `cx.new` closure). It is not a
+  parameter because `Riffle::new` already takes seven arguments, and an eighth
+  trips `clippy::too_many_arguments` (`-D warnings` in CI). Another
+  launch-only suppression flag has the same choice: set a field after `new`, or
+  add `#[allow]` as `tauri-app.md` does for `Writer::set`.
 - Rule: hiding the strip removes only its own `div`; the status row (the
   status line and `Sort` / `Filter`) stays, unlike the Tauri app, where the
   menus sit in the strip's header. The strip's bookkeeping (range, thumbnails)

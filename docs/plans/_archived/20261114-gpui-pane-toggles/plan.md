@@ -208,3 +208,4 @@ Once this is done, in the native app:
 ## Progress
 
 - (2026-11-14) Step 1 implemented; the Windows hand check is pending on the user (see learnings.md)
+- (2026-11-14) Step 1 complete
