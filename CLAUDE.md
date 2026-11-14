@@ -254,7 +254,13 @@ emits each sample as `perf-sample`, so nothing samples while the overlay is
 off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
-`crates/app` (see `docs/agents/native-app.md`); its `src/datadir.rs` places
+`crates/app` (see `docs/agents/native-app.md`); its `build.rs` embeds
+`crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
+(`winresource`), its window opens with `app_id` `IDENTIFIER`, and
+`packaging/` holds the macOS `Info.plist` and the Linux
+`dev.minodisk.handpic.desktop` the `native:bundle:macos` (`Handpic.app` under
+`target/<profile>/`) and `native:install:linux` (the release binary, the
+`.desktop` file and the icon under `~/.local`) mise tasks use; its `src/datadir.rs` places
 its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the

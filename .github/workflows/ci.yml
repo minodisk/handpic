@@ -166,6 +166,17 @@ jobs:
           mise exec rust@1.98.1 -- cargo clippy --all-targets -- -D warnings
           mise exec rust@1.98.1 -- cargo test
 
+      # The debug build keeps the step short; the layout is the release one's.
+      - name: Bundle and check Handpic.app
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mise run native:bundle:macos debug
+          app=crates/native/target/debug/Handpic.app
+          plutil -lint "$app/Contents/Info.plist"
+          test -x "$app/Contents/MacOS/riffle-native"
+          test -s "$app/Contents/Resources/icon.icns"
+
   # Branch protection requires a single check named `ci`. This job stands in for
   # the whole run, so the lint job and the matrix can change shape without the
   # required check going missing. always() makes it report a failure rather

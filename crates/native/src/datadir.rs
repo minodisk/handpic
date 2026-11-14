@@ -75,4 +75,48 @@ mod tests {
         );
         assert_eq!(index_path(None, None), None);
     }
+
+    fn packaging(file: &str) -> String {
+        std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("packaging")
+                .join(file),
+        )
+        .unwrap()
+    }
+
+    fn plist_string(plist: &str, key: &str) -> String {
+        let after = plist
+            .split(&format!("<key>{key}</key>"))
+            .nth(1)
+            .unwrap_or_else(|| panic!("no {key}"));
+        let value = after.trim_start().strip_prefix("<string>").unwrap();
+        value[..value.find("</string>").unwrap()].to_string()
+    }
+
+    fn desktop_value(desktop: &str, key: &str) -> String {
+        desktop
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("no {key}"))
+            .to_string()
+    }
+
+    #[test]
+    fn the_macos_bundle_names_the_identifier_and_the_binary() {
+        let plist = packaging("macos/Info.plist");
+        assert_eq!(plist_string(&plist, "CFBundleIdentifier"), IDENTIFIER);
+        assert_eq!(
+            plist_string(&plist, "CFBundleExecutable"),
+            env!("CARGO_BIN_NAME")
+        );
+    }
+
+    #[test]
+    fn the_linux_desktop_file_names_the_identifier_and_the_binary() {
+        let desktop = packaging(&format!("linux/{IDENTIFIER}.desktop"));
+        assert_eq!(desktop_value(&desktop, "StartupWMClass"), IDENTIFIER);
+        assert_eq!(desktop_value(&desktop, "Icon"), IDENTIFIER);
+        assert_eq!(desktop_value(&desktop, "Exec"), env!("CARGO_BIN_NAME"));
+    }
 }

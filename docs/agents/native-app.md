@@ -181,6 +181,65 @@ of non-path dependencies. RAF decode measured about 99 ms without SIMD and
 
 - Rule: put `nasm` on `PATH`; setting `NASM` does not satisfy the build.
 
+## Packaging
+
+Source: [the native-app-icon plan](../plans/20261114-native-app-icon/plan.md).
+
+### The Windows icon is resource ID 1 of the exe (Measured)
+
+`gpui-pre-windows` 0.3.12's `load_icon` loads `LoadImageW(module, PCWSTR(1),
+IMAGE_ICON, ..)` into the window class's `hIcon`, and a failed load silently
+leaves the generic icon. `crates/native/build.rs` therefore embeds
+`crates/app/icons/icon.ico` with `winresource`'s `set_icon`, which writes ID
+`1`, on a Windows target only (`CARGO_CFG_TARGET_OS`; the crate is a
+`cfg(windows)` build-dependency), before the NASM check's early returns. The
+icon is referenced by path from `CARGO_MANIFEST_DIR`, not a Cargo dependency
+on `crates/app`. Explorer shows the exe's first icon group, so the one
+resource serves the taskbar, the title bar and Explorer. In the built debug
+exe, `FindResourceW` finds `RT_GROUP_ICON` 1, one `RT_MANIFEST` 1 and
+`winresource`'s `RT_VERSION` 1, and `LoadImageW(.., 1, IMAGE_ICON, ..)`
+succeeds.
+
+- Rule: never set a manifest in the app's resource. `gpui-pre-platform` turns
+  on `gpui-pre`'s `windows-manifest` feature, whose build script already
+  embeds `1 RT_MANIFEST`; a second one is a duplicate resource at link time.
+- Rule: a change to `crates/app/icons/icon.ico` alone does not select the
+  native checks in `mise run ci:local`; the PR's `native` job still builds it.
+
+### Linux matches the window to its `.desktop` file by `IDENTIFIER` (Inferred)
+
+The window opens with `app_id: Some(IDENTIFIER)`. Wayland matches a
+toplevel's `app_id` to the `.desktop` file's base name, so the file is
+`crates/native/packaging/linux/dev.minodisk.handpic.desktop`. On X11,
+`gpui-pre-linux`'s `set_app_id` writes `WM_CLASS` as `IDENTIFIER` for both the
+instance and the class, so `StartupWMClass` is `IDENTIFIER` too. The default
+`set_app_id` is a no-op on Windows and macOS. `Exec=riffle-native` is static,
+so `~/.local/bin` must be on the session's `PATH`.
+
+`mise run native:install:linux` builds the release binary and installs it to
+`~/.local/bin/riffle-native`, the `.desktop` file to
+`~/.local/share/applications/` and `crates/app/icons/128x128@2x.png` (256 x
+256 px) to `~/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`.
+
+- Rule: the `hicolor` size directory equals the PNG's real pixel size.
+
+### macOS gets `Handpic.app` from a mise task (Inferred)
+
+`mise run native:bundle:macos [profile]` (release by default) builds and lays
+out `crates/native/target/<profile>/Handpic.app` with the checked-in
+`crates/native/packaging/macos/Info.plist`, `Contents/MacOS/riffle-native` and
+`crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`. No signing,
+notarization or `.dmg`. The `native` CI job's macOS leg bundles the debug
+build and checks it (`plutil -lint`, the executable and the `.icns` present).
+
+- Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`,
+  shared with the Tauri app, which the native app replaces. `datadir.rs`'s
+  tests check that `Info.plist` and the `.desktop` file agree with
+  `IDENTIFIER` and the binary's name; change them together.
+- Pending manual checks, not done here: the Dock / Finder icon of the built
+  `.app` on a Mac, and the running window's icon after the install task on a
+  Wayland and an X11 session.
+
 ## Backend
 
 ### The backend names no event and no `AppHandle` (Inferred)
