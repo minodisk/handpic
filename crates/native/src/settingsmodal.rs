@@ -232,20 +232,15 @@ impl Tab {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    Next,
-    Previous,
-}
-
 /// What a key does while the modal is open. None of them reaches the
-/// culling keymap.
+/// culling keymap. Tab and Shift+Tab are not among them: `Root` walks the
+/// dialog's focus trap with them before the box sees a key, unless a row
+/// captures.
 #[derive(Debug, PartialEq, Eq)]
 pub enum ModalKey {
     Add(String),
     Cancel,
     Close,
-    Focus(Step),
     /// Left to the focused control.
     Native,
 }
@@ -285,7 +280,7 @@ impl SettingsModal {
 
     /// `key` is `keys::key_name`'s name, `None` for a lone modifier. While a
     /// row captures, Escape cancels the capture and any other key is added;
-    /// otherwise Escape closes and Tab moves the focus within the modal.
+    /// otherwise Escape closes.
     pub fn key(&self, key: Option<&str>) -> ModalKey {
         if self.capturing.is_some() {
             return match key {
@@ -296,8 +291,6 @@ impl SettingsModal {
         }
         match key {
             Some("escape") => ModalKey::Close,
-            Some("tab") => ModalKey::Focus(Step::Next),
-            Some("shift+tab") => ModalKey::Focus(Step::Previous),
             _ => ModalKey::Native,
         }
     }
@@ -323,9 +316,8 @@ mod tests {
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, ModalKey,
-        SettingsModal, Step, TABS, Tab, display_key, edit, format_change, label_change,
-        label_names_of, label_texts, next_tab, pattern_change, root_note, shortcut_label, stops,
-        writes_xmp,
+        SettingsModal, TABS, Tab, display_key, edit, format_change, label_change, label_names_of,
+        label_texts, next_tab, pattern_change, root_note, shortcut_label, stops, writes_xmp,
     };
 
     #[test]
@@ -415,7 +407,7 @@ mod tests {
     fn a_focused_text_field_keeps_the_keys_the_modal_does_not_take() {
         assert!(!stops(&ModalKey::Native, true));
         assert!(stops(&ModalKey::Native, false));
-        assert!(stops(&ModalKey::Focus(Step::Next), true));
+        assert!(stops(&ModalKey::Add("tab".into()), true));
         assert!(stops(&ModalKey::Close, true));
     }
 
@@ -569,14 +561,11 @@ mod tests {
     }
 
     #[test]
-    fn escape_closes_and_tab_and_shift_tab_move_the_focus() {
+    fn escape_closes_and_tab_and_shift_tab_are_left_to_the_dialog() {
         let modal = open();
         assert_eq!(modal.key(Some("escape")), ModalKey::Close);
-        assert_eq!(modal.key(Some("tab")), ModalKey::Focus(Step::Next));
-        assert_eq!(
-            modal.key(Some("shift+tab")),
-            ModalKey::Focus(Step::Previous)
-        );
+        assert_eq!(modal.key(Some("tab")), ModalKey::Native);
+        assert_eq!(modal.key(Some("shift+tab")), ModalKey::Native);
     }
 
     #[test]
@@ -606,6 +595,10 @@ mod tests {
             ModalKey::Add("arrowright".into())
         );
         assert_eq!(modal.key(Some("tab")), ModalKey::Add("tab".into()));
+        assert_eq!(
+            modal.key(Some("shift+tab")),
+            ModalKey::Add("shift+tab".into())
+        );
         assert_eq!(modal.key(Some("escape")), ModalKey::Cancel);
         modal.capturing = None;
         assert_eq!(modal.key(Some("escape")), ModalKey::Close);

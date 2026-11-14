@@ -313,8 +313,8 @@ from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
 the application's one `AssetSource`, to `svg().path(..)`, falling back to
 `gpui_kit_assets::Assets` for the icons gpui-component's controls draw),
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
-rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
-its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box,
+rules of `modal.ts` and `tabs.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
+its entity, opened on `ctrl+,` (`meta+,` on macOS) as a gpui-component `Dialog` through `modal.rs`'s shell, its box the dialog's content (closed by Escape, its `×` or a press outside it; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 a hand-drawn vertical tab list beside gpui-component controls (`Button`,
 `Checkbox`, `Radio`, `Input`, and the scrolling lists' scrollbars),
 holding the Sidecar tab's format radios and label names (`Input` fields), the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
@@ -450,7 +450,7 @@ the window opens as a gpui-component `Dialog` in `Root`'s layer through
 `src/modal.rs` (`Modal`, the open and close that follow a flow after the
 current update, the shell with the component's own closing, backdrop and
 animations off, and `backdrop`, the dimmed window the view draws under it
-that keeps a press from moving the focus) and runs through the backend's `trash::trash_listed` /
+that keeps a press from moving the focus, and `shade`, the one under the settings, which does not) and runs through the backend's `trash::trash_listed` /
 `trash::delete_listed` on a background task, undoing a run with
 `trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding
 a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one

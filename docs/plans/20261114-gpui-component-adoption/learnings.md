@@ -385,6 +385,62 @@
   does while the trash flow is busy.
 - Nothing here was run on screen; the hand checks are below.
 
+## Step 8: the settings modal's shell as a `Dialog`
+
+- `origin/main` was at `2e0f3fe4` (Step 7's #1067), as the branch.
+- No second mechanism: `SettingsView` keeps its own `modal::Modal` and opens
+  and closes the dialog from its own `open` / `close`, so every close path
+  (Escape, the view's `×`, a press outside the box) goes through the one
+  `close`, which closes the model and the dialog and emits
+  `Change::Closed`. The builder captures the entity weakly and puts it in
+  the dialog's `content`; nothing is created inside it.
+- `open_dialog` takes the focus it restores on close (`window.focused` at the
+  deferred open) and focuses the dialog's shell. `SettingsView::open` used
+  to focus the tab itself, which would have made the tab the handle
+  restored on close; the tab is now focused from the builder's first run,
+  and `Change::Closed` no longer focuses the window's handle (only one of
+  the two, the dialog's restore, which brings back the window's own handle,
+  the only one focused when `ctrl+,` reaches `key_down`). It now only
+  notifies the window, to drop the shade.
+- The backdrop press. The component's backdrop stays off (a Windows drag
+  area, Step 6), and `modal::backdrop` cannot be reused here: its
+  capture-phase `prevent_default` stops GPUI's focus-on-press, which the
+  settings rely on (a press in the box blurs a field so it commits, a
+  click on a tab focuses it). So the window draws `modal::shade`, the
+  dimmed layer with no listener, and the box closes on a left press outside
+  itself with `on_mouse_down_out` (capture phase, so it fires over the
+  component's full-window occluding `div`). The dialog has no padding and
+  the box is the whole surface (`w_full`, the dialog's width 90 % up to
+  860 px), so outside the box is outside the surface, less its 1 px border.
+  The close is deferred (`Modal`), so the press's own focus transfer to the
+  dialog host lands first and the restore wins.
+- The capture of `tab` / `shift+tab`: Step 5's mechanism, a `NoAction`
+  context deeper than `Root`. The box sets the key context `SettingsCapture`
+  only while a row captures, and `main`'s `keymap_keys` binds both keys to
+  `NoAction` in it next to the `Handpic` ones; `main.rs`'s keymap test
+  checks the context stack `Root` + `SettingsCapture` resolves no binding
+  for either. Outside a capture `Root`'s `Tab` / `TabPrev` walk the trap.
+  `escape`, `enter` and `space` reach the box because `.keyboard(false)`
+  drops the `Dialog` context and the focus is on the box, not a control.
+  Read from `keymap.rs` and `window.rs` at the pinned rev (the binding loop
+  of `dispatch_key_event` runs every matched action until one does not
+  propagate, so an `Input`'s propagating `IndentInline` is followed by
+  `Root`'s `Tab`); not run on screen.
+- `ModalKey::Focus` and `Step` are gone: `Root` takes Tab before the box's
+  listener, so the arm could not run. `settingsmodal.rs`'s
+  `escape_closes_and_tab_and_shift_tab_move_the_focus` became
+  `..._are_left_to_the_dialog` (Tab is `Native`), the `stops` test uses
+  `Add("tab")` for a taken key, and the capture test adds `shift+tab`. The
+  order and the wrap are `focus_next` / `focus_prev` over the same stops as
+  before, now confined to the dialog's trap instead of the window (where the
+  modal's controls were the only stops).
+- Look: the box's fill, border, radius are now the surface's (`popover` =
+  `PANE_COLOR`, `border` = `BORDER_COLOR`, `radius_lg` 8 px, as before) plus
+  the component's shadow; the size, the title row, the tab list, the
+  content and the status line are the view's as before. The dialog is
+  `centered()`.
+- Nothing here was run on screen; the hand checks are below.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, Windows, the user's). Basis: Step 1's
@@ -687,3 +743,45 @@
       close (Escape, Cancel, a run's end): the tree still has the keyboard
       (arrows move its cursor). Then rename a folder inline (a slow second
       click on its name): the editor works, Enter commits, Escape cancels.
+- Pending manual check (Step 8, Windows, the user's). Basis: Step 8's
+  Done-when (the settings modal as a `Dialog`, its closes, Tab walk, the
+  capture, IME, `Choose…`, the keymap blocked while open, the tree's
+  keyboard); the step's checkbox was ticked on the automated criteria
+  (`cargo clippy` / `cargo test` of `crates/native`, the keymap test of
+  `SettingsCapture`; the crate has no GPUI view test). Related files:
+  `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`,
+  `crates/native/src/modal.rs`, `crates/native/src/main.rs`.
+  - Build: `cargo build --manifest-path crates/native/Cargo.toml` (rename a
+    locked `riffle-native.exe` aside first; do not kill it).
+  - Launch on a copy:
+    `crates/native/target/debug/riffle-native.exe --index <fresh temp>/index.sqlite --settings <test>/settings.sqlite D:\Photos\tests\20261114-gpui-component-adoption\<copy>`.
+  - Steps and expected results:
+    - `ctrl+,`: the settings open centered, 90 % of the window up to 860 px
+      wide and 80 % up to 720 px high, the window dimmed, the title row with
+      `×`, the tab list, the content and the status line as before, no
+      animation; the tab left last time is selected and has the focus ring.
+    - Close by each path, reopening between: Escape; a press on the dimmed
+      area; `×`; type in a label name then Escape (the name is committed);
+      type a pattern then Escape (committed, or its refusal kept out). After
+      each close the arrows page again (the window has the keyboard).
+    - On every tab, Tab forward through every control and wrap, then
+      Shift+Tab back: the same stops in the same order as `main` before this
+      step. ArrowUp / ArrowDown on the focused tab move between tabs. Enter
+      and Space press the focused button, checkbox and radio.
+    - Keyboard Shortcuts: `+` on a row, then `enter`: added; again `space`,
+      `tab`, `shift+tab`, `ctrl+alt+1`: each added as typed; `+` then
+      `escape`: the capture ends and the dialog stays open; `+` then `q`:
+      the status line shows `"q" is taken by this app`; `+` then a key bound
+      elsewhere: the backend's refusal shows.
+    - IME (Japanese) in a label name and in the import pattern: the
+      composition shows in place and commits into the field.
+    - Import tab, `Choose…`: the OS folder picker opens; after choosing (or
+      canceling) the root shows and Tab still walks the dialog.
+    - With the dialog open, paging keys, `f`, `tab` and `ctrl+z` do nothing
+      on the window; a click on the strip or the tree closes the settings
+      without acting on what was under the pointer.
+    - Click in the tree (it takes the keyboard), `ctrl+,`, then close by
+      Escape: the arrows still move the tree's cursor.
+    - Start a folder operation from the tree and, while its dialog is open
+      or the import has stepped aside during its run, press `ctrl+,`: the
+      settings do not open.
