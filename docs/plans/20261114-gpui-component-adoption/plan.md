@@ -865,3 +865,5 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
     against those.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
