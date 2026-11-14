@@ -2426,6 +2426,10 @@ impl Riffle {
             ("home", _) => self.go(Move::First, cx),
             ("end", _) => self.go(Move::Last, cx),
             ("q", _) => self.quit(cx),
+            // Not while a folder flow is under way, as in the Tauri app: the
+            // dialog would open over the settings and the run would read a
+            // format changed meanwhile.
+            (name, _) if name == settingsmodal::OPEN_KEY && self.folderops.busy() => {}
             (name, _) if name == settingsmodal::OPEN_KEY => {
                 self.menus.close();
                 let settings = &self.settings;

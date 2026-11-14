@@ -140,3 +140,6 @@
      and no key reaches the strip. With a request waiting during a scan,
      open another folder from the tree: the waiting note goes and no dialog
      opens.
+  7. Pick `Rewrite Sidecars from Index…` and press `Ctrl+,` before the
+     dialog opens (while the preview is under way): the settings modal does
+     not open.
