@@ -1,5 +1,22 @@
 use std::time::{Duration, Instant};
 
+/// Where a page's image came from: its own read, or the prefetch ring, whose
+/// `read`, `decode` and `orient` are 0.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Source {
+    Read,
+    Prefetch,
+}
+
+impl Source {
+    fn name(self) -> &'static str {
+        match self {
+            Source::Read => "read",
+            Source::Prefetch => "prefetch",
+        }
+    }
+}
+
 /// What one keyed page knows by the time its result is handed to the window.
 pub struct Page {
     pub key: Instant,
@@ -13,6 +30,7 @@ pub struct Page {
     pub jpeg_kb: usize,
     pub px: (u32, u32),
     pub orientation: u16,
+    pub source: Source,
     pub file: String,
 }
 
@@ -52,7 +70,7 @@ impl Page {
     pub fn line(&self, s: &Stages) -> String {
         format!(
             "page wait={} read={} decode={} orient={} hop={} frameWait={} paint={} present={} \
-             keypressToPixels={} jpegKB={} px={}x{} orientation={} file={}",
+             keypressToPixels={} jpegKB={} px={}x{} orientation={} source={} file={}",
             ms(s.wait),
             ms(s.read),
             ms(s.decode),
@@ -66,6 +84,7 @@ impl Page {
             self.px.0,
             self.px.1,
             self.orientation,
+            self.source.name(),
             self.file,
         )
     }
@@ -117,7 +136,7 @@ impl Summary {
 
 #[cfg(test)]
 mod tests {
-    use super::{Page, Summary};
+    use super::{Page, Source, Summary};
     use std::time::{Duration, Instant};
 
     const fn millis(n: u64) -> Duration {
@@ -137,6 +156,7 @@ mod tests {
             jpeg_kb: 1234,
             px: (1616, 1080),
             orientation: 6,
+            source: Source::Read,
             file: "DSC1.ARW".into(),
         }
     }
@@ -184,7 +204,7 @@ mod tests {
             page.line(&s),
             "page wait=0.00ms read=3.00ms decode=6.00ms orient=1.00ms hop=1.00ms \
              frameWait=8.00ms paint=1.00ms present=1.00ms keypressToPixels=22.00ms \
-             jpegKB=1234 px=1616x1080 orientation=6 file=DSC1.ARW"
+             jpegKB=1234 px=1616x1080 orientation=6 source=read file=DSC1.ARW"
         );
     }
 
