@@ -1,5 +1,101 @@
 # Changelog
 
+## [2.0.0](https://github.com/minodisk/handpic/compare/v1.10.0...v2.0.0) (2026-11-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* **app:** the app is now Handpic, with the identifier com.minodisk.handpic; a Riffle install's data moves there on first launch.
+
+### Features
+
+* **app:** add a focus peaking toggle on e ([#929](https://github.com/minodisk/handpic/issues/929)) ([f6f3935](https://github.com/minodisk/handpic/commit/f6f39353b3f67dcd6d532f669603bbea2de1d8ff))
+* **app:** add the installer migration config and the data-dir migration ([#953](https://github.com/minodisk/handpic/issues/953)) ([117c0c9](https://github.com/minodisk/handpic/commit/117c0c98b256bfe96b11abf95253938883a4f386))
+* **app:** cap the scan's concurrent reads at 2 ([#935](https://github.com/minodisk/handpic/issues/935)) ([fb3ac3f](https://github.com/minodisk/handpic/commit/fb3ac3f3af6fa398f1aa7d225168278b22c1ceea))
+* **app:** measure and store full-size eye sharpness in pass 2 ([#946](https://github.com/minodisk/handpic/issues/946)) ([9e7bf16](https://github.com/minodisk/handpic/commit/9e7bf168d5500d452a783276e01cf50022694dcb))
+* **app:** pause the scan's reads while a preview read is in flight ([#927](https://github.com/minodisk/handpic/issues/927)) ([d49fa25](https://github.com/minodisk/handpic/commit/d49fa25165d518184ba62c7d176b980b9b65a8ff))
+* **app:** prefetch and keep the neighbours' decoded previews ([#943](https://github.com/minodisk/handpic/issues/943)) ([0c50c3f](https://github.com/minodisk/handpic/commit/0c50c3ff6f4d18862c6666a928a069fea63c8a28))
+* **app:** rename the app to Handpic ([#957](https://github.com/minodisk/handpic/issues/957)) ([4a131a2](https://github.com/minodisk/handpic/commit/4a131a2a19c72adca3ca0d467ede748b69b604ce))
+* **app:** show a frowning face for Face focus Low ([#930](https://github.com/minodisk/handpic/issues/930)) ([2b7c09f](https://github.com/minodisk/handpic/commit/2b7c09f843626c2dc59b7b271dd42a1e8cfa5207))
+* **app:** take a frame soft at full size out of Face focus Good ([#947](https://github.com/minodisk/handpic/issues/947)) ([2367e67](https://github.com/minodisk/handpic/commit/2367e67ef98de8c528c28b76e7fd0a223eea295f))
+* **app:** time every stage of the preview path ([#934](https://github.com/minodisk/handpic/issues/934)) ([d439c58](https://github.com/minodisk/handpic/commit/d439c5862fe93bb423a803a1724b30d6e13dad8b))
+* **backend:** add the shared riffle-backend crate with exif, shortcuts and photolab ([#956](https://github.com/minodisk/handpic/issues/956)) ([fb7fcdf](https://github.com/minodisk/handpic/commit/fb7fcdf434cc0378dd111033055efb8efb97fa81))
+* **backend:** move the CPU and disk sampler into the backend ([#1002](https://github.com/minodisk/handpic/issues/1002)) ([f611b2c](https://github.com/minodisk/handpic/commit/f611b2cf2f8600d19322d7b97b42cfa4cfbefc96))
+* **backend:** move the folder watcher into riffle-backend ([#960](https://github.com/minodisk/handpic/issues/960)) ([aa325d9](https://github.com/minodisk/handpic/commit/aa325d9de00a37920c55aa4bcba5bad584c188e2))
+* **backend:** move the index and the sidecar writer into riffle-backend ([#958](https://github.com/minodisk/handpic/issues/958)) ([567734d](https://github.com/minodisk/handpic/commit/567734da613373ec138d54a041395d9fcb0043d3))
+* **backend:** move trash, output and diagnostics into riffle-backend ([#959](https://github.com/minodisk/handpic/issues/959)) ([247c61a](https://github.com/minodisk/handpic/commit/247c61a8242e0b093c9466f0804693b73eb3f9a9))
+* **cli:** dump the full-size eye sharpness and validate its threshold ([#941](https://github.com/minodisk/handpic/issues/941)) ([5e630d4](https://github.com/minodisk/handpic/commit/5e630d4198c7787c1b2fbc912cc1a19a0ce28113))
+* **core:** add the full-size eye sharpness metric ([#937](https://github.com/minodisk/handpic/issues/937)) ([79c42ea](https://github.com/minodisk/handpic/commit/79c42eaf58c871a613b1a1273cee4c1db0014343))
+* **native:** add a text input and edit the label names in the Sidecar tab ([#1031](https://github.com/minodisk/handpic/issues/1031)) ([fdcec35](https://github.com/minodisk/handpic/commit/fdcec3573fd59a53e545e9bd83b304d8df7247c3))
+* **native:** add focus peaking on e over the fit view and the 1:1 crop ([#982](https://github.com/minodisk/handpic/issues/982)) ([b9645c1](https://github.com/minodisk/handpic/commit/b9645c18a4eae79d9408880a466e29807e7b20bc))
+* **native:** add Move to Trash and Delete Permanently with their dialog ([#1032](https://github.com/minodisk/handpic/issues/1032)) ([ce98356](https://github.com/minodisk/handpic/commit/ce983569e9727dbf440e9a7fd7934063ad4b723e))
+* **native:** add rejectRest and the MCP companion's burst ([#1049](https://github.com/minodisk/handpic/issues/1049)) ([ff9a536](https://github.com/minodisk/handpic/commit/ff9a536e1a5dd29cedd38e4705d2a959994b1f75))
+* **native:** add the 1:1 view on z ([#979](https://github.com/minodisk/handpic/issues/979)) ([fc42787](https://github.com/minodisk/handpic/commit/fc4278753ee6af2f153f2ff1bd91d0a1054392cb))
+* **native:** add the folder menu's Import dialog ([#1046](https://github.com/minodisk/handpic/issues/1046)) ([4ee6597](https://github.com/minodisk/handpic/commit/4ee6597689fafaf8be1d008977833aa71dcd07ec))
+* **native:** add the folder menu's items and the Rewrite Sidecars / Delete Sidecars dialogs ([#1039](https://github.com/minodisk/handpic/issues/1039)) ([f942b4d](https://github.com/minodisk/handpic/commit/f942b4ddfd09f047c870ef9c6bda53281c0c466f))
+* **native:** add the folder menu's Sequence JPEG Timestamps dialog with progress and cancel ([#1041](https://github.com/minodisk/handpic/issues/1041)) ([abd0522](https://github.com/minodisk/handpic/commit/abd05221ddceb6e009545f97adca4c0ce988a61b))
+* **native:** add the folder tree pane and open folders from it ([#1014](https://github.com/minodisk/handpic/issues/1014)) ([71d5dc5](https://github.com/minodisk/handpic/commit/71d5dc528aeee38ec0f7db29f9a5e984d34db662))
+* **native:** add the folder tree's keyboard, Expand All and Collapse All ([#1025](https://github.com/minodisk/handpic/issues/1025)) ([9bd7856](https://github.com/minodisk/handpic/commit/9bd7856600808548f76a9ccb82a581a768837e4b))
+* **native:** add the Import tab to the settings modal ([#1033](https://github.com/minodisk/handpic/issues/1033)) ([f47bf51](https://github.com/minodisk/handpic/commit/f47bf51505ecb2f5d14b3fdeb18b3d7ed775cf32))
+* **native:** add the meta pane and the view-only JPEG folder ([#975](https://github.com/minodisk/handpic/issues/975)) ([060e21d](https://github.com/minodisk/handpic/commit/060e21d58c53c997cc3aaaecf14f8d2ee0ec6073))
+* **native:** add the performance overlay on d ([#1021](https://github.com/minodisk/handpic/issues/1021)) ([d46c922](https://github.com/minodisk/handpic/commit/d46c9221f10727987d2e7b5ab50c575aae0c1b4f))
+* **native:** add the settings modal shell and the Culling tab ([#1022](https://github.com/minodisk/handpic/issues/1022)) ([7a8dbef](https://github.com/minodisk/handpic/commit/7a8dbef733f27a78a55d27477525cbbc73d2bd93))
+* **native:** add the sort and filter menus to the status row ([#993](https://github.com/minodisk/handpic/issues/993)) ([40e3ec5](https://github.com/minodisk/handpic/commit/40e3ec5700812947e53e5a5360fe8dc888b91a81))
+* **native:** add the strip's multi-selection and judge the whole selection ([#1028](https://github.com/minodisk/handpic/issues/1028)) ([6e0ce1d](https://github.com/minodisk/handpic/commit/6e0ce1db68b88c4bb64160ea938c394a5854a8e9))
+* **native:** add the strip's right-click menu ([#1030](https://github.com/minodisk/handpic/issues/1030)) ([004dda8](https://github.com/minodisk/handpic/commit/004dda8540ce422d3abf1fd5c8daa5b350c72a2b))
+* **native:** add the thumbnail strip in sync with the preview ([#964](https://github.com/minodisk/handpic/issues/964)) ([3e3893c](https://github.com/minodisk/handpic/commit/3e3893cfa7e86ed9a4ff4393e10f94cafd26b10c))
+* **native:** call gpui_component::init and map the theme to Neutral dark ([#1056](https://github.com/minodisk/handpic/issues/1056)) ([15b26e3](https://github.com/minodisk/handpic/commit/15b26e30c6fbf9d3ac1d2868cfe896cec4937d67))
+* **native:** draw a stale crop before chasing the current one ([#1013](https://github.com/minodisk/handpic/issues/1013)) ([26e1f7f](https://github.com/minodisk/handpic/commit/26e1f7fb9a79b1784f4d426f07fa82a136fec050))
+* **native:** draw a stale preview before chasing the current file ([#1010](https://github.com/minodisk/handpic/issues/1010)) ([6680e48](https://github.com/minodisk/handpic/commit/6680e4853b37f7d83085bbb941341d3b21a2016f))
+* **native:** draw the f focus mark colored by the stored analysis ([#974](https://github.com/minodisk/handpic/issues/974)) ([90ce921](https://github.com/minodisk/handpic/commit/90ce921323d4ffa91c037b072260afb12c1c88e3))
+* **native:** draw the face boxes with their landmark dots and labels ([#977](https://github.com/minodisk/handpic/issues/977)) ([8d2b446](https://github.com/minodisk/handpic/commit/8d2b44624f5f79e75f41e4879ee65d28e40036bc))
+* **native:** draw the filter menu's icons by kind and head every section ([#1057](https://github.com/minodisk/handpic/issues/1057)) ([22d6e6a](https://github.com/minodisk/handpic/commit/22d6e6a0bc2e5dad1c258d7ee750dda32bdc0769))
+* **native:** draw the settings modal's controls with gpui-component ([#1061](https://github.com/minodisk/handpic/issues/1061)) ([26e4e15](https://github.com/minodisk/handpic/commit/26e4e15d066130d688f937609ec8fcf136c21e82))
+* **native:** draw the sort, filter and right-click menus with the theme ([#1062](https://github.com/minodisk/handpic/issues/1062)) ([2595b1b](https://github.com/minodisk/handpic/commit/2595b1bb2fa10afec6726bc5fd0fa810d5403069))
+* **native:** edit the keymap live from the Keyboard Shortcuts tab ([#1029](https://github.com/minodisk/handpic/issues/1029)) ([588e557](https://github.com/minodisk/handpic/commit/588e5573dae89a0a275fdb81089261cf1bbf8da2))
+* **native:** fill the Face focus, Eyes and Output filter sections ([#992](https://github.com/minodisk/handpic/issues/992)) ([09fd508](https://github.com/minodisk/handpic/commit/09fd508489587b952263165aa8870e60e668842d))
+* **native:** filter the strip by the stored judgment sections ([#991](https://github.com/minodisk/handpic/issues/991)) ([eb462f0](https://github.com/minodisk/handpic/commit/eb462f08b7710b9c1c57d2723559dfe8f21a419c))
+* **native:** follow the disk in the folder tree and add its right-click menu ([#1019](https://github.com/minodisk/handpic/issues/1019)) ([4f823d9](https://github.com/minodisk/handpic/commit/4f823d96d541f4526af7f23c2fdfd40b5c1f1ef6))
+* **native:** give the native app its icon on Windows, macOS and Linux ([#1058](https://github.com/minodisk/handpic/issues/1058)) ([b8fad0f](https://github.com/minodisk/handpic/commit/b8fad0f848db70da8897c8757e45a3d3b87f10e1))
+* **native:** group bursts, draw their bands and badges and add the burst moves ([#1047](https://github.com/minodisk/handpic/issues/1047)) ([6f1e793](https://github.com/minodisk/handpic/commit/6f1e793611989eaf19b0ae4793c2e8fef0825d8b))
+* **native:** hold the decoded neighbours in a prefetch ring ([#1026](https://github.com/minodisk/handpic/issues/1026)) ([8caadd0](https://github.com/minodisk/handpic/commit/8caadd054a98efa118f035f076391fc97abb005d))
+* **native:** judge the eyes on demand and draw the face mesh ([#978](https://github.com/minodisk/handpic/issues/978)) ([397ad73](https://github.com/minodisk/handpic/commit/397ad733aece8c48bea9a4745b41e73ee8f2eae8))
+* **native:** keep the settings in a SQLite store seeded once from settings.json ([#1008](https://github.com/minodisk/handpic/issues/1008)) ([394e1c2](https://github.com/minodisk/handpic/commit/394e1c20039281c02c55c8d12bbace30db328f85))
+* **native:** open a folder dropped onto the window ([#1052](https://github.com/minodisk/handpic/issues/1052)) ([54f7ab6](https://github.com/minodisk/handpic/commit/54f7ab6609fde181b8fd53231349d23fa2f11230))
+* **native:** open the index and run pass 1 of the scan ([#963](https://github.com/minodisk/handpic/issues/963)) ([1770ffc](https://github.com/minodisk/handpic/commit/1770ffcb305aa7d587ffef076e015d4152ac2d51))
+* **native:** order the strip by the stored sort key ([#990](https://github.com/minodisk/handpic/issues/990)) ([6b0fa0e](https://github.com/minodisk/handpic/commit/6b0fa0e8ab5dae06153063b58cbaafdaf03b6ab4))
+* **native:** page a folder's RAW previews with stage timings ([#950](https://github.com/minodisk/handpic/issues/950)) ([fb41adb](https://github.com/minodisk/handpic/commit/fb41adb7b189edca08a38c42f0b615fa8d938463))
+* **native:** persist the strip's filter and sort order in the settings store ([#1012](https://github.com/minodisk/handpic/issues/1012)) ([e341ef2](https://github.com/minodisk/handpic/commit/e341ef21c9c32a2e3ca3b189c124f1fb08c6f6e3))
+* **native:** port the per-folder EXIF filter sections ([#1009](https://github.com/minodisk/handpic/issues/1009)) ([76b7e52](https://github.com/minodisk/handpic/commit/76b7e52281bbec5bb06f594031a64cb38d9d85c1))
+* **native:** read the settings, the keymap and the sidecars' judgments ([#980](https://github.com/minodisk/handpic/issues/980)) ([5fda400](https://github.com/minodisk/handpic/commit/5fda400345185825c6c2245c30000fd4dccad886))
+* **native:** record judgments from the MCP companion's set_judgment ([#1020](https://github.com/minodisk/handpic/issues/1020)) ([4862eee](https://github.com/minodisk/handpic/commit/4862eee29154428ea1f0e4c420964c52e08f8da3))
+* **native:** replace textinput.rs with gpui-component's Input ([#1059](https://github.com/minodisk/handpic/issues/1059)) ([6ff22c4](https://github.com/minodisk/handpic/commit/6ff22c4c1da26ac08cee924d003fcf70ea86a1fe))
+* **native:** restore the window geometry and the last folder on launch ([#1040](https://github.com/minodisk/handpic/issues/1040)) ([88152a9](https://github.com/minodisk/handpic/commit/88152a910ddc0b41fa706a8a3baf605b10437ea7))
+* **native:** resync the open folder from the folder watcher ([#966](https://github.com/minodisk/handpic/issues/966)) ([7a5eaf5](https://github.com/minodisk/handpic/commit/7a5eaf5f4f35597f2d4fc3436393dbd5b18ec271))
+* **native:** run Open Folder and the pane toggles and remember the panes ([#1042](https://github.com/minodisk/handpic/issues/1042)) ([1ce45ab](https://github.com/minodisk/handpic/commit/1ce45ab40c3e76652f75aada17f1935166eff3ea))
+* **native:** run pass 2 after pass 1 on the scan thread ([#972](https://github.com/minodisk/handpic/issues/972)) ([1bfc54a](https://github.com/minodisk/handpic/commit/1bfc54a68134574df3beb9547a57c0f8bc032431))
+* **native:** scaffold the GPUI app as its own workspace ([#944](https://github.com/minodisk/handpic/issues/944)) ([ccb8a02](https://github.com/minodisk/handpic/commit/ccb8a0259f8f2b8f61a1814d8741783e57d682eb))
+* **native:** serve the MCP endpoint with the read and navigate tools ([#1015](https://github.com/minodisk/handpic/issues/1015)) ([f4ba9b9](https://github.com/minodisk/handpic/commit/f4ba9b933511eaaea80b8d24af77872e8bb46b20))
+* **native:** show a progress bar for the scan and Move to Trash ([#1053](https://github.com/minodisk/handpic/issues/1053)) ([ec50782](https://github.com/minodisk/handpic/commit/ec50782bcc90640bc4a817df529c210534b4cdfe))
+* **native:** show the empty state in the preview area ([#1048](https://github.com/minodisk/handpic/issues/1048)) ([83cbd56](https://github.com/minodisk/handpic/commit/83cbd56748ba1fb8fb95fcae7b9bba675247432d))
+* **native:** steer the scan from the strip and resume at the last viewed file ([#965](https://github.com/minodisk/handpic/issues/965)) ([7e5c8d7](https://github.com/minodisk/handpic/commit/7e5c8d7771713f5412b2205ebbab2ef30f8be35d))
+* **native:** switch the sidecar format live from the Sidecar tab ([#1027](https://github.com/minodisk/handpic/issues/1027)) ([0e5fe76](https://github.com/minodisk/handpic/commit/0e5fe766893bd90f0dba351b3b5852a560c95243))
+* **native:** undo and redo a judgment ([#983](https://github.com/minodisk/handpic/issues/983)) ([923d852](https://github.com/minodisk/handpic/commit/923d8526a6a63850a40588e0c527337f4935ce32))
+* **native:** undo and redo a move to the Trash ([#1035](https://github.com/minodisk/handpic/issues/1035)) ([4e018d8](https://github.com/minodisk/handpic/commit/4e018d895d0883eeefceeb9011cca6bca8d21a5a))
+* **native:** write Handpic.log from the GPUI app ([#998](https://github.com/minodisk/handpic/issues/998)) ([0b175c0](https://github.com/minodisk/handpic/commit/0b175c0979ce3a4bccb789af7cc21c0526535ce1))
+* **native:** write the judgments to the index and the sidecars ([#981](https://github.com/minodisk/handpic/issues/981)) ([06d673b](https://github.com/minodisk/handpic/commit/06d673bcbd681dc4b5dd49d621058cb88e73636e))
+
+
+### Bug Fixes
+
+* **app:** iterate the prefetch ring's sets without copying ([#951](https://github.com/minodisk/handpic/issues/951)) ([a91a267](https://github.com/minodisk/handpic/commit/a91a2678b8aca794cb7cb7001fcaed78864d9503))
+* **native:** reset the scan status on a stop and stop the scan on quit ([#988](https://github.com/minodisk/handpic/issues/988)) ([244690d](https://github.com/minodisk/handpic/commit/244690df381850ec2f43e52914e58df6cc80b115))
+
+
+### Performance Improvements
+
+* **scan:** keep paging fast while pass 2 runs ([#984](https://github.com/minodisk/handpic/issues/984)) ([2b2adcf](https://github.com/minodisk/handpic/commit/2b2adcfb0b1678228cd2b3b90a4093930e75dd22))
+
 ## [1.10.0](https://github.com/minodisk/riffle/compare/v1.9.0...v1.10.0) (2026-11-07)
 
 
