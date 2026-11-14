@@ -1,13 +1,14 @@
-//! The shell the confirmation dialogs share as gpui-component `Dialog`s in
-//! `Root`'s layer, and the plumbing that opens and closes one to follow its
-//! flow's model.
+//! The shell the confirmation dialogs and the settings share as
+//! gpui-component `Dialog`s in `Root`'s layer, and the plumbing that opens
+//! and closes one to follow its flow's model.
 //!
 //! The shell turns off every way the component closes itself (Escape and
 //! Enter through its `Dialog` key context, a backdrop press, the close
 //! button, `on_ok` / `on_cancel`), so only the flow closes it, and its
 //! entrance and exit animations. Its own backdrop is off too: on Windows the
 //! component's backdrop is a window drag area, so a press on it would move
-//! the window. The view draws `backdrop` in its place.
+//! the window. The view draws `backdrop` in its place, or `shade` under the
+//! settings.
 
 use gpui::{
     AnyElement, AnyWindowHandle, App, DispatchPhase, MouseDownEvent, Pixels, Window, canvas,
@@ -93,6 +94,21 @@ fn shell(dialog: Dialog, cx: &App) -> Dialog {
         .bg(cx.theme().popover)
         .text_color(cx.theme().popover_foreground)
         .text_size(px(13.))
+}
+
+/// The dimmed window under the settings dialog. It leaves a press alone: the
+/// settings take the focus where a press puts it and close on one outside
+/// their box.
+pub fn shade(cx: &App) -> AnyElement {
+    deferred(
+        div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .bg(cx.theme().overlay),
+    )
+    .into_any_element()
 }
 
 /// The dimmed window under an open dialog, drawn by the view while its flow

@@ -122,11 +122,11 @@ key-down listener, so a binding that matches takes the key from
 `open_window`'s closure builds the app's `Riffle` entity first (it takes the
 focus and starts as before) and returns `Root::new(view, window, cx)` as the
 window's root view. Nothing reads the window's root by its type:
-`on_app_quit`, the bounds saved on quit, `SettingsView`'s `Change::Closed`
-focus restore and the tree's keyboard flag hold the view, its focus handle or
-the `Window`, so they are unchanged. The trash dialog and the folder
-operations' dialog are component dialogs (see "The trash dialog is a
-component `Dialog`").
+`on_app_quit`, the bounds saved on quit and the tree's keyboard flag hold
+the view, its focus handle or the `Window`, so they are unchanged. The trash
+dialog, the folder operations' dialog and the settings modal are component
+dialogs (see "The trash dialog is a component `Dialog`" and "The settings
+modal is its own entity").
 
 What `Root` adds to every frame, read at 0.9.1: its own `div` (the `Root` key
 context and the `Tab` / `TabPrev` / `Copy` handlers), gpui-base's
@@ -149,15 +149,14 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
   (`keymap.rs`, `resolve_bindings_for_input`) sorts the matching bindings by
   context depth and drops every binding ranked after a `NoAction` from a
   source of equal or weaker precedence; `Handpic` is deeper than `Root`, so
-  with the focus anywhere in the app's view (the settings modal included: a
-  `deferred` keeps its parent dispatch node) no action is dispatched and the
+  with the focus anywhere in the app's view no action is dispatched and the
   key reaches `key_down` as before. Nothing is stopped, so no typed character
   is lost. A component dialog is drawn in `Root`'s layer, a sibling of the
   app's view, so its context stack has `Root` and no `Handpic`, and `Root`'s
   `Tab` / `TabPrev` walk its focus trap. An `Input` binds the two keys deeper
   still (`IndentInline` / `OutdentInline`), which runs first and propagates
-  on a single-line input, so the settings modal's fields move the focus as
-  before. `cx.intercept_keystrokes` was not taken: it runs before every
+  on a single-line input, so in the settings modal's fields `Root`'s `Tab` /
+  `TabPrev` still run after it. `cx.intercept_keystrokes` was not taken: it runs before every
   binding and would have had to tell a dialog's focus apart itself.
 - `ctrl-c` / `cmd-c`: `Root`'s `Copy` copies the text selection's text and
   propagates when it is empty. The app draws no selectable text, so the key
@@ -979,48 +978,67 @@ registers it with `application().with_assets(icons::Icons)`.
 
 ### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
 
-`settingsview.rs`'s `SettingsView` is an `Entity` the window holds and adds as
-its root's last child; `settingsmodal.rs` is its pure model (the open state,
-the selected tab, the shortcut row capturing a key, `modal.ts`'s key rule,
-`tabs.ts`'s vertical `nextTab`). While closed its
-`render` returns `Empty`, one zero-size layout node. While open it is
-`deferred(div().absolute().top_0().left_0().size_full())`: in taffy an
-absolute child is placed against its parent, here the window's root, so it
-covers the window, and `deferred` paints it after everything else. The
-backdrop and the box are both `occlude()`d: the backdrop's `on_mouse_down`
-closes it (the box blocks the backdrop's hitbox, so a press inside the box
-does not), and the strip's `on_mouse_down` and `on_scroll`, the menus'
-buttons and the root's focus-on-press all check their hitbox, which
-`BlockMouse` drops from the hit test (`window.rs`'s `hit_test` stops at the
-first blocking hitbox, for scroll too). The tabs are Sidecar, Culling,
-Keyboard Shortcuts and Import (no Cache, MCP or Debug); the modal keeps the
-tab across opens and focuses it on open, as the Tauri `open` does.
+`settingsview.rs`'s `SettingsView` is an `Entity` the window creates once and
+holds; `settingsmodal.rs` is its pure model (the open state, the selected
+tab, the shortcut row capturing a key, `modal.ts`'s key rule, `tabs.ts`'s
+vertical `nextTab`). Its `open` opens a gpui-component `Dialog` through its
+own `modal::Modal`, the plumbing and shell the trash and folder dialogs use
+(see "The trash dialog is a component `Dialog`"): no component close path,
+no entrance or exit animation, no component backdrop. The builder captures
+the entity weakly and puts it, never a new one, in the dialog's `content`,
+with the dialog `centered()`, 90 % of the window up to 860 px wide and no
+padding, so the view's box (80 % of the window up to 720 px high) is the
+whole surface, whose fill (`popover`, `PANE_COLOR`), border (`border`), 8 px
+radius and shadow are the component's. While closed the view's `render`
+returns `Empty`. The window draws `modal::shade`, a dimmed layer with no
+listener, under the dialog while the modal is open, and no longer lays the
+view out itself. The tabs are Sidecar, Culling, Keyboard Shortcuts and Import
+(no Cache, MCP or Debug); the modal keeps the tab across opens and focuses it
+on open, as the Tauri `open` does: `open_dialog` remembers the focus it opens
+over and focuses the dialog's shell, so the tab is focused from the builder's
+first run of each opening (a `Cell<bool>`), not before the deferred open.
 
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
 `Keymap` replaces the keymap (next section),
-`Closed` focuses the window's handle again.
+`Closed` only redraws the window, to drop the shade: closing the dialog gives
+the focus back to the handle it opened over, the window's, and the tree's
+keyboard is a flag the dialog does not touch.
 The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
 
-- Rule: the key routing. GPUI dispatches a `KeyDownEvent` along the path from
-  the root to the focused node, capture phase root first, then bubble from the
-  focused node up (`dispatch_key_down_up_event`). The box has its own focus
-  handle (`track_focus`) and an `on_key_down` that calls
-  `cx.stop_propagation()` on every key, so a key with the focus inside the
-  modal never reaches the root's handler; the root's `key_down` also returns
-  at once while the modal is open, for a focus left on the root. `ctrl+,`
-  (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally after
-  `home` / `end` / `q`, closes an open sort or filter menu, and opens the
-  modal; the keymap refuses to bind it.
-- Rule: Tab and Shift+Tab are not built in. The box's handler calls
-  `window.focus_next` / `focus_prev`, which walk the whole window's rendered
-  tab stops and wrap; the modal's controls are the only tab stops (the root's
-  handle comes from `cx.focus_handle()`, `tab_stop` false), so the cycle stays
-  inside the modal. The controls are gpui-component's `Button` (the outlined
-  `small_button`s: `Choose…`, the example patterns, the languages, `Reset`,
-  `+`, a chip's `×`, `Reset all`; the ghost close `×`), `Checkbox`
+- Rule: the closes. `close` (Escape, the view's own `×`, a left press outside
+  the box) closes the model, closes the dialog through `Modal::close` and
+  emits `Closed`. The press outside is the box's `on_mouse_down_out`, a
+  capture-phase listener, so it fires whatever is under the pointer; the
+  component's backdrop stays off because on Windows it is a window drag area
+  (see the trash dialog's section), and the shell's `overlay_closable(false)`
+  and `on_cancel` returning `false` keep the component from closing it
+  behind the model's back. Unlike the confirmation dialogs' `backdrop`, the
+  shade leaves the press alone, so a press inside the box still moves the
+  focus where it lands (a field blurs and commits, a tab takes the focus).
+- Rule: the key routing. The dialog is drawn in `Root`'s layer, outside the
+  app view's dispatch path, so no key with the focus inside it reaches the
+  window's `key_down`; that handler also returns at once while the modal is
+  open. The box has its own focus handle (`track_focus`) and an
+  `on_key_down` that calls `cx.stop_propagation()` on every key but one typed
+  into a field (`settingsmodal::stops`). `.keyboard(false)` drops the
+  `Dialog` key context, whose `escape` / `enter` bindings would otherwise run
+  before the box's listener, so Escape still closes from the listener
+  (committing a focused field first) and Enter presses the focused control.
+  `ctrl+,` (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally
+  after `home` / `end` / `q`, closes an open sort or filter menu, and opens
+  the modal, not while a folder flow or the trash flow is busy; the keymap
+  refuses to bind it.
+- Rule: Tab and Shift+Tab are `Root`'s. Its `Tab` / `TabPrev` actions run
+  before the box's listener and walk the dialog's focus trap with
+  `focus_next` / `focus_prev`, which wrap; the trap holds only the modal's
+  controls, the same stops in the same order as the box's own `focus_next`
+  walk had (the window's root handle is not a tab stop). So `ModalKey` has no
+  focus move any more. The controls are gpui-component's `Button` (the
+  outlined `small_button`s: `Choose…`, the example patterns, the languages,
+  `Reset`, `+`, a chip's `×`, `Reset all`; the ghost close `×`), `Checkbox`
   (auto-advance) and `Radio` (the three formats, standalone, not a
   `RadioGroup`, whose arrow-key roving would change the cycle), each a tab
   stop at the default `tab_index(0)` with a focus handle of its own (keyed
@@ -1080,12 +1098,21 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
 (`Writes::shortcuts`, the Tauri `update_keymap` rule).
 
 - Rule: the capture sees the raw key in the box's handler. `+` sets
-  `capturing` and focuses the box itself, since the pressed `+` is replaced by
-  the prompt and a focus left on a node no longer drawn would send the key to
-  the window's root, whose handler returns while the modal is open; a `×`
-  focuses the box after its edit for the same reason. The next named key
-  (`key_name`, a lone modifier ignored) is added, Escape cancels, and a tab
-  switch or a close cancels (`SettingsModal::select` / `close`).
+  `capturing` and focuses the box itself, inside the dialog's focus trap,
+  since the pressed `+` is replaced by the prompt and a focus left on a node
+  no longer drawn would leave the dialog; a `×` focuses the box after its
+  edit for the same reason. The next named key (`key_name`, a lone modifier
+  ignored) is added, Escape cancels without closing, and a tab switch or a
+  close cancels (`SettingsModal::select` / `close`).
+- Rule: `tab` and `shift+tab` can be captured. While a row captures, the box
+  sets the key context `SettingsCapture` (`settingsview::CAPTURE_CONTEXT`),
+  and `main` binds both keys to `NoAction` in it (`capture_keys`, bound with
+  `keymap_keys`), Step 5's mechanism for the `Handpic` context: the deeper
+  `NoAction` drops `Root`'s `Tab` / `TabPrev`, so the key reaches the box's
+  listener and is taken as the shortcut. Enter, Space and Escape reach it
+  because the focus is on the box, not on a control, and the dialog has no
+  `Dialog` key context. Outside a capture the context is not set and `Root`
+  walks the trap.
 - Rule: `settingsmodal::APP_KEYS` (`home`, `end`, `q`) are refused with
   `"<key>" is taken by this app`: `key_down` takes them before the keymap, so
   a binding would never fire. `escape` cannot be captured (it cancels) and

@@ -1,13 +1,14 @@
 //! The settings modal as its own entity with its own focus handle, over the
-//! pure `settingsmodal` model: a backdrop over the whole window and a
-//! centered box, painted after the rest of the window and occluding it,
-//! laid out only while open. A change is emitted as a `Change` for the main
-//! view, which owns the values, to apply.
+//! pure `settingsmodal` model, drawn as the content of a gpui-component
+//! `Dialog` in `Root`'s layer (`modal`'s shell) while open. A change is
+//! emitted as a `Change` for the main view, which owns the values, to apply.
+
+use std::cell::Cell;
 
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyDownEvent, MouseButton, PathPromptOptions, Pixels, SharedString, Window,
-    deferred, div, prelude::*, px, rgb, rgba, transparent_black,
+    FontWeight, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, NoAction, PathPromptOptions,
+    Pixels, SharedString, Window, div, prelude::*, px, rgb, rgba, transparent_black,
 };
 use gpui_component::{
     ActiveTheme, Selectable, Sizable,
@@ -22,11 +23,24 @@ use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
-    ACCENT_COLOR, BORDER_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR,
-    OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
+    ACCENT_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR, PRIMARY_COLOR, keys,
+    modal::Modal,
     settings::Settings,
-    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, Step, TABS, Tab},
+    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, TABS, Tab},
 };
+
+/// The key context of the box while a shortcut row waits for a key.
+pub const CAPTURE_CONTEXT: &str = "SettingsCapture";
+
+/// `Root` binds `tab` / `shift-tab` to the dialog's focus walk, dispatched
+/// before the box's key listener. These mask them while a row captures, so
+/// the keys reach `key_down` and are taken as the shortcut.
+pub fn capture_keys() -> [KeyBinding; 2] {
+    [
+        KeyBinding::new("tab", NoAction, Some(CAPTURE_CONTEXT)),
+        KeyBinding::new("shift-tab", NoAction, Some(CAPTURE_CONTEXT)),
+    ]
+}
 
 /// The height of the port the fields replaced: a 13 px line at GPUI's
 /// default line height, 3 px of padding and the border on each side.
@@ -72,6 +86,7 @@ pub struct SettingsView {
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
     status: Option<SharedString>,
+    modal: Modal,
 }
 
 impl EventEmitter<Change> for SettingsView {}
@@ -114,6 +129,7 @@ impl SettingsView {
             pattern_field,
             example: Ok(String::new()),
             status: None,
+            modal: Modal::new(window.window_handle()),
         }
     }
 
@@ -137,7 +153,26 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
-        window.focus(&self.tabs[self.model.tab.at()], cx);
+        // The dialog remembers the focus it opens over and focuses its shell,
+        // so the tab is focused from the builder, on its first run.
+        let this = cx.weak_entity();
+        let first = Cell::new(true);
+        self.modal.open(cx, move |dialog, window, cx| {
+            let Some(view) = this.upgrade() else {
+                return dialog;
+            };
+            if first.replace(false) {
+                let view = view.read(cx);
+                let tab = view.tabs[view.model.tab.at()].clone();
+                window.focus(&tab, cx);
+            }
+            let viewport = window.viewport_size();
+            dialog
+                .centered()
+                .w((viewport.width * 0.9).min(px(860.)))
+                .p_0()
+                .content(move |content, _, _| content.child(view.clone()))
+        });
         cx.notify();
     }
 
@@ -277,6 +312,7 @@ impl SettingsView {
 
     fn close(&mut self, cx: &mut Context<Self>) {
         self.model.close();
+        self.modal.close(cx);
         cx.emit(Change::Closed);
         cx.notify();
     }
@@ -302,8 +338,6 @@ impl SettingsView {
                 }
                 self.close(cx);
             }
-            ModalKey::Focus(Step::Next) => window.focus_next(cx),
-            ModalKey::Focus(Step::Previous) => window.focus_prev(cx),
             ModalKey::Add(key) => {
                 if let Some(action) = self.model.capturing.take() {
                     self.edit(Edit::Add(action, key), cx);
@@ -706,26 +740,31 @@ impl SettingsView {
             .overflow_y_scrollbar()
     }
 
+    /// The box, the whole of the dialog's surface, which draws its fill and
+    /// border. A press outside it is one on the backdrop.
     fn dialog(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let viewport = window.viewport_size();
         div()
             .id("settings-box")
-            .occlude()
+            .when(self.model.capturing.is_some(), |d| {
+                d.key_context(CAPTURE_CONTEXT)
+            })
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(e, window, cx);
             }))
+            .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                if e.button == MouseButton::Left {
+                    this.close(cx);
+                }
+            }))
             .flex()
             .flex_col()
             .gap_2()
-            .w((viewport.width * 0.9).min(px(860.)))
+            .w_full()
             .h((viewport.height * 0.8).min(px(720.)))
             .px_4()
             .py_3()
-            .bg(rgb(PANE_COLOR))
-            .border_1()
-            .border_color(rgba(BORDER_COLOR))
-            .rounded_lg()
             .text_color(rgb(FOREGROUND_COLOR))
             .child(
                 div()
@@ -816,27 +855,6 @@ impl Render for SettingsView {
         if !self.model.is_open() {
             return Empty.into_any_element();
         }
-        // Absolute over the window's root, drawn after the rest of it; the
-        // backdrop and the box occlude what is under them, so a press or a
-        // wheel never reaches the strip or the menus' buttons.
-        deferred(
-            div()
-                .id("settings-backdrop")
-                .absolute()
-                .top_0()
-                .left_0()
-                .size_full()
-                .occlude()
-                .flex()
-                .items_center()
-                .justify_center()
-                .bg(rgba(OVERLAY_COLOR))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| this.close(cx)),
-                )
-                .child(self.dialog(window, cx)),
-        )
-        .into_any_element()
+        self.dialog(window, cx).into_any_element()
     }
 }

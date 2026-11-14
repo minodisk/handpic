@@ -700,7 +700,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
       alive, and "coming back" a new `open_dialog`; check the focus restore
       on each.
 
-- [ ] Step 8: The settings modal's shell as a `Dialog`
+- [x] Step 8: The settings modal's shell as a `Dialog`
   - Done when:
     - `ctrl+,` (`meta+,` on macOS) opens the settings as a gpui-component
       `Dialog` holding the `SettingsView`'s content: the hand-built

@@ -681,7 +681,7 @@ impl Riffle {
         cx.subscribe_in(
             &settings_view,
             window,
-            |this, _, change, window, cx| match *change {
+            |this, _, change, _, cx| match *change {
                 Change::AutoAdvance(on) => {
                     this.settings.auto_advance = on;
                     this.settings.writes.set("autoAdvance", on.into());
@@ -703,7 +703,9 @@ impl Riffle {
                         .set("importPattern", pattern.as_str().into());
                     this.settings.import_pattern = pattern.clone();
                 }
-                Change::Closed => window.focus(&this.focus, cx),
+                // The dialog gives the focus back to what had it when it
+                // opened; only the shade goes.
+                Change::Closed => cx.notify(),
             },
         )
         .detach();
@@ -4520,10 +4522,15 @@ impl Render for Riffle {
                     .children(strip_tips)
             }))
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
-            .child(self.settings_view.clone())
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
+            )
+            .children(
+                self.settings_view
+                    .read(cx)
+                    .is_open()
+                    .then(|| modal::shade(cx)),
             )
     }
 }
@@ -4537,11 +4544,15 @@ const KEY_CONTEXT: &str = "Handpic";
 /// `Root` binds `tab` / `shift-tab` to its focus moves. These mask them where
 /// the focus is inside the app's view, so the keys reach `key_down` and the
 /// keymap, while a component dialog, drawn in `Root`'s layer outside this
-/// context, keeps them for its focus trap.
-fn keymap_keys() -> [KeyBinding; 2] {
+/// context, keeps them for its focus trap, except while the settings capture
+/// a shortcut (`settingsview::capture_keys`).
+fn keymap_keys() -> [KeyBinding; 4] {
+    let [tab, shift_tab] = settingsview::capture_keys();
     [
         KeyBinding::new("tab", NoAction, Some(KEY_CONTEXT)),
         KeyBinding::new("shift-tab", NoAction, Some(KEY_CONTEXT)),
+        tab,
+        shift_tab,
     ]
 }
 
@@ -5441,6 +5452,10 @@ mod tests {
         for key in ["tab", "shift-tab"] {
             assert_eq!(bound(&keymap, key, &["Root", KEY_CONTEXT]), 0);
             assert_eq!(bound(&keymap, key, &["Root"]), 1);
+            assert_eq!(
+                bound(&keymap, key, &["Root", settingsview::CAPTURE_CONTEXT]),
+                0
+            );
         }
     }
 }
