@@ -303,7 +303,7 @@ Verified in the cargo registry sources `gpui-component-0.9.1`,
 
 - [x] Step 2: Replace `textinput.rs` with gpui-component's `Input`
   - Done when:
-    - The settings modal's six label name fields and the Import tab's
+    - The settings modal's five label name fields and the Import tab's
       pattern field are `InputState` entities drawn with `Input`, and
       `crates/native/src/textinput.rs` is deleted along with
       `unicode-segmentation` if nothing else uses it.
