@@ -16,10 +16,11 @@ use std::time::Instant;
 
 use futures::channel::oneshot;
 use gpui::{
-    AnyElement, ClickEvent, Context, Entity, Focusable, FontWeight, HighlightStyle, MouseButton,
-    ScrollStrategy, StyledText, Subscription, Task, Window, deferred, div, prelude::*, px,
-    relative, rgb, rgba,
+    AnyElement, ClickEvent, Context, Entity, Focusable, FontWeight, HighlightStyle, KeyDownEvent,
+    MouseButton, ScrollStrategy, StyledText, Subscription, Task, Window, deferred, div, prelude::*,
+    px, relative, rgb, rgba, transparent_black,
 };
+use gpui_component::input::{Input, InputEvent, InputState};
 use riffle_backend::{
     datefolder::{self as datefolders, Kind as DateKind, Split},
     foldersidecars::{self, DeletePreview, Preview, Summary},
@@ -44,7 +45,6 @@ use crate::rename::{
 use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
-use crate::textinput::{self, TextInput};
 use crate::tree::{self, IGNORE_CASE};
 use crate::{
     BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
@@ -87,7 +87,7 @@ pub struct FolderOps {
 /// A live inline rename and the text input drawn over its row's name.
 struct Edit {
     rename: InlineRename,
-    input: Entity<TextInput>,
+    input: Entity<InputState>,
     _events: Subscription,
 }
 
@@ -1421,7 +1421,23 @@ impl Riffle {
                 .line_height(px(TREE_ROW_HEIGHT - 8.))
                 .on_click(|_, _, cx| cx.stop_propagation())
                 .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
-                .child(edit.input.clone())
+                .on_key_down(cx.listener(|this, event: &KeyDownEvent, window, cx| {
+                    // The input propagates an Escape it has no use for.
+                    if event.keystroke.key == "escape" {
+                        cx.stop_propagation();
+                        this.rename_event(false, window, cx);
+                    }
+                }))
+                .child(
+                    Input::new(&edit.input)
+                        .focus_bordered(false)
+                        .bg(transparent_black())
+                        .border_color(rgb(PRIMARY_COLOR))
+                        .rounded_sm()
+                        .px(px(3.))
+                        .py(px(1.))
+                        .text_size(px(13.)),
+                )
                 .into_any_element();
         }
         let pending = self
@@ -1541,13 +1557,15 @@ impl Riffle {
             &self.tree_rows[at].name,
         )
         .to_owned();
-        let input = cx.new(|cx| TextInput::new(window, cx));
+        let input = cx.new(|cx| InputState::new(window, cx));
         input.update(cx, |input, cx| {
-            input.set_text(&name, window, cx);
+            input.set_value(name.as_str(), window, cx);
             input.select_all(window, cx);
         });
-        let events = cx.subscribe_in(&input, window, |this, input, event, window, cx| {
-            this.rename_event(input, *event, window, cx);
+        let events = cx.subscribe_in(&input, window, |this, _, event, window, cx| {
+            if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
+                this.rename_event(true, window, cx);
+            }
         });
         window.focus(&input.focus_handle(cx), cx);
         self.folderops.editing = Some(Edit {
@@ -1563,19 +1581,21 @@ impl Riffle {
     /// lost to another app does not: the edit waits for the window to come
     /// back, as the Tauri editor's blur checks `document.hasFocus()`. After
     /// Enter or Escape the tree has the keyboard again.
-    fn rename_event(
-        &mut self,
-        input: &Entity<TextInput>,
-        event: textinput::Event,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if event == textinput::Event::Commit && !window.is_window_active() {
+    fn rename_event(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if commit && !window.is_window_active() {
             return;
         }
+        let Some(input) = self
+            .folderops
+            .editing
+            .as_ref()
+            .map(|edit| edit.input.clone())
+        else {
+            return;
+        };
         let focused = input.focus_handle(cx).is_focused(window);
         self.finish_rename(
-            if event == textinput::Event::Commit {
+            if commit {
                 Decision::Confirm
             } else {
                 Decision::Cancel
@@ -1599,7 +1619,7 @@ impl Riffle {
         if commit(&mut edit.rename, decision) != Some(Decision::Confirm) {
             return;
         }
-        let typed = edit.input.read(cx).text().to_owned();
+        let typed = edit.input.read(cx).value().to_string();
         let InlineRename { path, original, .. } = edit.rename;
         if !self.tree.has(&path) {
             return;

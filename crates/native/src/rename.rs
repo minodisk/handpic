@@ -3,7 +3,7 @@
 //! the name its row shows meanwhile, the slow second click that starts an
 //! edit, and the folders whose rename is in flight. A port of the folder
 //! parts of the Tauri app's `rename.ts`; the window draws the editor with
-//! `textinput.rs` and runs the rename from `folderops.rs`.
+//! `gpui-component`'s `Input` and runs the rename from `folderops.rs`.
 
 use std::time::{Duration, Instant};
 
@@ -18,8 +18,8 @@ pub enum Decision {
 
 /// The decision a key makes on a live edit: Enter confirms, Escape cancels,
 /// and every other key (`None`) is the input's own. The native editor takes
-/// those two keys in `textinput.rs`'s own handler, which emits `Commit` and
-/// `Cancel`, so this stays a model of that rule.
+/// Enter (`PressEnter`, or the lost focus) and Escape (a key listener over
+/// the input) in `folderops.rs`, so this stays a model of that rule.
 #[cfg(test)]
 pub fn edit_key(key: Option<&str>) -> Option<Decision> {
     match key {
