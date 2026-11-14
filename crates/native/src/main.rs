@@ -33,6 +33,7 @@ mod perf;
 mod perfgraph;
 mod prefetch;
 mod rename;
+mod progress;
 mod resync;
 mod scan;
 mod selection;
@@ -430,8 +431,9 @@ struct Riffle {
     /// The judgments and `seen` membership of the files a Move to Trash
     /// took, kept for an undo landing before the re-listing reads them back.
     trashed_state: HashMap<String, (Option<State>, bool)>,
-    /// How far the run in flight got, in the pane's notes.
-    trashing: Option<String>,
+    /// How far the run in flight got, `(mode, done, total)`, in the pane's
+    /// notes and the progress bar.
+    trashing: Option<(trash::Mode, usize, usize)>,
     /// A folder the tree opened while a run was in flight, opened whole at
     /// its end (only the launch's open has `--size` / `--max`).
     deferred_open: Option<PathBuf>,
@@ -1231,7 +1233,7 @@ impl Riffle {
         let trash::Target { dir, paths, mode } = target;
         self.gate.enter_in_flight();
         self.resync.hold();
-        self.trashing = Some(trash::progress_status(mode, 0, paths.len()));
+        self.trashing = Some((mode, 0, paths.len()));
         let (stores, writer, runs, events) = (
             self.stores.clone(),
             self.writer.clone(),
@@ -1491,7 +1493,7 @@ impl Riffle {
         self.trash_step = Some(entry.id);
         self.gate.enter_in_flight();
         self.resync.hold();
-        self.trashing = Some(trash::progress_status(trash::Mode::Trash, 0, entry.count));
+        self.trashing = Some((trash::Mode::Trash, 0, entry.count));
         let (stores, writer, runs, events) = (
             self.stores.clone(),
             self.writer.clone(),
@@ -2393,7 +2395,7 @@ impl Riffle {
             Event::TrashProgress { mode, done, total } => {
                 // The last message can land after the run came back.
                 if self.trashing.is_some() {
-                    self.trashing = Some(trash::progress_status(*mode, *done, *total));
+                    self.trashing = Some((*mode, *done, *total));
                     cx.notify();
                 }
                 return;
@@ -3830,7 +3832,7 @@ impl Riffle {
             )
             .children(
                 self.trashing
-                    .clone()
+                    .map(|(mode, done, total)| trash::progress_status(mode, done, total))
                     .or_else(|| self.folderops.note())
                     .or_else(|| {
                         self.gate
@@ -4008,10 +4010,12 @@ impl Riffle {
     /// The status line with the sort and filter buttons at its right end.
     fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         div()
+            .relative()
             .flex()
             .items_center()
             .gap_1()
             .px_2()
+            .children(self.progress_bar())
             .child(div().flex_1().min_w_0().child(self.status()))
             .child(self.menu_button(
                 Which::Sort,
@@ -4029,6 +4033,32 @@ impl Riffle {
                 max_menu_height,
                 cx,
             ))
+    }
+
+    /// The bar along the status row's top edge while an operation with a
+    /// count runs, out of the row's flow so neither it nor the canvas above
+    /// changes size.
+    fn progress_bar(&self) -> Option<impl IntoElement> {
+        let (done, total) = progress::shown(
+            self.trashing.map(|(_, done, total)| (done, total)),
+            None,
+            self.scan_status.running(),
+        )?;
+        Some(
+            div()
+                .absolute()
+                .top_0()
+                .left_0()
+                .w_full()
+                .h(px(2.))
+                .bg(rgb(MUTED_FILL))
+                .child(
+                    div()
+                        .h_full()
+                        .w(relative(progress::fraction(done, total)))
+                        .bg(rgb(PRIMARY_COLOR)),
+                ),
+        )
     }
 
     /// A menu's button, lit while `lit`, with its popover above it while

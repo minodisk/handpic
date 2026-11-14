@@ -231,6 +231,11 @@ impl Status {
         self.progress.is_some() || self.analyzing.is_some()
     }
 
+    /// The running pass's `(done, total)`, pass 1's before pass 2's.
+    pub fn running(&self) -> Option<(usize, usize)> {
+        self.progress.or(self.analyzing)
+    }
+
     /// What the status line says of the running pass.
     pub fn suffix(&self) -> Option<String> {
         if let Some((done, total)) = self.progress {
@@ -566,6 +571,22 @@ mod tests {
         status.clear();
         assert!(!status.scanning());
         assert_eq!(status.suffix(), None);
+    }
+
+    #[test]
+    fn the_running_pass_gives_the_bar_its_counts() {
+        let mut status = Status::default();
+        assert_eq!(status.running(), None);
+        status.started(10);
+        assert_eq!(status.running(), Some((0, 10)));
+        status.extracting(3, 10);
+        assert_eq!(status.running(), Some((3, 10)));
+        status.extracted();
+        assert_eq!(status.running(), Some((0, 0)));
+        status.analyzing(4, 9);
+        assert_eq!(status.running(), Some((4, 9)));
+        status.clear();
+        assert_eq!(status.running(), None);
     }
 
     #[test]

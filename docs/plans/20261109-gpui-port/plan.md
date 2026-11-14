@@ -629,3 +629,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md`; folder drag-and-drop onto the window is not ported yet, so the no-folder text omits the drop clause (Step 8 stays open)
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 8: the folder operation dialogs, through `../_archived/20261113-gpui-folder-dialogs/plan.md`; the strip's `Rename…` and the tree's multi-folder selection are left out of the port; folder drag-and-drop onto the window remains (#1052) (Step 8 stays open)
+- (2026-11-14) A native addition the milestones did not list: the progress bar fed by the scan and by Move to Trash / Delete Permanently, through `../20261114-gpui-progress-bars/plan.md`

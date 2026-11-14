@@ -2912,3 +2912,45 @@ Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
 - [ ] On Windows, set a filter that hides every file. Expect "No files match the current filter." in the preview area.
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
 - [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
+
+### Native: real-device checks of the scan and Move to Trash progress bar
+
+`gpui-progress-bars` added a 2 px determinate progress bar to the GPUI app (`crates/native`), drawn as an absolutely positioned child of the status row's top edge. It is fed by scan pass 1, scan pass 2 and Move to Trash / Delete Permanently / trash redo, and it appears with any combination of panes hidden. Unit tests cover `progress.rs` (the fraction and which operation's progress is shown), and `mise run ci:local` passes. The window was never run, so the drawing, the placement and the no-layout-change rule are unchecked. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
+
+Files: `crates/native/src/main.rs` (`progress_bar`), `crates/native/src/progress.rs`.
+
+#### TODO
+
+- [ ] On Windows, open a cold folder of 500+ RAW files in `riffle-native` (fresh `--index`). Expect the 2 px bar on the status row's top edge to appear and fill through pass 1, start empty again and fill through pass 2, then disappear. The status line's `scanning d/t` / `analyzing d/t` must read as before. A warm folder may flash the empty track for a few frames, which is accepted.
+- [ ] On Windows, select many files and run `Move to Trash…` with the right pane hidden (`toggleRight`). Expect the bar to show the run's progress and go when it ends. Repeat with the strip and the left pane hidden, and check that the preview canvas does not resize when the bar appears or disappears.
+
+### Native: Sequence JPEG Timestamps and Import do not feed the progress bar
+
+`gpui-progress-bars` made the GPUI app's progress bar take a folder operation's `(done, total)` through `progress::shown`'s `folder_op` argument, but `main.rs`'s `progress_bar` passes `None`, so Sequence and Import still show only their pane note. Both already have `(done, total)` callbacks. The folder-dialogs plan (`docs/plans/20261113-gpui-folder-dialogs/plan.md`) wires the dialogs themselves. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
+
+Files: `crates/native/src/progress.rs`, `crates/native/src/main.rs`, `crates/native/src/sequence.rs`, `crates/native/src/import.rs`.
+
+#### TODO
+
+- [ ] Pass each run's `(done, total)` into `progress::shown`'s `folder_op` input, and clear it where the run ends, is canceled or is stopped by a re-listing.
+
+### Native: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
+
+`gpui-progress-bars` feeds the bar from the scan and from Move to Trash / Delete Permanently / trash redo. `trash::undo_run` takes no progress callback, and neither do the Rewrite Sidecars from Index and Delete Sidecars runs, so the bar shows nothing for them (`redo_run` has one and already feeds the bar). Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
+
+Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `crates/native/src/progress.rs`.
+
+#### TODO
+
+- [ ] Add a `(done, total)` callback to `trash::undo_run` and to the `foldersidecars` rewrite and delete runs, and feed the bar from them in `crates/native`.
+
+### Native: real-device checks of the burst bands, badges, burst keys and reject the rest
+
+#### Background
+
+`gpui-bursts` ported the Tauri app's burst grouping to the GPUI app (`crates/native`): `burst.rs` groups the listing (`BURST_GAP_MS` 1000 ms), the strip paints a band behind each burst of two or more cells with a `position/size` badge, `burstPrevious` / `burstNext` / `burstFramePrevious` / `burstFrameNext` move through them, `rejectRest` rejects the rest of the current file's burst as one undo entry, and the MCP companion's `get_view` reports the current file's `burst`. CI and the unit tests cover the pure parts (`burst.rs` with every `burst.test.ts` case, the `reject_rest` change builder, `companion.rs`'s burst cases). The band's and the badge's look, the keys on a real keyboard, and `rejectRest`'s sidecars and undo on real files were never exercised, because the implementing session could not run the native window. Plan: `docs/plans/_archived/20261114-gpui-bursts/plan.md`. Files: `crates/native/src/main.rs` (`paint_strip`, `move_burst`, `reject_rest`, `mcp_request`), `crates/native/src/burst.rs`, `crates/native/src/companion.rs`.
+
+#### TODO
+
+- [ ] On Windows and macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `riffle-native`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
+- [ ] On Windows and macOS, in `riffle-native` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
