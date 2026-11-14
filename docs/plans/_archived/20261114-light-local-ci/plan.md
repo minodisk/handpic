@@ -293,3 +293,5 @@ rest is left to GitHub Actions. `mise run ci` stays the full run.
   changes across `.claude/`.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
