@@ -3189,3 +3189,22 @@ Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, wi
   - With it open, paging keys, `f`, `tab` and `ctrl+z` do nothing on the window, and a click on the strip or the tree closes the settings without acting on what was under the pointer.
   - Click in the tree, `ctrl+,`, close by Escape: the arrows still move the tree's cursor.
   - While a folder operation's dialog is open (or the import has stepped aside), `ctrl+,` does not open the settings.
+
+### Native: real-device checks of the strip, folder tree and meta pane scrollbars
+
+#### Background
+
+The `native-scrollbars` feature gave the GPUI native app's thumbnail strip, folder tree and meta pane gpui-component's scrollbar in the theme's `ScrollbarMode::Scrolling` (shown while the area scrolls, fading out after about 2 s idle, taking a press only while shown). The tree's bar sits on a `relative()` wrapper of its `uniform_list`, the meta pane's body ends in `overflow_y_scrollbar()`, and the strip's horizontal bar goes through `StripBar`, a `ScrollbarHandle` over the strip's own model whose pending offset `Riffle::render` applies through `Strip::scroll_to` and `strip_moved`. `stripbar.rs`'s unit tests and `mise run ci:local` cover the pure logic. Nobody has watched the running window: the bars' look, the fade-out, dragging and track clicks, the thumbnails following a drag, and what a press on a shown bar does and does not reach were never exercised. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261115-native-scrollbars/plan.md`.
+
+Files: `crates/native/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/native/src/stripbar.rs` (`StripBar`), `crates/native/src/strip.rs` (`Strip::content_width`).
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` on a folder of a few hundred files with a deep folder tree. Scroll the strip, the tree and the meta pane each by the wheel. Expect each bar to show, then fade out about 2 s after the scroll stops.
+- [ ] On Windows, within the time a bar is shown, drag its thumb and click its track, on each of the three. Expect the area to scroll.
+- [ ] On Windows, on the strip, drag the thumb to the far end of a long folder. Expect the thumbnails there to appear. Expect the bar to show with the thumb following the arrow keys (the current file scrolled into view), a refilter and a window resize.
+- [ ] On Windows, on the strip, press on the shown bar. Expect the current file and the selection not to change. With the bar faded out, press in its place and expect the cell to be selected as before. Expect the cells' tooltips to still show on hover.
+- [ ] On Windows, on the tree, click a row, right-click a row and rename a row inline next to the bar. Expect all three to behave as before.
+- [ ] On Windows, look at a short folder's strip, a short tree and a short meta pane. Expect no bar.
+- [ ] On Windows, open the settings modal's lists and the sort, filter and right-click menus, and scroll them. Expect their scrollbars to behave as before.
+- [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and ideally the other two).

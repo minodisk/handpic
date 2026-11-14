@@ -414,6 +414,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   `target/debug/riffle-native.exe` and `cargo build` fails with `os error 5`;
   rename the running exe aside (for example `riffle-native.stale-<pid>.exe`)
   instead of killing it, or ask the user to close it.
+- Rule: `cargo` is not on the Git Bash `PATH` in a worktree session. Prepend
+  `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
+  direct call; the mise tasks find it on their own. Source:
+  `docs/plans/_archived/20261115-native-scrollbars/learnings.md`, Step 1.
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.

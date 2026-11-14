@@ -216,3 +216,5 @@ gives it one.
    `learnings.md`.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
