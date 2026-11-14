@@ -4,6 +4,7 @@ mod companion;
 mod context;
 mod datadir;
 mod dialog;
+mod empty;
 mod exif;
 mod eyes;
 mod facemesh;
@@ -3661,6 +3662,37 @@ impl Riffle {
         self.retired.borrow_mut().extend(images);
     }
 
+    /// Why the preview area shows no photo, centered over it. Only the
+    /// no-folder message takes a click, which opens the folder picker.
+    fn empty_message(
+        &self,
+        state: empty::State,
+        text: String,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let message = div()
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .p_4()
+            .text_center()
+            .text_size(px(14.4))
+            .text_color(rgb(MUTED_COLOR));
+        if state != empty::State::NoFolder {
+            return message.child(text).into_any_element();
+        }
+        message
+            .id("empty")
+            .cursor_pointer()
+            .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.pick_folder(cx)))
+            .child(text)
+            .into_any_element()
+    }
+
     /// The right-hand pane: the file on screen with its metadata, or why its
     /// preview failed, and the folder's notes at the bottom.
     fn meta_pane(&self) -> impl IntoElement {
@@ -4257,6 +4289,17 @@ impl Render for Riffle {
         let zoom_pending = self.zoom_pending.clone();
         let fit_peaking = self.peaking.paint(View::Fit);
         let this = cx.entity().downgrade();
+        let preview_failed = matches!(
+            &self.shown,
+            Some((Some(at), Shown::Failed { .. })) if *at == self.pager.current()
+        ) && !self.zoom.is_on();
+        let empty = empty::state(
+            self.dir.is_some(),
+            self.all.len(),
+            self.files.len(),
+            preview_failed,
+        );
+        let empty_text = empty::text(empty, &self.settings.keymap.bindings());
         div()
             .size_full()
             .flex()
@@ -4274,80 +4317,90 @@ impl Render for Riffle {
                     .flex()
                     .children(self.panels.left.then(|| self.tree_pane(cx)))
                     .child(
-                        canvas(
-                            |_, _, _| {},
-                            move |bounds: Bounds<Pixels>, _, window, cx| {
-                                let page = pending.borrow_mut().take();
-                                let zoomed = zoom_pending.borrow_mut().take();
-                                let paint_started = Instant::now();
-                                let scale = window.scale_factor();
-                                viewport.set((
-                                    (f32::from(bounds.size.width) * scale).round() as u32,
-                                    (f32::from(bounds.size.height) * scale).round() as u32,
-                                ));
-                                let mut want = None;
-                                if let Some(zoom_paint) = zoom_paint {
-                                    want = zoom_paint
-                                        .paint(bounds, window)
-                                        .map(|(image, size)| (View::Crop, image, size));
-                                } else if let Some(image) = image {
-                                    let fit = fit_centered(&image, bounds);
-                                    if let Err(e) = window.paint_image(
-                                        fit,
-                                        fit,
-                                        Corners::default(),
-                                        image.clone(),
-                                        0,
-                                        false,
-                                    ) {
-                                        println!("error paint: {e}");
-                                    }
-                                    want = fit_peaking
-                                        .paint(&image, fit, fit, window)
-                                        .map(|size| (View::Fit, image, size));
-                                    overlay::paint(mark.as_ref(), fit, window, cx);
-                                }
-                                perfgraph::paint(&perf, bounds, window, cx);
-                                hold.release();
-                                let paint_finished = Instant::now();
-                                let old = retired.take();
-                                if page.is_none()
-                                    && zoomed.is_none()
-                                    && old.is_empty()
-                                    && want.is_none()
-                                {
-                                    return;
-                                }
-                                // `defer` runs when the update holding the frame's
-                                // draw and present ends.
-                                cx.defer(move |cx| {
-                                    let presented = Instant::now();
-                                    if let Some((page, keyed)) = page {
-                                        let stages =
-                                            page.stages(paint_started, paint_finished, presented);
-                                        if keyed {
-                                            println!("{}", page.line(&stages));
-                                            summary.borrow_mut().record(stages);
+                        div()
+                            .relative()
+                            .flex_1()
+                            .min_w_0()
+                            .h_full()
+                            .child(
+                                canvas(
+                                    |_, _, _| {},
+                                    move |bounds: Bounds<Pixels>, _, window, cx| {
+                                        let page = pending.borrow_mut().take();
+                                        let zoomed = zoom_pending.borrow_mut().take();
+                                        let paint_started = Instant::now();
+                                        let scale = window.scale_factor();
+                                        viewport.set((
+                                            (f32::from(bounds.size.width) * scale).round() as u32,
+                                            (f32::from(bounds.size.height) * scale).round() as u32,
+                                        ));
+                                        let mut want = None;
+                                        if let Some(zoom_paint) = zoom_paint {
+                                            want = zoom_paint
+                                                .paint(bounds, window)
+                                                .map(|(image, size)| (View::Crop, image, size));
+                                        } else if let Some(image) = image {
+                                            let fit = fit_centered(&image, bounds);
+                                            if let Err(e) = window.paint_image(
+                                                fit,
+                                                fit,
+                                                Corners::default(),
+                                                image.clone(),
+                                                0,
+                                                false,
+                                            ) {
+                                                println!("error paint: {e}");
+                                            }
+                                            want = fit_peaking
+                                                .paint(&image, fit, fit, window)
+                                                .map(|size| (View::Fit, image, size));
+                                            overlay::paint(mark.as_ref(), fit, window, cx);
                                         }
-                                        perfgraph::add_latency(&perf, presented, stages);
-                                    }
-                                    if let Some(zoomed) = zoomed {
-                                        println!("{}", zoomed.line(presented));
-                                    }
-                                    for image in old {
-                                        cx.drop_image(image, None);
-                                    }
-                                    if let Some((view, image, size)) = want {
-                                        this.update(cx, |this, cx| {
-                                            this.want_peaking(view, image, size, cx);
-                                        })
-                                        .ok();
-                                    }
-                                });
-                            },
-                        )
-                        .flex_1()
-                        .h_full(),
+                                        perfgraph::paint(&perf, bounds, window, cx);
+                                        hold.release();
+                                        let paint_finished = Instant::now();
+                                        let old = retired.take();
+                                        if page.is_none()
+                                            && zoomed.is_none()
+                                            && old.is_empty()
+                                            && want.is_none()
+                                        {
+                                            return;
+                                        }
+                                        // `defer` runs when the update holding the frame's
+                                        // draw and present ends.
+                                        cx.defer(move |cx| {
+                                            let presented = Instant::now();
+                                            if let Some((page, keyed)) = page {
+                                                let stages = page.stages(
+                                                    paint_started,
+                                                    paint_finished,
+                                                    presented,
+                                                );
+                                                if keyed {
+                                                    println!("{}", page.line(&stages));
+                                                    summary.borrow_mut().record(stages);
+                                                }
+                                                perfgraph::add_latency(&perf, presented, stages);
+                                            }
+                                            if let Some(zoomed) = zoomed {
+                                                println!("{}", zoomed.line(presented));
+                                            }
+                                            for image in old {
+                                                cx.drop_image(image, None);
+                                            }
+                                            if let Some((view, image, size)) = want {
+                                                this.update(cx, |this, cx| {
+                                                    this.want_peaking(view, image, size, cx);
+                                                })
+                                                .ok();
+                                            }
+                                        });
+                                    },
+                                )
+                                .size_full(),
+                            )
+                            .children(empty_text.map(|text| self.empty_message(empty, text, cx))),
                     )
                     .children(self.panels.right.then(|| self.meta_pane())),
             )

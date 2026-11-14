@@ -1461,8 +1461,9 @@ directory and `--auto` is off), and nothing else: the OS folder picker
 the left pane's tree or from the picker on `open` (see below). A remembered folder opens through the same `open` as
 the command line's, so it is revealed in the tree and resumes at its last
 viewed file. When neither gives a folder the window
-shows the tree, an empty preview and strip, and `no folder` on the status
-line; every handler already tolerated `dir: None` and an empty `files` (the
+shows the tree, the no-folder hint in the preview area (see "The preview
+area says why it shows no photo" below), an empty strip, and `no folder` on
+the status line; every handler already tolerated `dir: None` and an empty `files` (the
 pager's `go` and `request` are no-ops at length 0, `judge` and `step` need a
 current path, `zoom::toggle` needs files, the strip's hit test finds no cell).
 
@@ -1543,6 +1544,47 @@ multiple: false`) and, in a `cx.spawn`, opens the chosen folder through
   is up shows a second dialog, and whether the window's focus returns to the
   photo when it closes (the pending hand check in
   `../plans/20261114-gpui-pane-toggles/learnings.md`).
+
+### The preview area says why it shows no photo (Inferred)
+
+`empty.rs` is the port of `empty.ts`: `state` judges, in `emptyState`'s
+order, no folder (`dir` unset), no listed file (`all` empty), no shown file
+(`files` empty, the text being `filter::FILTERED_TEXT`), a failed preview of
+the current file, else nothing; `text` gives the state's message and
+`open_hint` the no-folder one, the `open` action's keys from the live
+keymap's `bindings()` shown through `settingsmodal::display_key` and joined
+by ` or `, the key clause left out when `open` has none. `render` wraps the
+preview canvas in a `relative` div that takes the canvas's old `flex_1` /
+`h_full` (plus `min_w_0`), the canvas `size_full` in it, so its bounds, and
+with them `viewport`, the fit, the 1:1 crop and the perf band, are the same;
+the message is an `absolute`, full-size, centered child in `MUTED_COLOR` at
+14.4 px (`0.9rem`) with `p_4` padding (`empty_message`).
+
+- Rule: only the no-folder message has an `id`, `cursor_pointer` and an
+  `on_click` (primary button) calling `pick_folder`; the others register no
+  listener. The settings modal, the trash dialog, the folder dialogs, the
+  context popover and the sort / filter menus are deferred, `occlude()`d
+  layers, so a press on them does not reach the message.
+- Rule: "the current file's preview failed" is `shown` being
+  `Shown::Failed` at `pager.current()` with the 1:1 view off (Tauri's
+  `previewFailedSeq === seq && !comparing && !zoomed`; there is no compare
+  view). A page turn moves `pager.current()` off `shown`'s index, so the
+  message goes at once; `refilter` moves `shown`'s index through
+  `filter::shown_after`, so it stays with the failed file.
+- Rule: a failure clears the image (`loaded`'s `Err` arm calls
+  `clear_image`), and nothing puts an older one back: `Finished::Stale` never
+  draws a failure and draws a success only after the pager has moved on, the
+  ring never holds the failed file, and a failed crop releases an earlier
+  page's held crop (`zoom::arrived`).
+- Rule: `dir` is set when the listing arrives, as Tauri's `openDir`, so the
+  hint shows while the first open's listing runs.
+- The no-folder text drops `empty.ts`'s "Drop a folder onto the window"
+  clause: folder drag-and-drop is not ported yet (a separate change ports it
+  and restores the clause).
+- Not verified in the running app: the message's placement, the click
+  opening the picker, the key clause following a rebinding, and the failed
+  preview message on `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef` (the
+  pending hand check in `../plans/20261114-gpui-empty-state/learnings.md`).
 
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
 
