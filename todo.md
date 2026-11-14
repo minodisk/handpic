@@ -3077,6 +3077,7 @@ Files: `crates/native/src/main.rs` (`menu_row`), `crates/native/src/menu.rs`, `c
 - [ ] On Windows, click the open folder's name once and wait half a second: the field opens. A double-click, or a click followed by a key or another click within half a second, opens no field. A single click on a root or another folder opens that folder as before.
 - [ ] On Windows, during an import run (see the Import check), confirm a rename. Expect `Rename… is unavailable while an import runs`.
 - [ ] Record the results in the archived `learnings.md`.
+
 ### Native: real-device checks of the app icon on Windows, macOS and Linux
 
 #### Background
