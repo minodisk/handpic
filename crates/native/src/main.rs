@@ -3,6 +3,7 @@ mod burst;
 mod companion;
 mod context;
 mod datadir;
+mod datefolder;
 mod dialog;
 mod exif;
 mod eyes;

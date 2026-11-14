@@ -77,7 +77,7 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
     if !root {
         groups.push(vec![
             pending(Action::RenameFolder, "Rename…"),
-            pending(Action::RenameByDate, "Rename by Capture Date…"),
+            command(Action::RenameByDate, "Rename by Capture Date…"),
         ]);
         groups.push(vec![
             command(Action::ExpandAll, "Expand All"),
@@ -312,7 +312,7 @@ mod tests {
                 vec![command(Action::RefreshFolder, "Refresh")],
                 vec![
                     pending(Action::RenameFolder, "Rename…"),
-                    pending(Action::RenameByDate, "Rename by Capture Date…"),
+                    command(Action::RenameByDate, "Rename by Capture Date…"),
                 ],
                 vec![
                     command(Action::ExpandAll, "Expand All"),
@@ -366,7 +366,7 @@ mod tests {
             .filter(|item| item.disabled)
             .map(|item| item.action)
             .collect();
-        assert_eq!(disabled, vec![Action::RenameFolder, Action::RenameByDate]);
+        assert_eq!(disabled, vec![Action::RenameFolder]);
     }
 
     #[test]

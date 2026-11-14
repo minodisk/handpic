@@ -430,7 +430,8 @@ folder menu's operations (the flow under way, one at a time, their dialog
 drawn as a `deferred` layer), `src/sidecars.rs` the port of `sidecars.ts`
 (`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/sequence.rs` the
 port of `sequence.ts` (`Sequence JPEG Timestamps…`), `src/import.rs` the port
-of `import.ts` (`Import…`), and `src/peaking.rs`
+of `import.ts` (`Import…`), `src/datefolder.rs` the port of `datefolder.ts`
+(`Rename by Capture Date…`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

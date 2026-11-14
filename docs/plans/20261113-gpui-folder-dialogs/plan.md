@@ -528,7 +528,7 @@ folder operation.
       listing clears the import's result line (`FolderOps::clear_imported`)
       as the Tauri open clears `imported`. `failure_text` is test-only: the
       pane words a failure the same way through `write_failed`.
-- [ ] Step 6: Rename by Capture Date…, and what follows a folder rename
+- [x] Step 6: Rename by Capture Date…, and what follows a folder rename
   - Done when:
     - `crates/native/src/datefolder.rs` is a port of `datefolder.ts` with
       `datefolder.test.ts`'s cases: `date_title_line`, `date_rows`,
@@ -590,6 +590,15 @@ folder operation.
       same.
     - This step lands the rename aftermath without the inline editor, so
       Step 7 is only the editor and the hold.
+    - As landed: `main.rs` gained only `mod datefolder;`; the menu item
+      reaches `folderops` through the existing fallthrough arm. The rename
+      path is `folderops`' `folder_renamed(path, new_path, canonical,
+      warning)`: the tree and its cursor follow over the tree's spelling,
+      the trash entries and the reopen over the canonical pair (`Riffle::dir`
+      and a run's `dirs` are canonical), which the background task computes
+      before and after the rename; Step 7's inline rename calls it the same
+      way. The `notify` 8.2.2 check is the test `datefolder::watch_release`
+      in the native crate.
 - [ ] Step 7: Rename…: the tree's inline rename, held during a scan; and port Step 8's wrap-up
   - Done when:
     - `crates/native/src/rename.rs` is a port of `rename.ts`'s folder parts

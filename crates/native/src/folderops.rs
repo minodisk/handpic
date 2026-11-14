@@ -2,12 +2,13 @@
 //! way, the one-flow-at-a-time rule, the shared confirmation dialog
 //! (`dialog.rs`) and its drawing, and the dispatch of a folder menu action.
 //! So far `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-//! (`sidecars.rs`), `Sequence JPEG Timestamps…` (`sequence.rs`) and
-//! `Import…` (`import.rs`); the
+//! (`sidecars.rs`), `Sequence JPEG Timestamps…` (`sequence.rs`), `Import…`
+//! (`import.rs`) and `Rename by Capture Date…` (`datefolder.rs`), with what
+//! follows a folder rename (`folder_renamed`); the
 //! window's view keeps one `FolderOps`, and this module adds to its `impl`,
 //! as a child module reaches its private fields.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
@@ -18,22 +19,25 @@ use gpui::{
     deferred, div, prelude::*, px, relative, rgb, rgba,
 };
 use riffle_backend::{
+    datefolder::{self as datefolders, Kind as DateKind, Split},
     foldersidecars::{self, DeletePreview, Preview, Summary},
     import::{self as importer, ImportSettings, Plan, Ran as Imported},
     listing::canonicalize,
+    rename::{self as renamer, Context as Moves, Renamed},
     sequence::{self as sequencer, Ran as Sequenced},
     sidecar,
     text::{SCAN_RUNNING, SIZE_BASE, format_bytes},
     trash::Summary as TrashSummary,
 };
 
+use crate::datefolder::{self, DateFolderFlow};
 use crate::dialog::{self, Button, Content, Dialog, Row, Style};
 use crate::import::{self, ImportFlow};
 use crate::judgment::State;
 use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
-use crate::tree::IGNORE_CASE;
+use crate::tree::{self, IGNORE_CASE};
 use crate::{
     BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
     PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, context, trash,
@@ -63,12 +67,13 @@ pub struct FolderOps {
     /// until the next open of a folder or import.
     importing: Option<String>,
     imported: Option<String>,
+    date: DateFolderFlow,
 }
 
 impl FolderOps {
     /// A folder flow is under way, from its preview to its run's end.
     pub fn busy(&self) -> bool {
-        self.sidecars.busy() || self.sequence.busy() || self.import_busy()
+        self.sidecars.busy() || self.sequence.busy() || self.import_busy() || self.date.busy()
     }
 
     /// An import is under way, its dialog shown or not; a folder rename is
@@ -123,6 +128,13 @@ enum Previewed {
     Delete(DeletePreview),
 }
 
+/// What a date run did: a rename, with the folder's canonical path before
+/// and after it, or a split of the canonical folder.
+enum DateRan {
+    Renamed(Renamed, (String, String)),
+    Split(Split, String),
+}
+
 /// What a sidecar run did.
 enum Ran {
     Rewrote(Result<Summary, String>),
@@ -152,6 +164,7 @@ impl Riffle {
             context::Action::DeleteSidecars => Kind::Delete,
             context::Action::SequenceTimestamps => return self.start_sequence(path, cx),
             context::Action::ImportFolder => return self.start_import(path, cx),
+            context::Action::RenameByDate => return self.start_date_folder(path, cx),
             _ => return,
         };
         self.request_sidecars(Target { kind, dir: path }, cx);
@@ -180,6 +193,7 @@ impl Riffle {
             || self.trash.busy()
             || self.folderops.sequence.busy()
             || self.folderops.import.busy()
+            || self.folderops.date.busy()
             || !self.folderops.sidecars.start(target.clone())
         {
             return;
@@ -408,6 +422,7 @@ impl Riffle {
             || self.trash.busy()
             || self.folderops.sidecars.busy()
             || self.folderops.import.busy()
+            || self.folderops.date.busy()
             || !self.folderops.sequence.start(dir.clone())
         {
             return;
@@ -573,6 +588,7 @@ impl Riffle {
             || self.trash.busy()
             || self.folderops.sidecars.busy()
             || self.folderops.sequence.busy()
+            || self.folderops.date.busy()
         {
             return;
         }
@@ -810,6 +826,306 @@ impl Riffle {
         cx.notify();
     }
 
+    /// `Rename by Capture Date…`: not held by the gate but refused with the
+    /// scan message while a listing, a scan or a run is under way, since the
+    /// plan could be stale by its end; else planned on a background task
+    /// from the index's capture times. Nothing starts while the settings,
+    /// the trash dialog or another folder flow is open or busy.
+    fn start_date_folder(&mut self, dir: String, cx: &mut Context<Self>) {
+        if self.settings_view.read(cx).is_open() || self.trash.busy() || self.folderops.busy() {
+            return;
+        }
+        if self.resync.busy() || self.gate.in_flight() {
+            self.step_note = Some(SCAN_RUNNING.to_owned());
+            cx.notify();
+            return;
+        }
+        if !self.folderops.date.start(dir.clone()) {
+            return;
+        }
+        let index = self.reader.clone().or_else(|| self.index.clone().ok());
+        cx.spawn(async move |this, cx| {
+            let previewed = cx
+                .background_spawn(async move {
+                    let dir = canonicalize(&dir);
+                    let plan = datefolders::plan_of(index.as_deref(), &dir)?;
+                    Ok::<_, String>(datefolders::preview(Path::new(&dir), plan))
+                })
+                .await;
+            this.update(cx, |this, cx| this.date_folder_previewed(previewed, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The plan came back: its dialog opens, or the refusal goes to the
+    /// status and the flow ends.
+    fn date_folder_previewed(
+        &mut self,
+        previewed: Result<datefolders::Preview, String>,
+        cx: &mut Context<Self>,
+    ) {
+        match previewed {
+            Ok(preview) if self.folderops.date.previewed() => {
+                let reason = datefolder::disabled_reason(&preview);
+                let content = Content {
+                    title: "Rename by Capture Date".to_owned(),
+                    lines: vec![datefolder::date_title_line(&preview)],
+                    rows: rows(datefolder::date_rows(&preview)),
+                    notes: [
+                        datefolder::undated_line(&preview),
+                        datefolder::removal_note(&preview),
+                    ]
+                    .into_iter()
+                    .flatten()
+                    .collect(),
+                    reason: reason.clone(),
+                    running_note: datefolder::RUNNING_NOTE.to_owned(),
+                    ..Content::default()
+                };
+                self.menus.close();
+                self.context.close();
+                self.folderops.dialog = Some(Dialog::new(
+                    content,
+                    "Run",
+                    Style::Primary,
+                    reason.is_none(),
+                ));
+            }
+            Ok(_) => {}
+            Err(e) => {
+                self.folderops.date.end();
+                self.step_note = Some(e);
+            }
+        }
+        cx.notify();
+    }
+
+    /// The run button: refused with the scan message if a listing or scan
+    /// started while the dialog was open; else, the buttons disabled, on a
+    /// background task in flight so no listing or scan starts under it: the
+    /// queued judgment stores and the sidecar writer flushed, the folder
+    /// planned again (the preview is not trusted across the dialog) and
+    /// refused on a collision or a folder already named, then renamed to its
+    /// one date or split into one folder per date. The folder watcher and the
+    /// tree watches on it are released by the backend around the moves.
+    fn run_date_folder(&mut self, cx: &mut Context<Self>) {
+        let Some(dir) = self.folderops.date.run() else {
+            return;
+        };
+        if self.resync.busy() || self.gate.in_flight() {
+            self.folderops.date.end();
+            self.folderops.dialog = None;
+            self.step_note = Some(SCAN_RUNNING.to_owned());
+            cx.notify();
+            return;
+        }
+        if let Some(dialog) = &mut self.folderops.dialog {
+            dialog.set_running();
+        }
+        self.gate.enter_in_flight();
+        if self.dir.is_some() {
+            self.resync.hold();
+        }
+        let (stores, writer, index, runs) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.index.clone().ok(),
+            self.runs.clone(),
+        );
+        let (watch, trees) = (self.watch.clone(), self.tree_watch.clone());
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let caller = dir.clone();
+            let ran = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    let canonical = canonicalize(&caller);
+                    let index = index.as_deref();
+                    let plan = datefolders::plan_of(index, &canonical)?;
+                    if !plan.collisions.is_empty() {
+                        return Err(format!("{} already exists", plan.collisions.join(", ")));
+                    }
+                    let moves = Moves {
+                        watch: &watch,
+                        trees: &trees,
+                        index,
+                        runs: &runs,
+                    };
+                    match plan.kind {
+                        DateKind::Named => Err(format!(
+                            "{} is already named its capture date",
+                            datefolders::file_name(Path::new(&canonical))
+                        )),
+                        DateKind::Rename => {
+                            renamer::rename_folder(&moves, &caller, &plan.groups[0].name).map(
+                                |renamed| {
+                                    let new = canonicalize(&renamed.path);
+                                    DateRan::Renamed(renamed, (canonical, new))
+                                },
+                            )
+                        }
+                        DateKind::Split => {
+                            datefolders::split_folder(&moves, &canonical, &caller, &plan)
+                                .map(|split| DateRan::Split(split, canonical))
+                        }
+                    }
+                })
+                .await;
+            log::info!(
+                "datefolder: {dir} {} in {}ms",
+                match &ran {
+                    Ok(DateRan::Renamed(renamed, _)) => format!("renamed to {}", renamed.path),
+                    Ok(DateRan::Split(split, _)) => format!("split into {}", split.moved.len()),
+                    Err(e) => format!("failed: {e}"),
+                },
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| this.date_folder_ran(dir, ran, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+    }
+
+    /// The run came back and the dialog closes. A rename ends in
+    /// `folder_renamed`. A split's failures go to the notes and the status
+    /// says what moved; when the split folder was the open one it is
+    /// re-listed if it remains, else the first date folder opens; and the
+    /// parent is re-listed in the tree.
+    fn date_folder_ran(
+        &mut self,
+        dir: String,
+        ran: Result<DateRan, String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.gate.leave_in_flight();
+        self.folderops.date.end();
+        self.folderops.dialog = None;
+        let (split, canonical) = match ran {
+            Ok(DateRan::Renamed(renamed, canonical)) => {
+                return self.folder_renamed(&dir, &renamed.path, canonical, renamed.warning, cx);
+            }
+            Ok(DateRan::Split(split, canonical)) => (split, canonical),
+            Err(e) => {
+                self.step_note = Some(e);
+                self.settle_folder_run(cx);
+                cx.notify();
+                return;
+            }
+        };
+        for failure in &split.failed {
+            self.write_failed(
+                failure.path.clone(),
+                format!("could not move: {}", failure.message),
+            );
+        }
+        let status = datefolder::split_status(&split, &name_of(&dir));
+        let opens = self
+            .dir
+            .as_deref()
+            .is_some_and(|open| trash::opens_target(open, &[canonical], IGNORE_CASE));
+        let first = split.moved.first().filter(|_| split.removed);
+        if self.deferred_open.is_some() || !opens {
+            self.step_note = Some(status);
+            self.settle_folder_run(cx);
+        } else if !split.removed {
+            self.step_note = Some(status);
+            self.resync.open();
+            self.relist(cx);
+        } else if let Some(first) = first {
+            self.open_with_note(PathBuf::from(&first.path), Some(status), cx);
+        } else {
+            self.step_note = Some(status);
+            self.settle_folder_run(cx);
+        }
+        self.tree_refresh(datefolder::parent_of(&dir), cx);
+        cx.notify();
+    }
+
+    /// The folder `path` (the tree's spelling) is now `new_path`, its
+    /// canonical path going from `canonical.0` to `canonical.1`, as
+    /// `main.ts`'s `folderRenamed`: the tree renames the node in place with
+    /// its state, its open row and cursor follow, the trash runs of both
+    /// histories follow (the backend's recorded runs already did), and the
+    /// tree's watched set is handed over afresh. When the open folder is the
+    /// renamed one or under it, it is reopened under its new path, its
+    /// judgments and last viewed file coming back from the carried index
+    /// rows; a warning goes to the status once that open has landed.
+    pub(crate) fn folder_renamed(
+        &mut self,
+        path: &str,
+        new_path: &str,
+        canonical: (String, String),
+        warning: Option<String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.tree
+            .rename_folder(path, new_path, &name_of(new_path), IGNORE_CASE);
+        let moved = |p: &str| tree::rebase(p, path, new_path, IGNORE_CASE);
+        self.tree_open = self.tree_open.take().map(|p| moved(&p).unwrap_or(p));
+        self.tree_cursor = self.tree_cursor.take().map(|p| moved(&p).unwrap_or(p));
+        let (old, new) = canonical;
+        self.undo.map_trash_dirs(|dir| {
+            tree::rebase(dir, &old, &new, IGNORE_CASE).unwrap_or_else(|| dir.to_owned())
+        });
+        self.tree_watched = None;
+        self.tree_changed(cx);
+        let reopen = match self.deferred_open.take() {
+            Some(folder) => Some(
+                moved(&folder.to_string_lossy())
+                    .map(PathBuf::from)
+                    .unwrap_or(folder),
+            ),
+            None => self
+                .dir
+                .as_deref()
+                .and_then(|dir| tree::rebase(dir, &old, &new, IGNORE_CASE))
+                .map(|dir| PathBuf::from(context::shown_path(&dir))),
+        };
+        match reopen {
+            Some(folder) => self.open_with_note(folder, warning, cx),
+            None => {
+                if warning.is_some() {
+                    self.step_note = warning;
+                }
+                self.settle_folder_run(cx);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Open `folder` as a click in the tree opens it, then put `note` in the
+    /// status, which the open's fresh listing would otherwise clear.
+    fn open_with_note(&mut self, folder: PathBuf, note: Option<String>, cx: &mut Context<Self>) {
+        let opening = self.open(folder, None, None, cx);
+        cx.spawn(async move |this, cx| {
+            opening.await;
+            let Some(note) = note else { return };
+            this.update(cx, |this, cx| {
+                this.step_note = Some(note);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A folder run ended without reopening a folder: the folder the tree
+    /// asked for meanwhile opens, else a change the watcher saw meanwhile
+    /// re-lists.
+    fn settle_folder_run(&mut self, cx: &mut Context<Self>) {
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if self.resync.finished() {
+            self.relist(cx);
+        }
+    }
+
     /// A message of a folder operation's run; one of an ended run is
     /// dropped.
     pub(crate) fn folder_op_message(&mut self, message: Message, cx: &mut Context<Self>) {
@@ -857,7 +1173,7 @@ impl Riffle {
                 sequence::Dismiss::None => {}
             }
             cx.notify();
-        } else if self.folderops.sidecars.dismiss() {
+        } else if self.folderops.sidecars.dismiss() || self.folderops.date.dismiss() {
             self.folderops.dialog = None;
             cx.notify();
         }
@@ -868,6 +1184,7 @@ impl Riffle {
             Button::Run if self.folderops.import.is_open() => self.run_import(cx),
             Button::Run if self.folderops.sequence.is_open() => self.run_sequence(cx),
             Button::Run if self.folderops.sidecars.is_open() => self.run_sidecars(cx),
+            Button::Run if self.folderops.date.is_open() => self.run_date_folder(cx),
             Button::Run => {}
             Button::Cancel => self.dismiss_folder_dialog(false, cx),
         }
