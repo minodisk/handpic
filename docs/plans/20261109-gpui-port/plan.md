@@ -339,7 +339,7 @@ them; their contents are deliberately coarse.
     `partial.rs`, focus peaking (`e`), and the `eyes_of` on-demand path.
   - Pass 2, the `f` overlays (mark, face boxes, face mesh) and `eyes_of`
     were done by `../20261110-gpui-focus-marks/plan.md`.
-- [ ] Step 8: Dialogs, folder tree and folder operations
+- [x] Step 8: Dialogs, folder tree and folder operations
   - Done when: the folder tree with its watchers and volume roots, the
     strip's right-click menu (reveal, copy path / name, Move to Trash…,
     Delete Permanently…), Rename, Rename by Capture Date…, Import…,
@@ -352,6 +352,13 @@ them; their contents are deliberately coarse.
     drag-and-drop onto the window (a separate change is porting it); until
     it lands the no-folder text omits `empty.ts`'s "Drop a folder onto the
     window" clause.
+  - The folder operation dialogs (Rename, Rename by Capture Date…,
+    Import…, Sequence JPEG Timestamps…, Rewrite / Delete Sidecars…) were
+    done by `../_archived/20261113-gpui-folder-dialogs/plan.md`. Left out of
+    the port by the user's decision (2026-11-13): the strip menu's
+    `Rename…` (`rename_file`, one RAW with its sidecars) and the tree's
+    multi-folder selection, which nothing consumes (the folder menu acts on
+    the one folder right-clicked).
 - [ ] Step 9: Settings, pass 3 and the companions
   - Done when: the settings modal (sidecar format, label names, shortcuts,
     Import tab, `aiEnabled` with the model download), pass 3 embeddings,
@@ -621,3 +628,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md`; folder drag-and-drop onto the window is not ported yet, so the no-folder text omits the drop clause (Step 8 stays open)
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
+- (2026-11-14) Step 8 complete: the folder operation dialogs, through `../_archived/20261113-gpui-folder-dialogs/plan.md`; the strip's `Rename…` and the tree's multi-folder selection are left out of the port

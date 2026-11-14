@@ -32,6 +32,7 @@ mod peaking;
 mod perf;
 mod perfgraph;
 mod prefetch;
+mod rename;
 mod resync;
 mod scan;
 mod selection;
@@ -250,6 +251,7 @@ fn held_label(held: &HeldOp) -> String {
         HeldOp::Undo(entry) => format!("held undo of run {}", entry.run_id),
         HeldOp::Redo(entry) => format!("held redo of run {}", entry.run_id),
         HeldOp::Sidecars(target) => format!("held {} of {}", target.kind.label(), target.dir),
+        HeldOp::Rename(held) => format!("held rename of {} to {}", held.path, held.name),
     }
 }
 
@@ -258,12 +260,14 @@ fn held_label(held: &HeldOp) -> String {
 type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
 
 /// What the gate holds for the listing or scan under way: a confirmed run,
-/// or the undo or redo of one, or a folder's sidecar rewrite or delete.
+/// or the undo or redo of one, or a folder's sidecar rewrite or delete, or
+/// a folder rename.
 enum HeldOp {
     Run(trash::Target),
     Undo(TrashEntry),
     Redo(TrashEntry),
     Sidecars(sidecars::Target),
+    Rename(rename::Held),
 }
 
 struct Opened {
@@ -842,9 +846,10 @@ impl Riffle {
             self.deferred_open = Some(folder);
             return Task::ready(());
         }
-        if let Some(held) = self.gate.discard() {
+        let dropped = self.gate.discard().and_then(|held| {
             log::info!("trash: {} dropped by an open", held_label(&held));
-        }
+            self.held_dropped(held, None)
+        });
         self.opens.fetch_add(1, Ordering::SeqCst);
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
@@ -852,7 +857,11 @@ impl Riffle {
         self.wanted = wanted;
         self.max = max;
         self.resync.open();
-        self.list(folder, false, cx)
+        let listing = self.list(folder, false, cx);
+        match dropped {
+            Some(note) => self.note_after(listing, note, cx),
+            None => listing,
+        }
     }
 
     fn opens(&self) -> u64 {
@@ -862,6 +871,9 @@ impl Riffle {
     /// A click on a folder's name in the tree, or an import's first folder:
     /// open it whole, without the command line's `--size` / `--max`.
     fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) -> Task<()> {
+        if self.refuse_renaming(&path, cx) {
+            return Task::ready(());
+        }
         self.open(PathBuf::from(path), None, None, cx)
     }
 
@@ -1084,8 +1096,18 @@ impl Riffle {
     }
 
     /// A click on an item of the right-click menu.
-    fn context_action(&mut self, action: context::Action, cx: &mut Context<Self>) {
+    fn context_action(
+        &mut self,
+        action: context::Action,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match self.context.close() {
+            Some(context::Target::Folder { path, .. })
+                if action == context::Action::RenameFolder =>
+            {
+                self.start_rename(path, window, cx);
+            }
             Some(context::Target::Folder { path, name }) => {
                 self.folder_action(action, path, name, cx);
             }
@@ -1168,7 +1190,7 @@ impl Riffle {
         };
         let busy = self.resync.busy() || self.gate.in_flight();
         let label = target.mode.label();
-        match self.gate.request(label, HeldOp::Run(target), busy) {
+        match self.gate_request(label, HeldOp::Run(target), busy) {
             Some(HeldOp::Run(target)) => self.run_trash(target, true, cx),
             Some(_) => {}
             None => {
@@ -1341,7 +1363,7 @@ impl Riffle {
             (undo, HeldOp::Undo(entry))
         };
         let busy = self.resync.busy() || self.gate.in_flight();
-        match self.gate.request(label, held, busy) {
+        match self.gate_request(label, held, busy) {
             Some(HeldOp::Undo(entry)) => {
                 self.undo_trash(entry, cx);
             }
@@ -1849,6 +1871,11 @@ impl Riffle {
                 }
             }
             Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
+            Some(HeldOp::Rename(held)) => {
+                if self.run_rename(held, cx) {
+                    return;
+                }
+            }
             None => {}
         }
         if self.resync.finished() {
@@ -2531,6 +2558,9 @@ impl Riffle {
         }
         if self.folderops.dialog_open() {
             return self.folder_dialog_key(name.as_deref(), cx);
+        }
+        if self.rename_owns_keys() {
+            return;
         }
         let Some(name) = name else {
             return;
@@ -3835,9 +3865,13 @@ impl Riffle {
         div()
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(|this, _: &MouseDownEvent, _, cx| this.set_tree_keys(true, cx)),
+                cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                    this.disarm_slow_click();
+                    this.set_tree_keys(true, cx);
+                }),
             )
             .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.disarm_slow_click();
                 this.set_tree_keys(false, cx);
             }))
             .w(px(PANE_WIDTH))
@@ -3917,14 +3951,7 @@ impl Riffle {
                 s.bg(rgb(ACCENT_COLOR)).font_weight(FontWeight::SEMIBOLD)
             })
             .child(expander)
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .when(row.failed.is_some(), |s| s.text_color(rgb(ERROR_COLOR)))
-                    .child(row.name.clone()),
-            )
+            .child(self.tree_name(at, cx))
             .children(count)
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                 this.open_from_tree(path.clone(), cx).detach();
@@ -4589,7 +4616,9 @@ fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> Any
     }
     row.cursor_pointer()
         .hover(|s| s.bg(rgb(ACCENT_COLOR)))
-        .on_click(cx.listener(move |this, _, _, cx| this.context_action(action, cx)))
+        .on_click(cx.listener(move |this, _, window, cx| {
+            this.context_action(action, window, cx);
+        }))
         .into_any_element()
 }
 

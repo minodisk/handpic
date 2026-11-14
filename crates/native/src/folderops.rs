@@ -3,8 +3,9 @@
 //! (`dialog.rs`) and its drawing, and the dispatch of a folder menu action.
 //! So far `Rewrite Sidecars from Index…` and `Delete Sidecars…`
 //! (`sidecars.rs`), `Sequence JPEG Timestamps…` (`sequence.rs`), `Import…`
-//! (`import.rs`) and `Rename by Capture Date…` (`datefolder.rs`), with what
-//! follows a folder rename (`folder_renamed`); the
+//! (`import.rs`), `Rename by Capture Date…` (`datefolder.rs`) and the tree's
+//! inline `Rename…` (`rename.rs`), with what follows a folder rename
+//! (`folder_renamed`); the
 //! window's view keeps one `FolderOps`, and this module adds to its `impl`,
 //! as a child module reaches its private fields.
 
@@ -15,8 +16,9 @@ use std::time::Instant;
 
 use futures::channel::oneshot;
 use gpui::{
-    AnyElement, ClickEvent, Context, FontWeight, HighlightStyle, StyledText, Subscription, Task,
-    deferred, div, prelude::*, px, relative, rgb, rgba,
+    AnyElement, ClickEvent, Context, Entity, Focusable, FontWeight, HighlightStyle, MouseButton,
+    ScrollStrategy, StyledText, Subscription, Task, Window, deferred, div, prelude::*, px,
+    relative, rgb, rgba,
 };
 use riffle_backend::{
     datefolder::{self as datefolders, Kind as DateKind, Split},
@@ -34,13 +36,19 @@ use crate::datefolder::{self, DateFolderFlow};
 use crate::dialog::{self, Button, Content, Dialog, Row, Style};
 use crate::import::{self, ImportFlow};
 use crate::judgment::State;
+use crate::rename::{
+    self, Decision, Held, InlineRename, Outcome, PENDING_TITLE, Pending, PendingRename,
+    RENAME_REFUSED, RENAMING, RenamesInFlight, SLOW_CLICK_DELAY, SlowClick, commit, display_name,
+    edit_outcome,
+};
 use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
+use crate::textinput::{self, TextInput};
 use crate::tree::{self, IGNORE_CASE};
 use crate::{
     BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, HeldOp, INPUT_BORDER, MUTED_COLOR,
-    PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, context, trash,
+    PANE_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context, trash,
 };
 
 /// The folder operations' view state: the flows, the one dialog, laid out
@@ -68,6 +76,19 @@ pub struct FolderOps {
     importing: Option<String>,
     imported: Option<String>,
     date: DateFolderFlow,
+    /// The tree's live inline rename, the rename the gate holds as its row
+    /// shows it, the renames in flight and the slow second click.
+    editing: Option<Edit>,
+    pending: PendingRename,
+    renames: RenamesInFlight,
+    slow: SlowClick,
+}
+
+/// A live inline rename and the text input drawn over its row's name.
+struct Edit {
+    rename: InlineRename,
+    input: Entity<TextInput>,
+    _events: Subscription,
 }
 
 impl FolderOps {
@@ -176,7 +197,7 @@ impl Riffle {
     fn request_sidecars(&mut self, target: Target, cx: &mut Context<Self>) {
         let busy = self.resync.busy() || self.gate.in_flight();
         let label = target.kind.label();
-        match self.gate.request(label, HeldOp::Sidecars(target), busy) {
+        match self.gate_request(label, HeldOp::Sidecars(target), busy) {
             Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
             Some(_) => {}
             None => log::info!("sidecars: {label} held for the scan's end"),
@@ -1356,6 +1377,431 @@ impl Riffle {
             )
             .into_any_element(),
         )
+    }
+}
+
+/// The pending name's hover text.
+struct Tip(&'static str);
+
+impl Render for Tip {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px_2()
+            .py_1()
+            .rounded_sm()
+            .border_1()
+            .border_color(rgba(BORDER_COLOR))
+            .bg(rgb(PANE_COLOR))
+            .text_size(px(12.))
+            .text_color(rgb(FOREGROUND_COLOR))
+            .child(self.0)
+    }
+}
+
+/// The tree's inline rename, a port of `folders.ts`'s editor and
+/// `main.ts`'s `renameFolder` / `holdRename`.
+impl Riffle {
+    /// The name of the tree's row `at`: the text input while it is being
+    /// renamed, else its name, or the held rename's name in the pending
+    /// style. A click on the open folder's name arms the slow click instead
+    /// of reopening it.
+    pub(crate) fn tree_name(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
+        let row = &self.tree_rows[at];
+        if let Some(edit) = self
+            .folderops
+            .editing
+            .as_ref()
+            .filter(|edit| edit.rename.path == row.path)
+        {
+            return div()
+                .id(("tree-name", at))
+                .flex_1()
+                .min_w_0()
+                // The input's padding and border take 8 px of the row.
+                .line_height(px(TREE_ROW_HEIGHT - 8.))
+                .on_click(|_, _, cx| cx.stop_propagation())
+                .on_mouse_down(MouseButton::Right, |_, _, cx| cx.stop_propagation())
+                .child(edit.input.clone())
+                .into_any_element();
+        }
+        let pending = self
+            .folderops
+            .pending
+            .current()
+            .filter(|pending| pending.path == row.path);
+        let name = display_name(pending, &row.path, &row.name);
+        let name = div()
+            .id(("tree-name", at))
+            .flex_1()
+            .min_w_0()
+            .truncate()
+            .when(row.failed.is_some(), |s| s.text_color(rgb(ERROR_COLOR)))
+            .when(pending.is_some(), |s| {
+                s.italic()
+                    .text_color(rgb(MUTED_COLOR))
+                    .tooltip(|_, cx| cx.new(|_| Tip(PENDING_TITLE)).into())
+            })
+            .child(if pending.is_some() {
+                format!("\u{25f7} {name}")
+            } else {
+                name.to_owned()
+            });
+        if self.tree_open_row != Some(at) || row.depth == 0 {
+            return name.into_any_element();
+        }
+        let path = row.path.clone();
+        name.on_click(cx.listener(move |this, e: &ClickEvent, window, cx| {
+            this.tree_name_clicked(&path, e, window, cx);
+        }))
+        .into_any_element()
+    }
+
+    /// A click on the open folder's name: without a modifier it does not
+    /// reopen the folder; a single click arms the slow click, whose rename
+    /// starts `SLOW_CLICK_DELAY` later unless a press or a key disarms it,
+    /// and a double-click disarms it.
+    fn tree_name_clicked(
+        &mut self,
+        path: &str,
+        e: &ClickEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let modifiers = e.modifiers();
+        if modifiers.secondary(cx) || modifiers.shift {
+            return;
+        }
+        cx.stop_propagation();
+        if e.click_count() != 1 {
+            self.folderops.slow.cancel();
+            return;
+        }
+        self.folderops.slow.click(path, true, Instant::now());
+        let path = path.to_owned();
+        cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(SLOW_CLICK_DELAY).await;
+            this.update_in(cx, |this, window, cx| {
+                if this.folderops.slow.due(&path, Instant::now()) {
+                    this.start_rename(path, window, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A press anywhere disarms the slow click; the arming click comes after
+    /// its own press.
+    pub(crate) fn disarm_slow_click(&mut self) {
+        self.folderops.slow.cancel();
+    }
+
+    /// A key disarms the slow click; true while an inline rename is live,
+    /// whose input owns every key it does not take itself, so none reaches
+    /// the tree or the keymap.
+    pub(crate) fn rename_owns_keys(&mut self) -> bool {
+        self.folderops.slow.cancel();
+        self.folderops.editing.is_some()
+    }
+
+    /// Opening a folder whose rename is in flight, or one under it, is
+    /// refused with a note: the tree still draws it at a path about to move.
+    pub(crate) fn refuse_renaming(&mut self, path: &str, cx: &mut Context<Self>) -> bool {
+        if !self.folderops.renames.blocks(path, IGNORE_CASE) {
+            return false;
+        }
+        self.tree_note = Some(RENAMING.to_owned());
+        cx.notify();
+        true
+    }
+
+    /// `Rename…`, or a slow click: the row's name turns into a text input
+    /// holding its name (the pending one while a rename of it is held),
+    /// selected whole and focused. A live edit of another row is confirmed
+    /// first.
+    pub(crate) fn start_rename(
+        &mut self,
+        path: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.folderops.slow.cancel();
+        if self.refuse_renaming(&path, cx) {
+            return;
+        }
+        if self.folderops.editing.is_some() {
+            self.finish_rename(Decision::Confirm, cx);
+        }
+        let Some(at) = self.tree_rows.iter().position(|row| row.path == path) else {
+            return;
+        };
+        let name = display_name(
+            self.folderops.pending.current(),
+            &path,
+            &self.tree_rows[at].name,
+        )
+        .to_owned();
+        let input = cx.new(|cx| TextInput::new(window, cx));
+        input.update(cx, |input, cx| {
+            input.set_text(&name, window, cx);
+            input.select_all(window, cx);
+        });
+        let events = cx.subscribe_in(&input, window, |this, input, event, window, cx| {
+            this.rename_event(input, *event, window, cx);
+        });
+        window.focus(&input.focus_handle(cx), cx);
+        self.folderops.editing = Some(Edit {
+            rename: InlineRename::new(path, name),
+            input,
+            _events: events,
+        });
+        self.tree_scroll.scroll_to_item(at, ScrollStrategy::Nearest);
+        cx.notify();
+    }
+
+    /// The input's Enter or lost focus confirms, its Escape cancels. A focus
+    /// lost to another app does not: the edit waits for the window to come
+    /// back, as the Tauri editor's blur checks `document.hasFocus()`. After
+    /// Enter or Escape the tree has the keyboard again.
+    fn rename_event(
+        &mut self,
+        input: &Entity<TextInput>,
+        event: textinput::Event,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if event == textinput::Event::Commit && !window.is_window_active() {
+            return;
+        }
+        let focused = input.focus_handle(cx).is_focused(window);
+        self.finish_rename(
+            if event == textinput::Event::Commit {
+                Decision::Confirm
+            } else {
+                Decision::Cancel
+            },
+            cx,
+        );
+        if focused || window.focused(cx).is_none() {
+            window.focus(&self.focus, cx);
+            self.set_tree_keys(true, cx);
+        }
+    }
+
+    /// End the live edit with `decision`, once. A confirmed name acts on the
+    /// folder as the tree has it now: nothing when it is gone; on a row
+    /// whose rename is held, the real name cancels it.
+    fn finish_rename(&mut self, decision: Decision, cx: &mut Context<Self>) {
+        let Some(mut edit) = self.folderops.editing.take() else {
+            return;
+        };
+        cx.notify();
+        if commit(&mut edit.rename, decision) != Some(Decision::Confirm) {
+            return;
+        }
+        let typed = edit.input.read(cx).text().to_owned();
+        let InlineRename { path, original, .. } = edit.rename;
+        if !self.tree.has(&path) {
+            return;
+        }
+        let real = self
+            .tree_rows
+            .iter()
+            .find(|row| row.path == path)
+            .map_or(original, |row| row.name.clone());
+        match edit_outcome(self.folderops.pending.current(), &path, &real, &typed) {
+            Outcome::Keep => {}
+            Outcome::Cancel => self.cancel_pending_rename(&path),
+            Outcome::Rename(name) => self.request_rename(path, name, cx),
+        }
+    }
+
+    /// The real name typed back on the row whose rename is held: the held
+    /// rename is dropped, the row shows its real name and the status says
+    /// so. Only while that rename is still the one held.
+    fn cancel_pending_rename(&mut self, path: &str) {
+        let held = self.gate.waiting() == Some(rename::LABEL)
+            && self
+                .folderops
+                .pending
+                .current()
+                .is_some_and(|pending| pending.path == path);
+        if let Some(op) = held.then(|| self.gate.discard()).flatten()
+            && let Some(note) = self.held_dropped(op, None)
+        {
+            self.step_note = Some(note.to_owned());
+        }
+    }
+
+    /// A confirmed name, through the gate under `Rename…`: run at once with
+    /// no listing, scan or run under way, else held, its row showing the new
+    /// name in the pending style, without canceling the scan. Refused while
+    /// an import runs.
+    fn request_rename(&mut self, path: String, name: String, cx: &mut Context<Self>) {
+        if self.folderops.import_busy() {
+            self.step_note = Some(RENAME_REFUSED.to_owned());
+            return;
+        }
+        let busy = self.resync.busy() || self.gate.in_flight();
+        let mark = busy.then(|| self.folderops.pending.mark(path.clone(), name.clone()));
+        match self.gate_request(
+            rename::LABEL,
+            HeldOp::Rename(Held { path, name, mark }),
+            busy,
+        ) {
+            Some(HeldOp::Rename(held)) => {
+                self.run_rename(held, cx);
+            }
+            Some(_) => {}
+            None => log::info!("rename: held for the scan's end"),
+        }
+        cx.notify();
+    }
+
+    /// The gate's `request`, a held rename it replaces being dropped through
+    /// `held_dropped` first, so its row shows its real name again and the
+    /// status says it was canceled (unless a rename of the same folder
+    /// replaced it).
+    pub(crate) fn gate_request(
+        &mut self,
+        label: &'static str,
+        op: HeldOp,
+        busy: bool,
+    ) -> Option<HeldOp> {
+        if let Some(old) = self.gate.discard() {
+            let by = match &op {
+                HeldOp::Rename(held) => Some(held.path.as_str()),
+                _ => None,
+            };
+            if let Some(note) = self.held_dropped(old, by) {
+                self.step_note = Some(note.to_owned());
+            }
+        }
+        self.gate.request(label, op, busy)
+    }
+
+    /// A held operation was dropped, by an open or a later request (`by`
+    /// naming the folder a replacing rename is of): a rename's row shows
+    /// its real name again, and the status note to show, if any.
+    pub(crate) fn held_dropped(&mut self, op: HeldOp, by: Option<&str>) -> Option<&'static str> {
+        let HeldOp::Rename(held) = op else {
+            return None;
+        };
+        if let Some(mark) = &held.mark {
+            self.folderops.pending.clear(mark);
+        }
+        rename::dropped_status(&held.path, by)
+    }
+
+    /// `task` (an open's listing), then `note` in the status, which the
+    /// open's fresh listing would otherwise clear.
+    pub(crate) fn note_after(
+        &mut self,
+        task: Task<()>,
+        note: &'static str,
+        cx: &mut Context<Self>,
+    ) -> Task<()> {
+        cx.spawn(async move |this, cx| {
+            task.await;
+            this.update(cx, |this, cx| {
+                this.step_note = Some(note.to_owned());
+                cx.notify();
+            })
+            .ok();
+        })
+    }
+
+    /// Run a rename on a background task, in flight so no listing or scan
+    /// starts under it: the queued judgment stores and the sidecar writer
+    /// flushed, then the backend's folder rename, which releases the folder
+    /// watcher and the tree watches around it. Until it settles, the folder
+    /// and everything under it can be neither opened nor renamed. Refused
+    /// when an import began while it was held; false when it did not start.
+    pub(crate) fn run_rename(&mut self, held: Held, cx: &mut Context<Self>) -> bool {
+        let Held { path, name, mark } = held;
+        if self.folderops.import_busy() {
+            if let Some(mark) = &mark {
+                self.folderops.pending.clear(mark);
+            }
+            self.step_note = Some(RENAME_REFUSED.to_owned());
+            cx.notify();
+            return false;
+        }
+        self.folderops.renames.start(path.clone());
+        self.gate.enter_in_flight();
+        if self.dir.is_some() {
+            self.resync.hold();
+        }
+        let (stores, writer, index, runs) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.index.clone().ok(),
+            self.runs.clone(),
+        );
+        let (watch, trees) = (self.watch.clone(), self.tree_watch.clone());
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let dir = path.clone();
+            let ran = cx
+                .background_spawn(async move {
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    let old = canonicalize(&dir);
+                    let moves = Moves {
+                        watch: &watch,
+                        trees: &trees,
+                        index: index.as_deref(),
+                        runs: &runs,
+                    };
+                    renamer::rename_folder(&moves, &dir, &name).map(|renamed| {
+                        let new = canonicalize(&renamed.path);
+                        (renamed, (old, new))
+                    })
+                })
+                .await;
+            log::info!(
+                "rename: {path} {} in {}ms",
+                match &ran {
+                    Ok((renamed, _)) => format!("renamed to {}", renamed.path),
+                    Err(e) => format!("failed: {e}"),
+                },
+                started.elapsed().as_millis()
+            );
+            this.update(cx, |this, cx| this.rename_ran(path, mark, ran, cx))
+                .ok();
+        })
+        .detach();
+        cx.notify();
+        true
+    }
+
+    /// The rename came back: the folder can be opened and renamed again,
+    /// its pending name goes, and it ends in `folder_renamed`, or the
+    /// refusal goes to the status and the row keeps its name.
+    fn rename_ran(
+        &mut self,
+        path: String,
+        mark: Option<Pending>,
+        ran: Result<(Renamed, (String, String)), String>,
+        cx: &mut Context<Self>,
+    ) {
+        self.gate.leave_in_flight();
+        self.folderops.renames.settle(&path);
+        if let Some(mark) = &mark {
+            self.folderops.pending.clear(mark);
+        }
+        match ran {
+            Ok((renamed, canonical)) => {
+                self.folder_renamed(&path, &renamed.path, canonical, renamed.warning, cx);
+            }
+            Err(e) => {
+                self.step_note = Some(e);
+                self.settle_folder_run(cx);
+                cx.notify();
+            }
+        }
     }
 }
 

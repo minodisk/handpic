@@ -1458,8 +1458,9 @@ and `Event::Cancel` (Escape).
 - Seen running (the user, 2026-11-14, Windows, the example itself built
   standalone at the pinned rev): Japanese IME composition, the candidate
   window placed at the text and the commit all work. Not yet seen in the
-  native app (the settings' label name fields): the pending check in
-  `../plans/20261113-gpui-settings/learnings.md`.
+  native app (the settings' label name fields, the tree's rename field): the
+  pending checks in `../plans/20261113-gpui-settings/learnings.md` and
+  `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 - Limits kept from the example: one line, no horizontal scroll (long text is
   clipped), no undo, no word movement, no double-click selection. Its third
   test (one selection rectangle on a 10 000-character line) needs a shaped
@@ -2029,6 +2030,69 @@ the watcher back when the rename fails or the split leaves the folder.
 - Not verified headless: the dialog, the tree row following in place and
   the reopen keeping the strip's judgments and position; the hand check is
   pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+
+### The tree's inline rename is a text input in the row, held by the gate (Inferred)
+
+`Rename…` in the folder menu, or a slow second click on the open folder's
+name, puts a fresh `textinput::TextInput` in place of the row's name
+(`folderops`' `tree_name`), its text the name (or the pending one) selected
+whole (`TextInput::select_all`) and focused. The edit is keyed by the row's
+path, not its index, so a re-listing of the tree keeps it with its text and
+selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
+`PendingRename`, `SlowClick`, `RenamesInFlight`).
+
+- Rule: a live edit owns the keyboard. The input takes Enter, Escape and its
+  editing keys in its own `on_key_down` and stops them; every other key goes
+  on unstopped (on Windows a stopped key types nothing) and the window's
+  `key_down` returns for it right after the dialogs' guards
+  (`rename_owns_keys`), so neither the tree's keyboard nor the keymap sees
+  it. A key the IME takes raises no `KeyDownEvent`, so composition never
+  reaches a listener.
+- Rule: the input's `Commit` (Enter, or the focus left) confirms and its
+  `Cancel` (Escape) cancels, once (`commit`); the edit and its subscription
+  are dropped at once, so the lost focus that follows an Enter decides
+  nothing. A `Commit` while the window is inactive is ignored: GPUI blurs the
+  focused element when the window deactivates (the focus path of an inactive
+  frame is empty), and the edit waits for the window to come back as the
+  Tauri blur checks `document.hasFocus()`. Any press outside the input
+  focuses the window's root (`track_focus` on any button) and so confirms.
+  After Enter or Escape the root is focused again and the tree has the
+  keyboard.
+- Inferred: a row scrolled out of the `uniform_list`'s range is not laid
+  out, so a live edit scrolled away loses the focus and confirms; the Tauri
+  input stays in the DOM. A confirm on a folder the tree no longer has does
+  nothing.
+- Rule: a confirmed name goes through the gate as `HeldOp::Rename` under
+  `Rename…` (`gate_request`): run at once with no listing, scan or run under
+  way, else held with its row showing the new name muted and italic after a
+  clock, `PENDING_TITLE` on hover, until it runs, without canceling the scan.
+  `gate_request`, which the trash, the undo and the sidecar requests use
+  too, discards first, so a held rename replaced by another request has its
+  mark cleared and says `Rename… was canceled` (not when a re-edit of the
+  same folder replaced it); an open drops it the same way and puts the note
+  in the status after its listing (`note_after`). Typing the real name back
+  on the pending row discards it; an import under way refuses it, when
+  confirmed and again when it drains.
+- Rule: the run is the date rename's: in flight with `Resync::hold`, the
+  stores and the writer drained, the backend's `rename_folder` with the
+  canonical path computed before and after, then `folder_renamed`; a refusal
+  (an invalid name, an existing entry) goes to the status. Until it settles
+  the folder and everything under it is refused for an open from the tree
+  (`open_from_tree`) and for a rename with `A folder is being renamed; try
+  again in a moment.`.
+- Rule: the slow click (`SLOW_CLICK_DELAY`, 500 ms) is armed by a single
+  click on the open folder's name (not a root, no Ctrl / Shift) and fired by
+  a `spawn_in` timer; any press in or outside the tree pane, any key and a
+  second click (`click_count` 2) disarm it. That click no longer reopens the
+  folder, as in the Tauri tree.
+- The operations' rules during a scan, in one place: `Rename…`, `Rewrite
+  Sidecars from Index…` and `Delete Sidecars…` are held by the gate and
+  never cancel the scan; `Move to Trash` and `Delete Permanently` are held
+  and cancel it; `Rename by Capture Date…` is refused with `SCAN_RUNNING`;
+  `Sequence JPEG Timestamps…` and `Import…` ignore the scan.
+- Not verified headless: the editor, its keys, the IME in it and the held
+  rename; the hand check is pending in
+  `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 
 ## Timings
 

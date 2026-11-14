@@ -316,6 +316,12 @@ impl TextInput {
         self.changed(window, cx);
     }
 
+    /// Selects the whole text.
+    pub fn select_all(&mut self, window: &Window, cx: &mut Context<Self>) {
+        self.text.select_all();
+        self.selection_changed(window, cx);
+    }
+
     fn changed(&mut self, window: &Window, cx: &mut Context<Self>) {
         window.notify_text_input_changed(&self.focus);
         cx.notify();
