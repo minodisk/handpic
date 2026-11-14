@@ -297,10 +297,14 @@ orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,
 `src/menu.rs` the status row's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
-`filter_rows`, a port of `index.html`'s `#sort-menu` and `#filter-menu`
-without the `Face focus` help; `apply`, what a click on an item does, the
-window writing the changed sort or filter; `Menus`, which one is open), which the window draws as
-`deferred` / `anchored` popovers above their buttons,
+`filter_rows`, after `index.html`'s `#sort-menu` and `#filter-menu`
+without the `Face focus` help, the filter menu heading every section, its
+rating rows from 5 stars down and each kind its own lead; `apply`, what a
+click on an item does, the window writing the changed sort or filter;
+`Menus`, which one is open), which the window draws as
+`deferred` / `anchored` popovers above their buttons, its leads Lucide icons
+from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
+the application's one `AssetSource`, to `svg().path(..)`),
 `src/settingsmodal.rs` the settings modal's model (open state, tab, the key
 rules of `modal.ts` and `tabs.ts`, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS): a deferred backdrop and box

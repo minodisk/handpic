@@ -1,8 +1,12 @@
-//! The strip bar's sort and filter menus, a port of `index.html`'s
-//! `#sort-menu` and `#filter-menu`: their rows in the HTML's order and
-//! labels, each item's checked state, what a click on it does, and which menu
-//! is open. The `Face focus` `?` help is left out (the user's decision), the
-//! `Recommended` sort and the `Genre` section are port Step 9's. The EXIF
+//! The strip bar's sort and filter menus, after `index.html`'s `#sort-menu`
+//! and `#filter-menu`: their rows, each item's checked state, what a click on
+//! it does, and which menu is open. The filter menu differs from the HTML on
+//! purpose: every section has a heading (the HTML has none over the flags,
+//! the rating, the labels and the orientation), the rating rows run from 5
+//! stars down to the unrated, and the labels and orientations lead with
+//! their own shapes. The `Face focus` `?` help is left out (the user's
+//! decision), the `Recommended` sort and the `Genre` section are port Step
+//! 9's. The EXIF
 //! sections come last, one per group the folder has (`exif::groups_of`), an
 //! item keyed by its group and label rather than its row, as the groups can
 //! be rebuilt between the frame that drew the menu and the click.
@@ -49,7 +53,7 @@ pub enum Label {
     Text(&'static str),
     /// A folder's EXIF label.
     Owned(String),
-    /// `on` lit stars, then `5 - on` dim ones, as the HTML's `.on` / `.off`.
+    /// `on` lit star icons, then `5 - on` dim ones.
     Stars(u8),
 }
 
@@ -59,8 +63,10 @@ pub enum Lead {
     None,
     /// The pick or reject dot, or the muted one of `Untagged`.
     Flag(Option<FilterFlag>),
-    /// A label's dot; `None` is the hollow dot of `No label`.
+    /// A label's filled square; `None` is the outline square of `No label`.
     Label(Option<Tint>),
+    /// The portrait or landscape rectangle.
+    Orientation(Orientation),
     /// A `Face focus` item's icon in the focus mark's color; `Neutral` keeps
     /// its slot empty.
     Face(Option<MarkState>),
@@ -133,6 +139,7 @@ pub fn filter_rows(filter: &FilterState, output_known: bool, groups: &Groups) ->
             action: Action::Reset,
         }),
         Row::Separator,
+        Row::Heading("Flag"),
     ];
     for (flag, text) in [
         (FilterFlag::Picked, "Picked"),
@@ -143,10 +150,12 @@ pub fn filter_rows(filter: &FilterState, output_known: bool, groups: &Groups) ->
         rows.push(item(Label::Text(text), Lead::Flag(dot), Toggle::Flag(flag)));
     }
     rows.push(Row::Separator);
-    for stars in 0..=5 {
+    rows.push(Row::Heading("Rating"));
+    for stars in (0..=5).rev() {
         rows.push(item(Label::Stars(stars), Lead::None, Toggle::Stars(stars)));
     }
     rows.push(Row::Separator);
+    rows.push(Row::Heading("Color label"));
     for (key, text) in LABELS {
         let tint = (key != "none").then(|| Tint::of(key));
         rows.push(item(
@@ -156,13 +165,14 @@ pub fn filter_rows(filter: &FilterState, output_known: bool, groups: &Groups) ->
         ));
     }
     rows.push(Row::Separator);
+    rows.push(Row::Heading("Orientation"));
     for (orientation, text) in [
         (Orientation::Portrait, "Portrait"),
         (Orientation::Landscape, "Landscape"),
     ] {
         rows.push(item(
             Label::Text(text),
-            Lead::None,
+            Lead::Orientation(orientation),
             Toggle::Orientation(orientation),
         ));
     }
@@ -381,24 +391,27 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_menu_lists_the_html_rows_in_order() {
+    fn the_filter_menu_lists_its_rows_in_order() {
         let rows = filter_rows(&FilterState::default(), true, &Groups::default());
         assert_eq!(
             texts(&rows),
             [
                 "Reset",
                 "---",
+                "# Flag",
                 "Picked",
                 "Untagged",
                 "Rejected",
                 "---",
-                "stars 0",
-                "stars 1",
-                "stars 2",
-                "stars 3",
-                "stars 4",
+                "# Rating",
                 "stars 5",
+                "stars 4",
+                "stars 3",
+                "stars 2",
+                "stars 1",
+                "stars 0",
                 "---",
+                "# Color label",
                 "Red",
                 "Orange",
                 "Yellow",
@@ -408,6 +421,7 @@ mod tests {
                 "Purple",
                 "No label",
                 "---",
+                "# Orientation",
                 "Portrait",
                 "Landscape",
                 "---",
@@ -440,7 +454,7 @@ mod tests {
     }
 
     #[test]
-    fn the_leads_follow_the_css() {
+    fn each_kind_has_its_lead() {
         let rows = filter_rows(&FilterState::default(), true, &Groups::default());
         let lead = |action| {
             items(&rows)
@@ -484,7 +498,57 @@ mod tests {
             lead(toggle(Toggle::Candidate(MarkState::Low))),
             Lead::Face(Some(MarkState::Low))
         );
+        assert_eq!(
+            lead(toggle(Toggle::Orientation(Orientation::Portrait))),
+            Lead::Orientation(Orientation::Portrait)
+        );
+        assert_eq!(
+            lead(toggle(Toggle::Orientation(Orientation::Landscape))),
+            Lead::Orientation(Orientation::Landscape)
+        );
         assert_eq!(lead(toggle(Toggle::Stars(3))), Lead::None);
+        assert_eq!(lead(toggle(Toggle::Eyes(EyesItem::Open))), Lead::None);
+    }
+
+    #[test]
+    fn every_filter_section_starts_with_a_heading() {
+        for (output_known, groups) in [
+            (true, Groups::default()),
+            (false, Groups::default()),
+            (true, groups()),
+            (false, groups()),
+        ] {
+            let rows = filter_rows(&FilterState::default(), output_known, &groups);
+            let separators: Vec<usize> = rows
+                .iter()
+                .enumerate()
+                .filter(|(_, row)| **row == Row::Separator)
+                .map(|(at, _)| at)
+                .collect();
+            assert!(!separators.is_empty());
+            for at in separators {
+                assert!(
+                    matches!(rows.get(at + 1), Some(Row::Heading(_))),
+                    "row {at} of {:?}",
+                    texts(&rows)
+                );
+            }
+            assert_eq!(
+                rows.iter()
+                    .position(|row| *row == Row::Separator)
+                    .map(|at| texts(&rows[..at])),
+                Some(vec!["Reset".to_owned()])
+            );
+        }
+    }
+
+    #[test]
+    fn the_sort_menu_has_no_heading() {
+        assert!(
+            !sort_rows(SortKey::Capture)
+                .iter()
+                .any(|row| matches!(row, Row::Heading(_)))
+        );
     }
 
     #[test]
@@ -515,8 +579,8 @@ mod tests {
             checked(&filter_rows(&filter, true, &Groups::default())),
             [
                 Toggle::Flag(FilterFlag::Picked),
-                Toggle::Stars(0),
                 Toggle::Stars(4),
+                Toggle::Stars(0),
                 Toggle::Label("red"),
                 Toggle::Label("none"),
                 Toggle::Orientation(Orientation::Portrait),
@@ -724,7 +788,7 @@ mod tests {
         let headings: Vec<String> = texts(&filter_rows(&FilterState::default(), true, &groups))
             .into_iter()
             .filter_map(|t| t.strip_prefix("# ").map(str::to_owned))
-            .skip(3)
+            .skip(7)
             .collect();
         assert_eq!(
             headings,

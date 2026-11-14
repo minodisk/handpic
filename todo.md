@@ -2979,3 +2979,16 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 #### TODO
 
 - [ ] Make `Writes` in `crates/native/src/settings.rs` close its store on drop, and remove the retry from `a_second_load_does_not_reread_a_changed_seed`. Done when the test passes on Windows without the retry.
+
+### Native: real-device checks of the filter menu's icons and headings (gpui-filter-menu-icons)
+
+`gpui-filter-menu-icons` gave the GPUI app's strip `Filter ▾` menu (`crates/native`) a shape per kind of row, drawn with Lucide icons from a new asset source, and a non-clickable heading over every section. The rating rows are now ordered 5 stars down to 0 and drawn as five star icons. The color labels are squares, the `Face focus` rows use `scan-face` and its frown derivative, and Portrait / Landscape use `rectangle-vertical` / `rectangle-horizontal`. New headings are `Flag`, `Rating`, `Color label` and `Orientation`. Unit tests cover the row model (order, headings, leads, checked items) and the asset source (every icon path loads SVG bytes, an unknown path loads `None`), and `mise run ci:local` passes. The window was never run, so how the icons and headings look and behave is unchecked: no agent can see the window, and Step 1's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-filter-menu-icons/plan.md`.
+
+Files: `crates/native/src/main.rs` (`menu_row`), `crates/native/src/menu.rs`, `crates/native/src/icons.rs`.
+
+#### TODO
+
+- [ ] On Windows, build with `cargo build` in `crates/native`, launch on a test copy with an explicit fresh `--index` and a test `--settings`, and open `Filter ▾`. Expect a heading over every section (`Flag`, `Rating`, `Color label`, `Orientation`, `Face focus`, `Eyes`, `Output` when the folder has an export answer, the EXIF groups), none of them reacting to hover or a click.
+- [ ] On Windows, in the same menu, expect the flag dots unchanged; star rows 5 down to 0 with crisp star icons, lit and dim; seven filled squares and one outline square; the smiling and frowning `scan-face` in green and gray with `Neutral` aligned; the two rectangles for the orientations.
+- [ ] On Windows, expect the text of every row in a section to start at the same x, a click to still toggle each item, and the taller menu to scroll in a small window.
+- [ ] On a HiDPI or fractional-scale display, if available, check that the 1 px stroke icons read cleanly at 12 px. If a shape reads badly, pick a size per kind (`MENU_ICON` in `main.rs`).
