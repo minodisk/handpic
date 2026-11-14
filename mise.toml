@@ -131,9 +131,10 @@ description = "Build Handpic.app from the GPUI app under crates/native/target (m
 dir = "crates/native"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
+usage = 'arg "[profile]" default="release"'
 run = """
 set -euo pipefail
-profile="${1:-release}"
+profile="${usage_profile:-release}"
 if [ "$profile" = debug ]; then
   cargo build
 else
