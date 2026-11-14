@@ -5201,8 +5201,8 @@ fn main() {
                     }),
                     window_bounds: Some(window_bounds),
                     display_id,
-                    ..Default::default()
                     app_id: Some(datadir::IDENTIFIER.into()),
+                    ..Default::default()
                 },
                 |window, cx| {
                     cx.new(|cx| {
