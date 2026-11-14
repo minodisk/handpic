@@ -5,6 +5,7 @@ mod context;
 mod datadir;
 mod datefolder;
 mod dialog;
+mod dropped;
 mod empty;
 mod exif;
 mod eyes;
@@ -79,11 +80,11 @@ use futures::{
 };
 use gpui::{
     Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
-    Entity, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent,
-    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollStrategy, SharedString, Task,
-    TextAlign, TitlebarOptions, UniformListScrollHandle, Window, WindowBounds, WindowOptions,
-    anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba,
-    size, uniform_list,
+    Entity, ExternalPaths, FocusHandle, FontWeight, KeyDownEvent, Keystroke, MouseButton,
+    MouseDownEvent, PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollStrategy,
+    SharedString, Task, TextAlign, TitlebarOptions, UniformListScrollHandle, Window, WindowBounds,
+    WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative,
+    rgb, rgba, size, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, TrashEntry, Undo};
@@ -379,6 +380,9 @@ struct Riffle {
     /// Bumped by every open, without a lock: a listing or a reveal of an
     /// earlier open is dropped.
     opens: Arc<AtomicU64>,
+    /// Bumped by every drop, a port of `dropCounter`: a drop whose path
+    /// resolves after a later drop opens nothing.
+    drops: u64,
     /// Taken by a listing's background task around "the counter still equals
     /// my token, then set the watcher", never by the UI thread.
     watching_lock: Arc<Mutex<()>>,
@@ -718,6 +722,7 @@ impl Riffle {
             dir: None,
             remember,
             opens: Arc::default(),
+            drops: 0,
             watching_lock: Arc::default(),
             tree: Tree::default(),
             tree_rows: Vec::new(),
@@ -894,6 +899,38 @@ impl Riffle {
             this.update(cx, |this, cx| {
                 if this.opens() == opens {
                     this.open(folder, None, None, cx).detach();
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// A drop onto the window: one folder opens as a click in the tree
+    /// opens it, one file opens its parent, anything else is refused.
+    fn drop_paths(&mut self, paths: &ExternalPaths, cx: &mut Context<Self>) {
+        let Some(path) = dropped::single(paths.paths()).map(Path::to_path_buf) else {
+            self.status = dropped::DROP_TEXT.into();
+            cx.notify();
+            return;
+        };
+        self.drops += 1;
+        let drop = self.drops;
+        let resolve = cx
+            .background_executor()
+            .spawn(async move { dropped::dropped_dir(&path) });
+        cx.spawn(async move |this, cx| {
+            let folder = resolve.await;
+            this.update(cx, |this, cx| {
+                if this.drops != drop {
+                    return;
+                }
+                match folder {
+                    Some(folder) => this.open(folder, None, None, cx).detach(),
+                    None => {
+                        this.status = dropped::DROP_TEXT.into();
+                        cx.notify();
+                    }
                 }
             })
             .ok();
@@ -4361,11 +4398,16 @@ impl Render for Riffle {
             .bg(rgb(0x000000))
             .text_color(rgb(0xffffff))
             .track_focus(&self.focus)
+            .group(DROP_GROUP)
+            .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
+                this.drop_paths(paths, cx);
+            }))
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(&e.keystroke, e.is_held, window, cx);
             }))
             .child(
                 div()
+                    .relative()
                     .flex_1()
                     .min_h_0()
                     .flex()
@@ -4456,7 +4498,8 @@ impl Render for Riffle {
                             )
                             .children(empty_text.map(|text| self.empty_message(empty, text, cx))),
                     )
-                    .children(self.panels.right.then(|| self.meta_pane())),
+                    .children(self.panels.right.then(|| self.meta_pane()))
+                    .child(drop_outline()),
             )
             .children(self.panels.strip.then(|| {
                 div()
@@ -4497,6 +4540,23 @@ impl Render for Riffle {
             .children(self.trash_dialog(cx))
             .children(self.folder_dialog(cx))
     }
+}
+
+/// The window's group, so a drag anywhere over it lights the outline.
+const DROP_GROUP: &str = "drop";
+
+/// The Tauri `body.dragging #main` outline, laid over the main area while an
+/// OS file drag is over the window. Its own `drag_over` gives it the hitbox
+/// the window group's style is applied through.
+fn drop_outline() -> impl IntoElement {
+    let lit = |style: gpui::StyleRefinement| style.border_color(rgba(DROP_RING_COLOR));
+    div()
+        .absolute()
+        .inset_0()
+        .border_3()
+        .border_color(rgba(0))
+        .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
+        .group_drag_over::<ExternalPaths>(DROP_GROUP, lit)
 }
 
 /// One row of an open menu: an item's check mark, swatch and text, or a
@@ -4674,6 +4734,8 @@ const FOREGROUND_COLOR: u32 = 0xfafafa;
 const ACCENT_COLOR: u32 = 0x262626;
 /// `style.css`'s `--sidebar-ring`, the tree cursor's outline.
 const RING_COLOR: u32 = 0x737373ff;
+/// `style.css`'s `--ring`, the drop outline.
+const DROP_RING_COLOR: u32 = 0x737373ff;
 const BORDER_COLOR: u32 = 0xffffff1a;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
