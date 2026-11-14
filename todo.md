@@ -2943,3 +2943,14 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 #### TODO
 
 - [ ] Add a `(done, total)` callback to `trash::undo_run` and to the `foldersidecars` rewrite and delete runs, and feed the bar from them in `crates/native`.
+
+### Native: real-device checks of the burst bands, badges, burst keys and reject the rest
+
+#### Background
+
+`gpui-bursts` ported the Tauri app's burst grouping to the GPUI app (`crates/native`): `burst.rs` groups the listing (`BURST_GAP_MS` 1000 ms), the strip paints a band behind each burst of two or more cells with a `position/size` badge, `burstPrevious` / `burstNext` / `burstFramePrevious` / `burstFrameNext` move through them, `rejectRest` rejects the rest of the current file's burst as one undo entry, and the MCP companion's `get_view` reports the current file's `burst`. CI and the unit tests cover the pure parts (`burst.rs` with every `burst.test.ts` case, the `reject_rest` change builder, `companion.rs`'s burst cases). The band's and the badge's look, the keys on a real keyboard, and `rejectRest`'s sidecars and undo on real files were never exercised, because the implementing session could not run the native window. Plan: `docs/plans/_archived/20261114-gpui-bursts/plan.md`. Files: `crates/native/src/main.rs` (`paint_strip`, `move_burst`, `reject_rest`, `mcp_request`), `crates/native/src/burst.rs`, `crates/native/src/companion.rs`.
+
+#### TODO
+
+- [ ] On Windows and macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `riffle-native`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
+- [ ] On Windows and macOS, in `riffle-native` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
