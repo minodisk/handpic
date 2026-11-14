@@ -2811,9 +2811,12 @@ A Python heredoc edit in text mode writes CRLF into this LF repository
 (`core.autocrlf=false`), and a `'''...'''` string silently eats `\U` / `\\`
 sequences — a risk for Windows-path test fixtures.
 
-- Fix: open/write with `newline=""` to keep LF, and re-check backslashes in
-  any Windows-path string literals afterward.
+- Fix: open/write with `newline=""` to keep LF (or strip the `\r` afterwards),
+  check with `git ls-files --eol`, and re-check backslashes in any
+  Windows-path string literals afterward.
 - Source: `docs/plans/_archived/20260929-tree-root-dedup/learnings.md`, Step 1.
+- Source: `docs/plans/_archived/20261114-gpui-perf-overlay/learnings.md`,
+  Step 1 (hit `crates/native/src/main.rs` and `scan.rs` too).
 
 A related trap: a Python heredoc run through the Bash tool can also turn
 escape text meant to stay literal (`\0`, `\x01` inside a byte-string

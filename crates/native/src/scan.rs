@@ -102,6 +102,8 @@ pub enum Event {
     },
     /// A message of a folder operation's run.
     FolderOp(crate::folderops::Message),
+    /// A performance overlay sample from the sampler's thread.
+    Perf(riffle_backend::perf::Sample),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its

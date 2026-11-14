@@ -24,6 +24,8 @@ mod orient;
 mod overlay;
 mod pager;
 mod peaking;
+mod perf;
+mod perfgraph;
 mod prefetch;
 mod resync;
 mod scan;
@@ -478,13 +480,17 @@ struct Riffle {
     marks: overlay::Marks,
     /// Shown images that the next presented frame no longer uses.
     retired: Rc<RefCell<Vec<Arc<RenderImage>>>>,
-    /// The keyed page the next presented frame completes.
-    pending: Rc<RefCell<Option<Page>>>,
+    /// The page the next presented frame completes, and whether a key or a
+    /// strip click turned it (an unkeyed one only feeds the `d` graph).
+    pending: Rc<RefCell<Option<(Page, bool)>>>,
     /// The shown image's scan pause, released once it is painted.
     hold: PaintHold,
     summary: Rc<RefCell<Summary>>,
     key: Option<Instant>,
     sent: Instant,
+    /// When the current file last changed, where an unkeyed page's latency
+    /// starts.
+    switched: Instant,
     zoom: Zoom<zoom::Crop>,
     /// The pending re-cut after a resize; dropping it cancels it.
     zoom_timer: Option<Task<()>>,
@@ -493,6 +499,8 @@ struct Riffle {
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
+    /// The performance overlay on `d`.
+    perf: perfgraph::Overlay,
     /// The MCP companion's server, `None` while `mcpEnabled` is off.
     mcp: Option<mcp::Server>,
     /// The decoded neighbours of the current file, `None` under
@@ -738,6 +746,7 @@ impl Riffle {
             summary: Rc::default(),
             key: None,
             sent: Instant::now(),
+            switched: Instant::now(),
             zoom: Zoom::default(),
             zoom_timer: None,
             viewport: Rc::default(),
@@ -746,6 +755,7 @@ impl Riffle {
             prefetch: prefetch.then(Ring::default),
             heading: Heading::default(),
             screen: None,
+            perf: perfgraph::Overlay::default(),
         }
     }
 
@@ -2264,6 +2274,11 @@ impl Riffle {
                 }
                 return;
             }
+            Event::Perf(sample) => {
+                self.perf.add_sample(*sample);
+                cx.notify();
+                return;
+            }
             Event::SidecarError { path, message } => {
                 self.write_failed(path.clone(), message.clone());
                 cx.notify();
@@ -2316,7 +2331,8 @@ impl Riffle {
             | Event::SidecarError { .. }
             | Event::Mcp(_)
             | Event::FolderOp(_)
-            | Event::TrashProgress { .. } => {}
+            | Event::TrashProgress { .. }
+            | Event::Perf(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -2450,6 +2466,11 @@ impl Riffle {
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some("performance")) => {
+                let events = self.events.clone();
+                self.perf
+                    .toggle(move |sample| events.unbounded_send(Event::Perf(sample)), cx);
+            }
             (_, Some("toggleLeft")) => {
                 self.left_pane = !self.left_pane;
                 // A hidden pane must not keep the keyboard.
@@ -3021,6 +3042,7 @@ impl Riffle {
     /// Show the current file: from the prefetch ring when it holds it, else
     /// through a read.
     fn request(&mut self, at: Instant, cx: &mut Context<Self>) {
+        self.switched = at;
         if let Some(held) = self.take_held(cx) {
             self.show_held(held, cx);
             return;
@@ -3049,8 +3071,10 @@ impl Riffle {
         let index = self.pager.current();
         self.pager.hit();
         let now = Instant::now();
-        let page = self.key.take().map(|key| Page {
-            key,
+        let key = self.key.take();
+        let keyed = key.is_some();
+        let page = (keyed || self.perf.on()).then(|| Page {
+            key: perf::latency_start(key, self.switched),
             sent: now,
             finished: now,
             received: now,
@@ -3065,7 +3089,7 @@ impl Riffle {
             file: file_name(&self.files[index]),
         });
         self.show_current(index, held, cx);
-        self.pend_page(page);
+        self.pend_page(page, keyed);
         self.request_prefetch(cx);
     }
 
@@ -3204,8 +3228,9 @@ impl Riffle {
                 finished,
                 paused,
             }) => {
-                let page = key.map(|key| Page {
-                    key,
+                let keyed = key.is_some();
+                let page = (keyed || self.perf.on()).then(|| Page {
+                    key: perf::latency_start(key, self.switched),
                     sent: self.sent,
                     finished,
                     received,
@@ -3221,7 +3246,7 @@ impl Riffle {
                 });
                 self.show_current(index, held, cx);
                 self.hold.hold(paused);
-                self.pend_page(page);
+                self.pend_page(page, keyed);
                 self.request_prefetch(cx);
             }
             Err(e) => {
@@ -3248,10 +3273,10 @@ impl Riffle {
     }
 
     /// The keyed page the next presented frame completes, notified now.
-    fn pend_page(&self, page: Option<Page>) {
+    fn pend_page(&self, page: Option<Page>, keyed: bool) {
         if let Some(mut page) = page {
             page.notified = Instant::now();
-            *self.pending.borrow_mut() = Some(page);
+            *self.pending.borrow_mut() = Some((page, keyed));
         }
     }
 
@@ -4084,6 +4109,7 @@ impl Render for Riffle {
         let pending = self.pending.clone();
         let hold = self.hold.clone();
         let summary = self.summary.clone();
+        let perf = self.perf.model();
         let cells = self.strip_cells();
         let mark = self.marks.mark(self.current_path().as_deref());
         let zoom_paint = self.zoom_paint();
@@ -4141,6 +4167,7 @@ impl Render for Riffle {
                                         .map(|size| (View::Fit, image, size));
                                     overlay::paint(mark.as_ref(), fit, window, cx);
                                 }
+                                perfgraph::paint(&perf, bounds, window, cx);
                                 hold.release();
                                 let paint_finished = Instant::now();
                                 let old = retired.take();
@@ -4155,11 +4182,14 @@ impl Render for Riffle {
                                 // draw and present ends.
                                 cx.defer(move |cx| {
                                     let presented = Instant::now();
-                                    if let Some(page) = page {
+                                    if let Some((page, keyed)) = page {
                                         let stages =
                                             page.stages(paint_started, paint_finished, presented);
-                                        println!("{}", page.line(&stages));
-                                        summary.borrow_mut().record(stages);
+                                        if keyed {
+                                            println!("{}", page.line(&stages));
+                                            summary.borrow_mut().record(stages);
+                                        }
+                                        perfgraph::add_latency(&perf, presented, stages);
                                     }
                                     if let Some(zoomed) = zoomed {
                                         println!("{}", zoomed.line(presented));
