@@ -635,7 +635,12 @@ time a burst of its own. The view keeps the open folder's grouping in
   the Tauri strip's, room for the band. The `position/size` badge is shaped
   text at the image box's bottom-right, 2 px in, in `--foreground` over the
   eight dark copies of `overlay::HALO`, painted before the rejected dim so a
-  rejected member's badge dims with its cell.
+  rejected member's badge dims with its cell, and a rejected member's band
+  is drawn at the dimmed alpha (`BAND_COLOR_DIMMED`, 0.08 x 0.45) as
+  `.cell.rejected`'s opacity covers the `::before`.
+- Deliberate difference: a selected member's band is painted before the
+  cell's opaque `--muted` fill, so inside the cell the fill covers it; Tauri
+  paints the 8% tint over `--muted` (`isolation: isolate`).
 - Deliberate difference: `burst.ts` builds the time with `Date.UTC`, which
   rolls a month 00, a day 32 or an all-zero timestamp over into a finite
   time, so such files can share a burst in the Tauri app. `capture_ms` parses

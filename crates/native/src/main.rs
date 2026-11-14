@@ -2432,7 +2432,7 @@ impl Riffle {
     }
 
     /// Keep the folder's judgments, the view's own for a file judged since
-    /// the open, and its facts.
+    /// the open, and its facts, and regroup the bursts over `all`.
     fn set_entries(&mut self, (mut judgments, facts, groups): Entries) {
         self.seen = judgments.keys().cloned().collect();
         for path in &self.touched {
@@ -4549,6 +4549,8 @@ const REJECTED_DIM: u32 = 0x0000008c;
 const MARK_SIZE: f32 = 11.;
 /// `.cell.burst::before`'s `rgba(255, 255, 255, 0.08)` and its end radius.
 const BAND_COLOR: u32 = 0xffffff14;
+/// `BAND_COLOR` at the rejected cell's 0.45 opacity: 0.08 x 0.45.
+const BAND_COLOR_DIMMED: u32 = 0xffffff09;
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
 /// `style.css`'s `--primary`, `--foreground`, `--accent`, `--border` and
@@ -4585,7 +4587,7 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
         for cell in cells {
             if let Some(mark) = &cell.burst {
                 let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
-                paint_burst_band(mark, origin, window);
+                paint_burst_band(mark, cell.marks.dimmed(), origin, window);
             }
         }
     });
@@ -4669,8 +4671,9 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
 /// `.cell.burst::before`: a tint around the cell at `origin`, measured from
 /// its padding box 5 px above and below and 1 px right, on a member after
 /// another left across the gap, 2 px out with rounded corners at the band's
-/// ends.
-fn paint_burst_band(mark: &BurstMark, origin: Point<Pixels>, window: &mut Window) {
+/// ends. A rejected member's band is dimmed with its cell, as `.cell.rejected`'s
+/// opacity covers the `::before`.
+fn paint_burst_band(mark: &BurstMark, dimmed: bool, origin: Point<Pixels>, window: &mut Window) {
     use strip::{CELL_HEIGHT, CELL_PITCH, CELL_WIDTH};
     // The padding box sits inside the cell's 1 px border.
     let (inner_left, inner_right) = (1., CELL_WIDTH - 1.);
@@ -4693,7 +4696,12 @@ fn paint_burst_band(mark: &BurstMark, origin: Point<Pixels>, window: &mut Window
         if mark.first { px(BAND_RADIUS) } else { px(0.) },
         if mark.last { px(BAND_RADIUS) } else { px(0.) },
     );
-    window.paint_quad(fill(band, rgba(BAND_COLOR)).corner_radii(Corners {
+    let color = if dimmed {
+        BAND_COLOR_DIMMED
+    } else {
+        BAND_COLOR
+    };
+    window.paint_quad(fill(band, rgba(color)).corner_radii(Corners {
         top_left: start,
         bottom_left: start,
         top_right: end,
