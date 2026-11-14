@@ -183,7 +183,7 @@ of non-path dependencies. RAF decode measured about 99 ms without SIMD and
 
 ## Packaging
 
-Source: [the native-app-icon plan](../plans/20261114-native-app-icon/plan.md).
+Source: [the native-app-icon plan](../plans/_archived/20261114-native-app-icon/plan.md).
 
 ### The Windows icon is resource ID 1 of the exe (Measured)
 
