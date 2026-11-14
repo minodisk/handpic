@@ -230,11 +230,11 @@ fn shown(files: &[String], wanted: Option<(u32, u32)>, max: Option<usize>) -> Ve
 }
 
 /// What the log calls a held operation dropped by an open.
-fn held_label(held: &Held) -> String {
+fn held_label(held: &HeldOp) -> String {
     match held {
-        Held::Run(target) => format!("held run in {}", target.dir),
-        Held::Undo(entry) => format!("held undo of run {}", entry.run_id),
-        Held::Redo(entry) => format!("held redo of run {}", entry.run_id),
+        HeldOp::Run(target) => format!("held run in {}", target.dir),
+        HeldOp::Undo(entry) => format!("held undo of run {}", entry.run_id),
+        HeldOp::Redo(entry) => format!("held redo of run {}", entry.run_id),
     }
 }
 
@@ -244,7 +244,7 @@ type Entries = (HashMap<String, State>, HashMap<String, Facts>, exif::Groups);
 
 /// What the gate holds for the listing or scan under way: a confirmed run,
 /// or the undo or redo of one.
-enum Held {
+enum HeldOp {
     Run(trash::Target),
     Undo(TrashEntry),
     Redo(TrashEntry),
@@ -393,7 +393,7 @@ struct Riffle {
     /// A confirmed run, or a run's undo or redo, held for the listing or
     /// scan under way; in flight while one runs, which no listing or scan
     /// starts under.
-    gate: idle::IdleGate<Held>,
+    gate: idle::IdleGate<HeldOp>,
     /// The recorded runs to the Trash, for undo.
     runs: Arc<riffle_backend::trash::Runs>,
     /// The undo entry whose restore or redo is out, so a second undo or
@@ -1059,8 +1059,8 @@ impl Riffle {
         };
         let busy = self.resync.busy() || self.gate.in_flight();
         let label = target.mode.label();
-        match self.gate.request(label, Held::Run(target), busy) {
-            Some(Held::Run(target)) => self.run_trash(target, true, cx),
+        match self.gate.request(label, HeldOp::Run(target), busy) {
+            Some(HeldOp::Run(target)) => self.run_trash(target, true, cx),
             Some(_) => {}
             None => {
                 log::info!("trash: {label} held for the scan's end");
@@ -1218,19 +1218,19 @@ impl Riffle {
     /// waiting for a listing or scan under way without canceling it.
     fn step_trash(&mut self, entry: TrashEntry, redo: bool, cx: &mut Context<Self>) {
         let (label, held) = if redo {
-            ("Redo Move to Trash", Held::Redo(entry))
+            ("Redo Move to Trash", HeldOp::Redo(entry))
         } else {
-            ("Undo Move to Trash", Held::Undo(entry))
+            ("Undo Move to Trash", HeldOp::Undo(entry))
         };
         let busy = self.resync.busy() || self.gate.in_flight();
         match self.gate.request(label, held, busy) {
-            Some(Held::Undo(entry)) => {
+            Some(HeldOp::Undo(entry)) => {
                 self.undo_trash(entry, cx);
             }
-            Some(Held::Redo(entry)) => {
+            Some(HeldOp::Redo(entry)) => {
                 self.redo_trash(entry, cx);
             }
-            Some(Held::Run(_)) => {}
+            Some(HeldOp::Run(_)) => {}
             None => log::info!("trash: {label} held for the scan's end"),
         }
         cx.notify();
@@ -1705,19 +1705,19 @@ impl Riffle {
         // The run held for this scan runs now, the re-listing at its end
         // taking the change that waited; a dialog opened meanwhile drops it.
         match self.gate.drain() {
-            Some(Held::Run(target)) if !self.trash.busy() => {
+            Some(HeldOp::Run(target)) if !self.trash.busy() => {
                 return self.run_trash(target, false, cx);
             }
-            Some(Held::Run(target)) => log::info!(
+            Some(HeldOp::Run(target)) => log::info!(
                 "trash: held run in {} dropped by an open dialog",
                 target.dir
             ),
-            Some(Held::Undo(entry)) => {
+            Some(HeldOp::Undo(entry)) => {
                 if self.undo_trash(entry, cx) {
                     return;
                 }
             }
-            Some(Held::Redo(entry)) => {
+            Some(HeldOp::Redo(entry)) => {
                 if self.redo_trash(entry, cx) {
                     return;
                 }
