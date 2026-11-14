@@ -18,15 +18,34 @@ pub enum Button {
     Cancel,
 }
 
+/// One row of the dialog's list: its text, then a part set apart in the
+/// accent color (empty for none), the whole row muted when `muted`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Row {
+    pub text: String,
+    pub accent: String,
+    pub muted: bool,
+}
+
+impl From<String> for Row {
+    fn from(text: String) -> Self {
+        Self {
+            text,
+            ..Self::default()
+        }
+    }
+}
+
 /// What the dialog shows, top to bottom: the title, its text lines, a list
-/// of rows (which scrolls when long), a note, the reason the run is
-/// disabled, and, while the run is under way, the running note.
+/// of rows (which scrolls when long), the notes, the errors, the reason the
+/// run is disabled, and, while the run is under way, the running note.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Content {
     pub title: String,
     pub lines: Vec<String>,
-    pub rows: Vec<String>,
-    pub note: Option<String>,
+    pub rows: Vec<Row>,
+    pub notes: Vec<String>,
+    pub errors: Vec<String>,
     pub reason: Option<String>,
     pub running_note: String,
 }
@@ -50,6 +69,8 @@ pub struct Dialog {
     pub style: Style,
     run_enabled: bool,
     running: bool,
+    /// Cancel stays enabled while the run is under way.
+    cancelable: bool,
     focused: Button,
 }
 
@@ -63,6 +84,7 @@ impl Dialog {
             style,
             run_enabled,
             running: false,
+            cancelable: false,
             focused: if run_enabled {
                 Button::Run
             } else {
@@ -76,12 +98,23 @@ impl Dialog {
         self.running = true;
     }
 
+    /// The run started and Cancel cancels it: the run button disabled, the
+    /// focus on Cancel and the running note shown.
+    pub fn set_running_cancelable(&mut self) {
+        self.running = true;
+        self.cancelable = true;
+        self.focused = Button::Cancel;
+    }
+
     pub fn running(&self) -> bool {
         self.running
     }
 
     pub fn enabled(&self, button: Button) -> bool {
-        !self.running && (button == Button::Cancel || self.run_enabled)
+        match button {
+            Button::Run => !self.running && self.run_enabled,
+            Button::Cancel => !self.running || self.cancelable,
+        }
     }
 
     /// The focused button, `None` while no button is enabled.
@@ -121,7 +154,7 @@ mod tests {
             Content {
                 title: "Delete Sidecars".to_owned(),
                 lines: vec!["Move 2 sidecars (1 KB) of a to the Trash?".to_owned()],
-                rows: vec!["2 XMP sidecars (1 KB)".to_owned()],
+                rows: vec!["2 XMP sidecars (1 KB)".to_owned().into()],
                 running_note: "Moving the sidecars to the Trash.".to_owned(),
                 ..Content::default()
             },
@@ -198,6 +231,20 @@ mod tests {
         assert_eq!(d.key(Some("enter")), Key::Swallow);
         assert_eq!(d.key(Some("tab")), Key::Swallow);
         assert_eq!(d.focused(), None);
+        assert_eq!(d.key(Some("escape")), Key::Dismiss);
+    }
+
+    #[test]
+    fn a_cancelable_run_keeps_cancel_enabled_and_focused() {
+        let mut d = dialog(true);
+        d.set_running_cancelable();
+        assert!(d.running());
+        assert!(!d.enabled(Button::Run));
+        assert!(d.enabled(Button::Cancel));
+        assert_eq!(d.focused(), Some(Button::Cancel));
+        assert_eq!(d.key(Some("tab")), Key::Swallow);
+        assert_eq!(d.focused(), Some(Button::Cancel));
+        assert_eq!(d.key(Some("enter")), Key::Press(Button::Cancel));
         assert_eq!(d.key(Some("escape")), Key::Dismiss);
     }
 }

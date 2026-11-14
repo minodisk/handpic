@@ -100,6 +100,8 @@ pub enum Event {
         done: usize,
         total: usize,
     },
+    /// A message of a folder operation's run.
+    FolderOp(crate::folderops::Message),
     /// A performance overlay sample from the sampler's thread.
     Perf(riffle_backend::perf::Sample),
 }

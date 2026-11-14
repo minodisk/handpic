@@ -30,6 +30,7 @@ mod prefetch;
 mod resync;
 mod scan;
 mod selection;
+mod sequence;
 mod session;
 mod settings;
 mod settingsmodal;
@@ -2291,6 +2292,7 @@ impl Riffle {
             Event::Changed(dir) => return self.changed(dir, cx),
             Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
+            Event::FolderOp(message) => return self.folder_op_message(*message, cx),
             Event::TrashProgress { mode, done, total } => {
                 // The last message can land after the run came back.
                 if self.trashing.is_some() {
@@ -2355,6 +2357,7 @@ impl Riffle {
             | Event::TreeChanged(_)
             | Event::SidecarError { .. }
             | Event::Mcp(_)
+            | Event::FolderOp(_)
             | Event::TrashProgress { .. }
             | Event::Perf(_) => {}
         }
@@ -3636,6 +3639,7 @@ impl Riffle {
             .children(
                 self.trashing
                     .clone()
+                    .or_else(|| self.folderops.note())
                     .or_else(|| {
                         self.gate
                             .waiting()

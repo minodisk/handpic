@@ -422,7 +422,8 @@ listing starts under; `cancels_scan`, a port of `idle.ts`), `src/dialog.rs` the
 confirmation dialog model the folder operations share, `src/folderops.rs` the
 folder menu's operations (the flow under way, one at a time, their dialog
 drawn as a `deferred` layer), `src/sidecars.rs` the port of `sidecars.ts`
-(`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/peaking.rs`
+(`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/sequence.rs` the
+port of `sequence.ts` (`Sequence JPEG Timestamps…`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the

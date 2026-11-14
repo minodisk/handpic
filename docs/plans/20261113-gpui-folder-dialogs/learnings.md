@@ -95,6 +95,32 @@
 - `clippy::too_many_arguments` fired once `trashed` took `what`; it carries an
   `#[expect]` naming the Tauri `trashed`'s parameters.
 
+## Step 4: Sequence JPEG Timestamps…
+
+- `SequenceFlow` drops the Tauri `picking` phase, `started`, the early
+  `done` and `cancelAsked`: `run` hands out the run id before the thread
+  starts, so no message can precede it. `start` takes the folder directly.
+- The run is a `std::thread`, not `background_spawn`: it can take minutes
+  and would hold one of the executor's threads. `riffle_core::sequence::run`
+  calls the progress callback from its worker threads, which only send into
+  the view's `UnboundedSender` (it is `Sync`).
+- The quit's cancel is a `cx.on_app_quit` subscription stored next to the
+  flag and dropped at the run's end, so no handler piles up per run. If the
+  window drops the view before the quit handlers run, the subscription goes
+  with it and the flag is not set; the quit does not wait for the run
+  either way, so a file in flight may be cut short, which the next run's
+  rebuild replaces.
+- The shared dialog had to grow: rows with a highlighted part (a
+  `StyledText` with one highlight, which keeps the spaces a flex row of two
+  texts might trim), several notes after the rows, and errors in the error
+  color. The sidecar dialogs now pass `notes: vec![total line]`.
+- Bug caught by the ported test: `done_status` first returned early with
+  `folder_error(ran)?`, the inverse of the rule.
+- The preview failure and the run's failures go to `write_errors` through
+  `write_failed`, which renders `<file name>: <message>` exactly as
+  `failureText` words it, and which the next folder open clears, as the
+  Tauri `errors.clear()` does.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check (Step 3, Windows, the user's).** Basis: Step 3's
@@ -143,3 +169,41 @@
   7. Pick `Rewrite Sidecars from Index…` and press `Ctrl+,` before the
      dialog opens (while the preview is under way): the settings modal does
      not open.
+- **Pending manual check (Step 4, Windows, the user's).** Basis: Step 4's
+  Done-when; the dialog, the run's progress, the cancel and the reveal in
+  Explorer cannot be driven headless. The step's checkbox was ticked on the
+  automated criteria (`sequence.rs`, `dialog.rs` and `context.rs` tests,
+  `mise run ci`, `mise run native:check`). Setup: copy a dozen exported JPEGs
+  whose `DateTimeOriginal` repeats a second (a burst) into
+  `D:\Photos\tests\20261113-gpui-folder-dialogs\sequence\`, plus one
+  folder with no JPEG at
+  `D:\Photos\tests\20261113-gpui-folder-dialogs\no-jpeg\` (an empty
+  folder or one holding a text file); `cargo build` in `crates/native`
+  (rename a locked `riffle-native.exe` aside, never kill it); delete
+  `index-step4.sqlite` first and run
+  `crates\native\target\debug\riffle-native.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sequence --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step4.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step4.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step4.log`.
+  Only these copies. Steps and expected results:
+  1. Right-click `sequence` in the tree: `Sequence JPEG Timestamps…` is
+     enabled. Pick it: the dialog shows `Source: …\sequence`, `Output:
+     …\sequence-sequenced`, one row per file `name  old -> new` with the
+     changed field of the new time in green and the unchanged rows muted,
+     `n files will be written to sequence-sequenced` and `k of them get a
+     new capture time`; `Run` is outlined, Tab moves to `Cancel`, Escape
+     closes the dialog.
+  2. Again, then `Run`: `Run` dims, `Cancel` keeps the focus, the running
+     note shows, the pane shows `sequencing n / m` counting up; at the end
+     the dialog closes, the pane says `Wrote n of n files to
+     …\sequence-sequenced` and Explorer opens with `sequence-sequenced`
+     selected.
+  3. Again: the dialog shows `will be rebuilt: its JPEG files are replaced`
+     under the output line.
+  4. Again with `Run`, then `Cancel` (or Escape) at once: the run stops, the
+     dialog closes, the pane says `canceled, i of n written`, and Explorer
+     does not open.
+  5. Right-click `no-jpeg` and pick the item: no dialog opens and the pane
+     shows `no-jpeg: <the no-JPEG message>` in red.
+  6. While the dialog is open or the run is under way, `Rewrite Sidecars
+     from Index…` from another folder's menu cannot be reached (the dialog
+     covers the window) and `Ctrl+,` does not open the settings; a second
+     `Sequence JPEG Timestamps…` right after the first (before its dialog
+     opens) does nothing.

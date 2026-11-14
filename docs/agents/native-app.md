@@ -1684,11 +1684,14 @@ leaves it there.
 
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 
-The tree menu's folder operations (so far `Rewrite Sidecars from Index…` and
-`Delete Sidecars…`) open one dialog, `dialog::Dialog`: its `Content` (title,
-lines, rows, note, reason, running note), the run button's label and
-`Style` (primary or destructive), and which enabled button has the focus
-(the run button, or Cancel when the run is disabled). `Dialog::key` gives
+The tree menu's folder operations (so far `Rewrite Sidecars from Index…`,
+`Delete Sidecars…` and `Sequence JPEG Timestamps…`) open one dialog,
+`dialog::Dialog`: its `Content` (title, lines, rows, each with an optional
+accent part and a muted flag, notes, errors, reason, running note), the run
+button's label and `Style` (primary or destructive), and which enabled button
+has the focus (the run button, or Cancel when the run is disabled). A run
+that cannot be canceled disables both buttons (`set_running`); a cancelable
+one keeps Cancel enabled and focused (`set_running_cancelable`). `Dialog::key` gives
 Escape as `Dismiss` (the flow decides: a non-cancelable run ignores it), Tab
 / Shift+Tab cycle the enabled buttons, Enter or Space press the focused one,
 and every other key is swallowed. The trash dialog was not moved onto it.
@@ -1717,6 +1720,16 @@ the menu arm, the key guard, the render child and the gate's `Held` variant.
   open folder was the target (`sidecars_trashed`). A sidecar run's undo
   counts the sidecars that did not fail, since `Restored::restored` lists
   RAWs and JPEGs only (`trash::restored_count`).
+- Rule: `Sequence JPEG Timestamps…` neither goes through the gate nor
+  touches the scan, the index or the resync, and needs no open folder. The
+  preview reads on `background_spawn`; the run is a `std::thread` of its own
+  (it can take minutes, so it does not hold a background executor thread)
+  with an `AtomicBool` cancel flag, its progress sent into the view's channel
+  as `Event::FolderOp(Message::SequenceProgress)` tagged with the run id
+  `SequenceFlow::run` hands out before the run starts, so a late message of an
+  ended run is dropped; the result comes back through a `oneshot` awaited by
+  `cx.spawn`. The quit sets the flag through a `cx.on_app_quit` subscription
+  kept only while the run is under way, and waits for nothing.
 - Not verified headless: the dialog, its keys and the runs; the hand checks
   are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 
