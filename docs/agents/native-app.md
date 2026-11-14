@@ -12,24 +12,64 @@ and Step 1's [learnings](../plans/20261109-gpui-port/learnings.md).
 
 ## Toolchain
 
-### GPUI comes from one pinned Zed rev (Inferred)
+### GPUI is the `gpui-pre` snapshot gpui-component pins (Inferred)
 
-`gpui` and `gpui_platform` are git dependencies on Zed's repository at
-`b5cd310b3b54dfc659fcc06453e6358843dfe216`; crates.io's `gpui 0.2.2` is stale.
-Zed pins Rust 1.98.1, and so does `crates/native/mise.toml`.
+`gpui` and `gpui_platform` are the crates.io `gpui-pre` and
+`gpui-pre-platform` at `=0.3.12`, a snapshot of Zed's GPUI at `zed@d2a4fb6`
+published by the gpui-kit maintainer, renamed with `package =` so the code
+keeps the `gpui` names. That is the exact version `gpui-component` 0.9.1
+pins. Zed pins Rust 1.98.1 at that commit, and so does
+`crates/native/mise.toml`; the published crates declare no `rust-version`.
+Moving from the Zed git rev `b5cd310b` to the snapshot changed no source
+file. The plan: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md).
 
-- Rule: bump the rev only in a deliberate chore PR, and record API changes met
+- Rule: the native crate never picks a GPUI version of its own. An upgrade
+  moves `gpui-component`, `gpui-pre` and `gpui-pre-platform` together in one
+  deliberate chore PR (all three exact pins), and records the API changes met
   at the bump here.
+- Rule: `cargo tree` shows one GPUI: no package from
+  `git+https://github.com/zed-industries/zed`, `gpui-pre` at one version. Two
+  GPUIs have distinct types, so no gpui-component element could join the
+  app's views, and `[patch]` cannot swap `gpui-pre` for Zed's `gpui` because
+  the package names differ.
 
 ### Only two of Zed's patches are needed (Inferred)
 
-`[patch.crates-io]` carries Zed's `async-task` and `async-process` forks. Zed's
-other patches (`cpal`, `notify`, `calloop`, `khronos-egl`, ...) are not needed
-by `gpui` / `gpui_platform`.
+`[patch.crates-io]` carries Zed's `async-task` and `async-process` forks, which
+now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
+`d2a4fb6` carries the same two revs). They are the only git sources in
+`Cargo.lock`. Zed's other patches (`cpal`, `notify`, `calloop`,
+`khronos-egl`, ...) are not needed by `gpui` / `gpui_platform`.
 
 - Rule: do not copy the others. Do not move these two to the root workspace
   while the Tauri app lives there: both crates are in its lock, so a workspace
   patch would swap them for Zed's forks in the shipped app.
+
+### gpui-component is a dependency only; nothing calls `init` yet (Inferred)
+
+`gpui-component` `=0.9.1` is compiled on all three platforms but no source
+file uses it and nothing calls `gpui_component::init`. `init` sets a global
+`Theme`, registers context-scoped key bindings (`gpui-base`'s `Root` binds
+`tab`, `shift-tab`, `cmd-c` / `ctrl-c`) and, in debug builds, a global
+`ctrl-shift-i` / `cmd-alt-i` inspector binding: the first time anything would
+enter GPUI's keymap here. None of its optional features (`tree-sitter*`,
+`syntect`, `speech`, `inspector`, `decimal`, `gpui-fast`) is on, and it does
+not depend on `gpui-pre-platform`, so it turns on no `runtime_shaders`
+(`cargo tree -e features -i gpui-pre-platform` shows only the default
+`multithreaded`).
+
+- Rule: the first feature adopting a component calls `init`, checks those
+  bindings against the app's keymap (`keys.rs`, `treekeys.rs`, the settings
+  box's key path) and decides on `Root` and the icon assets.
+
+### The license notices are due at packaging (Inferred)
+
+`gpui-component` and the `gpui-pre-*` crates are Apache-2.0
+(`LICENSE-APACHE`, Copyright Longbridge; GitHub shows NOASSERTION only for the
+file name), and `gpui-kit-assets` embeds Lucide (ISC).
+
+- Rule: no notice file while the native app has never shipped; add these
+  notices when it is packaged.
 
 ### Linux needs system libraries, macOS and Windows do not (Inferred)
 

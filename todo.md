@@ -2833,3 +2833,23 @@ Run each check with `--settings <fresh test store>` and `--log <test file>`, nev
 - [ ] On Windows, hide the right pane and the strip, quit with `q` and relaunch: both are still hidden. Repeat, quitting with the title bar's close button.
 - [ ] On Windows, put `{"panels": {"left": false}}` in a Tauri-style `settings.json` and launch with `--import-settings` on a new store: the tree is hidden and the other two panes are shown.
 - [ ] On Windows, rebind one of the four actions in the Keyboard Shortcuts tab: the new key runs it.
+
+### Native: real-device check that the app runs as before after the move to gpui-pre and gpui-component
+
+#### Background
+
+`gpui-component-dep` moved the native app's GPUI from the Zed git rev `b5cd310b` to the crates.io `gpui-pre` / `gpui-pre-platform` `=0.3.12` snapshot and added `gpui-component` `=0.9.1` as a dependency only. No source file changed, and nothing calls `gpui_component::init`. `cargo tree`, the lock and `mise run native:check` (clippy `-D warnings`, 697 tests) cover the build. The Step 1 checkbox was ticked on those automated criteria only. Nobody has run the app by hand on the new GPUI and compared it with `main`. Plan: `docs/plans/_archived/20261114-gpui-component-dep/plan.md`. Files: `crates/native/Cargo.toml`, `crates/native/Cargo.lock`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` on a build with the gpui-pre snapshot and compare it with `main`. Open a folder, page through it, press the judgment keys, open the sort / filter menus and the right-click menus, open the settings modal and use the tree's keyboard. Expected: no difference from `main`, since no source file changed and `gpui_component::init` is not called.
+
+### Native: read the native CI job's build time per leg against the 30-minute timeout after the move to gpui-pre
+
+#### Background
+
+`gpui-component-dep` changed `crates/native/Cargo.lock`, so each leg of the `native` CI job (Windows, Linux, macOS) makes a nearly cold build of a larger graph (two versions of the `windows` crate, `markdown`, `lsp-types`, `ropey`, `html5ever`, a second `resvg`). The local first build took several minutes. The CI times against `timeout-minutes: 30` were not seen when the step was written. Plan: `docs/plans/_archived/20261114-gpui-component-dep/plan.md`. Files: `.github/workflows/ci.yml`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] Read the build time of each leg of the `native` CI job (Windows, Linux, macOS) on the `gpui-component-dep` PR. Done when every leg finishes inside `timeout-minutes: 30` with margin. Otherwise raise the timeout and record it in the "gpui-pre snapshot" entry of `docs/agents/native-app.md`.
