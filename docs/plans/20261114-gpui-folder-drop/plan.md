@@ -145,3 +145,5 @@ match the Tauri `OPEN_TEXT` again.
 - **macOS and Linux** drop delivery is not verified on this host.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete (the hand check in the running app pending the user)
