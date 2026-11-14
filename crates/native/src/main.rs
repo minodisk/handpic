@@ -16,6 +16,7 @@ mod focus;
 mod folderops;
 mod history;
 mod hold;
+mod icons;
 mod idle;
 mod import;
 mod judgment;
@@ -85,7 +86,7 @@ use gpui::{
     MouseDownEvent, PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, UniformListScrollHandle, Window, WindowBounds,
     WindowOptions, anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative,
-    rgb, rgba, size, uniform_list,
+    rgb, rgba, size, svg, uniform_list,
 };
 use gpui_platform::application;
 use history::{Judged, TrashEntry, Undo};
@@ -4583,47 +4584,60 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         Row::Item(item) => item,
     };
     let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(rgb(color));
+    let icon = |path: &'static str| svg().path(path).size(px(MENU_ICON)).flex_none();
     let lead = match item.lead {
         Lead::None => None,
-        Lead::Flag(flag) => Some(dot(match flag {
-            Some(filter::FilterFlag::Picked) => PICK_COLOR,
-            Some(filter::FilterFlag::Rejected) => REJECT_COLOR,
-            _ => MUTED_COLOR,
-        })),
-        Lead::Label(Some(tint)) => Some(dot(tint_color(tint))),
+        Lead::Flag(flag) => Some(
+            dot(match flag {
+                Some(filter::FilterFlag::Picked) => PICK_COLOR,
+                Some(filter::FilterFlag::Rejected) => REJECT_COLOR,
+                _ => MUTED_COLOR,
+            })
+            .into_any_element(),
+        ),
+        Lead::Label(Some(tint)) => Some(
+            icon(icons::SQUARE_FILLED)
+                .text_color(rgb(tint_color(tint)))
+                .into_any_element(),
+        ),
         Lead::Label(None) => Some(
-            div()
-                .size(px(7.))
-                .flex_none()
-                .rounded_full()
-                .border_1()
-                .border_color(rgba(BORDER_COLOR)),
+            icon(icons::SQUARE)
+                .text_color(rgb(MUTED_COLOR))
+                .into_any_element(),
         ),
-        Lead::Face(state) => Some(
-            div()
-                .size(px(12.))
-                .flex_none()
-                .flex()
-                .items_center()
-                .justify_center()
-                .children(state.map(|state| dot(state.color()).size(px(9.)))),
+        Lead::Orientation(orientation) => Some(
+            icon(match orientation {
+                filter::Orientation::Portrait => icons::RECTANGLE_VERTICAL,
+                filter::Orientation::Landscape => icons::RECTANGLE_HORIZONTAL,
+            })
+            .text_color(rgb(MUTED_COLOR))
+            .into_any_element(),
         ),
+        Lead::Face(Some(state)) => Some(
+            icon(if state == mark::MarkState::Low {
+                icons::SCAN_FACE_FROWN
+            } else {
+                icons::SCAN_FACE
+            })
+            .text_color(rgb(state.color()))
+            .into_any_element(),
+        ),
+        Lead::Face(None) => Some(div().size(px(MENU_ICON)).flex_none().into_any_element()),
     };
     let label = match item.label {
         menu::Label::Text(text) => div().child(text),
         menu::Label::Owned(text) => div().child(text),
         menu::Label::Stars(on) => div()
             .flex()
-            .child(
-                div()
-                    .text_color(rgb(STARS_COLOR))
-                    .child("\u{2605}".repeat(on.into())),
-            )
-            .child(
-                div()
-                    .text_color(rgba(MUTED_COLOR << 8 | 0x66))
-                    .child("\u{2605}".repeat((5 - on).into())),
-            ),
+            .items_center()
+            .gap(px(2.))
+            .children((0..5u8).map(|at| {
+                if at < on {
+                    icon(icons::STAR_FILLED).text_color(rgb(STARS_COLOR))
+                } else {
+                    icon(icons::STAR).text_color(rgba(MUTED_COLOR << 8 | 0x66))
+                }
+            })),
     };
     let action = item.action;
     div()
@@ -4744,6 +4758,8 @@ const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
 /// The leading column a checked item's check mark sits in.
 const MENU_INDENT: f32 = 20.;
+/// The filter menu's icons, as the Tauri `.face`.
+const MENU_ICON: f32 = 12.;
 
 fn tint_color(tint: Tint) -> u32 {
     match tint {
@@ -5142,33 +5158,35 @@ fn main() {
         Path::is_dir,
     );
     let saved = settings.window.clone().filter(|_| remember);
-    application().run(move |cx: &mut App| {
-        gpui_component::init(cx);
-        theme::apply(cx);
-        cx.on_window_closed(|cx, _| cx.quit()).detach();
-        let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
-        cx.open_window(
-            WindowOptions {
-                titlebar: Some(TitlebarOptions {
-                    title: Some("Handpic".into()),
+    application()
+        .with_assets(icons::Icons)
+        .run(move |cx: &mut App| {
+            gpui_component::init(cx);
+            theme::apply(cx);
+            cx.on_window_closed(|cx, _| cx.quit()).detach();
+            let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
+            cx.open_window(
+                WindowOptions {
+                    titlebar: Some(TitlebarOptions {
+                        title: Some("Handpic".into()),
+                        ..Default::default()
+                    }),
+                    window_bounds: Some(window_bounds),
+                    display_id,
                     ..Default::default()
-                }),
-                window_bounds: Some(window_bounds),
-                display_id,
-                ..Default::default()
-            },
-            |window, cx| {
-                cx.new(|cx| {
-                    let focus = cx.focus_handle();
-                    window.focus(&focus, cx);
-                    Riffle::start(args, cx);
-                    Riffle::new(
-                        focus, index, settings, mcp_port, prefetch, remember, window, cx,
-                    )
-                })
-            },
-        )
-        .unwrap();
-        cx.activate(true);
-    });
+                },
+                |window, cx| {
+                    cx.new(|cx| {
+                        let focus = cx.focus_handle();
+                        window.focus(&focus, cx);
+                        Riffle::start(args, cx);
+                        Riffle::new(
+                            focus, index, settings, mcp_port, prefetch, remember, window, cx,
+                        )
+                    })
+                },
+            )
+            .unwrap();
+            cx.activate(true);
+        });
 }

@@ -101,8 +101,10 @@ key-down listener, so a binding that matches takes the key from
 - Rule: a version bump of `gpui-component` re-reads the bindings: grep
   `KeyBinding::new` in both crates for a `None` context and for the `Root`
   context, and update the table.
-- Rule: the first feature drawing a component decides on the icon assets
-  (`gpui_kit_assets::Assets`, not a direct dependency yet).
+- Rule: the app already has its own `AssetSource` (`icons.rs`); GPUI takes
+  one per application, so a feature drawing a component's icons composes
+  `gpui_kit_assets::Assets` with it (see "The icons are Lucide SVGs served by
+  one `AssetSource`").
 
 ### The license notices are due at packaging (Inferred)
 
@@ -714,12 +716,30 @@ view-only folder, whose open closes a sort menu left open. A menu item runs
 so a reorder scrolls the current file into view. `menu_action` then writes
 `sortOrder` (`SortKey::setting`) when the sort key changed, and `filter`
 (`FilterState::stored`, then `Stored::setting`: the remembered sections, each
-in the menu's item order, never `Output` or the EXIF checks) when a remembered
+in the menu's item order except `stars`, which stays ascending (0 to 5)
+whatever the menu's order, never `Output` or the EXIF checks) when a remembered
 section changed, `Reset` included; a change of `Output` or EXIF alone writes
 nothing. Nothing is written at load, so a seeded `recommended` stays stored
 until the user picks an order, and a view-only folder, whose sort button is
 dimmed, shows capture order and keeps the stored key.
 
+- Rule: every filter section starts with a `Row::Heading` right after its
+  separator (no hover, no click handler, no check slot); `Reset` sits above
+  the first separator without one. Four headings are the native menu's own,
+  as the Tauri `#filter-menu` has none there: `Flag`, `Rating`,
+  `Color label` and `Orientation`. The sort menu has no heading.
+- Rule: the leads are drawn per kind in `main.rs`'s `menu_row`: the flags
+  keep their 7 px dots; a rating row is five 12 px Lucide stars, the `on`
+  filled ones in `STARS_COLOR` and the rest outlined in `MUTED_COLOR` at
+  40 %; a color label a filled Lucide `square` in `tint_color`, `No label`
+  the outline; `Portrait` and `Landscape` the Lucide `rectangle-vertical` and
+  `rectangle-horizontal`; `Face focus` the Tauri icons (`scan-face` for
+  `Good`, its frown derivative for `Low`, in `MarkState::color()`) with an
+  empty 12 px slot for `Neutral`. `menu.rs` names the kind (`Lead`), never an
+  asset path.
+- Rule: the rating rows run 5, 4, 3, 2, 1, 0 stars from the top, the labels
+  are squares and the orientations have icons, all unlike the Tauri menu on
+  purpose (the user's decision); a later port must not "fix" them back.
 - Rule: the filter menu ends with the folder's EXIF sections, after `Output`
   (or `Eyes` without an export answer), in the Tauri order and headings
   (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`),
@@ -763,6 +783,28 @@ dimmed, shows capture order and keeps the stored key.
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
   read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
   `../plans/_archived/20261113-gpui-filter-sort/learnings.md`.
+
+### The icons are Lucide SVGs served by one `AssetSource` (Inferred)
+
+`svg().path(p)` loads `p` through the application's `AssetSource` and paints
+the rendered alpha mask in the element's `text_color`, so a stroked Lucide
+icon and a filled derivative both draw in one color. `icons.rs` holds the
+SVG strings as constants, a path constant per icon (`icons/<name>.svg`), and
+`Icons`, whose `load` answers those paths with borrowed bytes and anything
+else with `None`; `main()` registers it with
+`application().with_assets(icons::Icons)`.
+
+- Rule: to add an icon, copy it verbatim from `lucide-static` at the version
+  the header names (v1.48.0, as `crates/app/ui/src/icons.ts`), add its SVG
+  and path constants and its entry in `SVGS`, and name it in the header
+  comment, with any derivative (a filled shape, the `scan-face` frown) and
+  any Feather-derived icon (the list in `LICENSE-lucide`). The full notice is
+  `crates/native/LICENSE-lucide`, a copy of the Tauri app's, not a reference
+  into `crates/app`.
+- Rule: GPUI keeps one `AssetSource` per application. Another source (say
+  `gpui_kit_assets::Assets`) is composed with `Icons`, the own paths first,
+  never registered in its place: a missing asset draws nothing and fails no
+  build. `icons.rs`'s test checks every path loads an SVG.
 
 ### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
 
