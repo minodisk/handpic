@@ -324,3 +324,5 @@ they are. This plan gives each kind its own shape, with icons from Lucide
    a fractional scale; the step measures and may pick a size per kind.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
