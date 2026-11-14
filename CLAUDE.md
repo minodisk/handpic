@@ -349,7 +349,11 @@ the flag dot, the dimmed reject and the label's `Tint`, and its hover texts'
 `tip_regions`: the label's name over the name band, the scan's error over the
 rest of the cell), which the window draws along its bottom edge on
 a `canvas` with each cell's face focus icon (`MarkState::icon`), under
-transparent region `div`s that show those texts as gpui-component `Tooltip`s, and `src/thumbs.rs` the thumbnails of the strip's range, read
+transparent region `div`s that show those texts as gpui-component `Tooltip`s
+and under gpui-component's horizontal scrollbar, whose handle is
+`src/stripbar.rs`'s `StripBar` (a `ScrollbarHandle` over the strip's offset
+and content width, synced on every render, the offset a drag or a track click
+sets taken once at the top of `render`), and `src/thumbs.rs` the thumbnails of the strip's range, read
 `MAX_IN_FLIGHT` at a time through the index's read-only connection, decoded
 and turned upright, released into the view's `retired` list when their cell
 leaves the range, `src/focus.rs` the scan's hot list (`scan_focus_paths`, a
