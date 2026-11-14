@@ -2272,7 +2272,7 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
 - Rule: the input's `InputEvent::PressEnter` or `Blur` (Enter, or the
   focus left) confirms and Escape cancels, once (`commit`); the edit and its subscription
   are dropped at once, so the lost focus that follows an Enter decides
-  nothing. A `Commit` while the window is inactive is ignored: GPUI blurs the
+  nothing. A confirm (`PressEnter` or `Blur`) while the window is inactive is ignored: GPUI blurs the
   focused element when the window deactivates (the focus path of an inactive
   frame is empty), and the edit waits for the window to come back as the
   Tauri blur checks `document.hasFocus()`. Any press outside the input
