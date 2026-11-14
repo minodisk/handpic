@@ -15,7 +15,7 @@ use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
     ACCENT_COLOR, BORDER_COLOR, BUTTON_FILL, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER,
-    MUTED_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
+    MUTED_COLOR, OVERLAY_COLOR, PANE_COLOR, PRIMARY_COLOR, keys,
     settings::Settings,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, Step, TABS, Tab},
     textinput::{self, TextInput},
@@ -867,7 +867,7 @@ impl Render for SettingsView {
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(rgba(0x00000099))
+                .bg(rgba(OVERLAY_COLOR))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, _, cx| this.close(cx)),

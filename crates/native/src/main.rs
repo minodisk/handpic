@@ -46,6 +46,7 @@ mod sidecars;
 mod sort;
 mod strip;
 mod textinput;
+mod theme;
 mod thumbs;
 mod timing;
 mod trash;
@@ -4275,7 +4276,7 @@ impl Riffle {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgba(0x00000099))
+                    .bg(rgba(OVERLAY_COLOR))
                     .child(
                         div()
                             .id("trash-box")
@@ -4737,6 +4738,8 @@ const RING_COLOR: u32 = 0x737373ff;
 /// `style.css`'s `--ring`, the drop outline.
 const DROP_RING_COLOR: u32 = 0x737373ff;
 const BORDER_COLOR: u32 = 0xffffff1a;
+/// The backdrop behind the app's dialogs and the settings modal.
+const OVERLAY_COLOR: u32 = 0x00000099;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
 /// The leading column a checked item's check mark sits in.
@@ -5140,6 +5143,8 @@ fn main() {
     );
     let saved = settings.window.clone().filter(|_| remember);
     application().run(move |cx: &mut App| {
+        gpui_component::init(cx);
+        theme::apply(cx);
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
         cx.open_window(
