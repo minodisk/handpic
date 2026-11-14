@@ -601,6 +601,47 @@ last, and a JPEG folder under `"name"` paged in capture order.
   first file. This is a native improvement: the Tauri `refilter` lands on the
   first file there.
 
+### The bursts are regrouped with the entries and marked with the judgments (Inferred)
+
+`burst.rs` ports `burst.ts`: a burst is consecutive frames in capture order
+no more than `BURST_GAP_MS` (1000 ms) apart, a file without a usable capture
+time a burst of its own. The view keeps the open folder's grouping in
+`bursts`, keyed by the listed path, as the Tauri `bursts` map.
+
+- Rule: regroup only in `set_entries`, over `all` with the capture time and
+  subsec of `facts`, through `sort::order_files(SortKey::Capture, ..)` (no
+  second capture order). Both callers (the open and pass 1's entries read)
+  have set `all` first, and another folder's open replaces the grouping
+  there, which stands in for the Tauri reset. `refilter`, a page, a judgment
+  and a trash undo's `all.extend` do not regroup: as in the Tauri app the
+  grouping is stale until the next entries read, a file not grouped yet being
+  its own burst for the moves.
+- Rule: the strip's per-cell marks (`burst_marks` over `files`) are set in
+  `mark_strip` next to the judgments, so the open, every rebuilding
+  `refilter` and an entries read that leaves the list unchanged all re-mark
+  the cells. `Strip::new` drops them, so the marks follow every rebuild.
+- Rule: `burstPrevious` / `burstNext` and `burstFramePrevious` /
+  `burstFrameNext` are `move_burst`: `burst_step` / `burst_frame_step` over
+  the shown files' ids (the burst id, else `-1 - at`), then
+  `go(Move::To(..))`, which selects the landed file alone and starts the
+  preview latency at the key. They run in a view-only folder too, and
+  `tree_gate` swallows them while the tree has the keyboard.
+- Rule: `paint_strip` paints every on-screen band first, masked to the
+  strip, then the cells, so a band reaching across the gap never covers the
+  neighbour's outline. The band is `.cell.burst::before`: `rgba(255, 255,
+  255, 0.08)` from the cell's padding box 5 px above and below and 1 px
+  right, on a member after another left across the 8 px gap, 2 px out with
+  a 6 px radius at the band's first and last cell. `STRIP_PADDING` is 7 px,
+  the Tauri strip's, room for the band. The `position/size` badge is shaped
+  text at the image box's bottom-right, 2 px in, in `--foreground` over the
+  eight dark copies of `overlay::HALO`, painted before the rejected dim so a
+  rejected member's badge dims with its cell.
+- Deliberate difference: `burst.ts` builds the time with `Date.UTC`, which
+  rolls a month 00, a day 32 or an all-zero timestamp over into a finite
+  time, so such files can share a burst in the Tauri app. `capture_ms` parses
+  strictly (month, the month's days, 23:59:59), and such a file has no
+  capture time, a burst of its own.
+
 ### The sort and filter menus are deferred popovers over the window (Inferred)
 
 The status row is a flex row: the status text, then `Sort ▾` and `Filter ▾`

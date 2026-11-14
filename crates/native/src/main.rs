@@ -1,4 +1,5 @@
 mod args;
+mod burst;
 mod companion;
 mod context;
 mod datadir;
@@ -66,6 +67,7 @@ use std::{
 };
 
 use args::Args;
+use burst::{BURST_GAP_MS, BurstMark, BurstMember};
 use filter::{Facts, FilterState};
 use futures::{
     StreamExt,
@@ -320,6 +322,9 @@ struct Riffle {
     files: Vec<PathBuf>,
     /// The listed files' facts by path, from the index.
     facts: HashMap<String, Facts>,
+    /// The open folder's bursts over `all`, regrouped whenever the entries
+    /// are set.
+    bursts: HashMap<String, BurstMember>,
     /// Pass 2 files reported since the last read of the index, laid over a
     /// snapshot read before they were written.
     pending_faces: Vec<riffle_backend::index::FaceReady>,
@@ -678,6 +683,7 @@ impl Riffle {
             all: Vec::new(),
             files: Vec::new(),
             facts: HashMap::new(),
+            bursts: HashMap::new(),
             pending_faces: Vec::new(),
             sort: settings.sort,
             filter: {
@@ -2443,16 +2449,30 @@ impl Riffle {
             &mut self.seen,
         );
         self.facts = facts;
+        self.bursts = burst::group_bursts(
+            &self.all,
+            |path| {
+                let facts = self.facts.get(path);
+                SortFacts {
+                    capture_time: facts.and_then(|f| f.capture_time.clone()),
+                    subsec: facts.and_then(|f| f.subsec.clone()),
+                    rating: None,
+                }
+            },
+            BURST_GAP_MS,
+        );
         self.filter.prune_exif(&groups);
         self.exif_groups = groups;
     }
 
-    /// Hand the shown files' judgments to the strip.
+    /// Hand the shown files' judgments and burst marks to the strip.
     fn mark_strip(&mut self) {
         for (index, path) in self.files.iter().enumerate() {
             let state = self.judgments.get(path.to_string_lossy().as_ref()).cloned();
             self.strip.set_judgment(index, state);
         }
+        let marks = burst::burst_marks(&path_strings(&self.files), &self.bursts);
+        self.strip.set_bursts(marks);
     }
 
     /// Read the judgments and the facts again once pass 1 has written the
@@ -2550,6 +2570,10 @@ impl Riffle {
             }
             (_, Some("previous")) => self.go(Move::Previous, cx),
             (_, Some("next")) => self.go(Move::Next, cx),
+            (_, Some("burstPrevious")) => self.move_burst(burst::burst_step, -1, cx),
+            (_, Some("burstNext")) => self.move_burst(burst::burst_step, 1, cx),
+            (_, Some("burstFramePrevious")) => self.move_burst(burst::burst_frame_step, -1, cx),
+            (_, Some("burstFrameNext")) => self.move_burst(burst::burst_frame_step, 1, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
@@ -2861,6 +2885,31 @@ impl Riffle {
         }
     }
 
+    /// The Tauri `moveBurst` / `moveBurstFrame`: `step` over the shown
+    /// files' burst ids, a file not grouped yet its own id.
+    fn move_burst(
+        &mut self,
+        step: fn(&[i64], usize, isize) -> usize,
+        direction: isize,
+        cx: &mut Context<Self>,
+    ) {
+        if self.files.is_empty() {
+            return;
+        }
+        let ids: Vec<i64> = self
+            .files
+            .iter()
+            .enumerate()
+            .map(|(at, path)| {
+                self.bursts
+                    .get(path.to_string_lossy().as_ref())
+                    .map_or(-1 - at as i64, |member| member.burst as i64)
+            })
+            .collect();
+        let at = step(&ids, self.pager.current(), direction);
+        self.go(Move::To(at), cx);
+    }
+
     fn select_current(&mut self) {
         let current = self.current_path();
         self.set_selection(selection::single(current.as_deref()));
@@ -3118,6 +3167,7 @@ impl Riffle {
                 current: index == current,
                 selected: index != current && self.strip.is_selected(index),
                 marks: self.strip.marks(index),
+                burst: self.strip.burst(index),
             })
             .collect()
     }
@@ -4470,6 +4520,7 @@ struct StripCell {
     /// Selected and not current.
     selected: bool,
     marks: Marks,
+    burst: Option<BurstMark>,
 }
 
 /// In the Tauri info pane's range (`#info`, 220 px), and the folder tree's
@@ -4496,6 +4547,9 @@ const LABELED_NAME_COLOR: u32 = 0xfafafa;
 /// `.cell.rejected`'s `opacity: 0.45` over the strip's black.
 const REJECTED_DIM: u32 = 0x0000008c;
 const MARK_SIZE: f32 = 11.;
+/// `.cell.burst::before`'s `rgba(255, 255, 255, 0.08)` and its end radius.
+const BAND_COLOR: u32 = 0xffffff14;
+const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
 /// `style.css`'s `--primary`, `--foreground`, `--accent`, `--border` and
 /// `--input`, and `.button.outline`'s fill.
@@ -4525,6 +4579,16 @@ fn tint_color(tint: Tint) -> u32 {
 
 fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
+    // Every band first, so one reaching across the gap stays behind the
+    // neighbour's outline.
+    window.with_content_mask(Some(ContentMask { bounds }), |window| {
+        for cell in cells {
+            if let Some(mark) = &cell.burst {
+                let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
+                paint_burst_band(mark, origin, window);
+            }
+        }
+    });
     for cell in cells {
         let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
         let cell_bounds = Bounds::new(origin, size(px(CELL_WIDTH), px(CELL_HEIGHT)));
@@ -4568,6 +4632,9 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     paint_failure(failure, image_box, window, cx);
                 }
                 paint_marks(&cell.marks, image_box, window, cx);
+                if let Some(mark) = &cell.burst {
+                    paint_burst_badge(mark, image_box, window, cx);
+                }
                 let at = point(origin.x, image_box.bottom());
                 let name_color = match cell.marks.label {
                     Some(tint) => {
@@ -4597,6 +4664,79 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
             },
         );
     }
+}
+
+/// `.cell.burst::before`: a tint around the cell at `origin`, measured from
+/// its padding box 5 px above and below and 1 px right, on a member after
+/// another left across the gap, 2 px out with rounded corners at the band's
+/// ends.
+fn paint_burst_band(mark: &BurstMark, origin: Point<Pixels>, window: &mut Window) {
+    use strip::{CELL_HEIGHT, CELL_PITCH, CELL_WIDTH};
+    // The padding box sits inside the cell's 1 px border.
+    let (inner_left, inner_right) = (1., CELL_WIDTH - 1.);
+    let (top, bottom) = (1. - 5., CELL_HEIGHT - 1. + 5.);
+    let left = if mark.first {
+        inner_left - 2.
+    } else {
+        inner_left - 1. - (CELL_PITCH - CELL_WIDTH)
+    };
+    let right = if mark.last {
+        inner_right + 2.
+    } else {
+        inner_right + 1.
+    };
+    let band = Bounds::new(
+        origin + point(px(left), px(top)),
+        size(px(right - left), px(bottom - top)),
+    );
+    let (start, end) = (
+        if mark.first { px(BAND_RADIUS) } else { px(0.) },
+        if mark.last { px(BAND_RADIUS) } else { px(0.) },
+    );
+    window.paint_quad(fill(band, rgba(BAND_COLOR)).corner_radii(Corners {
+        top_left: start,
+        bottom_left: start,
+        top_right: end,
+        bottom_right: end,
+    }));
+}
+
+/// `.cell span.count`: the `position/size` badge at the image box's
+/// bottom-right, over dark copies for the halo.
+fn paint_burst_badge(
+    mark: &BurstMark,
+    image_box: Bounds<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let text: SharedString = burst::burst_badge(Some(mark)).into();
+    let shape = |color: u32, window: &mut Window| {
+        let mut run = window.text_style().to_run(text.len());
+        run.color = rgb(color).into();
+        window
+            .text_system()
+            .shape_line(text.clone(), px(MARK_SIZE), &[run], None)
+    };
+    let inset = px(2.);
+    let line_height = px(MARK_SIZE + 3.);
+    let width = Some(image_box.size.width - inset * 2.);
+    let at = point(
+        image_box.origin.x + inset,
+        image_box.bottom() - inset - line_height,
+    );
+    let halo = shape(0x000000, window);
+    for (dx, dy) in overlay::HALO {
+        let _ = halo.paint(
+            at + point(px(dx), px(dy)),
+            line_height,
+            TextAlign::Right,
+            width,
+            window,
+            cx,
+        );
+    }
+    let _ =
+        shape(FOREGROUND_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
 }
 
 /// The stars at the image box's top-right over a 1 px dark copy, and the pick

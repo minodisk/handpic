@@ -44,7 +44,7 @@ const MESH_LINE_WIDTH: f32 = 1.5;
 const LABEL_SIZE: f32 = 11.;
 /// The offsets of the label's dark copies under it, standing in for the
 /// Tauri label's 3 px stroke, which GPUI cannot draw.
-const HALO: [(f32, f32); 8] = [
+pub const HALO: [(f32, f32); 8] = [
     (-1., -1.),
     (0., -1.),
     (1., -1.),

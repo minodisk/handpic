@@ -97,7 +97,7 @@ implementing.
 
 ## Steps
 
-- [ ] Step 1: Burst grouping, the strip's bands and badges, and the four burst move actions
+- [x] Step 1: Burst grouping, the strip's bands and badges, and the four burst move actions
   - Done when:
     - `crates/native/src/burst.rs` is a port of `burst.ts` (`BURST_GAP_MS`,
       the member and mark types, `group_bursts`, `burst_marks`,
