@@ -51,3 +51,7 @@
   on the automated criteria (the consistency unit test). Basis: plan Step 1's
   Done when; files `crates/native/packaging/linux/dev.minodisk.handpic.desktop`,
   `crates/native/src/main.rs`, `mise.toml`.
+- Once the three checks above are done (or a failure is filed as its own
+  issue), update the "Pending manual checks" bullet under `## Packaging` in
+  `docs/agents/native-app.md`; it lists only macOS and Linux today and leaves
+  out the Windows check. Done when the bullet matches what is still pending.

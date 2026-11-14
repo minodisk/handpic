@@ -3077,3 +3077,17 @@ Files: `crates/native/src/main.rs` (`menu_row`), `crates/native/src/menu.rs`, `c
 - [ ] On Windows, click the open folder's name once and wait half a second: the field opens. A double-click, or a click followed by a key or another click within half a second, opens no field. A single click on a root or another folder opens that folder as before.
 - [ ] On Windows, during an import run (see the Import check), confirm a rename. Expect `Rename… is unavailable while an import runs`.
 - [ ] Record the results in the archived `learnings.md`.
+### Native: real-device checks of the app icon on Windows, macOS and Linux
+
+#### Background
+
+The `native-app-icon` feature gave the GPUI native app its icon: `crates/native/build.rs` embeds `crates/app/icons/icon.ico` as icon resource ID 1 on a Windows target (through `winresource`), `crates/native/packaging/macos/Info.plist` and the `native:bundle:macos` mise task produce `Handpic.app`, and the window opens with `app_id: Some(IDENTIFIER)` with `crates/native/packaging/linux/dev.minodisk.handpic.desktop` and the `native:install:linux` task for Linux. CI and the tests cover the resource: the icon resource ID 1 was verified in the built Windows exe with `FindResourceW` / `LoadImageW`, the `datadir.rs` consistency test checks the `Info.plist` and `.desktop` file against `IDENTIFIER` and the binary's name on all three legs, and the macOS CI leg runs `plutil -lint` and checks that the executable and the `.icns` exist. Nobody has looked at the icon as the OS shows it: the taskbar, title bar and Explorer on Windows, the Dock and Finder on macOS, and the dock / taskbar / alt-tab of a running window on a Wayland and an X11 session. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-app-icon/plan.md`.
+
+Files: `crates/native/build.rs`, `crates/native/src/main.rs`, `crates/native/packaging/macos/Info.plist`, `crates/native/packaging/linux/dev.minodisk.handpic.desktop`, `mise.toml`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev`. Expect the Handpic icon, not the generic one, in the taskbar button and the title bar. Also expect it in Explorer for `crates/native/target/debug/riffle-native.exe`.
+- [ ] On macOS, run `mise run native:bundle:macos`, then open `crates/native/target/release/Handpic.app`. Expect the Handpic icon in the Dock and in Finder.
+- [ ] On Linux, on a Wayland session and on an X11 session, run `mise run native:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`.
+- [ ] Once the checks above are done (or a failure is filed as its own issue), update the "Pending manual checks" bullet under `## Packaging` in `docs/agents/native-app.md`. It lists only macOS and Linux and leaves out the Windows check. Done when the bullet matches what is still pending.

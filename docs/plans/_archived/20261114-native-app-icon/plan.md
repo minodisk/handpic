@@ -165,3 +165,5 @@ Taken with the user at plan approval (2026-11-14):
   locally; the PR's `native` job still builds it.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete

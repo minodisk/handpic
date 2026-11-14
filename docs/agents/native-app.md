@@ -221,6 +221,10 @@ so `~/.local/bin` must be on the session's `PATH`.
 `~/.local/share/applications/` and `crates/app/icons/128x128@2x.png` (256 x
 256 px) to `~/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`.
 
+- Rule: in a `mise.toml` `run = """..."""` (a TOML basic string), a `\` at the
+  end of a line is TOML's line-ending backslash and swallows the newline. A
+  shell line continuation needs `\\`; the install task instead keeps each
+  command on one line.
 - Rule: the `hicolor` size directory equals the PNG's real pixel size.
 
 ### macOS gets `Handpic.app` from a mise task (Inferred)
@@ -236,6 +240,10 @@ build and checks it (`plutil -lint`, the executable and the `.icns` present).
   shared with the Tauri app, which the native app replaces. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
+- Rule: the `native` CI job's macOS leg runs `mise run native:bundle:macos
+  debug` itself, so CI exercises the task this section describes. The
+  Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
+  `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
 - Pending manual checks, not done here: the Dock / Finder icon of the built
   `.app` on a Mac, and the running window's icon after the install task on a
   Wayland and an X11 session.
