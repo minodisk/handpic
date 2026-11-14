@@ -173,3 +173,5 @@ plan records it in the port plan as not ported yet.
   Aligning the two is outside this plan.
 
 ## Progress
+
+- (2026-11-14) Step 1 complete
