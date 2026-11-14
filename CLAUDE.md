@@ -277,6 +277,12 @@ folder written on every open, the geometry on quit, `src/sort.rs` the strip's or
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies
 to the listing `all` to give the `files` everything else indexes into),
+`src/burst.rs` the bursts (a port of `burst.ts`: `group_bursts` over `all`
+in capture order through `order_files`, frames no more than `BURST_GAP_MS`
+apart, regrouped whenever the entries are set; `burst_marks` and
+`burst_badge`, each strip cell's band and `position/size` badge; `burst_step`
+and `burst_frame_step`, the `burstPrevious` / `burstNext` and
+`burstFramePrevious` / `burstFrameNext` moves over the shown files' ids),
 `src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
 `filter.ts` less the genres: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups

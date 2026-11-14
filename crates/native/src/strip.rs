@@ -5,7 +5,7 @@ use std::{
 
 use riffle_core::Flag;
 
-use crate::judgment::State;
+use crate::{burst::BurstMark, judgment::State};
 
 /// The distance from one cell's left edge to the next's, the Tauri strip's
 /// `--cell-width`.
@@ -17,8 +17,8 @@ pub const BOX_WIDTH: f32 = 144.;
 pub const BOX_HEIGHT: f32 = 96.;
 pub const NAME_HEIGHT: f32 = 16.;
 pub const CELL_HEIGHT: f32 = BOX_HEIGHT + NAME_HEIGHT + 2.;
-/// Above and below the cells.
-pub const STRIP_PADDING: f32 = 4.;
+/// Above and below the cells, room for the burst band.
+pub const STRIP_PADDING: f32 = 7.;
 pub const STRIP_HEIGHT: f32 = CELL_HEIGHT + 2. * STRIP_PADDING;
 /// Cells kept beyond the visible range, so a short scroll shows a thumbnail
 /// that is already decoded.
@@ -61,6 +61,9 @@ pub struct Strip {
     judgments: HashMap<usize, State>,
     /// The selected cells, as `strip.ts`'s `selected`; painted unless current.
     selected: HashSet<usize>,
+    /// Each cell's part of a burst's band and its badge, `None` outside a
+    /// burst of two or more.
+    bursts: Vec<Option<BurstMark>>,
 }
 
 /// The color a label tints the cell's name band with: one of the seven
@@ -302,6 +305,15 @@ impl Strip {
         self.selected.contains(&index)
     }
 
+    /// Record every cell's burst mark, in cell order.
+    pub fn set_bursts(&mut self, marks: Vec<Option<BurstMark>>) {
+        self.bursts = marks;
+    }
+
+    pub fn burst(&self, index: usize) -> Option<BurstMark> {
+        self.bursts.get(index).copied().flatten()
+    }
+
     pub fn marks(&self, index: usize) -> Marks {
         self.judgments
             .get(&index)
@@ -366,7 +378,7 @@ mod tests {
     use riffle_core::Flag;
 
     use super::{Answer, CELL_PITCH, Marks, Strip, Tint, carried_indices, carried_offset};
-    use crate::judgment::State;
+    use crate::{burst::BurstMark, judgment::State};
 
     fn strip(len: usize) -> Strip {
         Strip::new(
@@ -617,6 +629,21 @@ mod tests {
         assert!(!s.marks(0).dimmed());
         s.set_judgment(1, None);
         assert_eq!(s.marks(1), Marks::default());
+    }
+
+    #[test]
+    fn a_cell_carries_its_burst_mark() {
+        let mut s = strip(3);
+        let mark = BurstMark {
+            first: true,
+            last: false,
+            position: 0,
+            size: 2,
+        };
+        s.set_bursts(vec![Some(mark), None]);
+        assert_eq!(s.burst(0), Some(mark));
+        assert_eq!(s.burst(1), None);
+        assert_eq!(s.burst(2), None);
     }
 
     #[test]

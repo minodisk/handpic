@@ -375,6 +375,10 @@ them; their contents are deliberately coarse.
   - The performance overlay (`d`) was done by
     [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md); Step 9
     stays open.
+  - The bursts, named in no step and recorded here as Step 9 owns the MCP
+    companion's `burst`, are ported by `../20261114-gpui-bursts/plan.md`:
+    the grouping, the strip's bands and badges and the four burst moves
+    (its Step 1), then `rejectRest` and `get_view`'s `burst` (its Step 2).
 - [ ] Step 10: Packaging, the updater, the three-platform CI and the switch-over
   - Done when: the six sub-milestones below are done, in this order, each
     re-planned as its own plan when its turn comes. The packager
@@ -607,3 +611,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: the settings modal (the native store, the persisted filter and sort, the Sidecar, Culling, Keyboard Shortcuts and Import tabs), through `../20261113-gpui-settings/plan.md`; the Cache tab, the first-launch format dialog and a macOS `Settings…` menu item remain, and the AI features are not ported by the user's decision (Step 9 stays open)
 - (2026-11-14) Step 10, sub-milestone 1: the `native` CI job on three platforms and the packaging / updater decision, through `../20261114-gpui-ci-packaging/plan.md` (Step 10 stays open)
 - (2026-11-14) Step 9: the performance overlay (`d`), through [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md) (Step 9 stays open)
+- (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
