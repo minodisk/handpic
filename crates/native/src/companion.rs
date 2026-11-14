@@ -1,7 +1,7 @@
 //! The answering side of the MCP companion, a port of `companion.ts` over a
-//! snapshot of the view. The native view has no selection, no compare and no
-//! bursts yet, so the selection is the current file, `burst` is always empty,
-//! and compare and a selection of several photos are refused.
+//! snapshot of the view. The native view has no compare and answers with no
+//! selection yet, so the selection is the current file, and compare and a
+//! selection of several photos are refused.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -16,7 +16,7 @@ use riffle_backend::{
 use riffle_core::Flag;
 use serde_json::{Map, Value, json};
 
-use crate::judgment::State;
+use crate::{burst::BurstMember, filter::Facts, judgment::State};
 
 const COMPARE_REFUSAL: &str = "compare is not supported by Handpic's native app yet";
 const SELECTION_REFUSAL: &str =
@@ -46,6 +46,10 @@ pub struct View<'a> {
     pub judgments: &'a HashMap<String, State>,
     /// The paths whose label the index has told the view.
     pub seen: &'a HashSet<String>,
+    /// The open folder's bursts over every listed file.
+    pub bursts: &'a HashMap<String, BurstMember>,
+    /// The listed files' facts, for each burst frame's sharpness.
+    pub facts: &'a HashMap<String, Facts>,
 }
 
 /// What the view does before it answers with the new `get_view`.
@@ -84,6 +88,36 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
     }
 }
 
+/// `companion.ts`'s `burstOf`: the current file's burst in capture order,
+/// positions 1-based; empty when the file is a burst of its own. A frame the
+/// filter hides is listed with `visible: false`.
+fn burst_of(view: &View, path: &str) -> Vec<Value> {
+    let Some(member) = view.bursts.get(path).filter(|m| m.size > 1) else {
+        return Vec::new();
+    };
+    let mut frames: Vec<(&String, &BurstMember)> = view
+        .bursts
+        .iter()
+        .filter(|(_, other)| other.burst == member.burst)
+        .collect();
+    frames.sort_by_key(|(_, other)| other.position);
+    frames
+        .into_iter()
+        .map(|(other, frame)| {
+            let state = view.judgments.get(other).cloned().unwrap_or_default();
+            json!({
+                "path": other,
+                "position": frame.position + 1,
+                "sharpness": view.facts.get(other).and_then(|f| f.sharpness),
+                "rating": state.rating,
+                "flag": flag_name(state.flag),
+                "label": state.label,
+                "visible": view.files.iter().any(|file| file.to_string_lossy() == other.as_str()),
+            })
+        })
+        .collect()
+}
+
 pub fn get_view(view: &View) -> Value {
     let current = view.files.get(view.index).map(|path| {
         let mut current = Map::new();
@@ -103,9 +137,12 @@ pub fn get_view(view: &View) -> Value {
         }
         (path.to_string_lossy().into_owned(), Value::Object(current))
     });
-    let (selected, current) = match current {
-        Some((path, current)) => (vec![path], current),
-        None => (Vec::new(), Value::Null),
+    let (selected, current, burst) = match current {
+        Some((path, current)) => {
+            let burst = burst_of(view, &path);
+            (vec![path], current, burst)
+        }
+        None => (Vec::new(), Value::Null, Vec::new()),
     };
     json!({
         "folder": view.folder,
@@ -114,7 +151,7 @@ pub fn get_view(view: &View) -> Value {
         "selected": selected,
         "mode": if view.zoomed { "zoom" } else { "normal" },
         "compare_active": null,
-        "burst": [],
+        "burst": burst,
         "sort": view.sort,
         "filtered": view.filtered,
     })
@@ -291,7 +328,7 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 #[cfg(test)]
 mod tests {
     use super::{Action, Change, View, answer, get_view};
-    use crate::judgment::State;
+    use crate::{burst::BurstMember, filter::Facts, judgment::State};
     use riffle_backend::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
@@ -310,6 +347,8 @@ mod tests {
 
     static NO_JUDGMENTS: LazyLock<HashMap<String, State>> = LazyLock::new(HashMap::new);
     static NONE_SEEN: LazyLock<HashSet<String>> = LazyLock::new(HashSet::new);
+    static NO_BURSTS: LazyLock<HashMap<String, BurstMember>> = LazyLock::new(HashMap::new);
+    static NO_FACTS: LazyLock<HashMap<String, Facts>> = LazyLock::new(HashMap::new);
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -323,6 +362,8 @@ mod tests {
             view_only: false,
             judgments: &NO_JUDGMENTS,
             seen: &NONE_SEEN,
+            bursts: &NO_BURSTS,
+            facts: &NO_FACTS,
         }
     }
 
@@ -375,6 +416,131 @@ mod tests {
                 "sort": "capture",
                 "filtered": true,
             })
+        );
+    }
+
+    fn bursts(given: &[(&str, usize, usize, usize)]) -> HashMap<String, BurstMember> {
+        given
+            .iter()
+            .map(|&(path, burst, position, size)| {
+                (
+                    path.to_owned(),
+                    BurstMember {
+                        burst,
+                        position,
+                        size,
+                    },
+                )
+            })
+            .collect()
+    }
+
+    fn sharp(score: f64) -> Facts {
+        Facts {
+            orientation: 1,
+            capture_time: None,
+            subsec: None,
+            focus: None,
+            exif: None,
+            sharpness: Some(score),
+        }
+    }
+
+    #[test]
+    fn reports_a_single_file_with_no_burst() {
+        let files = paths(&["/d/a.ARW"]);
+        let bursts = bursts(&[("/d/a.ARW", 0, 0, 1)]);
+        let view = View {
+            bursts: &bursts,
+            ..view(&files)
+        };
+        assert_eq!(get_view(&view)["burst"], json!([]));
+    }
+
+    #[test]
+    fn lists_the_current_files_burst_in_capture_order_with_its_judgments() {
+        let files = paths(&["/d/a", "/d/b", "/d/c", "/d/x"]);
+        let bursts = bursts(&[
+            ("/d/c", 0, 2, 3),
+            ("/d/a", 0, 0, 3),
+            ("/d/b", 0, 1, 3),
+            ("/d/x", 1, 0, 1),
+        ]);
+        let facts = HashMap::from([
+            ("/d/a".to_owned(), sharp(0.5)),
+            ("/d/b".to_owned(), sharp(0.8)),
+        ]);
+        let judgments = HashMap::from([
+            ("/d/b".to_owned(), state(Some(3), Flag::None, None)),
+            ("/d/c".to_owned(), state(None, Flag::Reject, None)),
+            ("/d/a".to_owned(), state(None, Flag::None, Some("Red"))),
+        ]);
+        let view = View {
+            index: 1,
+            bursts: &bursts,
+            facts: &facts,
+            judgments: &judgments,
+            ..view(&files)
+        };
+        let state = get_view(&view);
+        assert_eq!(state["current"], json!({ "path": "/d/b", "position": 2 }));
+        assert_eq!(
+            state["burst"],
+            json!([
+                {
+                    "path": "/d/a",
+                    "position": 1,
+                    "sharpness": 0.5,
+                    "rating": null,
+                    "flag": "none",
+                    "label": "Red",
+                    "visible": true,
+                },
+                {
+                    "path": "/d/b",
+                    "position": 2,
+                    "sharpness": 0.8,
+                    "rating": 3,
+                    "flag": "none",
+                    "label": null,
+                    "visible": true,
+                },
+                {
+                    "path": "/d/c",
+                    "position": 3,
+                    "sharpness": null,
+                    "rating": null,
+                    "flag": "reject",
+                    "label": null,
+                    "visible": true,
+                },
+            ])
+        );
+    }
+
+    #[test]
+    fn marks_a_burst_frame_the_filter_hides_as_not_visible() {
+        // The filter hides "/d/c", so it is missing from `files` even though
+        // `bursts` still groups it with "/d/a" and "/d/b".
+        let files = paths(&["/d/a", "/d/b"]);
+        let bursts = bursts(&[("/d/a", 0, 0, 3), ("/d/b", 0, 1, 3), ("/d/c", 0, 2, 3)]);
+        let view = View {
+            bursts: &bursts,
+            ..view(&files)
+        };
+        let visible: Vec<(Value, Value)> = get_view(&view)["burst"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|frame| (frame["path"].clone(), frame["visible"].clone()))
+            .collect();
+        assert_eq!(
+            visible,
+            [
+                (json!("/d/a"), json!(true)),
+                (json!("/d/b"), json!(true)),
+                (json!("/d/c"), json!(false)),
+            ]
         );
     }
 

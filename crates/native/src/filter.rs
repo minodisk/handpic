@@ -38,6 +38,8 @@ pub struct Facts {
     pub subsec: Option<String>,
     pub focus: Option<Focus>,
     pub exif: Option<Exif>,
+    /// The preview's sharpness score, for the MCP companion's `burst`.
+    pub sharpness: Option<f64>,
 }
 
 impl From<&IndexedFile> for Facts {
@@ -48,6 +50,7 @@ impl From<&IndexedFile> for Facts {
             subsec: file.subsec.clone(),
             focus: file.focus,
             exif: file.exif.clone(),
+            sharpness: file.sharpness,
         }
     }
 }
@@ -371,10 +374,15 @@ pub fn output_of(
 
 /// Patch each of pass 2's `ready` files into its facts' focus, as the Tauri
 /// `applyFaceReady`: a file without facts or without a focus (a JPEG) is left
-/// alone.
+/// alone. Its sharpness is taken with or without a focus, as the Tauri
+/// `applySharpnessReady`.
 pub fn apply_face_ready(facts: &mut HashMap<String, Facts>, ready: &[FaceReady]) {
     for item in ready {
-        if let Some(focus) = facts.get_mut(&item.path).and_then(|f| f.focus.as_mut()) {
+        let Some(facts) = facts.get_mut(&item.path) else {
+            continue;
+        };
+        facts.sharpness = item.sharpness;
+        if let Some(focus) = facts.focus.as_mut() {
             focus.eye_focus = item.eye_focus;
             focus.candidate = item.candidate;
             focus.eyes = item.eyes;
@@ -540,6 +548,7 @@ mod tests {
             subsec: None,
             focus: None,
             exif: None,
+            sharpness: None,
         }
     }
 
@@ -1212,6 +1221,27 @@ mod tests {
         );
         assert!(facts["J.JPG"].focus.is_none());
         assert!(!facts.contains_key("B.ARW"));
+    }
+
+    #[test]
+    fn a_ready_file_takes_its_sharpness_with_or_without_a_focus() {
+        let mut facts = HashMap::from([
+            ("J.JPG".to_string(), facts(1)),
+            (
+                "A.ARW".to_string(),
+                Facts {
+                    focus: Some(candidate()),
+                    sharpness: Some(0.9),
+                    ..facts(1)
+                },
+            ),
+        ]);
+        apply_face_ready(
+            &mut facts,
+            &[ready("J.JPG", &candidate()), ready("A.ARW", &candidate())],
+        );
+        assert_eq!(facts["J.JPG"].sharpness, Some(0.5));
+        assert_eq!(facts["A.ARW"].sharpness, Some(0.5));
     }
 
     #[test]
