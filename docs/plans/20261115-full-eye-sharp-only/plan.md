@@ -375,3 +375,5 @@ Decisions taken with the user at planning (2026-11-15):
   both migrate through the backend.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
