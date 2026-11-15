@@ -172,10 +172,9 @@ pub struct Analysis {
     /// `sharpness::score_preview` of the preview; `None` when it could not be
     /// scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
-    /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the
-    /// largest JPEG of the file: the full JPEG when it holds one larger than
-    /// the preview, else the preview itself. `None` when the cue judged no
-    /// face, or on any failure.
+    /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the full
+    /// JPEG; `None` when the cue judged no face, the file has no usable larger
+    /// JPEG, or on any failure.
     pub full_eye_sharp: Option<f64>,
 }
 
@@ -187,9 +186,9 @@ pub struct Analysis {
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure falls
 /// back to the eye window. The judged face's eyes are measured once more on
-/// the largest JPEG (`full_eye_sharp`): the full JPEG, a second read, when the
-/// file holds one larger than the preview, else the preview already read. A
-/// JPEG file gets none of these, and is not read.
+/// the full JPEG, a second read, when the file holds one larger than the
+/// preview (`full_eye_sharp`). A JPEG file gets none of these, and is not
+/// read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
     extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
         .expect("a never-set flag never abandons")
@@ -282,7 +281,7 @@ fn extract_analysis_unless(
     yield_to_pause(cancel);
     let sharpness = score(&preview, &arw.shot, focus, &faces);
     yield_to_pause(cancel);
-    let full_eye_sharp = full_eye_sharp(path, &arw, &preview, &cue, cancel, slots)?;
+    let full_eye_sharp = full_eye_sharp(path, &arw, &cue, cancel, slots)?;
     Some(Ok(Analysis {
         cue,
         sharpness,
@@ -300,33 +299,21 @@ fn has_larger_jpeg(arw: &Arw) -> bool {
     arw.full.is_some() && !arw.hevc && !same
 }
 
-/// The sharpness of the eyes of the face `cue` judged on the largest JPEG of
-/// the file: its full JPEG when `has_larger_jpeg`, else `preview`; `None`
-/// inside when the cue judged no face or anything failed, `None` outside when
-/// `cancel` abandoned the file. The full read goes through `slots`, the
-/// decode does not; a failed full read is no score, not a fallback to the
-/// preview.
+/// The full-size sharpness of the eyes of the face `cue` judged, whatever its
+/// state; `None` inside when the cue judged no face, the file has no larger
+/// JPEG or anything failed, `None` outside when `cancel` abandoned the file.
+/// The read goes through `slots`, the decode does not.
 fn full_eye_sharp(
     path: &Path,
     arw: &Arw,
-    preview: &[u8],
     cue: &Cue,
     cancel: &AtomicBool,
     slots: &ReadSlots,
 ) -> Option<Option<f64>> {
-    let Some(eyes) = cue.eye_centers else {
-        return Some(None);
+    let eyes = match cue.eye_centers {
+        Some(eyes) if has_larger_jpeg(arw) => eyes,
+        _ => return Some(None),
     };
-    let measure = |jpeg: &[u8]| {
-        catch_unwind(AssertUnwindSafe(|| {
-            full_eye_sharpness(jpeg, eyes, cue.preview_width)
-        }))
-        .ok()
-        .flatten()
-    };
-    if !has_larger_jpeg(arw) {
-        return Some(measure(preview));
-    }
     let read = {
         let _slot = slots.acquire(cancel)?;
         read_full(path)
@@ -338,7 +325,13 @@ fn full_eye_sharp(
     let Ok((_, full)) = read else {
         return Some(None);
     };
-    Some(measure(&full))
+    Some(
+        catch_unwind(AssertUnwindSafe(|| {
+            full_eye_sharpness(&full, eyes, cue.preview_width)
+        }))
+        .ok()
+        .flatten(),
+    )
 }
 
 /// The detection on the whole preview; any failure or panic is none.
@@ -1302,7 +1295,7 @@ mod tests {
     }
 
     #[test]
-    fn every_judged_face_is_measured_on_the_largest_jpeg() {
+    fn every_judged_face_with_a_larger_jpeg_is_read_and_a_preview_only_file_is_not() {
         let dir = dir("full-eye-sharp");
         let embedded = |offset| Embedded {
             offset,
@@ -1317,7 +1310,6 @@ mod tests {
             hevc: false,
         };
         let (larger, preview_only) = (arw(Some(embedded(20))), arw(None));
-        let preview = jpeg(100, 60);
         let not_candidate = Cue {
             state: FocusCandidate::NotCandidate,
             eye_centers: Some([(30.0, 30.0), (70.0, 30.0)]),
@@ -1335,35 +1327,27 @@ mod tests {
             AtomicBool::new(false),
         );
         let measure = |arw: &Arw, cue: &Cue, cancel: &AtomicBool| {
-            full_eye_sharp(&missing, arw, &preview, cue, cancel, &slots)
+            full_eye_sharp(&missing, arw, cue, cancel, &slots)
         };
-        assert!(
-            matches!(
-                measure(&preview_only, &not_candidate, &unset),
-                Some(Some(_))
-            ),
-            "a judged non-candidate without a larger JPEG is measured on its preview"
-        );
         assert_eq!(
             measure(&preview_only, &not_candidate, &set),
-            measure(&preview_only, &not_candidate, &unset),
-            "the preview needs no read, so a cancel does not abandon it"
+            Some(None),
+            "a file without a larger JPEG reads nothing, so not even a cancel abandons it"
         );
         assert_eq!(
             measure(&larger, &no_face, &set),
             Some(None),
-            "no judged face reads and measures nothing"
+            "no judged face reads nothing"
         );
-        assert_eq!(measure(&preview_only, &no_face, &unset), Some(None));
         assert_eq!(
             measure(&larger, &not_candidate, &unset),
             Some(None),
-            "a judged non-candidate reads the full JPEG, and a failed read is no              score, not the preview's"
+            "a failed read is no score, not an error"
         );
         assert_eq!(
             measure(&larger, &not_candidate, &set),
             None,
-            "a cancel abandons the file at the full read's slot"
+            "a judged non-candidate reads the full JPEG, so a cancel abandons it at the slot"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

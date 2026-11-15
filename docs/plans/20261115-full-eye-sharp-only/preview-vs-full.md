@@ -1,8 +1,8 @@
 # `full_eye_sharp` measured on the preview against the full JPEG
 
-Step 2 measures a file without a larger JPEG (a RAF, an HDR PQ CR3, a body
-whose full image is the preview) on its preview, with the same metric and the
-same thresholds. This compares the two sources on the labeled ARW frames,
+Step 2 as first planned measured a file without a larger JPEG (a RAF, an HDR
+PQ CR3, a body whose full image is the preview) on its preview, with the same
+metric and the same thresholds. This compares the two sources on the labeled ARW frames,
 which all have a full JPEG, so the same eyes are measured both ways. It is a
 record, not a gate.
 
@@ -48,6 +48,10 @@ held-out 3-star frames (95%) would not be Good and 91 (59%) would be Low.
 Under Step 3's rule, a file measured on its preview (RAF, HDR PQ CR3, the
 bodies with no larger JPEG) would land in Low most of the time whatever its
 focus. The preview still ranks the frames (AUC 0.63-0.65), so the gap is
-mostly a scale offset, not noise. The plan accepted the preview path as
-uncalibrated; this is the size of that gap, carried to the deferred issues in
-`learnings.md` for a decision before Step 3 merges.
+mostly a scale offset, not noise.
+
+## Decision
+
+The user decided on 2026-11-15 that a file without a larger JPEG is not
+measured: it has no `full_eye_sharp` and so is Neutral. Step 2 dropped the
+preview path again; this record is why.

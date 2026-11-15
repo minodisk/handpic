@@ -647,11 +647,10 @@ rectangle was tried and did not beat it on the held-out set (best cell AUC
 #### Full-size eye sharpness (Windows 11)
 
 Pass 2 measures the eye sharpness of the judged face (`full_eye_sharp`,
-`crates/core/src/fullsharp.rs`) on the largest JPEG the file holds. Until
-`FACES_VERSION` 10 it did so only on a `Candidate` with a larger JPEG; from
-11 it does so on every frame whose cue judged a face, on the full JPEG (a
-second read) when the file holds one larger than the preview, else on the
-preview already read (no read). Measured on 2026-11-15 on
+`crates/core/src/fullsharp.rs`) on the full-size JPEG, a second read, when
+the file holds one larger than the preview. Until `FACES_VERSION` 10 it did
+so only on a `Candidate`; from 11 it does so on every frame whose cue judged
+a face. A file without a larger JPEG is not measured. Measured on 2026-11-15 on
 the folder `2026-11-07` (3638 α7 V ARW, every one with a larger JPEG),
 local NTFS drive, warm page cache (one run before timing), release build,
 8 threads, `scan::extract_analysis` alone timed per file by a scratch
@@ -670,8 +669,7 @@ The frames measured went from 2949 to 3354 of 3638 (81% to 92%). A
 the price of the full read and the two crop decodes; the other files do not
 change. The whole pass took 82.5 / 85.6s before and 85.6 / 106.8s after; the
 second after run was slower on every group, the no-face files included,
-so part of it is run-to-run noise. The cold-disk cost is not measured, and
-neither is the preview path (no file of this folder takes it).
+so part of it is run-to-run noise. The cold-disk cost is not measured.
 
 #### Eye-state model survey (Windows 11)
 

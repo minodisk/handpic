@@ -20,11 +20,15 @@
 
 ## Step 2
 
-- `full_eye_sharp` in `scan.rs` now takes the preview bytes and measures them
-  when `has_larger_jpeg` is false; the preview path neither reads nor takes a
-  `ReadSlots` slot, so a cancel does not abandon it (the unit test pins
-  that). `cue.preview_width` is the stored preview's width (the detection's),
-  so the preview path runs `full_eye_sharpness` at scale 1.
+- The first commit measured a file without a larger JPEG on its preview.
+  `cue.preview_width` is the stored preview's width (the detection's), so
+  that ran `full_eye_sharpness` at scale 1 with `MIN_SCALE` removed.
+- User decision (2026-11-15), after the comparison below: a file without a
+  larger JPEG is not measured and stays Neutral. The follow-up commit drops
+  the preview path and restores `MIN_SCALE`, because `has_larger_jpeg` only
+  tells a full JPEG apart from the preview (no full, HEVC, same offset), not
+  how much larger it is; a full JPEG at most 1.5x the preview is near the
+  preview's scale, where the full-size thresholds do not hold.
 - With Step 2's build the full-size values equal `frames.tsv` on all 345
   rated frames, and every frame with a judged face was measured (478 of 500
   in the five rated folders, 46 of them `NotCandidate`).
@@ -40,18 +44,6 @@
   `mise exec -- cargo`; a bare `cargo` in the Bash tool is not on `PATH`).
 - A backslash path written through a Python heredoc (`D:\Photos\2026\...`)
   had `\2026` turned into control bytes; the docs name the folder only.
-
-## Deferred issues (todo candidates)
-
-- **The preview path puts most preview-only frames in Low once Step 3
-  lands.** Measured on the labeled ARW frames (both sources available),
-  `full_eye_sharp` on the preview is about half the full-size value: 95% of
-  held-out 3-star frames would not be Good and 59% would be Low under Step
-  3's rule. That hits every RAF, every HDR PQ CR3 and the Sony bodies with no
-  larger JPEG. The plan accepted the preview path as uncalibrated, but the
-  size of the gap calls for a decision before Step 3 merges (for example
-  separate preview thresholds, a scale correction, or Neutral on a
-  preview-measured value). Basis: Step 2's comparison,
-  `docs/plans/20261115-full-eye-sharp-only/preview-vs-full.md`; code in
-  `crates/core/src/scan.rs` (`full_eye_sharp`) and the tier rule Step 3
-  changes in `crates/app/ui/src/focus.ts` and `crates/native/src/mark.rs`.
+- The cost run used the first commit's build (preview path, no `MIN_SCALE`).
+  It holds for the final rule: every file of that folder has a full JPEG
+  well over 1.5x the preview, so neither difference touched it.
