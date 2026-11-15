@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::arw::{Arw, FocusLocation, Shot};
-use crate::candidate::{face_cue_unless, focus_cue_unless, Cue, FocusCandidate};
+use crate::candidate::{face_cue_unless, focus_cue_unless, Cue};
 use crate::decode::{decode_rgb, thumbnail_jpeg, thumbnail_jpeg_near};
 use crate::embed::{embed_preview, Model};
 use crate::eyes::judged_face;
@@ -173,8 +173,8 @@ pub struct Analysis {
     /// scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
     /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the full
-    /// JPEG, measured when the cue is `Candidate`; `None` when it was not
-    /// measured or the file has no usable larger JPEG, or on any failure.
+    /// JPEG; `None` when the cue judged no face, the file has no usable larger
+    /// JPEG, or on any failure.
     pub full_eye_sharp: Option<f64>,
 }
 
@@ -185,9 +185,10 @@ pub struct Analysis {
 /// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure falls
-/// back to the eye window. A candidate's eyes are measured once more on the
-/// full JPEG, a second read (`full_eye_sharp`). A JPEG file gets none of
-/// these, and is not read.
+/// back to the eye window. The judged face's eyes are measured once more on
+/// the full JPEG, a second read, when the file holds one larger than the
+/// preview (`full_eye_sharp`). A JPEG file gets none of these, and is not
+/// read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
     extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
         .expect("a never-set flag never abandons")
@@ -298,9 +299,10 @@ fn has_larger_jpeg(arw: &Arw) -> bool {
     arw.full.is_some() && !arw.hevc && !same
 }
 
-/// The full-size sharpness of the eyes of a `Candidate` `cue`; `None` inside
-/// when nothing was measured or anything failed, `None` outside when `cancel`
-/// abandoned the file. The read goes through `slots`, the decode does not.
+/// The full-size sharpness of the eyes of the face `cue` judged, whatever its
+/// state; `None` inside when the cue judged no face, the file has no larger
+/// JPEG or anything failed, `None` outside when `cancel` abandoned the file.
+/// The read goes through `slots`, the decode does not.
 fn full_eye_sharp(
     path: &Path,
     arw: &Arw,
@@ -309,7 +311,7 @@ fn full_eye_sharp(
     slots: &ReadSlots,
 ) -> Option<Option<f64>> {
     let eyes = match cue.eye_centers {
-        Some(eyes) if cue.state == FocusCandidate::Candidate && has_larger_jpeg(arw) => eyes,
+        Some(eyes) if has_larger_jpeg(arw) => eyes,
         _ => return Some(None),
     };
     let read = {
@@ -1293,32 +1295,30 @@ mod tests {
     }
 
     #[test]
-    fn a_cue_that_is_not_a_candidate_reads_nothing_and_a_missing_full_jpeg_is_none() {
+    fn every_judged_face_with_a_larger_jpeg_is_read_and_a_preview_only_file_is_not() {
         let dir = dir("full-eye-sharp");
-        let arw = Arw {
-            preview: Some(Embedded {
-                offset: 10,
-                length: 1,
-                codec: Codec::Jpeg,
-            }),
-            full: Some(Embedded {
-                offset: 20,
-                length: 1,
-                codec: Codec::Jpeg,
-            }),
+        let embedded = |offset| Embedded {
+            offset,
+            length: 1,
+            codec: Codec::Jpeg,
+        };
+        let arw = |full| Arw {
+            preview: Some(embedded(10)),
+            full,
             orientation: 1,
             shot: Shot::default(),
             hevc: false,
         };
-        let candidate = Cue {
-            state: FocusCandidate::Candidate,
-            eye_centers: Some([(10.0, 10.0), (30.0, 10.0)]),
+        let (larger, preview_only) = (arw(Some(embedded(20))), arw(None));
+        let not_candidate = Cue {
+            state: FocusCandidate::NotCandidate,
+            eye_centers: Some([(30.0, 30.0), (70.0, 30.0)]),
             preview_width: 100,
             ..Cue::default()
         };
-        let not_candidate = Cue {
-            state: FocusCandidate::NotCandidate,
-            ..candidate.clone()
+        let no_face = Cue {
+            eye_centers: None,
+            ..not_candidate.clone()
         };
         let missing = dir.join("missing.ARW");
         let (slots, set, unset) = (
@@ -1326,20 +1326,28 @@ mod tests {
             AtomicBool::new(true),
             AtomicBool::new(false),
         );
+        let measure = |arw: &Arw, cue: &Cue, cancel: &AtomicBool| {
+            full_eye_sharp(&missing, arw, cue, cancel, &slots)
+        };
         assert_eq!(
-            full_eye_sharp(&missing, &arw, &not_candidate, &set, &slots),
+            measure(&preview_only, &not_candidate, &set),
             Some(None),
-            "nothing to read, so not even a cancel abandons the file"
+            "a file without a larger JPEG reads nothing, so not even a cancel abandons it"
         );
         assert_eq!(
-            full_eye_sharp(&missing, &arw, &candidate, &unset, &slots),
+            measure(&larger, &no_face, &set),
+            Some(None),
+            "no judged face reads nothing"
+        );
+        assert_eq!(
+            measure(&larger, &not_candidate, &unset),
             Some(None),
             "a failed read is no score, not an error"
         );
         assert_eq!(
-            full_eye_sharp(&missing, &arw, &candidate, &set, &slots),
+            measure(&larger, &not_candidate, &set),
             None,
-            "a cancel abandons the file at the slot"
+            "a judged non-candidate reads the full JPEG, so a cancel abandons it at the slot"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }

@@ -29,7 +29,8 @@ of the Laplacian / edge-width model at full size are not. The user does not
 want two paths.
 
 After this plan there is one measure: `full_eye_sharp`, computed for every
-frame with a judged face on the largest JPEG the file holds. The Good /
+frame with a judged face on the full-size JPEG when the file holds one larger
+than the preview. The Good /
 Neutral / Low tiers of the Tauri app and the native app read it alone, and
 `eye_focus` is gone from the code, the index, the UI, the MCP answers, the CLI
 and the docs (archived plans and `CHANGELOG.md` excepted).
@@ -37,11 +38,12 @@ and the docs (archived plans and `CHANGELOG.md` excepted).
 Target rules:
 
 - Measure: `full_eye_sharp` for every frame whose cue judged a face, on the
-  full-size embedded JPEG when the file holds one larger than the preview,
-  else on the preview itself (a RAF's single JPEG, an HDR PQ CR3 whose full
-  image is HEVC, a body with no larger JPEG). Same metric and the same
-  thresholds on both; the value is uncalibrated on preview-only files (the
-  user accepted this).
+  full-size embedded JPEG when the file holds one larger than the preview.
+  A file without one (a RAF's single JPEG, an HDR PQ CR3 whose full image is
+  HEVC, a body with no larger JPEG) has no value and so is Neutral: measured
+  on the preview, the value reads about half the full-size one and would put
+  most such frames in Low (`preview-vs-full.md`; the user's decision of
+  2026-11-15, after Step 2's comparison).
 - Good: `full_eye_sharp >= SOFT_BELOW` (0.162) and the existing non-sharpness
   cuts (EAR, yaw, pitch, mesh eye offset, edge gap).
 - Low: `full_eye_sharp < LOW_BELOW`, the new threshold Step 1 derives: the
@@ -127,22 +129,22 @@ Decisions taken with the user at planning (2026-11-15):
       script, not as the result.
     - Touch nothing outside `docs/plans/20261115-full-eye-sharp-only/`.
 
-- [ ] Step 2: Measure `full_eye_sharp` for every judged face on the largest JPEG
+- [x] Step 2: Measure `full_eye_sharp` for every judged face with a larger JPEG
   - Done when:
     - `extract_analysis` fills `full_eye_sharp` for every frame whose cue
-      judged a face (`cue.eye_centers` is `Some`), whatever its `eye_focus`:
-      from the full JPEG when `has_larger_jpeg`, else from the preview bytes
-      the pass already holds.
-    - `fullsharp::full_eye_sharpness` measures a JPEG at any scale, the
-      preview's own (scale 1) included.
+      judged a face (`cue.eye_centers` is `Some`), whatever its `eye_focus`,
+      from the full JPEG when `has_larger_jpeg`; a file without one stays
+      `None` (Neutral). (Changed 2026-11-15 by the user after the comparison
+      below: the plan first measured such files on their preview.)
+    - `fullsharp::full_eye_sharpness` keeps its `MIN_SCALE` floor.
     - `FACES_VERSION` is 11 with its doc comment extended, so pass 2 reruns.
-    - Unit tests cover: a judged non-candidate is measured; a file without a
-      larger JPEG is measured on its preview; no judged face gives `None`;
+    - Unit tests cover: a judged non-candidate is read and measured; a file
+      without a larger JPEG gives `None`; no judged face gives `None`;
       cancel still abandons the file.
     - The preview-measured value is compared with the full-size one on the
       labeled ARW folders and the result (how many 3-star frames fall under
       `SOFT_BELOW` and under Step 1's `LOW_BELOW` when measured on the
-      preview) is recorded in this folder. This is a record, not a gate.
+      preview) is recorded in this folder (`preview-vs-full.md`).
     - The pass 2 cost is measured before and after on one real folder
       (frames measured, ms per file) and recorded in
       `docs/humans/performance.md` and its `.ja.md` pair.
@@ -152,34 +154,24 @@ Decisions taken with the user at planning (2026-11-15):
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Step 1 is merged (the comparison reads `LOW_BELOW` from
       `low-threshold.md`).
-    - Files: `crates/core/src/scan.rs` (`full_eye_sharp`, `has_larger_jpeg`,
-      the `Analysis::full_eye_sharp` and `extract_analysis` doc comments,
-      their tests), `crates/core/src/fullsharp.rs`,
-      `crates/backend/src/index.rs` (`FACES_VERSION` only; no schema change),
-      docs.
+    - Files: `crates/core/src/scan.rs` (`full_eye_sharp`, the
+      `Analysis::full_eye_sharp` and `extract_analysis` doc comments, their
+      tests), `crates/backend/src/index.rs` (`FACES_VERSION` only; no schema
+      change), docs.
     - `full_eye_sharp` in `scan.rs` drops the
-      `cue.state == FocusCandidate::Candidate` condition. `has_larger_jpeg`
-      stays as the switch between the two sources. The preview path needs no
-      read and no `ReadSlots` slot: `extract_analysis_unless` already holds
-      the preview bytes, and `reader` already hands an HDR PQ CR3's HEVC
-      `PRVW` out as a JPEG.
-    - `fullsharp::full_eye_sharpness` returns `None` when the JPEG is not
-      more than `MIN_SCALE` (1.5) times the preview width. That guard has to
-      go for the preview path. The test
-      `full_eye_sharpness(&jpeg, eyes, 100), None, "exactly 1.5x"` changes
-      with it.
-    - A failed full-size read or decode stays `None`, as today; it does not
-      fall back to the preview.
-    - The tier rule is not touched in this step. Its side effect: a file
-      without a larger JPEG now carries a value, so today's
-      `full_eye_sharp >= GOOD_FULL_EYE_SHARP` cut starts applying to it.
-    - Cost to call out in the PR and the docs: every judged face now reads
-      the full JPEG (about 77–81% of them did), at about +51 ms per measured
-      frame with 8 threads and a warm cache (`docs/agents/tauri-app.md`); the
-      preview path adds two partial decodes and no read. The cold-disk cost
-      is unmeasured.
-    - `riffle-cli facechoice` already prints `full_eye_sharp` per face; a
-      preview-measured column there is one way to do the comparison.
+      `cue.state == FocusCandidate::Candidate` condition and keeps
+      `has_larger_jpeg` as the gate.
+    - `MIN_SCALE` (1.5) stays: `has_larger_jpeg` only says the full JPEG is
+      a different image from the preview, not how much larger it is, and a
+      JPEG not more than 1.5x the preview width is close to the preview's
+      scale, where the full-size thresholds do not hold.
+    - A failed full-size read or decode stays `None`, as today.
+    - Cost to call out in the PR and the docs: every judged face with a
+      larger JPEG now reads the full JPEG (about 77–81% of them did), at
+      about +51 ms per measured frame with 8 threads and a warm cache
+      (`docs/agents/tauri-app.md`). The cold-disk cost is unmeasured.
+    - The comparison used a scratch `riffle-cli` subcommand that measured
+      the preview with the same eye centers; it is not committed.
 
 - [ ] Step 3: Read the Good / Neutral / Low tiers from `full_eye_sharp` alone
   - Done when:
@@ -200,8 +192,10 @@ Decisions taken with the user at planning (2026-11-15):
       whatever else clears; Neutral between the two; Neutral with no value;
       Neutral without a focus.
     - `README.md` / `README.ja.md` and `docs/humans/usage.md` /
-      `usage.ja.md` describe the tiers by the new rule (no 90%, no 77%, no
-      "skips the check" for RAF / ORF / HDR PQ CR3) and give the new
+      `usage.ja.md` describe the tiers by the new rule (no 90%, no 77%; a
+      file without a larger JPEG, RAF / ORF / HDR PQ CR3 and the Sony bodies
+      whose largest JPEG is the preview, has no value and is Neutral) and
+      give the new
       evidence in place of the candidate cue's precision and coverage
       figures. `docs/agents/tauri-app.md` and `docs/agents/native-app.md`
       follow.
@@ -339,17 +333,18 @@ Decisions taken with the user at planning (2026-11-15):
   On the held-out labels 29/154 3-star frames (18.8%) are under 0.162 and so
   not Good, and 41/88 1-star frames are at or above it before the other cuts.
   A missing value now means Neutral, where it used to leave a candidate Good.
-- **Preview-only files are uncalibrated.** The metric was never measured on
-  a preview. On a 1616 px preview an eye crop is a few dozen px upscaled to
-  154 px, so scores may sit systematically lower and push the bodies with no
-  larger JPEG (α9 II, α7R IV, α7C, α6400, α6600, ZV-E10), RAF and HDR PQ CR3
-  toward Low. Step 2 records a comparison; it does not gate. The user
-  accepted this for one path.
-- **`MIN_SCALE` goes.** A full JPEG at most 1.5x the preview width was not
-  measured; under "the largest JPEG" it is.
-- **Cost.** Every judged face reads the full JPEG (about 77–81% did), about
-  +51 ms per measured frame warm; cold-disk cost is unmeasured. The preview
-  path adds two partial decodes and no read, and no HEVC decode of its own.
+- **Preview-only files lose their eye-focus tiers.** A file without a larger
+  JPEG (the Sony bodies whose largest JPEG is the preview: α9 II, α7R IV,
+  α7C, α6400, α6600, ZV-E10; RAF; HDR PQ CR3) has no `full_eye_sharp` and so
+  is Neutral, where today `eye_focus` gives it Good or Low. Step 2 measured
+  the alternative on the labeled ARW frames: on the preview the value is
+  about half the full-size one, and 146/154 held-out 3-star frames would not
+  be Good and 91/154 would be Low (`preview-vs-full.md`). The user chose
+  Neutral (2026-11-15).
+- **Cost.** Every judged face with a larger JPEG reads it (about 77–81% did;
+  92% of a 3638-ARW folder now), about +51 ms per measured frame warm (+75
+  ms per newly measured `NotCandidate` file in Step 2's run); cold-disk cost
+  is unmeasured.
 - **Ranking.** `Good photo` inert and `eye_focus` always missing leave their
   prior weights inert. The ablations measured no contribution from either, so
   no refit; the ranking is Tauri-only and the GPUI port drops AI features
@@ -358,7 +353,7 @@ Decisions taken with the user at planning (2026-11-15):
   two rows it adds. If it is still open at Step 4, stop and report.
 - **Names kept.** `candidate.rs`, `Cue`, the filter's `candidates` key and
   the `full_eye_sharp` column keep their names although "candidate" no longer
-  means a model's output and the value can come from a preview. Renaming the
+  means a model's output. Renaming the
   module or the stored filter key is a wider diff and a settings migration;
   not taken. The user-facing row is renamed `Eye focus`.
 - **Photo file names in the repository.** `frames.tsv` carries file names and
@@ -366,9 +361,10 @@ Decisions taken with the user at planning (2026-11-15):
   such frames. The user chose to commit it.
 - **One body.** All labels are ILCE-7M5. `SOFT_BELOW` and `LOW_BELOW` are
   applied to every camera.
-- **Intermediate states on main.** After Step 2 and before Step 3,
-  preview-only files get the Good cut from an uncalibrated value while Low
-  still comes from `eye_focus`. Steps 2 and 3 should be merged back to back.
+- **Intermediate states on main.** After Step 2 and before Step 3, a
+  non-candidate with a larger JPEG carries a value the tier does not read
+  yet, and preview-only files keep today's `eye_focus` tiers until Step 3
+  makes them Neutral. Steps 2 and 3 should be merged back to back.
 - **Index downgrade.** A v25 index has no `eye_focus`; an older build
   opening it is whatever `Index::open` does with a newer `user_version`
   today. The Tauri app and the native app keep separate index files, and
@@ -377,3 +373,4 @@ Decisions taken with the user at planning (2026-11-15):
 ## Progress
 
 - (2026-11-15) Step 1 complete
+- (2026-11-15) Step 2 complete

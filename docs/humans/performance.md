@@ -644,6 +644,33 @@ rectangle was tried and did not beat it on the held-out set (best cell AUC
 0.797, precision 88.6%, coverage 95.0%), so the cue still uses the rectangle
 (see `docs/plans/_archived/20261008-mesh-eye-mask/`).
 
+#### Full-size eye sharpness (Windows 11)
+
+Pass 2 measures the eye sharpness of the judged face (`full_eye_sharp`,
+`crates/core/src/fullsharp.rs`) on the full-size JPEG, a second read, when
+the file holds one larger than the preview. Until `FACES_VERSION` 10 it did
+so only on a `Candidate`; from 11 it does so on every frame whose cue judged
+a face. A file without a larger JPEG is not measured. Measured on 2026-11-15 on
+the folder `2026-11-07` (3638 α7 V ARW, every one with a larger JPEG),
+local NTFS drive, warm page cache (one run before timing), release build,
+8 threads, `scan::extract_analysis` alone timed per file by a scratch
+`riffle-cli` subcommand, before (`5c7d094a`) and after (this change)
+alternated, two runs each:
+
+| Files | n | Before mean / median / p95 (ms) | After mean / median / p95 (ms) |
+| --- | --- | --- | --- |
+| All | 3638 | 181.2 / 191.2 / 254.2, 187.9 / 203.4 / 253.4 | 188.1 / 191.0 / 260.6, 226.4 / 214.8 / 375.3 |
+| `Candidate` (measured before and after) | 2949 | 200.9 / 201.0 / 257.1, 208.1 / 211.0 / 256.1 | 198.8 / 196.3 / 262.2, 238.2 / 220.2 / 375.3 |
+| `NotCandidate` (measured after only) | 405 | 106.5 / 102.7 / 152.5, 114.0 / 106.4 / 156.5 | 184.7 / 177.4 / 273.5, 233.4 / 200.5 / 459.5 |
+| No judged face (not measured) | 284 | 83.5 / 79.8 / 116.2, 84.1 / 83.2 / 101.0 | 82.1 / 80.0 / 109.3, 94.1 / 88.1 / 145.0 |
+
+The frames measured went from 2949 to 3354 of 3638 (81% to 92%). A
+`NotCandidate` file now costs about 75 ms more (the first pair of runs),
+the price of the full read and the two crop decodes; the other files do not
+change. The whole pass took 82.5 / 85.6s before and 85.6 / 106.8s after; the
+second after run was slower on every group, the no-face files included,
+so part of it is run-to-run noise. The cold-disk cost is not measured.
+
 #### Eye-state model survey (Windows 11)
 
 YuNet's five landmarks carry no eyelid points, so telling closed eyes apart

@@ -96,9 +96,9 @@ passes on the one scan task: `run_scan` (thumbnail, metadata), then
 colored by (YuNet, then the face mesh on the face nearest the AF point) and
 the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
 `pose_roll` columns with the EAR of the more closed eye and the head pose
-from that same mesh, and, on a frame the cue calls a candidate, the
+from that same mesh, and, on every frame whose cue judged a face, the
 `full_eye_sharp` column with the sharpness of its eyes on the full JPEG (a
-second read), and streams them as `faces-progress` /
+second read; none when the file holds no JPEG larger than the preview), and streams them as `faces-progress` /
 `faces-done` events, then, when the `aiEnabled` setting is on and its model
 downloaded, `run_embed_scan`, which stores each RAW file's image embedding in
 the separate `embeddings` table (valid while `EMBED_VERSION` and the file's

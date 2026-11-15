@@ -17,3 +17,33 @@
 - Writing a Windows path with backslashes into a Python docstring through a
   shell heredoc and `sed` turned `\t` into a tab twice; the docstring is now
   a raw string and the path was fixed with the Edit tool.
+
+## Step 2
+
+- The first commit measured a file without a larger JPEG on its preview.
+  `cue.preview_width` is the stored preview's width (the detection's), so
+  that ran `full_eye_sharpness` at scale 1 with `MIN_SCALE` removed.
+- User decision (2026-11-15), after the comparison below: a file without a
+  larger JPEG is not measured and stays Neutral. The follow-up commit drops
+  the preview path and restores `MIN_SCALE`, because `has_larger_jpeg` only
+  tells a full JPEG apart from the preview (no full, HEVC, same offset), not
+  how much larger it is; a full JPEG at most 1.5x the preview is near the
+  preview's scale, where the full-size thresholds do not hold.
+- With Step 2's build the full-size values equal `frames.tsv` on all 345
+  rated frames, and every frame with a judged face was measured (478 of 500
+  in the five rated folders, 46 of them `NotCandidate`).
+- The preview-measured value is about half the full-size one (median ratio
+  0.44-0.47); 146 of 154 held-out 3-star frames fall under `SOFT_BELOW` and 91
+  under `LOW_BELOW` on the preview. See `preview-vs-full.md`.
+- Pass 2 cost on the folder `2026-11-07` (3638 ARW, 8 threads, warm):
+  measured frames 2949 -> 3354; a `NotCandidate` file about +75 ms; the
+  other files unchanged. Recorded in `docs/humans/performance.md`.
+- Both measurements used a scratch `riffle-cli` subcommand, not committed;
+  the "before" binary was built by putting `HEAD`'s `scan.rs` and
+  `fullsharp.rs` back for one release build (`cargo` is reached through
+  `mise exec -- cargo`; a bare `cargo` in the Bash tool is not on `PATH`).
+- A backslash path written through a Python heredoc (`D:\Photos\2026\...`)
+  had `\2026` turned into control bytes; the docs name the folder only.
+- The cost run used the first commit's build (preview path, no `MIN_SCALE`).
+  It holds for the final rule: every file of that folder has a full JPEG
+  well over 1.5x the preview, so neither difference touched it.
