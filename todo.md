@@ -19,11 +19,11 @@ Files: `mise.toml` (`[tasks."native:watch"]`)
 
 #### Background
 
-The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) added a section to `docs/agents/native-app.md` recording that the status row stays a plain `div` and is not gpui-component's `StatusBar`. It deliberately left the neighbouring sections untouched. Two pieces of text there are out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the sentence "only the settings modal and the tree's inline rename draw from it" in "One progress bar sits on the status row's top edge (Inferred)", and the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". Files: `docs/agents/native-app.md`.
+The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) left the neighbouring sections of `docs/agents/native-app.md` untouched, and `native-status-bar` then rewrote its status-row sections (the sentence "only the settings modal and the tree's inline rename draw from it" went with them). One piece of text is still out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". Files: `docs/agents/native-app.md`.
 
 #### TODO
 
-- [ ] Reword the progress bar section's sentence and the "gpui-component is initialized; ..." heading so they name the dialogs, tooltips and scrollbars as well. Check that no quoted-title reference to the heading (including from the new `StatusBar` section) goes stale.
+- [ ] Reword the "gpui-component is initialized; ..." heading so it names the dialogs, tooltips and scrollbars as well. Check that no quoted-title reference to the heading goes stale.
 
 ### App: real-device check of the first launch after the identifier change to dev.minodisk.handpic
 
@@ -2928,20 +2928,23 @@ Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
 - [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
 
-### Native: real-device checks of the scan and Move to Trash progress bar
+### Native: real-device checks of the status row's StatusBar and progress circle
 
-`gpui-progress-bars` added a 2 px determinate progress bar to the GPUI app (`crates/native`), drawn as an absolutely positioned child of the status row's top edge. It is fed by scan pass 1, scan pass 2 and Move to Trash / Delete Permanently / trash redo, and it appears with any combination of panes hidden. Unit tests cover `progress.rs` (the fraction and which operation's progress is shown), and `mise run ci:local` passes. The window was never run, so the drawing, the placement and the no-layout-change rule are unchecked. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
+`native-status-bar` rendered the GPUI app's status row (`crates/native`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
 
-Files: `crates/native/src/main.rs` (`progress_bar`), `crates/native/src/progress.rs`.
+Files: `crates/native/src/main.rs` (`status_row`, `progress_circle`), `crates/native/src/progress.rs`, `crates/native/src/theme.rs`.
 
 #### TODO
 
-- [ ] On Windows, open a cold folder of 500+ RAW files in `riffle-native` (fresh `--index`). Expect the 2 px bar on the status row's top edge to appear and fill through pass 1, start empty again and fill through pass 2, then disappear. The status line's `scanning d/t` / `analyzing d/t` must read as before. A warm folder may flash the empty track for a few frames, which is accepted.
-- [ ] On Windows, select many files and run `Move to Trash…` with the right pane hidden (`toggleRight`). Expect the bar to show the run's progress and go when it ends. Repeat with the strip and the left pane hidden, and check that the preview canvas does not resize when the bar appears or disappears.
+- [ ] On Windows, launch the native app and open a folder. Expect the row to show as a bar with a top border, its fill and 12 px muted text. Open and dismiss both `Sort ▾` and `Filter ▾`, including a tall `Filter ▾` menu: each opens upward with its right edge on the button's, is not clipped by the regions' `overflow_hidden`, fits above the row under the 40 px cap, and is dismissed by a press outside.
+- [ ] On Windows, open a cold folder of 500+ RAW files (fresh `--index`). Expect the circle to fill through pass 1, start again at empty for pass 2 and disappear at the end, with the status text and the buttons not moving. Judge whether the full-to-empty drop (animated over 180 ms) reads well, and confirm paging during the scan is not visibly slower from the circle's animation frames. The status line's `scanning d/t` / `analyzing d/t` must read as before; record what is seen in `docs/agents/native-app.md`.
+- [ ] On Windows, select many files and run `Move to Trash…`, also with the right pane hidden (`toggleRight`) and again with the strip and the left pane hidden. Expect the circle to show the run's progress and go when it ends, and the preview canvas not to resize when it appears or disappears.
+- [ ] On Windows, confirm a long status text does not push the circle or the buttons out and that an error text is still readable in the muted color.
+- [ ] On macOS and Linux, repeat the menu, scan and Move to Trash checks above when at hand.
 
 ### Native: Sequence JPEG Timestamps and Import do not feed the progress bar
 
-`gpui-progress-bars` made the GPUI app's progress bar take a folder operation's `(done, total)` through `progress::shown`'s `folder_op` argument, but `main.rs`'s `progress_bar` passes `None`, so Sequence and Import still show only their pane note. Both already have `(done, total)` callbacks. The folder-dialogs plan (`docs/plans/20261113-gpui-folder-dialogs/plan.md`) wires the dialogs themselves. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
+`gpui-progress-bars` made the GPUI app's progress indicator take a folder operation's `(done, total)` through `progress::shown`'s `folder_op` argument, but `main.rs`'s `progress_circle` passes `None`, so Sequence and Import still show only their pane note. Both already have `(done, total)` callbacks. The folder-dialogs plan (`docs/plans/20261113-gpui-folder-dialogs/plan.md`) wires the dialogs themselves. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
 
 Files: `crates/native/src/progress.rs`, `crates/native/src/main.rs`, `crates/native/src/sequence.rs`, `crates/native/src/import.rs`.
 
