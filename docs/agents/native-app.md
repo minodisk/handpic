@@ -2827,6 +2827,30 @@ rule: a canvas only when `paint` grows by more than 1 ms).
   element tree; look at `present` (and `frameWait` for layout) when adding
   elements beside it.
 
+### The meta pane does not use gpui-component's `DescriptionList` (Inferred)
+
+On 2026-11-15, replacing the pane's `div` rows with gpui-component 0.9.1's
+`DescriptionList` (optionally inside `GroupBox`) was looked into from the
+component's source and declined: the pane keeps its `div` rows.
+
+- Rule: do not port the pane to `DescriptionList` for less code. Its defaults
+  (bordered, 3 columns, a fixed 120 px label width, left-aligned values) would
+  all need overriding, and today's look (the label at its content width, the
+  value `min_w_0`, right-aligned and wrapping, an 11 px muted group heading
+  with `gap_0p5`) means building each value as an `AnyElement`, no shorter
+  than the `div` rows. In the 220 px pane a fixed label width also squeezes
+  the value and can wrap a long label.
+- `DescriptionList` has no group heading, and `GroupBox`'s title sits `gap_4`
+  (16 px) above its content, much wider than today's gap.
+- Its label colour, `description_list_label_foreground` (and, when bordered,
+  `tokens.description_list_label`), is derived from Default Dark at theme load
+  and not re-derived by `Theme::update`, so `theme.rs`'s `map` would have to
+  set it to get `MUTED_COLOR`.
+- Its label is fixed at `text_sm()` while the pane is 13 px, so the label and
+  the value may differ in size. This was not verified.
+- It is a rendering change, so "A same-session A/B gates only work on the
+  page path" asks for the A/B latency gate; the cost outweighs the gain.
+
 ### A same-session A/B gates only work on the page path (Hit)
 
 A same-session A/B needs the machine idle for 30 to 60 minutes, and other
