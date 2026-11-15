@@ -4600,20 +4600,26 @@ impl Render for Riffle {
                     .h(px(strip::STRIP_HEIGHT))
                     .on_mouse_down(
                         MouseButton::Right,
-                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                            // The strip spans the window from its left edge.
-                            this.strip_context(e.position, f32::from(e.position.x), cx);
+                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                            // The strip starts at the client-side frame's left padding.
+                            let x = f32::from(
+                                e.position.x - gpui_component::window_paddings(window).left,
+                            );
+                            this.strip_context(e.position, x, cx);
                         }),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
                             let modifiers = selection::Modifiers {
                                 toggle: e.modifiers.control || e.modifiers.platform,
                                 range: e.modifiers.shift,
                             };
-                            // The strip spans the window from its left edge.
-                            this.strip_clicked(f32::from(e.position.x), modifiers, cx);
+                            // The strip starts at the client-side frame's left padding.
+                            let x = f32::from(
+                                e.position.x - gpui_component::window_paddings(window).left,
+                            );
+                            this.strip_clicked(x, modifiers, cx);
                         }),
                     )
                     .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
@@ -5413,8 +5419,6 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
     }
 }
 
-/// The window's restore bounds and display; a fullscreen window is kept by
-/// its restore bounds, windowed.
 /// The viewport's width less the client-side frame's left and right padding
 /// (zero under server-side decorations and off Linux), which is what the
 /// strip really spans.
@@ -5423,6 +5427,8 @@ fn content_width(window: &Window) -> f32 {
     f32::from(window.viewport_size().width - pad.left - pad.right)
 }
 
+/// The window's restore bounds and display; a fullscreen window is kept by
+/// its restore bounds, windowed.
 fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
     let (bounds, maximized) = match window.window_bounds() {
         WindowBounds::Windowed(bounds) | WindowBounds::Fullscreen(bounds) => (bounds, false),
