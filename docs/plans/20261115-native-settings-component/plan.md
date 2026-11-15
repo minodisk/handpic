@@ -31,7 +31,7 @@ setting keeps reading and writing as before.
 
 ## Steps
 
-- [ ] Step 1: Show the settings as a full-window layer instead of a dialog
+- [x] Step 1: Show the settings as a full-window layer instead of a dialog
   - Done when:
     - `ctrl+,` (`meta+,` on macOS) shows the settings over the whole window,
       opaque, with the current title row, hand-drawn tab list, controls and
