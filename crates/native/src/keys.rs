@@ -117,7 +117,6 @@ impl Bindings {
 mod tests {
     use super::{Bindings, key_name, keystroke_of, typed_char};
     use gpui::{Keystroke, Modifiers};
-    use gpui_component::kbd::Kbd;
     use riffle_backend::shortcuts::Keymap;
 
     fn stroke(key: &str, control: bool, alt: bool, shift: bool) -> Keystroke {
@@ -181,6 +180,8 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn kbd_spells_a_keymap_key() {
+        use gpui_component::kbd::Kbd;
+
         let cases = [
             ("ctrl+alt+1", "Ctrl+Alt+1"),
             ("arrowleft", "Left"),
