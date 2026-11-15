@@ -415,6 +415,9 @@ struct Riffle {
     /// The open folder as the tree spells it, and its row while drawn.
     tree_open: Option<String>,
     tree_open_row: Option<usize>,
+    /// Bumped by every read of the index's per-folder counts: an answer
+    /// older than the latest read is dropped.
+    dir_counts: u64,
     tree_scroll: UniformListScrollHandle,
     /// The tree has the keyboard: a click in its pane gave it, `escape` or a
     /// press elsewhere hands it back to the photo.
@@ -657,6 +660,10 @@ impl Riffle {
             .detach();
         }
         Self::read_roots(cx);
+        cx.spawn(async |this, cx| {
+            this.update(cx, |this, cx| this.read_dir_counts(cx)).ok();
+        })
+        .detach();
         // A volume mounted since shows up when the window becomes active.
         cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() && this.roots_loaded {
@@ -766,6 +773,7 @@ impl Riffle {
             tree_rows: Vec::new(),
             tree_open: None,
             tree_open_row: None,
+            dir_counts: 0,
             tree_scroll: UniformListScrollHandle::new(),
             tree_keys: false,
             tree_cursor: None,
@@ -1012,6 +1020,35 @@ impl Riffle {
                 .background_spawn(async { folders::roots(dirs::home_dir()) })
                 .await;
             this.update(cx, |this, cx| this.roots_read(roots, cx)).ok();
+        })
+        .detach();
+    }
+
+    /// Read the index's row count of every folder on the reader, off the UI
+    /// thread, and hand them to the tree; nothing without an index.
+    fn read_dir_counts(&mut self, cx: &mut Context<Self>) {
+        let Some(reader) = self.reader.clone() else {
+            return;
+        };
+        self.dir_counts += 1;
+        let read = self.dir_counts;
+        cx.spawn(async move |this, cx| {
+            let counts = cx
+                .background_spawn(async move { index::lock(&reader).dir_counts() })
+                .await;
+            this.update(cx, |this, cx| {
+                if read != this.dir_counts {
+                    return;
+                }
+                match counts {
+                    Ok(counts) => {
+                        this.tree.set_index_counts(counts, IGNORE_CASE);
+                        this.tree_changed(cx);
+                    }
+                    Err(e) => log::warn!("failed to read the folder counts: {e}"),
+                }
+            })
+            .ok();
         })
         .detach();
     }
@@ -2212,6 +2249,7 @@ impl Riffle {
                 return;
             }
         };
+        let listed_count = listed.files.len();
         self.listing += 1;
         self.pending_faces.clear();
         self.order += 1;
@@ -2347,6 +2385,11 @@ impl Riffle {
             }
             _ => self.finished(cx),
         }
+        if let Some(open) = &self.tree_open {
+            self.tree.set_listed_count(open, listed_count, IGNORE_CASE);
+            self.tree_changed(cx);
+        }
+        self.read_dir_counts(cx);
         cx.notify();
     }
 
@@ -2535,6 +2578,7 @@ impl Riffle {
                 self.failed = summary.errors;
                 self.strip.refresh();
                 self.read_entries(cx);
+                self.read_dir_counts(cx);
             }
             Event::FacesProgress {
                 done, total, ready, ..
@@ -4023,18 +4067,15 @@ impl Riffle {
                     this.tree_toggle(path.clone(), cx);
                 }));
         }
-        let count = row
-            .raw_count
-            .filter(|count| row.expanded && *count > 0)
-            .map(|count| {
-                div()
-                    .flex_none()
-                    .px(px(5.))
-                    .rounded_full()
-                    .bg(rgb(ACCENT_COLOR))
-                    .text_size(px(11.))
-                    .child(count.to_string())
-            });
+        let count = row.raw_count.filter(|count| *count > 0).map(|count| {
+            div()
+                .flex_none()
+                .px(px(5.))
+                .rounded_full()
+                .bg(rgb(ACCENT_COLOR))
+                .text_size(px(11.))
+                .child(count.to_string())
+        });
         let path = row.path.clone();
         let (menu_path, menu_name) = (row.path.clone(), row.name.clone());
         div()

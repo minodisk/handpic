@@ -76,7 +76,7 @@ What the investigation found (the facts the steps rely on):
     - Use the test module's existing helpers (`temp_dir`, `open`,
       `write_batch` with an `Err(Failure)` row, `remove_temp_dir`)
     - Nothing in `crates/app` calls it; do not add a Tauri command
-- [ ] Step 2: Show the count on every drawn row, from the index until the folder is listed
+- [x] Step 2: Show the count on every drawn row, from the index until the folder is listed
   - Done when:
     - A collapsed or never-expanded tree row whose folder has index rows
       shows that count; a row shows its count whether expanded or collapsed,

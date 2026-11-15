@@ -425,6 +425,9 @@ the crop and the scaled-preview placeholder are painted, one JPEG pixel per
 device pixel with the focus point at the canvas center), `src/tree.rs` the
 left pane's folder tree (a port of the state half of `tree.ts`: the roots,
 each folder's listed children, expansion, RAW count and failed listing, the
+index's per-folder row counts (`set_index_counts`, keyed by the canonical
+`dir` without its verbatim prefix, which an unlisted row shows until a listing
+or an open's `set_listed_count` gives its own), the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
 draws as a `uniform_list`, fills from the backend's `folders`, expands

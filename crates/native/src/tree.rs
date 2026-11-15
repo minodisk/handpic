@@ -11,6 +11,8 @@ use std::{
 
 use riffle_backend::folders::FolderNode;
 
+use crate::context::shown_path;
+
 /// Whether paths compare ignoring case, as the file systems of Windows and
 /// macOS do by default.
 pub const IGNORE_CASE: bool = cfg!(any(windows, target_os = "macos"));
@@ -42,6 +44,7 @@ pub struct Node {
     /// `None` until a listing of this folder has answered.
     pub children: Option<Vec<Child>>,
     pub expanded: bool,
+    /// The count of the last listing of this folder (`read_dir`).
     pub raw_count: Option<usize>,
     /// The error of the last listing that failed, until one succeeds.
     pub failed: Option<String>,
@@ -51,6 +54,15 @@ pub struct Node {
 pub struct Tree {
     roots: Vec<Child>,
     nodes: HashMap<String, Node>,
+    indexed: Indexed,
+}
+
+/// The index's row count of each folder holding rows, keyed by its path
+/// without the verbatim prefix, folded the way `ignore_case` says.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Indexed {
+    counts: HashMap<String, usize>,
+    ignore_case: bool,
 }
 
 /// One drawn row, owned so the window keeps the rows between changes.
@@ -62,6 +74,7 @@ pub struct Row {
     pub expanded: bool,
     /// Not listed yet, or listed with a drawn child: it gets an expander.
     pub expandable: bool,
+    /// The listed count, else the index's.
     pub raw_count: Option<usize>,
     pub failed: Option<String>,
 }
@@ -145,6 +158,41 @@ impl Tree {
         }
     }
 
+    /// Replaces the index's counts, each by the index's canonical `dir`;
+    /// a node not listed yet shows the one its path matches.
+    pub fn set_index_counts(
+        &mut self,
+        counts: impl IntoIterator<Item = (String, usize)>,
+        ignore_case: bool,
+    ) {
+        self.indexed = Indexed {
+            counts: counts
+                .into_iter()
+                .map(|(dir, count)| (fold(&shown_path(&dir), ignore_case), count))
+                .collect(),
+            ignore_case,
+        };
+    }
+
+    /// Sets the listed count of the node that is `path`, as a listing of it
+    /// would, leaving its children as they are.
+    pub fn set_listed_count(&mut self, path: &str, count: usize, ignore_case: bool) {
+        for node in self.nodes.values_mut() {
+            if relation(&node.path, path, ignore_case) == Some(Relation::Same) {
+                node.raw_count = Some(count);
+            }
+        }
+    }
+
+    fn count_of(&self, node: &Node) -> Option<usize> {
+        node.raw_count.or_else(|| {
+            self.indexed
+                .counts
+                .get(&fold(&node.path, self.indexed.ignore_case))
+                .copied()
+        })
+    }
+
     /// The children of `node` the tree draws, or `None` until it is listed.
     /// A folder that is itself a root is drawn as that root only, so home is
     /// not repeated under the volume it lives on.
@@ -180,7 +228,7 @@ impl Tree {
                 name: node.name.clone(),
                 expanded: node.expanded,
                 expandable: children.as_ref().is_none_or(|c| !c.is_empty()),
-                raw_count: node.raw_count,
+                raw_count: self.count_of(node),
                 failed: node.failed.clone(),
             });
             if node.expanded
@@ -692,6 +740,7 @@ mod tests {
         changed.collapse("/nope");
         changed.mark_failed("/nope", "x".into());
         changed.set_children("/nope", 1, vec![child("x", "/nope/x")]);
+        changed.set_listed_count("/nope", 1, false);
         assert_eq!(changed, tree);
     }
 
@@ -1589,5 +1638,95 @@ mod tests {
         assert_eq!(drawn(&tree), ["0:me", "1:d", "2:x"]);
         assert!(!tree.has("/home/me/D"));
         assert_eq!(tree.nodes["/home/me/d"].raw_count, Some(2));
+    }
+
+    fn count(tree: &Tree, path: &str) -> Option<usize> {
+        tree.rows()
+            .into_iter()
+            .find(|row| row.path == path)
+            .and_then(|row| row.raw_count)
+    }
+
+    fn indexed(pairs: &[(&str, usize)]) -> Vec<(String, usize)> {
+        pairs
+            .iter()
+            .map(|(dir, n)| ((*dir).to_owned(), *n))
+            .collect()
+    }
+
+    #[test]
+    fn an_unlisted_folder_takes_the_index_count() {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.set_index_counts(indexed(&[("/home/me", 4)]), false);
+        assert_eq!(count(&tree, "/home/me"), Some(4));
+        assert_eq!(count(&tree, "/media/me/card"), None);
+        assert!(!tree.rows()[0].expanded);
+    }
+
+    #[test]
+    fn a_verbatim_index_dir_matches_the_trees_drive_and_unc_spelling() {
+        let mut tree = with_roots(&[
+            child("Photos", r"C:\Photos"),
+            child(r"C:\", r"C:\"),
+            child("raw", r"\\server\share\raw"),
+        ]);
+        tree.set_index_counts(
+            indexed(&[
+                (r"\\?\C:\Photos", 3),
+                (r"\\?\C:\", 1),
+                (r"\\?\UNC\server\share\raw", 7),
+            ]),
+            false,
+        );
+        assert_eq!(count(&tree, r"C:\Photos"), Some(3));
+        assert_eq!(count(&tree, r"C:\"), Some(1));
+        assert_eq!(count(&tree, r"\\server\share\raw"), Some(7));
+    }
+
+    #[test]
+    fn the_index_count_ignores_case_only_when_asked() {
+        let mut tree = with_roots(&[child("Photos", r"C:\Photos")]);
+        tree.set_index_counts(indexed(&[(r"\\?\C:\PHOTOS", 3)]), true);
+        assert_eq!(count(&tree, r"C:\Photos"), Some(3));
+        tree.set_index_counts(indexed(&[(r"\\?\C:\PHOTOS", 3)]), false);
+        assert_eq!(count(&tree, r"C:\Photos"), None);
+    }
+
+    #[test]
+    fn a_listed_count_wins_over_the_index_zero_included() {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.set_index_counts(indexed(&[("/home/me", 4), ("/media/me/card", 2)]), false);
+        tree.set_children("/home/me", 0, vec![]);
+        tree.set_listed_count("/media/me/card", 5, false);
+        assert_eq!(count(&tree, "/home/me"), Some(0));
+        assert_eq!(count(&tree, "/media/me/card"), Some(5));
+    }
+
+    #[test]
+    fn the_listed_count_is_set_on_the_node_in_another_case_when_asked() {
+        let mut tree = with_roots(&[child("Photos", "/Users/me/Photos")]);
+        tree.set_listed_count("/users/me/photos", 2, false);
+        assert_eq!(count(&tree, "/Users/me/Photos"), None);
+        tree.set_listed_count("/users/me/photos", 2, true);
+        assert_eq!(count(&tree, "/Users/me/Photos"), Some(2));
+    }
+
+    #[test]
+    fn replacing_the_index_counts_drops_a_folder_no_longer_in_them() {
+        let mut tree = with_roots(&[home(), card()]);
+        tree.set_index_counts(indexed(&[("/home/me", 4), ("/media/me/card", 2)]), false);
+        tree.set_index_counts(indexed(&[("/media/me/card", 3)]), false);
+        assert_eq!(count(&tree, "/home/me"), None);
+        assert_eq!(count(&tree, "/media/me/card"), Some(3));
+    }
+
+    #[test]
+    fn a_renamed_folder_keeps_its_listed_count() {
+        let mut tree = renamed_tree();
+        tree.set_index_counts(indexed(&[("/home/me/a", 9), ("/home/me/b", 6)]), false);
+        tree.rename_folder("/home/me/a", "/home/me/a1", "a1", false);
+        assert_eq!(count(&tree, "/home/me/a1"), Some(2));
+        assert_eq!(count(&tree, "/home/me/a1/x"), Some(1));
+        assert_eq!(count(&tree, "/home/me/b"), Some(6));
     }
 }

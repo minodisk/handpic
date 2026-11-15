@@ -2346,6 +2346,28 @@ strip needed one because `uniform_list` is vertical only.
   width. The padding is on the list, not the pane, so the scrollbar stays at
   the pane's edge. Inferred from the gpui-pre 0.3.12 and taffy sources, not
   yet observed in the running app.
+- Rule: a row shows its file count, expanded or collapsed, whenever it is
+  above zero, from one of two sources drawn the same. The listed count
+  (`Node::raw_count`) is the last `read_dir` of the folder: an expand, a
+  `Refresh`, a tree watcher change, and an open, which sets the open folder's
+  node from `listed.files.len()` through `Tree::set_listed_count` (found by
+  `relation` from `tree_open`, the tree's spelling, not the canonical
+  `listed.dir`). Until a folder is listed its row takes the index's row count
+  from `Index::dir_counts`, which `Tree::set_index_counts` keys by the
+  canonical `dir` with the verbatim prefix stripped (`context::shown_path`)
+  and folded (`fold`, case ignored on Windows and macOS), so `\\?\C:\...` and
+  `\\?\UNC\server\share\...` match the tree's `C:\...` and
+  `\\server\share\...`. The listed count wins, a listed zero showing nothing.
+  A folder reached through a mapped drive, a symlink or a junction never
+  matches its canonical `dir` and shows a count only once listed.
+- Rule: the index's counts are read whole (`GROUP BY dir` on the `files_dir`
+  covering index) on `background_spawn` under `index::lock` of the reader,
+  never touching a folder on disk, and replace the tree's map whole. They are
+  read at startup, at the end of `opened` (after the prepare's reconcile),
+  on pass 1's `Event::Done` and after `folder_renamed` / `date_folder_ran`;
+  an expand, a roots load or a `tree-changed` does not re-read, the map
+  already covering every folder. The `dir_counts` counter drops an answer
+  older than the latest read.
 - Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
   1000 window with the tree shown (see "The sort and filter menus are
   deferred popovers over the window"). Inferred: 1380 x 842 with it hidden by
