@@ -64,14 +64,26 @@ Decisions taken with the user at planning (2026-11-15):
   (`../_archived/20261015-folder-wide-ranking-eval/folderwide.md`) found
   neither `AF eye focus` nor `Good photo` contributes (dropping either moves
   the frame AUC by at most ±0.003, intervals across zero).
-- PR #1066 (the native meta pane's stored values, with `AF eye in focus` and
-  `Focus candidate` rows) merges first; Step 4 removes those rows.
+- PR #1066 (the native meta pane's stored values) drops its own
+  `AF eye in focus` and `Focus candidate` rows and renames its
+  `Eyes at full size` row `Eye focus` before it merges (another session's
+  work, decided 2026-11-15). Step 4 does not touch
+  `crates/native/src/meta.rs` and does not wait for #1066; Step 5 does wait
+  for it, since removing the fields would break #1066's branch.
 - The reduced per-frame table (folder, file, rating, `full_eye_sharp`) is
   committed to this folder so the derivation is reproducible from the
   repository.
-- The meta pane row `Eyes at full size` is renamed `Eye focus` (Tauri and
-  native, docs). Internal names (`candidate.rs`, `Cue`, the filter's
+- The meta pane row `Eyes at full size` is renamed `Eye focus` in the native
+  app only, done in #1066 (amended 2026-11-15; the Tauri app keeps its row
+  name). Internal names (`candidate.rs`, `Cue`, the filter's
   `candidates` key, the `full_eye_sharp` column) stay.
+- The Tauri app (`crates/app`, `crates/app/ui`) is frozen (2026-11-15): only
+  the GPUI native app grows. No Tauri improvement (no `Eye focus` rename
+  there, no new behavior). The only Tauri edits allowed are the minimal
+  mechanical ones that keep it building once Step 5 removes `eye_focus` /
+  `candidate` from the core and backend types and the index (a field deleted
+  from a TS type, the `AF eye in focus` row of `meta.ts` and its test, the
+  columns of the `commands.rs` debug dump), and they belong to Step 5.
 
 ## Steps
 
@@ -217,7 +229,7 @@ Decisions taken with the user at planning (2026-11-15):
     - The frontend tests do not run under `ci:local`; the PR's checks run
       them.
 
-- [ ] Step 4: Stop reading `eye_focus` in the ranking, the meta pane and the CLI; rename the meta row
+- [x] Step 4: Stop reading `eye_focus` in the ranking and the CLI
   - Done when:
     - `crates/core/src/rank.rs`: `Frame` has no `eye_focus`; the value's
       column is always the missing case; `good_photo` is always false (the
@@ -226,13 +238,7 @@ Decisions taken with the user at planning (2026-11-15):
       unchanged. A new test ranks and fits frames with no `eye_focus` and
       gets finite scores and places.
     - `Index::rank_rows` (`crates/backend/src/index.rs`) no longer selects
-      `eye_focus`, and the debug dump in `crates/app/src/commands.rs` (the
-      TSV header near line 3009) no longer prints `state` / `eye_focus`.
-    - `crates/app/ui/src/meta.ts` has no `AF eye in focus` row, and its
-      `Eyes at full size` row is named `Eye focus`; `meta.test.ts` follows.
-    - The native meta pane (`crates/native/src/meta.rs`, from PR #1066) has no
-      `AF eye in focus` and no `Focus candidate` row, and names its
-      full-size row `Eye focus` if it has one.
+      `eye_focus`.
     - `riffle-cli`: nothing calls `candidate::eye_focus`, `EyeFocus`,
       `Scored`, `FocusCandidate` or `Cue::eye_focus` / `Cue::state`. The
       `candidates` subcommand, which exists to validate the logistic model,
@@ -240,15 +246,16 @@ Decisions taken with the user at planning (2026-11-15):
       `facechoice` lose their `eye_focus` / `state` / `scored` / window
       columns and keep the rest (`facechoice` keeps the face choice, the
       mesh offsets, the edge gap and `full_eye_sharp`).
-    - `docs/humans/usage.md` / `usage.ja.md` (the meta pane rows, the new
-      `Eye focus` name), `docs/humans/performance.md` / `.ja.md` and
+    - `docs/humans/usage.md` / `usage.ja.md` (the ranking's reasons, if an
+      entry goes), `docs/humans/performance.md` / `.ja.md` and
       `docs/agents/tract-onnx-inference.md` (the mentions of
       `riffle-cli candidates` as a tool to run) and `CLAUDE.md` (the
       `facechoice` description) follow.
+    - No file under `crates/app` or `crates/native` changes.
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
-    - Assumes Step 3 is merged, and PR #1066 is merged (the user's choice);
-      if #1066 is still open, stop and report rather than editing its branch.
+    - Assumes Step 3 is merged. Does not depend on PR #1066: the native meta
+      pane's rows are #1066's own change, and the Tauri meta pane is frozen.
     - Do not rework the ranking and do not refit the prior. `tech()` already
       maps a missing `eye_focus` to NaN (then `prior.tech_mean`) and sets
       indicator column 7; make that the only case.
@@ -282,8 +289,12 @@ Decisions taken with the user at planning (2026-11-15):
       `eye_focus` and no `candidate`.
     - MCP `get_photo`, `faces-progress` and the folder entries carry neither
       field.
-    - Tauri frontend: `MarkFocus`, `applyFaceReady`, the types in `main.ts`
-      and `meta.ts` and the tests have neither field.
+    - Tauri (frozen, compile-only edits): `MarkFocus`, `applyFaceReady`, the
+      types in `main.ts` and `meta.ts` and the tests have neither field;
+      `meta.ts` loses its `AF eye in focus` row (and `meta.test.ts` follows)
+      and keeps `Eyes at full size` as named; the debug dump in
+      `crates/app/src/commands.rs` (the TSV header near line 3009) no longer
+      prints `state` / `eye_focus`. Nothing else in the Tauri app changes.
     - Native: `filter.rs`, `mark.rs`, `overlay.rs` and `meta.rs` have neither
       field and no `FocusCandidate` import.
     - `git grep -i -E "eye_focus|eyeFocus|FocusCandidate|not_candidate|CANDIDATE_LOGIT|GOOD_EYE_FOCUS"`
@@ -294,7 +305,12 @@ Decisions taken with the user at planning (2026-11-15):
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Steps 2–4 are merged, so nothing outside the scan reads the
-      fields any more.
+      fields any more, and PR #1066 is merged: it adds native meta rows over
+      `Focus`, and removing the fields first would leave its branch not
+      compiling. If #1066 is still open, stop and report.
+    - The Tauri app is frozen: change it only where the removed fields stop
+      it compiling or its tests passing, mechanically, with no behavior
+      added and no rename.
     - Migration precedent in `Index::migrate`:
       `ALTER TABLE folders DROP COLUMN culling_finished` for versions 21–22,
       and the v15 swap of `eye_sharpness`. Older migration blocks that
@@ -349,13 +365,18 @@ Decisions taken with the user at planning (2026-11-15):
   prior weights inert. The ablations measured no contribution from either, so
   no refit; the ranking is Tauri-only and the GPUI port drops AI features
   (#1017).
-- **PR #1066.** Merged before Step 4 by the user's choice; Step 4 removes the
-  two rows it adds. If it is still open at Step 4, stop and report.
+- **PR #1066.** Fixed in its own branch to drop the `AF eye in focus` /
+  `Focus candidate` rows and name its full-size row `Eye focus` (2026-11-15).
+  Step 4 does not wait for it; Step 5 does, and stops if it is still open.
+- **The Tauri app is frozen.** It keeps its `Eyes at full size` row name and
+  gets only Step 5's compile-only edits, so its meta pane and the native one
+  name the same value differently.
 - **Names kept.** `candidate.rs`, `Cue`, the filter's `candidates` key and
   the `full_eye_sharp` column keep their names although "candidate" no longer
   means a model's output. Renaming the
   module or the stored filter key is a wider diff and a settings migration;
-  not taken. The user-facing row is renamed `Eye focus`.
+  not taken. The user-facing row is renamed `Eye focus` in the native app
+  only (#1066); the frozen Tauri app keeps `Eyes at full size`.
 - **Photo file names in the repository.** `frames.tsv` carries file names and
   ratings of the user's test photos (no images); archived plans already name
   such frames. The user chose to commit it.

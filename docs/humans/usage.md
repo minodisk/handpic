@@ -834,7 +834,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
   (`+`) or below (`−`) the burst's average it sits in the model's units;
   `Reason` names up to three of what moved it most: `Look` (the image
   embedding: composition, expression, the moment), `Burst position`,
-  `Sharpness`, `AF eye focus`, `Eyes open`, `Head pose` and `Good photo`.
+  `Sharpness`, `Eyes open` and `Head pose`.
   The model starts from a built-in one, learned from the author's picks on
   27 culled shooting days, and learns your taste from the frames you
   viewed: a frame you have shown in the preview and neither picked nor

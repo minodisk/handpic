@@ -1467,7 +1467,7 @@ impl Index {
             .conn
             .prepare(
                 "SELECT files.path, COALESCE(ratings.flag, 0), capture_time, subsec,
-                     faces_extractor = ?3, sharpness, eye_focus, eyes_ear,
+                     faces_extractor = ?3, sharpness, eyes_ear,
                      pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap, embeddings.vec,
                      views.path IS NOT NULL, full_eye_sharp
                  FROM files LEFT JOIN ratings USING (path)
@@ -1485,14 +1485,14 @@ impl Index {
                 let value = |i: usize| -> rusqlite::Result<Option<f64>> {
                     Ok(if current { r.get(i)? } else { None })
                 };
-                let pose = match (value(8)?, value(9)?, value(10)?) {
+                let pose = match (value(7)?, value(8)?, value(9)?) {
                     (Some(yaw), Some(pitch), Some(roll)) => Some(Pose { yaw, pitch, roll }),
                     _ => None,
                 };
-                let vec: Option<Vec<u8>> = r.get(13)?;
+                let vec: Option<Vec<u8>> = r.get(12)?;
                 Ok(RankRow {
                     flag: flag_from_code(r.get(1)?),
-                    viewed: r.get(14)?,
+                    viewed: r.get(13)?,
                     frame: rank::Frame {
                         name: Path::new(&path)
                             .file_name()
@@ -1501,12 +1501,11 @@ impl Index {
                         capture_time: r.get(2)?,
                         subsec: r.get(3)?,
                         sharpness: value(5)?,
-                        eye_focus: value(6)?,
-                        eyes_ear: value(7)?,
+                        eyes_ear: value(6)?,
                         pose,
-                        eye_offset: value(11)?,
-                        edge_gap: value(12)?,
-                        full_eye_sharp: value(15)?,
+                        eye_offset: value(10)?,
+                        edge_gap: value(11)?,
+                        full_eye_sharp: value(14)?,
                         vec: vec.map(|v| {
                             v.chunks_exact(4)
                                 .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
@@ -3792,8 +3791,8 @@ pub(crate) mod tests {
         );
         assert_eq!(ra.frame.subsec.as_deref(), Some("122"));
         assert_eq!(
-            (ra.frame.eye_focus, ra.frame.sharpness, ra.frame.eyes_ear),
-            (Some(0.95), Some(120.0), Some(0.3))
+            (ra.frame.sharpness, ra.frame.eyes_ear),
+            (Some(120.0), Some(0.3))
         );
         assert_eq!(
             ra.frame.pose,
@@ -3810,7 +3809,7 @@ pub(crate) mod tests {
         assert_eq!(ra.frame.full_eye_sharp, Some(0.3));
         assert_eq!(ra.frame.vec, Some(vec![0.6, 0.8]));
         assert_eq!(
-            (rb.frame.eye_focus, rb.frame.sharpness),
+            (rb.frame.sharpness, rb.frame.eyes_ear),
             (None, None),
             "a row behind FACES_VERSION has no second-pass values"
         );
