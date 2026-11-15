@@ -1865,6 +1865,44 @@ modal and the tree's inline rename draw from it").
   shows nothing for them. A new operation needs a `(done, total)` callback
   before it can feed the bar.
 
+### The status row stays a plain `div`, not gpui-component's `StatusBar` (Inferred)
+
+gpui-component (`=0.9.1`, `src/status_bar.rs`) ships a `StatusBar`: a
+`RenderOnce` `h_flex` with left, center and right regions. The status row is
+`main.rs`'s `status_row`, a plain `relative` flex `div` holding the status
+text, the `Sort ▾` and `Filter ▾` buttons (`menu_button`) and the
+`progress_bar`. The swap was examined from the sources only (gpui-component
+0.9.1, `gpui-pre` 0.3.12, `main.rs`, `theme.rs`); nothing was built or
+measured.
+
+- Rule: do not replace `status_row` with `StatusBar` (the user's decision).
+  Revisit when the row gets a border and a background of its own, which is
+  what the component's defaults draw.
+- Unaffected: `StatusBar` has no id, focus, key context or listener, so the
+  keymap and the presses (the popover's `on_mouse_down_out`, the buttons'
+  `on_mouse_down` toggle) would not change. Each region is `overflow_hidden`,
+  but `Deferred` in `gpui-pre` 0.3.12 calls `window.defer_draw` with no
+  content mask (`elements/deferred.rs`), so the Sort / Filter popovers would
+  not be clipped and `anchored` would still open from the button's top-right.
+- The defaults would have to be undone through `refine_style`: `py_1` and
+  `border_t_1` would make the row about 9 px taller, changing the 1380 x 852
+  preview canvas recorded in "The sort and filter menus are deferred popovers
+  over the window"; `bg` reads the theme's `status_bar` token, which
+  `theme.rs` does not map, so it would fall back to `Default Dark`'s
+  `#171717` where the row is transparent over the root's black today; and
+  `text_xs` (12 px) with `muted_foreground` would shrink and dim the status
+  text, which is the root's default size in white today.
+- The regions' `gap_2` cannot be changed from the root's style, so keeping
+  the 4 px (`gap_1`) between Sort and Filter would need both wrapped in an
+  `h_flex().gap_1()` of their own, passed as one `.right()`.
+- Every child lands inside a region, never as a direct child of the root.
+  Taffy positions an `absolute` element against its direct parent, so the
+  progress bar could no longer sit on the row's top edge from inside it: the
+  `StatusBar` would need a `relative` wrapper with the bar as its sibling,
+  changing the rule in "One progress bar sits on the status row's top edge".
+- Gained: only the component's name and the `status_bar` /
+  `status_bar_border` theme tokens.
+
 ### Text is typed through gpui-component's `Input` (Inferred)
 
 The settings modal's text fields (the label names, the import pattern) are
