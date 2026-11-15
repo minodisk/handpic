@@ -699,8 +699,7 @@ most, as the Tauri frontend's `resyncPending`: a re-listing mid-scan would
 cancel and restart it. A re-listing carries the current file by path, the
 strip's offset (`carried_offset`) and the loaded thumbnails
 (`carried_indices`), bumps a listing counter that drops the previous listing's
-preview reads, and always reads the current preview again (it also refreshes
-the status line's `n/total`).
+preview reads, and always reads the current preview again.
 
 - Rule: a file still being copied in changes size between events, so each
   debounced event re-extracts it (`todo=1 removed=1`) until the copy ends;
@@ -711,7 +710,7 @@ the status line's `n/total`).
 The view keeps `all` (the listing in natural order narrowed by `--size` /
 `--max`, the Tauri `allFiles`) apart from `files` (`all` in the sort in force,
 later also filtered), which the pager, the strip, the thumbnails, the hot
-list, `current_path`, the status line and the pane's `n / total` index into.
+list, `current_path` and the pane's `n / total` index into.
 The order reads `facts` (each listed file's orientation, capture time, subsec
 and `Focus`, keyed by the listed path) and the judgments, both from the one
 `Index::entries` read at the open and at pass 1's `Done`. A view-only folder
@@ -801,8 +800,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   arrives. The shown file's index becomes `None` when a refilter hides it
   (`filter::shown_after`): a stale index would name the file then at that
   place in the next `refilter`, which could skip the re-request of a preview
-  its `order` bump had just dropped. The status line's `n/total` is left
-  alone.
+  its `order` bump had just dropped.
 - Rule: a `refilter` that empties `files` keeps its anchor
   (`filter::KeptAnchor`), a non-empty one or another folder's open drops it.
   A menu change, and only a menu change, anchors on it while no file is
@@ -860,8 +858,13 @@ time a burst of its own. The view keeps the open folder's grouping in
 ### The sort and filter menus are deferred popovers over the window (Inferred)
 
 The status row is a flex row: the status text, then `Sort ▾` and `Filter ▾`
-at its right end (`menu.rs` holds the rows, the clicks' `apply` and `Menus`;
-`main.rs` only maps rows to `div`s). The filter button is lit while
+at its right end. The status text is a transient note (an error, the drop
+refusal, the empty-folder and filtered texts) that `present` clears on every
+presented preview, as the Tauri `present`'s `setStatus()`, followed by
+`status()`'s suffixes with no leading separator when the note is empty; the
+current file's position, name and shooting settings live in the meta pane
+only. `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
+`main.rs` only maps rows to `div`s. The filter button is lit while
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open. A menu item runs
 `menu::apply`, then `refilter` on the current file with the scroll not kept,
@@ -1289,10 +1292,10 @@ neither shown nor printed. The drawn frame therefore lags the cursor by at most
 one load, the files in between are still skipped, and the number of reads per
 key sequence is unchanged.
 
-A stale frame sets the status line, `self.shown`, the image, `marks.show` and
-the paint hold, and nothing else. `self.shown` names the file whose image is on
-screen because `refilter` rewrites the status line's `n/total` from it and
-re-requests when it is not the current file, and the meta pane follows it.
+A stale frame clears the status note and sets `self.shown`, the image,
+`marks.show` and the paint hold, and nothing else. `self.shown` names the file
+whose image is on screen because `refilter` re-requests when it is not the
+current file, and the meta pane follows it.
 `marks.show` follows the image too: `Marks::mark`, `wanted_faces` and
 `wanted_eyes` draw and ask only when the shown file is the current one, so a
 stale frame gets no `f` overlay; left at the previous file, stepping back onto
@@ -1349,7 +1352,7 @@ current file's two neighbours (the next one in the paging direction first,
 none across the pager's wrap), at most `PREFETCH_PIXEL_CAP` (32 MP, 128 MB of
 BGRA) in all, the image on screen not counted. `request` takes the current
 file from the ring before it reads; a hit does everything `loaded`'s current
-arm does (`show_current`: status line, meta pane, `marks.show`, `zoom.shown`,
+arm does (`show_current`: the cleared status note, meta pane, `marks.show`, `zoom.shown`,
 `analyze_current`, `start_dwell`, the `page` line with `source=prefetch`) but
 the read and the paint hold. `request_prefetch` reads the next wanted file,
 one at a time through `load` on the background executor, only when the pager
