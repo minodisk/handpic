@@ -125,7 +125,7 @@ pub const NOT_SAVED: &str = "The settings store did not open, so changes last un
 /// and `ctrl+,` / `meta+,` the keymap refuses as a menu accelerator.
 pub const APP_KEYS: [&str; 3] = ["home", "end", "q"];
 
-/// A Keyboard Shortcuts tab edit of the keymap.
+/// A Keyboard Shortcuts page edit of the keymap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     Add(&'static str, String),
@@ -205,16 +205,15 @@ pub fn display_key(key: &str) -> &str {
     if key == "space" { "Space" } else { key }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
-    #[default]
     Sidecar,
     Culling,
     Shortcuts,
     Import,
 }
 
-/// The tabs in the Tauri order, less the Cache, MCP and Debug ones.
+/// The pages in the Tauri order, less the Cache, MCP and Debug ones.
 pub const TABS: [Tab; 4] = [Tab::Sidecar, Tab::Culling, Tab::Shortcuts, Tab::Import];
 
 impl Tab {

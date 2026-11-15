@@ -72,7 +72,7 @@ pub struct SettingsView {
     format: SidecarFormat,
     keymap: Keymap,
     label_names: LabelNames,
-    /// The Sidecar tab's name fields, in `LABEL_COLORS` order.
+    /// The Sidecar page's name fields, in `LABEL_COLORS` order.
     name_fields: Vec<Entity<InputState>>,
     /// The language `Reset` fills in, an index into `i18n::presets()`.
     language: usize,
