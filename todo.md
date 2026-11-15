@@ -3270,3 +3270,41 @@ Files: `crates/native/src/main.rs` (`tree_key_down`), `crates/native/src/treekey
 - [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run native:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, with the same labels and value strings as the Tauri app's pane for the same file (compare the shared rows; the frozen Tauri pane names `Eye focus` `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
 - [ ] On Windows, a file with no analysis value (a JPEG without an AF point, or a RAW pass 2 has not reached) shows no `Analysis` group (a JPEG shows at most `Sharpness`). A file hidden by a refilter shows neither the `Analysis` group nor the AF rows. A file whose preview failed still shows its `Analysis` group and a `Maker note` group holding only the AF rows. Turning the `f` overlay on or off does not change the `Analysis` rows (they never use the on-demand eyes judgment).
 - [ ] On Windows, open a second folder while a file of the first is on screen. Expected: until the new folder's first preview arrives, the pane shows no rows from the index (not another file's), then the new file's rows.
+
+### Native: real-device checks of the settings as a full-window layer (native-settings-component Step 1)
+
+#### Background
+
+The `native-settings-component` feature's Step 1 replaced the settings `Dialog` with a full-window, opaque, occluding layer drawn by `Riffle::render`, under a focus trap. CI and `mise run ci:local` cover the build and the pure `settingsmodal.rs` tests. The view's keys, pointer, focus trap and the drop behavior were never exercised: the agent session could not drive the GUI, and the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261115-native-settings-component/plan.md`.
+
+Files: `crates/native/src/settingsview.rs`, `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with a test `--settings` store and an open folder, then check each of these. Expected: all as described.
+  1. `ctrl+,` shows the settings over the whole window, opaque, with the title row, the controls and the status line.
+  2. Typing works in a label name field (Sidecar, XMP format) and in the Import pattern field; Enter and blur commit.
+  3. Tab / Shift+Tab cycle only through the settings' controls and wrap (no stop in the tree, strip or preview underneath).
+  4. On Keyboard Shortcuts, `+` captures the next key, `tab` and `shift+tab` included.
+  5. Pointer presses, hovers (no strip tooltip) and wheel scrolls over the settings do not reach the panes underneath.
+  6. A folder dropped on the window while the settings are shown opens nothing (record what actually happens; if it differs, correct the drop rule in `docs/agents/native-app.md`).
+  7. Escape (cancelling a capture first, committing a focused field first) and the `×` return to the main view, where Left / Right page at once.
+
+### Native: real-device checks of the settings body drawn with gpui-component's `Settings` (native-settings-component Step 2)
+
+#### Background
+
+The `native-settings-component` feature's Step 2 drew the settings body with gpui-component's `Settings` (sidebar with a search field, four `SettingPage`s), mapped the sidebar colors in `theme.rs`, and replaced the old tab-switch capture cancel with a capture-phase pointer-press cancel. The new `editing` rule (an `Input` key context on the focused path) lets the private search field take keys. CI and the remaining `settingsmodal.rs` tests cover the pure model. Typing in the search field, Escape on a non-empty query, the capture cancel, the Tab trap, the search filtering and the look were never run on a real machine (the step's checkbox was ticked on the automated criteria only). Plan: `docs/plans/_archived/20261115-native-settings-component/plan.md`.
+
+Files: `crates/native/src/settingsview.rs`, `crates/native/src/theme.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with a test `--settings` store and an open folder, press `ctrl+,`, then check each of these. Expected: all as described.
+  1. The body is a sidebar (search field, Sidecar, Culling, Keyboard Shortcuts, Import) beside the selected page, on the box's dark surface, the selected page lit `#262626`; the search placeholder reads "Search...".
+  2. Typing works in the search field, the label name fields (Sidecar, XMP format) and the Import pattern field; a name or pattern commits only on Enter or blur, an invalid pattern shows its reason in red.
+  3. Escape in the search field with text clears it; pressed again it closes the settings. Escape in a name or pattern field commits and closes.
+  4. On Keyboard Shortcuts, `+` captures the next key, `tab` and `shift+tab` included; `home`, `end`, `q` and a key bound elsewhere show their refusal on the status line; a press on the sidebar or another row's `+` cancels a pending capture.
+  5. Tab / Shift+Tab walk the search field and the page's controls and wrap, never reaching the main view.
+  6. Searching an action name (for example "burst") lists only its rows; clearing the search brings every item back.
+  7. The user's visual check of the new look (group headers, label-left / control-right rows, the sidebar's colors).
