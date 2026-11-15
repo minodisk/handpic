@@ -23,7 +23,7 @@ with gpui-component 0.9.1's `DescriptionList` (optionally inside `GroupBox`)
 was investigated and declined. Nothing in the repository says so, so the next
 agent looking for gpui-component adoption candidates would repeat the
 investigation. Once this is done,
-[native-app.md](../../agents/native-app.md) states the decision and its reasons
+[native-app.md](../../../agents/native-app.md) states the decision and its reasons
 next to the meta pane's section.
 
 ## Steps
