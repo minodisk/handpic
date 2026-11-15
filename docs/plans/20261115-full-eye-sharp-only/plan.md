@@ -73,7 +73,7 @@ Decisions taken with the user at planning (2026-11-15):
 
 ## Steps
 
-- [ ] Step 1: Record the experiment and derive the Low threshold from the labels
+- [x] Step 1: Record the experiment and derive the Low threshold from the labels
   - Done when:
     - `experiment.md` in this folder holds the experiment's numbers: the
       held-out folders and label counts (281 frames: 3 stars 154, 2 stars 39,
@@ -375,3 +375,5 @@ Decisions taken with the user at planning (2026-11-15):
   both migrate through the backend.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
