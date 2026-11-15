@@ -72,7 +72,7 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
 
 ## Steps
 
-- [ ] Step 1: Read the app-painted UI colors from the active theme
+- [x] Step 1: Read the app-painted UI colors from the active theme
   - Done when:
     - The semantic UI colors painted by `main.rs`, `settingsview.rs`,
       `folderops.rs` and `modal.rs` come from the active theme (through

@@ -53,8 +53,8 @@ before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
 to dark (`Theme::change(ThemeMode::Dark, ..)`, the built-in `Default Dark`)
 and maps it over it in a second `Theme::update`, since a mode switch reloads
 the registered theme over color edits made in the same closure. The mapping
-reads `main.rs`'s color constants (one source of each color, the overlay included, which the three backdrops read; the canvases
-keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foreground` and every
+reads `theme.rs`'s own constants, the one source of each color (the overlay included, which the three backdrops read):
+`background` `#0a0a0a`, `foreground` and every
 `*_foreground` on a dark surface `#fafafa`, `popover` `#171717`, `primary`
 `#e5e5e5` on `primary_foreground` `#171717`, `secondary`, `muted` and
 `accent` `#262626`, `muted_foreground` `#a1a1a1`, `danger` `#ff6467`,
@@ -63,13 +63,14 @@ keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foregro
 "`Root` wraps the window's content"), `radius`
 6 px (`rounded_md`, the buttons and menus) and `radius_lg` 8 px
 (`rounded_lg`, the dialog boxes), and `Button`'s default variant: `button`
-`BUTTON_FILL` (white at 4 %), `button_hover` and `button_active` `#262626`,
+white at 4 %, `button_hover` and `button_active` `#262626`,
 `button_foreground` `#fafafa`, and the settings' `Sidebar`: `sidebar`
 `#171717` (the box's `popover`, not `Default Dark`'s `#0a0a0a`),
 `sidebar_accent` `#262626` (the selected page, as the old tab list lit it),
 `sidebar_foreground` and `sidebar_accent_foreground` `#fafafa`,
 `sidebar_border` white at 10 %, `sidebar_primary` `#e5e5e5` on
-`sidebar_primary_foreground` `#171717`. `Default Dark` derives the `button_*`,
+`sidebar_primary_foreground` `#171717`, and `TitleBar`'s `title_bar`
+`#171717` and `title_bar_border` white at 10 %, as the panes'. `Default Dark` derives the `button_*`,
 `*_hover` / `*_active` and `list_*` fields at load and `Theme::update` does
 not derive them again, so the fields it does not name keep `Default Dark`'s
 values. Nothing calls `Theme::sync_system_appearance` or observes
@@ -84,8 +85,27 @@ rename is a text input in the row") and `Tooltip`, every tooltip of the app
 folder tree is not the component's `Tree` (see "The folder tree is not
 gpui-component's `Tree`"). The
 window's content is wrapped in `Root` (see "`Root` wraps the window's content").
-The app view's own black and white stay over `Root`'s surface; the theme is for
-components.
+The app's own `div`s and canvases read the same colors: the semantic ones
+from the theme (`cx.theme()`; a canvas's paint closure reads it from its
+`cx: &mut App`) and the ones no token equals from `theme.rs`'s `Roles`, a
+GPUI global `apply` sets with the theme (`theme::roles(cx)`): the window's
+surface `#000000` and text `#ffffff` (over `Root`'s surface, behind the
+strip and the status row), the strip's file name `#d4d4d4` and scan failure
+`#a3a3a3`, the burst band (white at 8 %, dimmed 3.6 %) and the reject dim
+(black at 55 %). `Roles::of` gives today's values for Neutral dark and
+otherwise derives them from the tokens (the surface and text from
+`background` / `foreground`, the band from `foreground` with alpha, the dim
+from `background` with alpha). The pane colors map onto tokens exactly: the
+panes `popover`, muted text `muted_foreground`, errors `danger`, the
+selected cell and the placeholder `muted`, the current cell's outline and
+lit controls `primary`, the tree cursor, a selected cell's outline and the
+drop outline `ring`, the hover and the tree's open row `accent`, the menu
+buttons `button` with an `input` border. Fixed in every theme, as constants
+with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
+`REJECT_COLOR`), the label tints with `LABELED_NAME_COLOR`, what is drawn
+over the photo (`mark.rs`, `overlay.rs`, `peaking.rs`, `perfgraph.rs`, the
+burst badge's `BADGE_COLOR` and the halos), and the preview's black
+surround (`PREVIEW_BACKGROUND`).
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
 `inspector`, `decimal`, `gpui-fast`) is on, and it does not depend on
@@ -914,7 +934,7 @@ time a burst of its own. The view keeps the open folder's grouping in
   text at the image box's bottom-right, 2 px in, in `--foreground` over the
   eight dark copies of `overlay::HALO`, painted before the rejected dim so a
   rejected member's badge dims with its cell, and a rejected member's band
-  is drawn at the dimmed alpha (`BAND_COLOR_DIMMED`, 0.08 x 0.45) as
+  is drawn at the dimmed alpha (`Roles::band_dimmed`, 0.08 x 0.45) as
   `.cell.rejected`'s opacity covers the `::before`.
 - Deliberate difference: a selected member's band is painted before the
   cell's opaque `--muted` fill, so inside the cell the fill covers it; Tauri
@@ -957,7 +977,7 @@ dimmed, shows capture order and keeps the stored key.
   `Color label` and `Orientation`. The sort menu has no heading.
 - Rule: the leads are drawn per kind in `main.rs`'s `menu_row`: the flags
   keep their 7 px dots; a rating row is five 12 px Lucide stars, the `on`
-  filled ones in `STARS_COLOR` and the rest outlined in `MUTED_COLOR` at
+  filled ones in `STARS_COLOR` and the rest outlined in `muted_foreground` at
   40 %; a color label a filled Lucide `square` in `tint_color`, `No label`
   the outline; `Portrait` and `Landscape` the Lucide `rectangle-vertical` and
   `rectangle-horizontal`; `Face focus` the Tauri icons (`scan-face` for
@@ -1070,7 +1090,7 @@ row capturing a key, `modal.ts`'s key rule, the pages' order and titles in
 one with the `Handpic` key context, the focus, the key listener and
 `on_drop`) in an outer full-size `div` and, while the modal is open, adds
 the view entity as a second child, in an `absolute` full-size `div`. The
-view's box is `size_full`, opaque on `popover` (`PANE_COLOR`), `occlude()`d
+view's box is `size_full`, opaque on `popover`, `occlude()`d
 and under `FocusTrapElement::focus_trap` on its own focus handle. The main
 layout stays rendered underneath, not replaced: the preview canvas's paint
 takes the pending page and releases the scan pause (`hold.rs`'s
@@ -1192,7 +1212,7 @@ not open.
   child (the variant's own label is `text_sm`, 14 px at the window's 16 px
   rem, and its content style is crate-private), on the mapped `button` fill
   and `input` border; the chosen language is `.selected(true)`
-  (`button_active`) with the `PRIMARY_COLOR` border. `Checkbox` and `Radio`
+  (`button_active`) with the `primary` border. `Checkbox` and `Radio`
   are `.small()` (a 14 px indicator) with a 13 px `text_size`; a checked
   `Radio` is the component's filled circle with the check mark, not the old
   ring and dot. The focus ring is the theme's: `focus_ring` is on in
@@ -1740,7 +1760,7 @@ cx)` renders the path through the application's `AssetSource` (`Icons`, so
 monochrome sprite drawn in `color`; its `Err` is logged, not unwrapped. The
 strip's face focus icon is 12 x 12 px, 2 px inside the image box's
 bottom-left, over eight black copies at `overlay::HALO`'s offsets for the
-Tauri `drop-shadow`, and painted before the rejected cell's `REJECTED_DIM`
+Tauri `drop-shadow`, and painted before the rejected cell's `Roles::rejected_dim`
 quad so the dimming covers it. Its state is computed in `strip_cells()` from
 `facts` as the filter's `passes` does, so it follows pass 2 with no
 bookkeeping. That the icon is crisp at 100 % and 150 % is not yet checked by
@@ -1970,7 +1990,7 @@ operations run: a Move to Trash, Delete Permanently or trash redo run first
 running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
 gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
-size), colored `PRIMARY_COLOR`, its value `fraction * 100`, the first item of
+size), colored `primary`, its value `fraction * 100`, the first item of
 the `StatusBar`'s right region, left of `Sort ▾`, and only while `shown`
 yields a count. The Tauri app draws a bar along the row's top edge
 (`#scan-progress`); the circle is the user's decision.
@@ -1978,7 +1998,7 @@ yields a count. The Tauri app draws a bar along the row's top edge
 The linear `Progress` was ruled out for that bar, and the reasons hold for
 `ProgressCircle` too, as verified at 0.9.1: it draws its track as its
 indicator's color at 20 % opacity with no setter for the track apart from
-it, so the track is `PRIMARY_COLOR` at 20 %, not `MUTED_FILL`; its value
+it, so the track is `primary` at 20 %, not `muted`; its value
 always animates through `transition` over the theme's
 `motion.duration_normal` (180 ms by default), turned off only by GPUI's
 reduce-motion or by a zero `duration_normal`, which the dialogs read too;
@@ -2027,8 +2047,8 @@ earlier rule that kept the row a plain `div` (PR #1072), by the user's
 decision, which also chose the component's look over the old one (the status
 text was 16 px white, the row transparent over the root's black).
 
-- Rule: `theme.rs`'s `map` sets `status_bar` to `PANE_COLOR` and
-  `status_bar_border` to `BORDER_COLOR` (white at 10 %), and the theme test
+- Rule: `theme.rs`'s `map` sets `status_bar` to the panes' `#171717` and
+  `status_bar_border` to the border (white at 10 %), and the theme test
   asserts both; `Theme::update` carries an edited `colors` field into
   `theme.tokens`, which the bar's `bg` reads. Unmapped, they would fall back
   to `Default Dark`'s `#171717` and a solid `#262626` border. Seen on screen
@@ -2101,7 +2121,7 @@ subscribes to `InputEvent`:
   inside a composition stay the IME's.
 - Rule: the look is the port's, set per field (`settingsview.rs`'s `field`):
   `focus_bordered(false)` drops the component's focus ring (the theme's
-  `ring`), and the border is `INPUT_BORDER`, `PRIMARY_COLOR` while the
+  `ring`), and the border is the theme's `input`, `primary` while the
   state's handle is focused, with no fill, `rounded_sm`, 8 / 3 px padding,
   13 px text and a 29 px height (`FIELD_HEIGHT`, a 13 px line at GPUI's
   default line height plus the padding and border). These are `Styled`
@@ -2228,7 +2248,7 @@ by ` or `, the key clause left out when `open` has none. `render` wraps the
 preview canvas in a `relative` div that takes the canvas's old `flex_1` /
 `h_full` (plus `min_w_0`), the canvas `size_full` in it, so its bounds, and
 with them `viewport`, the fit, the 1:1 crop and the perf band, are the same;
-the message is an `absolute`, full-size, centered child in `MUTED_COLOR` at
+the message is an `absolute`, full-size, centered child in `muted_foreground` at
 14.4 px (`0.9rem`) with `p_4` padding (`empty_message`).
 
 - Rule: only the no-folder message has an `id`, `cursor_pointer` and an
@@ -2852,7 +2872,7 @@ reason and running note sit in the footer above the `primary()` or
 
 `folderops.rs` is a child module of `main.rs` holding `FolderOps` (the flow
 under way and the open dialog) and an `impl Riffle` block: a child module
-reaches the view's private fields, methods and color constants, so the
+reaches the view's private fields, methods and constants, so the
 operations need no entity of their own and `main.rs` gains only the fields
 (the flows, the `Modal`, the buttons' focus), the menu arm, the key guard,
 the backdrop's condition and the gate's `Held` variant.
@@ -3085,7 +3105,7 @@ component's source and declined: the pane keeps its `div` rows.
 - Its label colour, `description_list_label_foreground` (and, when bordered,
   `tokens.description_list_label`), is derived from Default Dark at theme load
   and not re-derived by `Theme::update`, so `theme.rs`'s `map` would have to
-  set it to get `MUTED_COLOR`.
+  set it to get `muted_foreground`'s `#a1a1a1`.
 - Its label is fixed at `text_sm()` while the pane is 13 px, so the label and
   the value may differ in size. This was not verified.
 - It is a rendering change, so "A same-session A/B gates only work on the

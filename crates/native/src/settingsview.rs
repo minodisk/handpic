@@ -7,7 +7,7 @@
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     FontWeight, KeyBinding, KeyDownEvent, MouseDownEvent, NoAction, PathPromptOptions, Pixels,
-    SharedString, Window, div, prelude::*, px, rgb, rgba, transparent_black,
+    SharedString, Window, div, prelude::*, px, transparent_black,
 };
 use gpui_component::{
     ActiveTheme, FocusTrapElement, Selectable, Sizable,
@@ -21,7 +21,7 @@ use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
-    ACCENT_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR, PRIMARY_COLOR, keys,
+    keys,
     settings::Settings as Stored,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, TABS, Tab},
 };
@@ -459,7 +459,8 @@ impl SettingsView {
                 .item(
                     SettingItem::render({
                         let view = view.clone();
-                        move |_, window, _| {
+                        move |_, window, cx| {
+                            let primary = cx.theme().primary;
                             div()
                                 .flex()
                                 .flex_wrap()
@@ -469,7 +470,7 @@ impl SettingsView {
                                     let chosen = at == language;
                                     small_button(("label-language", at), preset.name.clone())
                                         .selected(chosen)
-                                        .when(chosen, |b| b.border_color(rgb(PRIMARY_COLOR)))
+                                        .when(chosen, |b| b.border_color(primary))
                                         .on_click(window.listener_for(
                                             &view,
                                             move |this, _: &ClickEvent, window, cx| {
@@ -518,7 +519,9 @@ impl SettingsView {
             let view = view.clone();
             SettingItem::new(
                 settingsmodal::shortcut_label(action),
-                SettingField::render(move |_, window, _| {
+                SettingField::render(move |_, window, cx| {
+                    let theme = cx.theme();
+                    let (accent, muted) = (theme.accent, theme.muted_foreground);
                     div()
                         .flex()
                         .flex_wrap()
@@ -534,7 +537,7 @@ impl SettingsView {
                                 .gap(px(3.))
                                 .pl(px(6.))
                                 .rounded_sm()
-                                .bg(rgb(ACCENT_COLOR))
+                                .bg(accent)
                                 .text_size(px(13.))
                                 .child(shown)
                                 .child(small_button(("remove", k), "\u{d7}").on_click(
@@ -551,7 +554,7 @@ impl SettingsView {
                         .child(if capturing {
                             div()
                                 .text_size(px(13.))
-                                .text_color(rgb(MUTED_COLOR))
+                                .text_color(muted)
                                 .child("Press a key...")
                                 .into_any_element()
                         } else {
@@ -599,7 +602,8 @@ impl SettingsView {
             "Destination root",
             SettingField::render({
                 let view = view.clone();
-                move |_, window, _| {
+                move |_, window, cx| {
+                    let theme = cx.theme();
                     div()
                         .flex()
                         .items_center()
@@ -614,8 +618,8 @@ impl SettingsView {
                                 .min_h(px(22.))
                                 .rounded_sm()
                                 .border_1()
-                                .border_color(rgba(INPUT_BORDER))
-                                .text_color(rgb(MUTED_COLOR))
+                                .border_color(theme.input)
+                                .text_color(theme.muted_foreground)
                                 .child(root.clone()),
                         )
                         .child(
@@ -648,10 +652,11 @@ impl SettingsView {
                     }),
                 ))
                 .item(
-                    SettingItem::render(move |_, _, _| {
+                    SettingItem::render(move |_, _, cx| {
+                        let danger = cx.theme().danger;
                         div()
                             .text_size(px(13.))
-                            .when(refused, |d| d.text_color(rgb(ERROR_COLOR)))
+                            .when(refused, |d| d.text_color(danger))
                             .child(example.clone())
                     })
                     .keywords(["Example"]),
@@ -678,7 +683,8 @@ impl SettingsView {
                     }),
                 ))
                 .item(
-                    SettingItem::render(|_, _, _| {
+                    SettingItem::render(|_, _, cx| {
+                        let muted = cx.theme().muted_foreground;
                         div().flex().flex_col().text_size(px(13.)).children(
                             settingsmodal::IMPORT_SPECIFIERS.iter().map(
                                 |&(spec, meaning, example)| {
@@ -687,7 +693,7 @@ impl SettingsView {
                                         .gap_2()
                                         .child(div().w(px(48.)).flex_none().child(spec))
                                         .child(div().w(px(180.)).flex_none().child(meaning))
-                                        .child(div().text_color(rgb(MUTED_COLOR)).child(example))
+                                        .child(div().text_color(muted).child(example))
                                 },
                             ),
                         )
@@ -724,7 +730,7 @@ impl SettingsView {
             .px_4()
             .py_3()
             .bg(cx.theme().popover)
-            .text_color(rgb(FOREGROUND_COLOR))
+            .text_color(cx.theme().foreground)
             .child(
                 div()
                     .flex()
@@ -757,7 +763,7 @@ impl SettingsView {
             .children(self.status.clone().map(|status| {
                 div()
                     .text_size(px(13.))
-                    .text_color(rgb(ERROR_COLOR))
+                    .text_color(cx.theme().danger)
                     .child(status)
             }))
             .focus_trap("settings-trap", &self.focus)
@@ -777,17 +783,17 @@ fn show(field: &Entity<InputState>, text: &str, window: &mut Window, cx: &mut gp
     }
 }
 
-/// A field drawn as the port it replaced: the `INPUT_BORDER` border, in
-/// `PRIMARY_COLOR` while focused, no fill, and its size and radius.
+/// A field drawn as the port it replaced: the theme's `input` border, in
+/// `primary` while focused, no fill, and its size and radius.
 fn field(state: &Entity<InputState>, window: &Window, cx: &gpui::App) -> impl IntoElement {
     let focused = state.focus_handle(cx).is_focused(window);
     let input = Input::new(state)
         .focus_bordered(false)
         .bg(transparent_black())
         .border_color(if focused {
-            rgb(PRIMARY_COLOR)
+            cx.theme().primary
         } else {
-            rgba(INPUT_BORDER)
+            cx.theme().input
         })
         .rounded_sm()
         .px(px(8.))
