@@ -31,6 +31,7 @@ mod orient;
 mod overlay;
 mod pager;
 mod panels;
+mod panewidths;
 mod peaking;
 mod perf;
 mod perfgraph;
@@ -83,19 +84,20 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Bounds, ClickEvent, ClipboardItem, ContentMask, Context, Corners,
-    Entity, ExternalPaths, FocusHandle, FontWeight, KeyBinding, KeyDownEvent, Keystroke,
-    MouseButton, MouseDownEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
-    ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
-    TransformationMatrix, UniformListScrollHandle, WeakEntity, Window, WindowBounds, WindowOptions,
-    anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, rgb, rgba, size, svg,
-    uniform_list,
+    Anchor, AnyElement, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask, Context,
+    Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, KeyBinding,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
+    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
+    SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
+    WeakEntity, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill,
+    outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Root, Sizable,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     progress::ProgressCircle,
+    resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
     status_bar::StatusBar,
     tooltip::Tooltip,
@@ -110,6 +112,7 @@ use menu::{Lead, Menus, Row, Which};
 use meta::Shown;
 use pager::{Finished, Move, Pager};
 use panels::{Panel, Panels};
+use panewidths::PaneWidths;
 use peaking::{Peaking, View};
 use prefetch::{Heading, Ring};
 use resync::Resync;
@@ -473,8 +476,15 @@ struct Riffle {
     /// The panes shown (`toggleLeft`, `toggleRight`, `toggleStrip`,
     /// `toggleSides`).
     panels: Panels,
-    /// A pane change is written to `panels`; off under `--auto`.
+    /// A pane change is written to `panels`, and the end of a pane drag to
+    /// `panelWidths`; off under `--auto`.
     remember_panels: bool,
+    /// The side panes' widths as the user set them, drawn narrower when the
+    /// window cannot hold them (`PaneWidths::drawn`).
+    pane_widths: PaneWidths,
+    /// A pane's boundary has moved since the button went down; the next
+    /// button release writes `panelWidths`.
+    pane_dragged: bool,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -799,6 +809,12 @@ impl Riffle {
                 Panels::default()
             },
             remember_panels: remember,
+            pane_widths: if remember {
+                settings.pane_widths
+            } else {
+                PaneWidths::default()
+            },
+            pane_dragged: false,
             wanted: None,
             max: None,
             listing: 0,
@@ -987,6 +1003,28 @@ impl Riffle {
             .ok();
         })
         .detach();
+    }
+
+    /// The boundary of `pane` dragged to the window `x` in a window `window`
+    /// wide, re-cutting a 1:1 crop as a window resize does.
+    fn drag_pane(&mut self, pane: Panel, x: f32, window: f32, cx: &mut Context<Self>) {
+        self.pane_dragged = true;
+        let widths = self.pane_widths.dragged(pane, x, window, self.panels);
+        if widths != self.pane_widths {
+            self.pane_widths = widths;
+            self.zoom_resized(cx);
+            cx.notify();
+        }
+    }
+
+    /// A button release anywhere in the window ends a pane drag and writes
+    /// the widths once.
+    fn end_pane_drag(&mut self) {
+        if std::mem::take(&mut self.pane_dragged) && self.remember_panels {
+            self.settings
+                .writes
+                .set("panelWidths", self.pane_widths.setting());
+        }
     }
 
     /// Show the panes `panels`: a hidden left pane gives up the keyboard, a
@@ -3844,7 +3882,7 @@ impl Riffle {
 
     /// The right-hand pane: the file on screen with its metadata, or why its
     /// preview failed, and the folder's notes at the bottom.
-    fn meta_pane(&self) -> impl IntoElement {
+    fn meta_pane(&self, width: f32) -> impl IntoElement {
         let mut body = div()
             .id("meta")
             .flex_1()
@@ -3910,7 +3948,7 @@ impl Riffle {
             );
         }
         div()
-            .w(px(PANE_WIDTH))
+            .w(px(width))
             .flex_none()
             .h_full()
             .flex()
@@ -3963,7 +4001,7 @@ impl Riffle {
     /// screen are laid out. A left press in it gives it the keyboard, a press
     /// of any button outside it hands the keyboard back, and a right press in
     /// it does neither.
-    fn tree_pane(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn tree_pane(&self, width: f32, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .on_mouse_down(
                 MouseButton::Left,
@@ -3976,7 +4014,7 @@ impl Riffle {
                 this.disarm_slow_click();
                 this.set_tree_keys(false, cx);
             }))
-            .w(px(PANE_WIDTH))
+            .w(px(width))
             .flex_none()
             .h_full()
             .py_1()
@@ -4363,6 +4401,8 @@ impl Render for Riffle {
             preview_failed,
         );
         let empty_text = empty::text(empty, &self.settings.keymap.bindings());
+        let window_width = f32::from(window.viewport_size().width);
+        let drawn = self.pane_widths.drawn(window_width, self.panels);
         let main = div()
             .size_full()
             .flex()
@@ -4375,6 +4415,22 @@ impl Render for Riffle {
             .on_drop(cx.listener(|this, paths: &ExternalPaths, _, cx| {
                 this.drop_paths(paths, cx);
             }))
+            .on_drag_move(
+                cx.listener(|this, e: &DragMoveEvent<PaneDrag>, window, cx| {
+                    let pane = e.drag(cx).0;
+                    let width = f32::from(window.viewport_size().width);
+                    this.drag_pane(pane, f32::from(e.event.position.x), width, cx);
+                }),
+            )
+            // Between them every release in the window, whatever covers the
+            // root (the handle's band occludes it, so `on_drop` would miss).
+            .capture_any_mouse_up(cx.listener(|this, _: &MouseUpEvent, _, _| {
+                this.end_pane_drag();
+            }))
+            .on_mouse_up_out(
+                MouseButton::Left,
+                cx.listener(|this, _: &MouseUpEvent, _, _| this.end_pane_drag()),
+            )
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(&e.keystroke, window, cx);
             }))
@@ -4384,7 +4440,7 @@ impl Render for Riffle {
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .children(self.panels.left.then(|| self.tree_pane(cx)))
+                    .children(self.panels.left.then(|| self.tree_pane(drawn.left, cx)))
                     .child(
                         div()
                             .relative()
@@ -4469,9 +4525,19 @@ impl Render for Riffle {
                                 )
                                 .size_full(),
                             )
-                            .children(empty_text.map(|text| self.empty_message(empty, text, cx))),
+                            .children(empty_text.map(|text| self.empty_message(empty, text, cx)))
+                            .children(
+                                self.panels
+                                    .left
+                                    .then(|| pane_handle(Panel::Left, HandleEdge::Leading)),
+                            )
+                            .children(
+                                self.panels
+                                    .right
+                                    .then(|| pane_handle(Panel::Right, HandleEdge::Trailing)),
+                            ),
                     )
-                    .children(self.panels.right.then(|| self.meta_pane()))
+                    .children(self.panels.right.then(|| self.meta_pane(drawn.right)))
                     .child(drop_outline()),
             )
             .children(self.panels.strip.then(|| {
@@ -4624,6 +4690,29 @@ fn trash_dialog(
                         .child(button("trash-cancel", "Cancel", trash::Button::Cancel)),
                 ),
         )
+}
+
+/// The drag payload of a side pane's boundary, and its dragged item, drawn as
+/// nothing.
+#[derive(Clone, Copy)]
+struct PaneDrag(Panel);
+
+impl Render for PaneDrag {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui::Empty
+    }
+}
+
+/// The grab band on the preview's edge beside `pane`, which the root's
+/// `on_drag_move` follows.
+fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
+    let id = match pane {
+        Panel::Left => "left-pane-edge",
+        _ => "right-pane-edge",
+    };
+    resize_handle::<PaneDrag, PaneDrag>(id, Axis::Horizontal)
+        .inside(edge)
+        .on_drag(PaneDrag(pane), |drag, _, _, cx| cx.new(|_| *drag))
 }
 
 /// The Tauri `body.dragging #main` outline, laid over the main area while an
@@ -4900,9 +4989,6 @@ fn strip_tips(cell: &StripCell) -> impl Iterator<Item = AnyElement> + '_ {
     })
 }
 
-/// In the Tauri info pane's range (`#info`, 220 px), and the folder tree's
-/// (`#side`).
-const PANE_WIDTH: f32 = 220.;
 /// `#folders`' 0.8 rem text in a 1.4 line, and `.folder`'s 2 px padding.
 const TREE_TEXT: f32 = 12.8;
 const TREE_ROW_HEIGHT: f32 = 22.;

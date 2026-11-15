@@ -272,7 +272,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -500,7 +500,14 @@ port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
 missing or non-boolean entry meaning shown), which the window's
 `change_panels` sets on `toggleLeft`, `toggleRight`, `toggleStrip` and
 `toggleSides`, the left pane giving up the keyboard when hidden, a 1:1 crop
-re-cut and `panels` written (neither read nor written under `--auto`), next to
+re-cut and `panels` written (neither read nor written under `--auto`), and
+`src/panewidths.rs` the side panes' widths (`PaneWidths`, `DEFAULT` 220 px
+within `MIN` and `MAX`, the preview kept `PREVIEW_MIN`; `from_setting` and
+`setting`, the `panelWidths` value; `dragged`, the widths a drag of a pane's
+boundary gives; `drawn`, the panes narrowed while the window cannot hold
+them), which the window sets from gpui-component's standalone
+`resize_handle` on the preview's edges and writes at the drag's end (neither
+read nor written under `--auto`), next to
 `open`, the OS folder picker whose folder opens as a click in the tree does
 unless another open came first, and `src/dropped.rs` the rules of a drop onto
 the window (a port of the Tauri `dropped_dir`: `single`, the one path a drop

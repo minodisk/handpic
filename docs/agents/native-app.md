@@ -2302,7 +2302,7 @@ neither a directory nor a file opens nothing and puts the Tauri
 
 ### The folder tree is a `uniform_list` over rows kept in the view (Inferred)
 
-The left pane (220 px, the Tauri `#side`) sits beside the preview canvas and
+The left pane (220 px by default, the Tauri `#side`; see the pane widths below) sits beside the preview canvas and
 above the strip, which still spans the window, so `strip_clicked` still takes
 the event's window `x` as the strip's. Its rows are `tree::Tree::rows`,
 rebuilt into the view's `tree_rows` whenever the tree changes (never in
@@ -2347,9 +2347,9 @@ strip needed one because `uniform_list` is vertical only.
   the pane's edge. Inferred from the gpui-pre 0.3.12 and taffy sources, not
   yet observed in the running app.
 - Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
-  1000 window with the tree shown (see "The sort and filter menus are
-  deferred popovers over the window"). Inferred: 1380 x 842 with it hidden by
-  `toggleLeft` (1160 plus the pane's 220), not measured. A pane
+  1000 window with the tree shown at its default width (see "The sort and
+  filter menus are deferred popovers over the window"). Inferred: 1380 x 842
+  with it hidden by `toggleLeft` (1160 plus the pane's 220), not measured. A pane
   change re-cuts a 1:1 crop through `zoom_resized`.
 
 ### The folder tree is not gpui-component's `Tree` (Inferred)
@@ -2438,6 +2438,63 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   keeps running while it is hidden.
 - Not measured: the toggles on macOS and Linux are covered by the CI build
   and the unit tests only.
+
+### The side panes' widths are one `PaneWidths`, stored under `panelWidths` (Inferred)
+
+`panewidths.rs` holds `PaneWidths { left, right }` in logical px, `DEFAULT`
+220 (the former fixed `PANE_WIDTH`), each pane within `MIN` 160 and `MAX`
+480, and `PREVIEW_MIN` 240 for the preview. The view holds it as
+`pane_widths`, apart from `Panels`, so hiding a pane and showing it again
+gives it its last width with no code.
+
+- Rule: not gpui-component's `h_resizable`. Its `ResizablePanelGroup` keeps
+  the sizes in its own `ResizableState`: a saved width only goes in as a
+  panel's initial `.size()`, a hidden pane either stays an empty panel whose
+  neighbour still draws a handle or has its size truncated away when left
+  out, a container resize rescales the panels that are not `fixed`, and the
+  clamping sits out of reach of a unit test (gpui-base 0.9.1's
+  `resizable/mod.rs` and `panel.rs`).
+- Rule: the handles are gpui-component's standalone `resize_handle`
+  (`pane_handle` in `main.rs`, payload and dragged item `PaneDrag(Panel)`,
+  drawn as nothing; GPUI tells drags apart by payload type and
+  `ExternalPaths` is the folder drop's). Both sit inside the preview
+  container, which is `relative`: the left one `HandleEdge::Leading` while the
+  tree is shown, the right one `HandleEdge::Trailing` while the meta pane is,
+  so they stay off the panes' own scrollbars and the panes change only their
+  width. The band takes the preview's outer 5 px and draws a 1 px line on its
+  edge.
+- Rule: the root `div`'s `on_drag_move::<PaneDrag>` follows the drag (capture
+  phase, every move while the drag is active, wherever the pointer is). The
+  panes are flush with the window's edges, so the pointer's `x` is the left
+  width and the window width less it the right one; `dragged` rounds it to
+  whole px, clamps it to `MIN`..`MAX` and to what leaves the preview
+  `PREVIEW_MIN` beside the other shown pane's stored width. A move that
+  changes the widths calls `zoom_resized` (the 1:1 crop is re-cut after
+  `CROP_RESIZE_DEBOUNCE`, its timer replaced on every move) and repaints; the
+  canvas's `viewport` and the peaking layer follow the canvas's own bounds,
+  and the strip spans the window, so nothing else needs telling.
+- Rule: the stored widths are the user's; `drawn`, called in `render` with the
+  window's width, gives the widths drawn. When the window cannot hold the
+  shown panes and `PREVIEW_MIN`, each shown pane gives up the excess in
+  proportion to its width over `MIN`; no pane is drawn under `MIN`, so a
+  window too narrow for both minimums and `PREVIEW_MIN` takes the rest from
+  the preview. Widening the window brings the stored widths back.
+- Rule: the widths are written at the drag's end, once. `on_drop::<PaneDrag>`
+  on the root would miss it: a drop listener fires only while its hitbox is
+  hovered and the handle's band occludes the root, and the pointer is on the
+  band at most releases. The root instead listens to every release in the
+  window with `capture_any_mouse_up` (hovered) and `on_mouse_up_out` (left
+  button, not hovered); `drag_pane` sets `pane_dragged` and the first release
+  after it writes `panelWidths` as `{"left": n, "right": n}`.
+- Rule: a missing or non-object value, or a missing, non-number or
+  non-finite entry, means 220; a number out of range is clamped. Under
+  `--auto` the panes start at 220 whatever the store holds and nothing is
+  written (`remember_panels` off, as for `panels`).
+- Not observed in the running app: the drag itself, the handle's look on the
+  theme, its band against the preview's own clicks, the tree and the meta pane
+  at 160 px, and a release outside the window (whether Windows delivers it;
+  if not, the write waits for the next release inside). The `todo.md` hand
+  checks hold them.
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
@@ -2968,7 +3025,7 @@ its `wait` is the time `go` took before the hit.
 
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 
-The right-hand pane (220 px, the Tauri `#info` width) lays out the file
+The right-hand pane (220 px by default, the Tauri `#info` width) lays out the file
 name, `n / total`, the `meta.rs` groups and the notes as `div`s, built from
 the `Metadata` that `load` formats on the background thread next to the
 preview, so paging reads nothing new. Release, `--auto 20` on the 20-file ARW
@@ -2999,7 +3056,7 @@ component's source and declined: the pane keeps its `div` rows.
   all need overriding, and today's look (the label at its content width, the
   value `min_w_0`, right-aligned and wrapping, an 11 px muted group heading
   with `gap_0p5`) means building each value as an `AnyElement`, no shorter
-  than the `div` rows. In the 220 px pane a fixed label width also squeezes
+  than the `div` rows. In a 220 px pane a fixed label width also squeezes
   the value and can wrap a long label.
 - `DescriptionList` has no group heading, and `GroupBox`'s title sits `gap_4`
   (16 px) above its content, much wider than today's gap.
