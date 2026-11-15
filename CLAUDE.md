@@ -266,8 +266,14 @@ and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
 global `Theme`, which `gpui_component::init` installs at startup, to dark
-and maps it to the app's Neutral dark tokens from `main.rs`'s color
-constants (`apply`, not following the OS appearance), `src/settings.rs`
+and maps it to the app's Neutral dark tokens, its own constants, `title_bar`
+and `title_bar_border` included (`apply`, not following the OS appearance),
+and sets beside it the `Roles` global, the colors the app paints that equal
+no token (the window's surface and text, the strip's names, failures, burst
+band and reject dim; today's values for Neutral dark, else derived from the
+tokens by `Roles::of`), which the panes, the strip, the status row, the
+menus and the dialogs read with the theme (`cx.theme()`, `roles`), the
+judgment, label and over-the-photo colors staying fixed constants, `src/settings.rs`
 reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a

@@ -22,7 +22,7 @@ use gpui::{
     Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
 use gpui_component::{
-    Disableable,
+    ActiveTheme, Disableable,
     button::{Button as UiButton, ButtonVariants},
     dialog::{self as component, DialogFooter},
     input::{Input, InputEvent, InputState},
@@ -53,10 +53,7 @@ use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
 use crate::tree::{self, IGNORE_CASE};
-use crate::{
-    ERROR_COLOR, HeldOp, MUTED_COLOR, PICK_COLOR, PRIMARY_COLOR, Riffle, TREE_ROW_HEIGHT, context,
-    keys, trash,
-};
+use crate::{HeldOp, PICK_COLOR, Riffle, TREE_ROW_HEIGHT, context, keys, trash};
 
 /// The folder operations' view state: the flows, the one dialog, laid out
 /// only while open, and the sequencing run under way.
@@ -1329,7 +1326,8 @@ fn folder_dialog(
         Style::Primary => run.primary(),
         Style::Destructive => run.danger(),
     };
-    let muted = |text: &String| div().text_color(rgb(MUTED_COLOR)).child(text.clone());
+    let (muted_color, danger) = (cx.theme().muted_foreground, cx.theme().danger);
+    let muted = |text: &String| div().text_color(muted_color).child(text.clone());
     let lists_empty =
         content.rows.is_empty() && content.lists.iter().all(|(_, items)| items.is_empty());
     let lines: Vec<SharedString> = content.lines.iter().cloned().map(Into::into).collect();
@@ -1350,15 +1348,15 @@ fn folder_dialog(
                     .children(content.rows.iter().map(|row| {
                         let text = format!("\u{2022} {}", row.text);
                         let accent = text.len()..text.len() + row.accent.len();
-                        div()
-                            .when(row.muted, |d| d.text_color(rgb(MUTED_COLOR)))
-                            .child(StyledText::new(text + &row.accent).with_highlights([(
+                        div().when(row.muted, |d| d.text_color(muted_color)).child(
+                            StyledText::new(text + &row.accent).with_highlights([(
                                 accent,
                                 HighlightStyle {
                                     color: Some(rgb(PICK_COLOR).into()),
                                     ..HighlightStyle::default()
                                 },
-                            )]))
+                            )]),
+                        )
                     }))
                     .children(
                         content
@@ -1400,7 +1398,7 @@ fn folder_dialog(
                     content
                         .errors
                         .iter()
-                        .map(|e| div().text_color(rgb(ERROR_COLOR)).child(e.clone())),
+                        .map(|e| div().text_color(danger).child(e.clone())),
                 )
                 .children(content.reason.as_ref().map(muted))
                 .when(dialog.running(), |d| d.child(muted(&content.running_note)))
@@ -1446,7 +1444,7 @@ impl Riffle {
                     Input::new(&edit.input)
                         .focus_bordered(false)
                         .bg(transparent_black())
-                        .border_color(rgb(PRIMARY_COLOR))
+                        .border_color(cx.theme().primary)
                         .rounded_sm()
                         .px(px(3.))
                         .py(px(1.))
@@ -1460,15 +1458,16 @@ impl Riffle {
             .current()
             .filter(|pending| pending.path == row.path);
         let name = display_name(pending, &row.path, &row.name);
+        let (danger, muted) = (cx.theme().danger, cx.theme().muted_foreground);
         let name = div()
             .id(("tree-name", at))
             .flex_1()
             .min_w_0()
             .truncate()
-            .when(row.failed.is_some(), |s| s.text_color(rgb(ERROR_COLOR)))
+            .when(row.failed.is_some(), |s| s.text_color(danger))
             .when(pending.is_some(), |s| {
                 s.italic()
-                    .text_color(rgb(MUTED_COLOR))
+                    .text_color(muted)
                     .tooltip(|window, cx| Tooltip::new(PENDING_TITLE).build(window, cx))
             })
             .child(if pending.is_some() {

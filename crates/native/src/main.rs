@@ -85,7 +85,7 @@ use futures::{
 };
 use gpui::{
     Anchor, AnyElement, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask, Context,
-    Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, KeyBinding,
+    Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla, KeyBinding,
     KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
@@ -3912,7 +3912,7 @@ impl Riffle {
             .p_4()
             .text_center()
             .text_size(px(14.4))
-            .text_color(rgb(MUTED_COLOR));
+            .text_color(cx.theme().muted_foreground);
         if state != empty::State::NoFolder {
             return message.child(text).into_any_element();
         }
@@ -3926,7 +3926,9 @@ impl Riffle {
 
     /// The right-hand pane: the file on screen with its metadata, or why its
     /// preview failed, and the folder's notes at the bottom.
-    fn meta_pane(&self, width: f32) -> impl IntoElement {
+    fn meta_pane(&self, width: f32, cx: &App) -> impl IntoElement {
+        let theme = cx.theme();
+        let (muted, danger) = (theme.muted_foreground, theme.danger);
         let mut body = div()
             .id("meta")
             .flex_1()
@@ -3950,12 +3952,12 @@ impl Riffle {
                     .child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()))
                     .child(
                         div()
-                            .text_color(rgb(MUTED_COLOR))
+                            .text_color(muted)
                             .child(meta::position(self.pager.current(), self.files.len())),
                     ),
             );
             if let Some(error) = error {
-                body = body.child(div().text_color(rgb(ERROR_COLOR)).child(error.clone()));
+                body = body.child(div().text_color(danger).child(error.clone()));
             }
             for group in meta::groups(meta, &maker_note, &analysis) {
                 body = body.child(
@@ -3966,7 +3968,7 @@ impl Riffle {
                         .child(
                             div()
                                 .text_size(px(11.))
-                                .text_color(rgb(MUTED_COLOR))
+                                .text_color(muted)
                                 .child(group.heading),
                         )
                         .children(group.rows.into_iter().map(|row| {
@@ -3977,7 +3979,7 @@ impl Riffle {
                                 .child(
                                     div()
                                         .flex_none()
-                                        .text_color(rgb(MUTED_COLOR))
+                                        .text_color(muted)
                                         .child(row.label.to_owned()),
                                 )
                                 .child(div().min_w_0().text_right().child(row.value.to_owned()))
@@ -3985,11 +3987,7 @@ impl Riffle {
                 );
             }
         } else if self.files.is_empty() && !self.all.is_empty() {
-            body = body.child(
-                div()
-                    .text_color(rgb(MUTED_COLOR))
-                    .child(filter::FILTERED_TEXT),
-            );
+            body = body.child(div().text_color(muted).child(filter::FILTERED_TEXT));
         }
         div()
             .w(px(width))
@@ -3999,18 +3997,17 @@ impl Riffle {
             .flex_col()
             .gap_3()
             .p_3()
-            .bg(rgb(PANE_COLOR))
+            .bg(theme.popover)
             .text_size(px(13.))
             .child(body.overflow_y_scrollbar())
-            .children(self.view_only.then(|| {
-                div()
-                    .text_color(rgb(MUTED_COLOR))
-                    .child(viewonly::VIEW_ONLY_NOTE)
-            }))
+            .children(
+                self.view_only
+                    .then(|| div().text_color(muted).child(viewonly::VIEW_ONLY_NOTE)),
+            )
             .children(
                 self.step_note
                     .clone()
-                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+                    .map(|note| div().text_color(muted).child(note)),
             )
             .children(
                 self.trashing
@@ -4021,12 +4018,12 @@ impl Riffle {
                             .waiting()
                             .map(|label| format!("{label}: waiting for the scan to finish"))
                     })
-                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+                    .map(|note| div().text_color(muted).child(note)),
             )
             .children(
                 self.folderops
                     .import_note()
-                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
+                    .map(|note| div().text_color(muted).child(note)),
             )
             .children(
                 self.notes
@@ -4037,7 +4034,7 @@ impl Riffle {
                     .chain(self.write_errors.iter().map(|(path, message)| {
                         format!("{}: {message}", file_name(Path::new(path)))
                     }))
-                    .map(|note| div().text_color(rgb(ERROR_COLOR)).child(note)),
+                    .map(|note| div().text_color(danger).child(note)),
             )
     }
 
@@ -4062,7 +4059,7 @@ impl Riffle {
             .flex_none()
             .h_full()
             .py_1()
-            .bg(rgb(PANE_COLOR))
+            .bg(cx.theme().popover)
             .text_size(px(TREE_TEXT))
             .child(
                 div()
@@ -4088,13 +4085,15 @@ impl Riffle {
     /// count; the open folder highlighted, a failed one's name in red.
     fn tree_row(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
         let row = &self.tree_rows[at];
+        let theme = cx.theme();
+        let (accent, muted, ring) = (theme.accent, theme.muted_foreground, theme.ring);
         let mut expander = div()
             .id(("tree-expander", at))
             .w(px(14.))
             .flex_none()
             .text_center()
             .text_size(px(11.))
-            .text_color(rgb(MUTED_COLOR));
+            .text_color(muted);
         if row.expandable {
             let path = row.path.clone();
             expander = expander
@@ -4110,7 +4109,7 @@ impl Riffle {
                 .flex_none()
                 .px(px(5.))
                 .rounded_full()
-                .bg(rgb(ACCENT_COLOR))
+                .bg(accent)
                 .text_size(px(11.))
                 .child(count.to_string())
         });
@@ -4128,15 +4127,15 @@ impl Riffle {
             .rounded_sm()
             .border_1()
             .border_color(if self.tree_keys && self.tree_cursor_row == Some(at) {
-                rgba(RING_COLOR)
+                ring
             } else {
-                rgba(0x00000000)
+                rgba(0x00000000).into()
             })
             .cursor_pointer()
             .whitespace_nowrap()
-            .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+            .hover(move |s| s.bg(accent))
             .when(self.tree_open_row == Some(at), |s| {
-                s.bg(rgb(ACCENT_COLOR)).font_weight(FontWeight::SEMIBOLD)
+                s.bg(accent).font_weight(FontWeight::SEMIBOLD)
             })
             .child(expander)
             .child(self.tree_name(at, cx))
@@ -4198,7 +4197,7 @@ impl Riffle {
     /// count runs, and the sort and filter buttons at its right end.
     fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         let mut row = StatusBar::new().child(self.status());
-        if let Some(circle) = self.progress_circle() {
+        if let Some(circle) = self.progress_circle(cx) {
             row = row.right(circle);
         }
         row.right(self.menu_button(
@@ -4221,7 +4220,7 @@ impl Riffle {
 
     /// The status row's progress circle while an operation with a count runs
     /// (`progress::shown`), its value 0-100 from `progress::fraction`.
-    fn progress_circle(&self) -> Option<ProgressCircle> {
+    fn progress_circle(&self, cx: &App) -> Option<ProgressCircle> {
         let (done, total) = progress::shown(
             self.trashing.map(|(_, done, total)| (done, total)),
             None,
@@ -4230,7 +4229,7 @@ impl Riffle {
         Some(
             ProgressCircle::new("progress")
                 .small()
-                .color(rgb(PRIMARY_COLOR))
+                .color(cx.theme().primary)
                 .value(progress::fraction(done, total) * 100.),
         )
     }
@@ -4250,24 +4249,22 @@ impl Riffle {
             Which::Sort => "sort-toggle",
             Which::Filter => "filter-toggle",
         };
+        let theme = cx.theme();
+        let accent = theme.accent;
         let mut button = div()
             .id(id)
             .px_1p5()
             .rounded_sm()
             .border_1()
-            .border_color(rgba(if lit {
-                PRIMARY_COLOR << 8 | 0xff
-            } else {
-                INPUT_BORDER
-            }))
-            .bg(rgba(BUTTON_FILL))
+            .border_color(if lit { theme.primary } else { theme.input })
+            .bg(theme.button)
             .text_size(px(12.))
-            .text_color(rgb(if lit { PRIMARY_COLOR } else { FOREGROUND_COLOR }))
+            .text_color(if lit { theme.primary } else { theme.foreground })
             .child(text);
         if enabled {
             button = button
                 .cursor_pointer()
-                .hover(|s| s.bg(rgb(ACCENT_COLOR)))
+                .hover(move |s| s.bg(accent))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, e: &MouseDownEvent, _, cx| {
@@ -4444,12 +4441,13 @@ impl Render for Riffle {
         let empty_text = empty::text(empty, &self.settings.keymap.bindings());
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
+        let roles = theme::roles(cx);
         let main = div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0x000000))
-            .text_color(rgb(0xffffff))
+            .bg(roles.surface)
+            .text_color(roles.text)
             .key_context(KEY_CONTEXT)
             .track_focus(&self.focus)
             .group(DROP_GROUP)
@@ -4488,6 +4486,7 @@ impl Render for Riffle {
                             .flex_1()
                             .min_w_0()
                             .h_full()
+                            .bg(rgb(PREVIEW_BACKGROUND))
                             .child(
                                 canvas(
                                     |_, _, _| {},
@@ -4578,8 +4577,8 @@ impl Render for Riffle {
                                     .then(|| pane_handle(Panel::Right, HandleEdge::Trailing)),
                             ),
                     )
-                    .children(self.panels.right.then(|| self.meta_pane(drawn.right)))
-                    .child(drop_outline()),
+                    .children(self.panels.right.then(|| self.meta_pane(drawn.right, cx)))
+                    .child(drop_outline(cx.theme().ring)),
             )
             .children(self.panels.strip.then(|| {
                 div()
@@ -4759,8 +4758,8 @@ fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
 /// The Tauri `body.dragging #main` outline, laid over the main area while an
 /// OS file drag is over the window. Its own `drag_over` gives it the hitbox
 /// the window group's style is applied through.
-fn drop_outline() -> impl IntoElement {
-    let lit = |style: gpui::StyleRefinement| style.border_color(rgba(DROP_RING_COLOR));
+fn drop_outline(ring: Hsla) -> impl IntoElement {
+    let lit = move |style: gpui::StyleRefinement| style.border_color(ring);
     div()
         .absolute()
         .inset_0()
@@ -4872,15 +4871,16 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         }
         Row::Item(item) => item,
     };
-    let dot = |color: u32| div().size(px(7.)).flex_none().rounded_full().bg(rgb(color));
+    let muted = cx.theme().muted_foreground;
+    let dot = |color: Hsla| div().size(px(7.)).flex_none().rounded_full().bg(color);
     let icon = |path: &'static str| svg().path(path).size(px(MENU_ICON)).flex_none();
     let lead = match item.lead {
         Lead::None => None,
         Lead::Flag(flag) => Some(
             dot(match flag {
-                Some(filter::FilterFlag::Picked) => PICK_COLOR,
-                Some(filter::FilterFlag::Rejected) => REJECT_COLOR,
-                _ => MUTED_COLOR,
+                Some(filter::FilterFlag::Picked) => rgb(PICK_COLOR).into(),
+                Some(filter::FilterFlag::Rejected) => rgb(REJECT_COLOR).into(),
+                _ => muted,
             })
             .into_any_element(),
         ),
@@ -4889,17 +4889,13 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
                 .text_color(rgb(tint_color(tint)))
                 .into_any_element(),
         ),
-        Lead::Label(None) => Some(
-            icon(icons::SQUARE)
-                .text_color(rgb(MUTED_COLOR))
-                .into_any_element(),
-        ),
+        Lead::Label(None) => Some(icon(icons::SQUARE).text_color(muted).into_any_element()),
         Lead::Orientation(orientation) => Some(
             icon(match orientation {
                 filter::Orientation::Portrait => icons::RECTANGLE_VERTICAL,
                 filter::Orientation::Landscape => icons::RECTANGLE_HORIZONTAL,
             })
-            .text_color(rgb(MUTED_COLOR))
+            .text_color(muted)
             .into_any_element(),
         ),
         Lead::Face(Some(state)) => Some(
@@ -4924,7 +4920,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
                 if at < on {
                     icon(icons::STAR_FILLED).text_color(rgb(STARS_COLOR))
                 } else {
-                    icon(icons::STAR).text_color(rgba(MUTED_COLOR << 8 | 0x66))
+                    icon(icons::STAR).text_color(muted.alpha(0.4))
                 }
             })),
     };
@@ -5033,44 +5029,24 @@ fn strip_tips(cell: &StripCell) -> impl Iterator<Item = AnyElement> + '_ {
 /// `#folders`' 0.8 rem text in a 1.4 line, and `.folder`'s 2 px padding.
 const TREE_TEXT: f32 = 12.8;
 const TREE_ROW_HEIGHT: f32 = 22.;
-const PANE_COLOR: u32 = 0x171717;
-const MUTED_COLOR: u32 = 0xa1a1a1;
-const ERROR_COLOR: u32 = 0xff6467;
-const PLACEHOLDER: u32 = 0x262626;
-const CURRENT_OUTLINE: u32 = 0xe5e5e5;
-/// `style.css`'s `--muted`, a selected cell's fill.
-const MUTED_FILL: u32 = 0x262626;
-const NAME_COLOR: u32 = 0xd4d4d4;
-const FAILURE_COLOR: u32 = 0xa3a3a3;
 /// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
-/// `--foreground`, and its `--label-*` tokens in `tint_color`.
+/// `--foreground`, and its `--label-*` tokens in `tint_color`. Fixed in every
+/// theme: the judgment's meaning, and the Lightroom label colors with the
+/// name on them.
 const STARS_COLOR: u32 = 0xffd050;
 const PICK_COLOR: u32 = 0x6bdc8a;
 const REJECT_COLOR: u32 = 0xff6b6b;
 const LABELED_NAME_COLOR: u32 = 0xfafafa;
-/// `.cell.rejected`'s `opacity: 0.45` over the strip's black.
-const REJECTED_DIM: u32 = 0x0000008c;
+/// A burst badge's text, over the photo on its dark halo, so fixed in every
+/// theme.
+const BADGE_COLOR: u32 = 0xfafafa;
+/// The preview's surround, fixed in every theme: the photo is judged against
+/// it, and the marks and the performance band over it are drawn for it.
+const PREVIEW_BACKGROUND: u32 = 0x000000;
 const MARK_SIZE: f32 = 11.;
-/// `.cell.burst::before`'s `rgba(255, 255, 255, 0.08)` and its end radius.
-const BAND_COLOR: u32 = 0xffffff14;
-/// `BAND_COLOR` at the rejected cell's 0.45 opacity: 0.08 x 0.45.
-const BAND_COLOR_DIMMED: u32 = 0xffffff09;
+/// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
-/// `style.css`'s `--primary`, `--foreground`, `--accent`, `--border` and
-/// `--input`, and `.button.outline`'s fill.
-const PRIMARY_COLOR: u32 = 0xe5e5e5;
-const FOREGROUND_COLOR: u32 = 0xfafafa;
-const ACCENT_COLOR: u32 = 0x262626;
-/// `style.css`'s `--sidebar-ring`, the tree cursor's outline.
-const RING_COLOR: u32 = 0x737373ff;
-/// `style.css`'s `--ring`, the drop outline.
-const DROP_RING_COLOR: u32 = 0x737373ff;
-const BORDER_COLOR: u32 = 0xffffff1a;
-/// The backdrop behind the app's dialogs.
-const OVERLAY_COLOR: u32 = 0x00000099;
-const INPUT_BORDER: u32 = 0xffffff26;
-const BUTTON_FILL: u32 = 0xffffff0b;
 /// `PopupMenu`'s row height at its default size (1.625 rem at the window's
 /// 16 px rem) and its horizontal padding (0.5 rem).
 const MENU_ROW: f32 = 26.;
@@ -5093,13 +5069,16 @@ fn tint_color(tint: Tint) -> u32 {
 
 fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
     use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
+    let colors = &cx.theme().colors;
+    let (primary, muted, ring) = (colors.primary, colors.muted, colors.ring);
+    let roles = theme::roles(cx);
     // Every band first, so one reaching across the gap stays behind the
     // neighbour's outline.
     window.with_content_mask(Some(ContentMask { bounds }), |window| {
         for cell in cells {
             if let Some(mark) = &cell.burst {
                 let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
-                paint_burst_band(mark, cell.marks.dimmed(), origin, window);
+                paint_burst_band(mark, cell.marks.dimmed(), origin, &roles, window);
             }
         }
     });
@@ -5111,15 +5090,11 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
             size(px(BOX_WIDTH), px(BOX_HEIGHT)),
         );
         if cell.current {
-            window.paint_quad(outline(
-                cell_bounds,
-                rgb(CURRENT_OUTLINE),
-                Default::default(),
-            ));
+            window.paint_quad(outline(cell_bounds, primary, Default::default()));
         } else if cell.selected {
             // `.cell.selected`: `--muted` behind, a `--ring` border.
-            window.paint_quad(fill(cell_bounds, rgb(MUTED_FILL)));
-            window.paint_quad(outline(cell_bounds, rgba(RING_COLOR), Default::default()));
+            window.paint_quad(fill(cell_bounds, muted));
+            window.paint_quad(outline(cell_bounds, ring, Default::default()));
         }
         window.with_content_mask(
             Some(ContentMask {
@@ -5140,10 +5115,10 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                             println!("error paint: {e}");
                         }
                     }
-                    None => window.paint_quad(fill(image_box, rgb(PLACEHOLDER))),
+                    None => window.paint_quad(fill(image_box, muted)),
                 }
                 if let Some(failure) = &cell.failure {
-                    paint_failure(failure, image_box, window, cx);
+                    paint_failure(failure, roles.failure, image_box, window, cx);
                 }
                 paint_marks(&cell.marks, image_box, window, cx);
                 if let Some(mark) = &cell.burst {
@@ -5157,12 +5132,12 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     Some(tint) => {
                         let band = Bounds::new(at, size(px(CELL_WIDTH), px(NAME_HEIGHT)));
                         window.paint_quad(fill(band, rgb(tint_color(tint))));
-                        LABELED_NAME_COLOR
+                        rgb(LABELED_NAME_COLOR).into()
                     }
-                    None => NAME_COLOR,
+                    None => roles.name,
                 };
                 let mut run = window.text_style().to_run(cell.name.len());
-                run.color = rgb(name_color).into();
+                run.color = name_color;
                 let name =
                     window
                         .text_system()
@@ -5176,7 +5151,7 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     cx,
                 );
                 if cell.marks.dimmed() {
-                    window.paint_quad(fill(cell_bounds, rgba(REJECTED_DIM)));
+                    window.paint_quad(fill(cell_bounds, roles.rejected_dim));
                 }
             },
         );
@@ -5188,7 +5163,13 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
 /// another left across the gap, 2 px out with rounded corners at the band's
 /// ends. A rejected member's band is dimmed with its cell, as `.cell.rejected`'s
 /// opacity covers the `::before`.
-fn paint_burst_band(mark: &BurstMark, dimmed: bool, origin: Point<Pixels>, window: &mut Window) {
+fn paint_burst_band(
+    mark: &BurstMark,
+    dimmed: bool,
+    origin: Point<Pixels>,
+    roles: &theme::Roles,
+    window: &mut Window,
+) {
     use strip::{CELL_HEIGHT, CELL_PITCH, CELL_WIDTH};
     // The padding box sits inside the cell's 1 px border.
     let (inner_left, inner_right) = (1., CELL_WIDTH - 1.);
@@ -5212,11 +5193,11 @@ fn paint_burst_band(mark: &BurstMark, dimmed: bool, origin: Point<Pixels>, windo
         if mark.last { px(BAND_RADIUS) } else { px(0.) },
     );
     let color = if dimmed {
-        BAND_COLOR_DIMMED
+        roles.band_dimmed
     } else {
-        BAND_COLOR
+        roles.band
     };
-    window.paint_quad(fill(band, rgba(color)).corner_radii(Corners {
+    window.paint_quad(fill(band, color).corner_radii(Corners {
         top_left: start,
         bottom_left: start,
         top_right: end,
@@ -5291,8 +5272,7 @@ fn paint_burst_badge(
             cx,
         );
     }
-    let _ =
-        shape(FOREGROUND_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
+    let _ = shape(BADGE_COLOR, window).paint(at, line_height, TextAlign::Right, width, window, cx);
 }
 
 /// The stars at the image box's top-right over a 1 px dark copy, and the pick
@@ -5341,6 +5321,7 @@ fn paint_marks(marks: &Marks, image_box: Bounds<Pixels>, window: &mut Window, cx
 /// Why the scan failed, wrapped inside the image box.
 fn paint_failure(
     text: &SharedString,
+    color: Hsla,
     image_box: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut App,
@@ -5350,7 +5331,7 @@ fn paint_failure(
         image_box.size - size(px(12.), px(12.)),
     );
     let mut run = window.text_style().to_run(text.len());
-    run.color = rgb(FAILURE_COLOR).into();
+    run.color = color;
     let line_height = px(12.);
     let Ok(lines) = window.text_system().shape_text(
         text.clone(),
