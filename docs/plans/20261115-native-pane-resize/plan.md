@@ -186,3 +186,11 @@ fixed.
   the unit tests cover the arithmetic and the setting.
 
 ## Progress
+
+- Step 1: the tree and meta panes resize by dragging their boundary with the
+  preview, and their widths persist in the `panelWidths` setting (the pure
+  arithmetic in `crates/native/src/panewidths.rs`, the handle and drag in
+  `crates/native/src/main.rs`). Ticked on the automated criteria only (unit
+  tests and `mise run ci:local`); the drag, cursor and look were not observed
+  in the running app, and the hand checks are listed under `## Deferred
+  issues (todo candidates)` in `learnings.md`.

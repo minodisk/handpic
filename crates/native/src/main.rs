@@ -4692,9 +4692,6 @@ fn trash_dialog(
         )
 }
 
-/// The Tauri `body.dragging #main` outline, laid over the main area while an
-/// OS file drag is over the window. Its own `drag_over` gives it the hitbox
-/// the window group's style is applied through.
 /// The drag payload of a side pane's boundary, and its dragged item, drawn as
 /// nothing.
 #[derive(Clone, Copy)]
@@ -4718,6 +4715,9 @@ fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
         .on_drag(PaneDrag(pane), |drag, _, _, cx| cx.new(|_| *drag))
 }
 
+/// The Tauri `body.dragging #main` outline, laid over the main area while an
+/// OS file drag is over the window. Its own `drag_over` gives it the hitbox
+/// the window group's style is applied through.
 fn drop_outline() -> impl IntoElement {
     let lit = |style: gpui::StyleRefinement| style.border_color(rgba(DROP_RING_COLOR));
     div()
