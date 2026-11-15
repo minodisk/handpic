@@ -119,3 +119,5 @@
   the subcommand (`crates/cli/src/main.rs`); the items are moot or need
   rewording onto `facechoice` / `features`. Reflect at wrap-up; `todo.md`
   is not edited in a step.
+
+- `cargo check -p riffle-app --tests` fails after `rank::Frame::eye_focus` was removed: `rank_dump_of_real_folders` reads `f.eye_focus` (crates/app/src/commands.rs:3020-3021). Needs the compile-only edit of the dump (header near line 3009 and its `writeln!`) in Step 4 or a decision to keep the field until Step 5. Basis: review Round 1, item 1. Files: `crates/app/src/commands.rs`, `docs/plans/20261115-full-eye-sharp-only/plan.md`.

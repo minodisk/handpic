@@ -224,7 +224,11 @@ fn frame(path: &Path) -> Result<Frame> {
     let (a, jpeg) = reader::read_preview(path)?;
     let focus = sharpness::trusted_focus(&a.shot);
     let (rgb, w, h) = decode_rgb(&jpeg)?;
-    let full = reader::read_full(path).ok().map(|(_, full)| full);
+    // The scan's own gate: no larger JPEG than the preview, no value.
+    let full = reader::read_full(path)
+        .ok()
+        .filter(|(arw, _)| scan::has_larger_jpeg(arw))
+        .map(|(_, full)| full);
     let judge = |face: &Face| {
         let t = Instant::now();
         let meshed = candidate::meshes_face(face);
