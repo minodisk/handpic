@@ -51,3 +51,9 @@
   Basis: the plan's Step 1 implementation approach; this host already had the
   component, so it could not be measured. Files: `mise.toml`,
   `crates/native/mise.toml`. Step 1 was ticked on the automated criteria.
+  How to check: `rustup component remove rust-analyzer --toolchain <v>`, then
+  a plain `mise install` at the root and in `crates/native`, then
+  `rustup component list --installed --toolchain <v>`. Done when the result is
+  recorded; if a plain `mise install` is not enough, add a
+  `mise install --force rust` line to the setup docs (`docs/agents/native-app.md`
+  or the README setup section).

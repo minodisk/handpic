@@ -3208,3 +3208,17 @@ Files: `crates/native/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates
 - [ ] On Windows, look at a short folder's strip, a short tree and a short meta pane. Expect no bar.
 - [ ] On Windows, open the settings modal's lists and the sort, filter and right-click menus, and scroll them. Expect their scrollbars to behave as before.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and ideally the other two).
+
+### Dev setup: check that a plain `mise install` adds rust-analyzer to an already installed toolchain
+
+#### Background
+
+The `mise-rust-analyzer` feature added `rust-analyzer` to the rust `components` in the root `mise.toml` and in `crates/native/mise.toml`, so that `mise install` installs the component for both toolchains (Claude Code's rust-analyzer LSP plugin failed with "rust-analyzer was not found"). The automated checks passed. On the author's host, mise reported `rust@<version>` as already installed and the component was already present for both toolchains before the change. So no one has measured whether a host whose toolchain lacks the component gets it from a plain `mise install`, or whether `mise install --force rust` is needed. Plan: `docs/plans/_archived/20261115-mise-rust-analyzer/plan.md`.
+
+Files: `mise.toml`, `crates/native/mise.toml`.
+
+#### TODO
+
+- [ ] At the repository root, run `mise current rust` (expect `1.97.1` or the current resolved version). Run `rustup component remove rust-analyzer --toolchain <resolved version>`, then a plain `mise install`, then `rustup component list --installed --toolchain <resolved version>`. Expected result: the list includes `rust-analyzer-<host triple>`. Pass the resolved full version to rustup, not `1.97`, because rustup treats `1.97` as a separate toolchain and auto-installs it.
+- [ ] In `crates/native`, run `rustup component remove rust-analyzer --toolchain 1.98.1`, then a plain `mise install`, then `rustup component list --installed --toolchain 1.98.1`. Expected result: the list includes `rust-analyzer-<host triple>`.
+- [ ] Record the result. If a plain `mise install` is not enough, add a `mise install --force rust` line to the setup docs (`docs/agents/native-app.md` or the README setup section).
