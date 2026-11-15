@@ -114,3 +114,9 @@ repeated and the row is not replaced by mistake.
   so a later reader can tell.
 
 ## Progress
+
+- 2026-11-15: Step 1 done. Added the section recording why the status row is
+  not gpui-component's `StatusBar` (pinned to 0.9.1) to
+  `docs/agents/native-app.md`, between the progress bar section and the `Input`
+  section, leaving the neighbouring sections untouched. Verified with
+  `mise run ci:local` (including lychee).
