@@ -1,17 +1,15 @@
-//! The settings modal as its own entity with its own focus handle, over the
-//! pure `settingsmodal` model, drawn as the content of a gpui-component
-//! `Dialog` in `Root`'s layer (`modal`'s shell) while open. A change is
-//! emitted as a `Change` for the main view, which owns the values, to apply.
-
-use std::cell::Cell;
+//! The settings as their own entity with its own focus handle, over the
+//! pure `settingsmodal` model, drawn by the main view over the whole window,
+//! outside its key context, while open. A change is emitted as a `Change`
+//! for the main view, which owns the values, to apply.
 
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyBinding, KeyDownEvent, MouseButton, MouseDownEvent, NoAction, PathPromptOptions,
-    Pixels, SharedString, Window, div, prelude::*, px, rgb, rgba, transparent_black,
+    FontWeight, KeyBinding, KeyDownEvent, NoAction, PathPromptOptions, Pixels, SharedString,
+    Window, div, prelude::*, px, rgb, rgba, transparent_black,
 };
 use gpui_component::{
-    ActiveTheme, Selectable, Sizable,
+    ActiveTheme, FocusTrapElement, Selectable, Sizable,
     button::{Button, ButtonVariants},
     checkbox::Checkbox,
     input::{Input, InputEvent, InputState},
@@ -24,7 +22,6 @@ use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
     ACCENT_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR, PRIMARY_COLOR, keys,
-    modal::Modal,
     settings::Settings,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, TABS, Tab},
 };
@@ -32,7 +29,7 @@ use crate::{
 /// The key context of the box while a shortcut row waits for a key.
 pub const CAPTURE_CONTEXT: &str = "SettingsCapture";
 
-/// `Root` binds `tab` / `shift-tab` to the dialog's focus walk, dispatched
+/// `Root` binds `tab` / `shift-tab` to the focus trap's walk, dispatched
 /// before the box's key listener. These mask them while a row captures, so
 /// the keys reach `key_down` and are taken as the shortcut.
 pub fn capture_keys() -> [KeyBinding; 2] {
@@ -58,7 +55,7 @@ pub enum Change {
     ImportRoot(String),
     /// A committed pattern that is valid and not the stored one.
     ImportPattern(String),
-    /// The focus goes back to the window.
+    /// The main view takes the focus back.
     Closed,
 }
 
@@ -86,7 +83,6 @@ pub struct SettingsView {
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
     status: Option<SharedString>,
-    modal: Modal,
 }
 
 impl EventEmitter<Change> for SettingsView {}
@@ -129,7 +125,6 @@ impl SettingsView {
             pattern_field,
             example: Ok(String::new()),
             status: None,
-            modal: Modal::new(window.window_handle()),
         }
     }
 
@@ -153,26 +148,7 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
-        // The dialog remembers the focus it opens over and focuses its shell,
-        // so the tab is focused from the builder, on its first run.
-        let this = cx.weak_entity();
-        let first = Cell::new(true);
-        self.modal.open(cx, move |dialog, window, cx| {
-            let Some(view) = this.upgrade() else {
-                return dialog;
-            };
-            if first.replace(false) {
-                let view = view.read(cx);
-                let tab = view.tabs[view.model.tab.at()].clone();
-                window.focus(&tab, cx);
-            }
-            let viewport = window.viewport_size();
-            dialog
-                .centered()
-                .w((viewport.width * 0.9).min(px(860.)))
-                .p_0()
-                .content(move |content, _, _| content.child(view.clone()))
-        });
+        window.focus(&self.tabs[self.model.tab.at()], cx);
         cx.notify();
     }
 
@@ -312,7 +288,6 @@ impl SettingsView {
 
     fn close(&mut self, cx: &mut Context<Self>) {
         self.model.close();
-        self.modal.close(cx);
         cx.emit(Change::Closed);
         cx.notify();
     }
@@ -740,10 +715,9 @@ impl SettingsView {
             .overflow_y_scrollbar()
     }
 
-    /// The box, the whole of the dialog's surface, which draws its fill and
-    /// border. A press outside it is one on the backdrop.
-    fn dialog(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let viewport = window.viewport_size();
+    /// The box, filling the window, opaque and occluding the main view under
+    /// it, with Tab and Shift+Tab kept inside it by its focus trap.
+    fn layer(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("settings-box")
             .when(self.model.capturing.is_some(), |d| {
@@ -753,18 +727,14 @@ impl SettingsView {
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(e, window, cx);
             }))
-            .on_mouse_down_out(cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                if e.button == MouseButton::Left {
-                    this.close(cx);
-                }
-            }))
+            .occlude()
             .flex()
             .flex_col()
             .gap_2()
-            .w_full()
-            .h((viewport.height * 0.8).min(px(720.)))
+            .size_full()
             .px_4()
             .py_3()
+            .bg(cx.theme().popover)
             .text_color(rgb(FOREGROUND_COLOR))
             .child(
                 div()
@@ -802,6 +772,7 @@ impl SettingsView {
                     .text_color(rgb(ERROR_COLOR))
                     .child(status)
             }))
+            .focus_trap("settings-trap", &self.focus)
     }
 }
 
@@ -855,6 +826,6 @@ impl Render for SettingsView {
         if !self.model.is_open() {
             return Empty.into_any_element();
         }
-        self.dialog(window, cx).into_any_element()
+        self.layer(window, cx).into_any_element()
     }
 }

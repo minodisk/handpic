@@ -126,9 +126,10 @@ focus and starts as before) and returns `Root::new(view, window, cx)` as the
 window's root view. Nothing reads the window's root by its type:
 `on_app_quit`, the bounds saved on quit and the tree's keyboard flag hold
 the view, its focus handle or the `Window`, so they are unchanged. The trash
-dialog, the folder operations' dialog and the settings modal are component
-dialogs (see "The trash dialog is a component `Dialog`" and "The settings
-modal is its own entity").
+dialog and the folder operations' dialog are component dialogs (see "The
+trash dialog is a component `Dialog`"); the settings are a full-window layer
+the view draws beside its own root `div` (see "The settings modal is its own
+entity").
 
 What `Root` adds to every frame, read at 0.9.1: its own `div` (the `Root` key
 context and the `Tab` / `TabPrev` / `Copy` handlers), gpui-base's
@@ -154,8 +155,9 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
   with the focus anywhere in the app's view no action is dispatched and the
   key reaches `key_down` as before. Nothing is stopped, so no typed character
   is lost. A component dialog is drawn in `Root`'s layer, a sibling of the
-  app's view, so its context stack has `Root` and no `Handpic`, and `Root`'s
-  `Tab` / `TabPrev` walk its focus trap. An `Input` binds the two keys deeper
+  app's view, and the settings layer is a sibling of the view's `Handpic`
+  `div`, so their context stacks have `Root` and no `Handpic`, and `Root`'s
+  `Tab` / `TabPrev` walk their focus traps. An `Input` binds the two keys deeper
   still (`IndentInline` / `OutdentInline`), which runs first and propagates
   on a single-line input, so in the settings modal's fields `Root`'s `Tab` /
   `TabPrev` still run after it. `cx.intercept_keystrokes` was not taken: it runs before every
@@ -1049,58 +1051,59 @@ registers it with `application().with_assets(icons::Icons)`.
 `settingsview.rs`'s `SettingsView` is an `Entity` the window creates once and
 holds; `settingsmodal.rs` is its pure model (the open state, the selected
 tab, the shortcut row capturing a key, `modal.ts`'s key rule, `tabs.ts`'s
-vertical `nextTab`). Its `open` opens a gpui-component `Dialog` through its
-own `modal::Modal`, the plumbing and shell the trash and folder dialogs use
-(see "The trash dialog is a component `Dialog`"): no component close path,
-no entrance or exit animation, no component backdrop. The builder captures
-the entity weakly and puts it, never a new one, in the dialog's `content`,
-with the dialog `centered()`, 90 % of the window up to 860 px wide and no
-padding, so the view's box (80 % of the window up to 720 px high) is the
-whole surface, whose fill (`popover`, `PANE_COLOR`), border (`border`), 8 px
-radius and shadow are the component's. While closed the view's `render`
-returns `Empty`. The window draws `modal::shade`, a dimmed layer with no
-listener, under the dialog while the modal is open, and no longer lays the
-view out itself. The tabs are Sidecar, Culling, Keyboard Shortcuts and Import
-(no Cache, MCP or Debug); the modal keeps the tab across opens and focuses it
-on open, as the Tauri `open` does: `open_dialog` remembers the focus it opens
-over and focuses the dialog's shell, so the tab is focused from the builder's
-first run of each opening (a `Cell<bool>`), not before the deferred open.
+vertical `nextTab`). It is shown over the whole window, not in a dialog
+(the user's choice, 2026-11-15): `Riffle::render` wraps its root `div` (the
+one with the `Handpic` key context, the focus, the key listener and
+`on_drop`) in an outer full-size `div` and, while the modal is open, adds
+the view entity as a second child, in an `absolute` full-size `div`. The
+view's box is `size_full`, opaque on `popover` (`PANE_COLOR`), `occlude()`d
+and under `FocusTrapElement::focus_trap` on its own focus handle. The main
+layout stays rendered underneath, not replaced: the preview canvas's paint
+takes the pending page and releases the scan pause (`hold.rs`'s
+`PaintHold`), and a re-listing or an MCP tool call can change the current
+file while the settings are shown. While closed the view's `render` returns
+`Empty`. The tabs are Sidecar, Culling, Keyboard Shortcuts and Import (no
+Cache, MCP or Debug); the modal keeps the tab across opens and `open`
+focuses it with `window.focus`, as the Tauri `open` does.
 
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
 `Keymap` replaces the keymap (next section),
-`Closed` only redraws the window, to drop the shade: closing the dialog gives
-the focus back to the handle it opened over, the window's, and the tree's
-keyboard is a flag the dialog does not touch.
+`Closed` focuses the window's handle and redraws, dropping the layer; the
+tree's keyboard is a flag the settings do not set (but see the pointer rule
+below).
 The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
 
-- Rule: the closes. `close` (Escape, the view's own `×`, a left press outside
-  the box) closes the model, closes the dialog through `Modal::close` and
-  emits `Closed`. The press outside is the box's `on_mouse_down_out`, a
-  capture-phase listener, so it fires whatever is under the pointer; the
-  component's backdrop stays off because on Windows it is a window drag area
-  (see the trash dialog's section), and the shell's `overlay_closable(false)`
-  and `on_cancel` returning `false` keep the component from closing it
-  behind the model's back. Unlike the confirmation dialogs' `backdrop`, the
-  shade leaves the press alone, so a press inside the box still moves the
-  focus where it lands (a field blurs and commits, a tab takes the focus).
-- Rule: the key routing. The dialog is drawn in `Root`'s layer, outside the
-  app view's dispatch path, so no key with the focus inside it reaches the
-  window's `key_down`; that handler also returns at once while the modal is
-  open. The box has its own focus handle (`track_focus`) and an
+- Rule: the closes. `close` (Escape or the view's own `×`) closes the model
+  and emits `Closed`. A full-window view has no outside to press, so there
+  is no press-outside close; `ctrl+,` while shown does nothing (the window's
+  `key_down` is not on the path).
+- Rule: the pointer. The box's `occlude()` blocks the hitboxes painted
+  before it, the whole main layout, so a press, a hover or a wheel scroll
+  over the settings does not reach the tree, the preview canvas, the strip
+  or their tooltips. The deferred layers the main view may still draw paint
+  after it: the sort and filter menus are closed on open and the right-click
+  menu on any key, the `ctrl+,` included; a trash or folder dialog held by
+  the idle gate opens in `Root`'s layer above the settings, with its
+  `backdrop`. The tree pane's `on_mouse_down_out` is a capture-phase
+  listener that ignores occlusion, so a press inside the settings hands the
+  tree's keyboard back to the photo, as a press inside the old dialog did.
+- Rule: the key routing. The layer is a sibling of the `Handpic` `div`,
+  outside the app view's dispatch path, so no key with the focus inside it
+  reaches the window's `key_down`; that handler also returns at once while
+  the modal is open. The box has its own focus handle (`track_focus`) and an
   `on_key_down` that calls `cx.stop_propagation()` on every key but one typed
-  into a field (`settingsmodal::stops`). `.keyboard(false)` drops the
-  `Dialog` key context, whose `escape` / `enter` bindings would otherwise run
-  before the box's listener, so Escape still closes from the listener
-  (committing a focused field first) and Enter presses the focused control.
+  into a field (`settingsmodal::stops`). There is no `Dialog` key context,
+  so Escape closes from the listener (committing a focused field first) and
+  Enter presses the focused control.
   `ctrl+,` (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally
   after `home` / `end` / `q`, closes an open sort or filter menu, and opens
   the modal, not while a folder flow or the trash flow is busy; the keymap
   refuses to bind it.
 - Rule: Tab and Shift+Tab are `Root`'s. Its `Tab` / `TabPrev` actions run
-  before the box's listener and walk the dialog's focus trap with
+  before the box's listener and walk the box's focus trap with
   `focus_next` / `focus_prev`, which wrap; the trap holds only the modal's
   controls, the same stops in the same order as the box's own `focus_next`
   walk had (the window's root handle is not a tab stop). So `ModalKey` has no
@@ -1166,9 +1169,9 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
 (`Writes::shortcuts`, the Tauri `update_keymap` rule).
 
 - Rule: the capture sees the raw key in the box's handler. `+` sets
-  `capturing` and focuses the box itself, inside the dialog's focus trap,
+  `capturing` and focuses the box itself, the focus trap's container,
   since the pressed `+` is replaced by the prompt and a focus left on a node
-  no longer drawn would leave the dialog; a `×` focuses the box after its
+  no longer drawn would leave the settings; a `×` focuses the box after its
   edit for the same reason. The next named key (`key_name`, a lone modifier
   ignored) is added, Escape cancels without closing, and a tab switch or a
   close cancels (`SettingsModal::select` / `close`).
@@ -1178,7 +1181,7 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
   `keymap_keys`), Step 5's mechanism for the `Handpic` context: the deeper
   `NoAction` drops `Root`'s `Tab` / `TabPrev`, so the key reaches the box's
   listener and is taken as the shortcut. Enter, Space and Escape reach it
-  because the focus is on the box, not on a control, and the dialog has no
+  because the focus is on the box, not on a control, and the box has no
   `Dialog` key context. Outside a capture the context is not set and `Root`
   walks the trap.
 - Rule: `settingsmodal::APP_KEYS` (`home`, `end`, `q`) are refused with
@@ -2026,8 +2029,8 @@ subscribes to `InputEvent`:
   meant to be typed must not be stopped by anything on the dispatch path: no
   `Input` binding is a bare printable key, the settings box's handler lets a
   key it does not take go on while a field is focused
-  (`settingsmodal::stops`), and the window's root handler returns without
-  stopping it while the modal is open. `WM_CHAR` then reaches the focused
+  (`settingsmodal::stops`), and the window's root handler is not on the
+  settings' dispatch path. `WM_CHAR` then reaches the focused
   state's handler; a propagated Enter, Escape or Tab gives a control
   character, which `parse_char_message` drops. A key the IME takes arrives
   as `VK_PROCESSKEY`, for which `MapVirtualKeyW` gives no character, so GPUI
@@ -2168,9 +2171,10 @@ the message is an `absolute`, full-size, centered child in `MUTED_COLOR` at
 
 - Rule: only the no-folder message has an `id`, `cursor_pointer` and an
   `on_click` (primary button) calling `pick_folder`; the others register no
-  listener. The settings modal, the trash dialog, the folder dialogs, the
-  context popover and the sort / filter menus are deferred, `occlude()`d
-  layers, so a press on them does not reach the message.
+  listener. The trash dialog, the folder dialogs, the context popover and
+  the sort / filter menus are deferred, `occlude()`d layers, and the
+  settings an `occlude()`d layer painted after the main layout, so a press
+  on them does not reach the message.
 - Rule: "the current file's preview failed" is `shown` being
   `Shown::Failed` at `pager.current()` with the 1:1 view off (Tauri's
   `previewFailedSeq === seq && !comparing && !zoomed`; there is no compare
@@ -2210,9 +2214,10 @@ neither a directory nor a file opens nothing and puts the Tauri
   moved on while it resolved; Tauri mints its folder token only after the
   path has resolved. `open` defers under a running trash or delete as for
   any open, so the drop has no gate of its own.
-- Rule: GPUI fires `on_drop` only on a hovered hitbox, and the settings
-  modal, the trash dialog and the folder dialogs are `occlude()`d layers, so
-  a drop over an open dialog does not reach the root and is ignored (as a
+- Rule: GPUI fires `on_drop` only on a hovered hitbox, and the settings,
+  the trash dialog and the folder dialogs are `occlude()`d layers, so
+  a drop over an open dialog or the settings does not reach the root and is
+  ignored (as a
   click in the tree is blocked by the same layers), where Tauri's drop is
   window-wide except under its format gate.
 - Rule: while an OS file drag is over the window, the main area (the tree,

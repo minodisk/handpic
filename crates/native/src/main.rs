@@ -502,7 +502,7 @@ struct Riffle {
     view_only: bool,
     settings: Settings,
     bindings: Bindings,
-    /// The settings modal, laid out only while open.
+    /// The settings, laid out over the window only while open.
     settings_view: Entity<SettingsView>,
     /// The open folder's judgments by listed path.
     judgments: HashMap<String, State>,
@@ -687,7 +687,7 @@ impl Riffle {
         cx.subscribe_in(
             &settings_view,
             window,
-            |this, _, change, _, cx| match *change {
+            |this, _, change, window, cx| match *change {
                 Change::AutoAdvance(on) => {
                     this.settings.auto_advance = on;
                     this.settings.writes.set("autoAdvance", on.into());
@@ -709,9 +709,10 @@ impl Riffle {
                         .set("importPattern", pattern.as_str().into());
                     this.settings.import_pattern = pattern.clone();
                 }
-                // The dialog gives the focus back to what had it when it
-                // opened; only the shade goes.
-                Change::Closed => cx.notify(),
+                Change::Closed => {
+                    window.focus(&this.focus, cx);
+                    cx.notify();
+                }
             },
         )
         .detach();
@@ -4362,7 +4363,7 @@ impl Render for Riffle {
             preview_failed,
         );
         let empty_text = empty::text(empty, &self.settings.keymap.bindings());
-        div()
+        let main = div()
             .size_full()
             .flex()
             .flex_col()
@@ -4513,13 +4514,19 @@ impl Render for Riffle {
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
-            )
-            .children(
-                self.settings_view
-                    .read(cx)
-                    .is_open()
-                    .then(|| modal::shade(cx)),
-            )
+            );
+        // The settings are a sibling of the app's view, outside its key
+        // context and dispatch path, drawn over it while it keeps painting.
+        div().relative().size_full().child(main).children(
+            self.settings_view.read(cx).is_open().then(|| {
+                div()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .size_full()
+                    .child(self.settings_view.clone())
+            }),
+        )
     }
 }
 
@@ -4531,9 +4538,10 @@ const KEY_CONTEXT: &str = "Handpic";
 
 /// `Root` binds `tab` / `shift-tab` to its focus moves. These mask them where
 /// the focus is inside the app's view, so the keys reach `key_down` and the
-/// keymap, while a component dialog, drawn in `Root`'s layer outside this
-/// context, keeps them for its focus trap, except while the settings capture
-/// a shortcut (`settingsview::capture_keys`).
+/// keymap, while a component dialog in `Root`'s layer, or the settings layer
+/// drawn beside the `Handpic` `div`, both outside this context, keeps them for
+/// its focus trap, except while the settings capture a shortcut
+/// (`settingsview::capture_keys`).
 fn keymap_keys() -> [KeyBinding; 4] {
     let [tab, shift_tab] = settingsview::capture_keys();
     [
@@ -4932,7 +4940,7 @@ const RING_COLOR: u32 = 0x737373ff;
 /// `style.css`'s `--ring`, the drop outline.
 const DROP_RING_COLOR: u32 = 0x737373ff;
 const BORDER_COLOR: u32 = 0xffffff1a;
-/// The backdrop behind the app's dialogs and the settings modal.
+/// The backdrop behind the app's dialogs.
 const OVERLAY_COLOR: u32 = 0x00000099;
 const INPUT_BORDER: u32 = 0xffffff26;
 const BUTTON_FILL: u32 = 0xffffff0b;
