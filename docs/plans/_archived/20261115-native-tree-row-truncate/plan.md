@@ -122,3 +122,5 @@ of this plan.
   before trying anything wider.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete

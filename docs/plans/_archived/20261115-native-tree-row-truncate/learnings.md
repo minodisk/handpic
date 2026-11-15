@@ -41,3 +41,8 @@
      cursor and the rename's row are brought fully into view by
      `scroll_to_item`; a click and a right-click on a row's inset edge
      behave as before.
+
+  Done when all six are confirmed and the folder tree rule in
+  `docs/agents/native-app.md` ("a tree row takes `w_full()` ... not yet
+  observed in the running app") is changed from Inferred to Measured with the
+  observed result, or corrected with the observed behavior if a point fails.

@@ -3244,3 +3244,22 @@ Files: `docs/agents/native-app.md`.
 #### TODO
 
 - [ ] Rename the heading so it states what gpui-component now draws (settings modal, tree rename, dialogs, tooltips, scrollbars), or make it generic. Update every reference to the old heading name, found with `rg -n 'gpui-component is initialized' docs CLAUDE.md`.
+
+### Native app: real-device check of the folder tree rows' name truncation inside the pane
+
+#### Background
+
+The native-tree-row-truncate work made a folder tree row in the GPUI app as wide as the list, so a long name ends in an ellipsis inside the 220 px pane and the RAW count badge stays whole. It gave the row `.w_full()`, dropped its `.mx_1()`, and put the 4 px inset on the `uniform_list` itself (`.px_1()`). `mise run ci:local` passed, but `crates/native` has no GPUI window test and the agent could not drive the native app's window. The cause was read from the gpui-pre 0.3.12 and taffy 0.15.0 sources and never observed, and the `native-app.md` rule is marked Inferred. Plan: `docs/plans/_archived/20261115-native-tree-row-truncate/plan.md`.
+
+Files: `crates/native/src/main.rs` (`tree_pane`, `tree_row`), `crates/native/src/folderops.rs` (`tree_name`), `docs/agents/native-app.md` (the folder tree section).
+
+#### TODO
+
+- [ ] On Windows (and any platform the native app runs on), run the native app (`mise run native:dev`) and open a folder tree holding a folder with a long name (e.g. `2026-10-03-dop-orientation`) at several depths. Check each of the following.
+  - Long name: a name longer than the pane ends in an ellipsis inside the pane at every depth, and no row content reaches past the pane's right edge.
+  - Count badge: expand a folder holding RAW files. Its count badge is fully visible at the row's right edge, both next to a short name and next to a truncated one.
+  - Highlights: the keyboard cursor ring (click in the tree, move with the arrows), the hover highlight and the open row's highlight span the pane less a 4 px inset on both sides, with rounded corners.
+  - Scrollbar: with enough rows to scroll, the vertical scrollbar sits at the pane's right edge, and dragging its thumb scrolls the list.
+  - Rename: the inline rename editor (`Rename…` from the folder's right-click) fits inside its row, and a held rename's pending name (clock icon, italic) truncates like any other name.
+  - Scrolling into view and clicks: the reveal on open, the keyboard cursor and the rename's row are brought fully into view by `scroll_to_item`, and a click and a right-click on a row's inset edge behave as before.
+- [ ] Once all six are confirmed, change the folder tree rule in `docs/agents/native-app.md` ("a tree row takes `w_full()` ... not yet observed in the running app") from Inferred to Measured with the observed result. If a point fails, correct the rule with the observed behavior and, per the plan's risk note, record what the layout actually does in `learnings.md` before trying anything wider.
