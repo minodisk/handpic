@@ -305,3 +305,4 @@ setting keeps reading and writing as before.
 ## Progress
 
 - (2026-11-16) Step 1 complete
+- (2026-11-16) Step 2 complete
