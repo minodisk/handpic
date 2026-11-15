@@ -253,7 +253,9 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `build.rs` embeds
 `crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
-(`winresource`), its window opens with `app_id` `IDENTIFIER`, and
+(`winresource`), its window opens with `app_id` `IDENTIFIER` under
+gpui-component's `TitleBar` (the app icon and "Handpic") in place of the OS
+title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `native:bundle:macos` (`Handpic.app` under
 `target/<profile>/`) and `native:install:linux` (the release binary, the
@@ -313,7 +315,8 @@ click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their buttons, its leads Lucide icons
 from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
-the application's one `AssetSource`, to `svg().path(..)`, falling back to
+the application's one `AssetSource`, to `svg().path(..)`, with the title
+bar's `crates/app/icons/64x64.png` for `img(..)`, falling back to
 `gpui_kit_assets::Assets` for the icons gpui-component's controls draw),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`

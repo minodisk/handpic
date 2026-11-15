@@ -2071,11 +2071,54 @@ text was 16 px white, the row transparent over the root's black).
   `anchored` still opens them from the button's top-right; read from the
   sources, the hand check is pending in
   `../plans/20261115-native-status-bar/learnings.md`. The popover's height
-  cap stays the window's less 40 px.
+  cap is the window's less 40 px and the title bar's height.
 - Rule: on a gpui-component bump, re-check the root's padding, border, text
   size and color and the regions' gap and alignment rules in
   `status_bar.rs`, and `ProgressCircle`'s sizes, track and animation, and
   re-measure the preview canvas, which the row's height sets.
+
+### The title bar is gpui-component's `TitleBar` with the icon and "Handpic" (Inferred)
+
+The window draws no OS title bar. `main()` opens it with
+`..TitleBar::window_options()` (gpui-component `=0.9.1`,
+`src/title_bar.rs`, which sets `app_owns_titlebar_drag`) and an explicit
+`titlebar: Some(TitlebarOptions { title: Some("Handpic".into()),
+..TitleBar::title_bar_options() })`, so the client area covers the caption
+(`appears_transparent`) and the macOS traffic lights sit at (9, 9).
+`impl Render for Riffle` puts `TitleBar::new()` first in the root's
+`flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
+every platform, so the main area below it shrinks by itself. Its one child
+is an `h_flex().gap_2()` of `img(icons::APP)` at 16 px and the text
+"Handpic" in `cx.theme().foreground`. The bar draws the window controls on
+Windows (hit-tested through `WindowControlArea`) and Linux and moves the
+window itself. Source: [the plan](../plans/20261116-native-title-bar/plan.md).
+
+- Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
+  None`, which would empty the taskbar and Alt+Tab text.
+- Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
+  `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
+  PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
+  string from the `AssetSource` and sniffs the format; no dependency is
+  added. `icons.rs`'s test checks the path loads PNG bytes.
+- Rule: Linux requests `window_decorations: Some(WindowDecorations::Client)`
+  (the user's choice). `gpui-pre` 0.3.12 defaults to server-side, which would
+  keep the window manager's bar and put this one, without controls, under it;
+  under client-side decorations `Root`'s `window_border()` draws the frame,
+  shadow and resize edges.
+- Rule: the bar's fill and bottom border are the theme's `title_bar` (a
+  gradient from it mixed 55 / 45 with `background` down to `title_bar`) and
+  `title_bar_border`. `theme.rs` does not map them yet, so they keep
+  gpui-component's load-time values (`background` / `border`); the
+  switchable theme work maps them. The text color comes from the theme, not
+  from the root's pure white.
+- Rule: the Sort / Filter and right-click menus' height cap subtracts
+  `TITLE_BAR_HEIGHT` as well as 40 px, so a long menu stops under the bar.
+- Unmeasured (by-hand checks pending in the plan): the Windows resize edges
+  over the bar, Snap Layouts, double-click to maximize, the controls and
+  drag while a dialog's backdrop covers the bar, a `windowBounds` saved
+  under the OS bar restoring without drift, macOS's traffic lights against
+  the 80 px left padding, and Linux under client- and server-side
+  decorations.
 
 ### Text is typed through gpui-component's `Input` (Inferred)
 

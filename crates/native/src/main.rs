@@ -89,13 +89,14 @@ use gpui::{
     KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill,
-    outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas,
+    deferred, div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Root, Sizable,
+    ActiveTheme, Disableable, Icon, IconName, Root, Sizable, TITLE_BAR_HEIGHT, TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
+    h_flex,
     progress::ProgressCircle,
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
@@ -4442,6 +4443,7 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
+        let menu_max = window.viewport_size().height - px(40.) - TITLE_BAR_HEIGHT;
         let main = div()
             .size_full()
             .flex()
@@ -4473,6 +4475,15 @@ impl Render for Riffle {
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(&e.keystroke, window, cx);
             }))
+            .child(
+                TitleBar::new().child(
+                    h_flex()
+                        .gap_2()
+                        .text_color(cx.theme().foreground)
+                        .child(img(icons::APP).size(px(16.)))
+                        .child("Handpic"),
+                ),
+            )
             .child(
                 div()
                     .relative()
@@ -4616,8 +4627,8 @@ impl Render for Riffle {
                     .children(strip_tips)
                     .horizontal_scrollbar(&self.strip_bar)
             }))
-            .child(self.status_row(window.viewport_size().height - px(40.), cx))
-            .children(self.context_popover(window.viewport_size().height - px(40.), cx))
+            .child(self.status_row(menu_max, cx))
+            .children(self.context_popover(menu_max, cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
             );
@@ -5500,12 +5511,13 @@ fn main() {
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: Some("Handpic".into()),
-                        ..Default::default()
+                        ..TitleBar::title_bar_options()
                     }),
                     window_bounds: Some(window_bounds),
                     display_id,
                     app_id: Some(datadir::IDENTIFIER.into()),
-                    ..Default::default()
+                    window_decorations: Some(WindowDecorations::Client),
+                    ..TitleBar::window_options()
                 },
                 |window, cx| {
                     let view = cx.new(|cx| {
