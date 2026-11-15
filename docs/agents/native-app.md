@@ -2195,6 +2195,16 @@ strip needed one because `uniform_list` is vertical only.
   the previous scan and joins the launch's eviction, then signals its own, so a
   second open never reconciles or scans while an earlier listing is still
   stopping the old scan or the eviction is still deleting rows.
+- Rule: a tree row takes `w_full()` and the `uniform_list` carries the 4 px
+  inset as its `px_1()`, never the row as a margin. A `uniform_list` item is
+  a layout root, and taffy 0.15.0 stretches a root to the available width
+  only when it is a block: a `flex()` row without a width is as wide as its
+  content, so the name's `flex_1().min_w_0().truncate()` never truncates and
+  the list clips the row at the pane edge. A margin next to `w_full()`
+  overflows, since the percentage resolves against the whole available
+  width. The padding is on the list, not the pane, so the scrollbar stays at
+  the pane's edge. Inferred from the gpui-pre 0.3.12 and taffy sources, not
+  yet observed in the running app.
 - Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
   with it hidden by `toggleLeft`. Not measured in the running app. A pane

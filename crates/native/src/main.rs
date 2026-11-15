@@ -4014,7 +4014,8 @@ impl Riffle {
                             }),
                         )
                         .track_scroll(&self.tree_scroll)
-                        .size_full(),
+                        .size_full()
+                        .px_1(),
                     )
                     .vertical_scrollbar(&self.tree_scroll),
             )
@@ -4058,7 +4059,7 @@ impl Riffle {
         div()
             .id(("tree-row", at))
             .h(px(TREE_ROW_HEIGHT))
-            .mx_1()
+            .w_full()
             .flex()
             .items_center()
             .gap(px(2.))
