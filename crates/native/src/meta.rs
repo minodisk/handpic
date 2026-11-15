@@ -98,8 +98,9 @@ pub fn af_rows(point: Option<&FocusPoint>) -> Vec<(&'static str, Option<String>)
 }
 
 /// The `Analysis` rows from the values the scan stored: `metaGroups`' rows
-/// with the same labels and strings, the full-size eye score as `Eye focus`, each computed value it does not show next to the one it
-/// derives from, and the preview's sharpness.
+/// with the same labels and strings, the full-size eye score as `Eye focus`,
+/// each computed value it does not show next to the one it derives from, and
+/// the preview's sharpness.
 pub fn analysis(
     focus: Option<&Focus>,
     sharpness: Option<f64>,

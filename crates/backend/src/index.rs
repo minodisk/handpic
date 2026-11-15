@@ -648,6 +648,7 @@ impl Index {
             20,
             21,
             22,
+            23,
             24,
             SCHEMA_VERSION,
         ]
@@ -4260,6 +4261,58 @@ pub(crate) mod tests {
         );
         assert_eq!(index.last_viewed("d").unwrap().as_deref(), Some("/d/a.ARW"));
         assert!(index.reconcile("d", &[a]).unwrap().0.is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn a_v23_database_opens_and_keeps_its_files_ratings_and_last_viewed() {
+        let dir = temp_dir("migrate-v23");
+        let db = dir.join("index.sqlite");
+        let a = file(&dir, "a.ARW", b"a");
+        {
+            let mut index = open(&dir);
+            index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
+            index.reconcile("d", std::slice::from_ref(&a)).unwrap();
+            index.set_last_viewed("d", "/d/a.ARW").unwrap();
+            index
+                .conn
+                .execute_batch(
+                    "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
+                         ('/rated.ARW', 'd', 4, 1, 1);
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     PRAGMA user_version = 23;",
+                )
+                .unwrap();
+        }
+
+        let index = Index::open(&db).unwrap();
+        let version: i64 = index
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let names = |index: &Index| -> Vec<String> {
+            index
+                .conn
+                .prepare("SELECT name FROM pragma_table_info('files')")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        let fresh = temp_dir("migrate-v23-fresh");
+        let new = names(&open(&fresh));
+        remove_temp_dir(&fresh);
+        assert_eq!(names(&index), new, "the same columns as a new database");
+        assert_eq!(index.entries("d").unwrap().len(), 1, "files are kept");
+        assert_eq!(
+            index.dirty_rows("d").unwrap(),
+            [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)]
+        );
+        assert_eq!(index.last_viewed("d").unwrap().as_deref(), Some("/d/a.ARW"));
 
         remove_temp_dir(&dir);
     }
