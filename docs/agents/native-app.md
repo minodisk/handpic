@@ -75,6 +75,8 @@ components drawn are the settings modal's: `Input` (its text fields, see
 own entity"), the tree's inline rename's `Input` (see "The tree's inline
 rename is a text input in the row") and `Tooltip`, every tooltip of the app
 (see "A strip cell's tooltips are transparent `div`s over the canvas"). The
+folder tree is not the component's `Tree` (see "The folder tree is not
+gpui-component's `Tree`"). The
 window's content is wrapped in `Root` (see "`Root` wraps the window's content").
 The app view's own black and white stay over `Root`'s surface; the theme is for
 components.
@@ -2145,6 +2147,61 @@ strip needed one because `uniform_list` is vertical only.
   1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
   with it hidden by `toggleLeft`. Not measured in the running app. A pane
   change re-cuts a 1:1 crop through `zoom_resized`.
+
+### The folder tree is not gpui-component's `Tree` (Inferred)
+
+The folder tree (`main.rs`'s `tree_pane` / `tree_row`, `tree.rs`,
+`treekeys.rs`) stays hand-built on a `uniform_list`. It is not replaced by
+gpui-component 0.9.1's `Tree`, nor by gpui-base's unstyled `Tree` the styled
+one wraps, which has the same click behavior, focus handle and key context.
+The reasons come from reading `gpui-base` 0.9.1's `src/tree.rs` (`TreeItem`,
+`TreeState`, the unstyled `Tree`) and `gpui-component` 0.9.1's `src/tree.rs`
+(the styled wrapper) on 2026-11-15; nothing was built against the component,
+so run-time behavior (the focus hand-over on a click, how the `"Tree"`
+context meets the app view's) is not verified.
+
+- `TreeItem::is_folder()` is `!self.children.is_empty()`. A folder not
+  listed yet has no children, so it would need a dummy child to get an
+  expander and to be toggled at all (`toggle_expand` returns early on a
+  non-folder). Filling the children after a lazy listing or a disk change
+  means `TreeState::set_items`, which sets both `selected_ix` and
+  `right_clicked_ix` to `None`.
+- A click on a row always selects it and toggles its expansion
+  (`on_entry_click`: `selected_ix = Some(ix)`, then `toggle_expand`). Ours
+  opens the folder on a click on the name and toggles only on the expander,
+  whose `on_click` stops propagation.
+- It has its own `FocusHandle` (`track_focus`) and the `"Tree"` key context.
+  The app keeps one window focus and routes keys through the `tree_keys`
+  flag and `treekeys::tree_gate` (see "The tree takes the keyboard through
+  one flag in the view").
+- Its keys differ. `up` / `down` wrap at the ends (`on_action_up` goes from
+  the first row to the last, `on_action_down` from the last to the first);
+  ours stop (`tree::step`). `left` only collapses an expanded folder and does
+  nothing on a collapsed row, so it never moves to the parent. There is no
+  Home / End and no type-ahead. `Confirm` toggles the selected folder instead
+  of opening it, and `gpui-base`'s `tree::init` binds only the four arrows in
+  the `"Tree"` context, so Enter does nothing there unless the app binds it.
+- It tracks one selected index and one right-clicked index. The folder tree
+  needs the keyboard cursor and the open folder's row apart.
+- The styled wrapper's `context_menu` builds a gpui-component `PopupMenu`,
+  not `context.rs`'s items (checked, disabled, shortcut) the strip's menu
+  shares. "The sort and filter menus are deferred popovers over the window"
+  says why `PopupMenu` is not used.
+- A `TreeItem` holds its whole subtree (`children: Vec<TreeItem>`) and its
+  expansion in an `Rc<RefCell<..>>`. That state would duplicate `tree.rs`'s
+  `Tree`, which stays for the lazy listing, the failed listings, `respell`
+  and the rename.
+- What it would give: virtualization and the scrollbar, which the tree
+  already has (`uniform_list` plus `vertical_scrollbar`, see "The strip, the
+  tree and the meta pane draw the theme's scrollbar"), and gpui-base's
+  accessibility roles (`Role::Tree`, `Role::TreeItem`, `aria_selected`,
+  `aria_expanded`).
+- Still possible, not adopted: drawing only the rows with
+  `gpui_component::list::ListItem` (the theme's list colors), as a small
+  later step.
+- Rule: a `gpui-component` version bump that prompts a second look re-reads
+  the points above in both crates' `src/tree.rs` before reopening the
+  decision; the behavior listed is 0.9.1's.
 
 ### The panes are one `Panels` value, stored under `panels` (Inferred)
 
