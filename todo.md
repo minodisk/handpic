@@ -2,6 +2,16 @@
 
 ## Cross-cutting / other
 
+### Native app docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
+
+#### Background
+
+The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) added a section to `docs/agents/native-app.md` recording that the status row stays a plain `div` and is not gpui-component's `StatusBar`. It deliberately left the neighbouring sections untouched. Two pieces of text there are out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the sentence "only the settings modal and the tree's inline rename draw from it" in "One progress bar sits on the status row's top edge (Inferred)", and the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". Files: `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] Reword the progress bar section's sentence and the "gpui-component is initialized; ..." heading so they name the dialogs, tooltips and scrollbars as well. Check that no quoted-title reference to the heading (including from the new `StatusBar` section) goes stale.
+
 ### App: real-device check of the first launch after the identifier change to dev.minodisk.handpic
 
 #### Background
