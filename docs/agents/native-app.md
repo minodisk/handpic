@@ -425,6 +425,15 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   and tests. The PR's `test` and `native` jobs, on all three platforms, run
   the rest: the root workspace's other crates and the native tests a backend
   change can break. Neither full task is run locally as a gate.
+- Rule: `ci:local` never compiles `riffle-app` or its tests, so a change to a
+  public `riffle-core` / `riffle-backend` type (removing or renaming a field of
+  `rank::Frame`, `Cue`, an index row) can leave the Tauri crate broken while it
+  passes. Also run `mise exec -- cargo check -p riffle-app --tests`. Removing
+  `rank::Frame::eye_focus` broke `rank_dump_of_real_folders` in
+  `crates/app/src/commands.rs` (E0609) this way, and only the review caught
+  it. The Tauri app is frozen, so the fix there is the minimal compile-only
+  edit. Source:
+  `docs/plans/_archived/20261115-full-eye-sharp-only/learnings.md`, Step 4.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
   workspace to be safe. `cargo clippy -p` / `cargo test -p` of `riffle-core`,
   `riffle-backend` or `riffle-cli` never compiles `tauri` or `riffle-app` (their

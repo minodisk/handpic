@@ -1111,6 +1111,11 @@ retried.
   its state, on the full JPEG when `has_larger_jpeg` (and the `MIN_SCALE`
   floor of `full_eye_sharpness` passes); a file without one (a RAF, an HDR
   PQ CR3, a body whose largest JPEG is the preview) stays `None`, so Neutral.
+  `has_larger_jpeg` only tells a full JPEG apart from the preview (no full,
+  HEVC, same offset), not how much larger it is, so the `MIN_SCALE` floor must
+  stay: a full JPEG at most 1.5x the preview is near the preview's scale, where
+  the full-size thresholds do not hold (the first commit dropped the floor and
+  measured at scale 1; the user then decided those files stay Neutral).
   Do not measure the preview instead: with the full-size thresholds it reads
   about half the full-size value and would put most such frames in Low (see
   `docs/plans/20261115-full-eye-sharp-only/preview-vs-full.md`). A failed

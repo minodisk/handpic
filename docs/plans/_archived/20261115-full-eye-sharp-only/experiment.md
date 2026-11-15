@@ -72,7 +72,7 @@ revised ratings.
 ## Ranking ablation behind `Good photo`
 
 The folder-wide ranking evaluation
-([`folderwide.md`](../_archived/20261015-folder-wide-ranking-eval/folderwide.md),
+([`folderwide.md`](../20261015-folder-wide-ranking-eval/folderwide.md),
 "Drop one") reran the held-out ranking without each feature group. Neither
 `AF eye focus` (the `eye_focus` column) nor `Good photo` contributes: the
 frame AUC moves by -0.000 [-0.005, +0.004] and +0.001 [-0.003, +0.006] on the
