@@ -189,3 +189,5 @@ gpui-component derives at theme load (`title_bar` from `background`,
   with nothing in it.
 
 ## Progress
+
+(2026-11-16) Step 1 complete

@@ -2095,6 +2095,12 @@ window itself. Source: [the plan](../plans/20261116-native-title-bar/plan.md).
 
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
+- A press on the bar still reaches the root `div`'s `track_focus`, so a click
+  on the bar keeps the keyboard with the view. The bar has no focus handle of
+  its own, so do not add one to the bar or to its children. Seen in a debug
+  build on Windows 11; the controls' clicks and the drag were not exercised
+  by hand. Source:
+  [learnings](../plans/_archived/20261116-native-title-bar/learnings.md), Step 1.
 - Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
   `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
   PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
