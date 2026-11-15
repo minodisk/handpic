@@ -383,8 +383,6 @@ pub fn apply_face_ready(facts: &mut HashMap<String, Facts>, ready: &[FaceReady])
         };
         facts.sharpness = item.sharpness;
         if let Some(focus) = facts.focus.as_mut() {
-            focus.eye_focus = item.eye_focus;
-            focus.candidate = item.candidate;
             focus.eyes = item.eyes;
         }
     }
@@ -485,7 +483,6 @@ mod tests {
     use super::*;
     use crate::mark::{GOOD_FULL_EYE_SHARP, LOW_FULL_EYE_SHARP, af_eye_state};
     use riffle_backend::index::{FocusPoint, StoredEyes};
-    use riffle_core::candidate::FocusCandidate;
     use serde_json::json;
 
     const NEUTRAL: AfEye = MarkState::Neutral;
@@ -888,8 +885,6 @@ mod tests {
                 frame: None,
             }),
             manual_focus: false,
-            eye_focus: Some(1.),
-            candidate: FocusCandidate::Candidate,
             eyes: StoredEyes {
                 eyes_ear: Some(0.35),
                 eyes: Some(EyeState::Open),
@@ -1180,8 +1175,6 @@ mod tests {
     fn ready(path: &str, focus: &Focus) -> FaceReady {
         FaceReady {
             path: path.into(),
-            eye_focus: focus.eye_focus,
-            candidate: focus.candidate,
             sharpness: Some(0.5),
             eyes: focus.eyes,
         }
@@ -1191,8 +1184,6 @@ mod tests {
     fn a_ready_file_takes_pass_2_values_over_its_af_point() {
         let mut before = candidate();
         before.manual_focus = true;
-        before.eye_focus = None;
-        before.candidate = FocusCandidate::Unknown;
         before.eyes = StoredEyes::default();
         let mut facts = HashMap::from([(
             "A.ARW".to_string(),
@@ -1204,8 +1195,6 @@ mod tests {
         let after = with(|f| f.eyes.eyes = Some(EyeState::Closed));
         apply_face_ready(&mut facts, &[ready("A.ARW", &after)]);
         let focus = facts["A.ARW"].focus.unwrap();
-        assert_eq!(focus.eye_focus, after.eye_focus);
-        assert_eq!(focus.candidate, after.candidate);
         assert_eq!(focus.eyes, after.eyes);
         assert_eq!(
             focus.point.map(|p| (p.x, p.y)),
@@ -1337,7 +1326,7 @@ mod tests {
             "stars": [5, 7, "3", 2.5, 0, 6],
             "labels": ["Red", "red", "none"],
             "orientations": ["square", "landscape"],
-            "candidates": ["ok", "not_candidate", "unknown", "good", "neutral"],
+            "candidates": ["ok", "unknown", "good", "neutral"],
             "eyes": ["closed", 1],
         })));
         assert_eq!(

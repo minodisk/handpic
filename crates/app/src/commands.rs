@@ -3160,7 +3160,7 @@ mod tests {
                 "stars": [5, 7, "3", 2.5, 0, 6],
                 "labels": ["Red", "red", "none"],
                 "orientations": ["square", "landscape"],
-                "candidates": ["ok", "not_candidate", "unknown", "good", "neutral"],
+                "candidates": ["ok", "unknown", "good", "neutral"],
                 "eyes": ["closed", 1],
             }))),
             json!({

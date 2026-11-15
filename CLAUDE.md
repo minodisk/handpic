@@ -18,12 +18,11 @@ landmarks: the eyes, the nose tip and the mouth corners), whose ONNX model and l
 live in `crates/core/models/`, `src/eyes.rs` the closed-eyes judgment of one
 face (the eye aspect ratio of the MediaPipe Face Landmarker v2 face mesh,
 its ONNX and `LICENSE-mediapipe` next to YuNet's; the scan runs only its
-mesh, `mesh_of`, for the focus candidate cue), `src/pose.rs` the head pose (yaw / pitch / roll) of a face from its face mesh points, a port of MediaPipe's face geometry pipeline whose 33-point Procrustes basis is in `LICENSE-mediapipe`, `src/candidate.rs` the focus candidate cue
-(the in-focus probability of the eyes of the face nearest the AF point,
-a logistic combination of the Laplacian variance and mean edge width over
-each eye's eyelid region from the face mesh, the sharper eye counting, or
-over the window between the eyes when neither eye's region counts (under the floor or without a clear edge), and
-whether it clears the threshold), `src/jpeg.rs` the Exif reader of a plain
+mesh, `mesh_of`, for the face cue), `src/pose.rs` the head pose (yaw / pitch / roll) of a face from its face mesh points, a port of MediaPipe's face geometry pipeline whose 33-point Procrustes basis is in `LICENSE-mediapipe`, `src/candidate.rs` the face cue
+(the face nearest the AF point, else the largest confident face of the
+whole preview, its face mesh and what the mesh gives: the EAR, the head
+pose, the eye offset, the edge gap and the eye centers `fullsharp.rs`
+measures around, YuNet's eye landmarks without a mesh), `src/jpeg.rs` the Exif reader of a plain
 JPEG file (orientation and the standard shooting tags into the same `Shot`
 the RAW parsers fill), which `reader` and `scan` dispatch to for a `.jpg` /
 `.jpeg`, `src/exif.rs` the crate-private IFD0 + Exif IFD reader `jpeg.rs`,
@@ -91,9 +90,8 @@ eviction, dropped by Clear Cache), which gives the ranking its negatives
 a reject from the 30-day eviction, not from the size cap or Clear Cache,
 re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in three
 passes on the one scan task: `run_scan` (thumbnail, metadata), then
-`run_faces_scan`, which fills the `eye_focus` / `sharpness` /
-`faces_extractor` columns with the focus candidate cue (YuNet, then the face mesh on the face nearest the AF point) and
-the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
+`run_faces_scan`, which runs the face cue (YuNet, then the face mesh on the face nearest the AF point) and fills the `sharpness` /
+`faces_extractor` columns with the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
 `pose_roll` columns with the EAR of the more closed eye and the head pose
 from that same mesh, and, on every frame whose cue judged a face, the
 `full_eye_sharp` column with the sharpness of its eyes on the full JPEG (a
@@ -407,7 +405,7 @@ a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 latter also carrying the index's AF point and frame (`af_rows`) after
 `AF tracking`, and an `Analysis` group (`analysis`) of every value pass 1 and
 pass 2 stored for the shown file: `metaGroups`' rows with its labels and
-strings less `AF eye in focus`, the full-size eye score named `Eye focus`, the closed probability, the EAR, the mesh's eye
+strings, the full-size eye score named `Eye focus`, the closed probability, the EAR, the mesh's eye
 offset, the edge gap and the preview's sharpness; both from the window's
 `Facts` of the file, never the on-demand eyes judgment), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
@@ -533,7 +531,7 @@ mark bright green and puts the strip's face icon on a good frame, `afEyeState`
 (Good / Neutral / Low), the one state the mark's color, the strip's icon and the
 filter menu read, `AF_EYE_HELP`, the definitions the `Face focus` section's `?` shows, and the eyes' openness the meta pane shows, and
 `src/meta.ts` groups the meta pane rows by provenance (EXIF, Maker note
-and Analysis, whose rows include the AF eye in-focus probability and the
+and Analysis, whose rows include the eye sharpness at full size and the
 `Eyes` judgment with its openness and the `Yaw`, `Pitch` and `Roll` of the head pose, from the values pass 2 stored for
 the AF face, else the `eyes_of` judgment, and, while `aiEnabled` is on, the
 personal ranking's place in the burst, reasons and confidence), `src/prefetch.ts` the ring of decoded neighbour previews (which files around the current one to hold, capped by total pixels, what to read next, and what a file list change, rename, delete or folder switch gives up), `src/recommend.ts` decides from a file's

@@ -98,9 +98,7 @@ pub fn af_rows(point: Option<&FocusPoint>) -> Vec<(&'static str, Option<String>)
 }
 
 /// The `Analysis` rows from the values the scan stored: `metaGroups`' rows
-/// with the same labels and strings, less the preview's `eye_focus` and focus
-/// candidate the Face focus tiers no longer read, the full-size eye score as
-/// `Eye focus`, each computed value it does not show next to the one it
+/// with the same labels and strings, the full-size eye score as `Eye focus`, each computed value it does not show next to the one it
 /// derives from, and the preview's sharpness.
 pub fn analysis(
     focus: Option<&Focus>,
@@ -197,7 +195,6 @@ pub fn groups<'a>(
 #[cfg(test)]
 mod tests {
     use riffle_backend::index::{EyesPose, FocusSize, StoredEyes};
-    use riffle_core::candidate::FocusCandidate;
 
     use super::*;
 
@@ -367,8 +364,6 @@ mod tests {
         Focus {
             point: None,
             manual_focus: false,
-            eye_focus: None,
-            candidate: FocusCandidate::Unknown,
             eyes: StoredEyes::default(),
         }
     }
@@ -464,18 +459,6 @@ mod tests {
             .collect();
         assert_eq!(headings, [EXIF_HEADING, MAKER_NOTE_HEADING]);
         assert!(groups(None, &[], &none).is_empty());
-    }
-
-    /// The Face focus tiers read `full_eye_sharp` alone, so the preview's
-    /// `eye_focus` and the focus candidate give no row.
-    #[test]
-    fn the_eye_focus_and_the_candidate_give_no_row() {
-        let f = Focus {
-            eye_focus: Some(0.87),
-            candidate: FocusCandidate::Candidate,
-            ..focus()
-        };
-        assert!(shown(Some(&f), None).is_empty());
     }
 
     #[test]

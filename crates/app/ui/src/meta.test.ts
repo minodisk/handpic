@@ -69,10 +69,12 @@ const leica: Metadata = {
 };
 
 const noEyes = { eyes_ear: null, eyes: "unknown", pose: null, full_eye_sharp: null } as const;
+const measured: FocusCue = { ...noEyes, full_eye_sharp: 0.143 };
+const measuredRow = { label: "Eyes at full size", value: "Soft · 0.143" };
 
 describe("metaGroups", () => {
   test("splits Sony-like input into EXIF, Maker note and Analysis", () => {
-    expect(metaGroups(sony, { candidate: "candidate", eye_focus: 0.87, ...noEyes })).toEqual([
+    expect(metaGroups(sony, measured)).toEqual([
       {
         heading: EXIF_HEADING,
         rows: [
@@ -104,7 +106,7 @@ describe("metaGroups", () => {
       },
       {
         heading: ANALYSIS_HEADING,
-        rows: [{ label: "AF eye in focus", value: "87%" }],
+        rows: [measuredRow],
       },
     ]);
   });
@@ -138,24 +140,20 @@ describe("metaGroups", () => {
         dro: null,
         raw_type: null,
       },
-      { candidate: "candidate", eye_focus: 0.87, ...noEyes },
+      measured,
     );
     expect(groups.map(({ heading }) => heading)).toEqual([EXIF_HEADING, ANALYSIS_HEADING]);
   });
 
   test("leaves out the EXIF and Maker note groups when they have no rows", () => {
-    expect(
-      metaGroups(empty, { candidate: "candidate", eye_focus: 0.87, ...noEyes }).map(
-        ({ heading }) => heading,
-      ),
-    ).toEqual([ANALYSIS_HEADING]);
+    expect(metaGroups(empty, measured).map(({ heading }) => heading)).toEqual([ANALYSIS_HEADING]);
   });
 
   test("shows only the analysis group when the metadata could not be read", () => {
-    expect(metaGroups(null, { candidate: "candidate", eye_focus: 0.87, ...noEyes })).toEqual([
+    expect(metaGroups(null, measured)).toEqual([
       {
         heading: ANALYSIS_HEADING,
-        rows: [{ label: "AF eye in focus", value: "87%" }],
+        rows: [measuredRow],
       },
     ]);
   });
@@ -176,24 +174,13 @@ describe("metaGroups", () => {
     mesh,
   });
 
-  test("shows the AF eye in-focus probability as a percentage", () => {
-    const handpic = (focus: FocusCue) => metaGroups(null, focus)[0]?.rows;
-    expect(handpic({ candidate: "candidate", eye_focus: 0.8701, ...noEyes })).toEqual([
-      { label: "AF eye in focus", value: "87%" },
-    ]);
-    expect(handpic({ candidate: "not_candidate", eye_focus: 0, ...noEyes })).toEqual([
-      { label: "AF eye in focus", value: "0%" },
-    ]);
-  });
-
   test("leaves out the row when there is no value", () => {
-    expect(metaGroups(null, { candidate: "unknown", eye_focus: null, ...noEyes })).toEqual([]);
+    expect(metaGroups(null, noEyes)).toEqual([]);
   });
 
-  test("shows the judgment and the openness after the AF eye row", () => {
-    const focus: FocusCue = { candidate: "candidate", eye_focus: 0.87, ...noEyes };
-    expect(metaGroups(null, focus, judgment("open", 0.25))[0]?.rows).toEqual([
-      { label: "AF eye in focus", value: "87%" },
+  test("shows the judgment and the openness after the full-size eye row", () => {
+    expect(metaGroups(null, measured, judgment("open", 0.25))[0]?.rows).toEqual([
+      measuredRow,
       { label: "Eyes", value: "Open · 41" },
     ]);
     expect(metaGroups(null, null, judgment("closed", 0.09))).toEqual([
@@ -210,8 +197,8 @@ describe("metaGroups", () => {
   });
 
   test("leaves out the eyes row when it is unknown or not yet judged", () => {
-    const focus: FocusCue = { candidate: "candidate", eye_focus: 0.87, ...noEyes };
-    const rows = [{ label: "AF eye in focus", value: "87%" }];
+    const focus = measured;
+    const rows = [measuredRow];
     expect(metaGroups(null, focus, null)[0]?.rows).toEqual(rows);
     expect(metaGroups(null, focus, undefined)[0]?.rows).toEqual(rows);
   });
@@ -248,8 +235,8 @@ describe("metaGroups", () => {
   });
 
   test("leaves out the head pose when it is unknown or the eyes are", () => {
-    const focus: FocusCue = { candidate: "candidate", eye_focus: 0.87, ...noEyes };
-    const rows = [{ label: "AF eye in focus", value: "87%" }];
+    const focus = measured;
+    const rows = [measuredRow];
     expect(metaGroups(null, focus, judgment("open", 0.45))[0]?.rows).toEqual([
       ...rows,
       { label: "Eyes", value: "Open · 100" },
@@ -260,15 +247,12 @@ describe("metaGroups", () => {
 
   test("shows the stored eye state, openness and head pose without a judgment", () => {
     const focus: FocusCue = {
-      candidate: "candidate",
-      eye_focus: 0.87,
       eyes_ear: 0.09,
       eyes: "closed",
       pose: { yaw: 12.4, pitch: -5.2, roll: 3.5 },
       full_eye_sharp: null,
     };
     expect(metaGroups(null, focus, undefined)[0]?.rows).toEqual([
-      { label: "AF eye in focus", value: "87%" },
       { label: "Eyes", value: "Closed · 0" },
       { label: "Yaw", value: "12°" },
       { label: "Pitch", value: "-5°" },
@@ -278,21 +262,16 @@ describe("metaGroups", () => {
 
   test("shows the full-size eye score against the Good cut only when there is one", () => {
     const rows = (full_eye_sharp: number | null) =>
-      metaGroups(null, { candidate: "candidate", eye_focus: 0.87, ...noEyes, full_eye_sharp })[0]
-        ?.rows;
-    expect(rows(0.143)).toEqual([
-      { label: "AF eye in focus", value: "87%" },
-      { label: "Eyes at full size", value: "Soft · 0.143" },
+      metaGroups(null, { ...noEyes, full_eye_sharp })[0]?.rows;
+    expect(rows(0.143)).toEqual([{ label: "Eyes at full size", value: "Soft · 0.143" }]);
+    expect(rows(GOOD_FULL_EYE_SHARP)).toEqual([
+      { label: "Eyes at full size", value: "Sharp · 0.162" },
     ]);
-    expect(rows(GOOD_FULL_EYE_SHARP)?.[1]).toEqual({
-      label: "Eyes at full size",
-      value: "Sharp · 0.162",
-    });
-    expect(rows(null)).toEqual([{ label: "AF eye in focus", value: "87%" }]);
+    expect(rows(null)).toBeUndefined();
   });
 
   test("falls back to the judgment without a stored eye state", () => {
-    const focus: FocusCue = { candidate: "unknown", eye_focus: null, ...noEyes };
+    const focus: FocusCue = noEyes;
     const pose = { yaw: -20, pitch: 0, roll: 0 };
     expect(metaGroups(null, focus, judgment("open", 0.25, pose))[0]?.rows).toEqual([
       { label: "Eyes", value: "Open · 41" },
@@ -304,8 +283,6 @@ describe("metaGroups", () => {
 
   test("prefers the stored eye state and head pose over the judgment", () => {
     const focus: FocusCue = {
-      candidate: "candidate",
-      eye_focus: null,
       eyes_ear: 0.3,
       eyes: "open",
       pose: { yaw: 1, pitch: 2, roll: 3 },
@@ -321,19 +298,7 @@ describe("metaGroups", () => {
   });
 
   test("leaves out the eye rows with neither a stored state nor a judgment", () => {
-    const focus: FocusCue = { candidate: "not_candidate", eye_focus: 0.07, ...noEyes };
-    expect(metaGroups(null, focus, null)[0]?.rows).toEqual([
-      { label: "AF eye in focus", value: "7%" },
-    ]);
-  });
-
-  test("shows the analysis group for the in-focus probability alone", () => {
-    expect(metaGroups(null, { candidate: "not_candidate", eye_focus: 0.07, ...noEyes })).toEqual([
-      {
-        heading: ANALYSIS_HEADING,
-        rows: [{ label: "AF eye in focus", value: "7%" }],
-      },
-    ]);
+    expect(metaGroups(null, measured, null)[0]?.rows).toEqual([measuredRow]);
   });
 });
 

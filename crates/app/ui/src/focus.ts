@@ -20,8 +20,6 @@ export interface FocusPoint {
 export interface MarkFocus extends StoredEyes {
   point: FocusPoint | null;
   manual_focus: boolean;
-  candidate: "candidate" | "not_candidate" | "unknown";
-  eye_focus: number | null;
 }
 
 // The tier `photoTier` puts a frame in: a good photo, one that is not a miss.
@@ -205,8 +203,6 @@ export function focusMark(
 // One file the second scan pass has written, as `faces-progress` carries it.
 export interface FaceReady extends StoredEyes {
   path: string;
-  eye_focus: number | null;
-  candidate: MarkFocus["candidate"];
   sharpness: number | null;
 }
 
@@ -225,8 +221,6 @@ export function applyFaceReady<T extends { focus: MarkFocus | null }>(
     if (focus === null || focus === undefined) {
       continue;
     }
-    focus.eye_focus = item.eye_focus;
-    focus.candidate = item.candidate;
     focus.eyes_ear = item.eyes_ear;
     focus.eyes = item.eyes;
     focus.eyes_closed = item.eyes_closed;

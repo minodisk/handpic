@@ -838,11 +838,10 @@ last, and a JPEG folder under `"name"` paged in capture order.
   only exact dyadic ties differ and a measured score practically never is one;
   `an_exact_tie_rounds_to_even_unlike_to_fixed` pins it. `Math.round` is
   `(x + 0.5).floor()`, so `-5.5` gives `-5` and `-0.5` gives `0`.
-- Rule: the meta pane's `Analysis` group reads neither `Focus::eye_focus` nor
-  `FocusCandidate`, since the Face focus tiers come from `full_eye_sharp`
-  alone, and names the full-size eye score `Eye focus`. The Tauri pane keeps
-  `AF eye in focus` and `Eyes at full size` until the full-eye-sharp-only
-  plan's Step 4 (`docs/plans/20261115-full-eye-sharp-only/plan.md`).
+- Rule: the meta pane's `Analysis` group names the full-size eye score
+  `Eye focus`, the one eye-focus measure since the full-eye-sharp-only plan
+  (`docs/plans/20261115-full-eye-sharp-only/plan.md`). The frozen Tauri pane
+  keeps it as `Eyes at full size`.
 - Rule: a `refilter` that empties `files` keeps its anchor
   (`filter::KeptAnchor`), a non-empty one or another folder's open drops it.
   A menu change, and only a menu change, anchors on it while no file is

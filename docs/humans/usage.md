@@ -321,17 +321,15 @@ viewer shows a prompt in its center; click it to open the folder picker.
   show them, and enciphered values (shutter count, picture profile) are not
   read. When a lens reports no f-number (the M11-P with an M-mount
   lens), the aperture is the camera's estimate, marked `(est.)`. **Analysis**
-  holds what Handpic computes itself: `AF eye in
-  focus`, the in-focus probability (a percentage) of the eyes of the judged
-  face (nearest the AF point; without an AF point or in manual focus, the
-  largest face Handpic is confident of), measured on the embedded preview and
-  shown for reference; the `Face focus` state is decided from `Eyes at full
-  size` below, not from this (left out when there is none). It comes from the scan's second pass, so it
-  appears a little after the file's thumbnail on a folder's first scan.
-  `Eyes at full size` is the sharpness of those same eyes on the file's
+  holds what Handpic computes itself: `Eyes at full size`, the sharpness of
+  the eyes of the judged face (nearest the AF point; without an AF point or
+  in manual focus, the largest face Handpic is confident of) on the file's
   full-size embedded JPEG, as in `Sharp · 0.214` or `Soft · 0.143`; `Soft`
-  is the verdict that takes a frame out of good. It is left out when nothing
-  was measured (for example a file with no JPEG larger than the preview).
+  is the verdict that takes a frame out of good, and the `Face focus` state
+  is decided from it. It comes from the scan's second pass, so it appears a
+  little after the file's thumbnail on a folder's first scan, and it is left
+  out when nothing was measured (for example a file with no JPEG larger than
+  the preview).
   `Eyes` says whether the eyes of the face nearest the AF point (without an
   AF point, the largest face Handpic is confident of) are open or closed and
   how open they are, from 0 to 100, as in `Open · 82` or `Closed · 0`. The

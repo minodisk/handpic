@@ -178,16 +178,16 @@ pub struct Analysis {
     pub full_eye_sharp: Option<f64>,
 }
 
-/// Compute the focus candidate cue and the sharpness score of one file from
-/// one read of its preview. The cue runs the face detector and, on the face
+/// Compute the face cue and the sharpness score of one file from one read of
+/// its preview. The cue runs the face detector and, on the face
 /// nearest the AF point, the face mesh (`candidate::focus_cue_unless`);
 /// without a trusted AF point, on the largest confident face of the whole
 /// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
-/// panic in any of them, is an unknown cue or no score; a mesh failure falls
-/// back to the eye window. The judged face's eyes are measured once more on
-/// the full JPEG, a second read, when the file holds one larger than the
-/// preview (`full_eye_sharp`). A JPEG file gets none of these, and is not
+/// panic in any of them, is an unknown cue or no score; a mesh failure leaves
+/// the face its YuNet eye landmarks. The judged face's eyes are measured once
+/// more on the full JPEG, a second read, when the file holds one larger than
+/// the preview (`full_eye_sharp`). A JPEG file gets none of these, and is not
 /// read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
     extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
@@ -880,7 +880,6 @@ where
 mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
-    use crate::candidate::FocusCandidate;
     use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -1164,7 +1163,7 @@ mod tests {
             4,
             Priority::Lowest,
             &ScanFocus::default(),
-            |i, r| seen.lock().unwrap().push((i, r.unwrap().cue.state)),
+            |i, r| seen.lock().unwrap().push((i, r.unwrap().cue.face)),
             &AtomicBool::new(false),
         )
         .unwrap();
@@ -1172,9 +1171,7 @@ mod tests {
         seen.sort_by_key(|&(i, _)| i);
         assert_eq!(
             seen,
-            (0..200)
-                .map(|i| (i, FocusCandidate::Unknown))
-                .collect::<Vec<_>>(),
+            (0..200).map(|i| (i, None)).collect::<Vec<_>>(),
             "each index exactly once"
         );
 
@@ -1310,15 +1307,14 @@ mod tests {
             hevc: false,
         };
         let (larger, preview_only) = (arw(Some(embedded(20))), arw(None));
-        let not_candidate = Cue {
-            state: FocusCandidate::NotCandidate,
+        let judged = Cue {
             eye_centers: Some([(30.0, 30.0), (70.0, 30.0)]),
             preview_width: 100,
             ..Cue::default()
         };
         let no_face = Cue {
             eye_centers: None,
-            ..not_candidate.clone()
+            ..judged.clone()
         };
         let missing = dir.join("missing.ARW");
         let (slots, set, unset) = (
@@ -1330,7 +1326,7 @@ mod tests {
             full_eye_sharp(&missing, arw, cue, cancel, &slots)
         };
         assert_eq!(
-            measure(&preview_only, &not_candidate, &set),
+            measure(&preview_only, &judged, &set),
             Some(None),
             "a file without a larger JPEG reads nothing, so not even a cancel abandons it"
         );
@@ -1340,14 +1336,14 @@ mod tests {
             "no judged face reads nothing"
         );
         assert_eq!(
-            measure(&larger, &not_candidate, &unset),
+            measure(&larger, &judged, &unset),
             Some(None),
             "a failed read is no score, not an error"
         );
         assert_eq!(
-            measure(&larger, &not_candidate, &set),
+            measure(&larger, &judged, &set),
             None,
-            "a judged non-candidate reads the full JPEG, so a cancel abandons it at the slot"
+            "a judged face reads the full JPEG, so a cancel abandons it at the slot"
         );
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1820,7 +1816,7 @@ mod tests {
         let no_af = extract_analysis(&write(&dir, "noaf.ARW", &fixture(1, &jpeg(64, 48))))
             .unwrap()
             .cue;
-        assert_eq!(no_af.state, FocusCandidate::Unknown);
+        assert_eq!(no_af.face, None);
         assert!(no_af.detection.is_none());
         let bad = extract_analysis(&write(&dir, "bad.ARW", &fixture(1, &[0u8; 512]))).unwrap();
         assert_eq!(bad, Analysis::default());
@@ -1833,7 +1829,7 @@ mod tests {
         let never = AtomicBool::new(false);
         assert_eq!(cue(&[0u8; 512], 1, focus, &never), Some(Cue::unknown()));
         let flat = cue(&jpeg(64, 48), 1, focus, &never).unwrap();
-        assert_eq!(flat.state, FocusCandidate::Unknown);
+        assert_eq!(flat.face, None);
         assert!(flat.detection.is_some_and(|d| d.point.is_some()));
         assert!(extract_analysis(&dir.join("missing.ARW")).is_err());
         std::fs::remove_dir_all(&dir).unwrap();
@@ -1871,8 +1867,6 @@ mod tests {
         let shy = scored(FACE_CONFIDENCE.next_down(), 40.0);
         let found = whole(vec![small, large, shy]);
         let cue = whole_image_cue(&jpeg(64, 48), 1, found.clone(), &never).unwrap();
-        assert_ne!(cue.state, FocusCandidate::Unknown);
-        assert!(cue.eye_focus.is_some());
         assert_eq!(cue.face, Some(large));
         assert_eq!(cue.detection, found);
 

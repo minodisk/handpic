@@ -254,7 +254,6 @@ mod tests {
     use super::*;
     use riffle_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
     use riffle_backend::ondemand::FacePoint;
-    use riffle_core::candidate::FocusCandidate;
 
     const AT: FocusPoint = FocusPoint {
         sensor_w: 7008,
@@ -280,8 +279,6 @@ mod tests {
         Focus {
             point: Some(AT),
             manual_focus: false,
-            eye_focus: None,
-            candidate: FocusCandidate::Unknown,
             eyes: no_eyes(),
         }
     }
@@ -292,8 +289,6 @@ mod tests {
 
     fn good() -> Focus {
         Focus {
-            candidate: FocusCandidate::Candidate,
-            eye_focus: Some(1.),
             eyes: StoredEyes {
                 eyes_ear: Some(0.35),
                 pose: pose(10., -5., 3.),
@@ -316,10 +311,6 @@ mod tests {
         with(good(), |f| f.eyes.eyes_ear = Some(ear))
     }
 
-    fn candidate(candidate: FocusCandidate) -> Focus {
-        with(point(), |f| f.candidate = candidate)
-    }
-
     fn sharp(full_eye_sharp: Option<f64>) -> Focus {
         with(good(), |f| f.eyes.full_eye_sharp = full_eye_sharp)
     }
@@ -328,9 +319,8 @@ mod tests {
         photo_tier(Some(focus))
     }
 
-    fn rated(eye_focus: f64, eyes_ear: f64, p: Option<EyesPose>, offset: f64, gap: f64) -> Focus {
+    fn rated(eyes_ear: f64, p: Option<EyesPose>, offset: f64, gap: f64) -> Focus {
         with(good(), |f| {
-            f.eye_focus = Some(eye_focus);
             f.eyes.eyes_ear = Some(eyes_ear);
             f.eyes.pose = p;
             f.eyes.eye_offset = Some(offset);
@@ -424,15 +414,12 @@ mod tests {
         assert_eq!(state(good()), Some(MarkState::Good));
         assert_eq!(state(ear(GOOD_EYE_EAR)), Some(MarkState::Good));
         assert_eq!(state(ear(0.1)), Some(MarkState::Neutral));
-        assert_eq!(
-            state(candidate(FocusCandidate::Candidate)),
-            Some(MarkState::Neutral)
-        );
+        assert_eq!(state(point()), Some(MarkState::Neutral));
     }
 
     #[test]
     fn focus_mark_of_a_manual_focus_or_missing_point_stays_none_whatever_the_state() {
-        let manual = with(candidate(FocusCandidate::Candidate), |f| {
+        let manual = with(point(), |f| {
             f.manual_focus = true;
         });
         assert_eq!(focus_mark(Some(&manual), 700., 468.), None);
@@ -507,23 +494,6 @@ mod tests {
     }
 
     #[test]
-    fn af_eye_state_reads_neither_the_candidate_cue_nor_eye_focus() {
-        let off = |f: Focus| {
-            with(f, |f| {
-                f.candidate = FocusCandidate::NotCandidate;
-                f.eye_focus = Some(0.1);
-            })
-        };
-        assert_eq!(af_eye_state(Some(&off(good()))), MarkState::Good);
-        assert_eq!(af_eye_state(Some(&off(point()))), MarkState::Neutral);
-        let unknown = with(good(), |f| {
-            f.candidate = FocusCandidate::Unknown;
-            f.eye_focus = None;
-        });
-        assert_eq!(af_eye_state(Some(&unknown)), MarkState::Good);
-    }
-
-    #[test]
     fn photo_tier_passes_a_candidate_whose_eyes_and_pose_clear_every_cut() {
         assert!(good_photo(&good()));
     }
@@ -543,16 +513,6 @@ mod tests {
     #[test]
     fn photo_tier_is_false_without_a_focus() {
         assert!(!photo_tier(None));
-    }
-
-    #[test]
-    fn photo_tier_does_not_read_the_candidate_cue() {
-        for c in [FocusCandidate::NotCandidate, FocusCandidate::Unknown] {
-            assert!(good_photo(&with(good(), |f| {
-                f.candidate = c;
-                f.eye_focus = None;
-            })));
-        }
     }
 
     #[test]
@@ -592,7 +552,6 @@ mod tests {
     fn the_three_frames_the_user_named_are_not_good() {
         // `_DSC2638`: the mesh off a rotated face.
         assert!(!good_photo(&rated(
-            0.999,
             0.3601,
             pose(3., -11.8, 11.8),
             0.1247,
@@ -600,7 +559,6 @@ mod tests {
         )));
         // `_DSC2827`: turned, the EAR inflated.
         assert!(!good_photo(&rated(
-            0.9984,
             0.3032,
             pose(-48.6, 5.2, 9.4),
             0.0866,
@@ -608,7 +566,6 @@ mod tests {
         )));
         // `_DSC3345`: cut by the left edge, its mesh off too.
         assert!(!good_photo(&rated(
-            0.9984,
             0.314,
             pose(-15.3, 2.7, -3.6),
             0.3521,
@@ -620,7 +577,6 @@ mod tests {
     fn the_one_star_frames_a_looser_yaw_or_eye_offset_cut_lets_in_are_not_good() {
         // `_DSC2050`: turned past the yaw cut.
         assert!(!good_photo(&rated(
-            0.9966,
             0.3228,
             pose(-36.6, 11.7, 5.1),
             0.0241,
@@ -628,7 +584,6 @@ mod tests {
         )));
         // `_DSC6920`: the mesh off the eyes of a face YuNet sees in profile.
         assert!(!good_photo(&rated(
-            0.9913,
             0.4054,
             pose(26.8, -17.4, 3.6),
             0.1769,
@@ -638,9 +593,8 @@ mod tests {
 
     #[test]
     fn a_five_star_frame_the_step_5b_cuts_left_out_is_good() {
-        // `_DSC3280`: the AF eyes at 0.92.
+        // `_DSC3280`: pitched 16.1 degrees down.
         assert!(good_photo(&rated(
-            0.9218,
             0.3468,
             pose(-23.9, -16.1, -4.7),
             0.0298,
@@ -648,7 +602,6 @@ mod tests {
         )));
         // `_DSC4912`: turned 34.5 degrees.
         assert!(good_photo(&rated(
-            0.9986,
             0.4194,
             pose(34.5, 3.7, 1.6),
             0.0456,

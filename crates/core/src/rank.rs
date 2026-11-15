@@ -688,7 +688,10 @@ mod tests {
         assert!(raw(&b, 0).abs() < 1e-9, "the sharpest frame is 0");
         assert!((raw(&a, 1) - prior.tech_mean[1]).abs() < 1e-9);
         assert!((raw(&a, 6)).abs() < 1e-9, "the good-photo rule is off");
-        assert!((raw(&a, 7) - 1.0).abs() < 1e-9, "no eye_focus");
+        assert!(
+            (raw(&a, 7) - 1.0).abs() < 1e-9,
+            "the AF eye logit is missing"
+        );
         assert!(raw(&a, TECH).abs() < 1e-9);
         assert!((raw(&b, TECH) - 0.5).abs() < 1e-9);
         assert!((raw(&a, TECH + 1) - 1.0).abs() < 1e-9);
@@ -733,7 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn the_inert_columns_move_no_score_and_a_fit_without_eye_focus_ranks() {
+    fn the_inert_columns_move_no_score_and_a_fit_without_the_af_eye_logit_ranks() {
         let mut frames = vec![
             frame("a.ARW", "2026:09:19 10:00:00", "0"),
             frame("b.ARW", "2026:09:19 10:00:00", "5"),

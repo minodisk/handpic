@@ -167,7 +167,7 @@ DxO PhotoLab.
   priority, so the viewer comes first when they compete for the CPU); the strip marks each bright green or gray file
   with an icon at the cell's bottom-left in the mark's color (a smiling face
   on a good photo, a frowning face on gray, none on white), the meta pane
-  shows the preview-based in-focus probability of those eyes as `AF eye in focus` (a percentage), whether that
+  shows the full-size sharpness of those eyes as `Eyes at full size`, whether that
   face's eyes are open and how open (0 to 100) as `Eyes` and the face's
   yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, both stored by the same second pass
   for the judged face and judged when the file is shown until then, and the filter menu's `Face focus` section (`Good` / `Neutral` /
