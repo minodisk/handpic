@@ -319,7 +319,8 @@ About +3.2ms per file on one thread (~+45%). The symlinks repeat one file, so
 this is CPU cost with no IO variety. The score has since moved out of the first
 pass into the second (see "Which pass carries which cost" below), so
 `riffle-cli scan` is back to the "before" column and the ~3ms lands on
-`riffle-cli candidates` and the app's `scan faces` instead.
+the second pass (the app's `scan faces`, and `riffle-cli candidates` until
+the full-eye-sharp-only plan removed it) instead.
 
 ### Face detection cost
 
@@ -816,8 +817,8 @@ about 1 deg.
 Since the sharpness score moved to the second pass, the first pass
 (`riffle_core::scan::extract`, `riffle-cli scan`, the app's `scan extract`
 line) reads the preview and computes the thumbnail and the metadata only. The
-second pass (`riffle_core::scan::extract_analysis`, `riffle-cli candidates`,
-the app's `scan faces` line) reads the preview once more and computes both the
+second pass (`riffle_core::scan::extract_analysis`, the app's `scan faces`
+line) reads the preview once more and computes both the
 focus candidate cue and the sharpness score:
 
 | Cost | Pass before | Pass now |

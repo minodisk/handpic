@@ -291,7 +291,7 @@ fn extract_analysis_unless(
 
 /// Whether `arw` holds a JPEG larger than its preview to measure the eyes on:
 /// not when it has no full image, an HEVC one, or only the preview itself.
-fn has_larger_jpeg(arw: &Arw) -> bool {
+pub fn has_larger_jpeg(arw: &Arw) -> bool {
     let same = match (arw.full, arw.preview) {
         (Some(full), Some(preview)) => full.offset == preview.offset,
         _ => false,

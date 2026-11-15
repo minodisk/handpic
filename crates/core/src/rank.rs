@@ -23,7 +23,6 @@ use std::sync::OnceLock;
 use chrono::NaiveDateTime;
 use serde::Deserialize;
 
-use crate::candidate::{candidate, FocusCandidate};
 use crate::eyes::closed_probability;
 use crate::genre;
 use crate::pose::Pose;
@@ -56,29 +55,20 @@ pub const REJECT_WEIGHT: f64 = 2.0;
 /// highest pooled held-out AUC among the values that do no harm.
 pub const OFFSET_SHRINK: f64 = 30.0;
 
-/// The good-photo cuts of `photoTier` in `focus.ts`.
-const GOOD_EYE_FOCUS: f64 = 0.9;
-const GOOD_EYE_EAR: f64 = 0.25;
-const GOOD_MAX_YAW: f64 = 35.0;
-const GOOD_MAX_PITCH: f64 = 45.0;
-const MAX_EYE_OFFSET: f64 = 0.1;
-const MIN_EDGE_GAP: f64 = 0.02;
-
 /// The reasons a score is told by, each a group of columns, with the columns
-/// it sums over.
-const REASONS: [(&str, std::ops::Range<usize>); 7] = [
+/// it sums over. The inert columns (see `tech`) are the same for every frame,
+/// so they move no score off its burst's mean and tell no reason.
+const REASONS: [(&str, std::ops::Range<usize>); 5] = [
     ("Look", TECH + POSITION..COLUMNS),
     ("Burst position", TECH..TECH + POSITION),
     ("Sharpness", 0..1),
-    ("AF eye focus", 1..2),
     ("Eyes open", 2..3),
     ("Head pose", 3..6),
-    ("Good photo", 6..7),
 ];
 
 /// The missing-value indicators, which join the reason of the value they
-/// stand for: no `eye_focus`, no eyes judgment, no pose.
-const MISSING: [(usize, usize); 3] = [(7, 1), (8, 2), (9, 3)];
+/// stand for: no eyes judgment, no pose.
+const MISSING: [(usize, usize); 2] = [(8, 2), (9, 3)];
 
 const FILE: &str = include_str!("../ranking/siglip2.json");
 
@@ -149,7 +139,6 @@ pub struct Frame {
     pub capture_time: Option<String>,
     pub subsec: Option<String>,
     pub sharpness: Option<f64>,
-    pub eye_focus: Option<f64>,
     pub eyes_ear: Option<f64>,
     pub pose: Option<Pose>,
     pub eye_offset: Option<f64>,
@@ -220,26 +209,12 @@ pub fn bursts(frames: &[Frame]) -> Vec<Vec<usize>> {
     groups
 }
 
-fn logit(p: f64) -> f64 {
-    let p = p.clamp(1e-3, 1.0 - 1e-3);
-    (p / (1.0 - p)).ln()
-}
-
-/// The good-photo rule of `photoTier` in `focus.ts`, without its full-size
-/// eye cut (`full_eye_sharp`): the ranking's features deliberately stay on the
-/// preview's values.
-fn good_photo(f: &Frame) -> bool {
-    candidate(f.eye_focus) == FocusCandidate::Candidate
-        && f.eye_focus.is_some_and(|p| p >= GOOD_EYE_FOCUS)
-        && f.eyes_ear.is_some_and(|e| e >= GOOD_EYE_EAR)
-        && f.pose
-            .is_some_and(|p| p.yaw.abs() <= GOOD_MAX_YAW && p.pitch.abs() <= GOOD_MAX_PITCH)
-        && f.eye_offset.is_some_and(|o| o <= MAX_EYE_OFFSET)
-        && f.edge_gap.is_some_and(|g| g >= MIN_EDGE_GAP)
-}
-
 /// The technical columns of one frame of a burst whose sharpest frame scored
-/// `top`, a missing value as NaN.
+/// `top`, a missing value as NaN. Columns 1 (the AF eye's in-focus logit,
+/// always missing), 6 (the good-photo rule, always off) and 7 (its missing
+/// indicator, always on) are inert: the prior was fit with them, and the
+/// preview's in-focus probability they read is gone (the full-eye-sharp-only
+/// plan), so they keep their place without a refit.
 fn tech(f: &Frame, top: Option<f64>) -> [f64; TECH] {
     let nan = f64::NAN;
     let open = f.eyes_ear.map(|e| 1.0 - closed_probability(e));
@@ -248,13 +223,13 @@ fn tech(f: &Frame, top: Option<f64>) -> [f64; TECH] {
             (Some(s), Some(top)) if top != 0.0 => (s / top).max(1e-3).ln(),
             _ => nan,
         },
-        f.eye_focus.map_or(nan, logit),
+        nan,
         open.unwrap_or(nan),
         f.pose.map_or(nan, |p| p.yaw.abs().min(90.0)),
         f.pose.map_or(nan, |p| p.pitch.abs().min(60.0)),
         f.pose.map_or(nan, |p| p.roll.abs().min(60.0)),
-        if good_photo(f) { 1.0 } else { 0.0 },
-        if f.eye_focus.is_none() { 1.0 } else { 0.0 },
+        0.0,
+        1.0,
         if open.is_none() { 1.0 } else { 0.0 },
         if f.pose.is_none() { 1.0 } else { 0.0 },
     ]
@@ -712,53 +687,13 @@ mod tests {
         assert!((raw(&a, 0) - 0.5f64.ln()).abs() < 1e-9);
         assert!(raw(&b, 0).abs() < 1e-9, "the sharpest frame is 0");
         assert!((raw(&a, 1) - prior.tech_mean[1]).abs() < 1e-9);
+        assert!((raw(&a, 6)).abs() < 1e-9, "the good-photo rule is off");
         assert!((raw(&a, 7) - 1.0).abs() < 1e-9, "no eye_focus");
         assert!(raw(&a, TECH).abs() < 1e-9);
         assert!((raw(&b, TECH) - 0.5).abs() < 1e-9);
         assert!((raw(&a, TECH + 1) - 1.0).abs() < 1e-9);
         assert!(raw(&b, TECH + 1).abs() < 1e-9);
         assert!(rows[2].is_none(), "a frame without an embedding");
-    }
-
-    #[test]
-    fn a_good_photo_clears_every_cut_of_photo_tier() {
-        let good = Frame {
-            eye_focus: Some(0.95),
-            eyes_ear: Some(0.3),
-            pose: Some(Pose {
-                yaw: 30.0,
-                pitch: -40.0,
-                roll: 50.0,
-            }),
-            eye_offset: Some(0.05),
-            edge_gap: Some(0.1),
-            ..Frame::default()
-        };
-        assert!(good_photo(&good));
-        for bad in [
-            Frame {
-                eye_focus: Some(0.85),
-                ..good.clone()
-            },
-            Frame {
-                eyes_ear: Some(0.2),
-                ..good.clone()
-            },
-            Frame {
-                pose: None,
-                ..good.clone()
-            },
-            Frame {
-                eye_offset: Some(0.2),
-                ..good.clone()
-            },
-            Frame {
-                edge_gap: Some(0.0),
-                ..good.clone()
-            },
-        ] {
-            assert!(!good_photo(&bad));
-        }
     }
 
     #[test]
@@ -795,6 +730,55 @@ mod tests {
             d.score.abs() < 1e-9,
             "a lone frame sits at its burst's mean"
         );
+    }
+
+    #[test]
+    fn the_inert_columns_move_no_score_and_a_fit_without_eye_focus_ranks() {
+        let mut frames = vec![
+            frame("a.ARW", "2026:09:19 10:00:00", "0"),
+            frame("b.ARW", "2026:09:19 10:00:00", "5"),
+            frame("c.ARW", "2026:09:19 10:00:01", "0"),
+        ];
+        frames[0].sharpness = Some(50.0);
+        frames[1].sharpness = Some(100.0);
+        frames[1].eyes_ear = Some(0.3);
+        frames[2].pose = Some(Pose {
+            yaw: 10.0,
+            pitch: 5.0,
+            roll: 0.0,
+        });
+        let rows = rows(&frames, &bursts(&frames));
+        let rows: Vec<Row> = rows.into_iter().map(Option::unwrap).collect();
+        for j in [1, 6, 7] {
+            assert!(rows.iter().all(|r| r[j] == rows[0][j]), "column {j}");
+        }
+        let fit = fit(&[Labeled {
+            frames: frames.clone(),
+            flags: vec![Flag::Pick, Flag::None, Flag::Reject],
+            viewed: vec![true; 3],
+        }]);
+        assert_eq!(fit.bursts, 1);
+        let mut weights = prior_weights().shared;
+        for j in [1, 6, 7] {
+            weights[j] = 5.0;
+        }
+        for weights in [fit.weights, shared_only(weights)] {
+            let ranked: Vec<Ranked> = rank(&frames, &weights)
+                .into_iter()
+                .map(Option::unwrap)
+                .collect();
+            let dots: Vec<f64> = rows.iter().map(|r| dot(r, &weights.shared)).collect();
+            let mean = dots.iter().sum::<f64>() / 3.0;
+            for (r, d) in ranked.iter().zip(&dots) {
+                assert!(r.score.is_finite());
+                assert!(
+                    (r.score - (d - mean)).abs() < 1e-9,
+                    "the reasons sum to the score"
+                );
+                assert_eq!(r.of, 3);
+                assert!((1..=3).contains(&r.place));
+            }
+        }
     }
 
     /// Two frames a second apart in one burst, the `sharper` one at 100.

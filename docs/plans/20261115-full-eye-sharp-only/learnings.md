@@ -67,3 +67,67 @@
   (`mark.rs`, `focus.ts`, `filter.ts`); updated with the rule.
 - The frontend tests (`mise exec -- pnpm exec vp test run`, 813) pass
   locally; `ci:local` does not run them.
+
+## Plan change (2026-11-15, user)
+
+- The Tauri app (`crates/app`, `crates/app/ui`) is frozen: only the GPUI
+  native app grows. No Tauri improvement (its meta row keeps the name
+  `Eyes at full size`); the only Tauri edits allowed are the mechanical ones
+  that keep it building once Step 5 removes `eye_focus` / `candidate`, and
+  they belong to Step 5.
+- PR #1066 (native meta pane) is fixed in its own branch by another session:
+  it drops its `AF eye in focus` / `Focus candidate` rows and renames
+  `Eyes at full size` to `Eye focus` before merging. Step 4 no longer
+  touches `crates/native/src/meta.rs` or waits for #1066; Step 5 waits for
+  it (removing the fields first would break its branch).
+- `plan.md` was rewritten accordingly: the decisions list, Step 4 (ranking
+  and CLI only), Step 5 (the Tauri compile-only edits, the #1066
+  precondition) and the trade-offs on #1066 and the names.
+
+## Step 4
+
+- `rank.rs`: `tech()` writes the constants NaN (then `prior.tech_mean[1]`),
+  0 and 1 into columns 1, 6 and 7; `good_photo`, `logit` and the
+  good-photo cut constants are gone. Those columns are the same for every
+  frame, so `row[j] - mean[j]` is 0 and their reasons were always 0: the
+  `AF eye focus` and `Good photo` entries of `REASONS` and the `(7, 1)`
+  `MISSING` entry are removed. The new test checks that each score still
+  equals the frame's dot product minus the burst's mean, with weight 5 on
+  the inert columns, under both a fit and the prior.
+- A stored `ranking.json` holds `COLUMNS` weights fit with the old columns;
+  nothing about its shape changed, so `rank` reads it as before and the
+  weights on the inert columns simply cancel within a burst.
+- The plan's `focusbox` is the CLI's `faces` subcommand (the one that
+  printed the cue's state and probability and drew the scored region);
+  `focusbox` itself never read `eye_focus`. `faces` keeps the nearest face
+  line and drops the scored region's rectangle.
+- `facechoice` now takes the EAR, pose, eye offset and edge gap straight from
+  the mesh (`eyes::more_closed_ear`, `Mesh::pose`,
+  `candidate::mesh_eye_offset`, `candidate::edge_gap`), not through
+  `EyeMeasures`, which Step 5 removes. Its `--check` compares the rule's
+  `full_sharp` with `scan::extract_analysis(..).full_eye_sharp`; not run on
+  real files in this step.
+- The `features_line` test builds `Cue` with `..Cue::default()` so it no
+  longer names `state` / `eye_focus`.
+- A heredoc through the Bash tool turned `\t` into `\t`; Python edit
+  scripts with backslashes were written to a file with the Write tool.
+- Local review found the first commit broke the Tauri build:
+  `rank_dump_of_real_folders` in `crates/app/src/commands.rs` read
+  `f.eye_focus` from `rank::Frame` (E0609 under
+  `cargo check -p riffle-app --tests`). `mise run ci:local` passed anyway: it
+  does not compile `riffle-app` or its tests (the crates depending on a
+  changed one are left to the PR's checks). When core or backend types
+  change, run `mise exec -- cargo check -p riffle-app --tests` too. Fixed by
+  dropping the dump's `state` / `eye_focus` columns, the one compile-only
+  Tauri edit the freeze allows here; `plan.md` moved it from Step 5 to
+  Step 4.
+
+## Deferred issues (todo candidates)
+
+- `todo.md` still names `riffle-cli candidates` as a command to run (around
+  lines 173 and 192, a held-out check of the candidate cue). Step 4 removed
+  the subcommand (`crates/cli/src/main.rs`); the items are moot or need
+  rewording onto `facechoice` / `features`. Reflect at wrap-up; `todo.md`
+  is not edited in a step.
+
+- `cargo check -p riffle-app --tests` fails after `rank::Frame::eye_focus` was removed: `rank_dump_of_real_folders` reads `f.eye_focus` (crates/app/src/commands.rs:3020-3021). Needs the compile-only edit of the dump (header near line 3009 and its `writeln!`) in Step 4 or a decision to keep the field until Step 5. Basis: review Round 1, item 1. Files: `crates/app/src/commands.rs`, `docs/plans/20261115-full-eye-sharp-only/plan.md`.

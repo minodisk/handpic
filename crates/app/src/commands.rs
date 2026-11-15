@@ -3006,19 +3006,17 @@ mod tests {
             let folder = Path::new(&dir).file_name().unwrap().to_string_lossy();
             let mut tsv =
                 std::fs::File::create(out.join("app").join(format!("{folder}.tsv"))).unwrap();
-            writeln!(tsv, "file\tflag\tcapture_time\tsubsec\tsharpness\tstate\teye_focus\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap").unwrap();
+            writeln!(tsv, "file\tflag\tcapture_time\tsubsec\tsharpness\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap").unwrap();
             for row in &rows {
                 let f = &row.frame;
                 writeln!(
                     tsv,
-                    "{}\t{:?}\t{}\t{}\t{}\t{:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    "{}\t{:?}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
                     f.name,
                     row.flag,
                     f.capture_time.as_deref().unwrap_or("-"),
                     f.subsec.as_deref().unwrap_or("-"),
                     opt(f.sharpness),
-                    riffle_core::candidate::candidate(f.eye_focus),
-                    opt(f.eye_focus),
                     opt(f.eyes_ear),
                     opt(f
                         .eyes_ear

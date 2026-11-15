@@ -32,20 +32,6 @@ fn main() -> Result<()> {
             args.get(3).map(|s| s.parse()).transpose()?,
         ),
         Some("scan") => scan_dir(Path::new(&args[1]), args.get(2).map(|t| t.parse()).transpose()?),
-        Some("candidates") => {
-            let mut dirs = &args[1..];
-            let threads = match dirs.last().map(|t| t.parse::<usize>()) {
-                Some(Ok(n)) => {
-                    dirs = &dirs[..dirs.len() - 1];
-                    Some(n)
-                }
-                _ => None,
-            };
-            if dirs.is_empty() {
-                bail!("usage: riffle-cli candidates <dir>... [threads]");
-            }
-            candidates(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
-        }
         Some("detect") => {
             let mut inputs = &args[1..];
             let threads = match inputs.last().map(|t| t.parse::<usize>()) {
@@ -121,7 +107,7 @@ fn main() -> Result<()> {
             _ => bail!("usage: {EMBED_COMPARE_USAGE}"),
         },
         _ => bail!(
-            "usage: riffle-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       riffle-cli crop <file.ARW> <out.png> [size]\n       riffle-cli scan <dir> [threads]\n       riffle-cli candidates <dir>... [threads]\n       riffle-cli detect <dir|file>... [threads]\n       riffle-cli eyecrops <dir|file>... <out-dir>\n       riffle-cli eyes <dir|file>...\n       riffle-cli features <dir>... [threads]\n       riffle-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
+            "usage: riffle-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       riffle-cli crop <file.ARW> <out.png> [size]\n       riffle-cli scan <dir> [threads]\n       riffle-cli detect <dir|file>... [threads]\n       riffle-cli eyecrops <dir|file>... <out-dir>\n       riffle-cli eyes <dir|file>...\n       riffle-cli features <dir>... [threads]\n       riffle-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
        {COPYBENCH_USAGE}",
             facechoice::USAGE
         ),
@@ -211,10 +197,9 @@ fn focusbox(path: &Path, out: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Print the focus candidate cue, and draw the searched region (the crop
-/// around the AF point, or nothing for the whole image), the AF point, the
-/// faces found with their eyes and the region the nearest face was scored
-/// over (its sharper mesh eye or the eye window) on the upright preview.
+/// Print the face the focus cue judges, and draw the searched region (the
+/// crop around the AF point, or nothing for the whole image), the AF point
+/// and the faces found with their eyes on the upright preview.
 fn faces(path: &Path, out: &Path) -> Result<()> {
     let (a, jpeg) = reader::read_preview(path)?;
     let focus = sharpness::trusted_focus(&a.shot);
@@ -231,38 +216,11 @@ fn faces(path: &Path, out: &Path) -> Result<()> {
         t.elapsed()
     );
     let cue = candidate::focus_cue(&jpeg, a.orientation, focus)?;
-    println!(
-        "candidate: {:?}, in focus {}",
-        cue.state,
-        cue.eye_focus
-            .map_or("-".to_string(), |p| format!("{:.0}%", p * 100.0))
-    );
     let (mut rgb, _, _) = decode_rgb(&jpeg)?;
     if let Some(f) = cue.face {
         println!(
             "nearest face ({:.0},{:.0}) {:.0}x{:.0}",
             f.x, f.y, f.width, f.height
-        );
-        let mesh = candidate::meshes_face(&f)
-            .then(|| eyes::mesh_of(&rgb, w, h, a.orientation, &f))
-            .flatten();
-        let m = candidate::eye_focus(&candidate::luma(&rgb, w, h), w, h, &f, mesh.as_ref());
-        println!(
-            "scored {:?}, lap {:.1}, edge width {}, logit {}",
-            m.scored,
-            m.lap,
-            m.edge_width.map_or("-".to_string(), |e| format!("{e:.2}")),
-            m.logit.map_or("-".to_string(), |l| format!("{l:.3}"))
-        );
-        let r = m.window;
-        draw_rect(
-            &mut rgb,
-            w,
-            h,
-            r.x as i64,
-            r.y as i64,
-            r.width as i64 - 1,
-            r.height as i64 - 1,
         );
     }
     if let Some((px, py)) = d.point {
@@ -535,226 +493,8 @@ fn scan_dir(dir: &Path, threads: Option<usize>) -> Result<()> {
     Ok(())
 }
 
-/// Compute the focus candidate cue of every RAW file in one or more folders
-/// in parallel and, over the files with a face whose XMP sidecar holds a
-/// pick / reject flag (a pick is in focus), pooled across the folders, print
-/// the AUC of the Laplacian alone and of the combined logit, and the precision
-/// and coverage of the candidates.
-///
-/// Each file is one line of whitespace-separated fields: the name, the state,
-/// `p` and the probability, `lap` and the scored region's Laplacian variance
-/// (the chosen mesh eye's or the eye window's), `edge` and its edge width, the
-/// face as `(x,y) WxH` (two fields) or `-` (one), the flag, then the
-/// `mesh_columns` (always 25 fields, `-` where a value is missing). A file
-/// that failed is `name  error: ...` instead.
-fn candidates(dirs: &[PathBuf], threads: Option<usize>) -> Result<()> {
-    let threads =
-        threads.unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
-    if threads == 0 {
-        bail!("threads must be at least 1");
-    }
-    let mut paths: Vec<PathBuf> = Vec::new();
-    for dir in dirs {
-        let mut found: Vec<PathBuf> = std::fs::read_dir(dir)?
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| riffle_core::scan::is_raw_file(p))
-            .collect();
-        if found.is_empty() {
-            bail!("no RAW files in {dir:?}");
-        }
-        found.sort();
-        paths.extend(found);
-    }
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
-        .build()?;
-    // Build the mesh model before the per-file mesh times.
-    let probe = faces::Face {
-        x: 0.0,
-        y: 0.0,
-        width: 1.0,
-        height: 1.0,
-        score: 1.0,
-        left_eye: (0.0, 0.0),
-        right_eye: (0.0, 0.0),
-        nose: (0.0, 0.0),
-        mouth_left: (0.0, 0.0),
-        mouth_right: (0.0, 0.0),
-    };
-    eyes::mesh_of(&[0; 3], 1, 1, 1, &probe);
-
-    let start = Instant::now();
-    let cues: Vec<_> = pool.install(|| {
-        use rayon::prelude::*;
-        paths
-            .par_iter()
-            .map(|p| scan::extract_analysis(p).map(|a| a.cue))
-            .collect()
-    });
-    let total = start.elapsed();
-    // The measures behind each face's probability, both mesh eyes' included,
-    // for the report only.
-    let measured: Vec<Option<Measured>> = pool.install(|| {
-        use rayon::prelude::*;
-        paths
-            .par_iter()
-            .zip(&cues)
-            .map(|(p, cue)| {
-                let face = cue.as_ref().ok()?.face?;
-                let (a, jpeg) = reader::read_preview(p).ok()?;
-                let (rgb, w, h) = decode_rgb(&jpeg).ok()?;
-                let gray = candidate::luma(&rgb, w, h);
-                let t = Instant::now();
-                let mesh = candidate::meshes_face(&face)
-                    .then(|| eyes::mesh_of(&rgb, w, h, a.orientation, &face))
-                    .flatten();
-                let mesh_ms = t.elapsed().as_secs_f64() * 1000.0;
-                Some(Measured {
-                    focus: candidate::eye_focus(&gray, w, h, &face, mesh.as_ref()),
-                    mesh_ms,
-                })
-            })
-            .collect()
-    });
-
-    // `hits` are candidates in focus: the numerator of both rates.
-    let (mut labeled, mut cands, mut in_focus, mut hits) = (0, 0, 0, 0);
-    let (mut errors, mut faced, mut no_edge) = (0, 0, 0);
-    // (in focus, lap, logit) of each labeled faced frame.
-    let mut scored: Vec<(bool, f64, Option<f64>)> = Vec::new();
-    for ((path, cue), measured) in paths.iter().zip(&cues).zip(&measured) {
-        let m = measured.as_ref().map(|m| m.focus);
-        let name = path.file_name().unwrap_or_default().to_string_lossy();
-        let flag = std::fs::read(xmp::sidecar_path(path))
-            .ok()
-            .and_then(|b| xmp::read_flag(&b).ok())
-            .filter(|f| *f != Flag::None);
-        let cue = match cue {
-            Ok(c) => c,
-            Err(e) => {
-                errors += 1;
-                println!("{name}  error: {e}");
-                continue;
-            }
-        };
-        let face = cue.face.map_or("-".to_string(), |f| {
-            format!("({:.0},{:.0}) {:.0}x{:.0}", f.x, f.y, f.width, f.height)
-        });
-        let opt =
-            |v: Option<f64>, digits: usize| v.map_or("-".to_string(), |v| format!("{v:.digits$}"));
-        println!(
-            "{name}  {:?}  p {}  lap {}  edge {}  {face}  {}  {}",
-            cue.state,
-            opt(cue.eye_focus, 3),
-            opt(m.map(|m| m.lap), 1),
-            opt(m.and_then(|m| m.edge_width), 2),
-            flag.map_or("-".to_string(), |f| format!("{f:?}")),
-            mesh_columns(cue.face.as_ref(), measured.as_ref())
-        );
-        if cue.face.is_some() {
-            faced += 1;
-            no_edge += m.is_some_and(|m| m.edge_width.is_none()) as usize;
-        }
-        let (Some(flag), Some(m)) = (flag, m) else {
-            continue;
-        };
-        labeled += 1;
-        let cand = cue.state == candidate::FocusCandidate::Candidate;
-        let pick = flag == Flag::Pick;
-        cands += cand as usize;
-        in_focus += pick as usize;
-        hits += (cand && pick) as usize;
-        scored.push((pick, m.lap, m.logit));
-    }
-    println!(
-        "{} files in {} folder(s), {threads} threads, {errors} errors: {:.2}s total",
-        paths.len(),
-        dirs.len(),
-        total.as_secs_f64()
-    );
-    println!("{faced} with a face, {no_edge} of them with no edge width (probability 0)");
-    if labeled > 0 {
-        let pct = |a: usize, b: usize| 100.0 * a as f64 / b.max(1) as f64;
-        println!(
-            "{labeled} labeled with a face ({in_focus} in focus, {} off): candidates {cands}, in focus {hits} ({:.1}%); in-focus frames {in_focus}, candidates {hits} ({:.1}%)",
-            labeled - in_focus,
-            pct(hits, cands),
-            pct(hits, in_focus)
-        );
-        let with_edge: Vec<(bool, f64)> = scored
-            .iter()
-            .filter_map(|&(pick, _, logit)| logit.map(|l| (pick, l)))
-            .collect();
-        println!(
-            "AUC: lap {:.3}, combined {:.3} ({} frames with an edge width)",
-            auc(scored.iter().map(|&(pick, lap, _)| (pick, lap))),
-            auc(with_edge.iter().copied()),
-            with_edge.len()
-        );
-    }
-    Ok(())
-}
-
-/// The report-only measures of one faced file of `candidates`.
-struct Measured {
-    /// The cue's measures, with both mesh eyes' (`None` when the mesh failed).
-    focus: candidate::EyeFocus,
-    /// The time `eyes::mesh_of` took, in ms.
-    mesh_ms: f64,
-}
-
-/// The mesh fields of one `candidates` line, 25 whitespace-separated fields:
-/// `side` and the face box's long side, `mesh` and the mesh time in ms, `yaw`,
-/// `pitch` and `roll` each with its angle in degrees, then per eye (`L`, `R`,
-/// the image side) the contour window as `WxH`, its lap and edge width, the
-/// iris window as `WxH` and its lap, then `eye`, the scored eye (`L`, `R`, or
-/// `-` for the eye window) and why (`sharper`, `only`: the one eye that
-/// counted, `window`: the window fallback). `-` for anything missing: no
-/// face, no measures, a failed mesh, no pose, a region `None`, no edge width.
-fn mesh_columns(face: Option<&faces::Face>, measured: Option<&Measured>) -> String {
-    let opt =
-        |v: Option<f64>, digits: usize| v.map_or("-".to_string(), |v| format!("{v:.digits$}"));
-    let mesh = measured.and_then(|m| m.focus.mesh);
-    let pose = mesh.and_then(|m| m.pose);
-    let window = |r: Option<candidate::RegionMeasures>| {
-        r.map_or("-".to_string(), |r| {
-            format!("{}x{}", r.window.width, r.window.height)
-        })
-    };
-    let eye = |e: Option<candidate::EyeRegions>| {
-        let (contour, iris) = (e.and_then(|e| e.contour), e.and_then(|e| e.iris));
-        format!(
-            "{} {} {} {} {}",
-            window(contour),
-            opt(contour.map(|r| r.lap), 1),
-            opt(contour.and_then(|r| r.edge_width), 2),
-            window(iris),
-            opt(iris.map(|r| r.lap), 1)
-        )
-    };
-    let side = |e: candidate::Eye| match e {
-        candidate::Eye::Left => "L",
-        candidate::Eye::Right => "R",
-    };
-    let scored = measured.map_or("- -".to_string(), |m| match m.focus.scored {
-        candidate::Scored::Sharper(e) => format!("{} sharper", side(e)),
-        candidate::Scored::Only(e) => format!("{} only", side(e)),
-        candidate::Scored::Window => "- window".to_string(),
-    });
-    format!(
-        "side {}  mesh {}  yaw {}  pitch {}  roll {}  L {}  R {}  eye {scored}",
-        opt(face.map(|f| f.width.max(f.height) as f64), 0),
-        opt(measured.map(|m| m.mesh_ms), 1),
-        opt(pose.map(|p| p.yaw), 1),
-        opt(pose.map(|p| p.pitch), 1),
-        opt(pose.map(|p| p.roll), 1),
-        eye(mesh.map(|m| m.left)),
-        eye(mesh.map(|m| m.right))
-    )
-}
-
 /// The header of `features`, the column names of `features_line`.
-const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsharpness\tstate\teye_focus\tcue_side\taf\tjudged_side\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap\tanalysis_ms\teyes_ms";
+const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsharpness\tcue_side\taf\tjudged_side\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap\tanalysis_ms\teyes_ms";
 
 /// Dump every feature of every RAW file of the given folders (not recursive,
 /// each folder's sorted) on a pool of `threads` threads: `FEATURES_HEADER`,
@@ -764,9 +504,8 @@ const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsha
 /// The columns: the folder's name, the file name, the Exif `capture_time`
 /// and `subsec`; the XMP and `.dop` flags (`Pick` / `Reject` / `None`, `-`
 /// when there is no sidecar, `err` when it is unreadable); from
-/// `scan::extract_analysis`, what the scan stores: `sharpness`, the cue
-/// `state`, `eye_focus` and the cue face's box side (the longer of width and
-/// height) in preview pixels; from the path `eyes_of` takes: `af` / `noaf`
+/// `scan::extract_analysis`, what the scan stores: `sharpness` and the cue
+/// face's box side (the longer of width and height) in preview pixels; from the path `eyes_of` takes: `af` / `noaf`
 /// (a trusted AF point), the judged face's box side, the EAR of its more
 /// closed eye, the eyes-open probability (`1 -` the closed one), `yaw`,
 /// `pitch` and `roll` in degrees; from the analysis again, the cue mesh's
@@ -1441,14 +1180,12 @@ fn features_line(
         Ok(a) => (
             [
                 opt(a.sharpness, 4),
-                format!("{:?}", a.cue.state),
-                opt(a.cue.eye_focus, 4),
                 opt(a.cue.face.map(|f| f.width.max(f.height) as f64), 1),
             ]
             .join("\t"),
             [opt(a.cue.eye_offset, 4), opt(a.cue.edge_gap, 4)].join("\t"),
         ),
-        Err(_) => (["err"; 4].join("\t"), ["err"; 2].join("\t")),
+        Err(_) => (["err"; 2].join("\t"), ["err"; 2].join("\t")),
     };
     let (time, eyes) = match eyes {
         Ok(e) => (
@@ -1885,25 +1622,6 @@ fn detect_line(
     )
 }
 
-/// The area under the ROC curve of `(in focus, score)` pairs: the share of
-/// (in focus, off) pairs where the in-focus frame scores higher, ties 0.5.
-fn auc(frames: impl Iterator<Item = (bool, f64)>) -> f64 {
-    let (pos, neg): (Vec<_>, Vec<_>) = frames.partition(|(pick, _)| *pick);
-    let mut s = 0.0;
-    for (_, a) in &pos {
-        for (_, b) in &neg {
-            s += if a > b {
-                1.0
-            } else if a == b {
-                0.5
-            } else {
-                0.0
-            };
-        }
-    }
-    s / (pos.len() * neg.len()) as f64
-}
-
 /// Run every RAW and JPEG file under one or more folders, recursively,
 /// through what the app's thumbnail, preview and 1:1 views call, print each
 /// failed stage and a per-extension summary, and fail when any file did.
@@ -2238,90 +1956,6 @@ mod tests {
     }
 
     #[test]
-    fn mesh_columns_list_the_pose_and_each_eye() {
-        let face = faces::Face {
-            width: 80.4,
-            height: 96.6,
-            ..upright()
-        };
-        let window = |width, height| sharpness::Window {
-            x: 0,
-            y: 0,
-            width,
-            height,
-        };
-        let region = |w, h, lap, edge_width| candidate::RegionMeasures {
-            window: window(w, h),
-            lap,
-            edge_width,
-            edge_width_rel: None,
-        };
-        let pose = pose::Pose {
-            yaw: -32.06,
-            pitch: 4.44,
-            roll: 0.0,
-        };
-        let focus = candidate::EyeFocus {
-            window: window(30, 14),
-            lap: 0.0,
-            edge_width: None,
-            edge_width_rel: None,
-            logit: None,
-            probability: 0.0,
-            state: candidate::FocusCandidate::NotCandidate,
-            scored: candidate::Scored::Sharper(candidate::Eye::Left),
-            mesh: Some(candidate::EyeMeasures {
-                left: candidate::EyeRegions {
-                    contour: Some(region(30, 14, 123.456, Some(2.346))),
-                    iris: Some(region(9, 9, 45.0, None)),
-                },
-                right: candidate::EyeRegions {
-                    contour: Some(region(28, 12, 80.0, None)),
-                    iris: None,
-                },
-                ear: None,
-                pose: Some(pose),
-                eye_offset: None,
-                edge_gap: None,
-                eye_centers: None,
-            }),
-        };
-        let measured = Measured {
-            focus,
-            mesh_ms: 35.04,
-        };
-        assert_eq!(
-            mesh_columns(Some(&face), Some(&measured)),
-            "side 97  mesh 35.0  yaw -32.1  pitch 4.4  roll 0.0  L 30x14 123.5 2.35 9x9 45.0  R 28x12 80.0 - - -  eye L sharper"
-        );
-        let only = Measured {
-            focus: candidate::EyeFocus {
-                scored: candidate::Scored::Only(candidate::Eye::Right),
-                ..focus
-            },
-            ..measured
-        };
-        assert!(mesh_columns(Some(&face), Some(&only)).ends_with("  eye R only"));
-        let failed = Measured {
-            focus: candidate::EyeFocus {
-                scored: candidate::Scored::Window,
-                mesh: None,
-                ..focus
-            },
-            ..measured
-        };
-        assert_eq!(
-            mesh_columns(Some(&face), Some(&failed)),
-            "side 97  mesh 35.0  yaw -  pitch -  roll -  L - - - - -  R - - - - -  eye - window"
-        );
-        assert_eq!(
-            mesh_columns(None, None),
-            "side -  mesh -  yaw -  pitch -  roll -  L - - - - -  R - - - - -  eye - -"
-        );
-        assert_eq!(mesh_columns(None, None).split_whitespace().count(), 25);
-    }
-
-    #[test]
     fn features_line_lists_every_column_with_dashes_for_missing_values() {
         let face = faces::Face {
             width: 80.4,
@@ -2330,16 +1964,10 @@ mod tests {
         };
         let analysis = Ok(scan::Analysis {
             cue: candidate::Cue {
-                state: candidate::FocusCandidate::Candidate,
-                eye_focus: Some(0.912345),
                 face: Some(face),
-                detection: None,
-                eyes_ear: None,
-                pose: None,
                 eye_offset: Some(0.04567),
                 edge_gap: Some(0.25),
-                eye_centers: None,
-                preview_width: 0,
+                ..candidate::Cue::default()
             },
             sharpness: Some(123.45678),
             full_eye_sharp: None,
@@ -2359,7 +1987,7 @@ mod tests {
         });
         assert_eq!(
             features_line("2026-09-19", "a.ARW", "Pick", "Pick", &analysis, 40.04, &eyes, 85.06),
-            "2026-09-19\ta.ARW\t2026:09:19 10:11:12\t345\tPick\tPick\t123.4568\tCandidate\t0.9123\t96.6\taf\t96.6\t0.2123\t0.9877\t-12.3\t4.1\t0.0\t0.0457\t0.2500\t40.0\t85.1"
+            "2026-09-19\ta.ARW\t2026:09:19 10:11:12\t345\tPick\tPick\t123.4568\t96.6\taf\t96.6\t0.2123\t0.9877\t-12.3\t4.1\t0.0\t0.0457\t0.2500\t40.0\t85.1"
         );
         let unknown = Ok(scan::Analysis::default());
         let no_face = Ok(EyesFeatures {
@@ -2383,7 +2011,7 @@ mod tests {
         );
         assert_eq!(
             line,
-            "2026-05-22\tb.DNG\t2026:05:22 08:00:00\t-\t-\tNone\t-\tUnknown\t-\t-\tnoaf\t-\t-\t-\t-\t-\t-\t-\t-\t30.0\t50.0"
+            "2026-05-22\tb.DNG\t2026:05:22 08:00:00\t-\t-\tNone\t-\t-\tnoaf\t-\t-\t-\t-\t-\t-\t-\t-\t30.0\t50.0"
         );
         assert_eq!(
             line.split('\t').count(),
@@ -2401,7 +2029,7 @@ mod tests {
         );
         assert_eq!(
             failed,
-            "x\tc.ARW\terr\terr\terr\t-\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\t1.0\t2.0"
+            "x\tc.ARW\terr\terr\terr\t-\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\t1.0\t2.0"
         );
     }
 

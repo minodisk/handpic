@@ -245,7 +245,7 @@ and a labeled set, not only whether it loads.
   13.4% of the faced files on the 2134-ARW folder and saved about 0.4 s of
   ~20.6 s, within the run-to-run spread (Measured, `docs/humans/performance.md`
   "Focus candidate pass"). The whole `riffle-cli candidates` command
-  peaked at 405-411 MB with 24 threads (Measured). `mesh_of` rotates only
+  (removed since, with the logistic model it validated) peaked at 405-411 MB with 24 threads (Measured). `mesh_of` rotates only
   the face crop of a portrait preview, not the whole image: 0.016 ms
   against 2.06 ms per call (Measured). Source:
   `docs/plans/_archived/20261008-mesh-eye-focus/learnings.md`, Steps 1 and

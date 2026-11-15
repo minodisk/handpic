@@ -1,9 +1,10 @@
 use anyhow::{bail, Result};
-use riffle_core::candidate::{self, EyeFocus, Scored};
+use riffle_core::candidate;
 use riffle_core::decode::decode_rgb;
 use riffle_core::eyes;
 use riffle_core::faces::{self, Face};
 use riffle_core::fullsharp;
+use riffle_core::pose::Pose;
 use riffle_core::reader;
 use riffle_core::scan;
 use riffle_core::sharpness;
@@ -13,19 +14,23 @@ use std::time::Instant;
 pub const USAGE: &str = "riffle-cli facechoice <dir|file>... [threads] [--out <out.tsv>] [--check]";
 
 /// The header of the dump, the column names of `frame_lines`.
-const HEADER: &str = "folder\tfile\taf\taf_x\taf_y\tset\tface\tx\ty\tw\th\tscore\tleft_eye\tright_eye\tnearest\teye_focus\tstate\tscored\tear\tyaw\tpitch\troll\tmesh_ms\tnose\tmesh_left_eye\tmesh_right_eye\tmesh_nose\teye_offset\tnose_offset\tmax_offset\twindow_ef\tedge_gap\tfull_sharp";
+const HEADER: &str = "folder\tfile\taf\taf_x\taf_y\tset\tface\tx\ty\tw\th\tscore\tleft_eye\tright_eye\tnearest\tear\tyaw\tpitch\troll\tmesh_ms\tnose\tmesh_left_eye\tmesh_right_eye\tmesh_nose\teye_offset\tnose_offset\tmax_offset\tedge_gap\tfull_sharp";
 
-/// One face of a set, scored as the scan scores its judged face.
+/// One face of a set, measured as the scan measures its judged face.
 #[derive(Clone, Copy)]
 struct Judged {
     face: Face,
-    focus: EyeFocus,
     /// The ms `eyes::mesh_of` took; `None` when `meshes_face` turned it down.
     mesh_ms: Option<f64>,
     /// The mesh points set against YuNet's; `None` without a mesh.
     landmarks: Option<Landmarks>,
-    /// `candidate::eye_focus` without the mesh: the eye window's probability.
-    window_ef: f64,
+    /// `eyes::more_closed_ear` of the mesh.
+    ear: Option<f64>,
+    pose: Option<Pose>,
+    /// `candidate::mesh_eye_offset` of the face and the mesh.
+    eye_offset: Option<f64>,
+    /// `candidate::edge_gap` of the face and the mesh.
+    edge_gap: Option<f64>,
     /// `fullsharp::full_eye_sharpness` of the face's eye centers.
     full_sharp: Option<f64>,
 }
@@ -77,7 +82,7 @@ struct Frame {
 /// folders given (the face-choice plan's Step 2): one `frame_lines` row per
 /// (file, set, face) after `HEADER`, to `--out` or stdout. With `--check`
 /// each file's `af_rule` value is compared with
-/// `scan::extract_analysis(path).cue.eye_focus` and the mismatches counted.
+/// `scan::extract_analysis(path).full_eye_sharp` and the mismatches counted.
 /// Errors and the totals go to stderr.
 pub fn run(args: &[String]) -> Result<()> {
     let (mut out, mut check, mut rest) = (None, false, Vec::new());
@@ -133,8 +138,11 @@ pub fn run(args: &[String]) -> Result<()> {
         paths
             .par_iter()
             .map(|p| {
-                let stored =
-                    check.then(|| scan::extract_analysis(p).ok().and_then(|a| a.cue.eye_focus));
+                let stored = check.then(|| {
+                    scan::extract_analysis(p)
+                        .ok()
+                        .and_then(|a| a.full_eye_sharp)
+                });
                 (frame(p), stored)
             })
             .collect()
@@ -210,14 +218,17 @@ pub fn run(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-/// Both face sets of the RAW file at `path`, every face scored on one
+/// Both face sets of the RAW file at `path`, every face measured on one
 /// full-size decode of its preview.
 fn frame(path: &Path) -> Result<Frame> {
     let (a, jpeg) = reader::read_preview(path)?;
     let focus = sharpness::trusted_focus(&a.shot);
     let (rgb, w, h) = decode_rgb(&jpeg)?;
-    let gray = candidate::luma(&rgb, w, h);
-    let full = reader::read_full(path).ok().map(|(_, full)| full);
+    // The scan's own gate: no larger JPEG than the preview, no value.
+    let full = reader::read_full(path)
+        .ok()
+        .filter(|(arw, _)| scan::has_larger_jpeg(arw))
+        .map(|(_, full)| full);
     let judge = |face: &Face| {
         let t = Instant::now();
         let meshed = candidate::meshes_face(face);
@@ -231,10 +242,16 @@ fn frame(path: &Path) -> Result<Frame> {
         });
         Judged {
             face: *face,
-            focus: candidate::eye_focus(&gray, w, h, face, mesh.as_ref()),
             mesh_ms,
             landmarks,
-            window_ef: candidate::eye_focus(&gray, w, h, face, None).probability,
+            ear: mesh.as_ref().and_then(|m| eyes::more_closed_ear(&m.points)),
+            pose: mesh.as_ref().and_then(|m| m.pose),
+            eye_offset: mesh
+                .as_ref()
+                .and_then(|m| candidate::mesh_eye_offset(face, &m.points)),
+            edge_gap: mesh
+                .as_ref()
+                .and_then(|m| candidate::edge_gap(face, &m.points, w, h)),
             full_sharp: full
                 .as_deref()
                 .and_then(|full| fullsharp::full_eye_sharpness(full, centers, w)),
@@ -263,7 +280,7 @@ fn nearest(set: &[Judged], point: Option<(usize, usize)>) -> Option<usize> {
     faces.iter().position(|f| std::ptr::eq(f, n))
 }
 
-/// The `eye_focus` of today's rule: with an AF point the crop set's nearest
+/// The `full_sharp` of today's rule: with an AF point the crop set's nearest
 /// face, without one the whole set's `eyes::judged_face` (the largest at or
 /// above `sharpness::FACE_CONFIDENCE`).
 fn af_rule(frame: &Frame) -> Option<f64> {
@@ -275,7 +292,7 @@ fn af_rule(frame: &Frame) -> Option<f64> {
             (&frame.whole, faces.iter().position(|f| std::ptr::eq(f, j))?)
         }
     };
-    Some(set[i].focus.probability)
+    set[i].full_sharp
 }
 
 /// The rows of one frame: its crop set, then its whole set, one row per face
@@ -290,7 +307,7 @@ fn frame_lines(folder: &str, file: &str, frame: &Frame) -> Vec<String> {
     let mut lines = Vec::new();
     for (name, set) in [("crop", &frame.crop), ("whole", &frame.whole)] {
         if set.is_empty() {
-            lines.push(format!("{head}\t{name}\t-{}", "\t-".repeat(26)));
+            lines.push(format!("{head}\t{name}\t-{}", "\t-".repeat(22)));
             continue;
         }
         let near = nearest(set, frame.point);
@@ -304,26 +321,20 @@ fn frame_lines(folder: &str, file: &str, frame: &Frame) -> Vec<String> {
     lines
 }
 
-/// The 26 columns after `face` of one face's row.
+/// The 22 columns after `face` of one face's row.
 fn face_columns(j: &Judged, nearest: bool) -> String {
     let opt = |v: Option<f64>| v.map_or("-".to_string(), |v| v.to_string());
     let point = |p: Option<(f32, f32)>| p.map_or("-".to_string(), |(x, y)| format!("{x},{y}"));
     let f = &j.face;
-    let mesh = j.focus.mesh;
-    let pose = mesh.and_then(|m| m.pose);
+    let pose = j.pose;
     let landmarks = j.landmarks;
-    let eye_offset = mesh.and_then(|m| m.eye_offset);
     let nose_offset = landmarks.and_then(|l| nose_offset(f, &l));
-    let max_offset = eye_offset.zip(nose_offset).map(|(eye, nose)| eye.max(nose));
-    let scored = match j.focus.scored {
-        Scored::Sharper(e) | Scored::Only(e) => match e {
-            candidate::Eye::Left => "L",
-            candidate::Eye::Right => "R",
-        },
-        Scored::Window => "window",
-    };
+    let max_offset = j
+        .eye_offset
+        .zip(nose_offset)
+        .map(|(eye, nose)| eye.max(nose));
     format!(
-        "{}\t{}\t{}\t{}\t{}\t{},{}\t{},{}\t{}\t{}\t{:?}\t{scored}\t{}\t{}\t{}\t{}\t{}\t{},{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{},{}\t{},{}\t{}\t{}\t{}\t{}\t{}\t{}\t{},{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         f.x,
         f.y,
         f.width,
@@ -334,9 +345,7 @@ fn face_columns(j: &Judged, nearest: bool) -> String {
         f.right_eye.0,
         f.right_eye.1,
         nearest as u8,
-        j.focus.probability,
-        j.focus.state,
-        opt(mesh.and_then(|m| m.ear)),
+        opt(j.ear),
         opt(pose.map(|p| p.yaw)),
         opt(pose.map(|p| p.pitch)),
         opt(pose.map(|p| p.roll)),
@@ -346,11 +355,10 @@ fn face_columns(j: &Judged, nearest: bool) -> String {
         point(landmarks.map(|l| l.left_eye)),
         point(landmarks.map(|l| l.right_eye)),
         point(landmarks.map(|l| l.nose)),
-        opt(eye_offset),
+        opt(j.eye_offset),
         opt(nose_offset),
         opt(max_offset),
-        j.window_ef,
-        opt(mesh.and_then(|m| m.edge_gap)),
+        opt(j.edge_gap),
         opt(j.full_sharp)
     )
 }
@@ -358,9 +366,6 @@ fn face_columns(j: &Judged, nearest: bool) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riffle_core::candidate::{EyeMeasures, EyeRegions, FocusCandidate};
-    use riffle_core::pose::Pose;
-    use riffle_core::sharpness::Window;
 
     fn face(x: f32, side: f32, score: f32) -> Face {
         Face {
@@ -377,53 +382,24 @@ mod tests {
         }
     }
 
-    fn judged(face: Face, probability: f64, meshed: bool) -> Judged {
-        let regions = EyeRegions {
-            contour: None,
-            iris: None,
-        };
+    fn judged(face: Face, full_sharp: f64, meshed: bool) -> Judged {
         Judged {
             face,
-            focus: EyeFocus {
-                window: Window {
-                    x: 0,
-                    y: 0,
-                    width: 24,
-                    height: 24,
-                },
-                lap: 1.0,
-                edge_width: None,
-                edge_width_rel: None,
-                logit: None,
-                probability,
-                state: FocusCandidate::NotCandidate,
-                scored: if meshed {
-                    Scored::Sharper(candidate::Eye::Right)
-                } else {
-                    Scored::Window
-                },
-                mesh: meshed.then_some(EyeMeasures {
-                    left: regions,
-                    right: regions,
-                    ear: Some(0.25),
-                    pose: Some(Pose {
-                        yaw: 1.5,
-                        pitch: -2.0,
-                        roll: 0.125,
-                    }),
-                    eye_offset: Some(0.0625),
-                    edge_gap: Some(0.5),
-                    eye_centers: None,
-                }),
-            },
             mesh_ms: meshed.then_some(30.5),
             landmarks: meshed.then_some(Landmarks {
                 left_eye: (face.left_eye.0 + 3.0, face.left_eye.1 + 4.0),
                 right_eye: (face.right_eye.0, face.right_eye.1 - 6.25),
                 nose: (face.nose.0, face.nose.1 + 12.5),
             }),
-            window_ef: if meshed { 0.03125 } else { probability },
-            full_sharp: meshed.then_some(0.25),
+            ear: meshed.then_some(0.25),
+            pose: meshed.then_some(Pose {
+                yaw: 1.5,
+                pitch: -2.0,
+                roll: 0.125,
+            }),
+            eye_offset: meshed.then_some(0.0625),
+            edge_gap: meshed.then_some(0.5),
+            full_sharp: Some(full_sharp),
         }
     }
 
@@ -438,11 +414,11 @@ mod tests {
         assert_eq!(
             lines,
             [
-                "2026-06-05\t_DSC0001.ARW\t1\t100\t50\tcrop\t0\t80\t10\t100\t100\t0.9\t110,50\t150,50\t1\t0.123456789012345\tNotCandidate\tR\t0.25\t1.5\t-2\t0.125\t30.5\t130,70\t113,54\t150,43.75\t130,82.5\t0.0625\t0.125\t0.125\t0.03125\t0.5\t0.25",
-                "2026-06-05\t_DSC0001.ARW\t1\t100\t50\twhole\t0\t1000\t10\t40\t40\t0.7\t1012,26\t1028,26\t1\t0.75\tNotCandidate\twindow\t-\t-\t-\t-\t-\t1020,34\t-\t-\t-\t-\t-\t-\t0.75\t-\t-",
+                "2026-06-05\t_DSC0001.ARW\t1\t100\t50\tcrop\t0\t80\t10\t100\t100\t0.9\t110,50\t150,50\t1\t0.25\t1.5\t-2\t0.125\t30.5\t130,70\t113,54\t150,43.75\t130,82.5\t0.0625\t0.125\t0.125\t0.5\t0.123456789012345",
+                "2026-06-05\t_DSC0001.ARW\t1\t100\t50\twhole\t0\t1000\t10\t40\t40\t0.7\t1012,26\t1028,26\t1\t-\t-\t-\t-\t-\t1020,34\t-\t-\t-\t-\t-\t-\t-\t0.75",
             ]
         );
-        assert_eq!(HEADER.split('\t').count(), 33);
+        assert_eq!(HEADER.split('\t').count(), 29);
         assert!(lines
             .iter()
             .all(|l| l.split('\t').count() == HEADER.split('\t').count()));
@@ -462,7 +438,7 @@ mod tests {
         assert_eq!(lines.len(), 3);
         assert_eq!(
             lines[0],
-            format!("d\tf.ARW\t1\t110\t50\tcrop\t-{}", "\t-".repeat(26))
+            format!("d\tf.ARW\t1\t110\t50\tcrop\t-{}", "\t-".repeat(22))
         );
         assert_eq!(lines[0].split('\t').count(), HEADER.split('\t').count());
         assert_eq!(

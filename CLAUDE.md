@@ -74,8 +74,8 @@ when the camera tracked a face, else around the AF point, else between
 the eyes of a detected face, else from the sharpest tile), `crates/cli` (the
 benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
-`facechoice` per-face `eye_focus` dump, with YuNet's nose, the face mesh's eye
-centers and nose tip, their eye and nose offsets and the eye window's score, the mesh's edge gap and the full-size eye sharpness),
+`facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
+centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
 `crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
 like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
