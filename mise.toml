@@ -96,7 +96,7 @@ cargo test
 """
 
 [tasks."native:dev"]
-description = "Run the GPUI app (debug build; fast to compile, slow at runtime)"
+description = "Run the GPUI app (debug build, the GPUI crates optimized as the GPUI Kit guide has it)"
 dir = "crates/native"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"

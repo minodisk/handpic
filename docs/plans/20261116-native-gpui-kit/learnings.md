@@ -65,12 +65,6 @@
 
 ## Deferred issues (todo candidates)
 
-- The `native:dev` task's description in the root `mise.toml` still says
-  "debug build; fast to compile, slow at runtime". With the guide's
-  `[profile.dev.package]` block the GPUI crates are optimized in the dev
-  profile, so "slow at runtime" no longer holds and the cold compile is
-  slower. Basis: this step's dev profile. File: `mise.toml`
-  (`[tasks."native:dev"]`, also `native:watch`).
 - Pending manual check (Windows): run `mise run native:dev` with the real
   settings and confirm the window restores its saved place, the Lucide icons
   (strip, menus) and the settings modal's controls (the `Checkbox` check

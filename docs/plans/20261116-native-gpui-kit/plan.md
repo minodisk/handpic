@@ -175,3 +175,5 @@ at a usable speed.
 - **Not adopted: `use gpui_kit::*`.** The app keeps its explicit lists.
 
 ## Progress
+
+- 2026-11-16: Step 1 shipped: `crates/native` depends on the `gpui-kit` umbrella crate alone, with the GPUI crates optimized in the dev profile. Manual checks on Windows, macOS and Linux are pending (see `learnings.md`).

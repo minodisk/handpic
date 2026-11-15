@@ -187,7 +187,7 @@ key-down listener, so a binding that matches takes the key from
   context, and update the table.
 - Rule: the app already has its own `AssetSource` (`icons.rs`); GPUI takes
   one per application, so `Icons` falls back to `gpui_kit::assets::Assets`
-  (`gpui-kit-assets` `=0.9.1`, the components' own icon set, not the
+  (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the components' own icon set, not the
   whole-catalog `AllAssets`) for the icons the components draw, the
   checked `Radio`'s and the language menu's `icons/check.svg` and the
   `Select`'s `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
