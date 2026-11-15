@@ -64,12 +64,9 @@ Decisions taken with the user at planning (2026-11-15):
   (`../_archived/20261015-folder-wide-ranking-eval/folderwide.md`) found
   neither `AF eye focus` nor `Good photo` contributes (dropping either moves
   the frame AUC by at most ±0.003, intervals across zero).
-- PR #1066 (the native meta pane's stored values) drops its own
-  `AF eye in focus` and `Focus candidate` rows and renames its
-  `Eyes at full size` row `Eye focus` before it merges (another session's
-  work, decided 2026-11-15). Step 4 does not touch
-  `crates/native/src/meta.rs` and does not wait for #1066; Step 5 does wait
-  for it, since removing the fields would break #1066's branch.
+- PR #1066 (the native meta pane's stored values) merges first, already
+  without `AF eye in focus` and `Focus candidate` rows and with its full-size
+  row named `Eye focus`.
 - The reduced per-frame table (folder, file, rating, `full_eye_sharp`) is
   committed to this folder so the derivation is reproducible from the
   repository.

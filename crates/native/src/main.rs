@@ -2273,6 +2273,11 @@ impl Riffle {
             let old = self.thumbs.reset();
             self.retire(old);
             self.files = paths.iter().map(PathBuf::from).collect();
+            // The previous folder's file stays on screen until this one's
+            // first preview, and its index means nothing in `files` now.
+            if let Some((at, _)) = &mut self.shown {
+                *at = None;
+            }
             self.mark_strip();
             let landed = selection::settle(&self.selection, &paths, self.pager.current(), true);
             self.set_selection(landed);
@@ -3844,7 +3849,13 @@ impl Riffle {
             .flex()
             .flex_col()
             .gap_3();
-        if let Some((_, shown)) = &self.shown {
+        if let Some((at, shown)) = &self.shown {
+            let facts = at
+                .and_then(|i| self.files.get(i))
+                .and_then(|p| self.facts.get(p.to_string_lossy().as_ref()));
+            let focus = facts.and_then(|f| f.focus.as_ref());
+            let maker_note = meta::af_rows(focus.and_then(|f| f.point.as_ref()));
+            let analysis = meta::analysis(focus, facts.and_then(|f| f.sharpness));
             let (name, meta, error) = match shown {
                 Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
                 Shown::Failed { name, error } => (name, None, Some(error)),
@@ -3861,7 +3872,7 @@ impl Riffle {
             if let Some(error) = error {
                 body = body.child(div().text_color(rgb(ERROR_COLOR)).child(error.clone()));
             }
-            for group in meta::groups(meta, &[]) {
+            for group in meta::groups(meta, &maker_note, &analysis) {
                 body = body.child(
                     div()
                         .flex()
