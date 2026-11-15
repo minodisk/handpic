@@ -403,3 +403,4 @@ Decisions taken with the user at planning (2026-11-15):
 - (2026-11-15) Step 2 complete
 - (2026-11-15) Step 3 complete
 - (2026-11-16) Step 4 complete
+- (2026-11-16) Step 5 complete
