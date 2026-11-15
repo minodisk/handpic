@@ -1458,6 +1458,19 @@ impl Index {
             .map_err(|e| e.to_string())
     }
 
+    /// Every `dir` holding `files` rows with its row count, in `dir` order.
+    pub fn dir_counts(&self) -> Result<Vec<(String, usize)>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT dir, COUNT(*) FROM files GROUP BY dir ORDER BY dir")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize)))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<_>>()
+            .map_err(|e| e.to_string())
+    }
+
     /// What the ranking reads of every `files` row of `dir`, in file-name
     /// order: the flag, whether the file was viewed, the capture time, the
     /// second pass's values when the row is at `FACES_VERSION`, and the
@@ -3703,6 +3716,34 @@ pub(crate) mod tests {
             )
             .unwrap();
         assert_eq!(index.rank_dirs().unwrap(), ["/rejects", "/viewed"]);
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn dir_counts_count_each_folders_rows_failures_included() {
+        let dir = temp_dir("dir-counts");
+        let a = file(&dir, "a.ARW", b"a");
+        let b = file(&dir, "b.ARW", b"b");
+        let c = file(&dir, "c.ARW", b"c");
+        let d = file(&dir, "d.ARW", b"d");
+        let mut index = open(&dir);
+        let failure = Failure {
+            message: "broken".to_string(),
+            orientation: 1,
+            shot: None,
+        };
+        index
+            .write_batch("/two", &[(a, Ok(entry())), (b, Err(failure))])
+            .unwrap();
+        index.write_batch("/one", &[(c, Ok(entry()))]).unwrap();
+        index.write_batch("/gone", &[(d, Ok(entry()))]).unwrap();
+        index.reconcile("/gone", &[]).unwrap();
+
+        assert_eq!(
+            index.dir_counts().unwrap(),
+            [("/one".to_string(), 1), ("/two".to_string(), 2)]
+        );
 
         remove_temp_dir(&dir);
     }
