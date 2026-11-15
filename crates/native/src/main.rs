@@ -97,6 +97,7 @@ use gpui_component::{
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
+    kbd::Kbd,
     progress::ProgressCircle,
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
@@ -4267,27 +4268,30 @@ impl Riffle {
             Which::Filter => "filter-toggle",
         };
         let theme = cx.theme();
-        let accent = theme.accent;
-        let mut button = div()
-            .id(id)
-            .px_1p5()
+        let (fill, border, label) = (
+            theme.button,
+            if lit { theme.primary } else { theme.input },
+            if lit { theme.primary } else { theme.foreground },
+        );
+        // The caller's style is replayed over the disabled state's, so the
+        // inert sort button keeps the normal colors, only dimmed.
+        let mut button = Button::new(id)
+            .xsmall()
+            .tab_stop(false)
+            .disabled(!enabled)
+            .h(MENU_BUTTON_HEIGHT)
+            .px(px(6.))
             .rounded_sm()
-            .border_1()
-            .border_color(if lit { theme.primary } else { theme.input })
-            .bg(theme.button)
-            .text_size(px(12.))
-            .text_color(if lit { theme.primary } else { theme.foreground })
-            .child(text);
+            .bg(fill)
+            .border_color(border)
+            .child(div().text_size(px(12.)).text_color(label).child(text));
         if enabled {
-            button = button
-                .cursor_pointer()
-                .hover(move |s| s.bg(accent))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, e: &MouseDownEvent, _, cx| {
-                        this.menu_pressed(which, e.position, cx);
-                    }),
-                );
+            button = button.cursor_pointer().on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, e: &MouseDownEvent, _, cx| {
+                    this.menu_pressed(which, e.position, cx);
+                }),
+            );
         } else {
             button = button.opacity(0.5);
         }
@@ -4978,28 +4982,28 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
 fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> AnyElement {
     let action = item.action;
     let muted = cx.theme().muted_foreground;
-    let row = menu_item(
-        ("context-item", at),
-        item.checked == Some(true),
-        item.disabled,
-        cx,
-    )
-    .child(
-        div()
-            .flex_1()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_3()
-            .child(item.label.clone())
-            .child(
-                div()
-                    .flex_none()
-                    .text_xs()
-                    .text_color(muted)
-                    .child(item.shortcut.clone()),
-            ),
-    );
+    let row =
+        menu_item(
+            ("context-item", at),
+            item.checked == Some(true),
+            item.disabled,
+            cx,
+        )
+        .child(
+            div()
+                .flex_1()
+                .flex()
+                .items_center()
+                .justify_between()
+                .gap_3()
+                .child(item.label.clone())
+                .child(div().flex_none().text_xs().text_color(muted).when(
+                    !item.shortcut.is_empty(),
+                    |slot| {
+                        slot.child(Kbd::new(keys::keystroke_of(&item.shortcut)).appearance(false))
+                    },
+                )),
+        );
     if item.disabled {
         return row.into_any_element();
     }
@@ -5082,6 +5086,11 @@ const MARK_SIZE: f32 = 11.;
 /// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
+/// The `Sort ▾` / `Filter ▾` buttons' height, the bordered `div`s' they
+/// replaced (a 12 px line at GPUI's default line height, rounded to 19 px,
+/// and the border), which keeps the status row's height and the preview
+/// canvas's 842 px.
+const MENU_BUTTON_HEIGHT: Pixels = px(21.);
 /// `PopupMenu`'s row height at its default size (1.625 rem at the window's
 /// 16 px rem) and its horizontal padding (0.5 rem).
 const MENU_ROW: f32 = 26.;

@@ -10,10 +10,15 @@ use gpui::{
     SharedString, Window, div, prelude::*, px, transparent_black,
 };
 use gpui_component::{
-    ActiveTheme, FocusTrapElement, Selectable, Sizable,
+    ActiveTheme, FocusTrapElement, IndexPath, Sizable,
     button::{Button, ButtonVariants},
-    input::{Input, InputEvent, InputState},
+    input::{
+        Input, InputEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment, InputGroupButton,
+        InputState,
+    },
+    kbd::Kbd,
     radio::Radio,
+    select::{SearchableVec, Select, SelectEvent, SelectState},
     setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
 };
 
@@ -48,6 +53,10 @@ const INPUT_CONTEXT: &str = "Input";
 /// default line height, 3 px of padding and the border on each side.
 const FIELD_HEIGHT: Pixels = px(29.);
 
+/// The language picker's items, the presets' names in `i18n::presets()`
+/// order.
+type Languages = SelectState<SearchableVec<SharedString>>;
+
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
@@ -77,10 +86,14 @@ pub struct SettingsView {
     label_names: LabelNames,
     /// The Sidecar page's name fields, in `LABEL_COLORS` order.
     name_fields: Vec<Entity<InputState>>,
-    /// The language `Reset` fills in, an index into `i18n::presets()`.
+    /// The language `Reset` fills in, an index into `i18n::presets()`,
+    /// chosen in `languages`.
     language: usize,
+    languages: Entity<Languages>,
     /// The stored destination root and pattern.
     import_root: String,
+    /// The root shown read-only, so it can be selected and copied.
+    root_field: Entity<InputState>,
     import_pattern: String,
     pattern_field: Entity<InputState>,
     /// Where today's photos would go under the field's pattern, or why it is
@@ -115,6 +128,34 @@ impl SettingsView {
             }
         })
         .detach();
+        let names: Vec<SharedString> = i18n::presets()
+            .iter()
+            .map(|preset| preset.name.clone().into())
+            .collect();
+        let languages = cx.new(|cx| {
+            SelectState::new(
+                SearchableVec::new(names),
+                Some(IndexPath::new(0)),
+                window,
+                cx,
+            )
+        });
+        cx.subscribe_in(
+            &languages,
+            window,
+            |this, _, event: &SelectEvent<SearchableVec<SharedString>>, _, cx| {
+                if let SelectEvent::Confirm(Some(name)) = event
+                    && let Some(at) = i18n::presets()
+                        .iter()
+                        .position(|preset| preset.name == name.as_ref())
+                {
+                    this.language = at;
+                    cx.notify();
+                }
+            },
+        )
+        .detach();
+        let root_field = cx.new(|cx| InputState::new(window, cx));
         Self {
             focus: cx.focus_handle(),
             model: SettingsModal::default(),
@@ -124,7 +165,9 @@ impl SettingsView {
             label_names: LabelNames::default(),
             name_fields,
             language: 0,
+            languages,
             import_root: String::new(),
+            root_field,
             import_pattern: import::DEFAULT_PATTERN.to_owned(),
             pattern_field,
             example: Ok(String::new()),
@@ -149,6 +192,8 @@ impl SettingsView {
         self.keymap = settings.keymap.clone();
         self.show_names(settings.names.clone(), window, cx);
         self.import_root = settings.import_root.clone();
+        let root = self.import_root.clone();
+        show(&self.root_field, &root, window, cx);
         self.import_pattern = settings.import_pattern.clone();
         let pattern = self.import_pattern.clone();
         show(&self.pattern_field, &pattern, window, cx);
@@ -247,7 +292,7 @@ impl SettingsView {
     /// `Choose…`: the OS folder dialog, answered on a later turn. The chosen
     /// root is handed to the main view whether or not the modal is still
     /// open, and the pattern being typed is kept.
-    fn choose_root(&mut self, cx: &mut Context<Self>) {
+    fn choose_root(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.status = None;
         let chosen = cx.prompt_for_paths(PathPromptOptions {
             files: false,
@@ -255,7 +300,7 @@ impl SettingsView {
             multiple: false,
             prompt: None,
         });
-        cx.spawn(async move |this, cx| {
+        cx.spawn_in(window, async move |this, cx| {
             let chosen = match chosen.await {
                 Ok(Ok(Some(paths))) => paths.into_iter().next(),
                 Ok(Ok(None)) | Err(_) => None,
@@ -266,8 +311,9 @@ impl SettingsView {
                 }
             };
             let Some(root) = chosen else { return };
-            this.update(cx, |this, cx| {
+            this.update_in(cx, |this, window, cx| {
                 this.import_root = root.to_string_lossy().into_owned();
+                show(&this.root_field, &this.import_root, window, cx);
                 cx.emit(Change::ImportRoot(this.import_root.clone()));
                 this.show_example(cx);
                 cx.notify();
@@ -422,9 +468,8 @@ impl SettingsView {
     }
 
     /// The three format radios and, while the format writes XMP, the label
-    /// names: the Tauri paragraph, a name field per color, the languages
-    /// `Reset` chooses from (a wrapping row of them, the chosen one lit) and
-    /// `Reset`.
+    /// names: the Tauri paragraph, a name field per color, and the language
+    /// `Reset` fills in, chosen in a `Select`, beside `Reset`.
     fn sidecar(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
         let format = self.format;
         let page = page.group(SettingGroup::new().item(SettingItem::new(
@@ -454,7 +499,7 @@ impl SettingsView {
         if !settingsmodal::writes_xmp(format) {
             return page;
         }
-        let language = self.language;
+        let languages = self.languages.clone();
         page.group(
             SettingGroup::new()
                 .title("Label names")
@@ -474,40 +519,34 @@ impl SettingsView {
                         }),
                 )
                 .item(
-                    SettingItem::render({
-                        let view = view.clone();
-                        move |_, window, cx| {
-                            let primary = cx.theme().primary;
-                            div()
-                                .flex()
-                                .flex_wrap()
-                                .items_center()
-                                .gap(px(4.))
-                                .children(i18n::presets().iter().enumerate().map(|(at, preset)| {
-                                    let chosen = at == language;
-                                    small_button(("label-language", at), preset.name.clone())
-                                        .selected(chosen)
-                                        .when(chosen, |b| b.border_color(primary))
-                                        .on_click(window.listener_for(
+                    SettingItem::new(
+                        "Lightroom language",
+                        SettingField::render({
+                            let view = view.clone();
+                            move |_, window, _| {
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap(px(4.))
+                                    .child(
+                                        div().w(px(160.)).child(
+                                            Select::new(&languages)
+                                                .small()
+                                                .accessibility_label("Lightroom language"),
+                                        ),
+                                    )
+                                    .child(small_button("label-names-reset", "Reset").on_click(
+                                        window.listener_for(
                                             &view,
-                                            move |this, _: &ClickEvent, window, cx| {
+                                            |this, _: &ClickEvent, window, cx| {
                                                 this.leave_field(window, cx);
-                                                this.language = at;
-                                                cx.notify();
+                                                this.reset_names(window, cx)
                                             },
-                                        ))
-                                }))
-                                .child(small_button("label-names-reset", "Reset").on_click(
-                                    window.listener_for(
-                                        &view,
-                                        |this, _: &ClickEvent, window, cx| {
-                                            this.leave_field(window, cx);
-                                            this.reset_names(window, cx)
-                                        },
-                                    ),
-                                ))
-                        }
-                    })
+                                        ),
+                                    ))
+                            }
+                        }),
+                    )
                     .keywords(["Reset", "Language", "Lightroom"]),
                 ),
         )
@@ -547,7 +586,7 @@ impl SettingsView {
         let view = view.clone();
         page.group(SettingGroup::new().item(SettingItem::new(
             "Auto-advance after a star, reject or pick",
-            SettingField::checkbox(
+            SettingField::switch(
                 move |_| checked,
                 move |_, cx| view.update(cx, |this, cx| this.flip_auto_advance(cx)),
             ),
@@ -555,7 +594,7 @@ impl SettingsView {
     }
 
     /// One item per action, titled with its label so the search finds it: a
-    /// chip per key with its remove button, `+` or the capture prompt, and
+    /// `Kbd` per key with its remove button, `+` or the capture prompt, and
     /// `Reset`; then `Reset all`.
     fn shortcuts(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
         let rows = self.keymap.bindings().into_iter().map(|b| {
@@ -566,8 +605,7 @@ impl SettingsView {
             SettingItem::new(
                 settingsmodal::shortcut_label(action),
                 SettingField::render(move |_, window, cx| {
-                    let theme = cx.theme();
-                    let (accent, muted) = (theme.accent, theme.muted_foreground);
+                    let muted = cx.theme().muted_foreground;
                     div()
                         .flex()
                         .flex_wrap()
@@ -575,18 +613,12 @@ impl SettingsView {
                         .justify_end()
                         .gap(px(4.))
                         .children(keys.iter().enumerate().map(|(k, key)| {
-                            let shown = settingsmodal::display_key(key).to_owned();
-                            let key = key.clone();
-                            div()
-                                .flex()
-                                .items_center()
-                                .gap(px(3.))
-                                .pl(px(6.))
-                                .rounded_sm()
-                                .bg(accent)
+                            let chip = Kbd::new(keys::keystroke_of(key))
                                 .text_size(px(13.))
-                                .child(shown)
-                                .child(small_button(("remove", k), "\u{d7}").on_click(
+                                .text_color(cx.theme().foreground);
+                            let key = key.clone();
+                            div().flex().items_center().gap(px(3.)).child(chip).child(
+                                small_button(("remove", k), "\u{d7}").on_click(
                                     window.listener_for(
                                         &view,
                                         move |this, _: &ClickEvent, window, cx| {
@@ -595,7 +627,8 @@ impl SettingsView {
                                             window.focus(&this.focus, cx);
                                         },
                                     ),
-                                ))
+                                ),
+                            )
                         }))
                         .child(if capturing {
                             div()
@@ -640,41 +673,36 @@ impl SettingsView {
     }
 
     /// The Tauri paragraph as the page's description, the read-only root
-    /// with `Choose…` and its note, the pattern field, the example line, the
+    /// field with `Choose…` in one `InputGroup` and its note, the pattern field, the example line, the
     /// example patterns and the specifier table.
     fn import(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
-        let root = self.import_root.clone();
+        let root_field = self.root_field.clone();
         let mut root_item = SettingItem::new(
             "Destination root",
             SettingField::render({
                 let view = view.clone();
-                move |_, window, cx| {
-                    let theme = cx.theme();
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
+                move |_, window, _| {
+                    InputGroup::new("import-root")
+                        .readonly(true)
                         .w(px(360.))
+                        .bg(transparent_black())
+                        .rounded_sm()
                         .text_size(px(13.))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w_0()
-                                .px(px(6.))
-                                .min_h(px(22.))
-                                .rounded_sm()
-                                .border_1()
-                                .border_color(theme.input)
-                                .text_color(theme.muted_foreground)
-                                .child(root.clone()),
-                        )
-                        .child(
-                            small_button("import-root-choose", "Choose\u{2026}").on_click(
-                                window.listener_for(&view, |this, _: &ClickEvent, window, cx| {
-                                    this.leave_field(window, cx);
-                                    this.choose_root(cx);
-                                }),
-                            ),
+                        .input(Input::new(&root_field))
+                        .addon(
+                            InputGroupAddon::new("import-root-addon")
+                                .align(InputGroupAddonAlignment::InlineEnd)
+                                .child(
+                                    InputGroupButton::new("import-root-choose")
+                                        .label("Choose\u{2026}")
+                                        .on_click(window.listener_for(
+                                            &view,
+                                            |this, _: &ClickEvent, window, cx| {
+                                                this.leave_field(window, cx);
+                                                this.choose_root(window, cx);
+                                            },
+                                        )),
+                                ),
                         )
                 }
             }),

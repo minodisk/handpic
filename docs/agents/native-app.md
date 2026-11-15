@@ -92,8 +92,15 @@ Light or Dark forced, or System, the OS appearance, read with
 components drawn are the settings modal's: `setting::Settings` (with its
 `Sidebar`, search `Input`, `h_resizable` split, `GroupBox`es and the page
 list's scrollbar), `Input` (its text fields, see "Text is typed through
-gpui-component's `Input`"), `Button`, `Checkbox` and `Radio` (see "The
-settings modal is its own entity"), the tree's inline rename's `Input` (see "The tree's inline
+gpui-component's `Input`"), `Button`, `Switch` (auto-advance, through
+`SettingField::switch`), `Radio`, `Select` (the label names' language, with
+its menu's `List`), `Kbd` (the Keyboard Shortcuts page's keys) and
+`InputGroup` (the read-only Destination root with `Choose…`) (see "The
+settings modal is its own entity"), the status row's `Sort ▾` / `Filter ▾`
+`Button`s (see "The sort and filter menus are deferred popovers over the
+window"), the right-click menu's shortcuts as `Kbd` text (see "The
+right-click menu is a deferred popover at the pointer"), the tree's inline
+rename's `Input` (see "The tree's inline
 rename is a text input in the row") and `Tooltip`, every tooltip of the app
 (see "A strip cell's tooltips are transparent `div`s over the canvas"). The
 folder tree is not the component's `Tree` (see "The folder tree is not
@@ -140,7 +147,9 @@ key-down listener, so a binding that matches takes the key from
 | `Root` | `tab`, `shift-tab`, `ctrl-c` (`cmd-c` on macOS) | `Tab` / `TabPrev`, which move the focus (inside a dialog's focus trap) and do not propagate, masked by `NoAction` in the app view's `Handpic` context; `Copy`, which propagates when no text is selected |
 | `Input` | the editing keys, `enter` / `escape`, `tab` / `shift-tab`, the arrows, Home / End, word and line movement, undo / redo, the clipboard keys | the input's own; `PressEnter`, `Escape` and the indents propagate on a single-line input |
 | `Dialog` (only with `.keyboard(true)`) | `escape`, `enter` | `dialog::Cancel`, `dialog::Confirm` |
-| `Popover`, `PopupMenu`, `Select`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
+| `Select` (the settings' language picker, while focused) | `space` (`Select && !Input`), `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down`, `escape` | `Confirm` (opens the menu, or picks the highlighted row), `SelectUp` / `SelectDown`, `Cancel`, which closes an open menu and stops there, and propagates while it is closed |
+| `List` (the open language menu, which takes the focus) | `escape`, `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down` | the list's own; its `Cancel` propagates to the `Select`'s, which closes the menu only |
+| `Popover`, `PopupMenu`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
 
 - Rule: the inspector binding is left in place. In a debug build
   `ctrl+shift+i` opens the inspector and a user binding on it is shadowed;
@@ -156,8 +165,9 @@ key-down listener, so a binding that matches takes the key from
   one per application, so `Icons` falls back to `gpui_kit_assets::Assets`
   (`gpui-kit-assets` `=0.9.1`, the components' own icon set, not the
   whole-catalog `AllAssets`) for the icons the components draw, the
-  `Checkbox`'s and the checked `Radio`'s `icons/check.svg` so far (see "The
-  icons are Lucide SVGs served by one `AssetSource`").
+  checked `Radio`'s and the language menu's `icons/check.svg` and the
+  `Select`'s `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
+  served by one `AssetSource`").
 
 ### `Root` wraps the window's content (Measured)
 
@@ -972,7 +982,25 @@ current file's position, name and shooting settings live in the meta pane
 only. `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
 `main.rs` only maps rows to `div`s. The filter button is lit while
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
-view-only folder, whose open closes a sort menu left open. A menu item runs
+view-only folder, whose open closes a sort menu left open.
+
+- Rule: the two buttons are gpui-component `Button`s (`main.rs`'s
+  `menu_button`): the default variant at `.xsmall()` with
+  `.tab_stop(false)` (the main view routes every key through its own
+  handle), its height pinned to `MENU_BUTTON_HEIGHT` (21 px, the bordered
+  `div`'s they replaced, so the status row and the preview canvas keep their
+  size), `px(6.)`, `rounded_sm` and the text `Sort ▾` / `Filter ▾` as a
+  12 px child, not `dropdown_caret`. The variant paints the mapped `button`
+  fill, `input` border and `button_hover`. Lit, the border and the label
+  child are `primary`, without `.selected(true)`, which would change the
+  fill; on hover the component's hover style sets the border back to
+  `input`, so a lit button shows its `primary` border only while not
+  hovered (the label keeps `primary`). The inert sort button is
+  `.disabled(true)` (no hover, no press) with the normal fill and border
+  replayed over the disabled state's and `opacity(0.5)`, as the `div` was
+  dimmed. The toggle stays the caller's `on_mouse_down` (`Button` implements
+  `InteractiveElement`); `Button`'s own mouse-down only calls
+  `window.prevent_default()`, so the window's focus handle keeps the focus. A menu item runs
 `menu::apply`, then `refilter` on the current file with the scroll not kept,
 so a reorder scrolls the current file into view. `menu_action` then writes
 `sortOrder` (`SortKey::setting`) when the sort key changed, and `filter`
@@ -1168,13 +1196,15 @@ not open.
   controls, the same stops in the same order as the box's own `focus_next`
   walk had (the window's root handle is not a tab stop). So `ModalKey` has no
   focus move any more. The controls are the component's search `Input`,
-  gpui-component's `Button` (the outlined `small_button`s: `Choose…`, the
-  example patterns, the languages, `Reset`, `+`, a chip's `×`, `Reset all`;
-  the ghost close `×`), `Checkbox` (auto-advance, the built-in
-  `SettingField::checkbox`) and `Radio` (the three formats, standalone, not
-  a `RadioGroup`, whose arrow-key roving would change the cycle), each a tab
+  gpui-component's `Button` (the outlined `small_button`s: the example
+  patterns, `Reset`, `+`, a key's `×`, `Reset all`; the ghost close `×`;
+  the `InputGroupButton` `Choose…`), `Switch` (auto-advance, the built-in
+  `SettingField::switch`), `Radio` (the three formats, standalone, not
+  a `RadioGroup`, whose arrow-key roving would change the cycle) and the
+  `Select` of the label names' language, each a tab
   stop at the default `tab_index(0)` with a focus handle of its own (keyed
-  state, or `track_focus`), and the `Input` fields. The sidebar's page
+  state, or `track_focus`), and the `Input` fields, the read-only
+  Destination root among them. `Kbd` is not a tab stop. The sidebar's page
   entries are not tab stops (next rule), so pages are switched with the
   pointer only; ArrowUp / ArrowDown / Home / End on a tab and the roving
   `tabindex` went with the hand-drawn tab list.
@@ -1213,26 +1243,58 @@ not open.
   focus-on-press from running). So a control pressed while a field has the
   focus calls `leave_field` first, which focuses the box, and the field
   commits on its `Blur` as it did when the press focused the old control.
+  The `Select` needs none: opening its menu moves the focus to the menu's
+  list, so a focused field blurs and commits by itself.
+- Rule: the language picker (Inferred, read from `gpui-base` `select.rs`
+  and gpui-component `select.rs` / `list/list.rs`). The view holds one
+  `SelectState` over the presets' names, built in `new` with the first
+  chosen, not searchable or cleanable, and a `SelectEvent::Confirm`
+  subscription that sets `language`, the preset `Reset` fills in. It is not
+  `SettingField::dropdown`, which draws a `Button` with a `PopupMenu` and
+  cannot share its item with `Reset`. Escape with the menu open closes the
+  menu only (the list's `Cancel` propagates to the `Select`'s, which stops);
+  with it closed, the `Select`'s `Cancel` propagates, so Escape reaches the
+  box's `key_down` and closes the settings. Actions run before the box's
+  listener, so `settingsmodal::stops` is unchanged. The menu is `deferred`
+  inside the view, under the box's key listener and focus trap.
+- Rule: the Destination root is an `InputGroup` holding a read-only `Input`
+  over the view's own `root_field` (`show` on every open and after a
+  `Choose…` answer) and, in an `InlineEnd` addon, the `InputGroupButton`
+  `Choose…`. The path can be selected and copied, and scrolls in one line.
+  The field is not in `editing()`'s commit list (nothing to commit), and
+  Escape in it closes the settings through the `Input`'s propagating
+  `Escape`. A press on `Choose…` does not focus the field (`InputGroup`
+  checks `window.default_prevented()`).
 - Rule: the look. The pages are the component's: a header with the page's
   title (the Import page's description is `IMPORT_NOTE`), groups in the
   default `GroupBoxVariant::Normal` (no surface), and items with their
   14 px title left and the control right, stacked when the page is 480 px
   wide or less. The Sidecar page holds a `Format` item (the three radios)
   and, while the format writes XMP, a `Label names` group (the
-  `LABEL_NAMES_NOTE` as its description, one item per color, then the
-  languages and `Reset`); the Culling page the auto-advance checkbox; the
-  Keyboard Shortcuts page one item per action, then `Reset all`; the Import
-  page `Destination root` (its `root_note` as the description), `Folder
-  pattern`, the example line, `Example patterns` and the specifier table.
+  `LABEL_NAMES_NOTE` as its description, one item per color, then a
+  `Lightroom language` item, the Tauri `aria-label`, holding the `Select`
+  (`.small()`, 160 px wide) and `Reset`); the Culling page the auto-advance
+  switch; the Keyboard Shortcuts page one item per action, then `Reset all`;
+  the Import page `Destination root` (its `root_note` as the description),
+  `Folder pattern`, the example line, `Example patterns` and the specifier
+  table.
   The outlined buttons are `Button`'s default variant at
   `.small()` (24 px tall) with `px(6.)`, `rounded_sm` and a 13 px label
   child (the variant's own label is `text_sm`, 14 px at the window's 16 px
   rem, and its content style is crate-private), on the mapped `button` fill
-  and `input` border; the chosen language is `.selected(true)`
-  (`button_active`) with the `primary` border. `Checkbox` and `Radio`
-  are `.small()` (a 14 px indicator) with a 13 px `text_size`; a checked
-  `Radio` is the component's filled circle with the check mark, not the old
-  ring and dot. The focus ring is the theme's: `focus_ring` is on in
+  and `input` border. `Radio` is `.small()` (a 14 px indicator) with a
+  13 px `text_size`; a checked `Radio` is the component's filled circle with
+  the check mark, not the old ring and dot. The `Switch` is the
+  `SettingField::switch`'s, `primary` when on and `Default Dark`'s `switch` /
+  `switch_thumb` (`theme.rs` maps neither). Each key on the Keyboard
+  Shortcuts page is a `Kbd` (the `muted` fill, half the theme radius) with
+  its text set back to the old chip's 13 px `foreground`, its `×`
+  `small_button` beside it rather than inside, since `Kbd` is not a
+  `ParentElement`. The Destination root's `InputGroup` is 360 px wide with
+  a transparent fill, `rounded_sm` and a 13 px text over the group's own
+  `input` border; focused, the border and the ring outside it are the
+  component's `ring`, set after the caller's style, not the name fields'
+  `primary` border. The focus ring is the theme's: `focus_ring` is on in
   `Default Dark`, so a focused control gets the `ring` border and a ring
   outside it.
 - Rule: a page scrolls in the component's `list` of its groups, with the
@@ -1251,8 +1313,13 @@ not open.
 
 The Keyboard Shortcuts page lists `Keymap::bindings()` in order, labeled by
 `settingsmodal::shortcut_label` (`settings.ts`'s `shortcutLabels`), each key a
-chip (`display_key`: `space` as `Space`) with a `×`, then `+` or `Press a
-key...`, then `Reset`; `Reset all` is the last item. The view
+`Kbd` of `keys::keystroke_of(key)` with a `×` beside it, then `+` or `Press a
+key...`, then `Reset`; `Reset all` is the last item. `Kbd::format` spells the
+key: `ctrl+alt+1` as `Ctrl+Alt+1` (`⌃⌥1` on macOS), `arrowleft` as `Left`
+(`←`), `shift+x` as `Shift+X`, `escape` as `Esc`, `meta+o` as `⌘O` on macOS;
+there is no option to keep the keymap's lowercase names. The empty state's
+sentence and the status line's refusals are text and keep the keymap's
+spelling (`settingsmodal::display_key`), so the two spellings differ. The view
 edits its own copy of the keymap, read from the window on every open, through
 `settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
 refusal shows the backend's message on the status line and leaves the copy
@@ -1341,7 +1408,8 @@ folder is not re-listed.
 
 `Settings` reads `importRoot` and `importPattern` with the backend's
 `import::root_setting` / `pattern_setting` (an invalid stored pattern reads as
-`%Y/%F`). The Import page shows the root read-only with `Choose…`, the
+`%Y/%F`). The Import page shows the root in a read-only field with `Choose…`
+(one `InputGroup`, see "The settings modal is its own entity"), the
 `importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
 `IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
 `Input` field and the example line, `import::today_example` (the
@@ -1354,7 +1422,8 @@ commit (Enter, blur, Escape then close) or an example button goes through
 invalid one leaves the stored one and shows its reason.
 
 - Rule: `Choose…` calls `cx.prompt_for_paths` (directories only) from the
-  view and awaits it in a `cx.spawn`; the answer comes on a later turn and the
+  view and awaits it in a `cx.spawn_in` (the root field's `set_value` needs
+  the window); the answer comes on a later turn and the
   view entity lives as long as the window, so `Change::ImportRoot` is emitted
   and written whether or not the modal is still open. It sets only the root,
   so a pattern still being typed stays in the field. A dialog error (Linux)
@@ -2093,6 +2162,12 @@ text was 16 px white, the row transparent over the root's black).
   size and color and the regions' gap and alignment rules in
   `status_bar.rs`, and `ProgressCircle`'s sizes, track and animation, and
   re-measure the preview canvas, which the row's height sets.
+- Rule: the row's height is the `Sort ▾` / `Filter ▾` buttons' 21 px
+  (`MENU_BUTTON_HEIGHT`) plus the padding and the border; the status text's
+  line is 19 px (12 px at GPUI's default line height, rounded by
+  `line_height_in_pixels`). `Button` at `.xsmall()` alone is 20 px, which
+  would have grown the canvas by a pixel, so the height is pinned to the
+  replaced `div`'s. Inferred from the sources, not re-measured on screen.
 
 ### The title bar is gpui-component's `TitleBar` with the icon and "Handpic" (Inferred)
 
@@ -2668,7 +2743,10 @@ the others then act as usual), as in the Tauri app. Items use `on_click`; a disa
   popovers over the window" for the theme tokens and why `PopupMenu`,
   `Popover` and `ContextMenu` are not used), each item's shortcut at the
   row's right end in `muted_foreground` at `text_xs`, as `PopupMenu` places
-  its key binding. A menu taller than the window less 40 px scrolls under the
+  its key binding, drawn as `Kbd::new(keys::keystroke_of(..))
+  .appearance(false)` (the formatted text alone, as gpui-component's
+  `Tooltip` draws its key binding); an item without a shortcut draws
+  nothing there. A menu taller than the window less 40 px scrolls under the
   component's scrollbar on `context_scroll`, new on every open.
 
 - Rule: the strip's right-click follows the Tauri strip's `contextmenu`
@@ -2678,9 +2756,10 @@ the others then act as usual), as in the Tauri app. Items use `on_click`; a disa
   taken when it opens. Its judgment items carry the keymap's action names
   (`Action::Judge`) and run through `Command::from_action` and `judge` as a
   key does, so they act on the selection as it is when picked; each item's
-  shortcut is its action's first key, shown as `keys.ts`'s `displayKey`
-  (`space` as `Space`), not `Keymap::accelerator_for`, which spells keys for
-  the Tauri menu bar.
+  shortcut is its action's first key, carried as the keymap's name and
+  spelled by `Kbd::format` (`ctrl+alt+1` as `Ctrl+Alt+1`, `space` as
+  `Space`, `⌘A` on macOS), not `keys.ts`'s `displayKey` and not
+  `Keymap::accelerator_for`, which spells keys for the Tauri menu bar.
 - Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
   item in its parent through the desktop folder's `ParseDisplayName` (`open_target_in_explorer`)
   and only logs a failure. A root (`D:\`) has no parent, so the folder menu
