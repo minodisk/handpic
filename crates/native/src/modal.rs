@@ -9,13 +9,13 @@
 //! component's backdrop is a window drag area, so a press on it would move
 //! the window. The view draws `backdrop` in its place.
 
-use gpui::{
-    AnyElement, AnyWindowHandle, App, DispatchPhase, MouseDownEvent, Pixels, Window, canvas,
-    deferred, div, prelude::*, px,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, WindowExt,
     dialog::{Dialog, DialogEntrance},
+};
+use gpui_kit::{
+    AnyElement, AnyWindowHandle, App, DispatchPhase, MouseDownEvent, Pixels, Window, canvas,
+    deferred, div, prelude::*, px,
 };
 
 /// The boxes' width, as the hand-drawn layers had it.

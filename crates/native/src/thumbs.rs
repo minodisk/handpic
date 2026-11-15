@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use gpui::{AppContext, Context, RenderImage};
+use gpui_kit::{AppContext, Context, RenderImage};
 use image::{Frame, RgbaImage};
 use riffle_backend::index::{self, Index};
 
@@ -145,7 +145,7 @@ fn decode(jpeg: &[u8], orientation: u16) -> Result<Arc<RenderImage>, String> {
 #[cfg(test)]
 mod tests {
     use super::Thumbs;
-    use gpui::RenderImage;
+    use gpui_kit::RenderImage;
     use image::{Frame, RgbaImage};
     use std::sync::Arc;
 

@@ -4,7 +4,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gpui::{AppContext, Bounds, Context, Corners, Pixels, RenderImage, Window, point, px, size};
+use gpui_kit::{
+    AppContext, Bounds, Context, Corners, Pixels, RenderImage, Window, point, px, size,
+};
 use image::{Frame, RgbaImage};
 use riffle_core::{arw::FocusLocation, partial, reader};
 

@@ -10,7 +10,7 @@ use std::{
 };
 
 use futures::channel::mpsc::UnboundedSender;
-use gpui::App;
+use gpui_kit::App;
 use riffle_backend::{
     index::Index,
     mcp::{Bridge, MCP_PORT, Mcp},

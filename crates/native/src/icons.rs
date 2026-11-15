@@ -1,7 +1,7 @@
 //! The Lucide icons the app draws, served to GPUI's `svg().path(..)` by
 //! `Icons`, the application's one `AssetSource`, which also serves the app's
 //! own icon PNG to the title bar's `img(..)` and falls back to
-//! `gpui_kit_assets::Assets` for the icons gpui-component's controls draw.
+//! `gpui_kit::assets::Assets` for the icons gpui-component's controls draw.
 
 // Lucide `star`, `square`, `rectangle-vertical`, `rectangle-horizontal` and
 // `scan-face` icons, lucide-static v1.48.0
@@ -23,8 +23,8 @@
 
 use std::borrow::Cow;
 
-use gpui::{AssetSource, Result, SharedString};
-use gpui_kit_assets::Assets;
+use gpui_kit::assets::Assets;
+use gpui_kit::{AssetSource, Result, SharedString};
 
 pub const STAR: &str = "icons/star.svg";
 pub const STAR_FILLED: &str = "icons/star-filled.svg";

@@ -12,21 +12,39 @@ and Step 1's [learnings](../plans/20261109-gpui-port/learnings.md).
 
 ## Toolchain
 
-### GPUI is the `gpui-pre` snapshot gpui-component pins (Inferred)
+### GPUI is the `gpui-pre` snapshot `gpui-kit` pins (Inferred)
 
-`gpui` and `gpui_platform` are the crates.io `gpui-pre` and
-`gpui-pre-platform` at `=0.3.12`, a snapshot of Zed's GPUI at `zed@d2a4fb6`
-published by the gpui-kit maintainer, renamed with `package =` so the code
-keeps the `gpui` names. That is the exact version `gpui-component` 0.9.1
-pins. Zed pins Rust 1.98.1 at that commit, and so does
+The native crate depends on one GUI crate, the `gpui-kit` umbrella crate at
+`=0.9.1` (default features `component` and `assets`), as the GPUI Kit guides
+(<https://gpui-kit.com/docs/installation/>) have it. `gpui-kit` 0.9.1 pins
+`gpui-pre` and `gpui-pre-platform` at `=0.3.12`, a snapshot of Zed's GPUI at
+`zed@d2a4fb6` published by the gpui-kit maintainer, and depends on
+`gpui-base`, `gpui-component` and `gpui-kit-assets` 0.9.1 by caret
+requirements `Cargo.lock` holds. Its re-exports, read from 0.9.1's
+`src/lib.rs`: `gpui_kit::*` is all of GPUI (`pub use ::gpui::*`),
+`gpui_kit::platform` is `gpui_platform`, `gpui_kit::application` its
+`application`, `gpui_kit::component` is `gpui_component`,
+`gpui_kit::assets` is `gpui_kit_assets` and `gpui_kit::base` is
+`gpui_base`. The sources import through those paths with explicit lists
+(`use gpui_kit::{..}`, `use gpui_kit::component::{..}`), never a
+`use gpui_kit::*` glob; no crate is named `gpui` any more. `gpui_kit::actions!`
+derives through `$crate::Action`, so the test module's `actions!` needs no
+`gpui` alias. Zed pins Rust 1.98.1 at that commit, and so does
 `crates/native/mise.toml`; the published crates declare no `rust-version`.
-Moving from the Zed git rev `b5cd310b` to the snapshot changed no source
-file. The plan: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md).
+The plans: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md),
+then [native-gpui-kit](../plans/20261116-native-gpui-kit/plan.md).
+
+`crates/native/Cargo.toml` carries the guide's `[profile.dev.package]` block
+(`opt-level = 3` for `gpui-pre`, `gpui-component`, `gpui-kit`,
+`gpui-kit-assets`, `gpui-pre-platform`, `rustybuzz`, `taffy` and
+`ttf-parser`), so a `cargo run` debug build renders at a usable speed at the
+cost of a longer cold build.
 
 - Rule: the native crate never picks a GPUI version of its own. An upgrade
-  moves `gpui-component`, `gpui-kit-assets`, `gpui-pre` and
-  `gpui-pre-platform` together in one deliberate chore PR (all four exact
-  pins), and records the API changes met at the bump here.
+  is a `gpui-kit` bump (one exact pin) in one deliberate chore PR, which
+  checks in the lock diff that `gpui-pre` and gpui-component moved with it,
+  and records the API changes met at the bump here.
+- Rule: the `gpui-fast` feature stays off.
 - Rule: `cargo tree` shows one GPUI: no package from
   `git+https://github.com/zed-industries/zed`, `gpui-pre` at one version. Two
   GPUIs have distinct types, so no gpui-component element could join the
@@ -39,7 +57,7 @@ file. The plan: [gpui-component-dep](../plans/_archived/20261114-gpui-component-
 now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
 `d2a4fb6` carries the same two revs). They are the only git sources in
 `Cargo.lock`. Zed's other patches (`cpal`, `notify`, `calloop`,
-`khronos-egl`, ...) are not needed by `gpui` / `gpui_platform`.
+`khronos-egl`, ...) are not needed by `gpui-pre` / `gpui-pre-platform`.
 
 - Rule: do not copy the others. Do not move these two to the root workspace
   while the Tauri app lives there: both crates are in its lock, so a workspace
@@ -47,8 +65,9 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
 
 ### gpui-component is initialized; the settings modal and the tree's inline rename draw from it (Inferred)
 
-`gpui-component` `=0.9.1` is compiled on all three platforms.
-`gpui_component::init(cx)` runs first in the `application().run` closure,
+`gpui-component` 0.9.1 (through `gpui-kit`) is compiled on all three platforms.
+`gpui_kit::init(cx)`, which with the `component` feature is exactly
+`gpui_component::init(cx)`, runs first in the `application().run` closure,
 before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
 to the mode the stored `theme` setting resolves to
 (`Theme::change(mode, ..)`, the built-in `Default Dark` or `Default Light`)
@@ -129,10 +148,15 @@ burst badge's `BADGE_COLOR` and the halos), and the preview's black
 surround (`PREVIEW_BACKGROUND`).
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
-`inspector`, `decimal`, `gpui-fast`) is on, and it does not depend on
-`gpui-pre-platform`, so it turns on no `runtime_shaders`
-(`cargo tree -e features -i gpui-pre-platform` shows only the default
-`multithreaded`).
+`inspector`, `decimal`, `gpui-fast`) is on. `gpui-kit` itself turns on
+`gpui-pre-platform`'s `font-kit`, `x11`, `wayland` and `runtime_shaders`
+unconditionally (`cargo tree -e features -i gpui-pre-platform` shows those
+four and the default `multithreaded`, for the host and for the Linux and
+macOS targets alike); none of them reaches `gpui-pre-windows`. Before the
+switch to `gpui-kit` only the default `multithreaded` was on, so, read from
+the manifests and sources and not run on those platforms (Inferred), the
+macOS build had no `font-kit` (no text) and the Linux build neither the X11
+nor the Wayland backend.
 
 `init` puts the first bindings into GPUI's keymap. As verified at 0.9.1
 (`gpui-component` and `gpui-base`), every one is scoped to a key context
@@ -162,7 +186,7 @@ key-down listener, so a binding that matches takes the key from
   `KeyBinding::new` in both crates for a `None` context and for the `Root`
   context, and update the table.
 - Rule: the app already has its own `AssetSource` (`icons.rs`); GPUI takes
-  one per application, so `Icons` falls back to `gpui_kit_assets::Assets`
+  one per application, so `Icons` falls back to `gpui_kit::assets::Assets`
   (`gpui-kit-assets` `=0.9.1`, the components' own icon set, not the
   whole-catalog `AllAssets`) for the icons the components draw, the
   checked `Radio`'s and the language menu's `icons/check.svg` and the
@@ -171,9 +195,11 @@ key-down listener, so a binding that matches takes the key from
 
 ### `Root` wraps the window's content (Measured)
 
-`open_window`'s closure builds the app's `Riffle` entity first (it takes the
-focus and starts as before) and returns `Root::new(view, window, cx)` as the
-window's root view. Nothing reads the window's root by its type:
+`main` opens the window with `gpui_kit::open_window`, whose build closure
+returns the app's `Riffle` entity (it takes the focus and starts as before);
+`open_window` wraps it in `gpui_base::Root` (the type `gpui_component::Root`
+re-exports) as the window's root view and hands back the window and the
+view. The `WindowOptions` pass through untouched. Nothing reads the window's root by its type:
 `on_app_quit`, the bounds saved on quit and the tree's keyboard flag hold
 the view, its focus handle or the `Window`, so they are unchanged. The trash
 dialog and the folder operations' dialog are component dialogs (see "The
@@ -198,7 +224,7 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
 
 - `tab` / `shift-tab`: the app view's root `div` sets the key context
   `Handpic` (`KEY_CONTEXT`), and `main` binds both keys to `NoAction` in it
-  (`keymap_keys`) right after `gpui_component::init`. GPUI's keymap
+  (`keymap_keys`) right after `gpui_kit::init`. GPUI's keymap
   (`keymap.rs`, `resolve_bindings_for_input`) sorts the matching bindings by
   context depth and drops every binding ranked after a `NoAction` from a
   source of equal or weaker precedence; `Handpic` is deeper than `Root`, so
@@ -253,21 +279,23 @@ file name), and `gpui-kit-assets` embeds Lucide (ISC).
 Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
 driver at run time. The `native` CI job's Linux leg installs exactly these.
+Since the switch to `gpui-kit` the X11 and Wayland backends are compiled (its
+`x11` and `wayland` features); before, neither was.
 macOS needs the Xcode CLT (Metal), Windows only MSVC.
 
 - Rule: add a package to the CI job's apt step only when a build error names
   it, and keep this list equal to that step.
 
-### macOS compiles its shaders with `xcrun metal` at build time (Inferred)
+### macOS compiles its shaders at startup (Inferred)
 
 `gpui_apple`'s build script runs `xcrun metal` and `xcrun metallib` unless
-`gpui_platform`'s `runtime_shaders` feature is on, so an Xcode without the
-Metal toolchain fails the build there, not at run time. `macos-latest` is
-arm64, where `build.rs` returns before the NASM check.
+`gpui_platform`'s `runtime_shaders` feature is on. `gpui-kit` turns that
+feature on, so the build does not need the Metal toolchain and the shaders are
+compiled when the app starts instead. `macos-latest` is arm64, where
+`build.rs` returns before the NASM check.
 
-- Rule: if a macOS build fails at `xcrun metal`, install the toolchain
-  (`xcodebuild -downloadComponent MetalToolchain`) rather than turning on
-  `runtime_shaders` for every build.
+- Rule: `runtime_shaders` comes with `gpui-kit` and cannot be turned off from
+  the app's manifest; do not add a build-time Metal step.
 
 ### The `native` CI job runs on all three platforms (Inferred)
 
@@ -1104,7 +1132,7 @@ the rendered alpha mask in the element's `text_color`, so a stroked Lucide
 icon and a filled derivative both draw in one color. `icons.rs` holds the
 SVG strings as constants, a path constant per icon (`icons/<name>.svg`), and
 `Icons`, whose `load` answers those paths with borrowed bytes and any other
-from `gpui_kit_assets::Assets`, a path in neither with `None`; `main()`
+from `gpui_kit::assets::Assets`, a path in neither with `None`; `main()`
 registers it with `application().with_assets(icons::Icons)`.
 
 - Rule: to add an icon, copy it verbatim from `lucide-static` at the version
@@ -1115,7 +1143,7 @@ registers it with `application().with_assets(icons::Icons)`.
   `crates/native/LICENSE-lucide`, a copy of the Tauri app's, not a reference
   into `crates/app`.
 - Rule: GPUI keeps one `AssetSource` per application. Another source (here
-  `gpui_kit_assets::Assets`) is composed with `Icons`, the own paths first
+  `gpui_kit::assets::Assets`) is composed with `Icons`, the own paths first
   (`icons/star.svg` and `icons/square.svg` are in both; the app's win),
   never registered in its place: a missing asset draws nothing and fails no
   build. `icons.rs`'s tests check every own path loads an SVG, the own path

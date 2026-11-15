@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gpui::{AppContext, Bounds, Context, Corners, ImageId, Pixels, RenderImage, Window};
+use gpui_kit::{AppContext, Bounds, Context, Corners, ImageId, Pixels, RenderImage, Window};
 use image::{
     Frame, ImageBuffer, Rgba, RgbaImage,
     imageops::{self, FilterType},
