@@ -491,10 +491,11 @@ below `READ_FLOOR_BPS`; `latency_start`, the key else the selection change),
 redraw, both only while shown; the pure layout, `x_of`, `y_of`, `stack` over
 the native `page` line's stages and `shown`; `paint`, a port of `drawPerf`
 as a 120 px band along the bottom of the preview canvas over the fit view
-and the 1:1 crop alike), `src/progress.rs` the window's one progress bar
+and the 1:1 crop alike), `src/progress.rs` the window's one progress indicator
 (`fraction`, a port of `progress.ts`'s `progressWidth`, and `shown`, a Move to
 Trash / Delete Permanently run before a folder operation's run before the
-scan's running pass), which the window draws along the status row's top edge,
+scan's running pass), which the window draws as a gpui-component
+`ProgressCircle` in the status row's `StatusBar`, left of `Sort ▾`,
 and `src/panels.rs` the panes shown (`Panels`, a
 port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
 `from_setting` and `setting`, the `panels` value of the settings store, a
