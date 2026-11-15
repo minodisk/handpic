@@ -168,3 +168,5 @@ What the investigation found (the facts the steps rely on):
   user guide, so this plan leaves it.
 
 ## Progress
+
+(2026-11-16) Step 1 complete
