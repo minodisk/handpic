@@ -2414,16 +2414,6 @@ impl Riffle {
         if let Some((at, _)) = &mut self.shown {
             *at = filter::shown_after(&old, &next, *at);
         }
-        if let Some((Some(to), _)) = self.shown {
-            // The status line's `n/total` follows the shown file's new place.
-            if let Some((head, rest)) = self.status.split_once("  ")
-                && let Some((a, b)) = head.split_once('/')
-                && a.parse::<usize>().is_ok()
-                && b.parse::<usize>().is_ok()
-            {
-                self.status = format!("{}/{}  {rest}", to + 1, next.len()).into();
-            }
-        }
         self.files = next.iter().map(PathBuf::from).collect();
         if let Some(ring) = &mut self.prefetch {
             let given = ring.retain(&self.files);
@@ -3591,7 +3581,7 @@ impl Riffle {
     }
 
     /// Draw another file's result on the way to the current one: the frame,
-    /// its status line and meta pane, and the overlay's file, which keeps the
+    /// its meta pane (the status note cleared), and the overlay's file, which keeps the
     /// current file's marks off it. Nothing that is the current file's.
     fn stale(&mut self, index: usize, loaded: Loaded, cx: &mut Context<Self>) {
         self.present(index, loaded.held);
@@ -3599,8 +3589,8 @@ impl Riffle {
         cx.notify();
     }
 
-    /// Put `held` on screen as the file at `index`: the image, the status
-    /// line, the meta pane and the overlay's file. The image it replaces goes
+    /// Put `held` on screen as the file at `index`: the image, the meta pane
+    /// and the overlay's file, clearing the status note. The image it replaces goes
     /// back to the ring when its file is wanted there, else is retired.
     fn present(&mut self, index: usize, held: Held) {
         let Held {
@@ -3611,7 +3601,7 @@ impl Riffle {
             meta,
             focus,
         } = held;
-        self.status = self.status_line(index, px, orientation, &meta);
+        self.status = SharedString::default();
         let path = self.files[index].to_string_lossy().into_owned();
         let shown = self
             .shown
@@ -3646,28 +3636,6 @@ impl Riffle {
         }
     }
 
-    fn status_line(
-        &self,
-        index: usize,
-        px: (u32, u32),
-        orientation: u16,
-        m: &Metadata,
-    ) -> SharedString {
-        format!(
-            "{}/{}  {}  {}x{}  {}  {}  {}  {}",
-            index + 1,
-            self.files.len(),
-            file_name(&self.files[index]),
-            px.0,
-            px.1,
-            orientation,
-            dash(&m.shutter),
-            dash(&m.aperture),
-            dash(&m.iso),
-        )
-        .into()
-    }
-
     fn fail(&mut self, message: &str) {
         println!("error {message}");
         self.status = format!("error: {message}").into();
@@ -3686,7 +3654,7 @@ impl Riffle {
         } else if self.failed > 0 {
             status.push_str(&format!("  {} failed", self.failed));
         }
-        status.into()
+        status.trim_start().to_owned().into()
     }
 
     fn toggle_zoom(&mut self, cx: &mut Context<Self>) {
@@ -5266,10 +5234,6 @@ fn paint_failure(
             at.y += line.size(line_height).height;
         }
     });
-}
-
-fn dash(value: &Option<String>) -> &str {
-    value.as_deref().unwrap_or("-")
 }
 
 fn path_strings(paths: &[PathBuf]) -> Vec<String> {

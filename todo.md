@@ -2647,14 +2647,6 @@ The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitiv
 
 - [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
 
-### Native: the status line's `n/total` still lags a refilter that hides the shown file
-
-`gpui-exif-filter` fixed the meta pane's `n / total` (it reads the pager's current index) but left the status line's `n/total` alone: it only follows the shown file's new place, so it lags a refilter that hides the shown file. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/native/src/main.rs` (`refilter`).
-
-#### TODO
-
-- [ ] Make the status line's `n/total` follow the current index after a refilter, as the pane's does, and check that `p` under the `untagged` filter updates it at once.
-
 ### Native: drop the `.native` suffix from the native app's index and log folders at the switch-over
 
 #### Background
