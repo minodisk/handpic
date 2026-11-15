@@ -194,3 +194,5 @@ fixed.
   tests and `mise run ci:local`); the drag, cursor and look were not observed
   in the running app, and the hand checks are listed under `## Deferred
   issues (todo candidates)` in `learnings.md`.
+
+(2026-11-16) Step 1 complete

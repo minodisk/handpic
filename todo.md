@@ -3308,3 +3308,21 @@ Files: `crates/native/src/settingsview.rs`, `crates/native/src/theme.rs`.
   5. Tab / Shift+Tab walk the search field and the page's controls and wrap, never reaching the main view.
   6. Searching an action name (for example "burst") lists only its rows; clearing the search brings every item back.
   7. The user's visual check of the new look (group headers, label-left / control-right rows, the sidebar's colors).
+
+### Native: real-device checks of the drag-resizable tree and meta panes
+
+`native-pane-resize` made the GPUI app's (`crates/native`) folder tree and meta pane drag-resizable by their boundary with the preview, stored under the `panelWidths` key of the settings store (default 220 px, a pane 160 to 480 px, the preview at least 240 px). Unit tests (`panewidths.rs`, `settings.rs`'s read of `panelWidths`) and `mise run ci:local` cover the arithmetic and the setting. Nobody has dragged a handle in the running window: the drag itself, the cursor and the handle's look, the narrow-window behavior, a release outside the window, the 1:1 re-cut, the 5 px bands against the preview's clicks and the layout at 160 px are all unchecked. The limits (160 / 480 / 240) were not judged by eye. Plan: `docs/plans/_archived/20261115-native-pane-resize/plan.md`. Files: `crates/native/src/main.rs` (`pane_handle`, `drag_pane`, `end_pane_drag`, the root `div` in `render`), `crates/native/src/panewidths.rs`.
+
+Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store (except where a check says to restart).
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` (or `native:watch`) on a folder and hover the preview's left edge beside the tree. Expect the cursor to turn col-resize and the handle's pill to show, with the 1 px line reading well on the theme.
+- [ ] On Windows, drag that edge right and left, then the meta pane's edge. Expect each pane to follow the pointer between 160 and 480 px with the preview taking the rest. Note whether the boundary jumps a few px at the first move.
+- [ ] On Windows, with both panes wide, narrow the window. Expect the preview to keep 240 px while the panes narrow (never under 160), and widening the window again to bring the panes back to the dragged widths.
+- [ ] On Windows, release a drag over the preview, over a pane, over the strip and outside the window, and restart each time. Expect the widths to come back each time. For a release outside the window, note whether the width is written at once or only at the next click inside.
+- [ ] On Windows, press `Tab` (`toggleSides`), `Ctrl+Alt+Left` (`toggleLeft`) and `Ctrl+Alt+Right` (`toggleRight`) to hide and show a pane. Expect it to come back at its last width.
+- [ ] On Windows, press `z` for 1:1, then drag a boundary. Expect the crop to be re-cut once the drag settles.
+- [ ] On Windows, check that the 5 px bands do not get in the way of the empty-state message's click, the preview's context menu or the panes' scrollbars, and that the tree's rows, its inline rename input and the meta pane's rows lay out at 160 px.
+- [ ] On Windows, launch with `--auto`. Expect the panes to start at 220 whatever is stored and a drag to write nothing to `panelWidths`.
+- [ ] On macOS and Linux, repeat the hover, drag, narrow-window, restart and hide / show checks above. CI only builds these platforms.
