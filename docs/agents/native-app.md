@@ -911,8 +911,10 @@ time a burst of its own. The view keeps the open folder's grouping in
 
 ### The sort and filter menus are deferred popovers over the window (Inferred)
 
-The status row is a flex row: the status text, then `Sort ▾` and `Filter ▾`
-at its right end. The status text is a transient note (an error, the drop
+The status row is gpui-component's `StatusBar` (see "The status row is
+gpui-component's `StatusBar` with its defaults"): the status text in its
+center region, then, in its right region, the progress circle while an
+operation runs and `Sort ▾` and `Filter ▾`. The status text is a transient note (an error, the drop
 refusal, the empty-folder and filtered texts) that `present` clears on every
 presented preview, as the Tauri `present`'s `setStatus()`, followed by
 `status()`'s suffixes with no leading separator when the note is empty; the
@@ -1005,9 +1007,12 @@ dimmed, shows capture order and keeps the stored key.
   so a user binding on `escape` still works otherwise (no default binding
   uses it). Every other key goes through the window's handler as before, so
   paging, `e`, `z`, `f` and the burst keys work with a menu open.
-- Measured: the preview canvas stays 1380 x 852 logical px in the default
-  1600 x 1000 window with the two buttons in the status row (12 px text),
-  the same as the plain status line, so the fit scale is unchanged.
+- Measured: the preview canvas is 1160 x 842 logical px in the default
+  1600 x 1000 window with the tree shown and the status row a `StatusBar`
+  (a debug build at scale 1, the canvas's paint bounds logged), the same
+  with the progress circle shown and hidden. Inferred: 1380 x 842 with the
+  tree hidden. Before the `StatusBar` (a plain flex `div`, no padding or
+  border) it was 852 tall, so the row grew 10 px.
 - Not verified headless (mouse clicks cannot be driven by `--auto`): that a
   press on an item reaches its `on_click` and not the strip, and that
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
@@ -1890,91 +1895,103 @@ the `page` line and goes into `Summary`. A stale preview drawn on the way
   cost is the `on()` check in `paint` and in `loaded`.
 
 
-### One progress bar sits on the status row's top edge (Inferred)
+### One progress circle sits in the status row's right region (Inferred)
 
-`progress.rs` holds the bar's model: `fraction`, a port of `progress.ts`'s
-`progressWidth` (0 while `total` is 0, never above 1), and `shown`, which
-picks the `(done, total)` the bar shows when several operations run: a Move
-to Trash, Delete Permanently or trash redo run first (`Riffle.trashing`, the
-counts the pane's note is formatted from with `trash::progress_status`), then
-a folder operation's run, then the scan's running pass
-(`scan::Status::running`, pass 1's before pass 2's, the two sharing the one
-bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
-`MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
-width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's `Progress`, which, as verified at 0.9.1, cannot draw it so.
-`Progress` draws its track as its indicator's color at 20 % opacity (the
-`.color(..)` value, else the theme's `progress_bar`, which falls back to
-`primary`) and has no setter for the track apart from it, so the track would
-be `PRIMARY_COLOR` at 20 %, lighter than `MUTED_FILL`. Its indicator's width
+`progress.rs` holds the indicator's model: `fraction`, a port of
+`progress.ts`'s `progressWidth` (0 while `total` is 0, never above 1), and
+`shown`, which picks the `(done, total)` the indicator shows when several
+operations run: a Move to Trash, Delete Permanently or trash redo run first
+(`Riffle.trashing`, the counts the pane's note is formatted from with
+`trash::progress_status`), then a folder operation's run, then the scan's
+running pass (`scan::Status::running`, pass 1's before pass 2's, the two
+sharing the one indicator). `main.rs`'s `progress_circle` draws it as
+gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
+size), colored `PRIMARY_COLOR`, its value `fraction * 100`, the first item of
+the `StatusBar`'s right region, left of `Sort ▾`, and only while `shown`
+yields a count. The Tauri app draws a bar along the row's top edge
+(`#scan-progress`); the circle is the user's decision.
+
+The linear `Progress` was ruled out for that bar, and the reasons hold for
+`ProgressCircle` too, as verified at 0.9.1: it draws its track as its
+indicator's color at 20 % opacity with no setter for the track apart from
+it, so the track is `PRIMARY_COLOR` at 20 %, not `MUTED_FILL`; its value
 always animates through `transition` over the theme's
 `motion.duration_normal` (180 ms by default), turned off only by GPUI's
 reduce-motion or by a zero `duration_normal`, which the dialogs read too;
 while it runs it requests animation frames, and since it is keyed by the
-element id, a drop of the value (pass 1 to pass 2, a rescan) is drawn as the
-bar shrinking from full to 0. What it would add, the accessibility progress
-role and the indeterminate `loading` mode, nothing here uses.
+element id (`"progress"`), a drop of the value (pass 1 to pass 2, a rescan)
+is drawn as the ring emptying from full to 0. The user accepted both by
+choosing the circle.
 
-- Rule: do not replace the bar with `Progress` while its track color cannot
-  be set apart from the indicator's and its value always animates; check
-  both again on a gpui-component bump. Reproducing the look would also take
-  `.with_size(Size::Size(px(2.)))` and `.rounded_none()` (with the theme's
-  6 px radius the bar is otherwise a 1 px pill).
-- Rule: the bar is `absolute` inside the status row (made `relative`), on
-  its top edge, so showing or hiding it changes no layout: the canvas's
-  `viewport` cell, the fit scale, a 1:1 crop and the peaking layer are not
-  recomputed by it. The status row stays with every pane hidden, so the bar
-  does too. Do not give it a flex row of its own.
-- Rule: the bar adds no `notify` or timer; it is redrawn by the notifies the
-  scan's `Progress` / `FacesProgress` and the trash's `TrashProgress` already
-  make, and it goes wherever `scan_status.clear()` and `trashing = None` do.
-- Rule: pass 2 starts at `(0, 0)` and pass 1 can start at a total of 0, so
-  the track shows empty there.
+- Rule: the circle is in the row's flow inside the right region, never in
+  `left` (see the `StatusBar` section). At 12 px it is shorter than the
+  buttons, so showing or hiding it changes neither the row's height nor the
+  canvas (measured: 1160 x 842 either way), and the status text,
+  start-aligned in the center region, does not move; only the center region
+  is 20 px narrower (the circle and the region's 8 px gap) while it shows.
+- Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
+  starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
+  track ring shows there.
+- Rule: the circle adds no `notify` or timer of its own; it is redrawn by the
+  notifies the scan's `Progress` / `FacesProgress` and the trash's
+  `TrashProgress` already make, and it goes wherever `scan_status.clear()`
+  and `trashing = None` do. Its value's transition does request animation
+  frames for 180 ms after each change. Not yet observed: whether the drop
+  from pass 1's full ring to pass 2's empty one reads well, and whether the
+  extra frames slow paging during a scan (the hand check is pending in
+  `../plans/20261115-native-status-bar/learnings.md`).
+- Rule: do not zero `duration_normal` to stop the animation: the dialogs read
+  it too.
 - Another operation with a count (Sequence JPEG Timestamps, Import) feeds it
   by passing its `(done, total)` as `shown`'s `folder_op` argument, `None`
   today, from the state its own progress messages update.
 - The trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress
-  callback in the backend (`trash::undo_run`, `foldersidecars`), so the bar
-  shows nothing for them. A new operation needs a `(done, total)` callback
-  before it can feed the bar.
+  callback in the backend (`trash::undo_run`, `foldersidecars`), so the
+  circle shows nothing for them. A new operation needs a `(done, total)`
+  callback before it can feed it.
 
-### The status row stays a plain `div`, not gpui-component's `StatusBar` (Inferred)
+### The status row is gpui-component's `StatusBar` with its defaults (Inferred)
 
-gpui-component (`=0.9.1`, `src/status_bar.rs`) ships a `StatusBar`: a
-`RenderOnce` `h_flex` with left, center and right regions. The status row is
-`main.rs`'s `status_row`, a plain `relative` flex `div` holding the status
-text, the `Sort ▾` and `Filter ▾` buttons (`menu_button`) and the
-`progress_bar`. The swap was examined from the sources only (gpui-component
-0.9.1, `gpui-pre` 0.3.12, `main.rs`, `theme.rs`); nothing was built or
-measured.
+`main.rs`'s `status_row` builds the row with gpui-component's `StatusBar`
+(`=0.9.1`, `src/status_bar.rs`), a `RenderOnce` `h_flex` with `left`, center
+(`child` / `children`) and `right` regions, and overrides none of its root
+style: `items_center`, `gap_2`, `py_1`, `px_2`, `border_t_1` in the theme's
+`status_bar_border`, the `bg` of `tokens.status_bar`, `text_xs` (12 px) in
+`muted_foreground`. Each region is an
+`h_flex().overflow_hidden().items_center().gap_2()`. This reverses the
+earlier rule that kept the row a plain `div` (PR #1072), by the user's
+decision, which also chose the component's look over the old one (the status
+text was 16 px white, the row transparent over the root's black).
 
-- Rule: do not replace `status_row` with `StatusBar` (the user's decision).
-  Revisit when the row gets a border and a background of its own, which is
-  what the component's defaults draw.
+- Rule: `theme.rs`'s `map` sets `status_bar` to `PANE_COLOR` and
+  `status_bar_border` to `BORDER_COLOR` (white at 10 %), and the theme test
+  asserts both; `Theme::update` carries an edited `colors` field into
+  `theme.tokens`, which the bar's `bg` reads. Unmapped, they would fall back
+  to `Default Dark`'s `#171717` and a solid `#262626` border. Seen on screen
+  in a debug build: a filled row with a thin top border.
+- Rule: the status text is the center `child`, with no `left`; the circle
+  (while shown), `Sort ▾` and `Filter ▾` are each their own `.right(..)`, in
+  that order, 8 px apart (the region's `gap_2`, 4 px before). With only
+  `right`, the center is `flex_1` and start-aligned. Never put anything in
+  `left` while the right region holds the buttons: with both ends pinned the
+  center is `justify_center`, so the status text would jump to the middle of
+  the row.
+- Rule: no wrapper around the status text. Seen on screen with a text far
+  longer than the row: it stays on one line, clipped by the center region's
+  `overflow_hidden`, and the circle and the buttons keep their place.
 - Unaffected: `StatusBar` has no id, focus, key context or listener, so the
   keymap and the presses (the popover's `on_mouse_down_out`, the buttons'
-  `on_mouse_down` toggle) would not change. Each region is `overflow_hidden`,
-  but `Deferred` in `gpui-pre` 0.3.12 calls `window.defer_draw` with no
-  content mask (`elements/deferred.rs`), so the Sort / Filter popovers would
-  not be clipped and `anchored` would still open from the button's top-right.
-- The defaults would have to be undone through `refine_style`: `py_1` and
-  `border_t_1` would make the row about 9 px taller, changing the 1380 x 852
-  preview canvas recorded in "The sort and filter menus are deferred popovers
-  over the window"; `bg` reads the theme's `status_bar` token, which
-  `theme.rs` does not map, so it would fall back to `Default Dark`'s
-  `#171717` where the row is transparent over the root's black today; and
-  `text_xs` (12 px) with `muted_foreground` would shrink and dim the status
-  text, which is the root's default size in white today.
-- The regions' `gap_2` cannot be changed from the root's style, so keeping
-  the 4 px (`gap_1`) between Sort and Filter would need both wrapped in an
-  `h_flex().gap_1()` of their own, passed as one `.right()`.
-- Every child lands inside a region, never as a direct child of the root.
-  Taffy positions an `absolute` element against its direct parent, so the
-  progress bar could no longer sit on the row's top edge from inside it: the
-  `StatusBar` would need a `relative` wrapper with the bar as its sibling,
-  changing the rule in "One progress bar sits on the status row's top edge".
-- Gained: only the component's name and the `status_bar` /
-  `status_bar_border` theme tokens.
+  `on_mouse_down` toggle) are unchanged. `Deferred` in `gpui-pre` 0.3.12
+  calls `window.defer_draw` with no content mask (`elements/deferred.rs`), so
+  the regions' `overflow_hidden` does not clip the Sort / Filter popovers and
+  `anchored` still opens them from the button's top-right; read from the
+  sources, the hand check is pending in
+  `../plans/20261115-native-status-bar/learnings.md`. The popover's height
+  cap stays the window's less 40 px.
+- Rule: on a gpui-component bump, re-check the root's padding, border, text
+  size and color and the regions' gap and alignment rules in
+  `status_bar.rs`, and `ProgressCircle`'s sizes, track and animation, and
+  re-measure the preview canvas, which the row's height sets.
 
 ### Text is typed through gpui-component's `Input` (Inferred)
 
@@ -2262,9 +2279,10 @@ strip needed one because `uniform_list` is vertical only.
   width. The padding is on the list, not the pane, so the scrollbar stays at
   the pane's edge. Inferred from the gpui-pre 0.3.12 and taffy sources, not
   yet observed in the running app.
-- Inferred: the preview canvas is 1160 x 852 logical px in the default 1600 x
-  1000 window with the tree shown (1380 less the pane's 220), and 1380 x 852
-  with it hidden by `toggleLeft`. Not measured in the running app. A pane
+- Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
+  1000 window with the tree shown (see "The sort and filter menus are
+  deferred popovers over the window"). Inferred: 1380 x 842 with it hidden by
+  `toggleLeft` (1160 plus the pane's 220), not measured. A pane
   change re-cuts a 1:1 crop through `zoom_resized`.
 
 ### The folder tree is not gpui-component's `Tree` (Inferred)

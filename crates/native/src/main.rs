@@ -88,14 +88,16 @@ use gpui::{
     MouseButton, MouseDownEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
     ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Task, TextAlign, TitlebarOptions,
     TransformationMatrix, UniformListScrollHandle, WeakEntity, Window, WindowBounds, WindowOptions,
-    anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, relative, rgb, rgba,
-    size, svg, uniform_list,
+    anchored, canvas, deferred, div, fill, outline, point, prelude::*, px, rgb, rgba, size, svg,
+    uniform_list,
 };
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Root, Sizable,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
+    progress::ProgressCircle,
     scroll::ScrollableElement,
+    status_bar::StatusBar,
     tooltip::Tooltip,
 };
 use gpui_platform::application;
@@ -463,7 +465,7 @@ struct Riffle {
     /// took, kept for an undo landing before the re-listing reads them back.
     trashed_state: HashMap<String, (Option<State>, bool)>,
     /// How far the run in flight got, `(mode, done, total)`, in the pane's
-    /// notes and the progress bar.
+    /// notes and the progress circle.
     trashing: Option<(trash::Mode, usize, usize)>,
     /// A folder the tree opened while a run was in flight, opened whole at
     /// its end (only the launch's open has `--size` / `--max`).
@@ -4112,57 +4114,44 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The status line with the sort and filter buttons at its right end.
+    /// The status line with the progress circle, while an operation with a
+    /// count runs, and the sort and filter buttons at its right end.
     fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .relative()
-            .flex()
-            .items_center()
-            .gap_1()
-            .px_2()
-            .children(self.progress_bar())
-            .child(div().flex_1().min_w_0().child(self.status()))
-            .child(self.menu_button(
-                Which::Sort,
-                "Sort \u{25be}",
-                false,
-                !self.view_only,
-                max_menu_height,
-                cx,
-            ))
-            .child(self.menu_button(
-                Which::Filter,
-                "Filter \u{25be}",
-                self.filter.is_active(),
-                true,
-                max_menu_height,
-                cx,
-            ))
+        let mut row = StatusBar::new().child(self.status());
+        if let Some(circle) = self.progress_circle() {
+            row = row.right(circle);
+        }
+        row.right(self.menu_button(
+            Which::Sort,
+            "Sort \u{25be}",
+            false,
+            !self.view_only,
+            max_menu_height,
+            cx,
+        ))
+        .right(self.menu_button(
+            Which::Filter,
+            "Filter \u{25be}",
+            self.filter.is_active(),
+            true,
+            max_menu_height,
+            cx,
+        ))
     }
 
-    /// The bar along the status row's top edge while an operation with a
-    /// count runs, out of the row's flow so neither it nor the canvas above
-    /// changes size.
-    fn progress_bar(&self) -> Option<impl IntoElement> {
+    /// The status row's progress circle while an operation with a count runs
+    /// (`progress::shown`), its value 0-100 from `progress::fraction`.
+    fn progress_circle(&self) -> Option<ProgressCircle> {
         let (done, total) = progress::shown(
             self.trashing.map(|(_, done, total)| (done, total)),
             None,
             self.scan_status.running(),
         )?;
         Some(
-            div()
-                .absolute()
-                .top_0()
-                .left_0()
-                .w_full()
-                .h(px(2.))
-                .bg(rgb(MUTED_FILL))
-                .child(
-                    div()
-                        .h_full()
-                        .w(relative(progress::fraction(done, total)))
-                        .bg(rgb(PRIMARY_COLOR)),
-                ),
+            ProgressCircle::new("progress")
+                .small()
+                .color(rgb(PRIMARY_COLOR))
+                .value(progress::fraction(done, total) * 100.),
         )
     }
 

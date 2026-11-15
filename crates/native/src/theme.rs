@@ -55,6 +55,8 @@ fn map(colors: &mut ThemeColor) {
     colors.ring = rgba(RING_COLOR).into();
     colors.overlay = rgba(OVERLAY_COLOR).into();
     colors.scrollbar_thumb = rgba(BORDER_COLOR).into();
+    colors.status_bar = rgb(PANE_COLOR).into();
+    colors.status_bar_border = rgba(BORDER_COLOR).into();
     // `Button`'s default variant. `Default Dark` derives these at load and
     // `update` does not derive them again from the colors above.
     colors.button = rgba(BUTTON_FILL).into();
@@ -101,6 +103,8 @@ mod tests {
         assert_eq!(colors.ring, hex(0x737373ff));
         assert_eq!(colors.overlay, hex(0x00000099));
         assert_eq!(colors.scrollbar_thumb, hex(0xffffff1a));
+        assert_eq!(colors.status_bar, hex(0x171717ff));
+        assert_eq!(colors.status_bar_border, hex(0xffffff1a));
         assert_eq!(colors.button, hex(0xffffff0b));
         assert_eq!(colors.button_hover, hex(0x262626ff));
         assert_eq!(colors.button_active, hex(0x262626ff));

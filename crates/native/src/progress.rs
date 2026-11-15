@@ -1,5 +1,6 @@
-//! The window's one progress bar: how full it is, a port of `progress.ts`'s
-//! `progressWidth`, and which running operation it shows.
+//! The window's one progress indicator, the status row's circle: how full
+//! it is, a port of `progress.ts`'s `progressWidth`, and which running
+//! operation it shows.
 
 /// The indicator's share of the track: 0 while nothing is counted, never
 /// above 1.
@@ -10,7 +11,7 @@ pub fn fraction(done: usize, total: usize) -> f32 {
     (done as f32 / total as f32).min(1.)
 }
 
-/// The `(done, total)` the bar shows, `None` hiding it: a Move to Trash or
+/// The `(done, total)` the indicator shows, `None` hiding it: a Move to Trash or
 /// Delete Permanently run first, then a folder operation's run, then the
 /// scan's running pass.
 pub fn shown(
