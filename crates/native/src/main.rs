@@ -605,7 +605,7 @@ impl Riffle {
             if remember && geometry.is_usable() {
                 *observed.lock().unwrap() = Some(geometry);
             }
-            this.strip_width = f32::from(window.viewport_size().width);
+            this.strip_width = content_width(window);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
             this.zoom_resized(cx);
@@ -768,7 +768,7 @@ impl Riffle {
             strip: Strip::default(),
             strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
-            strip_width: f32::from(window.viewport_size().width),
+            strip_width: content_width(window),
             eviction,
             settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
@@ -4443,7 +4443,9 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
-        let menu_max = window.viewport_size().height - px(40.) - TITLE_BAR_HEIGHT;
+        let pad = gpui_component::window_paddings(window);
+        let menu_max =
+            window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT;
         let main = div()
             .size_full()
             .flex()
@@ -5413,6 +5415,14 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
 
 /// The window's restore bounds and display; a fullscreen window is kept by
 /// its restore bounds, windowed.
+/// The viewport's width less the client-side frame's left and right padding
+/// (zero under server-side decorations and off Linux), which is what the
+/// strip really spans.
+fn content_width(window: &Window) -> f32 {
+    let pad = gpui_component::window_paddings(window);
+    f32::from(window.viewport_size().width - pad.left - pad.right)
+}
+
 fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
     let (bounds, maximized) = match window.window_bounds() {
         WindowBounds::Windowed(bounds) | WindowBounds::Fullscreen(bounds) => (bounds, false),

@@ -2104,7 +2104,10 @@ window itself. Source: [the plan](../plans/20261116-native-title-bar/plan.md).
   (the user's choice). `gpui-pre` 0.3.12 defaults to server-side, which would
   keep the window manager's bar and put this one, without controls, under it;
   under client-side decorations `Root`'s `window_border()` draws the frame,
-  shadow and resize edges.
+  shadow and resize edges. That frame pads the content (about 21 px a
+  side on Linux), so `strip_width` and the menus' `menu_max` subtract
+  `gpui_component::window_paddings` from the viewport (zero under
+  server-side decorations and on Windows / macOS).
 - Rule: the bar's fill and bottom border are the theme's `title_bar` (a
   gradient from it mixed 55 / 45 with `background` down to `title_bar`) and
   `title_bar_border`. `theme.rs` does not map them yet, so they keep
