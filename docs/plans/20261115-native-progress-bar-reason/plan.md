@@ -99,3 +99,5 @@ without knowing what changes.
   is the mitigation.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
