@@ -130,3 +130,5 @@ none).
   backend (a long source build).
 
 ## Progress
+
+- (2026-11-15) Step 1 complete (the Ctrl+C manual check described in `learnings.md` is still pending)
