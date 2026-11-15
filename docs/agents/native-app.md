@@ -1126,7 +1126,7 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
   `"<key>" is taken by this app`: `key_down` takes them before the keymap, so
   a binding would never fire. `escape` cannot be captured (it cancels) and
   `ctrl+,` / `meta+,` the backend refuses as a menu accelerator. The folder
-  tree's keys (arrows, Home / End, Enter, Escape, type-ahead) are not
+  tree's keys (Up / Down, Home / End, Enter, Space, Escape, type-ahead) are not
   refused: they are taken only while the tree has the keyboard, when the
   keymap's photo actions are swallowed anyway (`treekeys.rs`).
 - Not verified headless: the clicks, the capture and the names a shifted
@@ -2241,9 +2241,9 @@ context meets the app view's) is not verified.
   one flag in the view").
 - Its keys differ. `up` / `down` wrap at the ends (`on_action_up` goes from
   the first row to the last, `on_action_down` from the last to the first);
-  ours stop (`tree::step`). `left` only collapses an expanded folder and does
-  nothing on a collapsed row, so it never moves to the parent. There is no
-  Home / End and no type-ahead. `Confirm` toggles the selected folder instead
+  ours stop (`tree::step`). Its `left` / `right` collapse and expand, where
+  ours leave Left / Right to the strip's paging and toggle on Space. There is
+  no Home / End and no type-ahead. `Confirm` toggles the selected folder instead
   of opening it, and `gpui-base`'s `tree::init` binds only the four arrows in
   the `"Tree"` context, so Enter does nothing there unless the app binds it.
 - It tracks one selected index and one right-clicked index. The folder tree
@@ -2411,14 +2411,23 @@ mouse listeners were the smaller change.
   `escape` and hiding the pane (`toggleLeft`, `toggleSides`) hand it back as
   well. The
   type-ahead buffer starts over whenever the keyboard moves.
-- Rule: while the tree has it, `tree_key_down` takes `escape`, the arrows,
-  `home` / `end`, `enter` and any printable key without Ctrl / Alt / Meta
-  (type-ahead); any other key runs its action only when
-  `treekeys::tree_gate` lets it through (`open` and the four pane toggles,
-  `TREE_PASSTHROUGH`) and is
-  otherwise swallowed, so `q`, the judgment keys, paging and undo never reach
+- Rule: while the tree has it, `tree_key_down` takes `escape`, Up / Down,
+  `home` / `end`, `enter` (open the cursor's folder), `space` (toggle the
+  cursor's folder, when it can expand) and any printable key without Ctrl /
+  Alt / Meta (type-ahead); any other key runs its action only when
+  `treekeys::tree_gate` lets it through (`open`, the four pane toggles and the
+  strip's `previous` / `next`, `TREE_PASSTHROUGH`) and is otherwise
+  swallowed, so `q`, the judgment keys, the burst moves and undo never reach
   the photo. The cursor row is outlined in `--sidebar-ring` only while the
-  tree has the keyboard.
+  tree has the keyboard, which Left / Right paging leaves with the tree.
+- Rule: this departs from the Tauri app on purpose (the user's request).
+  There, Left / Right are the WAI-ARIA tree keys (expand, collapse, first
+  child, parent); here they page the strip whatever has the keyboard, the
+  cursor reaches a parent or child only through Up / Down, Home / End and
+  type-ahead, and plain Space is the expand / collapse toggle, so it is no
+  longer a type-ahead character (type-ahead cannot match past a space in a
+  folder name). Modified arrows (`shift+arrow`, `alt+arrow`) stay
+  swallowed. A parity pass with `tree.ts` / `treekeys.ts` keeps this.
 - Rule: opening a folder from the tree, by a click on its name or `enter`,
   leaves the keyboard with the tree, as in the Tauri app (`folders.ts`'s
   `openFolder` and `main.ts`'s `openDirectory` never blur the tree); the

@@ -429,11 +429,13 @@ draws as a `uniform_list`, fills from the backend's `folders`, expands
 down to the open folder on every open, keeps following the disk through the
 backend's `treewatch` on its expanded, drawn folders (`watched_folders`) and
 re-reads the roots when the window becomes active, and its keyboard (the
-cursor's `step`, `tree_key`'s Left / Right / Enter, the type-ahead's
+cursor's `step`, `tree_key`'s Space / Enter, the type-ahead's
 `append_typed` / `type_ahead`, and `collapse_all`), which the tree takes on a
 click in its pane and hands back on `escape` or a press elsewhere,
 `src/treekeys.rs` the keymap actions that still run while the tree has the
-keyboard (`TREE_PASSTHROUGH`, `tree_gate`, a port of `treekeys.ts`),
+keyboard (`TREE_PASSTHROUGH`, `tree_gate`, after `treekeys.ts` but also
+letting the strip's `previous` / `next` through, so Left / Right page the
+strip, unlike the Tauri app),
 `src/context.rs` the
 right-click menus (a port of `context.ts`: the items with their action, label,
 shortcut, checked and disabled state, `folder_groups`, the tree's reveal,

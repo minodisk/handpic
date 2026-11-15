@@ -1,10 +1,14 @@
 //! Which keymap actions still run while the folder tree has the keyboard:
-//! only those about the window or the folder, never about a photo. Keyed by
-//! action name so it holds however the keys are rebound; an action missing
-//! here (including one added later) is swallowed. A port of `treekeys.ts`.
+//! those about the window or the folder, and the strip's previous / next.
+//! Keyed by action name so it holds however the keys are rebound; an action
+//! missing here (including one added later) is swallowed. After
+//! `treekeys.ts`, but unlike it lets `previous` / `next` through, so Left /
+//! Right page the strip while the tree keeps the keyboard.
 
-pub const TREE_PASSTHROUGH: [&str; 5] = [
+pub const TREE_PASSTHROUGH: [&str; 7] = [
     "open",
+    "previous",
+    "next",
     "toggleLeft",
     "toggleRight",
     "toggleStrip",
@@ -24,19 +28,21 @@ pub fn tree_gate(action: Option<&str>) -> Gate {
     }
 }
 
-/// Ported from `treekeys.test.ts`.
+/// After `treekeys.test.ts`, with `previous` / `next` passing.
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn lets_only_the_window_and_folder_actions_through() {
+    fn lets_only_the_window_folder_and_paging_actions_through() {
         let mut passing = TREE_PASSTHROUGH.to_vec();
         passing.sort_unstable();
         assert_eq!(
             passing,
             [
+                "next",
                 "open",
+                "previous",
                 "toggleLeft",
                 "toggleRight",
                 "toggleSides",
@@ -50,7 +56,15 @@ mod tests {
 
     #[test]
     fn swallows_the_culling_actions() {
-        for action in ["pick", "next", "undo", "selectAll", "rate1", "red"] {
+        for action in [
+            "pick",
+            "undo",
+            "selectAll",
+            "rate1",
+            "red",
+            "burstNext",
+            "burstFramePrevious",
+        ] {
             assert_eq!(tree_gate(Some(action)), Gate::Swallow);
         }
     }
