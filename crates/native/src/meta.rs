@@ -6,7 +6,6 @@
 
 use riffle_backend::exif::Metadata;
 use riffle_backend::index::{Focus, FocusPoint};
-use riffle_core::candidate::FocusCandidate;
 use riffle_core::eyes::{EYES_CLOSED_EAR, EyeState};
 
 use crate::mark::GOOD_FULL_EYE_SHARP;
@@ -99,8 +98,10 @@ pub fn af_rows(point: Option<&FocusPoint>) -> Vec<(&'static str, Option<String>)
 }
 
 /// The `Analysis` rows from the values the scan stored: `metaGroups`' rows
-/// with the same labels and strings, each computed value it does not show
-/// next to the one it derives from, and the preview's sharpness.
+/// with the same labels and strings, less the preview's `eye_focus` and focus
+/// candidate the Face focus tiers no longer read, the full-size eye score as
+/// `Eye focus`, each computed value it does not show next to the one it
+/// derives from, and the preview's sharpness.
 pub fn analysis(
     focus: Option<&Focus>,
     sharpness: Option<f64>,
@@ -110,21 +111,7 @@ pub fn analysis(
     let fixed = |v: f64| format!("{v:.3}");
     vec![
         (
-            "AF eye in focus",
-            focus.and_then(|f| f.eye_focus).map(percent),
-        ),
-        (
-            "Focus candidate",
-            focus
-                .and_then(|f| match f.candidate {
-                    FocusCandidate::Candidate => Some("Yes"),
-                    FocusCandidate::NotCandidate => Some("No"),
-                    FocusCandidate::Unknown => None,
-                })
-                .map(str::to_owned),
-        ),
-        (
-            "Eyes at full size",
+            "Eye focus",
             eyes.full_eye_sharp.map(|s| {
                 let verdict = if s >= GOOD_FULL_EYE_SHARP {
                     "Sharp"
@@ -210,6 +197,7 @@ pub fn groups<'a>(
 #[cfg(test)]
 mod tests {
     use riffle_backend::index::{EyesPose, FocusSize, StoredEyes};
+    use riffle_core::candidate::FocusCandidate;
 
     use super::*;
 
@@ -311,7 +299,7 @@ mod tests {
             ..empty()
         };
         let analysis = [
-            ("AF eye in focus", Some("82%".to_owned())),
+            ("Eye focus", Some("Sharp · 0.231".to_owned())),
             ("Eyes", None),
             ("Yaw", Some("3°".to_owned())),
         ];
@@ -320,7 +308,7 @@ mod tests {
         assert_eq!(headings, [EXIF_HEADING, ANALYSIS_HEADING]);
         assert_eq!(
             rows(&groups[1]),
-            [("AF eye in focus", "82%"), ("Yaw", "3°")]
+            [("Eye focus", "Sharp · 0.231"), ("Yaw", "3°")]
         );
     }
 
@@ -375,21 +363,25 @@ mod tests {
         }),
     };
 
-    fn focus(eye_focus: Option<f64>, candidate: FocusCandidate) -> Focus {
+    fn focus() -> Focus {
         Focus {
             point: None,
             manual_focus: false,
-            eye_focus,
-            candidate,
+            eye_focus: None,
+            candidate: FocusCandidate::Unknown,
             eyes: StoredEyes::default(),
         }
     }
 
     fn with_eyes(eyes: StoredEyes) -> Focus {
-        Focus {
-            eyes,
-            ..focus(None, FocusCandidate::Unknown)
-        }
+        Focus { eyes, ..focus() }
+    }
+
+    fn sharp_eyes() -> Focus {
+        with_eyes(StoredEyes {
+            full_eye_sharp: Some(0.231),
+            ..StoredEyes::default()
+        })
     }
 
     fn pose(yaw: f64, pitch: f64, roll: f64) -> Option<EyesPose> {
@@ -414,7 +406,7 @@ mod tests {
     #[test]
     fn splits_sony_like_input_into_exif_maker_note_and_analysis() {
         let meta = sony();
-        let analysis = analysis(Some(&focus(Some(0.87), FocusCandidate::Unknown)), None);
+        let analysis = analysis(Some(&sharp_eyes()), None);
         let groups = groups(Some(&meta), &[], &analysis);
         let headings: Vec<_> = groups.iter().map(|g| g.heading).collect();
         assert_eq!(
@@ -450,16 +442,16 @@ mod tests {
                 ("RAW type", "Lossless Compressed RAW"),
             ]
         );
-        assert_eq!(rows(&groups[2]), [("AF eye in focus", "87%")]);
+        assert_eq!(rows(&groups[2]), [("Eye focus", "Sharp · 0.231")]);
     }
 
     #[test]
     fn shows_only_the_analysis_group_without_metadata() {
-        let analysis = analysis(Some(&focus(Some(0.87), FocusCandidate::Unknown)), None);
+        let analysis = analysis(Some(&sharp_eyes()), None);
         let groups = groups(None, &[], &analysis);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].heading, ANALYSIS_HEADING);
-        assert_eq!(rows(&groups[0]), [("AF eye in focus", "87%")]);
+        assert_eq!(rows(&groups[0]), [("Eye focus", "Sharp · 0.231")]);
     }
 
     #[test]
@@ -474,36 +466,28 @@ mod tests {
         assert!(groups(None, &[], &none).is_empty());
     }
 
+    /// The Face focus tiers read `full_eye_sharp` alone, so the preview's
+    /// `eye_focus` and the focus candidate give no row.
     #[test]
-    fn shows_the_af_eye_in_focus_probability_as_a_percentage() {
-        let percent = |p| value(&focus(Some(p), FocusCandidate::Unknown), "AF eye in focus");
-        assert_eq!(percent(0.8701).as_deref(), Some("87%"));
-        assert_eq!(percent(0.).as_deref(), Some("0%"));
-        assert_eq!(
-            shown(Some(&focus(Some(0.07), FocusCandidate::Unknown)), None),
-            [("AF eye in focus", "7%".to_owned())]
-        );
-    }
-
-    #[test]
-    fn an_unknown_candidate_without_eye_focus_gives_no_group() {
-        let analysis = analysis(Some(&focus(None, FocusCandidate::Unknown)), None);
-        assert!(groups(None, &[], &analysis).is_empty());
+    fn the_eye_focus_and_the_candidate_give_no_row() {
+        let f = Focus {
+            eye_focus: Some(0.87),
+            candidate: FocusCandidate::Candidate,
+            ..focus()
+        };
+        assert!(shown(Some(&f), None).is_empty());
     }
 
     #[test]
     fn shows_the_stored_eye_state_openness_and_head_pose() {
-        let f = Focus {
-            eye_focus: Some(0.87),
-            ..with_eyes(StoredEyes::new(
-                Some(0.09),
-                pose(12.4, -5.2, 3.5),
-                None,
-                None,
-                None,
-            ))
-        };
-        let tauri = ["AF eye in focus", "Eyes", "Yaw", "Pitch", "Roll"];
+        let f = with_eyes(StoredEyes::new(
+            Some(0.09),
+            pose(12.4, -5.2, 3.5),
+            None,
+            None,
+            None,
+        ));
+        let tauri = ["Eyes", "Yaw", "Pitch", "Roll"];
         let rows: Vec<_> = shown(Some(&f), None)
             .into_iter()
             .filter(|(l, _)| tauri.contains(l))
@@ -511,7 +495,6 @@ mod tests {
         assert_eq!(
             rows,
             [
-                ("AF eye in focus", "87%".to_owned()),
                 ("Eyes", "Closed · 0".to_owned()),
                 ("Yaw", "12°".to_owned()),
                 ("Pitch", "-5°".to_owned()),
@@ -552,7 +535,7 @@ mod tests {
                 full_eye_sharp: s,
                 ..StoredEyes::default()
             });
-            value(&f, "Eyes at full size")
+            value(&f, "Eye focus")
         };
         assert_eq!(full(Some(0.143)).as_deref(), Some("Soft · 0.143"));
         assert_eq!(
@@ -563,36 +546,19 @@ mod tests {
     }
 
     #[test]
-    fn shows_the_focus_candidate_for_a_known_state() {
-        let candidate = |c| value(&focus(None, c), "Focus candidate");
-        assert_eq!(candidate(FocusCandidate::Candidate).as_deref(), Some("Yes"));
-        assert_eq!(
-            candidate(FocusCandidate::NotCandidate).as_deref(),
-            Some("No")
-        );
-        assert_eq!(candidate(FocusCandidate::Unknown), None);
-    }
-
-    #[test]
     fn keeps_the_rows_in_order_with_every_stored_value() {
-        let f = Focus {
-            eye_focus: Some(0.87),
-            candidate: FocusCandidate::Candidate,
-            ..with_eyes(StoredEyes::new(
-                Some(0.25),
-                pose(12.4, -5.2, 0.),
-                Some(0.0314),
-                Some(-0.02),
-                Some(0.2),
-            ))
-        };
+        let f = with_eyes(StoredEyes::new(
+            Some(0.25),
+            pose(12.4, -5.2, 0.),
+            Some(0.0314),
+            Some(-0.02),
+            Some(0.2),
+        ));
         let closed = percent(f.eyes.eyes_closed.unwrap());
         assert_eq!(
             shown(Some(&f), Some(123.45)),
             [
-                ("AF eye in focus", "87%".to_owned()),
-                ("Focus candidate", "Yes".to_owned()),
-                ("Eyes at full size", "Sharp · 0.200".to_owned()),
+                ("Eye focus", "Sharp · 0.200".to_owned()),
                 ("Eyes", "Open · 41".to_owned()),
                 ("Eyes closed", closed),
                 ("Eye aspect ratio", "0.250".to_owned()),
@@ -628,9 +594,9 @@ mod tests {
 
     #[test]
     fn leaves_out_each_new_row_without_its_value() {
-        let f = focus(Some(0.5), FocusCandidate::Unknown);
+        let f = focus();
         for label in [
-            "Focus candidate",
+            "Eye focus",
             "Eyes closed",
             "Eye aspect ratio",
             "Mesh eye offset",
@@ -651,7 +617,7 @@ mod tests {
         assert!(shown(None, None).is_empty());
         let point = Focus {
             point: Some(POINT),
-            ..focus(None, FocusCandidate::Unknown)
+            ..focus()
         };
         let analysis = analysis(Some(&point), None);
         assert!(groups(None, &[], &analysis).is_empty());

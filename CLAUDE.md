@@ -407,7 +407,7 @@ a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
 latter also carrying the index's AF point and frame (`af_rows`) after
 `AF tracking`, and an `Analysis` group (`analysis`) of every value pass 1 and
 pass 2 stored for the shown file: `metaGroups`' rows with its labels and
-strings, the focus candidate, the closed probability, the EAR, the mesh's eye
+strings less `AF eye in focus`, the full-size eye score named `Eye focus`, the closed probability, the EAR, the mesh's eye
 offset, the edge gap and the preview's sharpness; both from the window's
 `Facts` of the file, never the on-demand eyes judgment), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
