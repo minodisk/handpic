@@ -140,3 +140,5 @@ Tauri app does.
   as before; the preview area also shows `PREVIEW_FAILED_TEXT`.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete

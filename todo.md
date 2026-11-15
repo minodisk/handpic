@@ -3255,3 +3255,13 @@ Files: `crates/native/src/main.rs` (`tree_pane`, `tree_row`), `crates/native/src
   - Rename: the inline rename editor (`Rename…` from the folder's right-click) fits inside its row, and a held rename's pending name (clock icon, italic) truncates like any other name.
   - Scrolling into view and clicks: the reveal on open, the keyboard cursor and the rename's row are brought fully into view by `scroll_to_item`, and a click and a right-click on a row's inset edge behave as before.
 - [ ] Once all six are confirmed, change the folder tree rule in `docs/agents/native-app.md` ("a tree row takes `w_full()` ... not yet observed in the running app") from Inferred to Measured with the observed result. If a point fails, correct the rule with the observed behavior and, per the plan's risk note, record what the layout actually does in `learnings.md` before trying anything wider.
+
+### Native: real-device check of the status row with no current-file info
+
+#### Background
+
+`native-status-row-notes-only` stopped the GPUI app (`crates/native`) from writing the current file's info (`n/total`, file name, pixel size, orientation, shutter, aperture, ISO) into the status row. A preview load now clears the transient note, and `status()` trims the start of the built string so a suffix such as `1:1` or the scan's progress no longer starts with two spaces. The unit tests, clippy and `mise run ci:local` cover the code. The window was never run, so two things are unchecked: whether the preview area keeps its height when the status text is empty (the `Sort ▾` / `Filter ▾` buttons should hold the row's height), and the look of the suffixes at the row's left edge. Plan: `docs/plans/_archived/20261115-native-status-row-notes-only/plan.md`. Files: `crates/native/src/main.rs` (`status_row`, `status`).
+
+#### TODO
+
+- [ ] On Windows (or any platform the native app runs on), build `crates/native`, open a folder and page through it with the scan finished and zoom off, so the status text is empty. Then press `z` (adds `1:1`) and drop two files on the window (shows `DROP_TEXT`). Expect the status row to show nothing on the left while paging. Expect the preview area above not to shift in height between the empty and the non-empty status. Expect `1:1` and a scan suffix to start at the row's left edge without leading spaces.
