@@ -1228,9 +1228,8 @@ mod tests {
         assert_eq!(candidate(Some(focus.probability)), focus.state);
     }
 
-    /// `CANDIDATE_PERCENT` in `crates/app/ui/src/focus.ts` and the user docs
-    /// (`docs/humans/usage.md`, `README.md` and their Japanese pairs) show this
-    /// figure: update them with the threshold.
+    /// Pins the candidate threshold's rounded percentage. No UI shows it since
+    /// the full-eye-sharp-only plan's Step 3.
     #[test]
     fn the_candidate_threshold_rounds_to_the_percent_the_ui_shows() {
         assert_eq!((candidate_probability() * 100.0).round(), 77.0);
