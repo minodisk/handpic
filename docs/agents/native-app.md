@@ -790,7 +790,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   current file as anchor and the scroll kept only while a `Face focus` or
   `Eyes` item is checked; `FacesDone` reads nothing. On a fresh index under
   `{"filter":{"candidates":["good"]}}` the open's list and pass 1's are empty
-  (no `eye_focus` yet, so every file is `Neutral`) and the 3 good frames of 8
+  (no pass 2 values yet, so every file is `Neutral`) and the 3 good frames of 8
   came in from `FacesProgress` alone; `eyes: ["open"]` paged the 4 open-eyed
   frames.
 - Rule: the `Output` section's answer is read on the open's (and the
@@ -831,6 +831,18 @@ last, and a JPEG folder under `"name"` paged in capture order.
   the list emptied, else on its `anchor_after_filter` neighbour, else on the
   first file. This is a native improvement: the Tauri `refilter` lands on the
   first file there.
+
+### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
+
+- Rule: `mark::af_eye_state` is the one place the strip's icon, the filter's
+  `Face focus` items and the overlay's mark color read a file's state from,
+  as `afEyeState` is in the Tauri frontend. It reads `full_eye_sharp` alone
+  for the eye focus: `Low` under `LOW_FULL_EYE_SHARP`, `Good` when
+  `photo_tier` holds (at or above `GOOD_FULL_EYE_SHARP` with the EAR, pose,
+  eye offset and edge gap cuts), else `Neutral`, a missing value included.
+  The two constants mirror `fullsharp::SOFT_BELOW` and `LOW_BELOW`, and a
+  test compares them with the core's; change `focus.ts` with them.
+- Source: `docs/plans/20261115-full-eye-sharp-only/plan.md`, Step 3.
 
 ### The bursts are regrouped with the entries and marked with the judgments (Inferred)
 

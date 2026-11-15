@@ -7,10 +7,10 @@ import {
   FOCUS_MARK_COLORS,
   FOCUS_MARK_ICONS,
   GOOD_EYE_EAR,
-  GOOD_EYE_FOCUS,
   GOOD_FULL_EYE_SHARP,
   GOOD_MAX_PITCH,
   GOOD_MAX_YAW,
+  LOW_FULL_EYE_SHARP,
   MAX_EYE_OFFSET,
   MIN_EDGE_GAP,
   type FocusPoint,
@@ -111,13 +111,14 @@ describe("focusMark", () => {
   });
 
   test.each([
-    ["not_candidate", "low"],
-    ["unknown", "neutral"],
-  ] as const)("maps the %s focus candidate to %s", (candidate, state) => {
-    expect(focusMark({ ...point, candidate }, 700, 468)?.state).toBe(state);
+    [LOW_FULL_EYE_SHARP - 0.001, "low"],
+    [LOW_FULL_EYE_SHARP, "neutral"],
+    [null, "neutral"],
+  ] as const)("maps the full-size eye sharpness %s to %s", (full_eye_sharp, state) => {
+    expect(focusMark({ ...point, full_eye_sharp }, 700, 468)?.state).toBe(state);
   });
 
-  test("a focus candidate carries its photoTier, else neutral", () => {
+  test("a measured face carries its photoTier, else neutral", () => {
     expect(focusMark(good, 700, 468)?.state).toBe("good");
     expect(focusMark({ ...good, eyes_ear: GOOD_EYE_EAR }, 700, 468)?.state).toBe("good");
     expect(focusMark({ ...good, eyes_ear: 0.1 }, 700, 468)?.state).toBe("neutral");
@@ -161,15 +162,15 @@ describe("stripState", () => {
   test("is the mark's state, a manual-focus shot included", () => {
     expect(stripState(good)).toBe("good");
     expect(stripState({ ...good, eyes_ear: 0.1 })).toBe("neutral");
-    expect(stripState({ ...point, candidate: "not_candidate" })).toBe("low");
+    expect(stripState({ ...point, full_eye_sharp: 0.05 })).toBe("low");
     expect(stripState(point)).toBe("neutral");
-    expect(stripState({ ...point, manual_focus: true, candidate: "not_candidate" })).toBe("low");
+    expect(stripState({ ...point, manual_focus: true, full_eye_sharp: 0.05 })).toBe("low");
   });
 
   test("reads the cue of a focus with no recorded point", () => {
     expect(stripState({ ...good, point: null })).toBe("good");
     expect(stripState({ ...good, point: null, eyes_ear: 0.1 })).toBe("neutral");
-    expect(stripState({ ...point, point: null, candidate: "not_candidate" })).toBe("low");
+    expect(stripState({ ...point, point: null, full_eye_sharp: 0.05 })).toBe("low");
     expect(stripState({ ...point, point: null })).toBe("neutral");
   });
 });
@@ -184,41 +185,54 @@ describe("afEyeState", () => {
     expect(afEyeState(good)).toBe("good");
   });
 
-  test("is good at GOOD_EYE_FOCUS with the other conditions met", () => {
-    expect(afEyeState({ ...good, candidate: "candidate", eye_focus: GOOD_EYE_FOCUS })).toBe("good");
+  test("is good at GOOD_FULL_EYE_SHARP with the other conditions met, not below it", () => {
+    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP })).toBe("good");
+    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 })).toBe("neutral");
   });
 
-  test("is neutral for a focus candidate that is not good", () => {
+  test("is neutral for a measured face that is not good", () => {
     expect(afEyeState({ ...good, eyes_ear: 0.1 })).toBe("neutral");
-    expect(afEyeState({ ...good, eye_focus: GOOD_EYE_FOCUS - 0.01 })).toBe("neutral");
-    expect(afEyeState({ ...point, candidate: "candidate", eye_focus: 0.772 })).toBe("neutral");
+    expect(afEyeState({ ...point, full_eye_sharp: 0.3 })).toBe("neutral");
   });
 
-  test("is low for a not_candidate focus, whatever else clears the rule", () => {
-    expect(afEyeState({ ...point, candidate: "not_candidate", eye_focus: 0.7719 })).toBe("low");
-    expect(afEyeState({ ...good, candidate: "not_candidate", eye_focus: 0.7719 })).toBe("low");
+  test("is neutral between the Low and the Good thresholds", () => {
+    expect(afEyeState({ ...good, full_eye_sharp: LOW_FULL_EYE_SHARP })).toBe("neutral");
+    expect(afEyeState({ ...good, full_eye_sharp: 0.14 })).toBe("neutral");
   });
 
-  test("is neutral for an unknown focus: no face, or pass 2 not there yet", () => {
-    expect(afEyeState({ ...point, candidate: "unknown", eye_focus: null })).toBe("neutral");
-    expect(afEyeState({ ...good, candidate: "unknown", eye_focus: null })).toBe("neutral");
+  test("is low under LOW_FULL_EYE_SHARP, whatever else clears the rule", () => {
+    expect(afEyeState({ ...point, full_eye_sharp: LOW_FULL_EYE_SHARP - 0.001 })).toBe("low");
+    expect(afEyeState({ ...good, full_eye_sharp: LOW_FULL_EYE_SHARP - 0.001 })).toBe("low");
+    expect(afEyeState({ ...good, full_eye_sharp: 0 })).toBe("low");
+  });
+
+  test("is neutral without a value: no face, no larger JPEG, or pass 2 not there yet", () => {
+    expect(afEyeState({ ...point, full_eye_sharp: null })).toBe("neutral");
+    expect(afEyeState({ ...good, full_eye_sharp: null })).toBe("neutral");
+  });
+
+  test("reads neither the candidate cue nor eye_focus", () => {
+    expect(afEyeState({ ...good, candidate: "not_candidate", eye_focus: 0.1 })).toBe("good");
+    expect(afEyeState({ ...good, candidate: "unknown", eye_focus: null })).toBe("good");
+    expect(afEyeState({ ...point, candidate: "not_candidate", eye_focus: 0.1 })).toBe("neutral");
   });
 });
 
 describe("AF_EYE_HELP", () => {
   test("good names every cut with its figure", () => {
-    for (const figure of ["90%", "openness 41", "35°", "45°"]) {
+    for (const figure of ["sharpness 0.162 or more", "openness 41", "35°", "45°"]) {
       expect(AF_EYE_HELP.good).toContain(figure);
     }
-    expect(AF_EYE_HELP.good).toContain("sharp on it");
-    expect(AF_EYE_HELP.good).not.toContain("77%");
+    expect(AF_EYE_HELP.good).toContain("full-size image");
+    expect(AF_EYE_HELP.good).not.toContain("%");
   });
 
-  test("neutral holds a candidate that misses Good and every file without a judged face", () => {
-    expect(AF_EYE_HELP.neutral).toContain("77% or more");
+  test("neutral holds a face that misses Good and every file without a value", () => {
+    expect(AF_EYE_HELP.neutral).toContain("sharpness 0.11 or more");
     for (const holds of [
       "Good condition",
-      "soft at full size",
+      "larger than the preview",
+      "RAF",
       "no judged face",
       "a JPEG",
       "not reached",
@@ -227,9 +241,9 @@ describe("AF_EYE_HELP", () => {
     }
   });
 
-  test("low is a cue on the judged face under the candidate threshold", () => {
+  test("low is a cue on the judged face under the Low threshold", () => {
     expect(AF_EYE_HELP.low).toContain("A face was judged");
-    expect(AF_EYE_HELP.low).toContain("under 77%");
+    expect(AF_EYE_HELP.low).toContain("under 0.11");
   });
 
   test("the closing line says nothing is automatic", () => {
@@ -269,7 +283,9 @@ describe("photoTier: good", () => {
   test("passes a candidate with no recorded point on its values", () => {
     expect(photoTier({ ...good, point: null })).toBe("good");
     expect(photoTier({ ...good, point: null, manual_focus: true })).toBe("good");
-    expect(photoTier({ ...good, point: null, eye_focus: GOOD_EYE_FOCUS - 0.01 })).toBeNull();
+    expect(
+      photoTier({ ...good, point: null, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.01 }),
+    ).toBeNull();
   });
 
   test("is false without a focus", () => {
@@ -278,14 +294,14 @@ describe("photoTier: good", () => {
   });
 
   test.each(["not_candidate", "unknown"] as const)(
-    "is false for a %s frame even with good eyes and pose",
+    "does not read the %s candidate cue",
     (candidate) => {
-      expect(goodPhoto({ ...good, candidate })).toBe(false);
+      expect(goodPhoto({ ...good, candidate, eye_focus: null })).toBe(true);
     },
   );
 
   test("is false when any value is missing", () => {
-    expect(goodPhoto({ ...good, eye_focus: null })).toBe(false);
+    expect(goodPhoto({ ...good, full_eye_sharp: null })).toBe(false);
     expect(goodPhoto({ ...good, eyes_ear: null })).toBe(false);
     expect(goodPhoto({ ...good, pose: null })).toBe(false);
     expect(goodPhoto({ ...good, eye_offset: null })).toBe(false);
@@ -305,11 +321,10 @@ describe("photoTier: good", () => {
     expect(goodPhoto({ ...good, edge_gap: -0.1 })).toBe(false);
   });
 
-  test("a frame soft at full size is not good, at the cut or unmeasured it is", () => {
+  test("a frame soft or unmeasured at full size is not good, at the cut it is", () => {
     expect(photoTier({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 })).toBeNull();
-    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 })).toBe("neutral");
-    expect(afEyeState({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP })).toBe("good");
-    expect(afEyeState({ ...good, full_eye_sharp: null })).toBe("good");
+    expect(photoTier({ ...good, full_eye_sharp: null })).toBeNull();
+    expect(photoTier({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP })).toBe("good");
   });
 
   test("the three frames the user named are not good", () => {
@@ -398,10 +413,10 @@ describe("photoTier: good", () => {
     ).toBe("good");
   });
 
-  test("the eye_focus cut passes at and above, not below", () => {
-    expect(goodPhoto({ ...good, eye_focus: GOOD_EYE_FOCUS })).toBe(true);
-    expect(goodPhoto({ ...good, eye_focus: GOOD_EYE_FOCUS + 0.0005 })).toBe(true);
-    expect(goodPhoto({ ...good, eye_focus: GOOD_EYE_FOCUS - 0.0005 })).toBe(false);
+  test("the full-size eye sharpness cut passes at and above, not below", () => {
+    expect(goodPhoto({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP })).toBe(true);
+    expect(goodPhoto({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP + 0.0005 })).toBe(true);
+    expect(goodPhoto({ ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.0005 })).toBe(false);
   });
 
   test("the EAR cut passes at and above, not below", () => {
@@ -438,7 +453,6 @@ describe("photoTier: the folded tier", () => {
   });
 
   test("the cuts are the Step 7 cuts", () => {
-    expect(GOOD_EYE_FOCUS).toBe(0.9);
     expect(GOOD_EYE_EAR).toBe(0.25);
     expect(GOOD_MAX_YAW).toBe(35);
     expect(GOOD_MAX_PITCH).toBe(45);
@@ -446,14 +460,18 @@ describe("photoTier: the folded tier", () => {
     expect(MIN_EDGE_GAP).toBe(0.02);
   });
 
+  test("the full-size thresholds are fullsharp's SOFT_BELOW and LOW_BELOW", () => {
+    expect(GOOD_FULL_EYE_SHARP).toBe(0.162);
+    expect(LOW_FULL_EYE_SHARP).toBe(0.11);
+  });
+
   test("a frame below the Step 5 good cuts that cleared the fair ones is good", () => {
-    expect(photoTier({ ...good, eye_focus: 0.995 })).toBe("good");
     expect(photoTier({ ...good, eyes_ear: 0.27 })).toBe("good");
-    expect(photoTier({ ...good, eye_focus: 0.99, eyes_ear: 0.25 })).toBe("good");
+    expect(photoTier({ ...good, eyes_ear: 0.25 })).toBe("good");
   });
 
   test("the exclusions still apply at the folded cuts", () => {
-    const edge = { ...good, eye_focus: GOOD_EYE_FOCUS, eyes_ear: GOOD_EYE_EAR };
+    const edge = { ...good, full_eye_sharp: GOOD_FULL_EYE_SHARP, eyes_ear: GOOD_EYE_EAR };
     expect(photoTier(edge)).toBe("good");
     expect(photoTier({ ...edge, eye_offset: MAX_EYE_OFFSET + 0.001 })).toBeNull();
     expect(photoTier({ ...edge, edge_gap: MIN_EDGE_GAP - 0.001 })).toBeNull();

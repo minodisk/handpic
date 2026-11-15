@@ -383,8 +383,8 @@ or scan under way ends, a burst collapsing into one), the current file
 landing where `filter::anchor_after_filter` puts it, the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
 (`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
-(`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being Rust's
-`not_candidate`; `MarkState`'s `color` and the strip cell's `icon`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
+(`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being
+`full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
 `face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
 `FaceCache` (each path detected once, kept by path, a clear dropping the
 answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
@@ -521,8 +521,8 @@ Permanently…`),
 keys that do not confirm (`swallowedByDelete`) and their status lines,
 `src/focus.ts` places the `f` focus mark and the face boxes' five landmark
 dots and labels (score, box size and eye distance in stored preview px) and holds the good-photo rule
-(`photoTier`: the AF eyes in focus, also on the full-size JPEG where measured
-(`full_eye_sharp`), the eyes open and the face toward the camera, from the
+(`photoTier`: the AF eyes sharp on the full-size JPEG (`full_eye_sharp`, no
+value meaning not good), the eyes open and the face toward the camera, from the
 values pass 2 stored for the AF face), which colors the
 mark bright green and puts the strip's face icon on a good frame, `afEyeState`
 (Good / Neutral / Low), the one state the mark's color, the strip's icon and the
@@ -542,7 +542,7 @@ outline and iris edges the focus mark draws over the judged face,
 luminance over `PEAKING_THRESHOLD` lit in `PEAKING_COLOR`, which
 `src/peakingworker.ts` computes off the main thread for the fit view and the
 1:1 crop at the drawn size, `src/filter.ts` decides which files the strip's filter menu
-lets through (including its `Face focus` section, whose `Good` item applies the good-photo rule and whose `Low` item is Rust's `not_candidate`, its `Eyes` section on the
+lets through (including its `Face focus` section, whose `Good` item applies the good-photo rule and whose `Low` item is `full_eye_sharp` under `LOW_FULL_EYE_SHARP`, its `Eyes` section on the
 stored eye state, and its `Genre` section on the `genres_of` labels, shown
 while `aiEnabled` is on), `src/companion.ts` answers the MCP bridge's
 requests over the main window's view state, `src/resume.ts` picks the file a

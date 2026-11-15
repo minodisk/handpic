@@ -10,9 +10,9 @@ import type { PickFlag } from "./selection.js";
 // when there is none; a label outside the menu's colors matches no item.
 // The menu's `Face focus` items put `good`, `neutral` or `low` in `candidates`,
 // and they partition the files like the focus mark's states (`afEyeState` in
-// `focus.ts`): `good` is a good photo, `low` a judged face whose eyes are likely
-// not in focus, and `neutral` everything else, a file the pass has not reached
-// included.
+// `focus.ts`): `good` is a good photo, `low` a judged face whose eyes are
+// clearly soft at full size, and `neutral` everything else, a file without a
+// larger JPEG and a file the pass has not reached included.
 // Its `Eyes` items put the AF face's stored eye state, `open`, `closed` or
 // `unknown`, in `eyes`; a file without one counts as `unknown` the same way.
 // Its `Genre` items put genre labels (`genre.rs`'s, `Unknown` included) in

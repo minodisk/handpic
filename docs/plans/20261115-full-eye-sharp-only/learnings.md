@@ -47,3 +47,23 @@
 - The cost run used the first commit's build (preview path, no `MIN_SCALE`).
   It holds for the final rule: every file of that folder has a full JPEG
   well over 1.5x the preview, so neither difference touched it.
+
+## Step 3
+
+- The mirrors are named `LOW_FULL_EYE_SHARP` (`focus.ts`, the native
+  `mark.rs`) next to `GOOD_FULL_EYE_SHARP`. `fullsharp.rs` pins `LOW_BELOW`
+  to 0.110 and `focus.test.ts` pins both figures; the native `mark.rs` test
+  compares its two constants with `riffle_core::fullsharp`'s directly, since
+  the native crate depends on `riffle-core`.
+- Test fixtures that only meant "a focus candidate" had `full_eye_sharp:
+  null` (the Tauri `filter.test.ts` and native `filter.rs` `candidate()`);
+  under the new rule a missing value is Neutral, so they now carry 0.3. The
+  named-frame fixtures (`_DSC2638` and the rest) keep their `eye_focus`
+  values, which the tier no longer reads; Step 5 removes the field.
+- The native overlay test `only_the_latest_read_is_kept` made its Low answer
+  with `FocusCandidate::NotCandidate`; it now sets `full_eye_sharp` under the
+  Low threshold.
+- `CLAUDE.md` described Low as Rust's `not_candidate` in three places
+  (`mark.rs`, `focus.ts`, `filter.ts`); updated with the rule.
+- The frontend tests (`mise exec -- pnpm exec vp test run`, 813) pass
+  locally; `ci:local` does not run them.

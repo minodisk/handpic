@@ -3229,10 +3229,11 @@ function refreshRanks(): void {
 // records only the point gets the crosshair alone, and a manual-focus shot,
 // whose recorded point is not trusted, gets no mark. The mark is bright green
 // for a good photo (`photoTier`: the eyes of the face nearest the AF point are
-// sharp and open and the face is toward the camera), gray when that face was
-// judged and its eyes are likely not in focus, and white for
-// everything else: a focus candidate that is not good, no face near the point,
-// or a file the second scan pass has not reached yet.
+// sharp at full size and open and the face is toward the camera), gray when
+// that face was judged and its eyes are clearly soft at full size, and white
+// for everything else: a measured face that is not good, a file without a
+// larger JPEG to measure on, no face near the point, or a file the second scan
+// pass has not reached yet.
 function drawFocusMark(drawWidth: number, drawHeight: number): void {
   if (!showFocus || files.length === 0) {
     return;

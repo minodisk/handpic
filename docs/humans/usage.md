@@ -189,38 +189,39 @@ viewer shows a prompt in its center; click it to open the folder picker.
   (the strip's icon, the meta pane and the filter carry its state; a group
   photo without an AF point is judged on that one face). Bright green marks a good photo, a
   frame that is likely not a miss: the AF eyes in focus, the eyes open and
-  the face toward the camera, all at once. The cuts: the
-  AF eyes' in-focus probability is 90% or more; the eyes' openness (the meta
+  the face toward the camera, all at once. The cuts: the eyes' sharpness on
+  the file's full-size embedded JPEG, which shows softness the smaller
+  preview hides (the meta pane's `Eyes at full size` row), is 0.162 or more;
+  the eyes' openness (the meta
   pane's `Eyes` row) is 41 or more; the head is turned no more than 35° left
   or right; and it is tilted no more than 45° up or down (the roll is not
   looked at). A frame whose face mesh sits off the face (as on a face
   rotated far in-plane, such as a baby lying down) or whose face the frame's
-  edge cuts is never good. The eyes of the judged face are also checked on the
-  file's full-size embedded JPEG, which shows softness the smaller preview
-  hides (the meta pane's `Eyes at full size` row): a frame whose eyes are soft
-  there is not good and turns white (it is not rejected). A file with no JPEG
-  larger than the preview (RAF, ORF, an HDR PQ CR3) skips the check. The
-  threshold was checked on three folders from one body (ILCE-7M5) and on a
+  edge cuts is never good. A file with no JPEG larger than the preview (RAF,
+  ORF, an HDR PQ CR3, and the Sony bodies whose largest embedded JPEG is the
+  preview: the α9 II, α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10) has no
+  full-size sharpness and is never bright green or gray: measured on the
+  preview, the sharpness reads about half the full-size value and would turn
+  most such frames gray. The sharpness is taken on a square crop around each
+  eye, and the sharper of the two eyes counts. Both thresholds come from one
+  body (ILCE-7M5). The good one was checked on three folders and on a
   separate hand-labeled set, where the author judged 5 of the 145 good frames
-  sharp under it (a few sharp frames can leave good), and at high ISO it misses soft frames. It is selective by
-  design, so most frames get no bright green: before the full-size check, on
-  twelve of the author's folders it marked about 20% of the
-  frames with a face at the AF point; on 180 frames the author rated (1 star
-  for no subject, 2 for likely rejected, 3 or more for a pass), 54 of the 58
-  good frames passed and none was a frame without a subject. Bright green
-  means good only. Gray means a face was judged and its eyes are likely not
-  in focus: their in-focus probability (a logistic combination of the
-  Laplacian variance and the mean edge width) is under about 77%, the focus
-  candidate threshold, including a window between the eyes with no clear
-  edge, which counts as 0%. The
-  probability is measured over each eye's eyelid region, which a face mesh
-  model (MediaPipe Face Landmarker v2) finds, and the sharper of the two
-  eyes counts; when neither eye's region counts (under 24 px, as on small
-  faces, or without a clear edge), it is measured over the preview between
-  the eyes instead. White is everything else: a judged face at about 77% or
-  more that misses a good cut (under 90%, or the eyes, the pose, the mesh,
-  the frame's edge or soft eyes at full size), no face found (near the AF point when there is one,
-  anywhere on the preview when there is none), or not computed yet. A frame with no face found stays white rather
+  sharp under it (a few sharp frames can leave good), and at high ISO it
+  misses soft frames. It is selective by design, so most frames get no
+  bright green: on 281 frames the author rated for whether the focus plane is
+  on the eyes (3 stars on the eyes, 1 star visibly off, 2 between), 29 of the
+  154 3-star frames are under the sharpness cut alone. Bright green means
+  good only. Gray means a face was judged and its eyes are clearly soft at
+  full size: their sharpness there is under 0.110, the value under which 3
+  of those 154 3-star frames fall, and 13 of the 88 1-star ones, so gray
+  catches clearly soft frames, not every miss. On those 281 frames the
+  full-size sharpness told the 3-star frames from the rest better than the
+  preview-based in-focus probability it replaced (AUC 0.69 against 0.62;
+  0.74 against 0.64 on 58 frames of a folder rated afterwards). White is
+  everything else: a judged face at 0.110 or more that misses a good cut
+  (under 0.162, or the eyes, the pose, the mesh or the frame's edge), a file
+  with no full-size sharpness, no face found (near the AF point when there
+  is one, anywhere on the preview when there is none), or not computed yet. A frame with no face found stays white rather
   than being judged on the sharpness score: on the author's 4361 face-free
   frames the score barely told picks from the rest (AUC 0.58). A frame with no face found or with a face
   under about 60 pixels on the embedded preview is never good,
@@ -234,11 +235,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   bottom-left, above the file name, filling in as the pass runs: a smiling
   face (Lucide's `scan-face`) on a good frame and the same face with its mouth
   turned down on a gray one, both ISC license,
-  text in `crates/app/ui/LICENSE-lucide`; white frames get none. On the 406 hand-labeled α7 V frames with a face the focus
-  candidate cue was fitted on, 94% of the candidates were in focus and 91%
-  of the in-focus frames were candidates; on 400 frames from other shoots it
-  was not fitted on, 89% and 96%. It is a cue, not a verdict: AF on a person in the
-  background gives a sharp face and a false candidate, and the back of a
+  text in `crates/app/ui/LICENSE-lucide`; white frames get none. It is a
+  cue, not a verdict: AF on a person in the
+  background gives a sharp face and a false good, and the back of a
   head or an upturned face finds no face and stays white. The mark also
   draws the faces Handpic detects near the AF point (anywhere on the preview
   when there is no AF point) as a cyan box with a cyan dot on each eye, the
@@ -366,12 +365,12 @@ viewer shows a prompt in its center; click it to open the folder picker.
 - **Filter menu**: narrows the strip by pick flag, stars, color label,
   orientation (`Portrait` / `Landscape`), the focus mark's state (the
   `Face focus` section, each item with the strip's icon of its state: `Good`
-  for a good photo, the bright green mark and face icon, an in-focus
-  probability of 90% or more among its cuts; `Neutral` for white, everything
-  else: a judged face at about 77% or more that misses a good cut, no face
-  found, a JPEG, and files the second pass has not reached; and `Low` for
-  gray, a judged face with an in-focus probability under about 77%, a frame
-  with no AF point included; each file falls under exactly one of them,
+  for a good photo, the bright green mark and face icon, a full-size eye
+  sharpness of 0.162 or more among its cuts; `Neutral` for white, everything
+  else: a judged face at 0.110 or more that misses a good cut, a file with no
+  JPEG larger than the preview, no face found, a JPEG, and files the second
+  pass has not reached; and `Low` for gray, a judged face whose full-size eye
+  sharpness is under 0.110, a frame with no AF point included; each file falls under exactly one of them,
   checking several shows the files in any of them, the strip refills as
   the pass runs, and the `?` at the right of the heading shows each item's
   definition with its thresholds until the menu closes), the stored eye state of the judged face (the

@@ -28,12 +28,12 @@ export interface MarkFocus extends StoredEyes {
 export type PhotoTier = "good";
 
 // The state the mark's color, the strip's icon and the filter menu's
-// `Face focus` item are read from: the frame's `photoTier`, `low` for a frame
-// whose judged face (near the AF point, else the largest on the whole preview
-// without a trusted one) is under the candidate threshold, which is Rust's
-// `not_candidate` (the threshold lives in `candidate.rs`), else `neutral`: a
-// focus candidate not in the tier, and both no face found and a file pass 2
-// has not reached, which the frontend cannot tell apart.
+// `Face focus` item are read from: `low` for a frame whose judged face (near
+// the AF point, else the largest on the whole preview without a trusted one)
+// is under `LOW_FULL_EYE_SHARP` on the full-size JPEG, else the frame's
+// `photoTier`, else `neutral`: a measured face not in the tier, a file without
+// a larger JPEG to measure on, and both no face found and a file pass 2 has
+// not reached, which the frontend cannot tell apart.
 export type MarkState = PhotoTier | "neutral" | "low";
 
 export interface FocusMark {
@@ -67,10 +67,6 @@ export const FOCUS_MARK_ICONS = {
 // in Step 7 on the user's stars of 180 frames (`docs/plans/20261008-burst-keep-score/`
 // `provisional.md`): 54 of the 58 frames these cuts mark pass (3 stars or
 // more), none is a 1-star frame, so the tier means "not a miss".
-// The in-focus probability of the AF eyes: the seven rated frames from 0.90 to
-// 0.99 that clear the other cuts all pass; below 0.90 none clears them, so
-// the cut stays there, above the candidate's 0.772.
-export const GOOD_EYE_FOCUS = 0.9;
 // The EAR of the more closed eye, at the 35th percentile (open probability
 // 0.964, openness 41).
 export const GOOD_EYE_EAR = 0.25;
@@ -93,18 +89,17 @@ export const MAX_EYE_OFFSET = 0.1;
 // edge of what is visible (`_DSC3345` at 0.008), so a small margin, not 0.
 export const MIN_EDGE_GAP = 0.02;
 
-// The sharpness of the eyes on the full-size embedded JPEG under which a frame
-// leaves the tier, `fullsharp::SOFT_BELOW` in `crates/core/src/fullsharp.rs`:
-// blind review of the Good frames of three ILCE-7M5 folders sorted by the
-// score (`docs/plans/20261108-full-size-eye-check/`). A file without the value
-// is not demoted.
+// The sharpness of the eyes on the full-size embedded JPEG a good photo needs
+// at least, `fullsharp::SOFT_BELOW` in `crates/core/src/fullsharp.rs`: blind
+// review of the Good frames of three ILCE-7M5 folders sorted by the score
+// (`docs/plans/20261108-full-size-eye-check/`). A file without the value (no
+// judged face, or no JPEG larger than the preview) is not good.
 export const GOOD_FULL_EYE_SHARP = 0.162;
-
-// The candidate threshold as the `Face focus` help shows it, in percent:
-// `candidate_probability()`, the sigmoid of `CANDIDATE_LOGIT` in
-// `crates/core/src/candidate.rs`, rounded. Only the text reads it; the state
-// comes from Rust's `not_candidate`. A test there fails if the figure moves.
-export const CANDIDATE_PERCENT = 77;
+// The sharpness under which a frame is low, `fullsharp::LOW_BELOW`: at most 2%
+// of the user's held-out 3-star frames fall under it
+// (`docs/plans/20261115-full-eye-sharp-only/low-threshold.md`). A test there
+// fails if the figure moves.
+export const LOW_FULL_EYE_SHARP = 0.11;
 
 // The EAR the eyes count as closed at and below, `EYES_CLOSED_EAR` in
 // `crates/core/src/eyes.rs`.
@@ -126,26 +121,19 @@ export function eyesOpenness(ear: number | null): number | null {
 // What each `Face focus` item holds, from the cuts themselves so the text
 // cannot drift from the rule.
 export const AF_EYE_HELP: Record<MarkState, string> = {
-  good: `A face was judged and all of these hold: its eyes are likely in focus (${Math.round(GOOD_EYE_FOCUS * 100)}% or more), open (openness ${Math.round(eyesOpenness(GOOD_EYE_EAR)!)} or more) and toward the camera (turned at most ${GOOD_MAX_YAW}°, tilted at most ${GOOD_MAX_PITCH}°), the face mesh sits on the face, the frame's edge does not cut it, and, where the file has a full-size image, its eyes are sharp on it.`,
-  neutral: `Everything else: a judged face whose eyes are likely in focus (${CANDIDATE_PERCENT}% or more) but misses a Good condition (soft at full size among them), no judged face (a landscape, a snap without a face, faces away from the AF point), a JPEG, or a file the analysis has not reached yet.`,
-  low: `A face was judged and its eyes are likely not in focus: the in-focus probability is under ${CANDIDATE_PERCENT}%.`,
+  good: `A face was judged and all of these hold: its eyes are sharp on the full-size image (sharpness ${GOOD_FULL_EYE_SHARP} or more), open (openness ${Math.round(eyesOpenness(GOOD_EYE_EAR)!)} or more) and toward the camera (turned at most ${GOOD_MAX_YAW}°, tilted at most ${GOOD_MAX_PITCH}°), the face mesh sits on the face, and the frame's edge does not cut it.`,
+  neutral: `Everything else: a judged face whose eyes are not clearly soft (sharpness ${LOW_FULL_EYE_SHARP} or more) but that misses a Good condition, a file without a full-size image larger than the preview to measure on (RAF, ORF, an HDR CR3, some Sony bodies), no judged face (a landscape, a snap without a face, faces away from the AF point), a JPEG, or a file the analysis has not reached yet.`,
+  low: `A face was judged and its eyes are clearly soft on the full-size image: the sharpness is under ${LOW_FULL_EYE_SHARP}.`,
 };
 
 // The line under the definitions.
 export const AF_EYE_HELP_CLOSING =
   "A cue for your review, not a verdict; nothing is rejected for you.";
 
-function clears({
-  eye_focus,
-  eyes_ear,
-  pose,
-  eye_offset,
-  edge_gap,
-  full_eye_sharp,
-}: MarkFocus): boolean {
+function clears({ eyes_ear, pose, eye_offset, edge_gap, full_eye_sharp }: MarkFocus): boolean {
   return (
-    eye_focus !== null &&
-    eye_focus >= GOOD_EYE_FOCUS &&
+    full_eye_sharp !== null &&
+    full_eye_sharp >= GOOD_FULL_EYE_SHARP &&
     eyes_ear !== null &&
     eyes_ear >= GOOD_EYE_EAR &&
     pose !== null &&
@@ -154,18 +142,16 @@ function clears({
     eye_offset !== null &&
     eye_offset <= MAX_EYE_OFFSET &&
     edge_gap !== null &&
-    edge_gap >= MIN_EDGE_GAP &&
-    (full_eye_sharp === null || full_eye_sharp >= GOOD_FULL_EYE_SHARP)
+    edge_gap >= MIN_EDGE_GAP
   );
 }
 
-// A focus candidate whose AF eyes are in focus, whose eyes are open and whose
-// face is toward the camera, all at once, and which is not soft at full size, is
-// `good`. A mesh off the face or a face the frame's edge cuts is not, nor is any
-// missing value (no face judged, a face too small for the mesh), except
-// `full_eye_sharp`: a file without it is not demoted.
+// A judged face whose eyes are sharp at full size, open and toward the camera,
+// all at once, is `good`. A mesh off the face or a face the frame's edge cuts
+// is not, nor is any missing value (no face judged, a face too small for the
+// mesh, a file without a larger JPEG to measure on).
 export function photoTier(focus: MarkFocus | null | undefined): PhotoTier | null {
-  if (focus === null || focus === undefined || focus.candidate !== "candidate") {
+  if (focus === null || focus === undefined) {
     return null;
   }
   return clears(focus) ? "good" : null;
@@ -177,7 +163,7 @@ export function afEyeState(focus: MarkFocus | null | undefined): MarkState {
   if (focus === null || focus === undefined) {
     return "neutral";
   }
-  if (focus.candidate === "not_candidate") {
+  if (focus.full_eye_sharp !== null && focus.full_eye_sharp < LOW_FULL_EYE_SHARP) {
     return "low";
   }
   return photoTier(focus) ?? "neutral";

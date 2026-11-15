@@ -137,23 +137,29 @@ DxO PhotoLab.
   color judges the face nearest the AF point, or, without an AF point or on
   manual focus, the largest face Handpic finds anywhere on the preview, so
   such a frame can be bright green or gray although it shows no crosshair. The mark is
-  bright green for a good photo, one likely not a miss: the AF eyes in focus
-  (an in-focus probability of 90% or more), the eyes open (an openness of 41
-  or more) and the face toward the camera (turned no more than 35° and
-  tilted no more than 45°), with a face mesh that sits on the face and a
-  face the frame's edge does not cut. The eyes are also checked on the file's
-  full-size embedded JPEG: a frame whose eyes are soft there is not good and
-  turns white (it is not rejected), and a file with no JPEG larger than the
-  preview (RAF, ORF, an HDR PQ CR3) skips the check. The threshold was checked
-  on three folders from one body (ILCE-7M5) and on a separate hand-labeled
-  set, where the author judged 5 of the 145 good frames sharp under it (a few
-  sharp frames can leave good), and it misses soft frames at high ISO. It is selective by design, on about
-  20% of the author's frames with a face at the AF point before the full-size
-  check, and bright green means good only. The mark is gray when a face was judged and its eyes are
-  likely not in focus (a probability combining their sharpness and edge
-  width, under about 77%); and white for everything else (a judged face at
-  about 77% or more that misses a good cut, no face found near the AF point,
-  or anywhere without one, or not computed yet). A frame with no face stays white, since on the author's folders the
+  bright green for a good photo, one likely not a miss: the eyes sharp on the
+  file's full-size embedded JPEG, which shows softness the smaller preview
+  hides (a sharpness of 0.162 or more), the eyes open (an openness of 41 or
+  more) and the face toward the camera (turned no more than 35° and tilted no
+  more than 45°), with a face mesh that sits on the face and a face the
+  frame's edge does not cut. The mark is gray when a face was judged and its
+  eyes are clearly soft at full size (a sharpness under 0.110); and white for
+  everything else (a judged face between the two or one that misses a good
+  cut, a file with no JPEG larger than the preview to measure on (RAF, ORF,
+  an HDR PQ CR3, and the Sony bodies whose largest embedded JPEG is the
+  preview, such as the α7R IV and the α6400), no face found near the AF
+  point, or anywhere without one, or not computed yet). Both thresholds come
+  from one body (ILCE-7M5). The good one was checked on three folders and on
+  a separate hand-labeled set, where the author judged 5 of the 145 good
+  frames sharp under it (a few sharp frames can leave good), and it misses
+  soft frames at high ISO. The gray one was set on 281 frames the author
+  rated for whether the focus plane is on the eyes: 3 of the 154 in-focus
+  frames and 13 of the 88 clearly missed ones fall under it, so gray means
+  clearly soft, not every miss. On those frames the full-size sharpness told
+  the in-focus frames from the rest better than the preview-based in-focus
+  probability it replaced (AUC 0.69 against 0.62). Bright green is selective
+  by design (29 of those 154 in-focus frames are under its sharpness cut
+  alone) and means good only. A frame with no face stays white, since on the author's folders the
   sharpness score barely told picks from the rest on such frames.
   The camera's face tracking no longer colors the mark. The cue is computed
   in a second pass right after the thumbnails, so the marks turn from white

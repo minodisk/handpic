@@ -1116,7 +1116,11 @@ retried.
   Do not measure the preview instead: with the full-size thresholds it reads
   about half the full-size value and would put most such frames in Low (see
   `docs/plans/20261115-full-eye-sharp-only/preview-vs-full.md`). A failed
-  full-size read or decode stays `None` too. A
+  full-size read or decode stays `None` too. The tiers read
+  `full_eye_sharp` alone since that plan's Step 3: Good at or above
+  `SOFT_BELOW` with the other cuts, Low under `LOW_BELOW` (0.110, in
+  `fullsharp.rs` next to `SOFT_BELOW`), Neutral otherwise, a missing value
+  included; `candidate` and `eye_focus` no longer reach the tier. A
   new field of `faces-progress` must also be copied in `applyFaceReady`
   (`focus.ts`), which copies field by field, or a frame scanned while on screen
   stays Good until the folder reloads. See
@@ -1149,8 +1153,10 @@ zero `pick` (now `flag`), which lost a pick set during a switch.
 
 `focus.ts` `photoTier` returns `"good"` or `null`. The type is kept as a union
 so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
-`main.ts` plumbing. The rule needs the stored `eye_focus`, `eyes_ear`, `pose`,
-`eye_offset` and `edge_gap`.
+`main.ts` plumbing. The rule needs the stored `full_eye_sharp`, `eyes_ear`,
+`pose`, `eye_offset` and `edge_gap`; `afEyeState` makes Low from
+`full_eye_sharp` too, on the consumer's side (`focus.ts`, the native
+`mark.rs`), no longer from Rust's `not_candidate`.
 
 - The user's star scale: 1 = no subject, 2 = likely rejected, 3 and up =
   pass. The mark can say "not a miss" (the frames it marks were 93% 3+ stars,
@@ -1165,9 +1171,15 @@ so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
   mesh crop flags whole faces near the edge (only hair outside).
 - The EAR is inflated on a turned, foreshortened eye. That is why the yaw cut
   is tight (|yaw| <= 35, tightened from 60), not loose.
-- `GOOD_EYE_FOCUS` 0.90 has no held-out check: the rated batches hold no
-  frame between 0.90 and 0.99 (or 0.772 and 0.90) that clears the other cuts
-  in batch 1. Include such frames in the next rated batch before moving it.
+- The "not a miss" figures above were measured with the preview's
+  `eye_focus` cut (`GOOD_EYE_FOCUS` 0.90) in the rule. The
+  full-eye-sharp-only plan replaced that cut with `full_eye_sharp >=
+  SOFT_BELOW` and Low with `full_eye_sharp < LOW_BELOW`; its evidence is in
+  `docs/plans/20261115-full-eye-sharp-only/` (`experiment.md`,
+  `low-threshold.md`). `GOOD_FULL_EYE_SHARP` and `LOW_FULL_EYE_SHARP` mirror
+  the two constants in `focus.ts` and the native `mark.rs`, each pinned by a
+  test (`fullsharp.rs` against the figures, `focus.test.ts` against the
+  figures, `mark.rs` against the core constants).
 - Burst-level technical features do not predict a kept scene: burst length
   does (>= 15 frames: 79% hold a pick). Do not rebuild a burst "keep" or
   "best" mark from sharpness / eyes / pose. The first frame of a burst also

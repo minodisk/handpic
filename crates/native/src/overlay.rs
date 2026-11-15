@@ -763,10 +763,8 @@ mod tests {
         let mut marks = shown("a");
         let older = marks.reading();
         let newer = marks.reading();
-        let pass2 = Focus {
-            candidate: FocusCandidate::NotCandidate,
-            ..focus()
-        };
+        let mut pass2 = focus();
+        pass2.eyes.full_eye_sharp = Some(0.05);
         assert!(marks.answer(newer, "a".into(), Some(pass2)));
         assert!(!marks.answer(older, "a".into(), Some(focus())));
         let state = focus_of(&marks, "a").map(|f| mark::af_eye_state(Some(&f)));
