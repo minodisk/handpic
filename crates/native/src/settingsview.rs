@@ -19,7 +19,7 @@ use gpui_kit::component::{
 use gpui_kit::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
     FontWeight, KeyBinding, KeyDownEvent, MouseDownEvent, NoAction, PathPromptOptions, Pixels,
-    SharedString, Window, div, prelude::*, px, rgb, rgba, transparent_black,
+    SharedString, Window, div, prelude::*, px, transparent_black,
 };
 
 use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
