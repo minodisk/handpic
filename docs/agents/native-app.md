@@ -414,6 +414,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   `target/debug/riffle-native.exe` and `cargo build` fails with `os error 5`;
   rename the running exe aside (for example `riffle-native.stale-<pid>.exe`)
   instead of killing it, or ask the user to close it.
+- Rule: `cargo` is not on the Git Bash `PATH` in a worktree session. Prepend
+  `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
+  direct call; the mise tasks find it on their own. Source:
+  `docs/plans/_archived/20261115-native-scrollbars/learnings.md`, Step 1.
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
@@ -1554,6 +1558,51 @@ both ask for a tooltip.
   next, a scroll under a still pointer and the wrapping of a long error; the
   check is pending in
   `../plans/20261114-native-strip-face-icon-tooltips/learnings.md`.
+
+### The strip, the tree and the meta pane draw the theme's scrollbar (Inferred)
+
+The three draw gpui-component's scrollbar (`ScrollableElement`, at `=0.9.1`)
+in the theme's `ScrollbarMode::Scrolling`, as the settings modal's lists and
+the menus do: no bar sets a mode of its own and the theme's is not changed.
+A bar shows when its prepaint sees the handle's offset differ from the last
+one it saw, stays for the theme's idle time (2 s) or while hovered or
+dragged, and takes a press only while shown. Where the content fits, nothing
+is drawn.
+
+- The tree: its `uniform_list` sits in a `relative()`, `size_full()` wrapper
+  inside the pane's padding that carries `vertical_scrollbar(&tree_scroll)`,
+  so the bar's viewport is the list's and its range the list's own.
+- The meta pane: the body ends in `overflow_y_scrollbar()` (`Scrollable`,
+  which moves `flex_1` / `min_h_0` onto its wrapper), so the bar covers the
+  body only and the notes under it do not scroll.
+- The strip: `stripbar.rs`'s `StripBar`, a `ScrollbarHandle` over an
+  `Rc<Cell<..>>` the view holds, as the preview canvas's size cell is. On
+  every render the view `sync`s it from `Strip` (the offset, reported
+  negated, and `Strip::content_width`, the cell count times `CELL_PITCH`);
+  the strip's `div` (already `relative()`) gets
+  `horizontal_scrollbar(&strip_bar)` after the canvas and the tooltip region
+  `div`s, so the bar's hitbox is the topmost. Its viewport is the strip
+  `div`, which spans the window, so the bar's range equals
+  `Strip::max_offset`; `viewport_bounds` is not read.
+- Rule: a drag or a track click reaches the strip only through the handle.
+  The bar writes the offset (`set_offset`, kept as a positive request) and
+  notifies the current view, the `Riffle` entity under `Root`; the top of
+  `Riffle::render` `take`s it, once, and when `Strip::scroll_to` moves runs
+  `strip_moved` as a wheel scroll does (the range's thumbnails released and
+  requested, the scan's hot list, a `cx.notify()` that draws one more frame
+  with nothing left to take). A `sync` is never a request.
+- Rule: the bar's mouse-down listener runs in the bubble phase before its
+  parents' and stops propagation. A press on a shown strip bar selects no
+  cell and opens no right-click menu; a press on a shown tree bar reaches
+  neither a row's click nor the pane's `on_mouse_down`, so it does not give
+  the tree the keyboard (`on_mouse_down_out` is unaffected). With a bar not
+  shown, no listener is registered and the press goes where it went before.
+  The wheel is not stopped: the strip's `on_scroll` still runs under it.
+- The strip's bar is drawn over its bottom edge (the 7 px `STRIP_PADDING`
+  and possibly the bottom of the name band) while shown; `STRIP_HEIGHT` and
+  the layout are unchanged.
+- Not verified by hand yet; the check is pending in
+  `../plans/20261115-native-scrollbars/learnings.md`.
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 

@@ -48,6 +48,7 @@ mod settingsview;
 mod sidecars;
 mod sort;
 mod strip;
+mod stripbar;
 mod theme;
 mod thumbs;
 mod timing;
@@ -132,6 +133,7 @@ use settings::Settings;
 use settingsview::{Change, SettingsView};
 use sort::{SortFacts, SortKey};
 use strip::{Answer, Marks, Strip, Tint, Tip, TipRegion};
+use stripbar::StripBar;
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Source, Summary};
 use tree::{Child, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
@@ -376,6 +378,8 @@ struct Riffle {
     /// so they never wait behind a scan's write transaction.
     reader: Option<Arc<Mutex<Index>>>,
     strip: Strip,
+    /// The strip's scrollbar handle, synced from `strip` on every render.
+    strip_bar: StripBar,
     thumbs: Thumbs,
     /// The strip spans the window, so this is the window's width.
     strip_width: f32,
@@ -741,6 +745,7 @@ impl Riffle {
             index,
             reader,
             strip: Strip::default(),
+            strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
             strip_width: f32::from(window.viewport_size().width),
             eviction,
@@ -3869,7 +3874,6 @@ impl Riffle {
             .id("meta")
             .flex_1()
             .min_h_0()
-            .overflow_y_scroll()
             .flex()
             .flex_col()
             .gap_3();
@@ -3934,7 +3938,7 @@ impl Riffle {
             .p_3()
             .bg(rgb(PANE_COLOR))
             .text_size(px(13.))
-            .child(body)
+            .child(body.overflow_y_scrollbar())
             .children(self.view_only.then(|| {
                 div()
                     .text_color(rgb(MUTED_COLOR))
@@ -3998,15 +4002,21 @@ impl Riffle {
             .bg(rgb(PANE_COLOR))
             .text_size(px(TREE_TEXT))
             .child(
-                uniform_list(
-                    "tree",
-                    self.tree_rows.len(),
-                    cx.processor(|this, range: std::ops::Range<usize>, _, cx| {
-                        range.map(|at| this.tree_row(at, cx)).collect::<Vec<_>>()
-                    }),
-                )
-                .track_scroll(&self.tree_scroll)
-                .size_full(),
+                div()
+                    .relative()
+                    .size_full()
+                    .child(
+                        uniform_list(
+                            "tree",
+                            self.tree_rows.len(),
+                            cx.processor(|this, range: std::ops::Range<usize>, _, cx| {
+                                range.map(|at| this.tree_row(at, cx)).collect::<Vec<_>>()
+                            }),
+                        )
+                        .track_scroll(&self.tree_scroll)
+                        .size_full(),
+                    )
+                    .vertical_scrollbar(&self.tree_scroll),
             )
     }
 
@@ -4350,6 +4360,15 @@ impl Riffle {
 
 impl Render for Riffle {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A drag or a track click on the strip's scrollbar, which reports it
+        // only by writing the handle and notifying this view.
+        if let Some(offset) = self.strip_bar.take()
+            && self.strip.scroll_to(offset, self.strip_width)
+        {
+            self.strip_moved(cx);
+        }
+        self.strip_bar
+            .sync(self.strip.offset(), self.strip.content_width());
         let image = self.image.clone();
         let retired = self.retired.clone();
         let pending = self.pending.clone();
@@ -4520,6 +4539,7 @@ impl Render for Riffle {
                         .size_full(),
                     )
                     .children(strip_tips)
+                    .horizontal_scrollbar(&self.strip_bar)
             }))
             .child(self.status_row(window.viewport_size().height - px(40.), cx))
             .children(self.context_popover(window.viewport_size().height - px(40.), cx))

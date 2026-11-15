@@ -136,8 +136,13 @@ impl Strip {
         self.in_flight.len()
     }
 
+    /// The width of all the cells side by side.
+    pub fn content_width(&self) -> f32 {
+        self.len as f32 * CELL_PITCH
+    }
+
     fn max_offset(&self, width: f32) -> f32 {
-        (self.len as f32 * CELL_PITCH - width).max(0.)
+        (self.content_width() - width).max(0.)
     }
 
     /// Scroll by `delta` px, clamped to the content. Whether it moved.
