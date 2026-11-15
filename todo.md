@@ -158,22 +158,6 @@ Files: `crates/app/ui/src/main.ts`, `crates/app/ui/src/empty.ts`
 - [ ] On Windows, page back and forth quickly across the bad file. Expect an older file's image never stays on screen.
 - [ ] On Windows, press `z` (1:1) and open Compare on the bad file. Expect neither to throw.
 
-### Core: validate the combined AF-eye score on the two reserved labeled folders
-
-`docs/plans/_archived/20260926-af-eye-in-focus-probability/plan.md` reserved
-`D:\Photos\tests\2026-08-29-focus-sample` and
-`D:\Photos\tests\2026-09-13-b-focus-sample` (100 ARW each) as a
-post-implementation check, but as of Step 1 neither carried XMP pick/reject
-labels yet, so they were not run.
-
-#### TODO
-
-- [x] Moot: the full-eye-sharp-only plan
-      (`docs/plans/20261115-full-eye-sharp-only/`) removed the combined
-      score and the CLI subcommand that validated it. Its replacement,
-      `full_eye_sharp`, was checked on held-out folders in that plan
-      (`experiment.md`).
-
 ### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
 
 Step 3 of `docs/plans/_archived/20260925-focus-candidate/plan.md` asked for the
@@ -2470,16 +2454,6 @@ Only `preview` pauses the scan's reads. `metadata`, `faces_of`, `eyes_of` and `f
 
 - [ ] Add a test seam (a stub embedder or an injectable closure), and a test that holds the single permit and shows `embed_all` delivers nothing until it is dropped.
 - [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
-
-### Core: `good_photo` in the ranking leaves out the full-size eye cut that `photoTier` applies
-
-#### Background
-
-`full-size-eye-check` Step 4 added a full-size eye-sharpness cut to the frontend's `photoTier`. `good_photo` in `crates/core/src/rank.rs` deliberately leaves it out, so its features do not move in that feature, and its doc comment says so. The Rust copy therefore disagrees with the frontend on a demoted frame. Applying the cut to the ranking moves the ranking's features, so the prior's calibration needs a look. `rank::Frame::full_eye_sharp` is already carried through `Index::rank_rows` for this and nothing reads it yet. Plan: `docs/plans/_archived/20261108-full-size-eye-check/plan.md`. Files: `crates/core/src/rank.rs`, `crates/backend/src/index.rs`.
-
-#### TODO
-
-- [ ] Decide whether `good_photo` applies the full-size cut (`full_eye_sharp` against `SOFT_BELOW`). If it does, apply it, check the effect on the prior (`crates/core/ranking/siglip2.json`, written by `rank_prior.py`) and refit or recalibrate as needed. If it does not, document the divergence from `photoTier` where both are defined.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
