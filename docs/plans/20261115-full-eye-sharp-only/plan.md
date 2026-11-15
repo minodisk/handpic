@@ -82,8 +82,9 @@ Decisions taken with the user at planning (2026-11-15):
   there, no new behavior). The only Tauri edits allowed are the minimal
   mechanical ones that keep it building once Step 5 removes `eye_focus` /
   `candidate` from the core and backend types and the index (a field deleted
-  from a TS type, the `AF eye in focus` row of `meta.ts` and its test, the
-  columns of the `commands.rs` debug dump), and they belong to Step 5.
+  from a TS type, the `AF eye in focus` row of `meta.ts` and its test), and
+  they belong to Step 5, except the `commands.rs` debug dump's columns, which
+  Step 4's `rank::Frame` change already forced.
 
 ## Steps
 
@@ -251,7 +252,11 @@ Decisions taken with the user at planning (2026-11-15):
       `docs/agents/tract-onnx-inference.md` (the mentions of
       `riffle-cli candidates` as a tool to run) and `CLAUDE.md` (the
       `facechoice` description) follow.
-    - No file under `crates/app` or `crates/native` changes.
+    - No file under `crates/native` changes, and in `crates/app` only the
+      compile-only edit Step 4's `rank::Frame` change forces: the
+      `rank_dump_of_real_folders` debug dump in `crates/app/src/commands.rs`
+      (the TSV header near line 3009 and its `writeln!`) no longer prints
+      `state` / `eye_focus`.
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Step 3 is merged. Does not depend on PR #1066: the native meta
@@ -292,9 +297,8 @@ Decisions taken with the user at planning (2026-11-15):
     - Tauri (frozen, compile-only edits): `MarkFocus`, `applyFaceReady`, the
       types in `main.ts` and `meta.ts` and the tests have neither field;
       `meta.ts` loses its `AF eye in focus` row (and `meta.test.ts` follows)
-      and keeps `Eyes at full size` as named; the debug dump in
-      `crates/app/src/commands.rs` (the TSV header near line 3009) no longer
-      prints `state` / `eye_focus`. Nothing else in the Tauri app changes.
+      and keeps `Eyes at full size` as named. Nothing else in the Tauri app
+      changes (the `commands.rs` debug dump was already done in Step 4).
     - Native: `filter.rs`, `mark.rs`, `overlay.rs` and `meta.rs` have neither
       field and no `FocusCandidate` import.
     - `git grep -i -E "eye_focus|eyeFocus|FocusCandidate|not_candidate|CANDIDATE_LOGIT|GOOD_EYE_FOCUS"`

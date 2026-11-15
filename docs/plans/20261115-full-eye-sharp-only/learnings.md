@@ -111,6 +111,16 @@
   longer names `state` / `eye_focus`.
 - A heredoc through the Bash tool turned `\t` into `\t`; Python edit
   scripts with backslashes were written to a file with the Write tool.
+- Local review found the first commit broke the Tauri build:
+  `rank_dump_of_real_folders` in `crates/app/src/commands.rs` read
+  `f.eye_focus` from `rank::Frame` (E0609 under
+  `cargo check -p riffle-app --tests`). `mise run ci:local` passed anyway: it
+  does not compile `riffle-app` or its tests (the crates depending on a
+  changed one are left to the PR's checks). When core or backend types
+  change, run `mise exec -- cargo check -p riffle-app --tests` too. Fixed by
+  dropping the dump's `state` / `eye_focus` columns, the one compile-only
+  Tauri edit the freeze allows here; `plan.md` moved it from Step 5 to
+  Step 4.
 
 ## Deferred issues (todo candidates)
 
