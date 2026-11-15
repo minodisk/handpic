@@ -373,3 +373,4 @@ Decisions taken with the user at planning (2026-11-15):
 ## Progress
 
 - (2026-11-15) Step 1 complete
+- (2026-11-15) Step 2 complete
