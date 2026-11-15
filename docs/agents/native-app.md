@@ -320,6 +320,29 @@ build and checks it (`plutil -lint`, the executable and the `.icns` present).
   `.app` on a Mac, and the running window's icon after the install task on a
   Wayland and an X11 session.
 
+### `mise run native:watch` rebuilds and restarts the app (Inferred)
+
+`mise run native:watch [-- <folder>]` runs the GPUI app under watchexec, which
+the task's own `tools` installs next to rust, so the top-level `[tools]` (and
+every CI job) stays without it. An edit under `crates/native`, `crates/core` or
+`crates/backend` stops the app, rebuilds and relaunches it. Measured in
+`docs/plans/_archived/20261115-native-watch/learnings.md`.
+
+- Rule: the task watches the crate's inputs by name (`src`, `build.rs`,
+  `Cargo.toml`, `../core`, `../backend`), not `.`, so `crates/native/target`,
+  whose `.fingerprint` holds `.json`, never triggers a restart. Keep it that
+  way when you edit the task.
+- Rule: the watchexec line is the script's last line and runs with
+  `--shell=none`, so mise's appended quoted argument (a folder path with
+  spaces) reaches the app as one argument. A shell wrapper would re-split it.
+- Rule: on Windows the restart relinks cleanly (no `os error 5`) because
+  watchexec's job termination takes the app down together with `cargo`.
+  `taskkill /F` on `watchexec.exe` leaves `cargo` and `riffle-native.exe`
+  running. Pick processes by `Path` before killing them: the main checkout's own
+  `riffle-native.exe` may be running.
+- Pending manual check: Ctrl+C in the terminal stops watchexec, `cargo` and
+  the app, and the window repaints after a restart.
+
 ## Backend
 
 ### The backend names no event and no `AppHandle` (Inferred)

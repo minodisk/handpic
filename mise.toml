@@ -105,6 +105,16 @@ set -euo pipefail
 cargo run -- "$@"
 """
 
+[tasks."native:watch"]
+description = "Run the GPUI app (debug build) and rebuild and restart it on a source change (a restart, not a hot reload)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" }, watchexec = "2.8.0" }
+shell = "bash -c"
+run = """
+set -euo pipefail
+watchexec --restart --shell=none --watch src --watch build.rs --watch Cargo.toml --watch ../core --watch ../backend --exts rs,toml,json -- cargo run -- "$@"
+"""
+
 [tasks."native:release"]
 description = "Run the GPUI app with an optimized build (use this for any timing measurement)"
 dir = "crates/native"

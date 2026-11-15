@@ -2,6 +2,19 @@
 
 ## Cross-cutting / other
 
+### Native app: real-device Ctrl+C and window check of the native:watch task
+
+#### Background
+
+The `native:watch` mise task (the native-watch feature) runs the debug GPUI app under watchexec and rebuilds and restarts it on a `.rs`, `.toml` or `.json` change under `crates/native`, `crates/core` and `crates/backend`. It was checked by hand on Windows (Git Bash), but only from a non-interactive shell under `timeout`. That run covered the watchexec install, the launch, the restart on a source touch, no `os error 5` on the relink, no restart from the build's own output, and a folder argument holding spaces passed on every restart. The agent could see only processes and the app's log. Two things were never exercised: pressing Ctrl+C in a real terminal, and the window itself. A forced `taskkill /F` of `watchexec.exe` leaves `cargo` and the app running, because the job object is not kill-on-close. Ctrl+C is a different path (the console's ctrl event), so it needs a real terminal. Plan: `docs/plans/_archived/20261115-native-watch/plan.md`.
+
+Files: `mise.toml` (`[tasks."native:watch"]`)
+
+#### TODO
+
+- [ ] On Windows (Git Bash), run `mise run native:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `riffle-native.exe` all to exit (none left in Task Manager) and the prompt to return.
+- [ ] On Windows (Git Bash), run `mise run native:watch`, save a `.rs` file under `crates/native/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
+
 ### Native app docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
 
 #### Background
