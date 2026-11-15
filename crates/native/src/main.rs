@@ -90,7 +90,7 @@ use gpui::{
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
     WeakEntity, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill,
-    outline, point, prelude::*, px, relative, rgb, rgba, size, svg, uniform_list,
+    outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use gpui_component::{
     ActiveTheme, Disableable, Icon, IconName, Root, Sizable,
