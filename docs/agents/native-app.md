@@ -2091,7 +2091,7 @@ every platform, so the main area below it shrinks by itself. Its one child
 is an `h_flex().gap_2()` of `img(icons::APP)` at 16 px and the text
 "Handpic" in `cx.theme().foreground`. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
-window itself. Source: [the plan](../plans/20261116-native-title-bar/plan.md).
+window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
