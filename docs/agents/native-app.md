@@ -824,6 +824,25 @@ last, and a JPEG folder under `"name"` paged in capture order.
   (`filter::shown_after`): a stale index would name the file then at that
   place in the next `refilter`, which could skip the re-request of a preview
   its `order` bump had just dropped.
+- Rule: `self.shown`'s index is remapped only by a re-listing's `refilter`
+  (`filter::shown_after`). A fresh folder open does not run it, so `files` is
+  already the new folder's while the previous folder's image stays on screen
+  until the first preview arrives, and `files[at]` would name another file.
+  The open path therefore sets the index to `None`: the pane shows the old name
+  with no index rows in that window, and `pager.finish` treats the old image as
+  not the current file's. Any new reader of the shown file's index must handle
+  `None` on an open.
+- Rule: `toFixed(n)` and Rust's `{:.n}` differ on an exact decimal tie (`0.0625`
+  gives `0.063` in JavaScript and `0.062` in Rust, which rounds half to even).
+  The port of the meta pane's number formatting keeps the divergence, because
+  only exact dyadic ties differ and a measured score practically never is one;
+  `an_exact_tie_rounds_to_even_unlike_to_fixed` pins it. `Math.round` is
+  `(x + 0.5).floor()`, so `-5.5` gives `-5` and `-0.5` gives `0`.
+- Rule: the meta pane's `Analysis` group reads neither `Focus::eye_focus` nor
+  `FocusCandidate`, since the Face focus tiers come from `full_eye_sharp`
+  alone, and names the full-size eye score `Eye focus`. The Tauri pane keeps
+  `AF eye in focus` and `Eyes at full size` until the full-eye-sharp-only
+  plan's Step 4 (`docs/plans/20261115-full-eye-sharp-only/plan.md`).
 - Rule: a `refilter` that empties `files` keeps its anchor
   (`filter::KeptAnchor`), a non-empty one or another folder's open drops it.
   A menu change, and only a menu change, anchors on it while no file is

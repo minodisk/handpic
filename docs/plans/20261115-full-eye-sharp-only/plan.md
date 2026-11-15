@@ -64,8 +64,9 @@ Decisions taken with the user at planning (2026-11-15):
   (`../_archived/20261015-folder-wide-ranking-eval/folderwide.md`) found
   neither `AF eye focus` nor `Good photo` contributes (dropping either moves
   the frame AUC by at most ±0.003, intervals across zero).
-- PR #1066 (the native meta pane's stored values, with `AF eye in focus` and
-  `Focus candidate` rows) merges first; Step 4 removes those rows.
+- PR #1066 (the native meta pane's stored values) merges first, already
+  without `AF eye in focus` and `Focus candidate` rows and with its full-size
+  row named `Eye focus`.
 - The reduced per-frame table (folder, file, rating, `full_eye_sharp`) is
   committed to this folder so the derivation is reproducible from the
   repository.
@@ -230,9 +231,10 @@ Decisions taken with the user at planning (2026-11-15):
       TSV header near line 3009) no longer prints `state` / `eye_focus`.
     - `crates/app/ui/src/meta.ts` has no `AF eye in focus` row, and its
       `Eyes at full size` row is named `Eye focus`; `meta.test.ts` follows.
-    - The native meta pane (`crates/native/src/meta.rs`, from PR #1066) has no
-      `AF eye in focus` and no `Focus candidate` row, and names its
-      full-size row `Eye focus` if it has one.
+    - The native meta pane (`crates/native/src/meta.rs`) already has no
+      `AF eye in focus` and no `Focus candidate` row and names its full-size
+      row `Eye focus` (PR #1066); only its test helper's `eye_focus` /
+      `candidate` fields go with the types.
     - `riffle-cli`: nothing calls `candidate::eye_focus`, `EyeFocus`,
       `Scored`, `FocusCandidate` or `Cue::eye_focus` / `Cue::state`. The
       `candidates` subcommand, which exists to validate the logistic model,
