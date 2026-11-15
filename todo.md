@@ -3326,3 +3326,16 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, check that the 5 px bands do not get in the way of the empty-state message's click, the preview's context menu or the panes' scrollbars, and that the tree's rows, its inline rename input and the meta pane's rows lay out at 160 px.
 - [ ] On Windows, launch with `--auto`. Expect the panes to start at 220 whatever is stored and a drag to write nothing to `panelWidths`.
 - [ ] On macOS and Linux, repeat the hover, drag, narrow-window, restart and hide / show checks above. CI only builds these platforms.
+
+### Native app: real-device check of the folder tree's file counts on collapsed rows (native-tree-index-counts)
+
+#### Background
+
+The native-tree-index-counts work made every drawn row of the GPUI app's folder tree show its file count, expanded or collapsed, when it is above zero. The count comes from the SQLite index (`Index::dir_counts`, a whole-table `GROUP BY dir` answered from the `files_dir` covering index) until the folder is listed, and from `read_dir` once it has been expanded, opened or refreshed. `mise run ci:local` and the `tree.rs` / `index.rs` unit tests cover the merge, the `\?\` prefix matching and the query. Nobody has seen the pills drawn, the replacement of an index count by a listed count, or the index re-read after an open, a pass 1 end or a rename in the running app, and the query's cost was measured only on a copy of the index in Python's SQLite (0.70-0.83 ms for 10,634 rows in 15 folders), not inside the running app. Plan: `docs/plans/_archived/20261115-native-tree-index-counts/plan.md`.
+
+Files: `crates/native/src/tree.rs`, `crates/native/src/main.rs` (the tree row's count pill, the index read after startup, `opened`, pass 1's `Event::Done`), `crates/native/src/folderops.rs`, `crates/backend/src/index.rs` (`dir_counts`), `docs/agents/native-app.md` (the folder tree section).
+
+#### TODO
+
+- [ ] On Windows (`mise run native:dev`), with an index that already holds folders scanned earlier, launch the native app. Expect a collapsed row of a previously opened folder to show its file count before you expand it, and a folder never opened (no index rows) to show no count. Expand a folder holding RAW files: its number is replaced by the `read_dir` count and looks the same as before (same pill, expanded or collapsed). Collapse it: the count stays. Open a folder and let its scan finish, then check the row still shows the count. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows. Rename a folder, and run `Rename by Capture Date…`: the renamed row keeps its count. A folder reached through a mapped network drive, a symlink or a junction may show no count until listed (a known limit). Check a long name next to a count pill still truncates with the pill whole. If the tree or a thumbnail visibly stalls at startup or after a scan ends, record the time with `RUST_LOG=debug`, and if it is not cheap use the `IN (...)` fallback in the plan's "Trade-offs and risks".
+- [ ] If the rule in `docs/agents/native-app.md` ("The folder tree is a `uniform_list` over rows kept in the view", the count's two sources) is marked Inferred, change it to Measured with the observed result once the above is confirmed.
