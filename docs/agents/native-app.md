@@ -1234,10 +1234,13 @@ not open.
   (`Settings.search_placeholder`, the no-results texts) come from its
   `rust_i18n` locales; nothing calls `set_locale`, so they are English.
 - Rule: Enter and Space on a focused control come for free: the Base
-  `Button`, `Checkbox` and `Radio` under the components are `div`s with
-  `on_click`, which turn a key down then up of either into a
-  `ClickEvent::Keyboard` (`div.rs`), and their listener runs before the box's
-  bubble-phase handler stops the event.
+  `Button` and `Radio` under the components are `div`s with `on_click`, which
+  turn a key down then up of either into a `ClickEvent::Keyboard` (`div.rs`),
+  and their listener runs before the box's bubble-phase handler stops the
+  event. The `Select`'s come from its own `Confirm` binding, not `on_click`.
+  The `Switch` reaches its callback through `on_change` on a `BaseSwitch`
+  (`switch.rs`); that it gets Enter / Space the same way is Inferred, pending
+  the hand check in `learnings.md`.
 - Rule: a pointer press on a component control does not move the focus (each
   calls `window.prevent_default()` on mouse down, which also keeps the box's
   focus-on-press from running). So a control pressed while a field has the

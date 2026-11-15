@@ -250,3 +250,5 @@ state's clickable message (text, not a button).
     regions; the docs sections overlap), and its Step 3 may use `Select`.
 
 ## Progress
+
+- (2026-11-16) Step 1 complete (the hand checks recorded in learnings.md are still pending)
