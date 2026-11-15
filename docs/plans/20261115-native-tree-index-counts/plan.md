@@ -57,7 +57,7 @@ What the investigation found (the facts the steps rely on):
 
 ## Steps
 
-- [ ] Step 1: Add the per-folder row count query to the index
+- [x] Step 1: Add the per-folder row count query to the index
   - Done when:
     - `Index::dir_counts(&self) -> Result<Vec<(String, usize)>, String>` in
       `crates/backend/src/index.rs` returns each `dir` that has `files`
@@ -168,3 +168,5 @@ What the investigation found (the facts the steps rely on):
   user guide, so this plan leaves it.
 
 ## Progress
+
+(2026-11-16) Step 1 complete
