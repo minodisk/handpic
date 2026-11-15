@@ -24,7 +24,7 @@ gpui-component 0.9.1. A few controls are still hand-drawn `div`s. This plan
 replaces them with the component each one imitates, keeping the look as close
 as the component allows, and adds no new UI.
 
-Read [native-app.md](../../agents/native-app.md) first: "gpui-component is
+Read [native-app.md](../../../agents/native-app.md) first: "gpui-component is
 initialized", "The settings modal is its own entity", "The sort and filter
 menus are deferred popovers over the window", "The status row is
 gpui-component's `StatusBar`" and "The right-click menu is a deferred popover
