@@ -173,7 +173,7 @@ Decisions taken with the user at planning (2026-11-15):
     - The comparison used a scratch `riffle-cli` subcommand that measured
       the preview with the same eye centers; it is not committed.
 
-- [ ] Step 3: Read the Good / Neutral / Low tiers from `full_eye_sharp` alone
+- [x] Step 3: Read the Good / Neutral / Low tiers from `full_eye_sharp` alone
   - Done when:
     - `fullsharp.rs` holds `LOW_BELOW` (Step 1's value) next to `SOFT_BELOW`,
       pinned by a Rust test like `the_threshold_is_the_figure_the_ui_cuts_good_at`.
@@ -374,3 +374,4 @@ Decisions taken with the user at planning (2026-11-15):
 
 - (2026-11-15) Step 1 complete
 - (2026-11-15) Step 2 complete
+- (2026-11-15) Step 3 complete

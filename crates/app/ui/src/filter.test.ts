@@ -17,7 +17,7 @@ import {
   toStored,
   UNKNOWN_GENRE,
 } from "./filter.js";
-import { type MarkFocus, afEyeState } from "./focus.js";
+import { GOOD_FULL_EYE_SHARP, LOW_FULL_EYE_SHARP, type MarkFocus, afEyeState } from "./focus.js";
 
 function state(
   flags: Flag[] = [],
@@ -328,7 +328,7 @@ describe("passes: Face focus states", () => {
     pose: { yaw: 10, pitch: -5, roll: 3 },
     eye_offset: 0.03,
     edge_gap: 2,
-    full_eye_sharp: null,
+    full_eye_sharp: 0.3,
   };
 
   test("off passes every state", () => {
@@ -352,7 +352,7 @@ describe("passes: Face focus states", () => {
     expect(passes(low, unjudged, undefined, 1, undefined)).toBe(false);
   });
 
-  test("a focus candidate that is not good passes Neutral, not Good or Low", () => {
+  test("a measured face that is not good passes Neutral, not Good or Low", () => {
     const notGood = afEyeState({ ...candidate, eyes_ear: 0.1 });
     expect(passes(items("neutral"), unjudged, undefined, 1, notGood)).toBe(true);
     expect(passes(items("good"), unjudged, undefined, 1, notGood)).toBe(false);
@@ -390,11 +390,13 @@ describe("passes: Face focus states", () => {
     const frames: [MarkFocus | undefined, AfEye][] = [
       [candidate, "good"],
       [{ ...candidate, eyes_ear: 0.1 }, "neutral"],
-      [{ ...candidate, candidate: "not_candidate", eye_focus: 0.1 }, "low"],
-      [{ ...candidate, candidate: "unknown", eye_focus: null }, "neutral"],
+      [{ ...candidate, full_eye_sharp: LOW_FULL_EYE_SHARP - 0.001 }, "low"],
+      [{ ...candidate, full_eye_sharp: LOW_FULL_EYE_SHARP }, "neutral"],
+      [{ ...candidate, full_eye_sharp: GOOD_FULL_EYE_SHARP - 0.001 }, "neutral"],
+      [{ ...candidate, full_eye_sharp: null }, "neutral"],
       [{ ...candidate, point: null }, "good"],
-      [{ ...candidate, point: null, candidate: "not_candidate", eye_focus: 0.1 }, "low"],
-      [{ ...candidate, point: null, candidate: "unknown", eye_focus: null }, "neutral"],
+      [{ ...candidate, point: null, full_eye_sharp: LOW_FULL_EYE_SHARP - 0.001 }, "low"],
+      [{ ...candidate, point: null, full_eye_sharp: null }, "neutral"],
       [undefined, "neutral"],
     ];
     for (const item of ["good", "neutral", "low"] as const) {

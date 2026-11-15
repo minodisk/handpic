@@ -483,7 +483,7 @@ mod tests {
     //! cases leave `undefined` is `mark::af_eye_state(None)`, `Neutral`.
 
     use super::*;
-    use crate::mark::af_eye_state;
+    use crate::mark::{GOOD_FULL_EYE_SHARP, LOW_FULL_EYE_SHARP, af_eye_state};
     use riffle_backend::index::{FocusPoint, StoredEyes};
     use riffle_core::candidate::FocusCandidate;
     use serde_json::json;
@@ -901,7 +901,7 @@ mod tests {
                 }),
                 eye_offset: Some(0.03),
                 edge_gap: Some(2.),
-                full_eye_sharp: None,
+                full_eye_sharp: Some(0.3),
             },
         }
     }
@@ -939,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn a_focus_candidate_that_is_not_good_passes_neutral_not_good_or_low() {
+    fn a_measured_face_that_is_not_good_passes_neutral_not_good_or_low() {
         let not_good = af_eye_state(Some(&with(|f| f.eyes.eyes_ear = Some(0.1))));
         assert!(eyed(&items(&[Neutral]), not_good));
         assert!(!eyed(&items(&[Good]), not_good));
@@ -978,31 +978,35 @@ mod tests {
 
     #[test]
     fn the_three_face_focus_items_partition_the_frames() {
-        let not_candidate = |f: &mut Focus| {
-            f.candidate = FocusCandidate::NotCandidate;
-            f.eye_focus = Some(0.1);
-        };
-        let unknown = |f: &mut Focus| {
-            f.candidate = FocusCandidate::Unknown;
-            f.eye_focus = None;
-        };
+        let soft = |f: &mut Focus| f.eyes.full_eye_sharp = Some(LOW_FULL_EYE_SHARP - 0.001);
+        let unmeasured = |f: &mut Focus| f.eyes.full_eye_sharp = None;
         let frames = [
             (Some(candidate()), Good),
             (Some(with(|f| f.eyes.eyes_ear = Some(0.1))), Neutral),
-            (Some(with(not_candidate)), Low),
-            (Some(with(unknown)), Neutral),
+            (Some(with(soft)), Low),
+            (
+                Some(with(|f| f.eyes.full_eye_sharp = Some(LOW_FULL_EYE_SHARP))),
+                Neutral,
+            ),
+            (
+                Some(with(|f| {
+                    f.eyes.full_eye_sharp = Some(GOOD_FULL_EYE_SHARP - 0.001);
+                })),
+                Neutral,
+            ),
+            (Some(with(unmeasured)), Neutral),
             (Some(with(|f| f.point = None)), Good),
             (
                 Some(with(|f| {
                     f.point = None;
-                    not_candidate(f);
+                    soft(f);
                 })),
                 Low,
             ),
             (
                 Some(with(|f| {
                     f.point = None;
-                    unknown(f);
+                    unmeasured(f);
                 })),
                 Neutral,
             ),

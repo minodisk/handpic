@@ -17,6 +17,10 @@ use crate::partial::{decode_crop, jpeg_width};
 /// blind review of Good frames sorted by the score on three folders of one
 /// body; see the full-size-eye-check plan.
 pub const SOFT_BELOW: f64 = 0.162;
+/// The frame score below which the eyes are clearly soft at full size: the
+/// largest value on a 0.01 grid with at most 2% of the user's held-out 3-star
+/// frames under it; see the full-eye-sharp-only plan's `low-threshold.md`.
+pub const LOW_BELOW: f64 = 0.110;
 /// The full width over the preview width at or under which the full JPEG has
 /// no detail worth measuring.
 const MIN_SCALE: f64 = 1.5;
@@ -180,6 +184,13 @@ mod tests {
     #[test]
     fn the_threshold_is_the_figure_the_ui_cuts_good_at() {
         assert_eq!(SOFT_BELOW, 0.162);
+    }
+
+    /// `LOW_FULL_EYE_SHARP` in `crates/app/ui/src/focus.ts` is this figure:
+    /// update it with the threshold.
+    #[test]
+    fn the_low_threshold_is_the_figure_the_ui_cuts_low_at() {
+        assert_eq!(LOW_BELOW, 0.110);
     }
 
     #[test]

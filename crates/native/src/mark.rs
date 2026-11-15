@@ -4,12 +4,9 @@
 //! `faceLabel`, `faceLabelAt`); its comments say where each cut comes from.
 
 use riffle_backend::{index::Focus, ondemand::FaceBox};
-use riffle_core::candidate::FocusCandidate;
 
 use crate::icons;
 
-/// The in-focus probability of the AF eyes.
-pub const GOOD_EYE_FOCUS: f64 = 0.9;
 /// The EAR of the more closed eye.
 pub const GOOD_EYE_EAR: f64 = 0.25;
 /// |yaw| in degrees.
@@ -22,9 +19,11 @@ pub const MAX_EYE_OFFSET: f64 = 0.1;
 /// The face or a mesh eye region closer to the preview's edge than this, in
 /// face box sides, means a face the frame cuts.
 pub const MIN_EDGE_GAP: f64 = 0.02;
-/// `fullsharp::SOFT_BELOW`: a frame under it on the full-size JPEG leaves the
-/// tier; a file without the value is not demoted.
+/// `fullsharp::SOFT_BELOW`: the sharpness of the eyes on the full-size JPEG a
+/// good photo needs at least; a file without the value is not good.
 pub const GOOD_FULL_EYE_SHARP: f64 = 0.162;
+/// `fullsharp::LOW_BELOW`: a frame under it on the full-size JPEG is low.
+pub const LOW_FULL_EYE_SHARP: f64 = 0.110;
 
 /// The state the mark's color is read from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -78,30 +77,36 @@ pub struct FocusMark {
 
 fn clears(focus: &Focus) -> bool {
     let eyes = &focus.eyes;
-    focus.eye_focus.is_some_and(|f| f >= GOOD_EYE_FOCUS)
+    eyes.full_eye_sharp
+        .is_some_and(|s| s >= GOOD_FULL_EYE_SHARP)
         && eyes.eyes_ear.is_some_and(|e| e >= GOOD_EYE_EAR)
         && eyes
             .pose
             .is_some_and(|p| p.yaw.abs() <= GOOD_MAX_YAW && p.pitch.abs() <= GOOD_MAX_PITCH)
         && eyes.eye_offset.is_some_and(|o| o <= MAX_EYE_OFFSET)
         && eyes.edge_gap.is_some_and(|g| g >= MIN_EDGE_GAP)
-        && eyes.full_eye_sharp.is_none_or(|s| s >= GOOD_FULL_EYE_SHARP)
 }
 
-/// Whether the frame is a good photo: a focus candidate whose AF eyes are in
-/// focus, whose eyes are open and whose face is toward the camera, with the
-/// mesh on the face, the face not cut by the frame's edge and the eyes not
-/// soft at full size. `focus.ts`'s tier has the one value `good`.
+/// Whether the frame is a good photo: a judged face whose eyes are sharp at
+/// full size, open and toward the camera, with the mesh on the face and the
+/// face not cut by the frame's edge. `focus.ts`'s tier has the one value
+/// `good`.
 pub fn photo_tier(focus: Option<&Focus>) -> bool {
-    focus.is_some_and(|f| f.candidate == FocusCandidate::Candidate && clears(f))
+    focus.is_some_and(clears)
 }
 
-/// `Low` for Rust's `not_candidate`, `Good` for the tier, else `Neutral`,
-/// also without a focus.
+/// `Low` for a judged face under `LOW_FULL_EYE_SHARP` at full size, `Good`
+/// for the tier, else `Neutral`, also without a focus or a value.
 pub fn af_eye_state(focus: Option<&Focus>) -> MarkState {
     match focus {
         None => MarkState::Neutral,
-        Some(f) if f.candidate == FocusCandidate::NotCandidate => MarkState::Low,
+        Some(f)
+            if f.eyes
+                .full_eye_sharp
+                .is_some_and(|s| s < LOW_FULL_EYE_SHARP) =>
+        {
+            MarkState::Low
+        }
         Some(f) if photo_tier(Some(f)) => MarkState::Good,
         Some(_) => MarkState::Neutral,
     }
@@ -249,6 +254,7 @@ mod tests {
     use super::*;
     use riffle_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
     use riffle_backend::ondemand::FacePoint;
+    use riffle_core::candidate::FocusCandidate;
 
     const AT: FocusPoint = FocusPoint {
         sensor_w: 7008,
@@ -312,6 +318,10 @@ mod tests {
 
     fn candidate(candidate: FocusCandidate) -> Focus {
         with(point(), |f| f.candidate = candidate)
+    }
+
+    fn sharp(full_eye_sharp: Option<f64>) -> Focus {
+        with(good(), |f| f.eyes.full_eye_sharp = full_eye_sharp)
     }
 
     fn good_photo(focus: &Focus) -> bool {
@@ -395,14 +405,21 @@ mod tests {
     }
 
     #[test]
-    fn focus_mark_maps_the_candidate_cue_to_its_state() {
-        let state = |c| focus_mark(Some(&candidate(c)), 700., 468.).map(|m| m.state);
-        assert_eq!(state(FocusCandidate::NotCandidate), Some(MarkState::Low));
-        assert_eq!(state(FocusCandidate::Unknown), Some(MarkState::Neutral));
+    fn focus_mark_maps_the_full_size_eye_sharpness_to_its_state() {
+        let state = |s| {
+            let f = with(point(), |f| f.eyes.full_eye_sharp = s);
+            focus_mark(Some(&f), 700., 468.).map(|m| m.state)
+        };
+        assert_eq!(
+            state(Some(LOW_FULL_EYE_SHARP - 0.001)),
+            Some(MarkState::Low)
+        );
+        assert_eq!(state(Some(LOW_FULL_EYE_SHARP)), Some(MarkState::Neutral));
+        assert_eq!(state(None), Some(MarkState::Neutral));
     }
 
     #[test]
-    fn focus_mark_of_a_focus_candidate_carries_its_photo_tier_else_neutral() {
+    fn focus_mark_of_a_measured_face_carries_its_photo_tier_else_neutral() {
         let state = |f: Focus| focus_mark(Some(&f), 700., 468.).map(|m| m.state);
         assert_eq!(state(good()), Some(MarkState::Good));
         assert_eq!(state(ear(GOOD_EYE_EAR)), Some(MarkState::Good));
@@ -447,44 +464,63 @@ mod tests {
     }
 
     #[test]
-    fn af_eye_state_is_good_at_good_eye_focus_with_the_other_conditions_met() {
-        let edge = with(good(), |f| f.eye_focus = Some(GOOD_EYE_FOCUS));
-        assert_eq!(af_eye_state(Some(&edge)), MarkState::Good);
+    fn af_eye_state_is_good_at_good_full_eye_sharp_with_the_other_conditions_met_not_below() {
+        assert_eq!(
+            af_eye_state(Some(&sharp(Some(GOOD_FULL_EYE_SHARP)))),
+            MarkState::Good
+        );
+        assert_eq!(
+            af_eye_state(Some(&sharp(Some(GOOD_FULL_EYE_SHARP - 0.001)))),
+            MarkState::Neutral
+        );
     }
 
     #[test]
-    fn af_eye_state_is_neutral_for_a_focus_candidate_that_is_not_good() {
-        let below = with(good(), |f| f.eye_focus = Some(GOOD_EYE_FOCUS - 0.01));
-        let bare = with(candidate(FocusCandidate::Candidate), |f| {
-            f.eye_focus = Some(0.772);
-        });
+    fn af_eye_state_is_neutral_for_a_measured_face_that_is_not_good() {
+        let bare = with(point(), |f| f.eyes.full_eye_sharp = Some(0.3));
         assert_eq!(af_eye_state(Some(&ear(0.1))), MarkState::Neutral);
-        assert_eq!(af_eye_state(Some(&below)), MarkState::Neutral);
         assert_eq!(af_eye_state(Some(&bare)), MarkState::Neutral);
     }
 
     #[test]
-    fn af_eye_state_is_low_for_a_not_candidate_focus_whatever_else_clears_the_rule() {
-        let low = |f: Focus| {
-            with(f, |f| {
-                f.candidate = FocusCandidate::NotCandidate;
-                f.eye_focus = Some(0.7719);
-            })
-        };
-        assert_eq!(af_eye_state(Some(&low(point()))), MarkState::Low);
-        assert_eq!(af_eye_state(Some(&low(good()))), MarkState::Low);
+    fn af_eye_state_is_neutral_between_the_low_and_the_good_thresholds() {
+        assert_eq!(
+            af_eye_state(Some(&sharp(Some(LOW_FULL_EYE_SHARP)))),
+            MarkState::Neutral
+        );
+        assert_eq!(af_eye_state(Some(&sharp(Some(0.14)))), MarkState::Neutral);
     }
 
     #[test]
-    fn af_eye_state_is_neutral_for_an_unknown_focus() {
-        let unknown = |f: Focus| {
+    fn af_eye_state_is_low_under_low_full_eye_sharp_whatever_else_clears_the_rule() {
+        let soft = Some(LOW_FULL_EYE_SHARP - 0.001);
+        let bare = with(point(), |f| f.eyes.full_eye_sharp = soft);
+        assert_eq!(af_eye_state(Some(&bare)), MarkState::Low);
+        assert_eq!(af_eye_state(Some(&sharp(soft))), MarkState::Low);
+        assert_eq!(af_eye_state(Some(&sharp(Some(0.)))), MarkState::Low);
+    }
+
+    #[test]
+    fn af_eye_state_is_neutral_without_a_value() {
+        assert_eq!(af_eye_state(Some(&point())), MarkState::Neutral);
+        assert_eq!(af_eye_state(Some(&sharp(None))), MarkState::Neutral);
+    }
+
+    #[test]
+    fn af_eye_state_reads_neither_the_candidate_cue_nor_eye_focus() {
+        let off = |f: Focus| {
             with(f, |f| {
-                f.candidate = FocusCandidate::Unknown;
-                f.eye_focus = None;
+                f.candidate = FocusCandidate::NotCandidate;
+                f.eye_focus = Some(0.1);
             })
         };
-        assert_eq!(af_eye_state(Some(&unknown(point()))), MarkState::Neutral);
-        assert_eq!(af_eye_state(Some(&unknown(good()))), MarkState::Neutral);
+        assert_eq!(af_eye_state(Some(&off(good()))), MarkState::Good);
+        assert_eq!(af_eye_state(Some(&off(point()))), MarkState::Neutral);
+        let unknown = with(good(), |f| {
+            f.candidate = FocusCandidate::Unknown;
+            f.eye_focus = None;
+        });
+        assert_eq!(af_eye_state(Some(&unknown)), MarkState::Good);
     }
 
     #[test]
@@ -496,7 +532,9 @@ mod tests {
     fn photo_tier_passes_a_candidate_with_no_recorded_point_on_its_values() {
         let pointless = with(good(), |f| f.point = None);
         let manual = with(pointless, |f| f.manual_focus = true);
-        let below = with(pointless, |f| f.eye_focus = Some(GOOD_EYE_FOCUS - 0.01));
+        let below = with(pointless, |f| {
+            f.eyes.full_eye_sharp = Some(GOOD_FULL_EYE_SHARP - 0.01);
+        });
         assert!(good_photo(&pointless));
         assert!(good_photo(&manual));
         assert!(!good_photo(&below));
@@ -508,15 +546,18 @@ mod tests {
     }
 
     #[test]
-    fn photo_tier_is_false_for_a_frame_off_the_candidate_even_with_good_eyes_and_pose() {
+    fn photo_tier_does_not_read_the_candidate_cue() {
         for c in [FocusCandidate::NotCandidate, FocusCandidate::Unknown] {
-            assert!(!good_photo(&with(good(), |f| f.candidate = c)));
+            assert!(good_photo(&with(good(), |f| {
+                f.candidate = c;
+                f.eye_focus = None;
+            })));
         }
     }
 
     #[test]
     fn photo_tier_is_false_when_any_value_is_missing() {
-        assert!(!good_photo(&with(good(), |f| f.eye_focus = None)));
+        assert!(!good_photo(&sharp(None)));
         assert!(!good_photo(&with(good(), |f| f.eyes.eyes_ear = None)));
         assert!(!good_photo(&with(good(), |f| f.eyes.pose = None)));
         assert!(!good_photo(&with(good(), |f| f.eyes.eye_offset = None)));
@@ -541,16 +582,10 @@ mod tests {
     }
 
     #[test]
-    fn a_frame_soft_at_full_size_is_not_good_at_the_cut_or_unmeasured_it_is() {
-        let sharp = |s: Option<f64>| with(good(), |f| f.eyes.full_eye_sharp = s);
-        let soft = sharp(Some(GOOD_FULL_EYE_SHARP - 0.001));
-        assert!(!good_photo(&soft));
-        assert_eq!(af_eye_state(Some(&soft)), MarkState::Neutral);
-        assert_eq!(
-            af_eye_state(Some(&sharp(Some(GOOD_FULL_EYE_SHARP)))),
-            MarkState::Good
-        );
-        assert_eq!(af_eye_state(Some(&sharp(None))), MarkState::Good);
+    fn a_frame_soft_or_unmeasured_at_full_size_is_not_good_at_the_cut_it_is() {
+        assert!(!good_photo(&sharp(Some(GOOD_FULL_EYE_SHARP - 0.001))));
+        assert!(!good_photo(&sharp(None)));
+        assert!(good_photo(&sharp(Some(GOOD_FULL_EYE_SHARP))));
     }
 
     #[test]
@@ -622,11 +657,11 @@ mod tests {
     }
 
     #[test]
-    fn the_eye_focus_cut_passes_at_and_above_not_below() {
-        let at = |e: f64| good_photo(&with(good(), |f| f.eye_focus = Some(e)));
-        assert!(at(GOOD_EYE_FOCUS));
-        assert!(at(GOOD_EYE_FOCUS + 0.0005));
-        assert!(!at(GOOD_EYE_FOCUS - 0.0005));
+    fn the_full_size_eye_sharpness_cut_passes_at_and_above_not_below() {
+        let at = |s: f64| good_photo(&sharp(Some(s)));
+        assert!(at(GOOD_FULL_EYE_SHARP));
+        assert!(at(GOOD_FULL_EYE_SHARP + 0.0005));
+        assert!(!at(GOOD_FULL_EYE_SHARP - 0.0005));
     }
 
     #[test]
@@ -674,25 +709,30 @@ mod tests {
 
     #[test]
     fn the_cuts_are_the_step_7_cuts() {
-        assert_eq!(GOOD_EYE_FOCUS, 0.9);
         assert_eq!(GOOD_EYE_EAR, 0.25);
         assert_eq!(GOOD_MAX_YAW, 35.);
         assert_eq!(GOOD_MAX_PITCH, 45.);
         assert_eq!(MAX_EYE_OFFSET, 0.1);
         assert_eq!(MIN_EDGE_GAP, 0.02);
-        assert_eq!(GOOD_FULL_EYE_SHARP, 0.162);
+    }
+
+    #[test]
+    fn the_full_size_thresholds_are_fullsharp_s() {
+        assert_eq!(GOOD_FULL_EYE_SHARP, riffle_core::fullsharp::SOFT_BELOW);
+        assert_eq!(LOW_FULL_EYE_SHARP, riffle_core::fullsharp::LOW_BELOW);
     }
 
     #[test]
     fn a_frame_below_the_step_5_good_cuts_that_cleared_the_fair_ones_is_good() {
-        assert!(good_photo(&with(good(), |f| f.eye_focus = Some(0.995))));
         assert!(good_photo(&ear(0.27)));
-        assert!(good_photo(&with(ear(0.25), |f| f.eye_focus = Some(0.99))));
+        assert!(good_photo(&ear(0.25)));
     }
 
     #[test]
     fn the_exclusions_still_apply_at_the_folded_cuts() {
-        let edge = with(ear(GOOD_EYE_EAR), |f| f.eye_focus = Some(GOOD_EYE_FOCUS));
+        let edge = with(ear(GOOD_EYE_EAR), |f| {
+            f.eyes.full_eye_sharp = Some(GOOD_FULL_EYE_SHARP);
+        });
         assert!(good_photo(&edge));
         assert!(!good_photo(&with(edge, |f| {
             f.eyes.eye_offset = Some(MAX_EYE_OFFSET + 0.001);
