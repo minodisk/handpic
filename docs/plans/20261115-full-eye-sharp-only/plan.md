@@ -127,7 +127,7 @@ Decisions taken with the user at planning (2026-11-15):
       script, not as the result.
     - Touch nothing outside `docs/plans/20261115-full-eye-sharp-only/`.
 
-- [ ] Step 2: Measure `full_eye_sharp` for every judged face on the largest JPEG
+- [x] Step 2: Measure `full_eye_sharp` for every judged face on the largest JPEG
   - Done when:
     - `extract_analysis` fills `full_eye_sharp` for every frame whose cue
       judged a face (`cue.eye_centers` is `Some`), whatever its `eye_focus`:

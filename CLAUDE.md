@@ -65,7 +65,8 @@ and the reasons of each frame within its burst by the shared weights plus its
 burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
 holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
-sharpness of the judged face on the full-size embedded JPEG (a crop around each
+sharpness of the judged face on the largest embedded JPEG, the preview's own
+included (a crop around each
 eye resized to 154 px, the gradient's 99th percentile over the contrast, the
 sharper eye counting, a frame under `SOFT_BELOW` being soft), and
 `src/sharpness.rs` the
@@ -96,9 +97,10 @@ passes on the one scan task: `run_scan` (thumbnail, metadata), then
 colored by (YuNet, then the face mesh on the face nearest the AF point) and
 the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
 `pose_roll` columns with the EAR of the more closed eye and the head pose
-from that same mesh, and, on a frame the cue calls a candidate, the
-`full_eye_sharp` column with the sharpness of its eyes on the full JPEG (a
-second read), and streams them as `faces-progress` /
+from that same mesh, and, on every frame whose cue judged a face, the
+`full_eye_sharp` column with the sharpness of its eyes on the largest JPEG
+(the full JPEG, a second read, when the file holds one larger than the
+preview, else the preview already read), and streams them as `faces-progress` /
 `faces-done` events, then, when the `aiEnabled` setting is on and its model
 downloaded, `run_embed_scan`, which stores each RAW file's image embedding in
 the separate `embeddings` table (valid while `EMBED_VERSION` and the file's

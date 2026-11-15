@@ -17,9 +17,6 @@ use crate::partial::{decode_crop, jpeg_width};
 /// blind review of Good frames sorted by the score on three folders of one
 /// body; see the full-size-eye-check plan.
 pub const SOFT_BELOW: f64 = 0.162;
-/// The full width over the preview width at or under which the full JPEG has
-/// no detail worth measuring.
-const MIN_SCALE: f64 = 1.5;
 /// The floor of the distance between the eyes, in preview px.
 const MIN_EYE_DISTANCE: f64 = 8.0;
 /// The half-side of an eye's crop, in eye distances.
@@ -45,8 +42,8 @@ pub fn eye_crop_score(gray: &[u8], width: usize, height: usize) -> f64 {
 
 /// The frame score of `full_jpeg` for the two `eyes`, given in the stored
 /// coordinates of a preview `preview_width` px wide: the higher of the two
-/// eyes' `eye_crop_score`. `None` when the full JPEG is not more than
-/// `MIN_SCALE` times the preview's width, or a crop cannot be decoded or lies
+/// eyes' `eye_crop_score`. `full_jpeg` is any JPEG of the same frame, the
+/// preview itself included. `None` when a crop cannot be decoded or lies
 /// wholly outside the image.
 pub fn full_eye_sharpness(
     full_jpeg: &[u8],
@@ -57,9 +54,6 @@ pub fn full_eye_sharpness(
         return None;
     }
     let scale = jpeg_width(full_jpeg).ok()? as f64 / preview_width as f64;
-    if scale <= MIN_SCALE {
-        return None;
-    }
     let [(lx, ly), (rx, ry)] = eyes.map(|(x, y)| (f64::from(x), f64::from(y)));
     let half = CROP_HALF_SIDE * (lx - rx).hypot(ly - ry).max(MIN_EYE_DISTANCE) * scale;
     let score = |x: f64, y: f64| eye_score(full_jpeg, (x * scale, y * scale), half);
@@ -206,12 +200,12 @@ mod tests {
     }
 
     #[test]
-    fn a_full_jpeg_not_larger_than_the_scale_floor_has_no_score() {
+    fn a_jpeg_is_measured_at_any_scale_the_preview_s_own_included() {
         let jpeg = encode(&disc(150, 30, 220), 150, 150);
         let eyes = [(40.0, 75.0), (110.0, 75.0)];
-        assert_eq!(full_eye_sharpness(&jpeg, eyes, 150), None);
-        assert_eq!(full_eye_sharpness(&jpeg, eyes, 100), None, "exactly 1.5x");
-        assert!(full_eye_sharpness(&jpeg, eyes, 99).is_some());
+        assert!(full_eye_sharpness(&jpeg, eyes, 150).is_some(), "scale 1");
+        assert!(full_eye_sharpness(&jpeg, eyes, 100).is_some(), "1.5x");
+        assert_eq!(full_eye_sharpness(&jpeg, eyes, 0), None);
         assert_eq!(full_eye_sharpness(&[0u8; 16], eyes, 100), None);
     }
 

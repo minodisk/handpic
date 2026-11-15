@@ -162,8 +162,10 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// to fill `eye_offset` and `edge_gap` from it. `9` fills the cue, the EAR,
 /// the pose, the eye offset and the edge gap for frames with no trusted AF
 /// point from the largest confident face of the whole preview. `10` fills
-/// `full_eye_sharp` from a second read, of the full JPEG, on candidates.
-pub const FACES_VERSION: i64 = 10;
+/// `full_eye_sharp` from a second read, of the full JPEG, on candidates. `11`
+/// fills it for every frame whose cue judged a face, on the full JPEG when the
+/// file holds one larger than the preview, else on the preview already read.
+pub const FACES_VERSION: i64 = 11;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on

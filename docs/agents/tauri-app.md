@@ -1108,7 +1108,14 @@ retried.
   whose AF eyes measure soft at full size (`SOFT_BELOW`, pinned by a Rust-side
   test against the figure in `focus.ts`, which the test does not read) is no
   longer Good. It costs about +51 ms per measured (`Candidate`) frame in pass
-  2, with 8 threads and a warm file cache; the cold-disk cost is unmeasured. A
+  2, with 8 threads and a warm file cache; the cold-disk cost is unmeasured.
+  `FACES_VERSION` 11 measures every frame whose cue judged a face, whatever
+  its state, on the largest JPEG: the full JPEG when `has_larger_jpeg`, else
+  the preview bytes the pass already holds (no read, no `ReadSlots` slot; a
+  RAF, an HDR PQ CR3, a body without a larger JPEG), with no scale floor in
+  `full_eye_sharpness`. A failed full-size read or decode stays `None`; it
+  does not fall back to the preview. The value on a preview is uncalibrated
+  (see `docs/plans/20261115-full-eye-sharp-only/preview-vs-full.md`). A
   new field of `faces-progress` must also be copied in `applyFaceReady`
   (`focus.ts`), which copies field by field, or a frame scanned while on screen
   stays Good until the folder reloads. See
