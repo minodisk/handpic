@@ -1760,10 +1760,11 @@ impl Riffle {
     }
 
     /// A key while the tree has the keyboard, as `folders.ts`'s `keydown`:
-    /// `escape` hands the keys back, the arrows and `home` / `end` move the
-    /// cursor, left / right / `enter` act on its row, and a printable key
-    /// without Ctrl / Alt / Meta is type-ahead. False when the tree did not
-    /// consume the key.
+    /// `escape` hands the keys back, up / down and `home` / `end` move the
+    /// cursor, `space` toggles its row and `enter` opens it, and a printable
+    /// key without Ctrl / Alt / Meta is type-ahead. Left / right are not taken
+    /// (unlike `folders.ts`), so the strip's previous / next run. False when
+    /// the tree did not consume the key.
     fn tree_key_down(&mut self, keystroke: &Keystroke, name: &str, cx: &mut Context<Self>) -> bool {
         let step = match name {
             "arrowup" => Some(StepKey::Up),
@@ -1773,8 +1774,7 @@ impl Riffle {
             _ => None,
         };
         let key = match name {
-            "arrowleft" => Some(TreeKey::Left),
-            "arrowright" => Some(TreeKey::Right),
+            "space" => Some(TreeKey::Space),
             "enter" => Some(TreeKey::Enter),
             _ => None,
         };
@@ -1786,7 +1786,6 @@ impl Riffle {
             }
         } else if let Some(key) = key {
             match tree::tree_key(&self.tree_rows, self.tree_cursor.as_deref(), key) {
-                Some(TreeCommand::Focus(path)) => self.move_tree_cursor(path, cx),
                 Some(TreeCommand::Expand(path) | TreeCommand::Collapse(path)) => {
                     self.tree_toggle(path, cx);
                 }

@@ -326,50 +326,28 @@ pub fn step(rows: &[Row], cursor: Option<&str>, key: StepKey) -> Option<String> 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TreeKey {
-    Left,
-    Right,
+    Space,
     Enter,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TreeCommand {
-    Focus(String),
     Expand(String),
     Collapse(String),
     Open(String),
 }
 
-/// What `Right` / `Left` / `Enter` do on the cursor row, following the
-/// WAI-ARIA tree pattern, or `None` when the key does nothing there (or the
-/// cursor is not among the drawn rows).
+/// What `Space` / `Enter` do on the cursor row, or `None` when the key does
+/// nothing there (or the cursor is not among the drawn rows). `Space` toggles
+/// an expandable row. Unlike `tree.ts`, Left / Right are not tree keys: they
+/// page the strip while the tree has the keyboard.
 pub fn tree_key(rows: &[Row], cursor: Option<&str>, key: TreeKey) -> Option<TreeCommand> {
-    let at = rows
-        .iter()
-        .position(|row| Some(row.path.as_str()) == cursor)?;
-    let row = &rows[at];
+    let row = rows.iter().find(|row| Some(row.path.as_str()) == cursor)?;
     match key {
         TreeKey::Enter => Some(TreeCommand::Open(row.path.clone())),
-        TreeKey::Right => {
-            if !row.expandable {
-                None
-            } else if !row.expanded {
-                Some(TreeCommand::Expand(row.path.clone()))
-            } else {
-                rows.get(at + 1)
-                    .filter(|child| child.depth > row.depth)
-                    .map(|child| TreeCommand::Focus(child.path.clone()))
-            }
-        }
-        TreeKey::Left => {
-            if row.expanded && row.expandable {
-                return Some(TreeCommand::Collapse(row.path.clone()));
-            }
-            rows[..at]
-                .iter()
-                .rev()
-                .find(|parent| parent.depth < row.depth)
-                .map(|parent| TreeCommand::Focus(parent.path.clone()))
-        }
+        TreeKey::Space if !row.expandable => None,
+        TreeKey::Space if row.expanded => Some(TreeCommand::Collapse(row.path.clone())),
+        TreeKey::Space => Some(TreeCommand::Expand(row.path.clone())),
     }
 }
 
@@ -1000,75 +978,34 @@ mod tests {
     }
 
     #[test]
-    fn right_expands_a_collapsed_row_that_can_expand_listed_or_not() {
+    fn space_expands_a_collapsed_row_that_can_expand_listed_or_not() {
         assert_eq!(
-            key(&collapsed(keyed(), HOME), Some(HOME), TreeKey::Right),
+            key(&collapsed(keyed(), HOME), Some(HOME), TreeKey::Space),
             Some(TreeCommand::Expand(HOME.into()))
         );
         assert_eq!(
-            key(&keyed(), Some(CARD), TreeKey::Right),
+            key(&keyed(), Some(CARD), TreeKey::Space),
             Some(TreeCommand::Expand(CARD.into()))
         );
     }
 
     #[test]
-    fn right_on_an_expanded_row_enters_its_first_child() {
+    fn space_collapses_an_expanded_row_even_one_still_listing() {
         assert_eq!(
-            key(&keyed(), Some(HOME), TreeKey::Right),
-            Some(TreeCommand::Focus(PICTURES.into()))
-        );
-    }
-
-    #[test]
-    fn right_does_nothing_on_a_leaf_or_an_expanded_row_still_listing() {
-        assert_eq!(key(&keyed(), Some(EMPTY), TreeKey::Right), None);
-        assert_eq!(
-            key(&expanded(keyed(), CARD), Some(CARD), TreeKey::Right),
-            None
-        );
-    }
-
-    #[test]
-    fn left_collapses_an_expanded_row_even_one_still_listing() {
-        assert_eq!(
-            key(&keyed(), Some(PICTURES), TreeKey::Left),
+            key(&keyed(), Some(PICTURES), TreeKey::Space),
             Some(TreeCommand::Collapse(PICTURES.into()))
         );
         assert_eq!(
-            key(&expanded(keyed(), CARD), Some(CARD), TreeKey::Left),
+            key(&expanded(keyed(), CARD), Some(CARD), TreeKey::Space),
             Some(TreeCommand::Collapse(CARD.into()))
         );
     }
 
     #[test]
-    fn left_on_a_collapsed_row_or_a_leaf_goes_to_the_parent() {
+    fn space_does_nothing_on_a_leaf_expanded_or_not() {
+        assert_eq!(key(&keyed(), Some(EMPTY), TreeKey::Space), None);
         assert_eq!(
-            key(&keyed(), Some(Y2026), TreeKey::Left),
-            Some(TreeCommand::Focus(PICTURES.into()))
-        );
-        assert_eq!(
-            key(&keyed(), Some(EMPTY), TreeKey::Left),
-            Some(TreeCommand::Focus(HOME.into()))
-        );
-        assert_eq!(
-            key(&collapsed(keyed(), PICTURES), Some(PICTURES), TreeKey::Left),
-            Some(TreeCommand::Focus(HOME.into()))
-        );
-    }
-
-    #[test]
-    fn left_on_an_expanded_leaf_goes_to_the_parent() {
-        assert_eq!(
-            key(&expanded(keyed(), EMPTY), Some(EMPTY), TreeKey::Left),
-            Some(TreeCommand::Focus(HOME.into()))
-        );
-    }
-
-    #[test]
-    fn left_does_nothing_on_a_collapsed_root() {
-        assert_eq!(key(&keyed(), Some(CARD), TreeKey::Left), None);
-        assert_eq!(
-            key(&collapsed(keyed(), HOME), Some(HOME), TreeKey::Left),
+            key(&expanded(keyed(), EMPTY), Some(EMPTY), TreeKey::Space),
             None
         );
     }
@@ -1084,7 +1021,7 @@ mod tests {
     #[test]
     fn a_missing_or_stale_cursor_does_nothing() {
         let tree = collapsed(keyed(), HOME);
-        for k in [TreeKey::Left, TreeKey::Right, TreeKey::Enter] {
+        for k in [TreeKey::Space, TreeKey::Enter] {
             assert_eq!(key(&tree, None, k), None);
             assert_eq!(key(&tree, Some(Y2026), k), None);
             assert_eq!(key(&Tree::default(), None, k), None);
