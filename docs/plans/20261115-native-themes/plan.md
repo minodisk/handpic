@@ -311,3 +311,5 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
   before this lands, the `Appearance` tab belongs there (with its `.ja.md`).
 
 ## Progress
+
+- (2026-11-16) Step 1 complete
