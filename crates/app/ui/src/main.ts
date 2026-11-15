@@ -251,8 +251,6 @@ function debugLog(...args: unknown[]): void {
 interface Focus {
   point: FocusPoint | null;
   manual_focus: boolean;
-  candidate: "candidate" | "not_candidate" | "unknown";
-  eye_focus: number | null;
   eyes_ear: number | null;
   eyes: EyeState;
   eyes_closed: number | null;

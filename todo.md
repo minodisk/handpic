@@ -61,7 +61,7 @@ Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/filter.ts`, `crates/app/
 #### TODO
 
 - [ ] On Windows, use a folder with faced, face-less and JPEG frames under `D:\Photos\tests\<date>-<topic>\`. Open it for its first scan with `Low` checked. Expected: the list grows as pass 2 reaches files.
-- [ ] On Windows, after `faces-done`, step through the shown files. Expected: every one reads `AF eye in focus` under 77% in the meta pane.
+- [ ] On Windows, after `faces-done`, step through the shown files. Expected: every one reads `Eyes at full size` under 0.110 in the meta pane.
 - [ ] On Windows, check `Neutral` alone. Expected: the face-less frames and the JPEGs show.
 - [ ] On Windows, launch with a filter saved before this change with `Bad` checked. Expected: the `Face focus` section opens unchecked and nothing is hidden.
 
@@ -81,13 +81,13 @@ Files: `crates/app/ui/src/main.ts`, `crates/app/ui/index.html`, `crates/app/ui/s
 
 ### App: real-device check of the Face focus Good / Low icons and mark colors
 
-The `af-eye-good-ok-bad` feature gave each judged state its own icon and color on the strip, the filter menu and the `f` focus mark; the `af-eye-good-bad-cascade` plan (Step 1, `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`) merged `OK` into `Bad`, and the `face-focus-tiers` plan (`docs/plans/_archived/20261107-face-focus-tiers/plan.md`) then renamed the section `Face focus` with `Good` / `Neutral` / `Low`. A candidate face that is not good is now `Neutral` (white, no icon), and `Low` (gray frowning `scan-face`: Lucide's `scan-face` with its mouth turned down, by the `frown-low-icon` plan, `docs/plans/_archived/20261108-frown-low-icon/plan.md`) is a face whose in-focus probability is under about 77%. CI and the unit tests cover the state -> icon / color mapping (`stripState`, `FOCUS_MARK_ICONS`, `FOCUS_MARK_COLORS` in `focus.test.ts`) and the filter logic. Nobody has looked at the rendered result in the running app, including whether the gray `#999` reads on photos. Plan: `docs/plans/_archived/20261010-af-eye-good-ok-bad/plan.md`. The `frown-low-icon` plan's Step 1 was ticked on the unit test of `FOCUS_MARK_ICONS` and `mise run ci` only; the rendered 12 px icon was never looked at.
+The `af-eye-good-ok-bad` feature gave each judged state its own icon and color on the strip, the filter menu and the `f` focus mark; the `af-eye-good-bad-cascade` plan (Step 1, `docs/plans/_archived/20261010-af-eye-good-bad-cascade/plan.md`) merged `OK` into `Bad`, and the `face-focus-tiers` plan (`docs/plans/_archived/20261107-face-focus-tiers/plan.md`) then renamed the section `Face focus` with `Good` / `Neutral` / `Low`. A candidate face that is not good is now `Neutral` (white, no icon), and `Low` (gray frowning `scan-face`: Lucide's `scan-face` with its mouth turned down, by the `frown-low-icon` plan, `docs/plans/_archived/20261108-frown-low-icon/plan.md`) is a judged face whose full-size eye sharpness is under `LOW_BELOW` (0.110; the preview's in-focus probability under about 77% until the full-eye-sharp-only plan). CI and the unit tests cover the state -> icon / color mapping (`stripState`, `FOCUS_MARK_ICONS`, `FOCUS_MARK_COLORS` in `focus.test.ts`) and the filter logic. Nobody has looked at the rendered result in the running app, including whether the gray `#999` reads on photos. Plan: `docs/plans/_archived/20261010-af-eye-good-ok-bad/plan.md`. The `frown-low-icon` plan's Step 1 was ticked on the unit test of `FOCUS_MARK_ICONS` and `mise run ci` only; the rendered 12 px icon was never looked at.
 
 Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/strip.ts`, `crates/app/ui/src/icons.ts`, `crates/app/ui/index.html`, `CLAUDE.md`.
 
 #### TODO
 
-- [ ] On any desktop platform, open a folder with faced AF frames and wait for `analyzing N / M` to finish. Check that the strip shows a bright green smiling `scan-face` on good frames, a gray frowning `scan-face` (the same frame and eyes, the mouth turned down) on low frames (a judged face whose in-focus probability is under about 77%) and nothing on neutral ones (no face, a candidate face that is not good, a JPEG). Check that the filter menu's `Face focus` items (`Good` / `Neutral` / `Low`) show the same icons (`Neutral` an empty aligned slot). Check that the `f` mark is bright green for good, gray for low and white for neutral, with the gray readable on photos. Check that at 12 px the Low frown is told apart from the Good smile on the strip cell and on the filter menu's `Low` item; if it is not, open a follow-up that adjusts the mouth path (`M8 16s1.5-2 4-2 4 2 4 2`) or the stroke width.
+- [ ] On any desktop platform, open a folder with faced AF frames and wait for `analyzing N / M` to finish. Check that the strip shows a bright green smiling `scan-face` on good frames, a gray frowning `scan-face` (the same frame and eyes, the mouth turned down) on low frames (a judged face whose full-size eye sharpness is under 0.110) and nothing on neutral ones (no face, a candidate face that is not good, a JPEG). Check that the filter menu's `Face focus` items (`Good` / `Neutral` / `Low`) show the same icons (`Neutral` an empty aligned slot). Check that the `f` mark is bright green for good, gray for low and white for neutral, with the gray readable on photos. Check that at 12 px the Low frown is told apart from the Good smile on the strip cell and on the filter menu's `Low` item; if it is not, open a follow-up that adjusts the mouth path (`M8 16s1.5-2 4-2 4 2 4 2`) or the stroke width.
 - [ ] Update the other `CLAUDE.md` Layout sentences left stale by `docs/plans/_archived/20261010-af-eye-good-bad-cascade/`: add "else the largest confident face on the whole preview when there is no trusted AF point" to the `run_faces_scan`, `eyes_of` and `src/candidate.rs` sentences; make the `src/focus.ts` sentence name the `afEyeState` helper (Good / Neutral / Low) and drop the sharpness displays; and make the `src/sharpness.rs` sentence say the score now feeds the MCP companion only. Done when a PR edits those sentences.
 
 ### App: real-device check of the Face focus judgment on frames with no AF point
@@ -100,7 +100,7 @@ Files: `crates/app/ui/src/focus.ts`, `crates/app/ui/src/main.ts`, `crates/backen
 
 #### TODO
 
-- [ ] On Windows or macOS, open `D:\photos\2026\2026-02-01` in a build with this change and let the second pass re-run (`FACES_VERSION` 9). Check that Leica DNGs with a face get the strip's `scan-face` (good) or `scan` (low) icon although `f` draws no crosshair, or no icon when the face is neutral; that the filter's `Face focus` `Good` / `Low` items list them; that the meta pane shows `AF eye in focus`, `Eyes`, `Yaw`, `Pitch` and `Roll` for them from the stored values, matching the on-demand mesh overlay; and that a DNG with no face stays without an icon and under `Neutral`.
+- [ ] On Windows or macOS, open `D:\photos\2026\2026-02-01` in a build with this change and let the second pass re-run (`FACES_VERSION` 9). Check that Leica DNGs with a face get the strip's `scan-face` (good) or `scan` (low) icon although `f` draws no crosshair, or no icon when the face is neutral; that the filter's `Face focus` `Good` / `Low` items list them; that the meta pane shows `Eyes at full size` (when measured), `Eyes`, `Yaw`, `Pitch` and `Roll` for them from the stored values, matching the on-demand mesh overlay; and that a DNG with no face stays without an icon and under `Neutral`.
 - [ ] On Windows or macOS, repeat on a manual-focus ARW with a face (e.g. `D:\photos\samples\ARW\ILCE-6400_DSC00405.ARW` copied into a test folder under `D:\Photos\tests\`): same results, and still no crosshair.
 
 ### App: real-device check of the removed sharpness displays and the new Compare pairing
@@ -168,29 +168,19 @@ labels yet, so they were not run.
 
 #### TODO
 
-- [ ] Once `2026-08-29-focus-sample` and `2026-09-13-b-focus-sample` carry XMP
-      pick/reject labels, run
-      `riffle-cli candidates D:\Photos\tests\2026-08-29-focus-sample D:\Photos\tests\2026-09-13-b-focus-sample`
-      and record AUC / precision / coverage. The cue now scores the mesh
-      eye regions (`docs/plans/_archived/20261008-mesh-eye-focus/`), whose
-      gain over the window rests on few off frames (9 held-out off frames
-      among the meshed ones), so also run that plan's `fit.py` window /
-      region comparison on them, and the eyelid contour mask comparison of
-      `docs/plans/_archived/20261008-mesh-eye-mask/` (not adopted on the
-      held-out set, but it ranked the training set's meshed frames better:
-      meshed AUC 0.974 against the window's 0.951 on the same frames, where
-      the rectangle reached 0.948 against the window's 0.946). Files: `crates/cli/src/main.rs`,
-      `crates/core/src/candidate.rs`,
-      `docs/plans/_archived/20261008-mesh-eye-focus/fit.py`,
-      `docs/plans/_archived/20261008-mesh-eye-mask/fit.py`.
+- [x] Moot: the full-eye-sharp-only plan
+      (`docs/plans/20261115-full-eye-sharp-only/`) removed the combined
+      score and the CLI subcommand that validated it. Its replacement,
+      `full_eye_sharp`, was checked on held-out folders in that plan
+      (`experiment.md`).
 
 ### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
 
 Step 3 of `docs/plans/_archived/20260925-focus-candidate/plan.md` asked for the
 `scan extract` / `scan faces` log lines of one app open of the 2134-file
 Sony folder to be recorded in `docs/humans/performance.md` "Focus candidate pass",
-alongside the `riffle-cli scan` / `riffle-cli candidates` numbers already
-there. The implementing agent could not drive the GUI, so only the CLI
+alongside the CLI numbers already there (`riffle-cli scan` and a CLI
+subcommand removed since). The implementing agent could not drive the GUI, so only the CLI
 numbers are recorded; `docs/humans/performance.md` says so in a note under the
 section.
 
@@ -698,7 +688,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       on 68%, the gap at the frontal / oblique boundary. See
       `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
       "Closed-eyes judgment on demand (Windows 11)".
-- [ ] Derive the good-photo rule in the backend, next to `candidate` in
+- [ ] Derive the good-photo rule in the backend, in
       `crates/backend/src/index.rs`, so the MCP `get_view` tool can carry it.
       The rule lives only in `crates/app/ui/src/focus.ts` (`photoTier`) and
       `get_view` says nothing about it. Done when the index derives the tier
@@ -713,11 +703,9 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       random are labeled blind (`ok`, `miss` with `blur` / `focus` /
       `closed`, `turned`, `unsure`; the agent first, the user's review
       final) and the precision and coverage of the mark at its cuts are
-      written with a Wilson interval, with the focus candidate as the
-      baseline (the procedure is in `docs/plans/20261008-burst-keep-score/plan.md` Step 5). Files: the plan
-      folder of that work, `crates/app/ui/src/focus.ts` if the cuts move. Include some rated frames with eye_focus between 0.772 and 0.99 (0.90
-      cut) that clear the other cuts: GOOD_EYE_FOCUS 0.90 has no held-out
-      check, because batch 1 has none in that range.
+      written with a Wilson interval, with `full_eye_sharp >= SOFT_BELOW`
+      alone as the baseline (the procedure is in `docs/plans/20261008-burst-keep-score/plan.md` Step 5). Files: the plan
+      folder of that work, `crates/app/ui/src/focus.ts` if the cuts move.
 - [ ] Re-check the good-photo cuts after the closed-eyes and head-pose label
       reviews (the items in the sections below). If the user's review
       moves `EYES_CLOSED_EAR` in `crates/core/src/eyes.rs` or changes the
@@ -735,7 +723,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       without a point, so the same cuts mark it. The check of those cuts on
       starred no-AF frames is the next item.
 - [ ] Check the good-photo cuts on starred frames with no trusted AF point.
-      The cuts in `crates/app/ui/src/focus.ts` (`GOOD_EYE_FOCUS`,
+      The cuts in `crates/app/ui/src/focus.ts` (`GOOD_FULL_EYE_SHARP`,
       `GOOD_EYE_EAR`, `GOOD_MAX_YAW`, `GOOD_MAX_PITCH`, `MAX_EYE_OFFSET`,
       `MIN_EDGE_GAP`) were fitted on AF faces only; since
       `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2 they also judge
@@ -851,11 +839,11 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       the AF point. Consider a size or aspect filter on crop boxes. Files:
       `crates/core/src/faces.rs` (`detect_around`),
       `crates/core/src/candidate.rs`.
-- [ ] AF on a person in the background gives a sharp face and a false focus
-      candidate: the cue says the face nearest the AF point is sharp, not that
-      it is the subject. Files: `crates/core/src/candidate.rs`.
+- [ ] AF on a person in the background gives a sharp face and a false Good:
+      the measure says the eyes of the face nearest the AF point are sharp,
+      not that it is the subject. Files: `crates/core/src/candidate.rs`.
 - [ ] Back-of-head and upturned faces find no face in the crop, so their
-      focus candidate state is unknown (white), even when the camera tracked
+      Face focus state is Neutral (white), even when the camera tracked
       them. Files: `crates/core/src/candidate.rs`, `crates/core/src/faces.rs`.
 
 Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/backend/src/index.rs`, `crates/app/ui/src/burst.ts`.
@@ -878,7 +866,7 @@ Files: `crates/app/src/commands.rs` (`eyes_of`, `read_eyes`), `crates/app/ui/src
 
 #### TODO
 
-- [ ] On Windows 11, in a `mise run dev` build with Settings > `Timing logs` on, open `D:\photos\2026\2026-09-19` and wait for the scan to finish. Select `_DSC1889.ARW` or `_DSC1890.ARW` (labeled closed): the Analysis group shows `Eyes  Closed · 0` after `AF eye in focus`. Select `_DSC1894.ARW`: `Eyes  Open · NN`. Select `_DSC1897.ARW` (no face judged): no `Eyes` row.
+- [ ] On Windows 11, in a `mise run dev` build with Settings > `Timing logs` on, open `D:\photos\2026\2026-09-19` and wait for the scan to finish. Select `_DSC1889.ARW` or `_DSC1890.ARW` (labeled closed): the Analysis group shows `Eyes  Closed · 0` after `Eyes at full size`. Select `_DSC1894.ARW`: `Eyes  Open · NN`. Select `_DSC1897.ARW` (no face judged): no `Eyes` row.
 - [ ] Open `D:\photos\2026\2026-02-01`, let the second pass re-run (`FACES_VERSION` 9) and select `L1005161.DNG` (closed) and `L1005155.DNG` (open): the `Eyes` row shows the value pass 2 stored for the largest confident face (L1005161 `Closed · 0`, L1005155 `Open · NN`), and the strip icon and the filter's `Face focus` state follow the same face.
 - [ ] Hold the page key through 30 files of the ARW folder: no row of a previous file stays on a later one, and the preview keeps pace with no added stall against the previous build.
 - [ ] With the folder idle, read the `eyes total=... read=... decode=... detect=... model=... ipc=...` lines in `Riffle.log` for a few ARWs with an AF point: the row should appear within ~150 ms of the preview. Add the numbers (and the preview-to-row time) to `docs/humans/performance.md` "Closed-eyes judgment on demand (Windows 11)" and `performance.ja.md`. Since `face-mesh-overlay` (`docs/plans/_archived/20261007-face-mesh-overlay/plan.md`) the response also carries 478 mesh points (~8-10 KB of JSON): confirm the stages still add up to about `total` and `ipc=` stays within a few ms of the figure before that change (not measured; `crates/app/src/commands.rs` `read_eyes`, `crates/app/ui/src/main.ts` `requestEyes`).
@@ -2113,7 +2101,7 @@ The `bad-photo-labels` Decision found no usable removal filter. The base rate of
 
 The `discard-labels` feature later measured a different question, "OK to discard?" with "hide / sort last" semantics, on 600 blind labels (plan: `docs/plans/_archived/20261018-discard-labels/plan.md`, Decision). 48.45% [42.03, 55.11] of the frames are OK to discard, so the strict 5.52% base rate is the narrow subset. No `G0` cut is usable: q5 `RR` 17.3% [11.3, 24.0] against the 15% bar, q10 23.7%, q20 27.9%. A strict-bad rate sits below the discard rate in every `G0` band, so the two labels rank the bands alike. A cue shown to the human (a discard candidate marked, not cut) was not measured as such. The Decision found automation bias: the unblinded `RR@5` was about 1.4% (1 of 71) against 17.3% blind. A cue shown to the human therefore needs its own blind measurement.
 
-The `discard-retarget` feature then tried to make a better removal cut on the same 600 blind labels (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision). A 2x2 of discard target and burst-relative features gave no usable cut under either bar. `G0+B` is not better than `G0` (`DP` -1.9 [-6.5, +2.9] at q5), and `D0` / `D0+B` have a weighted `RR` of 32.7-42.7% and a higher `PL`. `eye_focus` alone is still the best single score by AUC (0.777). So a cue shown to the human is still the only unmeasured use, and the retarget gives no evidence that a better model is nearby.
+The `discard-retarget` feature then tried to make a better removal cut on the same 600 blind labels (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision). A 2x2 of discard target and burst-relative features gave no usable cut under either bar. `G0+B` is not better than `G0` (`DP` -1.9 [-6.5, +2.9] at q5), and `D0` / `D0+B` have a weighted `RR` of 32.7-42.7% and a higher `PL`. The preview's in-focus probability (removed since by the full-eye-sharp-only plan) alone was still the best single score by AUC (0.777). So a cue shown to the human is still the only unmeasured use, and the retarget gives no evidence that a better model is nearby.
 
 #### TODO
 
@@ -3305,6 +3293,6 @@ Files: `crates/native/src/main.rs` (`tree_key_down`), `crates/native/src/treekey
 
 #### TODO
 
-- [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run native:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, with the same labels and value strings as the Tauri app's pane for the same file (compare the shared rows; the Tauri pane keeps `AF eye in focus` and names `Eyes at full size` until the full-eye-sharp-only plan's Step 4). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
+- [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run native:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, with the same labels and value strings as the Tauri app's pane for the same file (compare the shared rows; the frozen Tauri pane names `Eye focus` `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
 - [ ] On Windows, a file with no analysis value (a JPEG without an AF point, or a RAW pass 2 has not reached) shows no `Analysis` group (a JPEG shows at most `Sharpness`). A file hidden by a refilter shows neither the `Analysis` group nor the AF rows. A file whose preview failed still shows its `Analysis` group and a `Maker note` group holding only the AF rows. Turning the `f` overlay on or off does not change the `Analysis` rows (they never use the on-demand eyes judgment).
 - [ ] On Windows, open a second folder while a file of the first is on screen. Expected: until the new folder's first preview arrives, the pane shows no rows from the index (not another file's), then the new file's rows.

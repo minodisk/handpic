@@ -1077,17 +1077,15 @@ retried.
   until the rescan the bump forces.
 - The second pass has its own version, `FACES_VERSION`, stored as
   `files.faces_extractor`: bump it, not `EXTRACTOR_VERSION`, on a change to
-  what `riffle_core::scan::extract_analysis` produces, the focus candidate cue
-  (the in-focus probability's coefficients or its threshold, the mesh eye
-  regions and the face mesh, the eye window, the detector:
-  `crates/core/src/candidate.rs`, `eyes.rs`, `faces.rs`) or the sharpness
+  what `riffle_core::scan::extract_analysis` produces, the face cue (the face
+  choice, the face mesh, the detector: `crates/core/src/candidate.rs`,
+  `eyes.rs`, `faces.rs`) or the sharpness
   score (`sharpness::score_preview`, `crates/core/src/sharpness.rs`, or what
   `extract_analysis` feeds it) or the full-size eye sharpness
   (`full_eye_sharp`: `crates/core/src/fullsharp.rs`, its `SOFT_BELOW`, the
   eye crop size, or the full-size read it makes in `scan.rs`). Only the second pass then re-runs; thumbnails
   are kept. The column and the constant keep their names although they now
-  cover the score too; a change to the columns it fills (`files.eye_focus`,
-  `files.sharpness`, `files.full_eye_sharp`, and `files.eyes_ear` with `files.pose_yaw` /
+  cover the score too; a change to the columns it fills (`files.sharpness`, `files.full_eye_sharp`, and `files.eyes_ear` with `files.pose_yaw` /
   `pose_pitch` / `pose_roll`, the EAR of the more closed eye and the head
   pose from the mesh the cue already runs, and `files.eye_offset` /
   `files.edge_gap`, how well that mesh sits on the face) is a
@@ -1120,7 +1118,8 @@ retried.
   `full_eye_sharp` alone since that plan's Step 3: Good at or above
   `SOFT_BELOW` with the other cuts, Low under `LOW_BELOW` (0.110, in
   `fullsharp.rs` next to `SOFT_BELOW`), Neutral otherwise, a missing value
-  included; `candidate` and `eye_focus` no longer reach the tier. A
+  included. Step 5 of that plan removed the preview's in-focus probability
+  and its candidate state from the core, the index and the types. A
   new field of `faces-progress` must also be copied in `applyFaceReady`
   (`focus.ts`), which copies field by field, or a frame scanned while on screen
   stays Good until the folder reloads. See
@@ -1156,7 +1155,8 @@ so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
 `main.ts` plumbing. The rule needs the stored `full_eye_sharp`, `eyes_ear`,
 `pose`, `eye_offset` and `edge_gap`; `afEyeState` makes Low from
 `full_eye_sharp` too, on the consumer's side (`focus.ts`, the native
-`mark.rs`), no longer from Rust's `not_candidate`.
+`mark.rs`), no longer from the preview's in-focus probability, which the
+full-eye-sharp-only plan removed.
 
 - The user's star scale: 1 = no subject, 2 = likely rejected, 3 and up =
   pass. The mark can say "not a miss" (the frames it marks were 93% 3+ stars,
@@ -1171,8 +1171,8 @@ so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
   mesh crop flags whole faces near the edge (only hair outside).
 - The EAR is inflated on a turned, foreshortened eye. That is why the yaw cut
   is tight (|yaw| <= 35, tightened from 60), not loose.
-- The "not a miss" figures above were measured with the preview's
-  `eye_focus` cut (`GOOD_EYE_FOCUS` 0.90) in the rule. The
+- The "not a miss" figures above were measured with the preview's in-focus
+  probability cut (0.90, since removed) in the rule. The
   full-eye-sharp-only plan replaced that cut with `full_eye_sharp >=
   SOFT_BELOW` and Low with `full_eye_sharp < LOW_BELOW`; its evidence is in
   `docs/plans/20261115-full-eye-sharp-only/` (`experiment.md`,
@@ -1187,33 +1187,26 @@ so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
 - Source: `docs/plans/_archived/20261008-burst-keep-score/learnings.md`,
   Steps 3, 5, 5b, 7.
 
-### A learned discard score over the stored technical features did not beat `eye_focus` (Hit)
+### A learned discard score over the stored technical features did not hold on fresh folders (Hit)
 
-The plan trained scores (`LR/T`: logistic regression over `eye_focus`, sharpness,
-EAR and pose, with and without the `af-whole` fill) on the user's 1,200 blind
-"fine to sort last" labels, then confirmed the winner on 600 fresh labels
-from six unseen folders. `LR/T` won the exploration and failed the
-confirmation: AUC - `eye_focus` -0.013 [-0.048, +0.023], with the `PL <= 5%`
-bar failing at q10 and the model-contribution bar failing at q5 and q10.
+The plan trained scores (`LR/T`: logistic regression over the preview's
+in-focus probability `ef`, sharpness, EAR and pose, with and without the
+`af-whole` fill) on the user's 1,200 blind "fine to sort last" labels, then
+confirmed the winner on 600 fresh labels from six unseen folders. `LR/T` won
+the exploration and failed the confirmation: AUC - `ef` -0.013
+[-0.048, +0.023], with the `PL <= 5%` bar failing at q10 and the
+model-contribution bar failing at q5 and q10. The full-eye-sharp-only plan
+later removed `ef` from the app, so the plan's readings of `ef` itself (its
+q5 `PL`, the frames without it) are history.
 
-- `eye_focus` stays the only discard-leaning cue and no app change was made. Do
-  not retrain a model on `eye_focus`, sharpness, EAR and pose to rank frames
-  for discard. Fitting looked better than `eye_focus` in the exploration and
-  did not hold on fresh folders.
-- At a per-folder q5 cut (about 5% of a folder sorted last) `eye_focus`
-  itself keeps `PL` near 4% on the fresh labels (picks lost: 4.07%). Whether
-  that is shippable as-is is undecided. The strata were cut for `LR/T`, so it
-  is only a reading. Deciding it needs its own plan with strata cut for that
-  score and pre-registered bars.
+- Do not retrain a model on the stored technical features (sharpness, EAR,
+  pose) to rank frames for discard. Fitting looked better in the exploration
+  and did not hold on fresh folders.
 - Judge a sort-last or discard cue at q5. At q10 every candidate lost more
   than 5% of the picks. The strata and bars are in the plan. A candidate's
   bar 5 (AUC against `ef`) is the only one that measures the model's own
   contribution. A clause that `ef` also meets (for example "close") says
   nothing about the model.
-- Frames with no `eye_focus` (about 9-12%) are a separate case. Today they sort
-  by a constant. An `af-whole` fill was level on all frames (+0.002) and
-  showed a gain only on the 201 missing-face fresh labels (+0.277
-  [+0.131, +0.407]); that reading was not pre-registered.
 - Source: `docs/plans/_archived/20261023-discard-model/learnings.md`, Steps 6
   and 7 (Decision); `discardmodel.md`, "Results of the confirmation".
 

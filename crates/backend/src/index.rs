@@ -13,7 +13,6 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
 use riffle_core::arw::{Rational, Shot};
-use riffle_core::candidate::{candidate, FocusCandidate};
 use riffle_core::embed::{Model, EMBED_VERSION};
 use riffle_core::eyes::{EyeState, Eyes};
 use riffle_core::pose::Pose;
@@ -71,11 +70,9 @@ use crate::exif::{exif, Exif};
 /// at (`0` = not yet); a v10 to v14 database gains them in place with an
 /// `ALTER TABLE`, a v14 one also drops `face_catch`, and keeps `files`,
 /// `ratings` and `folders`. v16 replaced `files.eye_sharpness` with
-/// `files.eye_focus`, the AF eye's in-focus probability (`NULL` = none); a
-/// v10 to v14 database gains it in place next to `faces_extractor`, a v15
-/// one drops `eye_sharpness` and adds `eye_focus` (not a rename, so a stale
-/// Laplacian variance is never read as a probability), and both keep
-/// `files`, `ratings` and `folders`. v17 added `folders.last_viewed`, the
+/// `files.eye_focus`, the AF eye's in-focus probability, which v25 dropped; a
+/// v15 database drops `eye_sharpness` in place and keeps `files`, `ratings`
+/// and `folders`. v17 added `folders.last_viewed`, the
 /// file that was current in the strip when the folder was last viewed
 /// (`NULL` = none); a v8 to v16 database gains it in place with an
 /// `ALTER TABLE` and keeps `files`, `ratings` and `folders`. v18 added
@@ -97,8 +94,11 @@ use crate::exif::{exif, Exif};
 /// place with an `ALTER TABLE` and keeps the rest. v24 added
 /// `files.full_eye_sharp`, the sharpness of the AF face's eyes on the full
 /// JPEG (`NULL` = none); a v10 to v23 database gains it in place with an
-/// `ALTER TABLE` and keeps `files`, `ratings` and `folders`.
-const SCHEMA_VERSION: i64 = 24;
+/// `ALTER TABLE` and keeps `files`, `ratings` and `folders`. v25 dropped
+/// `files.eye_focus`, `full_eye_sharp` being the only eye-focus measure; a
+/// v16 to v24 database drops it in place with an `ALTER TABLE`, an older one
+/// never gains it, and both keep `files`, `ratings` and `folders`.
+const SCHEMA_VERSION: i64 = 25;
 
 /// The version of what `riffle_core::scan::extract` produces, stored on every
 /// `files` row. Bump it on any change to that output: ARW/DNG/NEF/CR3/RAF/ORF parsing
@@ -131,17 +131,18 @@ const SCHEMA_VERSION: i64 = 24;
 const EXTRACTOR_VERSION: i64 = 13;
 
 /// The version of what the second pass, `riffle_core::scan::extract_analysis`,
-/// produces, stored on every `files` row as `faces_extractor` next to
-/// `eye_focus` and `sharpness`: the focus candidate cue and the sharpness
-/// score. Bump it on any change to the cue's computation (the threshold, the
-/// mesh eye regions, the eye window, the face mesh, the detector:
-/// `crates/core/src/candidate.rs`, `eyes.rs`, `faces.rs`) or to
+/// produces, stored on every `files` row as `faces_extractor` next to its
+/// values: the face cue's (the EAR, the pose, the eye offset, the edge gap),
+/// the full-size eye sharpness and the sharpness score. Bump it on any change
+/// to the cue's computation (the face choice, the face mesh, the detector:
+/// `crates/core/src/candidate.rs`, `eyes.rs`, `faces.rs`), to the full-size
+/// measure (`fullsharp.rs`) or to
 /// the score's (`sharpness::score_preview`, or what `extract_analysis` feeds
 /// it); the second pass then re-runs on every row without redoing the first. `2`
-/// re-runs pass 2 after `Cue::eye_focus` switched from the Laplacian
+/// re-runs pass 2 after the cue's eye score switched from the Laplacian
 /// variance to the combined in-focus probability, so `eye_sharpness` holds
 /// probabilities everywhere instead of a mix of old and new scales. `3`
-/// re-runs it after the probability moved to its own `eye_focus` column. It
+/// re-runs it after the probability moved to its own column. It
 /// stayed `3` when the score moved here from the first pass: a row whose score
 /// the first pass wrote keeps it, and one the second pass has not reached yet
 /// gets the same score from it. `4` re-runs it after the whole-image face
@@ -165,7 +166,9 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// `full_eye_sharp` from a second read, of the full JPEG, on candidates. `11`
 /// fills it for every frame whose cue judged a face, on the full JPEG when the
 /// file holds one larger than the preview (and past `fullsharp`'s `MIN_SCALE`);
-/// a file without one stays `None`.
+/// a file without one stays `None`. It stayed `11` when the in-focus
+/// probability and its eye window went (the full-eye-sharp-only plan): the
+/// values left are computed as before.
 pub const FACES_VERSION: i64 = 11;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
@@ -292,15 +295,6 @@ fn flag_from_code(code: i64) -> Flag {
     }
 }
 
-/// The name the frontend uses for a focus candidate state.
-fn candidate_name(state: FocusCandidate) -> &'static str {
-    match state {
-        FocusCandidate::Candidate => "candidate",
-        FocusCandidate::NotCandidate => "not_candidate",
-        FocusCandidate::Unknown => "unknown",
-    }
-}
-
 fn serialize_eyes<S: serde::Serializer>(state: &Option<EyeState>, s: S) -> Result<S::Ok, S::Error> {
     s.serialize_str(eyes_name(*state))
 }
@@ -312,13 +306,6 @@ fn eyes_name(state: Option<EyeState>) -> &'static str {
         Some(EyeState::Closed) => "closed",
         None => "unknown",
     }
-}
-
-fn serialize_candidate<S: serde::Serializer>(
-    state: &FocusCandidate,
-    s: S,
-) -> Result<S::Ok, S::Error> {
-    s.serialize_str(candidate_name(*state))
 }
 
 /// The AF point the camera recorded, in sensor coordinates.
@@ -339,12 +326,6 @@ pub struct FocusPoint {
 pub struct Focus {
     pub point: Option<FocusPoint>,
     pub manual_focus: bool,
-    /// The judged face's in-focus probability. `None` when no face was
-    /// judged, or before the second pass has run.
-    pub eye_focus: Option<f64>,
-    /// Derived from `eye_focus`, not stored.
-    #[serde(serialize_with = "serialize_candidate")]
-    pub candidate: FocusCandidate,
     #[serde(flatten)]
     pub eyes: StoredEyes,
 }
@@ -431,9 +412,6 @@ pub struct ScanSummary {
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct FaceReady {
     pub path: String,
-    pub eye_focus: Option<f64>,
-    #[serde(serialize_with = "serialize_candidate")]
-    pub candidate: FocusCandidate,
     pub sharpness: Option<f64>,
     #[serde(flatten)]
     pub eyes: StoredEyes,
@@ -443,7 +421,6 @@ pub struct FaceReady {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FacesRow {
     pub path: String,
-    pub eye_focus: Option<f64>,
     pub sharpness: Option<f64>,
     pub eyes_ear: Option<f64>,
     pub pose: Option<EyesPose>,
@@ -491,7 +468,7 @@ const INDEXED_FILE: &str = "SELECT path, orientation, capture_time, subsec,
             COALESCE(ratings.flag, 0), error,
             make, model, lens, f_num, f_den, f_estimated, exposure_num,
             exposure_den, iso, focal_num, focal_den, ratings.label,
-            sharpness, frame_w, frame_h, manual_focus, eye_focus,
+            sharpness, frame_w, frame_h, manual_focus,
             eyes_ear, pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap,
             full_eye_sharp
      FROM files LEFT JOIN ratings USING (path)";
@@ -512,17 +489,14 @@ fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
         _ => None,
     };
     let focus = if point.is_some() || is_raw_file(Path::new(&path)) {
-        let eye_focus = r.get(29)?;
-        let pose = match (r.get(31)?, r.get(32)?, r.get(33)?) {
+        let pose = match (r.get(30)?, r.get(31)?, r.get(32)?) {
             (Some(yaw), Some(pitch), Some(roll)) => Some(EyesPose { yaw, pitch, roll }),
             _ => None,
         };
         Some(Focus {
             point,
             manual_focus: r.get(28)?,
-            eye_focus,
-            candidate: candidate(eye_focus),
-            eyes: StoredEyes::new(r.get(30)?, pose, r.get(34)?, r.get(35)?, r.get(36)?),
+            eyes: StoredEyes::new(r.get(29)?, pose, r.get(33)?, r.get(34)?, r.get(35)?),
         })
     } else {
         None
@@ -674,6 +648,8 @@ impl Index {
             20,
             21,
             22,
+            23,
+            24,
             SCHEMA_VERSION,
         ]
         .contains(&version)
@@ -716,7 +692,6 @@ impl Index {
                      frame_w INTEGER,
                      frame_h INTEGER,
                      manual_focus INTEGER NOT NULL DEFAULT 0,
-                     eye_focus REAL,
                      faces_extractor INTEGER NOT NULL DEFAULT 0,
                      eyes_ear REAL,
                      pose_yaw REAL,
@@ -836,8 +811,7 @@ impl Index {
         }
         if (10..15).contains(&version) {
             tx.execute_batch(
-                "ALTER TABLE files ADD COLUMN eye_focus REAL;
-                 ALTER TABLE files ADD COLUMN faces_extractor INTEGER NOT NULL DEFAULT 0;",
+                "ALTER TABLE files ADD COLUMN faces_extractor INTEGER NOT NULL DEFAULT 0;",
             )
             .map_err(|e| e.to_string())?;
         }
@@ -846,11 +820,8 @@ impl Index {
                 .map_err(|e| e.to_string())?;
         }
         if version == 15 {
-            tx.execute_batch(
-                "ALTER TABLE files DROP COLUMN eye_sharpness;
-                 ALTER TABLE files ADD COLUMN eye_focus REAL;",
-            )
-            .map_err(|e| e.to_string())?;
+            tx.execute_batch("ALTER TABLE files DROP COLUMN eye_sharpness;")
+                .map_err(|e| e.to_string())?;
         }
         // Below v8 `folders` was just created with the column.
         if (8..17).contains(&version) {
@@ -883,6 +854,10 @@ impl Index {
         }
         if version == 22 {
             tx.execute_batch("ALTER TABLE folders DROP COLUMN culling_manual;")
+                .map_err(|e| e.to_string())?;
+        }
+        if (16..25).contains(&version) {
+            tx.execute_batch("ALTER TABLE files DROP COLUMN eye_focus;")
                 .map_err(|e| e.to_string())?;
         }
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)
@@ -1155,10 +1130,10 @@ impl Index {
                      capture_time, subsec, focus_w, focus_h, focus_x, focus_y, thumb, error,
                      make, model, lens, f_num, f_den, f_estimated, exposure_num,
                      exposure_den, iso, focal_num, focal_den, sharpness, extractor,
-                     frame_w, frame_h, manual_focus, eye_focus, faces_extractor)
+                     frame_w, frame_h, manual_focus, faces_extractor)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
                      ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, NULL, ?25,
-                     ?26, ?27, ?28, NULL, 0)",
+                     ?26, ?27, ?28, 0)",
                 params![
                     path,
                     dir,
@@ -1199,14 +1174,14 @@ impl Index {
     /// order like `entries`. Rows it has nothing to compute for (a failed
     /// extraction, or a JPEG file, told by the extension as
     /// `riffle_core::scan::is_jpeg_file` does; SQLite's `LIKE` ignores ASCII
-    /// case) are marked done at `FACES_VERSION` with no in-focus probability
-    /// and no score first, in the same transaction. A RAW without a trusted AF
+    /// case) are marked done at `FACES_VERSION` with no second-pass values
+    /// first, in the same transaction. A RAW without a trusted AF
     /// point is listed: its cue judges the largest confident face of the whole
     /// preview, and it gets a score.
     pub fn faces_todo(&mut self, dir: &str) -> Result<Vec<String>, String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         tx.execute(
-            "UPDATE files SET faces_extractor = ?2, eye_focus = NULL, sharpness = NULL,
+            "UPDATE files SET faces_extractor = ?2, sharpness = NULL,
                  eyes_ear = NULL, pose_yaw = NULL, pose_pitch = NULL, pose_roll = NULL,
                  eye_offset = NULL, edge_gap = NULL, full_eye_sharp = NULL
              WHERE dir = ?1 AND faces_extractor != ?2
@@ -1229,20 +1204,19 @@ impl Index {
         Ok(paths)
     }
 
-    /// Store the in-focus probability, the sharpness score, the EAR, the head
-    /// pose, the eye offset, the edge gap and the full-size eye sharpness of
-    /// each path, `None` for none, at `FACES_VERSION`, in a single transaction.
+    /// Store the sharpness score, the EAR, the head pose, the eye offset, the
+    /// edge gap and the full-size eye sharpness of each path, `None` for none,
+    /// at `FACES_VERSION`, in a single transaction.
     pub fn write_faces(&mut self, rows: &[FacesRow]) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         for row in rows {
             tx.execute(
-                "UPDATE files SET eye_focus = ?2, sharpness = ?3, faces_extractor = ?4,
-                     eyes_ear = ?5, pose_yaw = ?6, pose_pitch = ?7, pose_roll = ?8,
-                     eye_offset = ?9, edge_gap = ?10, full_eye_sharp = ?11
+                "UPDATE files SET sharpness = ?2, faces_extractor = ?3,
+                     eyes_ear = ?4, pose_yaw = ?5, pose_pitch = ?6, pose_roll = ?7,
+                     eye_offset = ?8, edge_gap = ?9, full_eye_sharp = ?10
                  WHERE path = ?1",
                 params![
                     row.path,
-                    row.eye_focus,
                     row.sharpness,
                     FACES_VERSION,
                     row.eyes_ear,
@@ -2095,7 +2069,7 @@ pub type ParsedSidecar = (String, Option<i8>, Flag, Option<String>, i64, i64, bo
 pub type DirtyRow = (String, Option<i8>, Flag, Option<String>, bool);
 
 /// Extract `files` (the first pass: thumbnails and metadata; the sharpness
-/// score and the focus candidate cue are `run_faces_scan`'s) and write them
+/// score and the face cue are `run_faces_scan`'s) and write them
 /// into `index` in batched transactions, reporting `(done, total, ready)` through `progress` at most every
 /// `progress_interval` (`PROGRESS_INTERVAL` in the app), always on the first
 /// file and once more after the trailing flush. `ready` holds the paths whose
@@ -2218,13 +2192,13 @@ where
 }
 
 /// Run the second pass (`extract_analysis`) over `paths` and store each
-/// in-focus probability and sharpness score in `index`, the way `run_scan`
-/// runs the first:
+/// file's cue values, full-size eye sharpness and sharpness score in `index`,
+/// the way `run_scan` runs the first:
 /// `BATCH`-sized transactions through `write_faces`, `progress(done, total,
 /// ready)` at most every `progress_interval`, always on the first file and once more after the
 /// trailing flush, where `ready` holds the files a batch committed since the
 /// previous notification. A file `extract_analysis` could not read counts as an
-/// error and is stored with no probability and no score at `FACES_VERSION`, so
+/// error and is stored with no values at `FACES_VERSION`, so
 /// it is not
 /// retried until that version moves. A file abandoned mid-pipeline by
 /// `cancel` is neither written nor counted, the way `run_scan` treats it, so
@@ -2261,7 +2235,6 @@ where
             .iter()
             .map(|(path, analysis, _)| FacesRow {
                 path: path.clone(),
-                eye_focus: analysis.cue.eye_focus,
                 sharpness: analysis.sharpness,
                 eyes_ear: analysis.cue.eyes_ear,
                 pose: analysis.cue.pose.map(EyesPose::from),
@@ -2285,9 +2258,7 @@ where
                 row.edge_gap,
                 row.full_eye_sharp,
             ),
-            candidate: candidate(row.eye_focus),
             path: row.path,
-            eye_focus: row.eye_focus,
             sharpness: row.sharpness,
         }));
     };
@@ -2477,7 +2448,6 @@ where
 pub(crate) mod tests {
     use super::*;
     use riffle_core::arw::{FocusFrame, FocusLocation, Shot};
-    use riffle_core::candidate::candidate_probability;
     use riffle_core::eyes::{closed_probability, EYES_CLOSED_EAR};
     use std::collections::HashSet;
 
@@ -2731,7 +2701,6 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN frame_w;
                      ALTER TABLE files DROP COLUMN frame_h;
                      ALTER TABLE files DROP COLUMN manual_focus;
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files DROP COLUMN faces_extractor;
                      INSERT INTO ratings (path, dir, rating, pick, dirty, xmp_size, xmp_mtime_ns) VALUES
                          ('/rejected.ARW', 'd', -1, 0, 1, 10, 20),
@@ -2816,8 +2785,8 @@ pub(crate) mod tests {
             .all(|e| e.sharpness.is_none()));
         index
             .write_faces(&[
-                faces_row(&a.path.to_string_lossy(), None, Some(123.5)),
-                faces_row(&b.path.to_string_lossy(), None, None),
+                faces_row(&a.path.to_string_lossy(), Some(123.5)),
+                faces_row(&b.path.to_string_lossy(), None),
             ])
             .unwrap();
         let entries = index.entries("d").unwrap();
@@ -2924,7 +2893,6 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN frame_w;
                      ALTER TABLE files DROP COLUMN frame_h;
                      ALTER TABLE files DROP COLUMN manual_focus;
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files DROP COLUMN faces_extractor;
                      ALTER TABLE files DROP COLUMN eyes_ear;
                      ALTER TABLE files DROP COLUMN pose_yaw;
@@ -2973,7 +2941,6 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN frame_w;
                      ALTER TABLE files DROP COLUMN frame_h;
                      ALTER TABLE files DROP COLUMN manual_focus;
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files DROP COLUMN faces_extractor;
                      ALTER TABLE files DROP COLUMN eyes_ear;
                      ALTER TABLE files DROP COLUMN pose_yaw;
@@ -3053,7 +3020,7 @@ pub(crate) mod tests {
         let json = serde_json::to_value(plain).unwrap();
         assert_eq!(json["point"]["x"], 3613);
         assert!(json["point"]["frame"].is_null());
-        assert_eq!(json["candidate"], "unknown");
+        assert!(json.get("candidate").is_none());
         let pointless = entries[2].focus.unwrap();
         assert!(
             pointless.point.is_none(),
@@ -3062,7 +3029,6 @@ pub(crate) mod tests {
         let json = serde_json::to_value(pointless).unwrap();
         assert!(json["point"].is_null());
         assert_eq!(json["manual_focus"], false);
-        assert!(json["eye_focus"].is_null());
         assert!(
             entries[3].focus.is_none(),
             "a JPEG with no AF point has none"
@@ -3082,10 +3048,9 @@ pub(crate) mod tests {
             .unwrap()
     }
 
-    fn faces_row(path: &str, eye_focus: Option<f64>, sharpness: Option<f64>) -> FacesRow {
+    fn faces_row(path: &str, sharpness: Option<f64>) -> FacesRow {
         FacesRow {
             path: path.to_string(),
-            eye_focus,
             sharpness,
             eyes_ear: None,
             pose: None,
@@ -3124,11 +3089,11 @@ pub(crate) mod tests {
                     eye_offset: Some(0.0625),
                     edge_gap: Some(-0.125),
                     full_eye_sharp: Some(0.25),
-                    ..faces_row(&a_path, Some(0.9), None)
+                    ..faces_row(&a_path, None)
                 },
                 FacesRow {
                     eyes_ear: Some(0.3),
-                    ..faces_row(&b_path, Some(0.1), None)
+                    ..faces_row(&b_path, None)
                 },
             ])
             .unwrap();
@@ -3157,7 +3122,6 @@ pub(crate) mod tests {
         assert_eq!(json["eye_offset"], 0.0625);
         assert_eq!(json["edge_gap"], -0.125);
         assert_eq!(json["full_eye_sharp"], 0.25);
-        assert_eq!(json["candidate"], "candidate");
         let open = index.entry(&b_path).unwrap().unwrap().focus.unwrap();
         assert_eq!(open.eyes.eyes, Some(EyeState::Open));
         assert_eq!(open.eyes.pose, None);
@@ -3165,9 +3129,7 @@ pub(crate) mod tests {
         assert_eq!(json["eyes"], "open");
         assert!(json["pose"].is_null());
 
-        index
-            .write_faces(&[faces_row(&a_path, None, None)])
-            .unwrap();
+        index.write_faces(&[faces_row(&a_path, None)]).unwrap();
         let focus = index.entry(&a_path).unwrap().unwrap().focus.unwrap();
         assert_eq!(focus.eyes, StoredEyes::default());
         let json = serde_json::to_value(focus).unwrap();
@@ -3184,8 +3146,6 @@ pub(crate) mod tests {
     fn a_face_ready_serializes_the_stored_eyes_next_to_the_cue() {
         let ready = FaceReady {
             path: "/d/a.ARW".into(),
-            eye_focus: Some(0.875),
-            candidate: candidate(Some(0.875)),
             sharpness: Some(12.0),
             eyes: StoredEyes::new(
                 Some(0.3),
@@ -3201,7 +3161,7 @@ pub(crate) mod tests {
         };
         let json = serde_json::to_value(&ready).unwrap();
         assert_eq!(json["path"], "/d/a.ARW");
-        assert_eq!(json["candidate"], "candidate");
+        assert!(json.get("candidate").is_none());
         assert_eq!(json["eyes_ear"], 0.3);
         assert_eq!(json["eyes"], "open");
         assert_eq!(json["eyes_closed"], closed_probability(0.3));
@@ -3240,7 +3200,7 @@ pub(crate) mod tests {
         let j_path = j.path.to_string_lossy().into_owned();
         index
             .write_faces(&[
-                faces_row(&a_path, Some(0.5), Some(7.0)),
+                faces_row(&a_path, Some(7.0)),
                 FacesRow {
                     eyes_ear: Some(0.3),
                     pose: Some(EyesPose {
@@ -3248,7 +3208,7 @@ pub(crate) mod tests {
                         pitch: 2.0,
                         roll: 3.0,
                     }),
-                    ..faces_row(&j_path, Some(0.5), Some(7.0))
+                    ..faces_row(&j_path, Some(7.0))
                 },
             ])
             .unwrap();
@@ -3291,7 +3251,7 @@ pub(crate) mod tests {
             index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
             index.reconcile("d", std::slice::from_ref(&a)).unwrap();
             index
-                .write_faces(&[faces_row(&a.path.to_string_lossy(), Some(0.875), Some(5.0))])
+                .write_faces(&[faces_row(&a.path.to_string_lossy(), Some(5.0))])
                 .unwrap();
             index.set_last_viewed("d", "/d/a.ARW").unwrap();
             index
@@ -3306,7 +3266,8 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
-                     UPDATE files SET faces_extractor = 6;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     UPDATE files SET eye_focus = 0.875, faces_extractor = 6;
                      DROP TABLE views;
                      PRAGMA user_version = 17;",
                 )
@@ -3341,7 +3302,6 @@ pub(crate) mod tests {
         let entries = index.entries("d").unwrap();
         assert_eq!(entries.len(), 1, "files are kept");
         let focus = entries[0].focus.unwrap();
-        assert_eq!(focus.eye_focus, Some(0.875));
         assert_eq!(entries[0].sharpness, Some(5.0));
         assert_eq!(focus.eyes, StoredEyes::default());
         assert_eq!(
@@ -3371,7 +3331,7 @@ pub(crate) mod tests {
             index
                 .write_faces(&[FacesRow {
                     eyes_ear: Some(0.3),
-                    ..faces_row(&a.path.to_string_lossy(), Some(0.875), Some(5.0))
+                    ..faces_row(&a.path.to_string_lossy(), Some(5.0))
                 }])
                 .unwrap();
             index.set_last_viewed("d", "/d/a.ARW").unwrap();
@@ -3383,7 +3343,8 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
-                     UPDATE files SET faces_extractor = 7;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     UPDATE files SET eye_focus = 0.875, faces_extractor = 7;
                      DROP TABLE views;
                      PRAGMA user_version = 18;",
                 )
@@ -3410,7 +3371,6 @@ pub(crate) mod tests {
         let entries = index.entries("d").unwrap();
         assert_eq!(entries.len(), 1, "files are kept");
         let focus = entries[0].focus.unwrap();
-        assert_eq!(focus.eye_focus, Some(0.875));
         assert_eq!(entries[0].sharpness, Some(5.0));
         assert_eq!(
             focus.eyes,
@@ -3448,6 +3408,7 @@ pub(crate) mod tests {
                      DROP TABLE embeddings;
                      DROP TABLE views;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
                      PRAGMA user_version = 19;",
                 )
                 .unwrap();
@@ -3486,6 +3447,7 @@ pub(crate) mod tests {
                 .execute_batch(
                     "DROP TABLE views;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
                      PRAGMA user_version = 20;",
                 )
                 .unwrap();
@@ -3532,6 +3494,7 @@ pub(crate) mod tests {
                      UPDATE folders SET culling_finished = 1 WHERE dir = 'd';
                      DROP TABLE views;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
                      PRAGMA user_version = 21;",
                 )
                 .unwrap();
@@ -3567,6 +3530,7 @@ pub(crate) mod tests {
                      ALTER TABLE folders ADD COLUMN culling_manual INTEGER NOT NULL DEFAULT 0;
                      UPDATE folders SET culling_finished = 1, culling_manual = 1;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
                      PRAGMA user_version = 22;",
                 )
                 .unwrap();
@@ -3720,7 +3684,6 @@ pub(crate) mod tests {
             .write_faces(&[
                 FacesRow {
                     path: path(&a),
-                    eye_focus: Some(0.95),
                     sharpness: Some(120.0),
                     eyes_ear: Some(0.3),
                     pose: Some(EyesPose {
@@ -3734,7 +3697,6 @@ pub(crate) mod tests {
                 },
                 FacesRow {
                     path: path(&b),
-                    eye_focus: Some(0.5),
                     sharpness: Some(80.0),
                     eyes_ear: None,
                     pose: None,
@@ -4142,7 +4104,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_eye_focus_round_trips_and_derives_the_candidate_state() {
+    fn the_second_pass_values_round_trip_until_the_first_pass_rewrites_the_row() {
         let dir = temp_dir("eye-sharpness");
         let a = file(&dir, "a.ARW", b"a");
         let b = file(&dir, "b.ARW", b"b");
@@ -4176,62 +4138,43 @@ pub(crate) mod tests {
             assert_eq!(faces_extractor(&index, &file.path), 0);
         }
 
+        let measured = |path: &str, sharpness| FacesRow {
+            full_eye_sharp: Some(0.25),
+            ..faces_row(path, sharpness)
+        };
         index
             .write_faces(&[
-                faces_row(&a_path, Some(0.875), None),
-                faces_row(&b_path, None, Some(1.0)),
-                faces_row(&c_path, Some(0.875), Some(2.0)),
+                measured(&a_path, None),
+                faces_row(&b_path, Some(1.0)),
+                measured(&c_path, Some(2.0)),
             ])
             .unwrap();
         let no_af = index.entry(&c_path).unwrap().unwrap().focus.unwrap();
         assert!(no_af.point.is_none());
         assert_eq!(
-            (no_af.eye_focus, no_af.candidate),
-            (Some(0.875), FocusCandidate::Candidate),
-            "a frame with no AF point carries the cue of its judged face"
+            no_af.eyes.full_eye_sharp,
+            Some(0.25),
+            "a frame with no AF point carries the values of its judged face"
         );
         let focus = index.entry(&a_path).unwrap().unwrap().focus.unwrap();
-        assert_eq!(focus.eye_focus, Some(0.875));
-        assert_eq!(focus.candidate, FocusCandidate::Candidate);
+        assert_eq!(focus.eyes.full_eye_sharp, Some(0.25));
         let json = serde_json::to_value(focus).unwrap();
-        assert_eq!(json["candidate"], "candidate");
-        assert_eq!(json["eye_focus"], 0.875);
         assert!(json.get("eye_sharpness").is_none());
-        for (p, state) in [
-            (candidate_probability(), FocusCandidate::Candidate),
-            (
-                candidate_probability().next_down(),
-                FocusCandidate::NotCandidate,
-            ),
-        ] {
-            index
-                .write_faces(&[faces_row(&a_path, Some(p), None)])
-                .unwrap();
-            let focus = index.entry(&a_path).unwrap().unwrap().focus.unwrap();
-            assert_eq!(focus.eye_focus, Some(p), "the probability round-trips");
-            assert_eq!(focus.candidate, state);
-        }
+        assert!(json.get("candidate").is_none());
         let manual = index.entries(&dir_name).unwrap()[1].focus.unwrap();
-        assert_eq!(manual.eye_focus, None);
-        assert_eq!(
-            serde_json::to_value(manual).unwrap()["candidate"],
-            "unknown"
-        );
+        assert_eq!(manual.eyes, StoredEyes::default());
         assert!(index.faces_todo(&dir_name).unwrap().is_empty());
 
         index
             .write_batch(&dir_name, &[(a.clone(), Ok(entry()))])
             .unwrap();
         let focus = index.entry(&a_path).unwrap().unwrap().focus.unwrap();
-        assert_eq!(focus.eye_focus, None);
-        assert_eq!(focus.candidate, FocusCandidate::Unknown);
+        assert_eq!(focus.eyes, StoredEyes::default());
         assert_eq!(
             index.faces_todo(&dir_name).unwrap(),
             std::slice::from_ref(&a_path)
         );
-        index
-            .write_faces(&[faces_row(&a_path, None, None)])
-            .unwrap();
+        index.write_faces(&[faces_row(&a_path, None)]).unwrap();
         assert_eq!(faces_extractor(&index, &a.path), FACES_VERSION);
         assert!(index.faces_todo(&dir_name).unwrap().is_empty());
 
@@ -4239,7 +4182,143 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_v14_database_swaps_face_catch_for_the_eye_focus_columns_and_keeps_its_files_and_ratings() {
+    fn a_v24_database_drops_the_in_focus_probability_and_keeps_its_files_ratings_and_pass_2_values()
+    {
+        let dir = temp_dir("migrate-v24");
+        let db = dir.join("index.sqlite");
+        let a = file(&dir, "a.ARW", b"a");
+        let a_path = a.path.to_string_lossy().into_owned();
+        let pose = EyesPose {
+            yaw: 1.0,
+            pitch: 2.0,
+            roll: 3.0,
+        };
+        {
+            let mut index = open(&dir);
+            index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
+            index.reconcile("d", std::slice::from_ref(&a)).unwrap();
+            index
+                .write_faces(&[FacesRow {
+                    eyes_ear: Some(0.3),
+                    pose: Some(pose),
+                    eye_offset: Some(0.05),
+                    edge_gap: Some(0.2),
+                    full_eye_sharp: Some(0.25),
+                    ..faces_row(&a_path, Some(5.0))
+                }])
+                .unwrap();
+            index.set_last_viewed("d", "/d/a.ARW").unwrap();
+            index
+                .conn
+                .execute_batch(
+                    "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
+                         ('/rated.ARW', 'd', 4, 1, 1);
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     UPDATE files SET eye_focus = 0.875;
+                     PRAGMA user_version = 24;",
+                )
+                .unwrap();
+        }
+
+        let mut index = Index::open(&db).unwrap();
+        let version: i64 = index
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let columns: Vec<String> = index
+            .conn
+            .prepare("SELECT name FROM pragma_table_info('files')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        let fresh = temp_dir("migrate-v24-fresh");
+        let new: Vec<String> = open(&fresh)
+            .conn
+            .prepare("SELECT name FROM pragma_table_info('files')")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<rusqlite::Result<_>>()
+            .unwrap();
+        remove_temp_dir(&fresh);
+        assert_eq!(columns, new, "the same columns as a new database");
+        let entries = index.entries("d").unwrap();
+        assert_eq!(entries.len(), 1, "files are kept");
+        assert_eq!(entries[0].sharpness, Some(5.0));
+        assert_eq!(
+            entries[0].focus.unwrap().eyes,
+            StoredEyes::new(Some(0.3), Some(pose), Some(0.05), Some(0.2), Some(0.25)),
+            "the other pass 2 values are kept"
+        );
+        assert_eq!(faces_extractor(&index, &a.path), FACES_VERSION);
+        assert!(index.faces_todo("d").unwrap().is_empty());
+        assert_eq!(
+            index.dirty_rows("d").unwrap(),
+            [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)]
+        );
+        assert_eq!(index.last_viewed("d").unwrap().as_deref(), Some("/d/a.ARW"));
+        assert!(index.reconcile("d", &[a]).unwrap().0.is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn a_v23_database_opens_and_keeps_its_files_ratings_and_last_viewed() {
+        let dir = temp_dir("migrate-v23");
+        let db = dir.join("index.sqlite");
+        let a = file(&dir, "a.ARW", b"a");
+        {
+            let mut index = open(&dir);
+            index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
+            index.reconcile("d", std::slice::from_ref(&a)).unwrap();
+            index.set_last_viewed("d", "/d/a.ARW").unwrap();
+            index
+                .conn
+                .execute_batch(
+                    "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
+                         ('/rated.ARW', 'd', 4, 1, 1);
+                     ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     PRAGMA user_version = 23;",
+                )
+                .unwrap();
+        }
+
+        let index = Index::open(&db).unwrap();
+        let version: i64 = index
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let names = |index: &Index| -> Vec<String> {
+            index
+                .conn
+                .prepare("SELECT name FROM pragma_table_info('files')")
+                .unwrap()
+                .query_map([], |r| r.get(0))
+                .unwrap()
+                .collect::<rusqlite::Result<_>>()
+                .unwrap()
+        };
+        let fresh = temp_dir("migrate-v23-fresh");
+        let new = names(&open(&fresh));
+        remove_temp_dir(&fresh);
+        assert_eq!(names(&index), new, "the same columns as a new database");
+        assert_eq!(index.entries("d").unwrap().len(), 1, "files are kept");
+        assert_eq!(
+            index.dirty_rows("d").unwrap(),
+            [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)]
+        );
+        assert_eq!(index.last_viewed("d").unwrap().as_deref(), Some("/d/a.ARW"));
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn a_v14_database_swaps_face_catch_for_faces_extractor_and_keeps_its_files_and_ratings() {
         let dir = temp_dir("migrate-v14");
         let db = dir.join("index.sqlite");
         let a = file(&dir, "a.ARW", b"a");
@@ -4251,7 +4330,6 @@ pub(crate) mod tests {
                 .execute_batch(
                     "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
                          ('/rated.ARW', 'd', 4, 1, 1);
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files DROP COLUMN faces_extractor;
                      ALTER TABLE files ADD COLUMN face_catch INTEGER NOT NULL DEFAULT 0;
                      UPDATE files SET face_catch = 1;
@@ -4284,13 +4362,10 @@ pub(crate) mod tests {
             .collect::<rusqlite::Result<_>>()
             .unwrap();
         assert!(!columns.iter().any(|c| c == "face_catch"));
-        assert!(columns.iter().any(|c| c == "eye_focus"));
         assert!(columns.iter().any(|c| c == "faces_extractor"));
         let entries = index.entries("d").unwrap();
         assert_eq!(entries.len(), 1, "files are kept");
-        let focus = entries[0].focus.unwrap();
-        assert_eq!(focus.eye_focus, None);
-        assert_eq!(focus.candidate, FocusCandidate::Unknown);
+        assert_eq!(entries[0].focus.unwrap().eyes, StoredEyes::default());
         assert_eq!(faces_extractor(&index, &a.path), 0);
         assert_eq!(
             index.dirty_rows("d").unwrap(),
@@ -4302,7 +4377,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_v15_database_swaps_eye_sharpness_for_eye_focus_and_keeps_its_files_ratings_and_folders() {
+    fn a_v15_database_drops_eye_sharpness_and_keeps_its_files_ratings_and_folders() {
         let dir = temp_dir("migrate-v15");
         let db = dir.join("index.sqlite");
         let a = file(&dir, "a.ARW", b"a");
@@ -4315,7 +4390,6 @@ pub(crate) mod tests {
                 .execute_batch(
                     "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
                          ('/rated.ARW', 'd', 4, 1, 1);
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files ADD COLUMN eye_sharpness REAL;
                      UPDATE files SET eye_sharpness = 120.0, faces_extractor = 2;
                      ALTER TABLE files DROP COLUMN eyes_ear;
@@ -4347,12 +4421,8 @@ pub(crate) mod tests {
             .collect::<rusqlite::Result<_>>()
             .unwrap();
         assert!(!columns.iter().any(|c| c == "eye_sharpness"));
-        assert!(columns.iter().any(|c| c == "eye_focus"));
         let entries = index.entries("d").unwrap();
         assert_eq!(entries.len(), 1, "files are kept");
-        let focus = entries[0].focus.unwrap();
-        assert_eq!(focus.eye_focus, None, "the stale eye sharpness is gone");
-        assert_eq!(focus.candidate, FocusCandidate::Unknown);
         assert_eq!(faces_extractor(&index, &a.path), 2);
         assert_eq!(
             index.faces_todo("d").unwrap(),
@@ -4375,7 +4445,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn a_v13_database_gains_the_eye_focus_columns_and_keeps_its_files_and_ratings() {
+    fn a_v13_database_gains_faces_extractor_and_keeps_its_files_and_ratings() {
         let dir = temp_dir("migrate-v13");
         let db = dir.join("index.sqlite");
         let a = file(&dir, "a.ARW", b"a");
@@ -4388,7 +4458,6 @@ pub(crate) mod tests {
                     "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
                          ('/rated.ARW', 'd', 4, 1, 1);
                      UPDATE files SET extractor = 3;
-                     ALTER TABLE files DROP COLUMN eye_focus;
                      ALTER TABLE files DROP COLUMN faces_extractor;
                      ALTER TABLE files DROP COLUMN eyes_ear;
                      ALTER TABLE files DROP COLUMN pose_yaw;
@@ -4412,9 +4481,7 @@ pub(crate) mod tests {
         assert_eq!(version, SCHEMA_VERSION);
         let entries = index.entries("d").unwrap();
         assert_eq!(entries.len(), 1, "files are kept");
-        let focus = entries[0].focus.unwrap();
-        assert_eq!(focus.eye_focus, None);
-        assert_eq!(focus.candidate, FocusCandidate::Unknown);
+        assert_eq!(faces_extractor(&index, &a.path), 0);
         assert_eq!(
             index.dirty_rows("d").unwrap(),
             [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)]
@@ -5226,15 +5293,15 @@ pub(crate) mod tests {
         assert!(index.faces_todo("d").unwrap().is_empty());
         for file in &files {
             assert_eq!(faces_extractor(&index, &file.path), FACES_VERSION);
-            let eye_focus: Option<f64> = index
+            let full_eye_sharp: Option<f64> = index
                 .conn
                 .query_row(
-                    "SELECT eye_focus FROM files WHERE path = ?1",
+                    "SELECT full_eye_sharp FROM files WHERE path = ?1",
                     params![file.path.to_string_lossy()],
                     |r| r.get(0),
                 )
                 .unwrap();
-            assert_eq!(eye_focus, None);
+            assert_eq!(full_eye_sharp, None);
         }
 
         remove_temp_dir(&dir);
@@ -5475,8 +5542,6 @@ pub(crate) mod tests {
             .iter()
             .map(|path| FaceReady {
                 path: path.clone(),
-                eye_focus: None,
-                candidate: FocusCandidate::Unknown,
                 sharpness: score,
                 eyes: StoredEyes::default(),
             })
@@ -5508,7 +5573,7 @@ pub(crate) mod tests {
         index
             .write_faces(&[FacesRow {
                 full_eye_sharp: Some(0.5),
-                ..faces_row(&path, None, None)
+                ..faces_row(&path, None)
             }])
             .unwrap();
         let stored = |index: &Index| -> Option<f64> {
@@ -5654,7 +5719,7 @@ pub(crate) mod tests {
         let mut index = lock(&index);
         assert_eq!(faces_extractor(&index, &bad.path), FACES_VERSION);
         let focus = index.entry(&bad_path).unwrap().unwrap().focus.unwrap();
-        assert_eq!(focus.eye_focus, None);
+        assert_eq!(focus.eyes, StoredEyes::default());
         assert!(index.faces_todo("d").unwrap().is_empty());
 
         remove_temp_dir(&dir);
@@ -6147,6 +6212,7 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN eye_offset;
                      ALTER TABLE files DROP COLUMN edge_gap;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
+                     ALTER TABLE files ADD COLUMN eye_focus REAL;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
                      PRAGMA user_version = 16;",

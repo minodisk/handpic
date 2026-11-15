@@ -320,8 +320,6 @@ describe("passes: Face focus states", () => {
   const candidate: MarkFocus = {
     point: { sensor_w: 7008, sensor_h: 4672, x: 1752, y: 1168, frame: null },
     manual_focus: false,
-    candidate: "candidate",
-    eye_focus: 1,
     eyes_ear: 0.35,
     eyes: "open",
     eyes_closed: 0.001,

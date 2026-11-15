@@ -41,16 +41,12 @@ export const EXIF_HEADING = "EXIF";
 export const MAKER_NOTE_HEADING = "Maker note";
 export const ANALYSIS_HEADING = "Analysis";
 
-export type FocusCandidate = "candidate" | "not_candidate" | "unknown";
-
 // The second scan pass's result for one file, as `Focus` in `main.ts` carries
 // it. `eyes_ear`, `eyes` and `pose` are what it stored for the judged face
 // (nearest the AF point, else the largest on the whole preview), `null` /
 // `unknown` when it ran no face mesh there. `full_eye_sharp` is the sharpness
 // of its eyes on the full-size image, `null` when there is none.
 export interface FocusCue {
-  candidate: FocusCandidate;
-  eye_focus: number | null;
   eyes_ear: number | null;
   eyes: EyeState;
   pose: Pose | null;
@@ -123,10 +119,6 @@ export function rankingRows(ranking: Ranking): [string, string | null][] {
     ["Reason", reasons.length === 0 ? null : reasons.join(", ")],
     ["Confidence", confidenceText(model)],
   ];
-}
-
-function focusPercent(p: number | null): string | null {
-  return p === null ? null : `${Math.round(p * 100)}%`;
 }
 
 // The open / closed judgment with the openness of the eyes, `Open · 82`.
@@ -209,7 +201,6 @@ export function metaGroups(
   }
   groups.push(
     group(ANALYSIS_HEADING, [
-      ["AF eye in focus", focusPercent(focus?.eye_focus ?? null)],
       ["Eyes at full size", fullSharpValue(focus?.full_eye_sharp ?? null)],
       [
         "Eyes",

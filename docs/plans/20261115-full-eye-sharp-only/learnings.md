@@ -122,12 +122,51 @@
   Tauri edit the freeze allows here; `plan.md` moved it from Step 5 to
   Step 4.
 
+## Step 5
+
+- `candidate.rs` keeps the face choice, `luma`, the mesh measures and the
+  cancel points; the mesh runs through `face_mesh`, which returns
+  `Option<Option<Mesh>>` (the outer `None` a cancel), and `cue_of` takes the
+  EAR, the pose, the eye offset, the edge gap and the eye centers straight
+  from the mesh with the same functions `mesh_eye_measures` called, so the
+  stored values are unchanged by construction and `FACES_VERSION` stays 11
+  (not rerun on a real folder). `eye_region` went with the region measures;
+  `edge_gap` builds on `grown_bounds` as before.
+- Schema v25: a new database is created without the column, a v10-v15 one
+  no longer gains it (the v10-v14 block adds only `faces_extractor`, the v15
+  block only drops `eye_sharpness`), and a v16-v24 one drops it. The older
+  migration tests built their old database from the current schema and
+  dropped the column; those for v10-v15 lose that line, and those for
+  v16-v22 now add the column first, since a real database of that age has it
+  and the migration's `DROP COLUMN` would fail without it. The new v24 test
+  compares the migrated column list with a new database's.
+- The plan's `git grep` criterion could not hold literally: the migration
+  has to name the column it drops, and the v24 test has to create it. The
+  criterion in `plan.md` now excepts the index's migration code, its schema
+  history comment and those tests.
+- The stored-filter tests (`filter_setting_drops_unknown_members` in
+  `crates/app/src/commands.rs`, `a_stored_filter_drops_unknown_members` in
+  the native `filter.rs`) used `not_candidate` only as an unknown member to
+  drop; it was removed from their input, the expectations unchanged.
+- Tauri (frozen): the `AF eye in focus` row went with `focusPercent`, which
+  it alone used. The `meta.test.ts` cases that relied on that row to make the
+  `Analysis` group non-empty now use a measured `full_eye_sharp`
+  (`Soft · 0.143`); the `applyFaceReady` tests patch `full_eye_sharp` where
+  they patched the removed fields. `README.md` / `README.ja.md` and
+  `docs/humans/usage.md` / `.ja.md` described that row and were updated with
+  it.
+- Verification: `cargo check -p riffle-app --tests`, the frontend tests
+  (`vp test run`, 808) and `vp check`, and the native workspace's tests
+  (886) besides `mise run ci:local`.
+
 ## Deferred issues (todo candidates)
 
-- `todo.md` still names `riffle-cli candidates` as a command to run (around
-  lines 173 and 192, a held-out check of the candidate cue). Step 4 removed
-  the subcommand (`crates/cli/src/main.rs`); the items are moot or need
-  rewording onto `facechoice` / `features`. Reflect at wrap-up; `todo.md`
-  is not edited in a step.
+- `Index::prepare` (`crates/backend/src/index.rs`) does not list schema
+  version 23 among the versions it migrates (the list goes `22`, then `24`
+  and `SCHEMA_VERSION`), so a v23 index is refused as `unsupported index
+  schema version 23`, although the schema history says a v10 to v23
+  database gains `full_eye_sharp` in place. Found in Step 5, which added
+  `24` to the list; not fixed there (pre-existing, out of scope). Files:
+  `crates/backend/src/index.rs`.
 
 - `cargo check -p riffle-app --tests` fails after `rank::Frame::eye_focus` was removed: `rank_dump_of_real_folders` reads `f.eye_focus` (crates/app/src/commands.rs:3020-3021). Needs the compile-only edit of the dump (header near line 3009 and its `writeln!`) in Step 4 or a decision to keep the field until Step 5. Basis: review Round 1, item 1. Files: `crates/app/src/commands.rs`, `docs/plans/20261115-full-eye-sharp-only/plan.md`.

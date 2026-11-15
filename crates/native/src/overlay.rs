@@ -536,7 +536,6 @@ mod tests {
     use super::*;
     use crate::mark::MarkState;
     use riffle_backend::index::{FocusPoint, StoredEyes};
-    use riffle_core::candidate::FocusCandidate;
 
     fn focus() -> Focus {
         Focus {
@@ -548,8 +547,6 @@ mod tests {
                 frame: None,
             }),
             manual_focus: false,
-            eye_focus: None,
-            candidate: FocusCandidate::Unknown,
             eyes: StoredEyes::new(None, None, None, None, None),
         }
     }

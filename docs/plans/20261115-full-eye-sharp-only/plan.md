@@ -271,7 +271,7 @@ Decisions taken with the user at planning (2026-11-15):
     - The performance docs keep their past measurements; only wording that
       tells the reader to run `riffle-cli candidates` changes.
 
-- [ ] Step 5: Remove `eye_focus` from the core, the index and the app types
+- [x] Step 5: Remove `eye_focus` from the core, the index and the app types
   - Done when:
     - `crates/core/src/candidate.rs` has no logistic model: `LOGIT_*`,
       `MESH_LOGIT_*`, `CANDIDATE_LOGIT`, `CANDIDATE_WINDOW_MIN`,
@@ -299,7 +299,12 @@ Decisions taken with the user at planning (2026-11-15):
     - Native: `filter.rs`, `mark.rs`, `overlay.rs` and `meta.rs` have neither
       field and no `FocusCandidate` import.
     - `git grep -i -E "eye_focus|eyeFocus|FocusCandidate|not_candidate|CANDIDATE_LOGIT|GOOD_EYE_FOCUS"`
-      finds nothing outside `docs/plans/**` and `CHANGELOG.md`.
+      finds nothing outside `docs/plans/**` and `CHANGELOG.md`, except the
+      index's migration of the dropped column in
+      `crates/backend/src/index.rs` (the schema history comment, the v25
+      `DROP COLUMN` and the migration tests that build a v16-v24 database
+      with the column), which must name it. (Amended in Step 5: the
+      criterion contradicted the v24 migration test it asks for.)
     - `CLAUDE.md`, `docs/agents/tauri-app.md`, `docs/agents/native-app.md`,
       `docs/agents/tract-onnx-inference.md` and `todo.md` no longer describe
       `eye_focus` as something the app has.
@@ -398,3 +403,4 @@ Decisions taken with the user at planning (2026-11-15):
 - (2026-11-15) Step 2 complete
 - (2026-11-15) Step 3 complete
 - (2026-11-16) Step 4 complete
+- (2026-11-16) Step 5 complete

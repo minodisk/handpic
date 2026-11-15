@@ -51,15 +51,11 @@ const at: FocusPoint = {
 const point: MarkFocus = {
   point: at,
   manual_focus: false,
-  candidate: "unknown",
-  eye_focus: null,
   ...noEyes,
 };
 
 const good: MarkFocus = {
   ...point,
-  candidate: "candidate",
-  eye_focus: 1,
   eyes_ear: 0.35,
   eyes: "open",
   eyes_closed: 0.001,
@@ -122,13 +118,11 @@ describe("focusMark", () => {
     expect(focusMark(good, 700, 468)?.state).toBe("good");
     expect(focusMark({ ...good, eyes_ear: GOOD_EYE_EAR }, 700, 468)?.state).toBe("good");
     expect(focusMark({ ...good, eyes_ear: 0.1 }, 700, 468)?.state).toBe("neutral");
-    expect(focusMark({ ...point, candidate: "candidate" }, 700, 468)?.state).toBe("neutral");
+    expect(focusMark(point, 700, 468)?.state).toBe("neutral");
   });
 
   test("a manual-focus or missing point stays null whatever the state", () => {
-    expect(
-      focusMark({ ...point, manual_focus: true, candidate: "candidate" }, 700, 468),
-    ).toBeNull();
+    expect(focusMark({ ...point, manual_focus: true }, 700, 468)).toBeNull();
     expect(focusMark(null, 700, 468)).toBeNull();
   });
 });
@@ -210,12 +204,6 @@ describe("afEyeState", () => {
     expect(afEyeState({ ...point, full_eye_sharp: null })).toBe("neutral");
     expect(afEyeState({ ...good, full_eye_sharp: null })).toBe("neutral");
   });
-
-  test("reads neither the candidate cue nor eye_focus", () => {
-    expect(afEyeState({ ...good, candidate: "not_candidate", eye_focus: 0.1 })).toBe("good");
-    expect(afEyeState({ ...good, candidate: "unknown", eye_focus: null })).toBe("good");
-    expect(afEyeState({ ...point, candidate: "not_candidate", eye_focus: 0.1 })).toBe("neutral");
-  });
 });
 
 describe("AF_EYE_HELP", () => {
@@ -293,13 +281,6 @@ describe("photoTier: good", () => {
     expect(goodPhoto(undefined)).toBe(false);
   });
 
-  test.each(["not_candidate", "unknown"] as const)(
-    "does not read the %s candidate cue",
-    (candidate) => {
-      expect(goodPhoto({ ...good, candidate, eye_focus: null })).toBe(true);
-    },
-  );
-
   test("is false when any value is missing", () => {
     expect(goodPhoto({ ...good, full_eye_sharp: null })).toBe(false);
     expect(goodPhoto({ ...good, eyes_ear: null })).toBe(false);
@@ -332,7 +313,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.999,
         eyes_ear: 0.3601,
         pose: { yaw: 3, pitch: -11.8, roll: 11.8 },
         eye_offset: 0.1247,
@@ -343,7 +323,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9984,
         eyes_ear: 0.3032,
         pose: { yaw: -48.6, pitch: 5.2, roll: 9.4 },
         eye_offset: 0.0866,
@@ -354,7 +333,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9984,
         eyes_ear: 0.314,
         pose: { yaw: -15.3, pitch: 2.7, roll: -3.6 },
         eye_offset: 0.3521,
@@ -368,7 +346,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9966,
         eyes_ear: 0.3228,
         pose: { yaw: -36.6, pitch: 11.7, roll: 5.1 },
         eye_offset: 0.0241,
@@ -379,7 +356,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9913,
         eyes_ear: 0.4054,
         pose: { yaw: 26.8, pitch: -17.4, roll: 3.6 },
         eye_offset: 0.1769,
@@ -389,11 +365,10 @@ describe("photoTier: good", () => {
   });
 
   test("a 5-star frame the Step 5b cuts left out is good", () => {
-    // `_DSC3280`: the AF eyes at 0.92.
+    // `_DSC3280`: pitched 16.1 degrees down.
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9218,
         eyes_ear: 0.3468,
         pose: { yaw: -23.9, pitch: -16.1, roll: -4.7 },
         eye_offset: 0.0298,
@@ -404,7 +379,6 @@ describe("photoTier: good", () => {
     expect(
       photoTier({
         ...good,
-        eye_focus: 0.9986,
         eyes_ear: 0.4194,
         pose: { yaw: 34.5, pitch: 3.7, roll: 1.6 },
         eye_offset: 0.0456,
@@ -629,26 +603,14 @@ describe("applyFaceReady", () => {
     const touched = applyFaceReady(
       entries,
       [
-        { path: "/d/a.ARW", eye_focus: 0.9, candidate: "candidate", sharpness: null, ...noEyes },
-        {
-          path: "/d/b.ARW",
-          eye_focus: 0.3,
-          candidate: "not_candidate",
-          sharpness: null,
-          ...noEyes,
-        },
+        { path: "/d/a.ARW", sharpness: null, ...noEyes, full_eye_sharp: 0.9 },
+        { path: "/d/b.ARW", sharpness: null, ...noEyes, full_eye_sharp: 0.3 },
       ],
       "/d/b.ARW",
     );
     expect(touched).toBe(true);
-    expect(entries.get("/d/a.ARW")?.focus).toMatchObject({
-      eye_focus: 0.9,
-      candidate: "candidate",
-    });
-    expect(entries.get("/d/b.ARW")?.focus).toMatchObject({
-      eye_focus: 0.3,
-      candidate: "not_candidate",
-    });
+    expect(entries.get("/d/a.ARW")?.focus).toMatchObject({ full_eye_sharp: 0.9 });
+    expect(entries.get("/d/b.ARW")?.focus).toMatchObject({ full_eye_sharp: 0.3 });
   });
 
   test("patches the stored eye state and head pose", () => {
@@ -659,8 +621,6 @@ describe("applyFaceReady", () => {
       [
         {
           path: "/d/a.ARW",
-          eye_focus: 0.9,
-          candidate: "candidate",
           sharpness: null,
           eyes_ear: 0.08,
           eyes: "closed",
@@ -689,22 +649,13 @@ describe("applyFaceReady", () => {
     expect(
       applyFaceReady(
         entries,
-        [
-          {
-            path: "/d/d.DNG",
-            eye_focus: 0.95,
-            candidate: "candidate",
-            sharpness: null,
-            ...noEyes,
-          },
-        ],
+        [{ path: "/d/d.DNG", sharpness: null, ...noEyes, full_eye_sharp: 0.95 }],
         "/d/d.DNG",
       ),
     ).toBe(true);
     expect(entries.get("/d/d.DNG")?.focus).toMatchObject({
       point: null,
-      eye_focus: 0.95,
-      candidate: "candidate",
+      full_eye_sharp: 0.95,
     });
   });
 
@@ -713,11 +664,11 @@ describe("applyFaceReady", () => {
     expect(
       applyFaceReady(
         entries,
-        [{ path: "/d/a.ARW", eye_focus: 0.9, candidate: "candidate", sharpness: null, ...noEyes }],
+        [{ path: "/d/a.ARW", sharpness: null, ...noEyes, full_eye_sharp: 0.9 }],
         "/d/b.ARW",
       ),
     ).toBe(false);
-    expect(entries.get("/d/b.ARW")?.focus?.candidate).toBe("unknown");
+    expect(entries.get("/d/b.ARW")?.focus?.full_eye_sharp).toBeNull();
   });
 
   test("a file with no row or no focus point is skipped", () => {
@@ -726,14 +677,8 @@ describe("applyFaceReady", () => {
       applyFaceReady(
         entries,
         [
-          { path: "/d/c.ARW", eye_focus: null, candidate: "unknown", sharpness: null, ...noEyes },
-          {
-            path: "/d/missing.ARW",
-            eye_focus: 0.85,
-            candidate: "candidate",
-            sharpness: null,
-            ...noEyes,
-          },
+          { path: "/d/c.ARW", sharpness: null, ...noEyes },
+          { path: "/d/missing.ARW", sharpness: null, ...noEyes, full_eye_sharp: 0.85 },
         ],
         "/d/c.ARW",
       ),
@@ -746,8 +691,6 @@ describe("applyFaceReady", () => {
 describe("applySharpnessReady", () => {
   const ready = (path: string, sharpness: number | null) => ({
     path,
-    eye_focus: null,
-    candidate: "unknown" as const,
     sharpness,
     ...noEyes,
   });

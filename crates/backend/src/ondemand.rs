@@ -66,7 +66,7 @@ pub fn read_preview(path: &Path) -> Result<(u16, Vec<u8>), String> {
 
 /// Detect the faces of a file's preview through the scan's own
 /// `detect_around`, so the region and the threshold match the faces the
-/// focus candidate cue picks from, for display only.
+/// face cue picks from, for display only.
 pub fn read_faces(path: &Path) -> Result<FacesResponse, String> {
     raw_only(path, "face detection")?;
     let (arw, jpeg) =

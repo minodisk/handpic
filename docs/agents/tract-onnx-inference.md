@@ -142,8 +142,9 @@ AF point (`partial::focus_point`) live in stored coordinates.
 
 ### Do not swap the cue path's full RGB decode for a cheaper grayscale + scaled decode (Measured)
 
-The cue path (`detect_around_rgb` plus `candidate::luma`) decodes the preview
-once at full size, which looks wasteful next to the whole-image search's DCT
+The cue path (`detect_around_rgb`, plus `candidate::luma` for the preview's
+in-focus probability until the full-eye-sharp-only plan removed it) decodes
+the preview once at full size, which looks wasteful next to the whole-image search's DCT
 scaled decode. A variant that took a grayscale decode for the luma and a 6/8
 RGB decode for the face search was faster (11.6 ms against 13.6 ms per file)
 but changed the results: 16 of the training set's per-file candidate states
@@ -152,9 +153,9 @@ changed and 6 of the held-out set's, with AUC 0.816 -> 0.819 and 0.635 ->
 the RGB, and the scaled crop's pixels differ.
 
 - Rule: the cue path keeps its single full RGB decode. Only a change that
-  passes an identity check of `candidates` on the labeled folders (identical
-  per-file lines) may replace it, otherwise it needs a `FACES_VERSION` bump
-  and a re-evaluation of the cue's threshold.
+  passes an identity check of the face cue on the labeled folders (identical
+  per-file `riffle-cli facechoice` lines) may replace it, otherwise it needs a
+  `FACES_VERSION` bump.
 - Source: [face-detection-recall-cost learnings, Step 3 "Cue-path variant"](../plans/_archived/20261005-face-detection-recall-cost/learnings.md).
 
 ### The face mesh: RGB NHWC 0..1, points by `Identity` (Measured)
@@ -237,31 +238,33 @@ and a labeled set, not only whether it loads.
   [head-pose learnings, Step 4](../plans/_archived/20261007-head-pose/learnings.md).
 - The scan's second pass runs the mesh from the rayon pool, one face per
   file (`eyes::mesh_of` from `candidate::focus_cue_unless`, through
-  `scored_face`), all workers sharing the one `OnceLock` plan. With 24 workers on the 2134-ARW folder a
+  `face_mesh`), all workers sharing the one `OnceLock` plan. With 24 workers on the 2134-ARW folder a
   face took 98.6 ms mean (p95 114.7 ms) against 28.8 ms on one thread, the
   cores being shared with the other files' decodes and detections, and the
   pass went from 12.9 to 21.5 s. It runs only on faces whose box long side
   is at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`); that skips
   13.4% of the faced files on the 2134-ARW folder and saved about 0.4 s of
   ~20.6 s, within the run-to-run spread (Measured, `docs/humans/performance.md`
-  "Focus candidate pass"). The whole `riffle-cli candidates` command
+  "Focus candidate pass"). The whole pass-2 CLI command of the time
   (removed since, with the logistic model it validated) peaked at 405-411 MB with 24 threads (Measured). `mesh_of` rotates only
   the face crop of a portrait preview, not the whole image: 0.016 ms
   against 2.06 ms per call (Measured). Source:
   `docs/plans/_archived/20261008-mesh-eye-focus/learnings.md`, Steps 1 and
   4, and `docs/humans/performance.md` "Focus candidate pass".
-- Gating the mesh by face size changed no candidate state on the labeled
-  sets or the 2134-ARW folder. One probability moved (`_DSC2748.ARW`, a 58x49
-  face, `p 0.209` -> `0.328`, `eye L only` -> `window`, still `NotCandidate`),
-  so `FACES_VERSION` was not bumped (Measured). Every mesh call site must use
-  `candidate::meshes_face`, including the `riffle-cli` debug subcommand that
-  prints the nearest face's scored region. Otherwise its line disagrees with
-  the cue printed above it. No non-ignored `riffle-core` test runs the mesh
-  model, so prove a gate with a small face in the synthetic image
-  (`Scored::Window`, `mesh: None`) plus a predicate check at
+- Gating the mesh by face size changed no candidate state of the preview's
+  in-focus probability (removed since) on the labeled sets or the 2134-ARW
+  folder. One probability moved (`_DSC2748.ARW`, a 58x49 face, `p 0.209` ->
+  `0.328`, `eye L only` -> `window`, still not a candidate), so
+  `FACES_VERSION` was not bumped (Measured). Every mesh call site must use
+  `candidate::meshes_face`, including `riffle-cli facechoice`. Otherwise its
+  line disagrees with the cue the scan stores. No non-ignored `riffle-core`
+  test runs the mesh model, so prove a gate with a small face in the
+  synthetic image (`face_mesh` gives no mesh) plus a predicate check at
   `EYES_MIN_FACE` and `EYES_MIN_FACE.next_down()`. Source:
   [mesh-face-gate learnings, Step 1](../plans/_archived/20261008-mesh-face-gate/learnings.md).
-- Mesh eye regions are boxes in stored coordinates, so on a portrait preview
+- The next two bullets guided the preview's eye-region measure, which the
+  full-eye-sharp-only plan removed; they still hold for any new measure over
+  mesh eye regions. Mesh eye regions are boxes in stored coordinates, so on a portrait preview
   (orientation 6 / 8) the eyes stand on end and a box's width is the eye's
   height (a 97 px face printed `L 11x20`). Any size rule on a region (the
   margin, the minimum size, a relative edge width) must use the box's longer
@@ -278,7 +281,7 @@ and a labeled set, not only whether it loads.
   a mask without a new reason. The masks are also tiny: at dilation 0 the
   median window's longer side is 10 px and 89 of 600 training eyes had no
   edge width. A masked edge width can be exactly 0 (a seed on the edge of a
-  window 1-2 px wide), so `MESH_LOGIT_EDGE_WIDTH * rel.ln()` would be `+inf`.
+  window 1-2 px wide), so a logit term in `ln(rel)` would be `+inf`.
   Guard `ln(0)` in any variant that measures edges on a tight mask window
   (Measured). The primitives were removed; `maskdump.patch` targets commit
   `35b1edce`, so reproducing the dump means checking that commit out first.
