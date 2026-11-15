@@ -25,6 +25,7 @@ use crate::{
     datadir::{self, IDENTIFIER, LEGACY_IDENTIFIERS},
     filter::Stored,
     panels::Panels,
+    panewidths::PaneWidths,
     session::Geometry,
     sort::SortKey,
 };
@@ -53,6 +54,8 @@ pub struct Settings {
     pub window: Option<Geometry>,
     /// The panes shown at startup; a pane toggle writes them back.
     pub panels: Panels,
+    /// The side panes' widths at startup; the end of a drag writes them back.
+    pub pane_widths: PaneWidths,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -260,6 +263,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .map(str::to_owned),
         window: Geometry::from_setting(values.get("windowBounds")),
         panels: Panels::from_setting(values.get("panels")),
+        pane_widths: PaneWidths::from_setting(values.get("panelWidths")),
         writes: Writes::spawn(None),
     }
 }
@@ -271,6 +275,7 @@ mod tests {
         datadir::{IDENTIFIER, LEGACY_IDENTIFIERS},
         filter::{FilterFlag, Stored},
         panels::Panels,
+        panewidths::{self, PaneWidths},
         session::{Geometry, Rect},
         sort::SortKey,
     };
@@ -450,6 +455,33 @@ mod tests {
             }
         );
         assert_eq!(seeded(dir.path(), "none", "{}").panels, Panels::default());
+    }
+
+    #[test]
+    fn the_pane_widths_are_read_with_their_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(
+            dir.path(),
+            "set",
+            r#"{"panelWidths":{"left":300,"right":1000}}"#,
+        );
+        assert_eq!(
+            s.pane_widths,
+            PaneWidths {
+                left: 300.,
+                right: panewidths::MAX,
+            }
+        );
+        let s = seeded(
+            dir.path(),
+            "odd",
+            r#"{"panelWidths":{"left":"wide","right":null}}"#,
+        );
+        assert_eq!(s.pane_widths, PaneWidths::default());
+        assert_eq!(
+            seeded(dir.path(), "none", "{}").pane_widths,
+            PaneWidths::default()
+        );
     }
 
     #[test]
