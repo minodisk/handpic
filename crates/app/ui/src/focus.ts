@@ -97,8 +97,8 @@ export const MIN_EDGE_GAP = 0.02;
 export const GOOD_FULL_EYE_SHARP = 0.162;
 // The sharpness under which a frame is low, `fullsharp::LOW_BELOW`: at most 2%
 // of the user's held-out 3-star frames fall under it
-// (`docs/plans/20261115-full-eye-sharp-only/low-threshold.md`). A test there
-// fails if the figure moves.
+// (`docs/plans/20261115-full-eye-sharp-only/low-threshold.md`). A test in
+// `crates/core/src/fullsharp.rs` fails if the figure moves.
 export const LOW_FULL_EYE_SHARP = 0.11;
 
 // The EAR the eyes count as closed at and below, `EYES_CLOSED_EAR` in

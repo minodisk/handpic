@@ -1176,8 +1176,8 @@ so a tier can be added back without rewriting the `filter.ts` / `strip.ts` /
   full-eye-sharp-only plan replaced that cut with `full_eye_sharp >=
   SOFT_BELOW` and Low with `full_eye_sharp < LOW_BELOW`; its evidence is in
   `docs/plans/20261115-full-eye-sharp-only/` (`experiment.md`,
-  `low-threshold.md`). `GOOD_FULL_EYE_SHARP` and `LOW_FULL_EYE_SHARP` mirror
-  the two constants in `focus.ts` and the native `mark.rs`, each pinned by a
+  `low-threshold.md`). `focus.ts` and the native `mark.rs` mirror
+  `SOFT_BELOW` and `LOW_BELOW` as `GOOD_FULL_EYE_SHARP` and `LOW_FULL_EYE_SHARP`, each pinned by a
   test (`fullsharp.rs` against the figures, `focus.test.ts` against the
   figures, `mark.rs` against the core constants).
 - Burst-level technical features do not predict a kept scene: burst length

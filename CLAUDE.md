@@ -92,8 +92,7 @@ a reject from the 30-day eviction, not from the size cap or Clear Cache,
 re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in three
 passes on the one scan task: `run_scan` (thumbnail, metadata), then
 `run_faces_scan`, which fills the `eye_focus` / `sharpness` /
-`faces_extractor` columns with the focus candidate cue the `f` focus mark is
-colored by (YuNet, then the face mesh on the face nearest the AF point) and
+`faces_extractor` columns with the focus candidate cue (YuNet, then the face mesh on the face nearest the AF point) and
 the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
 `pose_roll` columns with the EAR of the more closed eye and the head pose
 from that same mesh, and, on every frame whose cue judged a face, the

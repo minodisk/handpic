@@ -324,8 +324,9 @@ viewer shows a prompt in its center; click it to open the folder picker.
   holds what Handpic computes itself: `AF eye in
   focus`, the in-focus probability (a percentage) of the eyes of the judged
   face (nearest the AF point; without an AF point or in manual focus, the
-  largest face Handpic is confident of) that the focus candidate state is
-  decided from (left out when there is none). It comes from the scan's second pass, so it
+  largest face Handpic is confident of), measured on the embedded preview and
+  shown for reference; the `Face focus` state is decided from `Eyes at full
+  size` below, not from this (left out when there is none). It comes from the scan's second pass, so it
   appears a little after the file's thumbnail on a folder's first scan.
   `Eyes at full size` is the sharpness of those same eyes on the file's
   full-size embedded JPEG, as in `Sharp · 0.214` or `Soft · 0.143`; `Soft`
