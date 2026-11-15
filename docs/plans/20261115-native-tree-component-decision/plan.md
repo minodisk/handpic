@@ -132,3 +132,5 @@ or start the replacement. No code changes.
   interacts with the app view's context) is not verified.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
