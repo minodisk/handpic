@@ -303,3 +303,5 @@ setting keeps reading and writing as before.
   so the behavior checks in both steps are by hand.
 
 ## Progress
+
+- (2026-11-16) Step 1 complete
