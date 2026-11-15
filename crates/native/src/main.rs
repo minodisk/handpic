@@ -4139,6 +4139,8 @@ impl Riffle {
         ))
     }
 
+    /// The status row's progress circle while an operation with a count runs
+    /// (`progress::shown`), its value 0-100 from `progress::fraction`.
     fn progress_circle(&self) -> Option<ProgressCircle> {
         let (done, total) = progress::shown(
             self.trashing.map(|(_, done, total)| (done, total)),

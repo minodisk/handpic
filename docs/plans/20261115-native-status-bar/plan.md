@@ -233,3 +233,5 @@ bar. This plan rewrites both sections of that guide.
   say to re-measure on a bump.
 
 ## Progress
+
+- (2026-11-16) Step 1 complete (the manual check described in learnings.md is still pending)
