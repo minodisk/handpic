@@ -129,3 +129,5 @@ and `Enter` still opens it. The Tauri app (`crates/app`) is not changed.
   parity pass does not revert it.
 
 ## Progress
+
+- 2026-11-15: Step 1 done: `previous` / `next` pass the tree gate, Space toggles, `TreeKey::Left` / `Right` and `TreeCommand::Focus` removed; hand check pending (see learnings.md)
