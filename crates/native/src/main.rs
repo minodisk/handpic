@@ -4549,9 +4549,10 @@ const KEY_CONTEXT: &str = "Handpic";
 
 /// `Root` binds `tab` / `shift-tab` to its focus moves. These mask them where
 /// the focus is inside the app's view, so the keys reach `key_down` and the
-/// keymap, while a component dialog, drawn in `Root`'s layer outside this
-/// context, keeps them for its focus trap, except while the settings capture
-/// a shortcut (`settingsview::capture_keys`).
+/// keymap, while a component dialog in `Root`'s layer, or the settings layer
+/// drawn beside the `Handpic` `div`, both outside this context, keeps them for
+/// its focus trap, except while the settings capture a shortcut
+/// (`settingsview::capture_keys`).
 fn keymap_keys() -> [KeyBinding; 4] {
     let [tab, shift_tab] = settingsview::capture_keys();
     [
