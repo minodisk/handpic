@@ -95,3 +95,5 @@ next to the meta pane's section.
   PR's `lint` job runs the same formatting and link checks.
 
 ## Progress
+
+- (2026-11-15) Step 1 complete
