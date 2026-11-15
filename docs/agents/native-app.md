@@ -931,7 +931,7 @@ time a burst of its own. The view keeps the open folder's grouping in
   right, on a member after another left across the 8 px gap, 2 px out with
   a 6 px radius at the band's first and last cell. `STRIP_PADDING` is 7 px,
   the Tauri strip's, room for the band. The `position/size` badge is shaped
-  text at the image box's bottom-right, 2 px in, in `--foreground` over the
+  text at the image box's bottom-right, 2 px in, in the fixed `BADGE_COLOR` (`#fafafa`, the same in every theme as it sits over the photo on the halo) over the
   eight dark copies of `overlay::HALO`, painted before the rejected dim so a
   rejected member's badge dims with its cell, and a rejected member's band
   is drawn at the dimmed alpha (`Roles::band_dimmed`, 0.08 x 0.45) as
