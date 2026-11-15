@@ -114,7 +114,7 @@ setting keeps reading and writing as before.
       section where they name the settings as a component dialog, and
       `modal.rs`'s module comment; `CLAUDE.md`'s `src/settingsview.rs` and
       `src/modal.rs` (`shade`) sentences.
-- [ ] Step 2: Draw the settings' body with gpui-component's `Settings`
+- [x] Step 2: Draw the settings' body with gpui-component's `Settings`
   - Done when:
     - The body under the title row is one
       `gpui_component::setting::Settings` element with four pages in the

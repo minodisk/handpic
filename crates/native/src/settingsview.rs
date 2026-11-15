@@ -1,20 +1,20 @@
 //! The settings as their own entity with its own focus handle, over the
 //! pure `settingsmodal` model, drawn by the main view over the whole window,
-//! outside its key context, while open. A change is emitted as a `Change`
-//! for the main view, which owns the values, to apply.
+//! outside its key context, while open, its body gpui-component's
+//! `Settings`. A change is emitted as a `Change` for the main view, which
+//! owns the values, to apply.
 
 use gpui::{
     ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyBinding, KeyDownEvent, NoAction, PathPromptOptions, Pixels, SharedString,
-    Window, div, prelude::*, px, rgb, rgba, transparent_black,
+    FontWeight, KeyBinding, KeyDownEvent, MouseDownEvent, NoAction, PathPromptOptions, Pixels,
+    SharedString, Window, div, prelude::*, px, rgb, rgba, transparent_black,
 };
 use gpui_component::{
     ActiveTheme, FocusTrapElement, Selectable, Sizable,
     button::{Button, ButtonVariants},
-    checkbox::Checkbox,
     input::{Input, InputEvent, InputState},
     radio::Radio,
-    scroll::ScrollableElement,
+    setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
 };
 
 use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
@@ -22,7 +22,7 @@ use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
     ACCENT_COLOR, ERROR_COLOR, FOREGROUND_COLOR, INPUT_BORDER, MUTED_COLOR, PRIMARY_COLOR, keys,
-    settings::Settings,
+    settings::Settings as Stored,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, TABS, Tab},
 };
 
@@ -38,6 +38,10 @@ pub fn capture_keys() -> [KeyBinding; 2] {
         KeyBinding::new("shift-tab", NoAction, Some(CAPTURE_CONTEXT)),
     ]
 }
+
+/// The key context of a gpui-component `Input`, on the focused path while
+/// a text field has the focus.
+const INPUT_CONTEXT: &str = "Input";
 
 /// The height of the port the fields replaced: a 13 px line at GPUI's
 /// default line height, 3 px of padding and the border on each side.
@@ -62,9 +66,6 @@ pub enum Change {
 pub struct SettingsView {
     /// The box's, so a key inside the modal reaches its handler.
     focus: FocusHandle,
-    /// One per tab of `TABS`; only the selected one is a tab stop, as the
-    /// Tauri tablist's roving `tabindex`.
-    tabs: Vec<FocusHandle>,
     model: SettingsModal,
     /// The values shown, read from the main view on every open.
     auto_advance: bool,
@@ -112,7 +113,6 @@ impl SettingsView {
         .detach();
         Self {
             focus: cx.focus_handle(),
-            tabs: TABS.iter().map(|_| cx.focus_handle()).collect(),
             model: SettingsModal::default(),
             auto_advance: true,
             format: SidecarFormat::default(),
@@ -132,9 +132,10 @@ impl SettingsView {
         self.model.is_open()
     }
 
-    /// Opens on the tab it was left on, with that tab focused, showing
-    /// `settings`' values.
-    pub fn open(&mut self, settings: &Settings, window: &mut Window, cx: &mut Context<Self>) {
+    /// Opens on the first page with the box focused, showing `settings`'
+    /// values. The component keeps the selected page in its own element
+    /// state, dropped while the settings are hidden.
+    pub fn open(&mut self, settings: &Stored, window: &mut Window, cx: &mut Context<Self>) {
         if !self.model.open() {
             return;
         }
@@ -148,7 +149,7 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
-        window.focus(&self.tabs[self.model.tab.at()], cx);
+        window.focus(&self.focus, cx);
         cx.notify();
     }
 
@@ -293,12 +294,18 @@ impl SettingsView {
     }
 
     /// Every key stops here, so none reaches the window's keymap, except
-    /// that a key typed in a name field goes on to the platform's text input
-    /// (the window's own handler returns while the modal is open).
+    /// that a key typed in a text field goes on to the platform's text input
+    /// (the window's own handler returns while the modal is open). The
+    /// fields are the view's own and the component's private search field,
+    /// so a field is told by the `Input` key context on the focused path.
     fn key_down(&mut self, e: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let name = keys::key_name(&e.keystroke);
         let key = self.model.key(name.as_deref());
-        if !settingsmodal::stops(&key, self.editing(window, cx)) {
+        let typing = window
+            .context_stack()
+            .iter()
+            .any(|context| context.contains(INPUT_CONTEXT));
+        if !settingsmodal::stops(&key, typing) {
             return;
         }
         cx.stop_propagation();
@@ -322,22 +329,17 @@ impl SettingsView {
                 self.model.capturing = None;
                 cx.notify();
             }
-            ModalKey::Native => {
-                let Some(name) = name else { return };
-                if self.tabs[self.model.tab.at()].is_focused(window) {
-                    let tab = settingsmodal::next_tab(self.model.tab, &name);
-                    if tab != self.model.tab {
-                        self.select(tab, cx);
-                        window.focus(&self.tabs[tab.at()], cx);
-                    }
-                }
-            }
+            ModalKey::Native => {}
         }
     }
 
-    fn select(&mut self, tab: Tab, cx: &mut Context<Self>) {
-        self.model.select(tab);
-        cx.notify();
+    /// The component's sidebar switches pages in its own state, which the
+    /// view cannot observe, so any pointer press inside the box cancels a
+    /// capture, before the pressed control's own click runs.
+    fn cancel_capture(&mut self, cx: &mut Context<Self>) {
+        if self.model.capturing.take().is_some() {
+            cx.notify();
+        }
     }
 
     /// The row's `+`: the next key goes to `action`. The box takes the focus,
@@ -386,338 +388,322 @@ impl SettingsView {
         cx.notify();
     }
 
-    fn tab_list(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (border, foreground, muted, accent, primary) = (
-            theme.border,
-            theme.foreground,
-            theme.muted_foreground,
-            theme.accent,
-            theme.primary,
-        );
-        div()
-            .flex()
-            .flex_col()
-            .flex_none()
-            .gap(px(2.))
-            .w(px(180.))
-            .pr_3()
-            .border_r_1()
-            .border_color(border)
-            .children(TABS.iter().enumerate().map(|(at, &tab)| {
-                let selected = tab == self.model.tab;
-                div()
-                    .id(("settings-tab", at))
-                    .track_focus(&self.tabs[at].clone().tab_stop(selected))
-                    .px(px(9.6))
-                    .py(px(6.4))
-                    .rounded_sm()
-                    .border_1()
-                    .border_color(rgba(0))
-                    .text_size(px(13.6))
-                    .text_color(if selected { foreground } else { muted })
-                    .when(selected, |d| d.bg(accent).font_weight(FontWeight::SEMIBOLD))
-                    .cursor_pointer()
-                    .hover(move |s| s.bg(accent).text_color(foreground))
-                    .focus_visible(move |s| s.border_color(primary))
-                    .child(tab.label())
-                    .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| this.select(tab, cx)))
-            }))
+    /// The body: gpui-component's `Settings`, one page per tab of `TABS`,
+    /// rebuilt on every render. Its closures run outside the view's update,
+    /// so they hold the view's entity and reach it through `listener_for`.
+    fn body(&self, cx: &mut Context<Self>) -> Settings {
+        let view = cx.entity();
+        Settings::new("settings").pages(TABS.iter().map(|&tab| {
+            let page = SettingPage::new(tab.label());
+            match tab {
+                Tab::Sidecar => self.sidecar(page, &view),
+                Tab::Culling => self.culling(page, &view),
+                Tab::Shortcuts => self.shortcuts(page, &view),
+                Tab::Import => self.import(page, &view),
+            }
+        }))
     }
 
-    fn content(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let content = div()
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_w_0()
-            .gap_2()
-            .text_size(px(13.));
-        match self.model.tab {
-            Tab::Culling => content.child(
-                Checkbox::new("auto-advance")
-                    .small()
-                    .checked(self.auto_advance)
-                    .label("Auto-advance after a star, reject or pick")
-                    .px_2()
-                    .py(px(2.))
-                    .text_size(px(13.))
-                    .on_click(cx.listener(|this, _: &bool, _, cx| this.flip_auto_advance(cx))),
+    /// The three format radios and, while the format writes XMP, the label
+    /// names: the Tauri paragraph, a name field per color, the languages
+    /// `Reset` chooses from (a wrapping row of them, the chosen one lit) and
+    /// `Reset`.
+    fn sidecar(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let format = self.format;
+        let page = page.group(SettingGroup::new().item(SettingItem::new(
+            "Format",
+            SettingField::render({
+                let view = view.clone();
+                move |_, window, _| {
+                    div().flex().flex_col().gap_2().children(FORMATS.iter().map(
+                        |&(choice, label)| {
+                            Radio::new(choice.setting())
+                                .small()
+                                .checked(choice == format)
+                                .label(label)
+                                .text_size(px(13.))
+                                .on_click(window.listener_for(
+                                    &view,
+                                    move |this, _: &bool, window, cx| {
+                                        this.leave_field(window, cx);
+                                        this.choose_format(choice, cx);
+                                    },
+                                ))
+                        },
+                    ))
+                }
+            }),
+        )));
+        if !settingsmodal::writes_xmp(format) {
+            return page;
+        }
+        let language = self.language;
+        page.group(
+            SettingGroup::new()
+                .title("Label names")
+                .description(settingsmodal::LABEL_NAMES_NOTE)
+                .items(
+                    LABEL_COLORS
+                        .iter()
+                        .zip(&self.name_fields)
+                        .map(|(&color, state)| {
+                            let state = state.clone();
+                            SettingItem::new(
+                                color,
+                                SettingField::render(move |_, window, cx| {
+                                    div().w(px(240.)).child(field(&state, window, cx))
+                                }),
+                            )
+                        }),
+                )
+                .item(
+                    SettingItem::render({
+                        let view = view.clone();
+                        move |_, window, _| {
+                            div()
+                                .flex()
+                                .flex_wrap()
+                                .items_center()
+                                .gap(px(4.))
+                                .children(i18n::presets().iter().enumerate().map(|(at, preset)| {
+                                    let chosen = at == language;
+                                    small_button(("label-language", at), preset.name.clone())
+                                        .selected(chosen)
+                                        .when(chosen, |b| b.border_color(rgb(PRIMARY_COLOR)))
+                                        .on_click(window.listener_for(
+                                            &view,
+                                            move |this, _: &ClickEvent, window, cx| {
+                                                this.leave_field(window, cx);
+                                                this.language = at;
+                                                cx.notify();
+                                            },
+                                        ))
+                                }))
+                                .child(small_button("label-names-reset", "Reset").on_click(
+                                    window.listener_for(
+                                        &view,
+                                        |this, _: &ClickEvent, window, cx| {
+                                            this.leave_field(window, cx);
+                                            this.reset_names(window, cx)
+                                        },
+                                    ),
+                                ))
+                        }
+                    })
+                    .keywords(["Reset", "Language", "Lightroom"]),
+                ),
+        )
+    }
+
+    fn culling(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let checked = self.auto_advance;
+        let view = view.clone();
+        page.group(SettingGroup::new().item(SettingItem::new(
+            "Auto-advance after a star, reject or pick",
+            SettingField::checkbox(
+                move |_| checked,
+                move |_, cx| view.update(cx, |this, cx| this.flip_auto_advance(cx)),
             ),
-            Tab::Sidecar => content
-                .children(FORMATS.iter().map(|&(format, label)| {
-                    Radio::new(format.setting())
-                        .small()
-                        .checked(format == self.format)
-                        .label(label)
-                        .px_2()
-                        .py(px(2.))
-                        .text_size(px(13.))
-                        .on_click(cx.listener(move |this, _: &bool, window, cx| {
-                            this.leave_field(window, cx);
-                            this.choose_format(format, cx);
+        )))
+    }
+
+    /// One item per action, titled with its label so the search finds it: a
+    /// chip per key with its remove button, `+` or the capture prompt, and
+    /// `Reset`; then `Reset all`.
+    fn shortcuts(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let rows = self.keymap.bindings().into_iter().map(|b| {
+            let action = b.action;
+            let keys = b.keys;
+            let capturing = self.model.capturing == Some(action);
+            let view = view.clone();
+            SettingItem::new(
+                settingsmodal::shortcut_label(action),
+                SettingField::render(move |_, window, _| {
+                    div()
+                        .flex()
+                        .flex_wrap()
+                        .items_center()
+                        .justify_end()
+                        .gap(px(4.))
+                        .children(keys.iter().enumerate().map(|(k, key)| {
+                            let shown = settingsmodal::display_key(key).to_owned();
+                            let key = key.clone();
+                            div()
+                                .flex()
+                                .items_center()
+                                .gap(px(3.))
+                                .pl(px(6.))
+                                .rounded_sm()
+                                .bg(rgb(ACCENT_COLOR))
+                                .text_size(px(13.))
+                                .child(shown)
+                                .child(small_button(("remove", k), "\u{d7}").on_click(
+                                    window.listener_for(
+                                        &view,
+                                        move |this, _: &ClickEvent, window, cx| {
+                                            this.edit(Edit::Remove(action, key.clone()), cx);
+                                            // The pressed button is gone with its chip.
+                                            window.focus(&this.focus, cx);
+                                        },
+                                    ),
+                                ))
                         }))
-                }))
-                .when(settingsmodal::writes_xmp(self.format), |d| {
-                    d.child(self.label_names(window, cx))
+                        .child(if capturing {
+                            div()
+                                .text_size(px(13.))
+                                .text_color(rgb(MUTED_COLOR))
+                                .child("Press a key...")
+                                .into_any_element()
+                        } else {
+                            small_button("add", "+")
+                                .on_click(window.listener_for(
+                                    &view,
+                                    move |this, _: &ClickEvent, window, cx| {
+                                        this.capture(action, window, cx);
+                                    },
+                                ))
+                                .into_any_element()
+                        })
+                        .child(small_button("reset", "Reset").on_click(window.listener_for(
+                            &view,
+                            move |this, _: &ClickEvent, _, cx| {
+                                this.edit(Edit::Reset(action), cx);
+                            },
+                        )))
                 }),
-            Tab::Shortcuts => {
-                content
-                    .child(self.shortcuts(cx))
-                    .child(div().flex().justify_end().child(
+            )
+        });
+        let view = view.clone();
+        page.group(
+            SettingGroup::new().items(rows).item(
+                SettingItem::render(move |_, window, _| {
+                    div().flex().justify_end().child(
                         small_button("shortcuts-reset-all", "Reset all").on_click(
-                            cx.listener(|this, _: &ClickEvent, _, cx| {
+                            window.listener_for(&view, |this, _: &ClickEvent, _, cx| {
                                 this.edit(Edit::ResetAll, cx)
                             }),
                         ),
-                    ))
-            }
-            Tab::Import => content.child(self.import(window, cx)),
-        }
+                    )
+                })
+                .keywords(["Reset all"]),
+            ),
+        )
     }
 
-    /// The Tauri paragraph, the read-only root with `Choose…` and its note,
-    /// the pattern field, the example line, the example patterns and the
-    /// specifier table.
-    fn import(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    /// The Tauri paragraph as the page's description, the read-only root
+    /// with `Choose…` and its note, the pattern field, the example line, the
+    /// example patterns and the specifier table.
+    fn import(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let root = self.import_root.clone();
+        let mut root_item = SettingItem::new(
+            "Destination root",
+            SettingField::render({
+                let view = view.clone();
+                move |_, window, _| {
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .w(px(360.))
+                        .text_size(px(13.))
+                        .child(
+                            div()
+                                .flex_1()
+                                .min_w_0()
+                                .px(px(6.))
+                                .min_h(px(22.))
+                                .rounded_sm()
+                                .border_1()
+                                .border_color(rgba(INPUT_BORDER))
+                                .text_color(rgb(MUTED_COLOR))
+                                .child(root.clone()),
+                        )
+                        .child(
+                            small_button("import-root-choose", "Choose\u{2026}").on_click(
+                                window.listener_for(&view, |this, _: &ClickEvent, window, cx| {
+                                    this.leave_field(window, cx);
+                                    this.choose_root(cx);
+                                }),
+                            ),
+                        )
+                }
+            }),
+        );
+        if let Some(note) = settingsmodal::root_note(&self.import_root) {
+            root_item = root_item.description(note);
+        }
+        let pattern_field = self.pattern_field.clone();
         let (example, refused) = match &self.example {
             Ok(example) => (example.clone(), false),
             Err(reason) => (reason.clone(), true),
         };
-        div()
-            .id("import")
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_h_0()
-            .gap_2()
-            .child(div().child(settingsmodal::IMPORT_NOTE))
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Destination root"),
-            )
-            .child(
-                div()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(
+        let view = view.clone();
+        page.description(settingsmodal::IMPORT_NOTE).group(
+            SettingGroup::new()
+                .item(root_item)
+                .item(SettingItem::new(
+                    "Folder pattern",
+                    SettingField::render(move |_, window, cx| {
+                        div().w(px(240.)).child(field(&pattern_field, window, cx))
+                    }),
+                ))
+                .item(
+                    SettingItem::render(move |_, _, _| {
                         div()
-                            .flex_1()
-                            .min_w_0()
-                            .px(px(6.))
-                            .min_h(px(22.))
-                            .rounded_sm()
-                            .border_1()
-                            .border_color(rgba(INPUT_BORDER))
-                            .text_color(rgb(MUTED_COLOR))
-                            .child(self.import_root.clone()),
-                    )
-                    .child(
-                        small_button("import-root-choose", "Choose\u{2026}").on_click(cx.listener(
-                            |this, _: &ClickEvent, window, cx| {
-                                this.leave_field(window, cx);
-                                this.choose_root(cx);
-                            },
-                        )),
-                    ),
-            )
-            .children(
-                settingsmodal::root_note(&self.import_root)
-                    .map(|note| div().text_color(rgb(MUTED_COLOR)).child(note)),
-            )
-            .child(
-                div()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .child("Folder pattern"),
-            )
-            .child(
-                div()
-                    .w(px(240.))
-                    .child(field(&self.pattern_field, window, cx)),
-            )
-            .child(
-                div()
-                    .when(refused, |d| d.text_color(rgb(ERROR_COLOR)))
-                    .child(example),
-            )
-            .child(
-                div().flex().flex_wrap().gap(px(4.)).children(
-                    settingsmodal::IMPORT_PATTERN_EXAMPLES
-                        .iter()
-                        .enumerate()
-                        .map(|(at, &pattern)| {
-                            small_button(("import-pattern", at), pattern).on_click(cx.listener(
-                                move |this, _: &ClickEvent, window, cx| {
-                                    this.leave_field(window, cx);
-                                    this.use_pattern(pattern, window, cx);
+                            .text_size(px(13.))
+                            .when(refused, |d| d.text_color(rgb(ERROR_COLOR)))
+                            .child(example.clone())
+                    })
+                    .keywords(["Example"]),
+                )
+                .item(SettingItem::new(
+                    "Example patterns",
+                    SettingField::render(move |_, window, _| {
+                        div().flex().flex_wrap().justify_end().gap(px(4.)).children(
+                            settingsmodal::IMPORT_PATTERN_EXAMPLES
+                                .iter()
+                                .enumerate()
+                                .map(|(at, &pattern)| {
+                                    small_button(("import-pattern", at), pattern).on_click(
+                                        window.listener_for(
+                                            &view,
+                                            move |this, _: &ClickEvent, window, cx| {
+                                                this.leave_field(window, cx);
+                                                this.use_pattern(pattern, window, cx);
+                                            },
+                                        ),
+                                    )
+                                }),
+                        )
+                    }),
+                ))
+                .item(
+                    SettingItem::render(|_, _, _| {
+                        div().flex().flex_col().text_size(px(13.)).children(
+                            settingsmodal::IMPORT_SPECIFIERS.iter().map(
+                                |&(spec, meaning, example)| {
+                                    div()
+                                        .flex()
+                                        .gap_2()
+                                        .child(div().w(px(48.)).flex_none().child(spec))
+                                        .child(div().w(px(180.)).flex_none().child(meaning))
+                                        .child(div().text_color(rgb(MUTED_COLOR)).child(example))
                                 },
-                            ))
-                        }),
+                            ),
+                        )
+                    })
+                    .keywords(
+                        settingsmodal::IMPORT_SPECIFIERS
+                            .iter()
+                            .flat_map(|&(spec, meaning, _)| [spec, meaning]),
+                    ),
                 ),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .children(settingsmodal::IMPORT_SPECIFIERS.iter().map(
-                        |&(spec, meaning, example)| {
-                            div()
-                                .flex()
-                                .gap_2()
-                                .child(div().w(px(48.)).flex_none().child(spec))
-                                .child(div().w(px(180.)).flex_none().child(meaning))
-                                .child(div().text_color(rgb(MUTED_COLOR)).child(example))
-                        },
-                    )),
-            )
-            .overflow_y_scrollbar()
-    }
-
-    /// The Tauri paragraph, a name field per color, the languages `Reset`
-    /// chooses from (GPUI has no select element: a wrapping row of them,
-    /// the chosen one lit) and `Reset`.
-    fn label_names(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .pt_2()
-            .child(
-                div()
-                    .text_color(rgb(MUTED_COLOR))
-                    .child(settingsmodal::LABEL_NAMES_NOTE),
-            )
-            .children(
-                LABEL_COLORS
-                    .iter()
-                    .zip(&self.name_fields)
-                    .map(|(color, state)| {
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(div().w(px(64.)).flex_none().child(*color))
-                            .child(div().w(px(240.)).child(field(state, window, cx)))
-                    }),
-            )
-            .child(
-                div()
-                    .flex()
-                    .flex_wrap()
-                    .items_center()
-                    .gap(px(4.))
-                    .children(i18n::presets().iter().enumerate().map(|(at, preset)| {
-                        let chosen = at == self.language;
-                        small_button(("label-language", at), preset.name.clone())
-                            .selected(chosen)
-                            .when(chosen, |b| b.border_color(rgb(PRIMARY_COLOR)))
-                            .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
-                                this.leave_field(window, cx);
-                                this.language = at;
-                                cx.notify();
-                            }))
-                    }))
-                    .child(
-                        small_button("label-names-reset", "Reset").on_click(cx.listener(
-                            |this, _: &ClickEvent, window, cx| {
-                                this.leave_field(window, cx);
-                                this.reset_names(window, cx)
-                            },
-                        )),
-                    ),
-            )
-    }
-
-    /// One row per action: its label, a chip per key with its remove button,
-    /// `+` or the capture prompt, and `Reset`. Laid out only while the tab is
-    /// shown, so the rows are plain `div`s in a scrolling list.
-    fn shortcuts(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .id("shortcuts")
-            .flex()
-            .flex_col()
-            .flex_1()
-            .min_h_0()
-            .children(
-                self.keymap
-                    .bindings()
-                    .into_iter()
-                    .enumerate()
-                    .map(|(at, b)| {
-                        let action = b.action;
-                        let capturing = self.model.capturing == Some(action);
-                        div()
-                            .id(("shortcut", at))
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .py(px(3.))
-                            .child(
-                                div()
-                                    .w(px(220.))
-                                    .flex_none()
-                                    .child(settingsmodal::shortcut_label(action)),
-                            )
-                            .child(
-                                div()
-                                    .flex()
-                                    .flex_1()
-                                    .flex_wrap()
-                                    .items_center()
-                                    .gap(px(4.))
-                                    .children(b.keys.into_iter().enumerate().map(|(k, key)| {
-                                        let shown = settingsmodal::display_key(&key).to_owned();
-                                        div()
-                                            .flex()
-                                            .items_center()
-                                            .gap(px(3.))
-                                            .pl(px(6.))
-                                            .rounded_sm()
-                                            .bg(rgb(ACCENT_COLOR))
-                                            .child(shown)
-                                            .child(small_button(("remove", k), "\u{d7}").on_click(
-                                                cx.listener(
-                                                    move |this, _: &ClickEvent, window, cx| {
-                                                        this.edit(
-                                                            Edit::Remove(action, key.clone()),
-                                                            cx,
-                                                        );
-                                                        // The pressed button is gone with its chip.
-                                                        window.focus(&this.focus, cx);
-                                                    },
-                                                ),
-                                            ))
-                                    }))
-                                    .child(if capturing {
-                                        div()
-                                            .text_color(rgb(MUTED_COLOR))
-                                            .child("Press a key...")
-                                            .into_any_element()
-                                    } else {
-                                        small_button("add", "+")
-                                            .on_click(cx.listener(
-                                                move |this, _: &ClickEvent, window, cx| {
-                                                    this.capture(action, window, cx);
-                                                },
-                                            ))
-                                            .into_any_element()
-                                    }),
-                            )
-                            .child(small_button("reset", "Reset").on_click(cx.listener(
-                                move |this, _: &ClickEvent, _, cx| {
-                                    this.edit(Edit::Reset(action), cx);
-                                },
-                            )))
-                    }),
-            )
-            .overflow_y_scrollbar()
+        )
     }
 
     /// The box, filling the window, opaque and occluding the main view under
     /// it, with Tab and Shift+Tab kept inside it by its focus trap.
-    fn layer(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn layer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("settings-box")
             .when(self.model.capturing.is_some(), |d| {
@@ -726,6 +712,9 @@ impl SettingsView {
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(e, window, cx);
+            }))
+            .capture_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
+                this.cancel_capture(cx);
             }))
             .occlude()
             .flex()
@@ -757,14 +746,13 @@ impl SettingsView {
                             .on_click(cx.listener(|this, _: &ClickEvent, _, cx| this.close(cx))),
                     ),
             )
+            // `Settings` fills its parent, which needs a definite size.
             .child(
                 div()
-                    .flex()
+                    .relative()
                     .flex_1()
                     .min_h_0()
-                    .gap_3()
-                    .child(self.tab_list(cx))
-                    .child(self.content(window, cx)),
+                    .child(div().absolute().inset_0().child(self.body(cx))),
             )
             .children(self.status.clone().map(|status| {
                 div()
@@ -822,10 +810,10 @@ fn small_button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> But
 }
 
 impl Render for SettingsView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.model.is_open() {
             return Empty.into_any_element();
         }
-        self.layer(window, cx).into_any_element()
+        self.layer(cx).into_any_element()
     }
 }
