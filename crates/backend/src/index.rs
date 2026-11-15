@@ -164,7 +164,8 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// point from the largest confident face of the whole preview. `10` fills
 /// `full_eye_sharp` from a second read, of the full JPEG, on candidates. `11`
 /// fills it for every frame whose cue judged a face, on the full JPEG when the
-/// file holds one larger than the preview, else on the preview already read.
+/// file holds one larger than the preview (and past `fullsharp`'s `MIN_SCALE`);
+/// a file without one stays `None`.
 pub const FACES_VERSION: i64 = 11;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
