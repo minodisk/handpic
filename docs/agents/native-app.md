@@ -1843,10 +1843,24 @@ a folder operation's run, then the scan's running pass
 bar). `main.rs`'s `progress_bar` draws it as two plain `div`s, a 2 px
 `MUTED_FILL` track spanning the window and a `PRIMARY_COLOR` indicator whose
 width is `relative(fraction)`, as the Tauri `#scan-progress`. It is not
-gpui-component's progress element: only the settings modal and the tree's
-inline rename draw from it (see "gpui-component is initialized; the settings
-modal and the tree's inline rename draw from it").
+gpui-component's `Progress`, which, as verified at 0.9.1, cannot draw it so.
+`Progress` draws its track as its indicator's color at 20 % opacity (the
+`.color(..)` value, else the theme's `progress_bar`, which falls back to
+`primary`) and has no setter for the track apart from it, so the track would
+be `PRIMARY_COLOR` at 20 %, lighter than `MUTED_FILL`. Its indicator's width
+always animates through `transition` over the theme's
+`motion.duration_normal` (180 ms by default), turned off only by GPUI's
+reduce-motion or by a zero `duration_normal`, which the dialogs read too;
+while it runs it requests animation frames, and since it is keyed by the
+element id, a drop of the value (pass 1 to pass 2, a rescan) is drawn as the
+bar shrinking from full to 0. What it would add, the accessibility progress
+role and the indeterminate `loading` mode, nothing here uses.
 
+- Rule: do not replace the bar with `Progress` while its track color cannot
+  be set apart from the indicator's and its value always animates; check
+  both again on a gpui-component bump. Reproducing the look would also take
+  `.with_size(Size::Size(px(2.)))` and `.rounded_none()` (with the theme's
+  6 px radius the bar is otherwise a 1 px pill).
 - Rule: the bar is `absolute` inside the status row (made `relative`), on
   its top edge, so showing or hiding it changes no layout: the canvas's
   `viewport` cell, the fit scale, a 1:1 crop and the peaking layer are not

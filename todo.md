@@ -3232,3 +3232,15 @@ Files: `mise.toml`, `crates/native/mise.toml`.
 - [ ] At the repository root, run `mise current rust` (expect `1.97.1` or the current resolved version). Run `rustup component remove rust-analyzer --toolchain <resolved version>`, then a plain `mise install`, then `rustup component list --installed --toolchain <resolved version>`. Expected result: the list includes `rust-analyzer-<host triple>`. Pass the resolved full version to rustup, not `1.97`, because rustup treats `1.97` as a separate toolchain and auto-installs it.
 - [ ] In `crates/native`, run `rustup component remove rust-analyzer --toolchain 1.98.1`, then a plain `mise install`, then `rustup component list --installed --toolchain 1.98.1`. Expected result: the list includes `rust-analyzer-<host triple>`.
 - [ ] Record the result. If a plain `mise install` is not enough, add a `mise install --force rust` line to the setup docs (`docs/agents/native-app.md` or the README setup section).
+
+### Docs: the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it" in native-app.md is stale
+
+#### Background
+
+`docs/agents/native-app.md` (the heading at about line 48) still says only the settings modal and the tree's inline rename draw from gpui-component. The dialogs, tooltips and scrollbars are drawn from it too. The `native-progress-bar-reason` feature fixed the same stale claim in the progress bar section's sentence. It left the heading alone on purpose, to keep that PR to one sentence. Other places refer to the section by its exact heading name, for example the `docs/agents/native-app.md` mention "table in "gpui-component is initialized"" near line 1900. A rename must update those references, and `mise run lint` (lychee) must still pass. Plan: `docs/plans/_archived/20261115-native-progress-bar-reason/plan.md`.
+
+Files: `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] Rename the heading so it states what gpui-component now draws (settings modal, tree rename, dialogs, tooltips, scrollbars), or make it generic. Update every reference to the old heading name, found with `rg -n 'gpui-component is initialized' docs CLAUDE.md`.
