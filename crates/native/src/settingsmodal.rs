@@ -1,7 +1,7 @@
-//! The settings modal's pure model: its open state, the selected tab and the
-//! shortcut row waiting for a key, the key rule of `modal.ts`'s
-//! `SettingsModal` and the vertical tablist of `tabs.ts`'s `nextTab`, and the
-//! Keyboard Shortcuts tab's edits of the keymap.
+//! The settings modal's pure model: its open state and the shortcut row
+//! waiting for a key, the key rule of `modal.ts`'s `SettingsModal`, the
+//! pages' order and titles, and the Keyboard Shortcuts page's edits of the
+//! keymap.
 
 use riffle_backend::{
     import,
@@ -125,7 +125,7 @@ pub const NOT_SAVED: &str = "The settings store did not open, so changes last un
 /// and `ctrl+,` / `meta+,` the keymap refuses as a menu accelerator.
 pub const APP_KEYS: [&str; 3] = ["home", "end", "q"];
 
-/// A Keyboard Shortcuts tab edit of the keymap.
+/// A Keyboard Shortcuts page edit of the keymap.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     Add(&'static str, String),
@@ -205,16 +205,15 @@ pub fn display_key(key: &str) -> &str {
     if key == "space" { "Space" } else { key }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
-    #[default]
     Sidecar,
     Culling,
     Shortcuts,
     Import,
 }
 
-/// The tabs in the Tauri order, less the Cache, MCP and Debug ones.
+/// The pages in the Tauri order, less the Cache, MCP and Debug ones.
 pub const TABS: [Tab; 4] = [Tab::Sidecar, Tab::Culling, Tab::Shortcuts, Tab::Import];
 
 impl Tab {
@@ -225,10 +224,6 @@ impl Tab {
             Tab::Shortcuts => "Keyboard Shortcuts",
             Tab::Import => "Import",
         }
-    }
-
-    pub fn at(self) -> usize {
-        TABS.iter().position(|&t| t == self).unwrap_or(0)
     }
 }
 
@@ -248,7 +243,6 @@ pub enum ModalKey {
 #[derive(Default)]
 pub struct SettingsModal {
     opened: bool,
-    pub tab: Tab,
     /// The action whose shortcut row waits for a key.
     pub capturing: Option<&'static str>,
 }
@@ -272,12 +266,6 @@ impl SettingsModal {
         self.capturing = None;
     }
 
-    /// Switching tabs cancels a capture, as `selectTab` does.
-    pub fn select(&mut self, tab: Tab) {
-        self.tab = tab;
-        self.capturing = None;
-    }
-
     /// `key` is `keys::key_name`'s name, `None` for a lone modifier. While a
     /// row captures, Escape cancels the capture and any other key is added;
     /// otherwise Escape closes.
@@ -296,19 +284,6 @@ impl SettingsModal {
     }
 }
 
-/// The tab a vertical tablist key moves to, wrapping around, or `current`
-/// for any other key.
-pub fn next_tab(current: Tab, key: &str) -> Tab {
-    let at = current.at();
-    match key {
-        "arrowup" => TABS[(at + TABS.len() - 1) % TABS.len()],
-        "arrowdown" => TABS[(at + 1) % TABS.len()],
-        "home" => TABS[0],
-        "end" => TABS[TABS.len() - 1],
-        _ => current,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
@@ -316,8 +291,8 @@ mod tests {
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, ModalKey,
-        SettingsModal, TABS, Tab, display_key, edit, format_change, label_change, label_names_of,
-        label_texts, next_tab, pattern_change, root_note, shortcut_label, stops, writes_xmp,
+        SettingsModal, TABS, display_key, edit, format_change, label_change, label_names_of,
+        label_texts, pattern_change, root_note, shortcut_label, stops, writes_xmp,
     };
 
     #[test]
@@ -421,15 +396,6 @@ mod tests {
     }
 
     #[test]
-    fn switching_tabs_cancels_a_capture() {
-        let mut modal = open();
-        modal.capturing = Some("pick");
-        modal.select(Tab::Culling);
-        assert_eq!(modal.tab, Tab::Culling);
-        assert_eq!(modal.capturing, None);
-    }
-
-    #[test]
     fn a_captured_key_is_added_to_the_capturing_action() {
         let mut modal = open();
         modal.capturing = Some("pick");
@@ -527,29 +493,12 @@ mod tests {
     }
 
     #[test]
-    fn starts_closed_on_the_first_tab() {
-        let modal = SettingsModal::default();
-        assert!(!modal.is_open());
-        assert_eq!(modal.tab, Tab::Sidecar);
-    }
-
-    #[test]
     fn opens_once_and_opening_again_while_open_is_a_no_op() {
         let mut modal = SettingsModal::default();
         assert!(modal.open());
         assert!(modal.is_open());
         assert!(!modal.open());
         assert!(modal.is_open());
-    }
-
-    #[test]
-    fn closes_and_can_open_again_on_the_same_tab() {
-        let mut modal = open();
-        modal.tab = Tab::Culling;
-        modal.close();
-        assert!(!modal.is_open());
-        assert!(modal.open());
-        assert_eq!(modal.tab, Tab::Culling);
     }
 
     #[test]
@@ -618,32 +567,6 @@ mod tests {
             labels,
             ["Sidecar", "Culling", "Keyboard Shortcuts", "Import"]
         );
-    }
-
-    #[test]
-    fn arrow_down_moves_to_the_next_tab_and_wraps() {
-        assert_eq!(next_tab(Tab::Sidecar, "arrowdown"), Tab::Culling);
-        assert_eq!(next_tab(Tab::Shortcuts, "arrowdown"), Tab::Import);
-        assert_eq!(next_tab(Tab::Import, "arrowdown"), Tab::Sidecar);
-    }
-
-    #[test]
-    fn arrow_up_moves_to_the_previous_tab_and_wraps() {
-        assert_eq!(next_tab(Tab::Culling, "arrowup"), Tab::Sidecar);
-        assert_eq!(next_tab(Tab::Sidecar, "arrowup"), Tab::Import);
-    }
-
-    #[test]
-    fn home_and_end_move_to_the_first_and_last_tab() {
-        assert_eq!(next_tab(Tab::Culling, "home"), Tab::Sidecar);
-        assert_eq!(next_tab(Tab::Culling, "end"), Tab::Import);
-    }
-
-    #[test]
-    fn other_keys_keep_the_current_tab() {
-        for key in ["arrowleft", "arrowright", "enter", "tab"] {
-            assert_eq!(next_tab(Tab::Culling, key), Tab::Culling, "{key}");
-        }
     }
 
     #[test]

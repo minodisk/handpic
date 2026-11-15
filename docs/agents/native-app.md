@@ -64,15 +64,21 @@ keep reading them): `background` `#0a0a0a` (`theme.rs`'s own constant), `foregro
 6 px (`rounded_md`, the buttons and menus) and `radius_lg` 8 px
 (`rounded_lg`, the dialog boxes), and `Button`'s default variant: `button`
 `BUTTON_FILL` (white at 4 %), `button_hover` and `button_active` `#262626`,
-`button_foreground` `#fafafa`. `Default Dark` derives the `button_*`,
+`button_foreground` `#fafafa`, and the settings' `Sidebar`: `sidebar`
+`#171717` (the box's `popover`, not `Default Dark`'s `#0a0a0a`),
+`sidebar_accent` `#262626` (the selected page, as the old tab list lit it),
+`sidebar_foreground` and `sidebar_accent_foreground` `#fafafa`,
+`sidebar_border` white at 10 %, `sidebar_primary` `#e5e5e5` on
+`sidebar_primary_foreground` `#171717`. `Default Dark` derives the `button_*`,
 `*_hover` / `*_active` and `list_*` fields at load and `Theme::update` does
 not derive them again, so the fields it does not name keep `Default Dark`'s
 values. Nothing calls `Theme::sync_system_appearance` or observes
 the window appearance, so a light OS setting leaves the app dark. The
-components drawn are the settings modal's: `Input` (its text fields, see
-"Text is typed through gpui-component's `Input`"), `Button`, `Checkbox`,
-`Radio` and `ScrollableElement`'s scrollbar (see "The settings modal is its
-own entity"), the tree's inline rename's `Input` (see "The tree's inline
+components drawn are the settings modal's: `setting::Settings` (with its
+`Sidebar`, search `Input`, `h_resizable` split, `GroupBox`es and the page
+list's scrollbar), `Input` (its text fields, see "Text is typed through
+gpui-component's `Input`"), `Button`, `Checkbox` and `Radio` (see "The
+settings modal is its own entity"), the tree's inline rename's `Input` (see "The tree's inline
 rename is a text input in the row") and `Tooltip`, every tooltip of the app
 (see "A strip cell's tooltips are transparent `div`s over the canvas"). The
 folder tree is not the component's `Tree` (see "The folder tree is not
@@ -1048,9 +1054,9 @@ registers it with `application().with_assets(icons::Icons)`.
 ### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
 
 `settingsview.rs`'s `SettingsView` is an `Entity` the window creates once and
-holds; `settingsmodal.rs` is its pure model (the open state, the selected
-tab, the shortcut row capturing a key, `modal.ts`'s key rule, `tabs.ts`'s
-vertical `nextTab`). It is shown over the whole window, not in a dialog
+holds; `settingsmodal.rs` is its pure model (the open state, the shortcut
+row capturing a key, `modal.ts`'s key rule, the pages' order and titles in
+`TABS`). It is shown over the whole window, not in a dialog
 (the user's choice, 2026-11-15): `Riffle::render` wraps its root `div` (the
 one with the `Handpic` key context, the focus, the key listener and
 `on_drop`) in an outer full-size `div` and, while the modal is open, adds
@@ -1061,9 +1067,13 @@ layout stays rendered underneath, not replaced: the preview canvas's paint
 takes the pending page and releases the scan pause (`hold.rs`'s
 `PaintHold`), and a re-listing or an MCP tool call can change the current
 file while the settings are shown. While closed the view's `render` returns
-`Empty`. The tabs are Sidecar, Culling, Keyboard Shortcuts and Import (no
-Cache, MCP or Debug); the modal keeps the tab across opens and `open`
-focuses it with `window.focus`, as the Tauri `open` does.
+`Empty`. Under the title row (the `×`) and over the status line, the body is
+one gpui-component `setting::Settings` element, rebuilt on every render,
+with four `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts and Import
+(no Cache, MCP or Debug), in a `relative` `flex_1` slot holding an
+`absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
+its parent. Every open starts on Sidecar and `open` focuses the box's own
+handle with `window.focus`.
 
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
@@ -1094,9 +1104,14 @@ not open.
   reaches the window's `key_down`; that handler also returns at once while
   the modal is open. The box has its own focus handle (`track_focus`) and an
   `on_key_down` that calls `cx.stop_propagation()` on every key but one typed
-  into a field (`settingsmodal::stops`). There is no `Dialog` key context,
-  so Escape closes from the listener (committing a focused field first) and
-  Enter presses the focused control.
+  into a text field (`settingsmodal::stops`). A text field is told by the
+  `Input` key context on the focused path (`window.context_stack()`), not by
+  the view's own handles, since the component's search field is private.
+  There is no `Dialog` key context, so Escape closes from the listener
+  (committing a focused name or pattern field first) and Enter presses the
+  focused control. In the search field, Escape first clears a non-empty
+  query (the sidebar header's `Escape` handler, which then does not
+  propagate); with the query empty it propagates and closes.
   `ctrl+,` (`meta+,` on macOS, `settingsmodal::OPEN_KEY`) is taken literally
   after `home` / `end` / `q`, closes an open sort or filter menu, and opens
   the modal, not while a folder flow or the trash flow is busy; the keymap
@@ -1106,17 +1121,42 @@ not open.
   `focus_next` / `focus_prev`, which wrap; the trap holds only the modal's
   controls, the same stops in the same order as the box's own `focus_next`
   walk had (the window's root handle is not a tab stop). So `ModalKey` has no
-  focus move any more. The controls are gpui-component's `Button` (the
-  outlined `small_button`s: `Choose…`, the example patterns, the languages,
-  `Reset`, `+`, a chip's `×`, `Reset all`; the ghost close `×`), `Checkbox`
-  (auto-advance) and `Radio` (the three formats, standalone, not a
-  `RadioGroup`, whose arrow-key roving would change the cycle), each a tab
+  focus move any more. The controls are the component's search `Input`,
+  gpui-component's `Button` (the outlined `small_button`s: `Choose…`, the
+  example patterns, the languages, `Reset`, `+`, a chip's `×`, `Reset all`;
+  the ghost close `×`), `Checkbox` (auto-advance, the built-in
+  `SettingField::checkbox`) and `Radio` (the three formats, standalone, not
+  a `RadioGroup`, whose arrow-key roving would change the cycle), each a tab
   stop at the default `tab_index(0)` with a focus handle of its own (keyed
-  state, or `track_focus`), and the `Input` fields. The tabs stay hand-drawn
-  `div`s on the theme's tokens: each tracks a handle of the view's with
-  `tab_stop(selected)`, the Tauri roving `tabindex`, so only the selected tab
-  is in the cycle and ArrowUp / ArrowDown / Home / End on it select and focus
-  another (`next_tab`). `TabBar` is horizontal only.
+  state, or `track_focus`), and the `Input` fields. The sidebar's page
+  entries are not tab stops (next rule), so pages are switched with the
+  pointer only; ArrowUp / ArrowDown / Home / End on a tab and the roving
+  `tabindex` went with the hand-drawn tab list.
+- Rule: what the component imposes, read from `gpui-component` 0.9.1's
+  `src/setting/` (Inferred). The selected page and the search field live in
+  the element's `window.use_keyed_state`, in a `pub(super)`
+  `SettingsState`: the view can set only `default_selected_index`, neither
+  read nor set the page later, and the state is dropped while the settings
+  are hidden, so the page is not remembered across opens. The sidebar's
+  `SidebarMenuItem`s have no focus handle. The sidebar always has the search
+  field, with no option to hide it; a custom full-width item
+  (`SettingItem::render`) is hidden while the query is not empty unless its
+  `keywords` match, so the language row, `Reset all`, the example line and
+  the specifier table carry keywords, and each Keyboard Shortcuts item is
+  titled with its `shortcut_label` so the search finds actions.
+  `SettingField::input` calls its setter on every `InputEvent::Change`, a
+  write per keystroke (for the label names, `switch_names` with its writer
+  drain and re-listing; for the pattern, a half-typed one stored), so the
+  name and pattern fields are custom fields (`SettingField::render`) over
+  the view's own `InputState`s with the Enter / blur commit. The component
+  has no radio field, so the formats are a custom field too. The item and
+  field closures are `Fn(.., &mut Window, &mut App)`; the view builds them
+  with the values it shows and its `Entity`, through `window.listener_for`,
+  and they run during layout, after the view's render returned, so there is
+  no double lease. `Settings`, `Sidebar`, `GroupBox` and the resizable
+  register no `KeyBinding`. The component's own strings
+  (`Settings.search_placeholder`, the no-results texts) come from its
+  `rust_i18n` locales; nothing calls `set_locale`, so they are English.
 - Rule: Enter and Space on a focused control come for free: the Base
   `Button`, `Checkbox` and `Radio` under the components are `div`s with
   `on_click`, which turn a key down then up of either into a
@@ -1127,7 +1167,18 @@ not open.
   focus-on-press from running). So a control pressed while a field has the
   focus calls `leave_field` first, which focuses the box, and the field
   commits on its `Blur` as it did when the press focused the old control.
-- Rule: the look. The outlined buttons are `Button`'s default variant at
+- Rule: the look. The pages are the component's: a header with the page's
+  title (the Import page's description is `IMPORT_NOTE`), groups in the
+  default `GroupBoxVariant::Normal` (no surface), and items with their
+  14 px title left and the control right, stacked when the page is 480 px
+  wide or less. The Sidecar page holds a `Format` item (the three radios)
+  and, while the format writes XMP, a `Label names` group (the
+  `LABEL_NAMES_NOTE` as its description, one item per color, then the
+  languages and `Reset`); the Culling page the auto-advance checkbox; the
+  Keyboard Shortcuts page one item per action, then `Reset all`; the Import
+  page `Destination root` (its `root_note` as the description), `Folder
+  pattern`, the example line, `Example patterns` and the specifier table.
+  The outlined buttons are `Button`'s default variant at
   `.small()` (24 px tall) with `px(6.)`, `rounded_sm` and a 13 px label
   child (the variant's own label is `text_sm`, 14 px at the window's 16 px
   rem, and its content style is crate-private), on the mapped `button` fill
@@ -1138,12 +1189,9 @@ not open.
   ring and dot. The focus ring is the theme's: `focus_ring` is on in
   `Default Dark`, so a focused control gets the `ring` border and a ring
   outside it.
-- Rule: the Import tab's and the Keyboard Shortcuts tab's lists are
-  `overflow_y_scrollbar()` (`ScrollableElement`), which wraps the list in a
-  root carrying its size and an inner scroll area, with the theme's
-  scrollbar in its default `ScrollbarMode::Scrolling` (shown while
-  scrolling, fading after). Nothing scrolls a focused row into view, before
-  or after.
+- Rule: a page scrolls in the component's `list` of its groups, with the
+  theme's scrollbar in its default `ScrollbarMode::Scrolling` (shown while
+  scrolling, fading after). Nothing scrolls a focused row into view.
 - Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
   features (`aiEnabled` with the model download, pass 3, genres, the ranking,
   `recommended`); a seeded `aiEnabled` key stays in the store, unread.
@@ -1155,10 +1203,10 @@ not open.
 
 ### The keymap is edited in the modal and replaced whole (Inferred)
 
-The Keyboard Shortcuts tab lists `Keymap::bindings()` in order, labeled by
+The Keyboard Shortcuts page lists `Keymap::bindings()` in order, labeled by
 `settingsmodal::shortcut_label` (`settings.ts`'s `shortcutLabels`), each key a
 chip (`display_key`: `space` as `Space`) with a `×`, then `+` or `Press a
-key...`, then `Reset`; `Reset all` is under the scrolling list. The view
+key...`, then `Reset`; `Reset all` is the last item. The view
 edits its own copy of the keymap, read from the window on every open, through
 `settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
 refusal shows the backend's message on the status line and leaves the copy
@@ -1172,8 +1220,13 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
   since the pressed `+` is replaced by the prompt and a focus left on a node
   no longer drawn would leave the settings; a `×` focuses the box after its
   edit for the same reason. The next named key (`key_name`, a lone modifier
-  ignored) is added, Escape cancels without closing, and a tab switch or a
-  close cancels (`SettingsModal::select` / `close`).
+  ignored) is added, Escape cancels without closing, and a close cancels
+  (`SettingsModal::close`). A page switch is the component's and the view
+  cannot observe it, so in its place any pointer press inside the box
+  cancels (`cancel_capture`, a capture-phase `capture_any_mouse_down`, which
+  runs before the pressed control's own click: a `+` pressed on another row
+  then captures for that row). This differs from the Tauri app, where only
+  a tab switch or a close cancels.
 - Rule: `tab` and `shift+tab` can be captured. While a row captures, the box
   sets the key context `SettingsCapture` (`settingsview::CAPTURE_CONTEXT`),
   and `main` binds both keys to `NoAction` in it (`capture_keys`, bound with
@@ -1197,7 +1250,7 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
 
 ### A sidecar format switch is the Tauri order, shared (Inferred)
 
-The Sidecar tab's three rows (`settingsmodal::FORMATS`) emit
+The Sidecar page's three radios (`settingsmodal::FORMATS`) emit
 `Change::SidecarFormat` only for a format other than the one shown
 (`format_change`); the window's `switch_format` sets `settings.format` at
 once, so the next judgment, from a key or the MCP companion's
@@ -1226,7 +1279,7 @@ folder is not re-listed.
   new format's judgments.
 - Rule: a label names change takes the same path (`switch_names`, both
   through `reset_sidecars` under the `format_switch` lock). While the format
-  writes XMP the Sidecar tab shows the five name fields
+  writes XMP the Sidecar page shows the five name fields
   (`Input`), a row of `i18n::presets()` languages and `Reset`; a
   field's commit (Enter or blur; Escape commits and closes, as the Tauri
   field's `change` fires when the closing dialog takes its focus) or `Reset`
@@ -1238,11 +1291,11 @@ folder is not re-listed.
   drains the stores and runs `sidecar::switch_to` with nothing left to
   persist, then re-lists.
 
-### The Import tab stores a root and a valid pattern, nothing reads them yet (Inferred)
+### The Import page stores a root and a valid pattern, nothing reads them yet (Inferred)
 
 `Settings` reads `importRoot` and `importPattern` with the backend's
 `import::root_setting` / `pattern_setting` (an invalid stored pattern reads as
-`%Y/%F`). The Import tab shows the root read-only with `Choose…`, the
+`%Y/%F`). The Import page shows the root read-only with `Choose…`, the
 `importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
 `IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
 `Input` field and the example line, `import::today_example` (the
@@ -2027,7 +2080,8 @@ subscribes to `InputEvent`:
   consumed editing key therefore never also inserts a character, and a key
   meant to be typed must not be stopped by anything on the dispatch path: no
   `Input` binding is a bare printable key, the settings box's handler lets a
-  key it does not take go on while a field is focused
+  key it does not take go on while an `Input` key context is on the focused
+  path, the view's fields and the `Settings` search field alike
   (`settingsmodal::stops`), and the window's root handler is not on the
   settings' dispatch path. `WM_CHAR` then reaches the focused
   state's handler; a propagated Enter, Escape or Tab gives a control

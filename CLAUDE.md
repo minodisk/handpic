@@ -309,12 +309,12 @@ click on an item does, the window writing the changed sort or filter;
 from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
 the application's one `AssetSource`, to `svg().path(..)`, falling back to
 `gpui_kit_assets::Assets` for the icons gpui-component's controls draw),
-`src/settingsmodal.rs` the settings modal's model (open state, tab, the key
-rules of `modal.ts` and `tabs.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
+`src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
+rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
-a hand-drawn vertical tab list beside gpui-component controls (`Button`,
-`Checkbox`, `Radio`, `Input`, and the scrolling lists' scrollbars),
-holding the Sidecar tab's format radios and label names (`Input` fields), the Culling tab's auto-advance toggle, the Keyboard Shortcuts tab, which replaces the keymap and `Bindings` live, and the Import tab's root (`Choose…`, `prompt_for_paths`) and validated pattern,
+its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
+`Checkbox`, `Radio`, `Input`),
+holding the Sidecar page's format radios and label names (`Input` fields), the Culling page's auto-advance toggle, the Keyboard Shortcuts page, which replaces the keymap and `Bindings` live, and the Import page's root (`Choose…`, `prompt_for_paths`) and validated pattern,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an

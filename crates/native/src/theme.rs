@@ -57,6 +57,15 @@ fn map(colors: &mut ThemeColor) {
     colors.scrollbar_thumb = rgba(BORDER_COLOR).into();
     colors.status_bar = rgb(PANE_COLOR).into();
     colors.status_bar_border = rgba(BORDER_COLOR).into();
+    // The settings' `Sidebar`, on the settings box's own surface, its
+    // selected page lit as the hand-drawn tab list's was.
+    colors.sidebar = rgb(PANE_COLOR).into();
+    colors.sidebar_foreground = rgb(FOREGROUND_COLOR).into();
+    colors.sidebar_accent = rgb(ACCENT_COLOR).into();
+    colors.sidebar_accent_foreground = rgb(FOREGROUND_COLOR).into();
+    colors.sidebar_border = rgba(BORDER_COLOR).into();
+    colors.sidebar_primary = rgb(PRIMARY_COLOR).into();
+    colors.sidebar_primary_foreground = rgb(PANE_COLOR).into();
     // `Button`'s default variant. `Default Dark` derives these at load and
     // `update` does not derive them again from the colors above.
     colors.button = rgba(BUTTON_FILL).into();
@@ -105,6 +114,13 @@ mod tests {
         assert_eq!(colors.scrollbar_thumb, hex(0xffffff1a));
         assert_eq!(colors.status_bar, hex(0x171717ff));
         assert_eq!(colors.status_bar_border, hex(0xffffff1a));
+        assert_eq!(colors.sidebar, hex(0x171717ff));
+        assert_eq!(colors.sidebar_foreground, hex(0xfafafaff));
+        assert_eq!(colors.sidebar_accent, hex(0x262626ff));
+        assert_eq!(colors.sidebar_accent_foreground, hex(0xfafafaff));
+        assert_eq!(colors.sidebar_border, hex(0xffffff1a));
+        assert_eq!(colors.sidebar_primary, hex(0xe5e5e5ff));
+        assert_eq!(colors.sidebar_primary_foreground, hex(0x171717ff));
         assert_eq!(colors.button, hex(0xffffff0b));
         assert_eq!(colors.button_hover, hex(0x262626ff));
         assert_eq!(colors.button_active, hex(0x262626ff));
