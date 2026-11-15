@@ -32,7 +32,7 @@ derives through `$crate::Action`, so the test module's `actions!` needs no
 `gpui` alias. Zed pins Rust 1.98.1 at that commit, and so does
 `crates/native/mise.toml`; the published crates declare no `rust-version`.
 The plans: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md),
-then [native-gpui-kit](../plans/20261116-native-gpui-kit/plan.md).
+then [native-gpui-kit](../plans/_archived/20261116-native-gpui-kit/plan.md).
 
 `crates/native/Cargo.toml` carries the guide's `[profile.dev.package]` block
 (`opt-level = 3` for `gpui-pre`, `gpui-component`, `gpui-kit`,
