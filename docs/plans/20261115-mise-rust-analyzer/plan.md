@@ -60,9 +60,11 @@ toolchains, so every environment set up through mise has it.
       `CONTRIBUTING.md`, `CLAUDE.md` and `docs/agents/**` were searched), so
       none is updated. The line in `docs/plans/20261109-gpui-port/plan.md`
       that quotes the native pin is a record of that plan and stays.
-    - For these two paths `ci:local` selects the formatter checks, `vp check`
-      (which formats TOML), shellcheck, actionlint, lychee and the bash
-      tests; it runs no clippy or cargo test.
+    - For the root `mise.toml` `ci:local` selects the formatter checks,
+      `vp check` (which formats TOML), shellcheck, actionlint, lychee and the
+      bash tests. This was superseded: a change to `crates/native/mise.toml`
+      also selects the native crate's checks (clippy and 867 tests, several
+      minutes); see `learnings.md`.
 
 ## Trade-offs and risks
 
@@ -82,3 +84,11 @@ toolchains, so every environment set up through mise has it.
   changes are out of scope for this plan.
 
 ## Progress
+
+- 2026-11-15: Step 1 done. Added `rust-analyzer` to the rust `components` in
+  `mise.toml` and `crates/native/mise.toml`. Both toolchains (`1.97.1`,
+  `1.98.1`) list the component; outputs are in `learnings.md`. Deferred: this
+  host already had the component, so whether a plain `mise install` adds it to
+  an already installed toolchain or `mise install --force rust` is needed was
+  not measured (recorded under `## Deferred issues (todo candidates)` in
+  `learnings.md`).
