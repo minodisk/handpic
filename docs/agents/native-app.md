@@ -1321,8 +1321,12 @@ not open.
   through `commit_names`. `show_names`, which every open and every commit of
   the names goes through, selects the preset whose names equal those in
   force (`settingsmodal::preset_of`), else none (the placeholder). Setting
-  the selection emits no `SelectEvent`, so only a choice in the menu applies
-  names, and the subscription runs as an effect after the `SelectState`'s
+  the selection emits no `SelectEvent` (`set_selected_index` and
+  `set_selected_value` alike), so only a choice in the menu applies names.
+  `show_names` syncs with `set_selected_value` (it clears the search query
+  first, while `set_selected_index` indexes the delegate's matched items, so
+  a leftover query could shift it) or `set_selected_index(None)`, and the
+  subscription runs as an effect after the `SelectState`'s
   own update, so its sync of the selection is no nested update. It is not
   `SettingField::dropdown`, which draws a `Button` with a `PopupMenu`. Escape with the menu open closes the
   menu only (the list's `Cancel` propagates to the `Select`'s, which stops);
