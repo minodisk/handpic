@@ -232,3 +232,5 @@ It is documentation only: no packaging or updater code, no workflow change.
   while the Tauri app is what ships; sub-milestones 4 and 6 own them.
 
 ## Progress
+
+- (2026-11-16) Step 1 complete

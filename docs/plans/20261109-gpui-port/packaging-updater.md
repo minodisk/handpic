@@ -229,7 +229,8 @@ The gpui-kit-aligned layout per platform, with the user's answers of
 To be checked in the sub-milestone that needs each one.
 
 - **Unverified.** How the running app knows its install type (portable, Inno
-  Setup, DMG, deb), which "do not switch owners" requires.
+  Setup, DMG, deb), which "do not switch owners" requires, and, for answer 7,
+  whether a deb install only notifies.
 - **Unverified.** `self_update`'s asset-name and target matching, the
   binary's path in the archive, and whether the portable archives count as
   single-binary once the license notices ship beside the binary.
@@ -274,5 +275,3 @@ To be checked in the sub-milestone that needs each one.
   another ad hoc signature.
 - **Unverified.** Which archive formats `zipsign` signs, and what verifies
   the setup `.exe` and the `.app` download with the project's key.
-- **Unverified.** How the running app knows it is a deb install, for
-  answer 7.
