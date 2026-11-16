@@ -18,9 +18,9 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
-Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md) packages the
+Step 10 of [the gpui-port plan](../../20261109-gpui-port/plan.md) packages the
 native app, gives it an updater and switches the releases over.
-[`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md) decided
+[`packaging-updater.md`](../../20261109-gpui-port/packaging-updater.md) decided
 on 2026-11-14 to package with `cargo-packager` and to write an updater that
 keeps the Tauri `latest.json` / minisign contract, so that installs in the
 field would update into the native app.
