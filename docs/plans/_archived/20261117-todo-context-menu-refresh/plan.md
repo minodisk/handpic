@@ -65,3 +65,5 @@ user reviewed and approved the exact edits below.
   outside, the second right-click and the tree's keyboard hand-back.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete
