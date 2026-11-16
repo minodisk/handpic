@@ -29,7 +29,7 @@ menus and the dialogs. With nothing stored the app looks exactly as it does
 today. `theme.rs` also maps `title_bar` and `title_bar_border`, which the
 gpui-component `TitleBar` a peer session adds right after Step 1 reads.
 
-Read [native-app.md](../../agents/native-app.md) first, in particular
+Read [native-app.md](../../../agents/native-app.md) first, in particular
 "gpui-component is initialized" and "`Root` wraps the window's content".
 
 What the vendored gpui-component 0.9.1 source says (read at planning time, in
