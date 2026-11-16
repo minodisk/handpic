@@ -66,7 +66,8 @@ struct Cached {
 /// Serializes the writes of the counts the tree learns to `folder_counts`:
 /// one in flight at a time, and the counts pushed meanwhile collected, per
 /// folder with the latest winning, into the next write, so two listings of
-/// one folder cannot land out of order. `viewed.rs`'s `Batches`.
+/// one folder cannot land out of order. Like `viewed.rs`'s `Batches`, but the
+/// whole pending set goes out as one write.
 #[derive(Default)]
 pub struct CountWrites {
     /// In the order the folders were first pushed, each folder once.

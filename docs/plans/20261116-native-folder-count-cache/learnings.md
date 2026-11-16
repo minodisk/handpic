@@ -54,8 +54,9 @@
   `background_spawn` tasks driven from the view, so draining them would mean
   a new thread-backed queue. A lost write is a cache miss the folder's next
   listing repairs; `native-app.md` says so.
-- Writing a Python replacement script through a Bash heredoc turned `\?` in
-  a raw string into `\?`; the verbatim-prefix test edits were done with
+- Writing a Python replacement script through a Bash heredoc dropped a backslash
+  from the Windows verbatim prefix in a raw string (one backslash before
+  the question mark instead of the prefix's two before it); the verbatim-prefix test edits were done with
   `sed` instead. Also, `s.index(...)` for an end marker must search from the
   start marker (`s.index(end, a)`): the first try duplicated half of
   `native-app.md` because the "end" heading also occurs earlier.
