@@ -180,7 +180,7 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn kbd_spells_a_keymap_key() {
-        use gpui_component::kbd::Kbd;
+        use gpui_kit::component::kbd::Kbd;
 
         let cases = [
             ("ctrl+alt+1", "Ctrl+Alt+1"),

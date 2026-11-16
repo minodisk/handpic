@@ -5,7 +5,7 @@
 //! owns the values, to apply.
 
 use gpui_kit::component::{
-    ActiveTheme, FocusTrapElement, IndexPath, Selectable, Sizable,
+    ActiveTheme, FocusTrapElement, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     input::{
         Input, InputEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment, InputGroupButton,
