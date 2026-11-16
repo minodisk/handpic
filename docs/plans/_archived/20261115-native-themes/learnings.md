@@ -119,3 +119,16 @@
   Escape with the menu open closes the menu only, with it closed closes the
   settings. Record what is hard to read in this file. Files:
   `crates/native/src/theme.rs`, `crates/native/src/settingsview.rs`.
+- Check the upstream licenses of the shipped themes before packaging the
+  native app. The 21 vendored files in `crates/native/themes/` carry no
+  license of their own; upstream ships them under Apache-2.0, but each
+  adapts a third-party scheme (iTerm2-Color-Schemes, Zed's Ayu, Catppuccin,
+  Solarized, Tokyo Night, Twilight / MacroMates and others) whose own
+  license was not checked one by one. `crates/native/themes/LICENSE` holds
+  only the source, the author / url table and the Apache-2.0 text, and
+  `docs/agents/native-app.md`'s license section does not mention the gap.
+  Change: check each adapted scheme's license, add any missing attribution
+  to `LICENSE` or drop a theme whose license is incompatible, and record the
+  result in the guide's license section. Done when every file in
+  `crates/native/themes/` has a checked upstream license noted in `LICENSE`
+  and the guide's license section states the result.

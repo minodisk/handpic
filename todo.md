@@ -3425,3 +3425,26 @@ Files: `crates/native/src/folderops.rs` (`import_ran`, the deferred post), `crat
 - [ ] On Windows, run `mise run native:dev` with the real settings. Expected: the window restores its saved place, the Lucide icons (strip, menus) and the settings modal's controls (the `Checkbox` check mark, the `Radio`s, the `Input` fields) draw, and `tab` behaves as before (`toggleSides` in the main view, the focus walk inside a dialog).
 - [ ] On macOS, run `mise run native:dev` (the build now has `font-kit` and `runtime_shaders`). Expected: the window draws text (the status row, the meta pane, the menus) and opens without a shader error at startup.
 - [ ] On Linux, in an X11 session and in a Wayland session, run `mise run native:dev` (the build now compiles both backends). Expected: the window opens, draws, and takes the keyboard.
+
+### Native: real-device checks of the Appearance tab (mode, shipped themes) (native-themes)
+
+The `native-themes` feature made the GPUI app's theme a setting: Step 2 stored `theme` (mode System / Light / Dark), added a Neutral light palette and an `Appearance` tab; Step 3 vendored gpui-component's 21 theme files (36 themes) and added a light-theme and a dark-theme `Select`. `mise run ci:local` and the unit tests cover the setting rule, the mode resolution, the palette mappings, the `Roles` derivations and the theme-file parsing. Nobody has looked at the result on a real machine: both steps' checkboxes were ticked on the automated criteria only, so Light, System following the OS, the shipped themes' readability, the fixed judgment colors on light surfaces and the pickers' keys were never exercised on screen. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
+
+Files: `crates/native/src/theme.rs`, `crates/native/src/main.rs`, `crates/native/src/settingsview.rs`.
+
+#### TODO
+
+- [ ] On Windows, open the settings (`ctrl+,`), Appearance, choose Light. Expect the panes, the strip, the status row, the menus, the dialogs, the settings box and the `TitleBar` to turn light and stay readable: the strip's stars (`#ffd050`) and the pick green on the light strip, the tree cursor's ring, the menus' hover and the progress bar. Choose System and switch the OS appearance while the app runs: the app follows it without a restart. Choose Dark: it stays dark whatever the OS does. Restart: the choice is restored before the window is drawn. Record what is hard to read in the archived plan's `learnings.md` (the fixed judgment colors are not retuned in this plan).
+- [ ] On Windows, in Dark mode pick at least one shipped dark theme (e.g. Tokyo Night, Catppuccin Mocha) from `Dark theme`, and in Light mode one shipped light theme (e.g. Catppuccin Latte, Solarized Light) from `Light theme`. Expect the panes, the strip (names, burst band, reject dim), the status row, the menus, the dialogs, the settings box and the `TitleBar` to take the theme at once and stay readable, the preview's surround staying black. Check the derived `Roles` on both (the strip's file names and failures, the burst band, the dimmed reject) and the fixed stars / pick / reject colors on each. Pick Neutral again: the app looks exactly as before (Neutral dark unchanged). In System mode with two non-Neutral themes chosen, switch the OS appearance: the app swaps between them. Restart: the choice is restored. Pickers' keys: Space / Enter open the menu, the arrows move, Enter picks, Escape with the menu open closes the menu only, with it closed closes the settings.
+- [ ] On macOS, repeat both Windows checks above (Light / System / Dark with `meta+,`; the shipped light and dark themes; the pickers' keys).
+- [ ] On Linux, repeat both Windows checks above (Light / System / Dark; the shipped light and dark themes; the pickers' keys). Check System with `window.appearance()` following the desktop's appearance switch.
+
+### Native: check the upstream licenses of the shipped gpui-component themes before packaging (native-themes)
+
+The 21 vendored files in `crates/native/themes/` carry no license of their own. Upstream (longbridge/gpui-kit) ships them in its Apache-2.0 repository, but each adapts a third-party scheme (iTerm2-Color-Schemes, Zed's Ayu, Catppuccin, Solarized, Tokyo Night, Twilight / MacroMates and others) whose own license was not checked one by one. `crates/native/themes/LICENSE` holds only the source, the per-file author / url table and the Apache-2.0 text, and `docs/agents/native-app.md`'s license section does not mention the gap. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
+
+Files: `crates/native/themes/LICENSE`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] Check each adapted scheme's license and add any missing attribution to `crates/native/themes/LICENSE`, or drop a theme whose license is incompatible. Record the result in the guide's license section. Done when every file in `crates/native/themes/` has a checked upstream license noted in `LICENSE` and the guide's license section states the result.
