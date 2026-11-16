@@ -89,13 +89,14 @@ use gpui::{
     KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowOptions, anchored, canvas, deferred, div, fill,
-    outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
+    div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Root, Sizable,
+    ActiveTheme, Disableable, Icon, IconName, Root, Sizable, TITLE_BAR_HEIGHT, TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
+    h_flex,
     progress::ProgressCircle,
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
@@ -604,7 +605,7 @@ impl Riffle {
             if remember && geometry.is_usable() {
                 *observed.lock().unwrap() = Some(geometry);
             }
-            this.strip_width = f32::from(window.viewport_size().width);
+            this.strip_width = content_width(window);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
             this.zoom_resized(cx);
@@ -767,7 +768,7 @@ impl Riffle {
             strip: Strip::default(),
             strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
-            strip_width: f32::from(window.viewport_size().width),
+            strip_width: content_width(window),
             eviction,
             settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
@@ -4442,6 +4443,9 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
+        let pad = gpui_component::window_paddings(window);
+        let menu_max =
+            window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT;
         let main = div()
             .size_full()
             .flex()
@@ -4473,6 +4477,15 @@ impl Render for Riffle {
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(&e.keystroke, window, cx);
             }))
+            .child(
+                TitleBar::new().child(
+                    h_flex()
+                        .gap_2()
+                        .text_color(cx.theme().foreground)
+                        .child(img(icons::APP).size(px(16.)))
+                        .child("Handpic"),
+                ),
+            )
             .child(
                 div()
                     .relative()
@@ -4587,20 +4600,26 @@ impl Render for Riffle {
                     .h(px(strip::STRIP_HEIGHT))
                     .on_mouse_down(
                         MouseButton::Right,
-                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                            // The strip spans the window from its left edge.
-                            this.strip_context(e.position, f32::from(e.position.x), cx);
+                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                            // The strip starts at the client-side frame's left padding.
+                            let x = f32::from(
+                                e.position.x - gpui_component::window_paddings(window).left,
+                            );
+                            this.strip_context(e.position, x, cx);
                         }),
                     )
                     .on_mouse_down(
                         MouseButton::Left,
-                        cx.listener(|this, e: &MouseDownEvent, _, cx| {
+                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
                             let modifiers = selection::Modifiers {
                                 toggle: e.modifiers.control || e.modifiers.platform,
                                 range: e.modifiers.shift,
                             };
-                            // The strip spans the window from its left edge.
-                            this.strip_clicked(f32::from(e.position.x), modifiers, cx);
+                            // The strip starts at the client-side frame's left padding.
+                            let x = f32::from(
+                                e.position.x - gpui_component::window_paddings(window).left,
+                            );
+                            this.strip_clicked(x, modifiers, cx);
                         }),
                     )
                     .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
@@ -4616,8 +4635,8 @@ impl Render for Riffle {
                     .children(strip_tips)
                     .horizontal_scrollbar(&self.strip_bar)
             }))
-            .child(self.status_row(window.viewport_size().height - px(40.), cx))
-            .children(self.context_popover(window.viewport_size().height - px(40.), cx))
+            .child(self.status_row(menu_max, cx))
+            .children(self.context_popover(menu_max, cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
             );
@@ -5400,6 +5419,14 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
     }
 }
 
+/// The viewport's width less the client-side frame's left and right padding
+/// (zero under server-side decorations and off Linux), which is what the
+/// strip really spans.
+fn content_width(window: &Window) -> f32 {
+    let pad = gpui_component::window_paddings(window);
+    f32::from(window.viewport_size().width - pad.left - pad.right)
+}
+
 /// The window's restore bounds and display; a fullscreen window is kept by
 /// its restore bounds, windowed.
 fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
@@ -5500,12 +5527,13 @@ fn main() {
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: Some("Handpic".into()),
-                        ..Default::default()
+                        ..TitleBar::title_bar_options()
                     }),
                     window_bounds: Some(window_bounds),
                     display_id,
                     app_id: Some(datadir::IDENTIFIER.into()),
-                    ..Default::default()
+                    window_decorations: Some(WindowDecorations::Client),
+                    ..TitleBar::window_options()
                 },
                 |window, cx| {
                     let view = cx.new(|cx| {
