@@ -85,7 +85,8 @@ use futures::{
 };
 use gpui_kit::application;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT, TitleBar,
+    ActiveTheme, ColorName, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+    TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
@@ -96,6 +97,7 @@ use gpui_kit::component::{
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
     status_bar::StatusBar,
+    tag::Tag,
     tooltip::Tooltip,
 };
 use gpui_kit::{
@@ -5025,8 +5027,8 @@ fn menu_item(
     }
 }
 
-/// One row of an open menu: an item's check mark, swatch and text, or a
-/// section's separator or heading.
+/// One row of an open menu: an item's check mark, swatch and text, a color
+/// label item's Tag in place of both, or a section's separator or heading.
 fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
     let item = match row {
         Row::Separator => return menu_separator(cx),
@@ -5056,12 +5058,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
             })
             .into_any_element(),
         ),
-        Lead::Label(Some(tint)) => Some(
-            icon(icons::SQUARE_FILLED)
-                .text_color(rgb(tint_color(tint)))
-                .into_any_element(),
-        ),
-        Lead::Label(None) => Some(icon(icons::SQUARE).text_color(muted).into_any_element()),
+        Lead::Label(_) => None,
         Lead::Orientation(orientation) => Some(
             icon(match orientation {
                 filter::Orientation::Portrait => icons::RECTANGLE_VERTICAL,
@@ -5081,7 +5078,10 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         ),
         Lead::Face(None) => Some(div().size(px(MENU_ICON)).flex_none().into_any_element()),
     };
-    let label = menu_label(item.label, cx);
+    let label = match (&item.label, item.lead) {
+        (menu::Label::Text(text), Lead::Label(tint)) => div().child(label_tag(tint).child(*text)),
+        _ => menu_label(item.label, cx),
+    };
     let action = item.action;
     menu_item(("menu-item", at), item.checked, false, cx)
         .child(
@@ -5139,17 +5139,24 @@ fn context_item(
     view: &WeakEntity<Riffle>,
 ) -> PopupMenuItem {
     let label = item.label;
-    let entry = match (&label, item.shortcut.is_empty()) {
+    let tag = item.tag;
+    let entry = match (&label, item.shortcut.is_empty() && tag.is_none()) {
         (menu::Label::Text(text), true) => PopupMenuItem::new(*text),
         (menu::Label::Owned(text), true) => PopupMenuItem::new(SharedString::from(text.clone())),
         _ => {
             let key = (!item.shortcut.is_empty()).then(|| keys::keystroke_of(&item.shortcut));
             PopupMenuItem::element(move |_, cx| {
+                let name = match (&label, tag) {
+                    (menu::Label::Text(text), Some(tint)) => {
+                        div().child(label_tag(tint).child(*text))
+                    }
+                    _ => menu_label(label.clone(), cx),
+                };
                 h_flex()
                     .flex_1()
                     .justify_between()
                     .gap_3()
-                    .child(menu_label(label.clone(), cx))
+                    .child(name)
                     .child(
                         div()
                             .flex_none()
@@ -5234,9 +5241,8 @@ const TREE_TEXT: f32 = 12.8;
 const TREE_ROW_HEIGHT: f32 = 22.;
 const TREE_ICON: f32 = 14.;
 /// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
-/// `--foreground`, and its `--label-*` tokens in `tint_color`. Fixed in every
-/// theme: the judgment's meaning, and the Lightroom label colors with the
-/// name on them.
+/// `--foreground`. Fixed in every theme: the judgment's meaning, and the name
+/// on a label's band, which `LABEL_BAND_SCALE` keeps fixed too.
 const STARS_COLOR: u32 = 0xffd050;
 const PICK_COLOR: u32 = 0x6bdc8a;
 const REJECT_COLOR: u32 = 0xff6b6b;
@@ -5263,17 +5269,31 @@ const MENU_PAD: f32 = 8.;
 /// The filter menu's icons, as the Tauri `.face`.
 const MENU_ICON: f32 = 12.;
 
-fn tint_color(tint: Tint) -> u32 {
+/// The strip band's scale of a label's `ColorName`, dark enough for the
+/// name on it.
+const LABEL_BAND_SCALE: usize = 600;
+
+fn label_color(tint: Tint) -> ColorName {
     match tint {
-        Tint::Red => 0xd9453f,
-        Tint::Orange => 0xe8892c,
-        Tint::Yellow => 0xd8c032,
-        Tint::Green => 0x4fa84f,
-        Tint::Blue => 0x3f7fd9,
-        Tint::Pink => 0xd95fa8,
-        Tint::Purple => 0x8a5fd0,
-        Tint::Other => 0x808080,
+        Tint::Red => ColorName::Red,
+        Tint::Orange => ColorName::Orange,
+        Tint::Yellow => ColorName::Yellow,
+        Tint::Green => ColorName::Green,
+        Tint::Blue => ColorName::Blue,
+        Tint::Pink => ColorName::Pink,
+        Tint::Purple => ColorName::Purple,
+        Tint::Other => ColorName::Gray,
     }
+}
+
+/// A color label's small Tag in its `ColorName`, `No label`'s an outline
+/// secondary one, for the menus to put the label's name in.
+fn label_tag(tint: Option<Tint>) -> Tag {
+    match tint {
+        Some(tint) => Tag::color(label_color(tint)),
+        None => Tag::secondary().outline(),
+    }
+    .small()
 }
 
 fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
@@ -5340,7 +5360,7 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 let name_color = match cell.marks.label {
                     Some(tint) => {
                         let band = Bounds::new(at, size(px(CELL_WIDTH), px(NAME_HEIGHT)));
-                        window.paint_quad(fill(band, rgb(tint_color(tint))));
+                        window.paint_quad(fill(band, label_color(tint).scale(LABEL_BAND_SCALE)));
                         rgb(LABELED_NAME_COLOR).into()
                     }
                     None => roles.name,

@@ -168,7 +168,9 @@ outline `selection`, which Neutral maps to `accent`, `accent` and `ring`
 the menu
 buttons `button` with an `input` border. Fixed in every theme, as constants
 with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
-`REJECT_COLOR`), the label tints with `LABELED_NAME_COLOR`, what is drawn
+`REJECT_COLOR`), the strip's label band (the label's `ColorName` at
+`LABEL_BAND_SCALE`, a palette value no theme changes) with
+`LABELED_NAME_COLOR`, what is drawn
 over the photo (`mark.rs`, `overlay.rs`, `peaking.rs`, `perfgraph.rs`, the
 burst badge's `BADGE_COLOR` and the halos), and the preview's black
 surround (`PREVIEW_BACKGROUND`).
@@ -217,7 +219,7 @@ key-down listener, so a binding that matches takes the key from
   catalog icons selected with `gpui_kit::assets::icon_assets!`, and falls
   back to `gpui_kit::assets::Assets` (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the
   components' own icon set, not the whole-catalog `AllAssets`) for `star`,
-  `square`, the tree's `folder` and `folder-open` and the icons the
+  the tree's `folder` and `folder-open` and the icons the
   components draw, the checked `Radio`'s and
   the language menu's `icons/check.svg` and the `Select`'s
   `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
@@ -1083,14 +1085,16 @@ dimmed, shows capture order and keeps the stored key.
 - Rule: the leads are drawn per kind in `main.rs`'s `menu_row`: the flags
   keep their 7 px dots; a rating row is five 12 px Lucide stars, the `on`
   filled ones in `STARS_COLOR` and the rest outlined in `muted_foreground` at
-  40 %; a color label a filled Lucide `square` in `tint_color`, `No label`
-  the outline; `Portrait` and `Landscape` the Lucide `rectangle-vertical` and
+  40 %; a color label no lead, its name drawn inside a small gpui-component
+  `Tag::color` of its `ColorName` (`main.rs`'s `label_color`, the strip
+  band's mapping too), `No label` inside a small outline secondary `Tag`,
+  the Tag's colors left to its own dark / light choice; `Portrait` and `Landscape` the Lucide `rectangle-vertical` and
   `rectangle-horizontal`; `Face focus` the Tauri icons (`scan-face` for
   `Good`, its frown derivative for `Low`, in `MarkState::color()`) with an
   empty 12 px slot for `Neutral`. `menu.rs` names the kind (`Lead`), never an
   asset path.
 - Rule: the rating rows run 5, 4, 3, 2, 1, 0 stars from the top, the labels
-  are squares and the orientations have icons, all unlike the Tauri menu on
+  are Tags and the orientations have icons, all unlike the Tauri menu on
   purpose (the user's decision); a later port must not "fix" them back.
 - Rule: the filter menu ends with the folder's EXIF sections, after `Output`
   (or `Eyes` without an export answer), in the Tauri order and headings
@@ -1166,13 +1170,13 @@ dimmed, shows capture order and keeps the stored key.
 the rendered alpha mask in the element's `text_color`, so a stroked Lucide
 icon and a filled derivative both draw in one color. `icons.rs` holds a
 path constant per icon (`icons/<name>.svg`), the SVG strings of the app's
-own derivatives (the filled star and square, the frowning `scan-face`),
+own derivatives (the filled star, the frowning `scan-face`),
 `Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
 (`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
-then any other from `gpui_kit::assets::Assets`, which serves `star`,
-`square` and the tree's `folder` and `folder-open`, a path in none of them
-with `None`; `main()` registers it with
+then any other from `gpui_kit::assets::Assets`, which serves `star`
+and the tree's `folder` and `folder-open`, a path in none of them with
+`None`; `main()` registers it with
 `application().with_assets(icons::Icons)`.
 
 - Rule: to add an icon the `gpui-kit-assets` catalog has, add its variant to
@@ -1190,9 +1194,9 @@ with `None`; `main()` registers it with
   `Catalog` and `gpui_kit::assets::Assets`) are composed with `Icons`, in the
   order own derivatives, then the catalog selection, then `Assets`, never
   registered in its place: a missing asset draws nothing and fails no build.
-  `star` and `square` come from the default `Assets` rather than the
-  `icon_assets!` list, so they are not embedded twice; if a gpui-kit-assets
-  bump drops either from that set, the every-path test fails and the icon
+  `star` comes from the default `Assets` rather than the `icon_assets!`
+  list, so it is not embedded twice; if a gpui-kit-assets bump drops it
+  from that set, the every-path test fails and the icon
   moves into the list. `icons.rs`'s tests check every path constant loads an
   SVG, each catalog constant equals its `IconName` variant's `path()`, a
   derivative loads its own bytes, `icons/check.svg` loads from `Assets`, an
@@ -2939,7 +2943,9 @@ it inside, as the Tauri `menuPosition`.
   `PopupMenuItem::element` drawing its label and, at the right end in
   `muted_foreground` at `text_xs`, `Kbd::new(keys::keystroke_of(..))
   .appearance(false)` (the formatted text alone, as gpui-component's
-  `Tooltip` draws its key binding).
+  `Tooltip` draws its key binding). The strip menu's color label items
+  (`context::Item`'s `tag`) draw their name inside the same small `Tag` as the
+  filter menu's label rows, in place of the plain text.
 
 - Rule: the strip menu's judgment groups follow the filter menu
   (`menu::filter_rows`), not `context.ts`: the flags run Pick, Unflag,

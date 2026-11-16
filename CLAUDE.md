@@ -297,7 +297,7 @@ no token (the window's surface and text, the strip's names, failures, burst
 band and reject dim; today's values for Neutral dark, else derived from the
 tokens by `Roles::of`), which the panes, the strip, the status row, the
 menus and the dialogs read with the theme (`cx.theme()`, `roles`), the
-judgment, label and over-the-photo colors staying fixed constants, `src/settings.rs`
+judgment, label band and over-the-photo colors staying fixed, `src/settings.rs`
 reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
@@ -335,12 +335,13 @@ without the `Face focus` help, the filter menu heading every section, its
 rating rows from 5 stars down and each kind its own lead; `apply`, what a
 click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
-`deferred` / `anchored` popovers above their gpui-component `Button`s, its leads Lucide icons
+`deferred` / `anchored` popovers above their gpui-component `Button`s, the
+color label rows gpui-component `Tag`s, the other leads Lucide icons
 from `src/icons.rs` (served by `Icons`, the application's one
-`AssetSource`, to `svg().path(..)`: the three own derivatives, the filled
-star and square and the frowning `scan-face`, under their license header,
+`AssetSource`, to `svg().path(..)`: the two own derivatives, the filled
+star and the frowning `scan-face`, under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
-`gpui_kit::assets::Assets`, which serves `star`, `square` and the icons
+`gpui_kit::assets::Assets`, which serves `star` and the icons
 gpui-component's controls draw, with the title bar's
 `crates/app/icons/64x64.png` for `img(..)`),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key

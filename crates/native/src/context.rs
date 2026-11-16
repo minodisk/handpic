@@ -10,6 +10,7 @@
 use riffle_backend::shortcuts::Binding;
 use riffle_core::Flag;
 
+use crate::strip::Tint;
 use crate::{judgment::State, menu::Label};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +46,9 @@ pub struct Item {
     /// `None` for a plain command, which has no checked state.
     pub checked: Option<bool>,
     pub disabled: bool,
+    /// `Some` on a color label item, which is drawn as a Tag: the label's
+    /// tint, `None` for `No label`.
+    pub tag: Option<Option<Tint>>,
 }
 
 fn command(action: Action, label: &str) -> Item {
@@ -54,6 +58,17 @@ fn command(action: Action, label: &str) -> Item {
         shortcut: String::new(),
         checked: None,
         disabled: false,
+        tag: None,
+    }
+}
+
+/// The tag of a judgment item, by its keymap action name: a color label's
+/// tint, `No label`'s none, and not a tag for any other judgment.
+fn label_tag(action: &str) -> Option<Option<Tint>> {
+    match (action, Tint::of(action)) {
+        ("clearlabel", _) => Some(None),
+        (_, Tint::Other) => None,
+        (_, tint) => Some(Some(tint)),
     }
 }
 
@@ -185,6 +200,7 @@ pub fn strip_groups(
                     shortcut: shortcut_of(bindings, action),
                     checked: Some(checked(state)),
                     disabled: false,
+                    tag: label_tag(action),
                 })
                 .collect()
         }));
@@ -476,6 +492,34 @@ mod tests {
             })
             .collect();
         assert_eq!(judgments, filter);
+    }
+
+    #[test]
+    fn only_the_label_items_carry_a_tag() {
+        let tagged: Vec<(Action, Option<Tint>)> = strip(&defaults(), &State::default())
+            .iter()
+            .flatten()
+            .filter_map(|item| item.tag.map(|tint| (item.action, tint)))
+            .collect();
+        assert_eq!(
+            tagged,
+            vec![
+                (Action::Judge("red"), Some(Tint::Red)),
+                (Action::Judge("orange"), Some(Tint::Orange)),
+                (Action::Judge("yellow"), Some(Tint::Yellow)),
+                (Action::Judge("green"), Some(Tint::Green)),
+                (Action::Judge("blue"), Some(Tint::Blue)),
+                (Action::Judge("pink"), Some(Tint::Pink)),
+                (Action::Judge("purple"), Some(Tint::Purple)),
+                (Action::Judge("clearlabel"), None),
+            ]
+        );
+        assert!(
+            folder_groups(REVEAL, false)
+                .iter()
+                .flatten()
+                .all(|item| item.tag.is_none())
+        );
     }
 
     #[test]

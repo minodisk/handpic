@@ -57,13 +57,13 @@ pub enum Label {
     Stars(u8),
 }
 
-/// The swatch before an item's text.
+/// The swatch before an item's text, or the Tag that holds it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Lead {
     None,
     /// The pick or reject dot, or the muted one of `Untagged`.
     Flag(Option<FilterFlag>),
-    /// A label's filled square; `None` is the outline square of `No label`.
+    /// A label's Tag in its color; `None` is the outline Tag of `No label`.
     Label(Option<Tint>),
     /// The portrait or landscape rectangle.
     Orientation(Orientation),
