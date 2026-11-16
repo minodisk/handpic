@@ -1517,6 +1517,47 @@ impl Index {
         tx.commit().map_err(|e| e.to_string())
     }
 
+    /// Delete, in one transaction, the `folder_counts` rows under `parent`
+    /// whose first path segment below it does not name one of `keep`: the
+    /// row of each child folder not kept and the rows under it. The parent's
+    /// own row and every row outside it stay. Paths are taken as spelled; the
+    /// parent prefix gets one separator unless it already ends in one.
+    pub fn prune_folder_counts(&mut self, parent: &str, keep: &[String]) -> Result<(), String> {
+        let prefix = if parent.ends_with(std::path::is_separator) {
+            parent.to_owned()
+        } else {
+            format!("{parent}{}", std::path::MAIN_SEPARATOR)
+        };
+        let keep: std::collections::HashSet<&str> = keep.iter().map(String::as_str).collect();
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        let doomed: Vec<String> = {
+            let mut stmt = tx
+                .prepare("SELECT dir FROM folder_counts WHERE substr(dir, 1, length(?1)) = ?1")
+                .map_err(|e| e.to_string())?;
+            let dirs = stmt
+                .query_map(params![prefix], |r| r.get::<_, String>(0))
+                .map_err(|e| e.to_string())?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(|e| e.to_string())?;
+            dirs.into_iter()
+                .filter(|dir| {
+                    let rest = &dir[prefix.len()..];
+                    let name = rest.split(std::path::is_separator).next().unwrap_or("");
+                    !name.is_empty() && !keep.contains(&dir[..prefix.len() + name.len()])
+                })
+                .collect()
+        };
+        {
+            let mut delete = tx
+                .prepare("DELETE FROM folder_counts WHERE dir = ?1")
+                .map_err(|e| e.to_string())?;
+            for dir in &doomed {
+                delete.execute(params![dir]).map_err(|e| e.to_string())?;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
     /// What the ranking reads of every `files` row of `dir`, in file-name
     /// order: the flag, whether the file was viewed, the capture time, the
     /// second pass's values when the row is at `FACES_VERSION`, and the
@@ -3832,6 +3873,91 @@ pub(crate) mod tests {
             (p("/r/shoot"), 1),
             (p("/r/shoot/sub"), 2),
             (p("/r/shoot2"), 7),
+        ];
+        expected.sort();
+        assert_eq!(index.folder_counts().unwrap(), expected);
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn prune_folder_counts_drops_the_absent_children_and_their_subfolders_only() {
+        let dir = temp_dir("folder-counts-prune");
+        let mut index = open(&dir);
+        let sep = std::path::MAIN_SEPARATOR;
+        let p = |s: &str| s.replace('/', &sep.to_string());
+        index
+            .set_folder_counts(&[
+                (p("/r/photos"), 1),
+                (p("/r/photos/a"), 2),
+                (p("/r/photos/a/deep"), 3),
+                (p("/r/photos/ab"), 4),
+                (p("/r/photos/ab/sub"), 5),
+                (p("/r/photos/k_e%p"), 6),
+                (p("/r/photos/k_e%p/sub"), 7),
+                (p("/r/photos/kXeYp"), 8),
+                (p("/r/photos/kXeYp/sub"), 9),
+                (p("/r/photos2"), 10),
+                (p("/r/photos2/a"), 11),
+                (p("/r"), 12),
+            ])
+            .unwrap();
+
+        index
+            .prune_folder_counts(&p("/r/photos"), &[p("/r/photos/ab"), p("/r/photos/k_e%p")])
+            .unwrap();
+
+        let mut expected = vec![
+            (p("/r/photos"), 1),
+            (p("/r/photos/ab"), 4),
+            (p("/r/photos/ab/sub"), 5),
+            (p("/r/photos/k_e%p"), 6),
+            (p("/r/photos/k_e%p/sub"), 7),
+            (p("/r/photos2"), 10),
+            (p("/r/photos2/a"), 11),
+            (p("/r"), 12),
+        ];
+        expected.sort();
+        assert_eq!(index.folder_counts().unwrap(), expected);
+
+        index.prune_folder_counts(&p("/r/photos"), &[]).unwrap();
+        let mut expected = vec![
+            (p("/r/photos"), 1),
+            (p("/r/photos2"), 10),
+            (p("/r/photos2/a"), 11),
+            (p("/r"), 12),
+        ];
+        expected.sort();
+        assert_eq!(index.folder_counts().unwrap(), expected);
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn prune_folder_counts_under_a_parent_ending_in_the_separator() {
+        let dir = temp_dir("folder-counts-prune-root");
+        let mut index = open(&dir);
+        let sep = std::path::MAIN_SEPARATOR;
+        let root = format!("X:{sep}");
+        let p = |s: &str| format!("X:{sep}{}", s.replace('/', &sep.to_string()));
+        index
+            .set_folder_counts(&[
+                (root.clone(), 1),
+                (p("gone"), 2),
+                (p("gone/sub"), 3),
+                (p("kept"), 4),
+                (p("kept/sub"), 5),
+                ("Y:other".to_string(), 6),
+            ])
+            .unwrap();
+
+        index.prune_folder_counts(&root, &[p("kept")]).unwrap();
+
+        let mut expected = vec![
+            (root.clone(), 1),
+            (p("kept"), 4),
+            (p("kept/sub"), 5),
+            ("Y:other".to_string(), 6),
         ];
         expected.sort();
         assert_eq!(index.folder_counts().unwrap(), expected);

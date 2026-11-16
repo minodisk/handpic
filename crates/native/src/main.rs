@@ -147,7 +147,8 @@ use stripbar::StripBar;
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Source, Summary};
 use tree::{
-    Child, CountWrites, IGNORE_CASE, Relation, RowClick, StepKey, Tree, TreeCommand, TreeKey, Typed,
+    Child, CountWrite, CountWrites, IGNORE_CASE, Relation, RowClick, StepKey, Tree, TreeCommand,
+    TreeKey, Typed,
 };
 use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
@@ -1993,6 +1994,7 @@ impl Riffle {
                 self.tree
                     .set_children(dir, folder.raw_count, children.clone());
                 self.cache_count(dir, folder.raw_count, cx);
+                self.prune_counts(dir, &children, cx);
                 Some(children)
             }
             Err(e) => {
@@ -2013,25 +2015,51 @@ impl Riffle {
         if self.index.is_err() {
             return;
         }
-        if let Some(counts) = self.count_writes.push(path, count) {
-            self.write_folder_counts(counts, cx);
+        if let Some(writes) = self.count_writes.push(path, count) {
+            self.write_folder_counts(writes, cx);
         }
     }
 
-    fn write_folder_counts(&self, counts: Vec<(String, usize)>, cx: &mut Context<Self>) {
+    /// Queue the prune of the `folder_counts` rows under the tree's listed
+    /// `dir` that its `children` (and the way to a root under it) no longer
+    /// hold; nothing without an index.
+    fn prune_counts(&mut self, dir: &str, children: &[Child], cx: &mut Context<Self>) {
+        if self.index.is_err() {
+            return;
+        }
+        let keep = self.tree.prune_keep(dir, children, IGNORE_CASE);
+        if let Some(writes) = self.count_writes.prune(dir, keep) {
+            self.write_folder_counts(writes, cx);
+        }
+    }
+
+    fn write_folder_counts(&self, writes: Vec<CountWrite>, cx: &mut Context<Self>) {
         let Ok(index) = self.index.clone() else {
             return;
         };
         cx.spawn(async move |this, cx| {
             let written = cx
-                .background_spawn(async move { index::lock(&index).set_folder_counts(&counts) })
+                .background_spawn(async move {
+                    let mut index = index::lock(&index);
+                    let mut counts = Vec::new();
+                    for write in writes {
+                        match write {
+                            CountWrite::Count(path, count) => counts.push((path, count)),
+                            CountWrite::Prune { parent, keep } => {
+                                index.set_folder_counts(&std::mem::take(&mut counts))?;
+                                index.prune_folder_counts(&parent, &keep)?;
+                            }
+                        }
+                    }
+                    index.set_folder_counts(&counts)
+                })
                 .await;
             if let Err(e) = written {
                 log::warn!("failed to cache the folder counts: {e}");
             }
             this.update(cx, |this, cx| {
-                if let Some(counts) = this.count_writes.settled() {
-                    this.write_folder_counts(counts, cx);
+                if let Some(writes) = this.count_writes.settled() {
+                    this.write_folder_counts(writes, cx);
                 }
             })
             .ok();
