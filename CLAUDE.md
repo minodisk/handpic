@@ -265,9 +265,14 @@ Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
-global `Theme`, which `gpui_component::init` installs at startup, to dark
-and maps it to the app's Neutral dark tokens, its own constants, `title_bar`
-and `title_bar_border` included (`apply`, not following the OS appearance),
+global `Theme`, which `gpui_component::init` installs at startup, to the mode
+the stored `theme` setting resolves to (`Setting`, `{"mode": "system" |
+"light" | "dark"}` read field by field, a missing or invalid one Dark;
+`resolve`, System following the OS appearance) and maps it to the app's
+shadcn/ui Neutral dark or light tokens, its own `DARK` / `LIGHT` palettes,
+`title_bar` and `title_bar_border` included (`apply`, at startup, on a choice
+in the Appearance page and, in System mode, on a change of the window's
+appearance),
 and sets beside it the `Roles` global, the colors the app paints that equal
 no token (the window's surface and text, the strip's names, failures, burst
 band and reject dim; today's values for Neutral dark, else derived from the
@@ -278,7 +283,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -320,7 +325,7 @@ rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Checkbox`, `Radio`, `Input`),
-holding the Sidecar page's format radios and label names (`Input` fields), the Culling page's auto-advance toggle, the Keyboard Shortcuts page, which replaces the keymap and `Bindings` live, and the Import page's root (`Choose…`, `prompt_for_paths`) and validated pattern,
+holding the Sidecar page's format radios and label names (`Input` fields), the Culling page's auto-advance toggle, the Keyboard Shortcuts page, which replaces the keymap and `Bindings` live, the Import page's root (`Choose…`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`), applied live and written to `theme`,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an

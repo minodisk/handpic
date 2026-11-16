@@ -674,6 +674,17 @@ impl Riffle {
             this.update(cx, |this, cx| this.read_dir_counts(cx)).ok();
         })
         .detach();
+        // The window's own appearance, which gpui-component prefers on Linux
+        // to the app's one the startup apply read.
+        if settings.theme.mode == theme::Mode::System {
+            theme::apply(settings.theme, window.appearance(), cx);
+        }
+        cx.observe_window_appearance(window, |this, window, cx| {
+            if this.settings.theme.mode == theme::Mode::System {
+                theme::apply(this.settings.theme, window.appearance(), cx);
+            }
+        })
+        .detach();
         // A volume mounted since shows up when the window becomes active.
         cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() && this.roots_loaded {
@@ -725,6 +736,11 @@ impl Riffle {
                         .writes
                         .set("importPattern", pattern.as_str().into());
                     this.settings.import_pattern = pattern.clone();
+                }
+                Change::Theme(setting) => {
+                    theme::apply(setting, window.appearance(), cx);
+                    this.settings.writes.set("theme", setting.setting());
+                    this.settings.theme = setting;
                 }
                 Change::Closed => {
                     window.focus(&this.focus, cx);
@@ -5467,11 +5483,12 @@ fn main() {
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take(), args.import_settings.take().as_deref());
     log::info!(
-        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?} store={}",
+        "settings: sidecarFormat={} autoAdvance={} sortOrder={} filter={:?} theme={} store={}",
         settings.format.setting(),
         settings.auto_advance,
         settings.sort.setting(),
         settings.filter,
+        settings.theme.mode.setting(),
         if settings.writes.is_open() {
             "open"
         } else {
@@ -5488,12 +5505,13 @@ fn main() {
         Path::is_dir,
     );
     let saved = settings.window.clone().filter(|_| remember);
+    let theme = settings.theme;
     application()
         .with_assets(icons::Icons)
         .run(move |cx: &mut App| {
             gpui_component::init(cx);
             cx.bind_keys(keymap_keys());
-            theme::apply(cx);
+            theme::apply(theme, cx.window_appearance(), cx);
             cx.on_window_closed(|cx, _| cx.quit()).detach();
             let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
             cx.open_window(

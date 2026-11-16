@@ -134,7 +134,7 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
     - The peer session's `TitleBar` work also edits `main.rs`; land this step
       first and keep the diff to color reads.
 
-- [ ] Step 2: Store the theme setting, add Light and System, and an `Appearance` tab
+- [x] Step 2: Store the theme setting, add Light and System, and an `Appearance` tab
   - Done when:
     - The settings store has a new key (`theme`) read by a pure rule: a
       missing or invalid value is the default (Neutral, mode Dark), each field

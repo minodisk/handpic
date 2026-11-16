@@ -23,7 +23,8 @@ use riffle_core::{i18n, xmp::LabelNames};
 use crate::{
     keys,
     settings::Settings as Stored,
-    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, ModalKey, SettingsModal, TABS, Tab},
+    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, MODES, ModalKey, SettingsModal, TABS, Tab},
+    theme::{self, Mode},
 };
 
 /// The key context of the box while a shortcut row waits for a key.
@@ -59,6 +60,8 @@ pub enum Change {
     ImportRoot(String),
     /// A committed pattern that is valid and not the stored one.
     ImportPattern(String),
+    /// The theme setting after a choice that changed it.
+    Theme(theme::Setting),
     /// The main view takes the focus back.
     Closed,
 }
@@ -83,6 +86,7 @@ pub struct SettingsView {
     /// Where today's photos would go under the field's pattern, or why it is
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
+    theme: theme::Setting,
     status: Option<SharedString>,
 }
 
@@ -124,6 +128,7 @@ impl SettingsView {
             import_pattern: import::DEFAULT_PATTERN.to_owned(),
             pattern_field,
             example: Ok(String::new()),
+            theme: theme::Setting::default(),
             status: None,
         }
     }
@@ -148,6 +153,7 @@ impl SettingsView {
         let pattern = self.import_pattern.clone();
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
+        self.theme = settings.theme;
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.focus, cx);
         cx.notify();
@@ -382,6 +388,16 @@ impl SettingsView {
         cx.notify();
     }
 
+    fn choose_mode(&mut self, chosen: Mode, cx: &mut Context<Self>) {
+        let Some(setting) = settingsmodal::mode_change(self.theme, chosen) else {
+            return;
+        };
+        self.theme = setting;
+        self.status = None;
+        cx.emit(Change::Theme(setting));
+        cx.notify();
+    }
+
     /// A switch failed: its message goes to the status line.
     pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
         self.status = Some(message.into());
@@ -400,6 +416,7 @@ impl SettingsView {
                 Tab::Culling => self.culling(page, &view),
                 Tab::Shortcuts => self.shortcuts(page, &view),
                 Tab::Import => self.import(page, &view),
+                Tab::Appearance => self.appearance(page, &view),
             }
         }))
     }
@@ -494,6 +511,35 @@ impl SettingsView {
                     .keywords(["Reset", "Language", "Lightroom"]),
                 ),
         )
+    }
+
+    /// The mode radios, drawn as the Sidecar page's format radios.
+    fn appearance(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let mode = self.theme.mode;
+        let view = view.clone();
+        page.group(SettingGroup::new().item(SettingItem::new(
+            "Mode",
+            SettingField::render(move |_, window, _| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_2()
+                    .children(MODES.iter().map(|&(choice, label)| {
+                        Radio::new(choice.setting())
+                            .small()
+                            .checked(choice == mode)
+                            .label(label)
+                            .text_size(px(13.))
+                            .on_click(window.listener_for(
+                                &view,
+                                move |this, _: &bool, window, cx| {
+                                    this.leave_field(window, cx);
+                                    this.choose_mode(choice, cx);
+                                },
+                            ))
+                    }))
+            }),
+        )))
     }
 
     fn culling(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {

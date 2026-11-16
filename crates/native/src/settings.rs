@@ -28,6 +28,7 @@ use crate::{
     panewidths::PaneWidths,
     session::Geometry,
     sort::SortKey,
+    theme,
 };
 
 pub struct Settings {
@@ -56,6 +57,8 @@ pub struct Settings {
     pub panels: Panels,
     /// The side panes' widths at startup; the end of a drag writes them back.
     pub pane_widths: PaneWidths,
+    /// The theme and its mode (`theme`); the Appearance tab writes it back.
+    pub theme: theme::Setting,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -264,6 +267,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         window: Geometry::from_setting(values.get("windowBounds")),
         panels: Panels::from_setting(values.get("panels")),
         pane_widths: PaneWidths::from_setting(values.get("panelWidths")),
+        theme: theme::Setting::from_setting(values.get("theme")),
         writes: Writes::spawn(None),
     }
 }
@@ -278,6 +282,7 @@ mod tests {
         panewidths::{self, PaneWidths},
         session::{Geometry, Rect},
         sort::SortKey,
+        theme::{self, Mode},
     };
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
     use riffle_core::xmp::LabelNames;
@@ -481,6 +486,19 @@ mod tests {
         assert_eq!(
             seeded(dir.path(), "none", "{}").pane_widths,
             PaneWidths::default()
+        );
+    }
+
+    #[test]
+    fn the_theme_is_read_with_its_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = seeded(dir.path(), "light", r#"{"theme":{"mode":"light"}}"#);
+        assert_eq!(s.theme, theme::Setting { mode: Mode::Light });
+        let s = seeded(dir.path(), "odd", r#"{"theme":{"mode":"sepia"}}"#);
+        assert_eq!(s.theme, theme::Setting { mode: Mode::Dark });
+        assert_eq!(
+            seeded(dir.path(), "none", "{}").theme,
+            theme::Setting::default()
         );
     }
 

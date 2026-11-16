@@ -1,31 +1,83 @@
-//! gpui-component's global `Theme`, dark and mapped to the app's shadcn/ui
-//! Neutral dark tokens, and the app's own `Roles` beside it: the one source
-//! of the colors the app paints over its themed surfaces.
+//! gpui-component's global `Theme`, mapped to the app's shadcn/ui Neutral
+//! tokens in the mode the stored `theme` setting resolves to, and the app's
+//! own `Roles` beside it: the one source of the colors the app paints over its
+//! themed surfaces.
 
-use gpui::{App, Global, Hsla, Pixels, px, rgb, rgba};
+use gpui::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use gpui_component::{ActiveTheme, Theme, ThemeColor, ThemeMode};
+use serde_json::{Value, json};
 
-/// `style.css`'s Neutral dark tokens: `--background`, which nothing outside
-/// the components paints, `--foreground`, `--card` / `--popover` (the panes),
-/// `--primary`, `--secondary` / `--muted` / `--accent`, `--muted-foreground`,
-/// `--destructive`, `--border`, `--input`, `--ring` (also `--sidebar-ring`,
-/// the tree cursor's outline), the backdrop behind the dialogs and
-/// `.button.outline`'s fill.
-const BACKGROUND: u32 = 0x0a0a0a;
-const FOREGROUND: u32 = 0xfafafa;
-const POPOVER: u32 = 0x171717;
-const PRIMARY: u32 = 0xe5e5e5;
-const ACCENT: u32 = 0x262626;
-const MUTED_FOREGROUND: u32 = 0xa1a1a1;
-const DANGER: u32 = 0xff6467;
-const BORDER: u32 = 0xffffff1a;
-const INPUT: u32 = 0xffffff26;
-const RING: u32 = 0x737373ff;
-const OVERLAY: u32 = 0x00000099;
-const BUTTON: u32 = 0xffffff0b;
-/// `style.css`'s destructive button on hover, `--destructive` at 90 % over
-/// the card.
-const DESTRUCTIVE_HOVER: u32 = 0xe85c5f;
+/// One mode's Neutral values, each `ThemeColor` field `map` pins.
+struct Palette {
+    background: u32,
+    foreground: u32,
+    /// `--card` / `--popover`, the panes, the status and title bars and the
+    /// settings' sidebar.
+    popover: u32,
+    primary: u32,
+    primary_foreground: u32,
+    /// `--secondary` / `--muted` / `--accent`.
+    accent: u32,
+    accent_foreground: u32,
+    muted_foreground: u32,
+    /// `--destructive`.
+    danger: u32,
+    /// `style.css`'s destructive button on hover, `--destructive` at 90 %
+    /// over the card.
+    danger_hover: u32,
+    danger_foreground: u32,
+    border: u32,
+    input: u32,
+    /// Also `--sidebar-ring`, the tree cursor's outline.
+    ring: u32,
+    /// The backdrop behind the dialogs.
+    overlay: u32,
+    /// `.button.outline`'s fill.
+    button: u32,
+}
+
+/// `style.css`'s Neutral dark tokens.
+const DARK: Palette = Palette {
+    background: 0x0a0a0aff,
+    foreground: 0xfafafaff,
+    popover: 0x171717ff,
+    primary: 0xe5e5e5ff,
+    primary_foreground: 0x171717ff,
+    accent: 0x262626ff,
+    accent_foreground: 0xfafafaff,
+    muted_foreground: 0xa1a1a1ff,
+    danger: 0xff6467ff,
+    danger_hover: 0xe85c5fff,
+    danger_foreground: 0xfafafaff,
+    border: 0xffffff1a,
+    input: 0xffffff26,
+    ring: 0x737373ff,
+    overlay: 0x00000099,
+    button: 0xffffff0b,
+};
+
+/// shadcn/ui's Neutral light tokens (`apps/v4/public/r/colors/neutral.json`,
+/// its oklch values as Tailwind's hex), the backdrop kept as the dark one's
+/// and the outline button's fill `--background`, as shadcn's `outline`.
+const LIGHT: Palette = Palette {
+    background: 0xffffffff,
+    foreground: 0x0a0a0aff,
+    popover: 0xffffffff,
+    primary: 0x171717ff,
+    primary_foreground: 0xfafafaff,
+    accent: 0xf5f5f5ff,
+    accent_foreground: 0x171717ff,
+    muted_foreground: 0x737373ff,
+    danger: 0xe7000bff,
+    danger_hover: 0xe91a23ff,
+    danger_foreground: 0xfafafaff,
+    border: 0xe5e5e5ff,
+    input: 0xe5e5e5ff,
+    ring: 0xa1a1a1ff,
+    overlay: 0x00000099,
+    button: 0xffffffff,
+};
+
 /// The window's rem, which `Root` sets from it every frame: GPUI's default,
 /// the one the app's rem-based sizes were drawn at.
 const FONT_SIZE: Pixels = px(16.);
@@ -84,84 +136,152 @@ pub fn roles(cx: &App) -> Roles {
     *cx.global::<Roles>()
 }
 
-/// Sets the theme to dark and maps it, leaving it there whatever the OS
-/// appearance, and sets the roles. Runs after `gpui_component::init`, which
-/// leaves it light.
-pub fn apply(cx: &mut App) {
-    // A mode switch reloads the registered theme over color edits made in
-    // the same `update`, so the switch comes first.
-    Theme::change(ThemeMode::Dark, None, cx);
+/// The stored `theme` setting's mode: the OS appearance, or one forced.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    System,
+    Light,
+    #[default]
+    Dark,
+}
+
+impl Mode {
+    pub fn setting(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Light => "light",
+            Self::Dark => "dark",
+        }
+    }
+
+    fn from_setting(value: Option<&str>) -> Option<Self> {
+        match value {
+            Some("system") => Some(Self::System),
+            Some("light") => Some(Self::Light),
+            Some("dark") => Some(Self::Dark),
+            _ => None,
+        }
+    }
+}
+
+/// The value stored under `theme`, an object read field by field: a missing
+/// or invalid field is its default, whatever the others hold.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Setting {
+    pub mode: Mode,
+}
+
+impl Setting {
+    pub fn from_setting(value: Option<&Value>) -> Self {
+        let field = |name: &str| value.and_then(|v| v.get(name)).and_then(Value::as_str);
+        Self {
+            mode: Mode::from_setting(field("mode")).unwrap_or_default(),
+        }
+    }
+
+    pub fn setting(self) -> Value {
+        json!({"mode": self.mode.setting()})
+    }
+}
+
+/// The mode `setting` puts in place under the OS `appearance`.
+pub fn resolve(setting: Setting, appearance: WindowAppearance) -> ThemeMode {
+    match setting.mode {
+        Mode::System => appearance.into(),
+        Mode::Light => ThemeMode::Light,
+        Mode::Dark => ThemeMode::Dark,
+    }
+}
+
+/// Installs the Neutral theme in the mode `setting` resolves to under the OS
+/// `appearance`, maps it and sets the roles. Runs after
+/// `gpui_component::init`, which leaves it light, and again on a change of
+/// the setting or, in System mode, of the appearance.
+pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
+    let mode = resolve(setting, appearance);
+    // `change` reloads the registered theme over color edits made in the
+    // same `update`, so the switch comes first.
+    Theme::change(mode, None, cx);
     Theme::update(cx, |theme| {
-        map(&mut theme.colors);
+        map(&mut theme.colors, palette(mode));
         theme.font_size = FONT_SIZE;
         theme.radius = RADIUS;
         theme.radius_lg = RADIUS_LG;
     });
-    let roles = Roles::of(&cx.theme().colors, true);
+    let roles = Roles::of(&cx.theme().colors, mode.is_dark());
     cx.set_global(roles);
 }
 
-fn map(colors: &mut ThemeColor) {
-    colors.background = rgb(BACKGROUND).into();
-    colors.foreground = rgb(FOREGROUND).into();
-    colors.popover = rgb(POPOVER).into();
-    colors.popover_foreground = rgb(FOREGROUND).into();
-    colors.primary = rgb(PRIMARY).into();
-    colors.primary_foreground = rgb(POPOVER).into();
-    colors.secondary = rgb(ACCENT).into();
-    colors.secondary_foreground = rgb(FOREGROUND).into();
-    colors.muted = rgb(ACCENT).into();
-    colors.muted_foreground = rgb(MUTED_FOREGROUND).into();
-    colors.accent = rgb(ACCENT).into();
-    colors.accent_foreground = rgb(FOREGROUND).into();
-    colors.danger = rgb(DANGER).into();
-    colors.border = rgba(BORDER).into();
-    colors.input = rgba(INPUT).into();
-    colors.ring = rgba(RING).into();
-    colors.overlay = rgba(OVERLAY).into();
-    colors.scrollbar_thumb = rgba(BORDER).into();
-    colors.status_bar = rgb(POPOVER).into();
-    colors.status_bar_border = rgba(BORDER).into();
+fn palette(mode: ThemeMode) -> &'static Palette {
+    if mode.is_dark() { &DARK } else { &LIGHT }
+}
+
+fn map(colors: &mut ThemeColor, p: &Palette) {
+    colors.background = rgba(p.background).into();
+    colors.foreground = rgba(p.foreground).into();
+    colors.popover = rgba(p.popover).into();
+    colors.popover_foreground = rgba(p.foreground).into();
+    colors.primary = rgba(p.primary).into();
+    colors.primary_foreground = rgba(p.primary_foreground).into();
+    colors.secondary = rgba(p.accent).into();
+    colors.secondary_foreground = rgba(p.accent_foreground).into();
+    colors.muted = rgba(p.accent).into();
+    colors.muted_foreground = rgba(p.muted_foreground).into();
+    colors.accent = rgba(p.accent).into();
+    colors.accent_foreground = rgba(p.accent_foreground).into();
+    colors.danger = rgba(p.danger).into();
+    colors.border = rgba(p.border).into();
+    colors.input = rgba(p.input).into();
+    colors.ring = rgba(p.ring).into();
+    colors.overlay = rgba(p.overlay).into();
+    colors.scrollbar_thumb = rgba(p.border).into();
+    colors.status_bar = rgba(p.popover).into();
+    colors.status_bar_border = rgba(p.border).into();
     // `TitleBar`'s surface and its border, as the panes'.
-    colors.title_bar = rgb(POPOVER).into();
-    colors.title_bar_border = rgba(BORDER).into();
+    colors.title_bar = rgba(p.popover).into();
+    colors.title_bar_border = rgba(p.border).into();
     // The settings' `Sidebar`, on the settings box's own surface, its
     // selected page lit as the hand-drawn tab list's was.
-    colors.sidebar = rgb(POPOVER).into();
-    colors.sidebar_foreground = rgb(FOREGROUND).into();
-    colors.sidebar_accent = rgb(ACCENT).into();
-    colors.sidebar_accent_foreground = rgb(FOREGROUND).into();
-    colors.sidebar_border = rgba(BORDER).into();
-    colors.sidebar_primary = rgb(PRIMARY).into();
-    colors.sidebar_primary_foreground = rgb(POPOVER).into();
-    // `Button`'s default variant. `Default Dark` derives these at load and
-    // `update` does not derive them again from the colors above.
-    colors.button = rgba(BUTTON).into();
-    colors.button_hover = rgb(ACCENT).into();
-    colors.button_active = rgb(ACCENT).into();
-    colors.button_foreground = rgb(FOREGROUND).into();
+    colors.sidebar = rgba(p.popover).into();
+    colors.sidebar_foreground = rgba(p.foreground).into();
+    colors.sidebar_accent = rgba(p.accent).into();
+    colors.sidebar_accent_foreground = rgba(p.accent_foreground).into();
+    colors.sidebar_border = rgba(p.border).into();
+    colors.sidebar_primary = rgba(p.primary).into();
+    colors.sidebar_primary_foreground = rgba(p.primary_foreground).into();
+    // `Button`'s default variant. The registered theme derives these at load
+    // and `update` does not derive them again from the colors above.
+    colors.button = rgba(p.button).into();
+    colors.button_hover = rgba(p.accent).into();
+    colors.button_active = rgba(p.accent).into();
+    colors.button_foreground = rgba(p.foreground).into();
     // `ButtonVariants::danger`, derived at load the same way.
-    colors.button_danger = rgb(DANGER).into();
-    colors.button_danger_hover = rgb(DESTRUCTIVE_HOVER).into();
-    colors.button_danger_active = rgb(DESTRUCTIVE_HOVER).into();
-    colors.button_danger_foreground = rgb(FOREGROUND).into();
+    colors.button_danger = rgba(p.danger).into();
+    colors.button_danger_hover = rgba(p.danger_hover).into();
+    colors.button_danger_active = rgba(p.danger_hover).into();
+    colors.button_danger_foreground = rgba(p.danger_foreground).into();
 }
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Hsla, rgba};
-    use gpui_component::ThemeColor;
+    use gpui::{Hsla, WindowAppearance, rgba};
+    use gpui_component::{ThemeColor, ThemeMode};
+    use serde_json::json;
 
-    use super::{Roles, map};
+    use super::{DARK, LIGHT, Mode, Palette, Roles, Setting, map, resolve};
 
     fn hex(value: u32) -> Hsla {
         rgba(value).into()
     }
 
-    fn mapped() -> ThemeColor {
+    fn mapped_with(palette: &Palette) -> ThemeColor {
         let mut colors = ThemeColor::default();
-        map(&mut colors);
+        map(&mut colors, palette);
         colors
+    }
+
+    fn mapped() -> ThemeColor {
+        mapped_with(&DARK)
     }
 
     #[test]
@@ -229,5 +349,93 @@ mod tests {
         assert_eq!(roles.band, colors.foreground.alpha(0.08));
         assert_eq!(roles.band_dimmed, colors.foreground.alpha(0.036));
         assert_eq!(roles.rejected_dim, colors.background.alpha(0.55));
+    }
+
+    #[test]
+    fn maps_the_neutral_light_tokens() {
+        let colors = mapped_with(&LIGHT);
+        assert_eq!(colors.background, hex(0xffffffff));
+        assert_eq!(colors.foreground, hex(0x0a0a0aff));
+        assert_eq!(colors.popover, hex(0xffffffff));
+        assert_eq!(colors.popover_foreground, hex(0x0a0a0aff));
+        assert_eq!(colors.primary, hex(0x171717ff));
+        assert_eq!(colors.primary_foreground, hex(0xfafafaff));
+        assert_eq!(colors.secondary, hex(0xf5f5f5ff));
+        assert_eq!(colors.secondary_foreground, hex(0x171717ff));
+        assert_eq!(colors.muted, hex(0xf5f5f5ff));
+        assert_eq!(colors.muted_foreground, hex(0x737373ff));
+        assert_eq!(colors.accent, hex(0xf5f5f5ff));
+        assert_eq!(colors.accent_foreground, hex(0x171717ff));
+        assert_eq!(colors.danger, hex(0xe7000bff));
+        assert_eq!(colors.border, hex(0xe5e5e5ff));
+        assert_eq!(colors.input, hex(0xe5e5e5ff));
+        assert_eq!(colors.ring, hex(0xa1a1a1ff));
+        assert_eq!(colors.overlay, hex(0x00000099));
+        assert_eq!(colors.scrollbar_thumb, hex(0xe5e5e5ff));
+        assert_eq!(colors.status_bar, hex(0xffffffff));
+        assert_eq!(colors.status_bar_border, hex(0xe5e5e5ff));
+        assert_eq!(colors.title_bar, hex(0xffffffff));
+        assert_eq!(colors.title_bar_border, hex(0xe5e5e5ff));
+        assert_eq!(colors.sidebar, hex(0xffffffff));
+        assert_eq!(colors.sidebar_foreground, hex(0x0a0a0aff));
+        assert_eq!(colors.sidebar_accent, hex(0xf5f5f5ff));
+        assert_eq!(colors.sidebar_accent_foreground, hex(0x171717ff));
+        assert_eq!(colors.sidebar_border, hex(0xe5e5e5ff));
+        assert_eq!(colors.sidebar_primary, hex(0x171717ff));
+        assert_eq!(colors.sidebar_primary_foreground, hex(0xfafafaff));
+        assert_eq!(colors.button, hex(0xffffffff));
+        assert_eq!(colors.button_hover, hex(0xf5f5f5ff));
+        assert_eq!(colors.button_active, hex(0xf5f5f5ff));
+        assert_eq!(colors.button_foreground, hex(0x0a0a0aff));
+        assert_eq!(colors.button_danger, hex(0xe7000bff));
+        assert_eq!(colors.button_danger_hover, hex(0xe91a23ff));
+        assert_eq!(colors.button_danger_active, hex(0xe91a23ff));
+        assert_eq!(colors.button_danger_foreground, hex(0xfafafaff));
+    }
+
+    #[test]
+    fn a_missing_or_invalid_setting_is_neutral_dark() {
+        let dark = Setting { mode: Mode::Dark };
+        assert_eq!(Setting::from_setting(None), dark);
+        for value in [
+            json!({}),
+            json!("light"),
+            json!(null),
+            json!({"mode": "sepia"}),
+            json!({"mode": 1}),
+            json!({"mode": "Light"}),
+        ] {
+            assert_eq!(Setting::from_setting(Some(&value)), dark, "{value}");
+        }
+    }
+
+    #[test]
+    fn each_mode_is_read_and_round_trips() {
+        for (stored, mode) in [
+            ("system", Mode::System),
+            ("light", Mode::Light),
+            ("dark", Mode::Dark),
+        ] {
+            let value = json!({"mode": stored, "light": "Neutral"});
+            let setting = Setting::from_setting(Some(&value));
+            assert_eq!(setting, Setting { mode });
+            assert_eq!(setting.setting(), json!({"mode": stored}));
+            assert_eq!(Setting::from_setting(Some(&setting.setting())), setting);
+        }
+    }
+
+    #[test]
+    fn system_follows_the_os_appearance_and_the_others_are_forced() {
+        let of = |mode| Setting { mode };
+        for (appearance, follows) in [
+            (WindowAppearance::Light, ThemeMode::Light),
+            (WindowAppearance::VibrantLight, ThemeMode::Light),
+            (WindowAppearance::Dark, ThemeMode::Dark),
+            (WindowAppearance::VibrantDark, ThemeMode::Dark),
+        ] {
+            assert_eq!(resolve(of(Mode::System), appearance), follows);
+            assert_eq!(resolve(of(Mode::Light), appearance), ThemeMode::Light);
+            assert_eq!(resolve(of(Mode::Dark), appearance), ThemeMode::Dark);
+        }
     }
 }
