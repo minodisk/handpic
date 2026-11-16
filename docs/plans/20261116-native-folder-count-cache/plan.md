@@ -165,7 +165,7 @@ What the investigation found (the facts the steps rely on):
     - The Tauri app calls the same two functions; its table is empty (it
       never writes counts), so the calls are no-ops there. Do not edit
       `crates/app`
-- [ ] Step 3: Write and read the tree's counts through the cache table in the native app, and drop `Index::dir_counts`
+- [x] Step 3: Write and read the tree's counts through the cache table in the native app, and drop `Index::dir_counts`
   - Done when:
     - Every count the tree learns from disk is written to `folder_counts`
       off the UI thread: each successful `folders::list` answer (an expand,
@@ -293,3 +293,4 @@ What the investigation found (the facts the steps rely on):
 
 (2026-11-16) Step 1 complete
 (2026-11-16) Step 2 complete
+(2026-11-17) Step 3 complete

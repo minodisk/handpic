@@ -2614,22 +2614,34 @@ strip needed one because `uniform_list` is vertical only.
   `Refresh`, a tree watcher change, and an open, which sets the open folder's
   node from `listed.files.len()` through `Tree::set_listed_count` (found by
   `relation` from `tree_open`, the tree's spelling, not the canonical
-  `listed.dir`). Until a folder is listed its row takes the index's row count
-  from `Index::dir_counts`, which `Tree::set_index_counts` keys by the
-  canonical `dir` with the verbatim prefix stripped (`context::shown_path`)
-  and folded (`fold`, case ignored on Windows and macOS), so `\\?\C:\...` and
-  `\\?\UNC\server\share\...` match the tree's `C:\...` and
-  `\\server\share\...`. The listed count wins, a listed zero showing nothing.
-  A folder reached through a mapped drive, a symlink or a junction never
-  matches its canonical `dir` and shows a count only once listed.
-- Rule: the index's counts are read whole (`GROUP BY dir` on the `files_dir`
-  covering index) on `background_spawn` under `index::lock` of the reader,
-  never touching a folder on disk, and replace the tree's map whole. They are
-  read at startup, at the end of `opened` (after the prepare's reconcile),
-  on pass 1's `Event::Done` and after `folder_renamed` / `date_folder_ran`;
-  an expand, a roots load or a `tree-changed` does not re-read, the map
-  already covering every folder. The `dir_counts` counter drops an answer
-  older than the latest read.
+  `listed.dir`). Until a folder is listed in this session its row takes the
+  cached count, the index's `folder_counts` row stored under the node's own
+  path, which `Tree::set_cached_counts` keys by `fold` (case ignored on
+  Windows and macOS). The listed count wins, a listed zero showing nothing; a
+  folder never counted shows nothing. Since the key is the tree's spelling, a
+  folder reached through a mapped drive, a symlink or a junction keeps its
+  count across restarts; one folder reached through two spellings has a row
+  for each. Inferred, not yet observed in the running app.
+- Rule: every count the tree learns from disk is written to `folder_counts`
+  under the tree node's path, the string handed to `folders::list`: each
+  successful listing through `tree_listed` (an expand, `Refresh`, a tree
+  watcher change, `Expand All`, a reveal's chain) and an open's or
+  re-listing's count, under the paths `set_listed_count` returns (none while
+  a reveal has not reached the node yet; its own listing writes it). A zero
+  deletes the row. The writes go through `tree::CountWrites`, one
+  `set_folder_counts` in flight on `background_spawn` under `index::lock` of
+  the writable index, the counts learned meanwhile coalesced per folder with
+  the latest winning; nothing is written without an index. A write still
+  queued at quit is lost, not drained: it is a cache, and the folder's next
+  listing writes it again. Inferred, not yet observed in the running app.
+- Rule: the cached counts are read whole (`Index::folder_counts`, the
+  `folder_counts` table alone, never `files`) on `background_spawn` under
+  `index::lock` of the reader, never touching a folder on disk, and replace
+  the tree's map whole. They are read at startup and after `folder_renamed` /
+  `date_folder_ran`, whose backend calls moved the rows (a rename's) or wrote
+  them (a split's date folders, not listed yet); a write does not re-read,
+  since a listed node shows its own count. The `count_reads` counter drops an
+  answer older than the latest read.
 - Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
   1000 window with the tree shown at its default width (see "The sort and
   filter menus are deferred popovers over the window"). Inferred: 1380 x 842
