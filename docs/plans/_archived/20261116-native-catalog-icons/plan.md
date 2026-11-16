@@ -175,3 +175,5 @@ What the `gpui-kit-assets` 0.9.1 source says (read at planning time, in
 - **Rendering is checked by hand, not by a test.**
 
 ## Progress
+
+- (2026-11-16) Step 1 complete

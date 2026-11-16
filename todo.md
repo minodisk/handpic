@@ -3448,3 +3448,16 @@ Files: `crates/native/themes/LICENSE`, `docs/agents/native-app.md`.
 #### TODO
 
 - [ ] Check each adapted scheme's license and add any missing attribution to `crates/native/themes/LICENSE`, or drop a theme whose license is incompatible. Record the result in the guide's license section. Done when every file in `crates/native/themes/` has a checked upstream license noted in `LICENSE` and the guide's license section states the result.
+
+### Native: real-device check of the catalog-served icons (native-catalog-icons)
+
+#### Background
+
+`native-catalog-icons` made the GPUI app (`crates/native`) serve `star`, `square`, `rectangle-vertical`, `rectangle-horizontal` and `scan-face` from `gpui-kit-assets` instead of its own copies of the Lucide SVGs. `star` and `square` come from the default `Assets` set, and the other three are selected with `icon_assets!`. The app keeps only the three derivatives the catalog lacks: the filled star, the filled square and the frowning `scan-face`. Unit tests cover the asset source: every one of the eight icon paths loads an SVG, each catalog const equals its `IconName` variant's `path()`, a derivative loads its own bytes, and an unknown or empty path loads nothing. `mise run ci:local` and clippy pass. The catalog's SVGs differ from the old copies only in whitespace and in carrying `width="24" height="24"`, so no visible change is expected. Nobody has looked at the rendered icons in the running window, and Step 1's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-catalog-icons/plan.md`.
+
+Files: `crates/native/src/icons.rs`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` and open the status row's `Filter ▾` menu. Confirm the star rows (outlined and filled), the label squares (outlined and filled), the orientation rectangles (vertical, horizontal) and the `Face focus` faces (smiling and frowning) look as they did on `main`. Then, with a folder open and pass 2 finished, confirm the strip's face focus icon on a good frame and on a low frame looks as before. Expected: no visible change.
+- [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
