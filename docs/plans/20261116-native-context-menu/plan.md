@@ -209,3 +209,5 @@ not touched.
   Windows check listed in the step.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete (the manual Windows check recorded in learnings.md is still pending)

@@ -3395,7 +3395,7 @@ Files: `crates/native/src/settingsview.rs`.
 
 The `native-component-controls` feature drew auto-advance as a switch and the Keyboard Shortcuts chips and the right-click menu's shortcuts as `Kbd`. The switch's `switch` / `switch_thumb` tokens are `Default Dark`'s, because `theme.rs` maps neither; the plan decided to map them only if the off state is hard to read on screen. Nobody has looked at it. Mapping them would conflict with `20261115-native-themes` Step 1's rewrite of `map`. The key spelling also changed (`Ctrl+Alt+1`, `Left`, `Esc`). Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
 
-Files: `crates/native/src/settingsview.rs`, `crates/native/src/main.rs` (`context_row`), `crates/native/src/theme.rs`.
+Files: `crates/native/src/settingsview.rs`, `crates/native/src/main.rs` (`context_item`), `crates/native/src/theme.rs`.
 
 #### TODO
 
