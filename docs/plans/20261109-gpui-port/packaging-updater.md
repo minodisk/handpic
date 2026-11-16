@@ -137,7 +137,8 @@ question names it.
   - `cargo-packager-updater`: a manifest dialect of its own for a contract
     nobody needs to keep any more.
   - `cargo-bundle`: no NSIS or Inno Setup, Windows support called
-    experimental, and nothing the platform-native tools above do not cover.
+    experimental (**Source**: `cargo-bundle` 0.12.0's readme, as read on
+    2026-11-14 by the earlier record), and nothing the platform-native tools above do not cover.
 
 ## Unverified
 
