@@ -95,7 +95,7 @@ mod tests {
 
     use super::*;
 
-    const PATHS: [&str; 10] = [
+    const PATHS: [&str; 8] = [
         STAR,
         STAR_FILLED,
         RECTANGLE_VERTICAL,
