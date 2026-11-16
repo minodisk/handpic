@@ -130,3 +130,5 @@ app) lets the user go straight to the part they want to rebind.
   `Preview`) as today. Hiding or implementing them is out of scope.
 
 ## Progress
+
+- Step 1: the Keyboard Shortcuts page now groups its rows into one titled `SettingGroup` per `SHORTCUT_GROUPS` entry, `Reset all` alone in a final untitled group. The manual check recorded in `learnings.md` is still pending.
