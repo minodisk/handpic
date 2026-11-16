@@ -313,3 +313,4 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
 ## Progress
 
 - (2026-11-16) Step 1 complete
+- (2026-11-16) Step 2 complete
