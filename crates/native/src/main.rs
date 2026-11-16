@@ -100,7 +100,7 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
-    Context, Corners, DismissEvent, DispatchPhase, DragMoveEvent, Entity, ExternalPaths,
+    Context, Corners, DismissEvent, DispatchPhase, Div, DragMoveEvent, Entity, ExternalPaths,
     FocusHandle, Focusable, FontWeight, Hsla, KeyBinding, KeyDownEvent, Keystroke, MouseButton,
     MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
     ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Subscription, Task, TextAlign,
@@ -5127,10 +5127,15 @@ fn context_item(
                     .justify_between()
                     .gap_3()
                     .child(menu_label(label.clone(), cx))
-                    .child(div().flex_none().text_xs().text_color(cx.theme().muted_foreground).when_some(
-                        key.clone(),
-                        |slot, key| slot.child(Kbd::new(key).appearance(false)),
-                    ))
+                    .child(
+                        div()
+                            .flex_none()
+                            .text_xs()
+                            .text_color(cx.theme().muted_foreground)
+                            .when_some(key.clone(), |slot, key| {
+                                slot.child(Kbd::new(key).appearance(false))
+                            }),
+                    )
             })
         }
     };
