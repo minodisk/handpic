@@ -3400,3 +3400,16 @@ Files: `crates/native/src/settingsview.rs`, `crates/native/src/main.rs` (`contex
 #### TODO
 
 - [ ] On Windows, run `mise run native:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.
+
+### Native: real-device check of the OS notification when an import ends while the window is inactive (native-import-notification)
+
+#### Background
+
+The native-import-notification work makes the GPUI app (`crates/native`) post one system-only OS notification when an `Import…` run ends while the main window is not active. The title is `Import finished`, or `Import canceled` after a cancel, and the body is the status line's summary (`import::done_status`). The app also now sets its process identity at startup (`cx.set_app_identity`), which on Windows sets the explicit AppUserModelID `dev.minodisk.handpic`. `mise run ci:local` and the unit tests of `import::done_notification` (the decision and the text) cover the pure part. The toast's actual delivery was never observed, nor was the click activation or the taskbar icon and grouping after the AppUserModelID was set. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-import-notification/plan.md`.
+
+Files: `crates/native/src/folderops.rs` (`import_ran`, the deferred post), `crates/native/src/main.rs` (`set_app_identity`), `crates/native/src/import.rs` (`done_notification`), `docs/agents/native-app.md` (the section "An import's end posts a system-only notification while inactive").
+
+#### TODO
+
+- [ ] On Windows, build with `mise run native:dev` (or `native:release`), start an `Import…` from a card or folder, switch to another application, and wait for the run to end. Expect one toast titled `Import finished` (or `Import canceled` after a cancel) whose body is the status line's summary. Click the toast and expect the Handpic window to come forward. Run an import that ends with the Handpic window active and expect no toast. Check that the taskbar icon and grouping of the running app look unchanged (an existing pin of the exe may no longer group with the running window), and that `Handpic.log` has no `failed to register AppUserModelID` or `cannot show a system notification` warning.
+- [ ] Once the above is confirmed, replace the "(Inferred)" marker on the `docs/agents/native-app.md` section "An import's end posts a system-only notification while inactive" with the observed result. If the toast, the click activation or the taskbar grouping misbehaves, file a fix issue instead.

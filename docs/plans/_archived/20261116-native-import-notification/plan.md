@@ -160,3 +160,5 @@ touched.
   the unit tests of the decision and text plus a manual check on Windows.
 
 ## Progress
+
+(2026-11-16) Step 1 complete

@@ -33,3 +33,8 @@
   `cannot show a system notification` warning. Basis: plan Step 1's
   Done-when; files `crates/native/src/folderops.rs`,
   `crates/native/src/main.rs`, `crates/native/src/import.rs`.
+  Completion: the checks pass and the "(Inferred)" marker on the
+  `docs/agents/native-app.md` section "An import's end posts a system-only
+  notification while inactive" is replaced with the observed result; if the
+  toast, the click activation or the taskbar grouping misbehaves, a fix
+  issue is filed instead.
