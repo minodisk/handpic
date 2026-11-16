@@ -2650,6 +2650,21 @@ strip needed one because `uniform_list` is vertical only.
   them (a split's date folders, not listed yet); a write does not re-read,
   since a listed node shows its own count. The `count_reads` counter drops an
   answer older than the latest read.
+- Rule: the backend keeps the `folder_counts` rows in step with a move, in the
+  same call that moves the index rows. `rename::rename_folder` chains
+  `Index::rename_folder_counts(old, new)` (`rename_dir`'s delete-under-`new`
+  then `substr` update, on this table alone) after `rename_dir` under the same
+  lock, so a failure of either takes the existing warning path.
+  `datefolder::split_folder` writes the date folders' rows (each
+  `Moved.count`, counted by the `folders::list` rule: the RAWs, or the JPEGs of
+  a JPEG-only folder, each file once, sidecars not counted) and a zero for the
+  original in one `set_folder_counts`, only after the file and index moves
+  succeeded. The zero deletes the original's row even when undated files keep
+  the folder, so its count comes back from its next listing. `Index::clear`
+  counts the deleted `folder_counts` rows in `EvictSummary.rows`; `evict` and
+  `evict_folder` leave the table alone. A test asserting row order must sort
+  the expected paths at run time, since `MAIN_SEPARATOR` sorts on opposite
+  sides of `2` on Windows and elsewhere.
 - Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
   1000 window with the tree shown at its default width (see "The sort and
   filter menus are deferred popovers over the window"). Inferred: 1380 x 842
