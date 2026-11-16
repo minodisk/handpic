@@ -22,10 +22,11 @@ use gpui::{
     Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
 use gpui_component::{
-    ActiveTheme, Disableable,
+    ActiveTheme, Disableable, WindowExt,
     button::{Button as UiButton, ButtonVariants},
     dialog::{self as component, DialogFooter},
     input::{Input, InputEvent, InputState},
+    notification::Notification,
     tooltip::Tooltip,
 };
 use riffle_backend::{
@@ -87,6 +88,10 @@ pub struct FolderOps {
     renames: RenamesInFlight,
     slow: SlowClick,
 }
+
+/// The id an import's end notification goes under, so the next one
+/// replaces it in the notification center.
+struct ImportEnded;
 
 /// A live inline rename and the text input drawn over its row's name.
 struct Edit {
@@ -851,6 +856,26 @@ impl Riffle {
             self.write_failed(failure.path.clone(), failure.message.clone());
         }
         self.folderops.imported = Some(import::done_status(&ran));
+        let window = self.window;
+        let ended = ran.clone();
+        cx.defer(move |cx| {
+            window
+                .update(cx, |_, window, cx| {
+                    if let Some((title, body)) =
+                        import::done_notification(&ended, window.is_window_active())
+                    {
+                        window.push_notification(
+                            Notification::new()
+                                .id::<ImportEnded>()
+                                .title(title)
+                                .message(body)
+                                .system(),
+                            cx,
+                        );
+                    }
+                })
+                .ok();
+        });
         let opens = self
             .dir
             .as_deref()

@@ -253,7 +253,9 @@ is the GPUI port of the desktop app, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `build.rs` embeds
 `crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
-(`winresource`), its window opens with `app_id` `IDENTIFIER` under
+(`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
+startup so its OS notifications can be delivered, its window opens with
+`app_id` `IDENTIFIER` under
 gpui-component's `TitleBar` (the app icon and "Handpic") in place of the OS
 title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
@@ -490,7 +492,9 @@ opened as a gpui-component `Dialog` through `modal.rs` like the trash
 dialog's), `src/sidecars.rs` the port of `sidecars.ts`
 (`Rewrite Sidecars from Index…` / `Delete Sidecars…`), `src/sequence.rs` the
 port of `sequence.ts` (`Sequence JPEG Timestamps…`), `src/import.rs` the port
-of `import.ts` (`Import…`), `src/datefolder.rs` the port of `datefolder.ts`
+of `import.ts` (`Import…`, and `done_notification`, the OS notification of a
+run's end posted only while the window is not active: `Import finished` or
+`Import canceled` over the status line's `done_status`), `src/datefolder.rs` the port of `datefolder.ts`
 (`Rename by Capture Date…`), `src/rename.rs` the port of `rename.ts`'s folder
 parts (the tree's inline `Rename…`), and `src/peaking.rs`
 the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
