@@ -1,9 +1,11 @@
 //! The Lucide icons the app draws, served to GPUI's `svg().path(..)` by
-//! `Icons`, the application's one `AssetSource`, which also serves the app's
-//! own icon PNG to the title bar's `img(..)` and falls back to
-//! `gpui_kit::assets::Assets` for the icons gpui-component's controls draw.
+//! `Icons`, the application's one `AssetSource`: its own derivatives first,
+//! then the catalog icons selected from `gpui-kit-assets` with
+//! `icon_assets!`, then `gpui_kit::assets::Assets`, which holds `star`,
+//! `square` and the icons gpui-component's controls draw. It also serves the
+//! app's own icon PNG to the title bar's `img(..)`.
 
-// Lucide `star`, `square`, `rectangle-vertical`, `rectangle-horizontal` and
+// The own SVGs below are derivatives of the Lucide `star`, `square` and
 // `scan-face` icons, lucide-static v1.48.0
 // (https://github.com/lucide-icons/lucide), ISC License, Copyright (c) 2026
 // Lucide Icons and Contributors.
@@ -19,7 +21,8 @@
 // `square` is derived from the Feather project, MIT License, Copyright (c)
 // 2013-present Cole Bemis.
 //
-// Full notice in `crates/native/LICENSE-lucide`.
+// Full notice in `crates/native/LICENSE-lucide`. The unmodified icons come
+// from `gpui-kit-assets`, under its own `LICENSE-LUCIDE`.
 
 use std::borrow::Cow;
 
@@ -38,46 +41,39 @@ pub const APP: &str = "icons/app.png";
 
 const APP_PNG: &[u8] = include_bytes!("../../app/icons/64x64.png");
 
-const STAR_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>"#;
-
 const STAR_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>"#;
-
-const SQUARE_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>"#;
 
 const SQUARE_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>"#;
 
-const RECTANGLE_VERTICAL_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="12" height="20" x="6" y="2" rx="2"/></svg>"#;
-
-const RECTANGLE_HORIZONTAL_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="12" x="2" y="6" rx="2"/></svg>"#;
-
-const SCAN_FACE_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>"#;
-
 const SCAN_FACE_FROWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 16s1.5-2 4-2 4 2 4 2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>"#;
 
-const SVGS: [(&str, &str); 8] = [
-    (STAR, STAR_SVG),
+const SVGS: [(&str, &str); 3] = [
     (STAR_FILLED, STAR_FILLED_SVG),
-    (SQUARE, SQUARE_SVG),
     (SQUARE_FILLED, SQUARE_FILLED_SVG),
-    (RECTANGLE_VERTICAL, RECTANGLE_VERTICAL_SVG),
-    (RECTANGLE_HORIZONTAL, RECTANGLE_HORIZONTAL_SVG),
-    (SCAN_FACE, SCAN_FACE_SVG),
     (SCAN_FACE_FROWN, SCAN_FACE_FROWN_SVG),
 ];
+
+// `star` and `square` are left out: the default `Assets` already holds them.
+// If `every_icon_path_loads_an_svg` fails after a gpui-kit-assets bump, move
+// the missing one into this list.
+gpui_kit::assets::icon_assets!(Catalog, [RectangleVertical, RectangleHorizontal, ScanFace]);
 
 pub struct Icons;
 
 impl AssetSource for Icons {
-    /// The own paths first; any other from the components' set, a path in
-    /// neither loading nothing (`Assets` errs on it).
+    /// The own paths first, then the catalog selection, then the components'
+    /// set, a path in none of them loading nothing (`Assets` errs on it).
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
         if path == APP {
             return Ok(Some(Cow::Borrowed(APP_PNG)));
         }
-        match SVGS.iter().find(|(known, _)| *known == path) {
-            Some((_, svg)) => Ok(Some(Cow::Borrowed(svg.as_bytes()))),
-            None => Ok(Assets.load(path).unwrap_or(None)),
+        if let Some((_, svg)) = SVGS.iter().find(|(known, _)| *known == path) {
+            return Ok(Some(Cow::Borrowed(svg.as_bytes())));
         }
+        if let Some(svg) = Catalog.load(path)? {
+            return Ok(Some(svg));
+        }
+        Ok(Assets.load(path).unwrap_or(None))
     }
 
     fn list(&self, path: &str) -> Result<Vec<SharedString>> {
@@ -89,7 +85,7 @@ impl AssetSource for Icons {
         if APP.starts_with(path) {
             paths.push(SharedString::from(APP));
         }
-        for other in Assets.list(path)? {
+        for other in Catalog.list(path)?.into_iter().chain(Assets.list(path)?) {
             if !paths.contains(&other) {
                 paths.push(other);
             }
@@ -100,23 +96,27 @@ impl AssetSource for Icons {
 
 #[cfg(test)]
 mod tests {
+    use gpui_kit::assets::IconName;
+
     use super::*;
+
+    const PATHS: [&str; 8] = [
+        STAR,
+        STAR_FILLED,
+        SQUARE,
+        SQUARE_FILLED,
+        RECTANGLE_VERTICAL,
+        RECTANGLE_HORIZONTAL,
+        SCAN_FACE,
+        SCAN_FACE_FROWN,
+    ];
 
     #[test]
     fn every_icon_path_loads_an_svg() {
-        for path in [
-            STAR,
-            STAR_FILLED,
-            SQUARE,
-            SQUARE_FILLED,
-            RECTANGLE_VERTICAL,
-            RECTANGLE_HORIZONTAL,
-            SCAN_FACE,
-            SCAN_FACE_FROWN,
-        ] {
+        for path in PATHS {
             let bytes = Icons.load(path).unwrap().expect(path);
-            assert!(bytes.starts_with(b"<svg "), "{path}");
-            assert!(bytes.ends_with(b"</svg>"), "{path}");
+            assert!(bytes.starts_with(b"<svg"), "{path}");
+            assert!(bytes.trim_ascii_end().ends_with(b"</svg>"), "{path}");
         }
     }
 
@@ -127,9 +127,22 @@ mod tests {
     }
 
     #[test]
-    fn an_own_path_wins_over_the_components_one() {
-        let bytes = Icons.load(STAR).unwrap().unwrap();
-        assert_eq!(bytes.as_ref(), STAR_SVG.as_bytes());
+    fn the_catalog_paths_equal_their_icon_names() {
+        for (path, name) in [
+            (STAR, IconName::Star),
+            (SQUARE, IconName::Square),
+            (RECTANGLE_VERTICAL, IconName::RectangleVertical),
+            (RECTANGLE_HORIZONTAL, IconName::RectangleHorizontal),
+            (SCAN_FACE, IconName::ScanFace),
+        ] {
+            assert_eq!(name.path().as_ref(), path);
+        }
+    }
+
+    #[test]
+    fn a_derivative_loads_its_own_bytes() {
+        let bytes = Icons.load(STAR_FILLED).unwrap().unwrap();
+        assert_eq!(bytes.as_ref(), STAR_FILLED_SVG.as_bytes());
     }
 
     #[test]
@@ -147,8 +160,12 @@ mod tests {
     #[test]
     fn the_listing_names_each_icon_under_the_prefix_once() {
         let listed = Icons.list("icons/").unwrap();
-        for (path, _) in SVGS {
-            assert_eq!(listed.iter().filter(|p| p.as_ref() == path).count(), 1);
+        for path in PATHS {
+            assert_eq!(
+                listed.iter().filter(|p| p.as_ref() == path).count(),
+                1,
+                "{path}"
+            );
         }
         assert_eq!(listed.iter().filter(|p| p.as_ref() == APP).count(), 1);
         assert!(listed.iter().any(|p| p.as_ref() == "icons/check.svg"));

@@ -330,10 +330,13 @@ rating rows from 5 stars down and each kind its own lead; `apply`, what a
 click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their gpui-component `Button`s, its leads Lucide icons
-from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
-the application's one `AssetSource`, to `svg().path(..)`, with the title
-bar's `crates/app/icons/64x64.png` for `img(..)`, falling back to
-`gpui_kit::assets::Assets` for the icons gpui-component's controls draw),
+from `src/icons.rs` (served by `Icons`, the application's one
+`AssetSource`, to `svg().path(..)`: the three own derivatives, the filled
+star and square and the frowning `scan-face`, under their license header,
+then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
+`gpui_kit::assets::Assets`, which serves `star`, `square` and the icons
+gpui-component's controls draw, with the title bar's
+`crates/app/icons/64x64.png` for `img(..)`),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
