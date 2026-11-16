@@ -204,11 +204,13 @@ key-down listener, so a binding that matches takes the key from
   `KeyBinding::new` in both crates for a `None` context and for the `Root`
   context, and update the table.
 - Rule: the app already has its own `AssetSource` (`icons.rs`); GPUI takes
-  one per application, so `Icons` falls back to `gpui_kit::assets::Assets`
-  (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the components' own icon set, not the
-  whole-catalog `AllAssets`) for the icons the components draw, the
-  checked `Radio`'s and the language menu's `icons/check.svg` and the
-  `Select`'s `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
+  one per application, so `Icons` serves its own derivatives, then a few
+  catalog icons selected with `gpui_kit::assets::icon_assets!`, and falls
+  back to `gpui_kit::assets::Assets` (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the
+  components' own icon set, not the whole-catalog `AllAssets`) for `star`,
+  `square` and the icons the components draw, the checked `Radio`'s and the
+  language menu's `icons/check.svg` and the `Select`'s
+  `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
   served by one `AssetSource`").
 
 ### `Root` wraps the window's content (Measured)
@@ -1152,26 +1154,39 @@ dimmed, shows capture order and keeps the stored key.
 
 `svg().path(p)` loads `p` through the application's `AssetSource` and paints
 the rendered alpha mask in the element's `text_color`, so a stroked Lucide
-icon and a filled derivative both draw in one color. `icons.rs` holds the
-SVG strings as constants, a path constant per icon (`icons/<name>.svg`), and
-`Icons`, whose `load` answers those paths with borrowed bytes and any other
-from `gpui_kit::assets::Assets`, a path in neither with `None`; `main()`
-registers it with `application().with_assets(icons::Icons)`.
+icon and a filled derivative both draw in one color. `icons.rs` holds a
+path constant per icon (`icons/<name>.svg`), the SVG strings of the app's
+own derivatives (the filled star and square, the frowning `scan-face`),
+`Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
+(`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
+whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
+then any other from `gpui_kit::assets::Assets`, which serves `star` and
+`square`, a path in none of them with `None`; `main()` registers it with
+`application().with_assets(icons::Icons)`.
 
-- Rule: to add an icon, copy it verbatim from `lucide-static` at the version
-  the header names (v1.48.0, as `crates/app/ui/src/icons.ts`), add its SVG
-  and path constants and its entry in `SVGS`, and name it in the header
-  comment, with any derivative (a filled shape, the `scan-face` frown) and
-  any Feather-derived icon (the list in `LICENSE-lucide`). The full notice is
+- Rule: to add an icon the `gpui-kit-assets` catalog has, add its variant to
+  the `icon_assets!` list and a path constant, the literal its `IconName`
+  variant's `path()` gives (`path()` is not `const`); an icon the default
+  `Assets` already holds needs only the path constant. Only a derivative (a
+  filled shape, the `scan-face` frown) is copied in as an own SVG: copy its
+  base from `lucide-static` at the version the header names (v1.48.0, as
+  `crates/app/ui/src/icons.ts`), add its SVG and path constants and its
+  entry in `SVGS`, and name it in the header comment, with any
+  Feather-derived base (the list in `LICENSE-lucide`). The full notice is
   `crates/native/LICENSE-lucide`, a copy of the Tauri app's, not a reference
   into `crates/app`.
-- Rule: GPUI keeps one `AssetSource` per application. Another source (here
-  `gpui_kit::assets::Assets`) is composed with `Icons`, the own paths first
-  (`icons/star.svg` and `icons/square.svg` are in both; the app's win),
-  never registered in its place: a missing asset draws nothing and fails no
-  build. `icons.rs`'s tests check every own path loads an SVG, the own path
-  wins, `icons/check.svg` loads from `Assets` and an unknown path loads
-  nothing.
+- Rule: GPUI keeps one `AssetSource` per application. Other sources (here
+  `Catalog` and `gpui_kit::assets::Assets`) are composed with `Icons`, in the
+  order own derivatives, then the catalog selection, then `Assets`, never
+  registered in its place: a missing asset draws nothing and fails no build.
+  `star` and `square` come from the default `Assets` rather than the
+  `icon_assets!` list, so they are not embedded twice; if a gpui-kit-assets
+  bump drops either from that set, the every-path test fails and the icon
+  moves into the list. `icons.rs`'s tests check every path constant loads an
+  SVG, each catalog constant equals its `IconName` variant's `path()`, a
+  derivative loads its own bytes, `icons/check.svg` loads from `Assets`, an
+  unknown and the empty path load nothing, and the listing names each path
+  once.
 
 ### The settings modal is its own entity, opened on `ctrl+,` (Inferred)
 
