@@ -79,7 +79,11 @@ theme. It puts the two chosen configs in `Theme`'s `light_theme` /
 (`apply_config`). Neutral's slot is the registry's built-in `Default Dark`
 or `Default Light`, which a second `Theme::update` maps, since a mode
 switch reloads the slot's config over color edits made in the same closure;
-a shipped theme is installed as it is, unmapped. The shipped themes are
+a shipped theme is installed as it is, unmapped. `Theme::apply_config`
+writes `shadow` only when a config sets it (Hybrid, macOS Classic,
+Mellifluous and Molokai do), so `apply` sets `theme.shadow = true` before
+`change`; otherwise Neutral chosen after Molokai would keep the shadow off.
+`highlight` is not reset, since the app draws no code view. The shipped themes are
 gpui-kit's 21 theme files at the 0.9.1 release, copied unchanged into
 `crates/native/themes/` (with its `LICENSE`), embedded with `include_str!`
 and parsed once into `ThemeConfig`s (`serde_json` over `ThemeSet`); the app
@@ -2265,9 +2269,9 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   server-side decorations and on Windows / macOS).
 - Rule: the bar's fill and bottom border are the theme's `title_bar` (a
   gradient from it mixed 55 / 45 with `background` down to `title_bar`) and
-  `title_bar_border`. `theme.rs` does not map them yet, so they keep
-  gpui-component's load-time values (`background` / `border`); the
-  switchable theme work maps them. The text color comes from the theme, not
+  `title_bar_border`. `theme.rs`'s `map` sets them in both palettes (dark
+  `#171717` and white at 10 %, light `#ffffff` and `#e5e5e5`); a shipped
+  theme supplies its own. The text color comes from the theme, not
   from the root's pure white.
 - Rule: the Sort / Filter and right-click menus' height cap subtracts
   `TITLE_BAR_HEIGHT` as well as 40 px, so a long menu stops under the bar.
