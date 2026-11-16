@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use gpui::{Keystroke, Modifiers};
+use gpui_kit::{Keystroke, Modifiers};
 use riffle_backend::shortcuts::Keymap;
 
 /// The modifiers held in `ctrl+alt+shift+meta+` order, then the key
@@ -116,7 +116,7 @@ impl Bindings {
 #[cfg(test)]
 mod tests {
     use super::{Bindings, key_name, keystroke_of, typed_char};
-    use gpui::{Keystroke, Modifiers};
+    use gpui_kit::{Keystroke, Modifiers};
     use riffle_backend::shortcuts::Keymap;
 
     fn stroke(key: &str, control: bool, alt: bool, shift: bool) -> Keystroke {
@@ -180,7 +180,7 @@ mod tests {
     #[cfg(not(target_os = "macos"))]
     #[test]
     fn kbd_spells_a_keymap_key() {
-        use gpui_component::kbd::Kbd;
+        use gpui_kit::component::kbd::Kbd;
 
         let cases = [
             ("ctrl+alt+1", "Ctrl+Alt+1"),

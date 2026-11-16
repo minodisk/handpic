@@ -3,8 +3,8 @@
 //! own `Roles` beside it: the one source of the colors the app paints over its
 //! themed surfaces.
 
-use gpui::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
-use gpui_component::{ActiveTheme, Theme, ThemeColor, ThemeMode};
+use gpui_kit::component::{ActiveTheme, Theme, ThemeColor, ThemeMode};
+use gpui_kit::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use serde_json::{Value, json};
 
 /// One mode's Neutral values, each `ThemeColor` field `map` pins.
@@ -195,7 +195,7 @@ pub fn resolve(setting: Setting, appearance: WindowAppearance) -> ThemeMode {
 
 /// Installs the Neutral theme in the mode `setting` resolves to under the OS
 /// `appearance`, maps it and sets the roles. Runs after
-/// `gpui_component::init`, which leaves it light, and again on a change of
+/// `gpui_kit::init`, which leaves it light, and again on a change of
 /// the setting or, in System mode, of the appearance.
 pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
     let mode = resolve(setting, appearance);
@@ -264,8 +264,8 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{Hsla, WindowAppearance, rgba};
-    use gpui_component::{ThemeColor, ThemeMode};
+    use gpui_kit::component::{ThemeColor, ThemeMode};
+    use gpui_kit::{Hsla, WindowAppearance, rgba};
     use serde_json::json;
 
     use super::{DARK, LIGHT, Mode, Palette, Roles, Setting, map, resolve};

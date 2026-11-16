@@ -8,7 +8,7 @@ use std::fmt::Display;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use gpui::{
+use gpui_kit::{
     App, Bounds, ContentMask, Context, Hsla, PathBuilder, Pixels, Point, Task, TextAlign, Window,
     fill, point, px, rgb, rgba, size,
 };
@@ -312,7 +312,7 @@ fn stroke(path: PathBuilder, color: u32, window: &mut Window) {
     }
 }
 
-fn shape(text: &str, color: Hsla, window: &mut Window) -> gpui::ShapedLine {
+fn shape(text: &str, color: Hsla, window: &mut Window) -> gpui_kit::ShapedLine {
     let mut run = window.text_style().to_run(text.len());
     run.color = color;
     window

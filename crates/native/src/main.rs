@@ -83,17 +83,9 @@ use futures::{
     StreamExt,
     channel::mpsc::{self, UnboundedSender},
 };
-use gpui::{
-    Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
-    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla,
-    KeyBinding, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
-    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
-    SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
-    div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
-};
-use gpui_component::{
-    ActiveTheme, Disableable, Icon, IconName, Root, Sizable, TITLE_BAR_HEIGHT, TitleBar,
+use gpui_kit::application;
+use gpui_kit::component::{
+    ActiveTheme, Disableable, Icon, IconName, Sizable, TITLE_BAR_HEIGHT, TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
@@ -104,7 +96,15 @@ use gpui_component::{
     status_bar::StatusBar,
     tooltip::Tooltip,
 };
-use gpui_platform::application;
+use gpui_kit::{
+    Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
+    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla,
+    KeyBinding, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
+    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
+    SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
+    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
+    div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+};
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
 use image::{Frame, RgbaImage};
@@ -4466,7 +4466,7 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
-        let pad = gpui_component::window_paddings(window);
+        let pad = gpui_kit::component::window_paddings(window);
         let menu_max =
             window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT;
         let main = div()
@@ -4626,7 +4626,7 @@ impl Render for Riffle {
                         cx.listener(|this, e: &MouseDownEvent, window, cx| {
                             // The strip starts at the client-side frame's left padding.
                             let x = f32::from(
-                                e.position.x - gpui_component::window_paddings(window).left,
+                                e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
                             this.strip_context(e.position, x, cx);
                         }),
@@ -4640,7 +4640,7 @@ impl Render for Riffle {
                             };
                             // The strip starts at the client-side frame's left padding.
                             let x = f32::from(
-                                e.position.x - gpui_component::window_paddings(window).left,
+                                e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
                             this.strip_clicked(x, modifiers, cx);
                         }),
@@ -4781,7 +4781,7 @@ struct PaneDrag(Panel);
 
 impl Render for PaneDrag {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        gpui::Empty
+        gpui_kit::Empty
     }
 }
 
@@ -4801,7 +4801,7 @@ fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
 /// OS file drag is over the window. Its own `drag_over` gives it the hitbox
 /// the window group's style is applied through.
 fn drop_outline(ring: Hsla) -> impl IntoElement {
-    let lit = move |style: gpui::StyleRefinement| style.border_color(ring);
+    let lit = move |style: gpui_kit::StyleRefinement| style.border_color(ring);
     div()
         .absolute()
         .inset_0()
@@ -4819,7 +4819,7 @@ fn menu_surface(
     max_height: Pixels,
     scroll: &ScrollHandle,
     cx: &Context<Riffle>,
-) -> gpui::Div {
+) -> gpui_kit::Div {
     let theme = cx.theme();
     div()
         .occlude()
@@ -4863,11 +4863,11 @@ fn menu_separator(cx: &Context<Riffle>) -> AnyElement {
 /// mark's column, the theme's radius, and the accent on hover, or the muted
 /// text while disabled.
 fn menu_item(
-    id: impl Into<gpui::ElementId>,
+    id: impl Into<gpui_kit::ElementId>,
     checked: bool,
     disabled: bool,
     cx: &Context<Riffle>,
-) -> gpui::Stateful<gpui::Div> {
+) -> gpui_kit::Stateful<gpui_kit::Div> {
     let theme = cx.theme();
     let (accent, accent_foreground) = (theme.accent, theme.accent_foreground);
     let row = div()
@@ -5451,7 +5451,7 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
 /// (zero under server-side decorations and off Linux), which is what the
 /// strip really spans.
 fn content_width(window: &Window) -> f32 {
-    let pad = gpui_component::window_paddings(window);
+    let pad = gpui_kit::component::window_paddings(window);
     f32::from(window.viewport_size().width - pad.left - pad.right)
 }
 
@@ -5477,7 +5477,7 @@ fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
 fn window_placement(
     saved: Option<&session::Geometry>,
     cx: &App,
-) -> (Option<gpui::DisplayId>, WindowBounds) {
+) -> (Option<gpui_kit::DisplayId>, WindowBounds) {
     let displays = cx.displays();
     let screens: Vec<session::Screen> = displays
         .iter()
@@ -5548,13 +5548,13 @@ fn main() {
     application()
         .with_assets(icons::Icons)
         .run(move |cx: &mut App| {
-            gpui_component::init(cx);
+            gpui_kit::init(cx);
             cx.bind_keys(keymap_keys());
             theme::apply(theme, cx.window_appearance(), cx);
             cx.set_app_identity(datadir::IDENTIFIER, "Handpic");
             cx.on_window_closed(|cx, _| cx.quit()).detach();
             let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
-            cx.open_window(
+            gpui_kit::open_window(
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: Some("Handpic".into()),
@@ -5566,16 +5566,16 @@ fn main() {
                     window_decorations: Some(WindowDecorations::Client),
                     ..TitleBar::window_options()
                 },
+                cx,
                 |window, cx| {
-                    let view = cx.new(|cx| {
+                    cx.new(|cx| {
                         let focus = cx.focus_handle();
                         window.focus(&focus, cx);
                         Riffle::start(args, cx);
                         Riffle::new(
                             focus, index, settings, mcp_port, prefetch, remember, window, cx,
                         )
-                    });
-                    cx.new(|cx| Root::new(view, window, cx))
+                    })
                 },
             )
             .unwrap();
@@ -5586,7 +5586,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{KeyContext, Keymap, actions};
+    use gpui_kit::{KeyContext, Keymap, actions};
 
     actions!(test, [Focus]);
 

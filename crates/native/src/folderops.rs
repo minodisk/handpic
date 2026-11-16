@@ -16,18 +16,18 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 use futures::channel::oneshot;
-use gpui::{
-    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, FontWeight,
-    HighlightStyle, KeyDownEvent, MouseButton, ScrollStrategy, SharedString, StyledText,
-    Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, Disableable, WindowExt,
     button::{Button as UiButton, ButtonVariants},
     dialog::{self as component, DialogFooter},
     input::{Input, InputEvent, InputState},
     notification::Notification,
     tooltip::Tooltip,
+};
+use gpui_kit::{
+    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, Focusable, FontWeight,
+    HighlightStyle, KeyDownEvent, MouseButton, ScrollStrategy, SharedString, StyledText,
+    Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
 use riffle_backend::{
     datefolder::{self as datefolders, Kind as DateKind, Split},

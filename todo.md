@@ -3413,3 +3413,15 @@ Files: `crates/native/src/folderops.rs` (`import_ran`, the deferred post), `crat
 
 - [ ] On Windows, build with `mise run native:dev` (or `native:release`), start an `Import…` from a card or folder, switch to another application, and wait for the run to end. Expect one toast titled `Import finished` (or `Import canceled` after a cancel) whose body is the status line's summary. Click the toast and expect the Handpic window to come forward. Run an import that ends with the Handpic window active and expect no toast. Check that the taskbar icon and grouping of the running app look unchanged (an existing pin of the exe may no longer group with the running window), and that `Handpic.log` has no `failed to register AppUserModelID` or `cannot show a system notification` warning.
 - [ ] Once the above is confirmed, replace the "(Inferred)" marker on the `docs/agents/native-app.md` section "An import's end posts a system-only notification while inactive" with the observed result. If the toast, the click activation or the taskbar grouping misbehaves, file a fix issue instead.
+
+### Native: real-device checks of the gpui-kit umbrella crate (native-gpui-kit)
+
+#### Background
+
+`native-gpui-kit` Step 1 made `crates/native` depend on `gpui-kit` `=0.9.1` alone (no direct `gpui-pre`, `gpui-pre-platform`, `gpui-component` or `gpui-kit-assets`), import GPUI through `gpui_kit::*`, start through `gpui_kit::init` / `gpui_kit::open_window`, and optimize the framework crates in the dev profile. The umbrella crate also turns `font-kit`, `x11`, `wayland` and `runtime_shaders` on for `gpui-pre-platform` (read from manifests and sources, not run): before, macOS had no `font-kit` and Linux had neither backend. `mise run ci:local` (879 native tests, clippy) and the `native` CI job cover the build. On Windows a debug launch ran 20 s without a panic. No one has looked at the window on any platform, and macOS and Linux were never run. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-gpui-kit/plan.md`. Files: `crates/native/Cargo.toml`, `crates/native/Cargo.lock`, `crates/native/src/main.rs`, `crates/native/src/theme.rs`, `crates/native/src/icons.rs`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` with the real settings. Expected: the window restores its saved place, the Lucide icons (strip, menus) and the settings modal's controls (the `Checkbox` check mark, the `Radio`s, the `Input` fields) draw, and `tab` behaves as before (`toggleSides` in the main view, the focus walk inside a dialog).
+- [ ] On macOS, run `mise run native:dev` (the build now has `font-kit` and `runtime_shaders`). Expected: the window draws text (the status row, the meta pane, the menus) and opens without a shader error at startup.
+- [ ] On Linux, in an X11 session and in a Wayland session, run `mise run native:dev` (the build now compiles both backends). Expected: the window opens, draws, and takes the keyboard.

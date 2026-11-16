@@ -1,7 +1,7 @@
 use std::{cell::Cell, rc::Rc};
 
-use gpui::{Bounds, Pixels, Point, Size, point, px, size};
-use gpui_component::scroll::ScrollbarHandle;
+use gpui_kit::component::scroll::ScrollbarHandle;
+use gpui_kit::{Bounds, Pixels, Point, Size, point, px, size};
 
 /// The strip's scrollbar handle over `strip.rs`'s model. The view writes the
 /// model's offset and content width with `sync` before the strip is drawn;
@@ -59,8 +59,8 @@ impl ScrollbarHandle for StripBar {
 
 #[cfg(test)]
 mod tests {
-    use gpui::{point, px};
-    use gpui_component::scroll::ScrollbarHandle;
+    use gpui_kit::component::scroll::ScrollbarHandle;
+    use gpui_kit::{point, px};
 
     use super::StripBar;
     use crate::strip::{CELL_PITCH, Strip};

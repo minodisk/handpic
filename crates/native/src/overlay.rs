@@ -8,7 +8,7 @@ use std::{
     time::Instant,
 };
 
-use gpui::{
+use gpui_kit::{
     App, AppContext, Bounds, Context, Hsla, PaintQuad, PathBuilder, Pixels, Point, TextAlign,
     Window, fill, hsla, point, px, rgb, size,
 };

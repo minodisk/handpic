@@ -250,7 +250,10 @@ current one's folders, run first in `main()`, and `src/perf.rs` the performance 
 emits each sample as `perf-sample`, so nothing samples while the overlay is
 off). `crates/native` (`riffle-native`)
 is the GPUI port of the desktop app, a separate Cargo workspace with its own
-`Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend` and must not depend on
+`Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend`, takes GPUI and
+gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
+`gpui_kit::component` gpui-component, started by `gpui_kit::init` and
+`gpui_kit::open_window`) and must not depend on
 `crates/app` (see `docs/agents/native-app.md`); its `build.rs` embeds
 `crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
@@ -269,7 +272,7 @@ Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `
 and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
-global `Theme`, which `gpui_component::init` installs at startup, to the mode
+global `Theme`, which `gpui_kit::init` installs at startup, to the mode
 the stored `theme` setting resolves to (`Setting`, `{"mode": "system" |
 "light" | "dark"}` read field by field, a missing or invalid one Dark;
 `resolve`, System following the OS appearance) and maps it to the app's
@@ -324,7 +327,7 @@ click on an item does, the window writing the changed sort or filter;
 from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
 the application's one `AssetSource`, to `svg().path(..)`, with the title
 bar's `crates/app/icons/64x64.png` for `img(..)`, falling back to
-`gpui_kit_assets::Assets` for the icons gpui-component's controls draw),
+`gpui_kit::assets::Assets` for the icons gpui-component's controls draw),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),

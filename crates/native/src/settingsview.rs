@@ -4,12 +4,7 @@
 //! `Settings`. A change is emitted as a `Change` for the main view, which
 //! owns the values, to apply.
 
-use gpui::{
-    ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
-    FontWeight, KeyBinding, KeyDownEvent, MouseDownEvent, NoAction, PathPromptOptions, Pixels,
-    SharedString, Window, div, prelude::*, px, transparent_black,
-};
-use gpui_component::{
+use gpui_kit::component::{
     ActiveTheme, FocusTrapElement, IndexPath, Sizable,
     button::{Button, ButtonVariants},
     input::{
@@ -20,6 +15,11 @@ use gpui_component::{
     radio::Radio,
     select::{SearchableVec, Select, SelectEvent, SelectState},
     setting::{SettingField, SettingGroup, SettingItem, SettingPage, Settings},
+};
+use gpui_kit::{
+    ClickEvent, Context, ElementId, Empty, Entity, EventEmitter, FocusHandle, Focusable,
+    FontWeight, KeyBinding, KeyDownEvent, MouseDownEvent, NoAction, PathPromptOptions, Pixels,
+    SharedString, Window, div, prelude::*, px, transparent_black,
 };
 
 use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
@@ -323,7 +323,7 @@ impl SettingsView {
         .detach();
     }
 
-    fn editing(&self, window: &Window, cx: &gpui::App) -> bool {
+    fn editing(&self, window: &Window, cx: &gpui_kit::App) -> bool {
         self.name_fields
             .iter()
             .chain([&self.pattern_field])
@@ -851,7 +851,7 @@ fn commits(event: &InputEvent) -> bool {
 
 /// Shows `text` in `field`, left alone when it already does, so a commit
 /// that changes nothing keeps the caret and the undo history.
-fn show(field: &Entity<InputState>, text: &str, window: &mut Window, cx: &mut gpui::App) {
+fn show(field: &Entity<InputState>, text: &str, window: &mut Window, cx: &mut gpui_kit::App) {
     if field.read(cx).value().as_ref() != text {
         field.update(cx, |field, cx| field.set_value(text, window, cx));
     }
@@ -859,7 +859,7 @@ fn show(field: &Entity<InputState>, text: &str, window: &mut Window, cx: &mut gp
 
 /// A field drawn as the port it replaced: the theme's `input` border, in
 /// `primary` while focused, no fill, and its size and radius.
-fn field(state: &Entity<InputState>, window: &Window, cx: &gpui::App) -> impl IntoElement {
+fn field(state: &Entity<InputState>, window: &Window, cx: &gpui_kit::App) -> impl IntoElement {
     let focused = state.focus_handle(cx).is_focused(window);
     let input = Input::new(state)
         .focus_bordered(false)
