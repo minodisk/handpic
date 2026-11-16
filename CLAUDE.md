@@ -483,7 +483,8 @@ shortcut (the keymap's key name, which the window draws as `Kbd` text), checked 
 `Copy Path`, `Copy Folder Name`, `Refresh` and, off a root, `Expand All` /
 `Collapse All`, `strip_groups`, the strip's `Select All`, reveal, `Copy Path`
 / `Copy File Name`, the judgment groups checked from the focused file (left
-out in a view-only folder) and `Move to Trash…` / `Delete Permanently…`,
+out in a view-only folder; in the filter menu's order, the rating rows its
+stars) and `Move to Trash…` / `Delete Permanently…`,
 `shown_path`, a path without the Windows verbatim prefix the shell refuses,
 and `Target`, what an open menu acts on), which the window shows as
 gpui-component's `PopupMenu` in a `deferred` / `anchored` layer at the
