@@ -50,10 +50,13 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
 `gpui-component` `=0.9.1` is compiled on all three platforms.
 `gpui_component::init(cx)` runs first in the `application().run` closure,
 before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
-to dark (`Theme::change(ThemeMode::Dark, ..)`, the built-in `Default Dark`)
+to the mode the stored `theme` setting resolves to
+(`Theme::change(mode, ..)`, the built-in `Default Dark` or `Default Light`)
 and maps it over it in a second `Theme::update`, since a mode switch reloads
-the registered theme over color edits made in the same closure. The mapping
-reads `theme.rs`'s own constants, the one source of each color (the overlay included, which the three backdrops read):
+the registered theme over color edits made in the same closure. With no
+`theme` key the mode is Dark. The mapping reads `theme.rs`'s own `DARK` or
+`LIGHT` palette, the one source of each color (the overlay included, which
+the three backdrops read). In dark:
 `background` `#0a0a0a`, `foreground` and every
 `*_foreground` on a dark surface `#fafafa`, `popover` `#171717`, `primary`
 `#e5e5e5` on `primary_foreground` `#171717`, `secondary`, `muted` and
@@ -70,11 +73,22 @@ white at 4 %, `button_hover` and `button_active` `#262626`,
 `sidebar_foreground` and `sidebar_accent_foreground` `#fafafa`,
 `sidebar_border` white at 10 %, `sidebar_primary` `#e5e5e5` on
 `sidebar_primary_foreground` `#171717`, and `TitleBar`'s `title_bar`
-`#171717` and `title_bar_border` white at 10 %, as the panes'. `Default Dark` derives the `button_*`,
+`#171717` and `title_bar_border` white at 10 %, as the panes'. In light, the
+same fields from shadcn/ui's Neutral light tokens (`neutral.json`'s oklch
+values as hex): `background`, `popover`, `sidebar`, `status_bar`, `title_bar`
+and `button` `#ffffff`, `foreground` `#0a0a0a`, `primary` `#171717` on
+`#fafafa`, `secondary`, `muted`, `accent` and the button hovers `#f5f5f5` with
+`#171717` on them, `muted_foreground` `#737373`, `danger` `#e7000b`
+(`#e91a23` on hover), `border`, `input` and `scrollbar_thumb` `#e5e5e5`,
+`ring` `#a1a1a1`, and the same `overlay`. The registered theme derives the `button_*`,
 `*_hover` / `*_active` and `list_*` fields at load and `Theme::update` does
 not derive them again, so the fields it does not name keep `Default Dark`'s
-values. Nothing calls `Theme::sync_system_appearance` or observes
-the window appearance, so a light OS setting leaves the app dark. The
+or `Default Light`'s values. The mode is the setting's (`theme::resolve`):
+Light or Dark forced, or System, the OS appearance, read with
+`cx.window_appearance()` at startup, then, once the window exists, with
+`window.appearance()` (which gpui-component prefers on Linux) and on every
+`observe_window_appearance` callback, which re-applies only in System mode.
+`Theme::sync_system_appearance` is not used, since it does not map. The
 components drawn are the settings modal's: `setting::Settings` (with its
 `Sidebar`, search `Input`, `h_resizable` split, `GroupBox`es and the page
 list's scrollbar), `Input` (its text fields, see "Text is typed through
@@ -95,7 +109,7 @@ strip and the status row), the strip's file name `#d4d4d4` and scan failure
 (black at 55 %). `Roles::of` gives today's values for Neutral dark and
 otherwise derives them from the tokens (the surface and text from
 `background` / `foreground`, the band from `foreground` with alpha, the dim
-from `background` with alpha). The pane colors map onto tokens exactly: the
+from `background` with alpha), which Neutral light takes. The pane colors map onto tokens exactly: the
 panes `popover`, muted text `muted_foreground`, errors `danger`, the
 selected cell and the placeholder `muted`, the current cell's outline and
 lit controls `primary`, the tree cursor, a selected cell's outline and the
@@ -1098,8 +1112,8 @@ takes the pending page and releases the scan pause (`hold.rs`'s
 file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
-with four `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts and Import
-(no Cache, MCP or Debug), in a `relative` `flex_1` slot holding an
+with five `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts and Import
+(no Cache, MCP or Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
@@ -1107,6 +1121,9 @@ handle with `window.focus`.
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`Theme` (the Appearance page's System / Light / Dark radios) applies the
+setting under the window's appearance and writes `theme` (read and written
+under `--auto` too, as the other settings of the modal),
 `Keymap` replaces the keymap (next section),
 `Closed` focuses the window's handle and redraws, dropping the layer; the
 tree's keyboard is a flag the settings do not set (but see the pointer rule
@@ -2179,8 +2196,8 @@ subscribes to `InputEvent`:
   default line height plus the padding and border). These are `Styled`
   refinements, applied after the component's own size and theme styling;
   `Input::h` is the multi-line height, so the frame's is set through
-  `Styled::h`. The caret and selection colors are `Default Dark`'s, which
-  `theme.rs` does not map.
+  `Styled::h`. The caret and selection colors are the installed registered
+  theme's (`Default Dark` or `Default Light`), which `theme.rs` does not map.
 - Rule: a right-click opens the component's edit menu (Cut, Copy, Paste,
   Select All) as an OS-native menu on Windows and macOS (`native_menu`),
   which needs no `Root`. On Linux it is a drawn `PopupMenu` held by `Root`'s

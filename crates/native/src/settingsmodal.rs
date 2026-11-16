@@ -10,6 +10,8 @@ use riffle_backend::{
 };
 use riffle_core::xmp::LabelNames;
 
+use crate::theme::{self, Mode};
+
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
 pub const OPEN_KEY: &str = if cfg!(target_os = "macos") {
@@ -70,6 +72,19 @@ pub fn label_names_of(texts: [&str; 5]) -> LabelNames {
 /// The change a commit asks for, none when the names are those in force.
 pub fn label_change(current: &LabelNames, committed: LabelNames) -> Option<LabelNames> {
     (committed != *current).then_some(committed)
+}
+
+/// The Appearance tab's mode choices.
+pub const MODES: [(Mode, &str); 3] = [
+    (Mode::System, "System"),
+    (Mode::Light, "Light"),
+    (Mode::Dark, "Dark"),
+];
+
+/// The setting a click on `chosen` asks for, none when it is the mode in
+/// force.
+pub fn mode_change(current: theme::Setting, chosen: Mode) -> Option<theme::Setting> {
+    (chosen != current.mode).then_some(theme::Setting { mode: chosen })
 }
 
 /// The Tauri paragraph at the top of the Import tab.
@@ -211,10 +226,18 @@ pub enum Tab {
     Culling,
     Shortcuts,
     Import,
+    Appearance,
 }
 
-/// The pages in the Tauri order, less the Cache, MCP and Debug ones.
-pub const TABS: [Tab; 4] = [Tab::Sidecar, Tab::Culling, Tab::Shortcuts, Tab::Import];
+/// The pages in the Tauri order, less the Cache, MCP and Debug ones, then
+/// the native app's own Appearance.
+pub const TABS: [Tab; 5] = [
+    Tab::Sidecar,
+    Tab::Culling,
+    Tab::Shortcuts,
+    Tab::Import,
+    Tab::Appearance,
+];
 
 impl Tab {
     pub fn label(self) -> &'static str {
@@ -223,6 +246,7 @@ impl Tab {
             Tab::Culling => "Culling",
             Tab::Shortcuts => "Keyboard Shortcuts",
             Tab::Import => "Import",
+            Tab::Appearance => "Appearance",
         }
     }
 }
@@ -290,10 +314,11 @@ mod tests {
     use riffle_core::xmp::LabelNames;
 
     use super::{
-        APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, ModalKey,
+        APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         SettingsModal, TABS, display_key, edit, format_change, label_change, label_names_of,
-        label_texts, pattern_change, root_note, shortcut_label, stops, writes_xmp,
+        label_texts, mode_change, pattern_change, root_note, shortcut_label, stops, writes_xmp,
     };
+    use crate::theme::{Mode, Setting};
 
     #[test]
     fn the_specifiers_are_the_date_ones_and_the_folder_separator() {
@@ -565,7 +590,30 @@ mod tests {
         let labels: Vec<_> = TABS.iter().map(|t| t.label()).collect();
         assert_eq!(
             labels,
-            ["Sidecar", "Culling", "Keyboard Shortcuts", "Import"]
+            [
+                "Sidecar",
+                "Culling",
+                "Keyboard Shortcuts",
+                "Import",
+                "Appearance"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_modes_are_system_light_and_dark() {
+        let labels: Vec<_> = MODES.iter().map(|(_, label)| *label).collect();
+        assert_eq!(labels, ["System", "Light", "Dark"]);
+    }
+
+    #[test]
+    fn choosing_the_mode_in_force_changes_nothing_and_another_is_set() {
+        for (mode, _) in MODES {
+            assert_eq!(mode_change(Setting { mode }, mode), None);
+        }
+        assert_eq!(
+            mode_change(Setting { mode: Mode::Dark }, Mode::System),
+            Some(Setting { mode: Mode::System })
         );
     }
 
