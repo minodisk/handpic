@@ -3122,14 +3122,12 @@ Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, wi
   - Scroll the Shortcuts list and the Import tab (short window) with the wheel: a scrollbar shows; drag its thumb and the list follows.
   - Look: outlined buttons about as on `main` (24 px, 13 px labels, faint fill, white-15 % border, `#262626` hover), the chosen language lit with the `#e5e5e5` border, a focused control with the `#737373` ring, the checked radio a filled circle with a check (new).
   - Click the backdrop: the modal closes. Reopen and click `×`: it closes. After closing the arrows page again.
-- [ ] On Windows (Step 4: menus), the Sort, Filter, tree right-click and strip right-click menus are the `#171717` surface with a white-10 % border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover, the check icon at the left of a checked item, muted headings, separators across the padding, the strip menu's shortcuts muted 12 px at the right end, and a disabled item muted with no hover. Use a folder with bursts and EXIF variety so the Filter menu is long. Then:
-  - Sort and Filter open above their button with the right edges aligned; a right-click menu opens at the pointer and flips near the right and bottom edges.
+- [ ] On Windows (Step 4: menus), the Sort and Filter menus are the `#171717` surface with a white-10 % border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover, the check icon at the left of a checked item, muted headings, separators across the padding, and a disabled item muted with no hover. Use a folder with bursts and EXIF variety so the Filter menu is long. Then:
+  - Sort and Filter open above their button with the right edges aligned.
   - An outside press closes an open Sort / Filter menu (in the strip, in the preview, and on the menu's own button, which does not reopen it). An item click applies and leaves the menu open.
   - With the Filter menu open: `escape` closes it, the arrows page, `e` / `z` / `f` toggle their overlays, the burst keys act, and the menu stays open through all but `escape`.
   - Make the window short so the Filter menu exceeds its cap: it scrolls by wheel, shows a scrollbar, dragging the thumb scrolls it, a press on the scrollbar does not close it, and reopening starts at the top.
-  - A right-click menu closes on any key, with `escape` stopping there and another key (an arrow) also acting. An outside press closes it, and a right press on another row opens that row's menu.
-  - Click in the tree (it takes the keyboard), right-click a folder: the tree keeps the keyboard while the menu is open. Press on the menu (an item, or its scrollbar in a short window): the tree hands the keyboard back.
-  - With a menu open nothing takes the GPUI focus.
+  - With a Sort / Filter menu open nothing takes the GPUI focus.
 - [ ] On Windows (Step 5: `Root`), everything looks as on `main` (menus' rows, settings buttons and fields, empty state's text the same size). Then:
   - `tab` toggles the side panes. Bind `shift+tab` to an action in the Keyboard Shortcuts tab (e.g. `toggleStrip`): `shift+tab` acts.
   - In the settings modal Tab / Shift+Tab walk its stops (from a field too), and the Shortcuts tab's `+` then `tab` adds `tab` as a chip.
