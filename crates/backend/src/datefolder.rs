@@ -372,8 +372,9 @@ pub enum Ran {
 /// re-render sets the tree watches again. Each date folder that received
 /// files gets its `folder_counts` row (`Moved.path`, `Moved.count`, which is
 /// the count `folders::list` gives it: one per listed file, its sidecars
-/// not counting), and the row of `dir`, keyed `caller`, is deleted rather
-/// than guessed when undated files remain. A failed index write after the
+/// not counting), and the row of `dir`, keyed `caller`, is always deleted:
+/// gone with the folder when it is removed, and not guessed when undated
+/// files keep it (its next listing writes the true count). A failed index write after the
 /// moves still returns `Ok` with a warning, as in `rename_folder`.
 pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Result<Split, String> {
     let path = Path::new(dir);
