@@ -1,128 +1,235 @@
 # Packaging and the updater for the switch-over
 
-The decision record for Step 10 of [the gpui-port plan](./plan.md): which tool
-packages the native app, how it updates itself, and what the first native
-release must give the Tauri installs already in the field. Written by
-the gpui-ci-packaging plan (`../20261114-gpui-ci-packaging/plan.md`) on
-2026-11-14.
+The decision record for Step 10 of [the gpui-port plan](./plan.md): how the
+native app is packaged, how an install of it is updated, and what happens to
+the Tauri installs already in the field. First written on 2026-11-14 by the
+gpui-ci-packaging plan (`../_archived/20261114-gpui-ci-packaging/plan.md`),
+and re-decided on 2026-11-16 by the gpui-packaging-redecision plan
+(`../20261116-gpui-packaging-redecision/plan.md`). The earlier text
+(`cargo-packager` and a self-written updater keeping the full `latest.json`
+contract) is in git history only.
 
-Each claim is tagged **Source** (read from the named source on 2026-11-14) or
+Each claim is tagged **Source** (read from the named source on 2026-11-16) or
 **Unverified** (to be checked in the sub-milestone that needs it). Nothing
-here comes from running `cargo-packager`, `cargo-bundle` or an update; no
+here comes from running a packaging tool, `self_update` or an update; no
 packaging or updater code was written.
 
-## The `latest.json` contract today
+## The user's decision (2026-11-16)
 
-Sources: `crates/app/tauri.conf.json`, `.github/workflows/release.yml`, the
-`latest.json` attached to v1.10.0, and `tauri-plugin-updater` 2.12.0's
-`updater.rs` (the version in the root `Cargo.lock`).
+- Auto-update for Tauri installs stops at the last Tauri release. Tauri users
+  reinstall the native app by hand.
+- Dropped with it: the `latest.json` manifest, the minisign key pair
+  (`TAURI_SIGNING_PRIVATE_KEY`, `plugins.updater.pubkey`), NSIS
+  `/P /UPDATE` compatibility, the MSI upgrade code, an rpm for shipped rpm
+  installs, and the "real-device update from the last Tauri release" gate.
+- The native app's packaging and updating follow gpui-kit's standard guides,
+  https://gpui-kit.com/docs/packaging/ and
+  https://gpui-kit.com/docs/auto-update/.
 
-- **Source.** The endpoint is
-  `https://github.com/minodisk/handpic/releases/latest/download/latest.json`
-  (`plugins.updater.endpoints`).
-- **Source.** `tauri-action` writes `latest.json` and attaches it to the draft
-  release; `updaterJsonPreferNsis: true` makes the plain `windows-x86_64` key
-  point at the NSIS installer.
-- **Source.** The shape is `version`, `notes`, `pub_date` and `platforms`, a
-  map of key to `{ signature, url }`. The keys in v1.10.0 are
-  `windows-x86_64`, `windows-x86_64-nsis`, `windows-x86_64-msi`,
-  `darwin-aarch64`, `darwin-aarch64-app`, `darwin-x86_64`,
-  `darwin-x86_64-app`, `linux-x86_64`, `linux-x86_64-appimage`,
-  `linux-x86_64-deb`, `linux-x86_64-rpm`.
-- **Source.** `signature` is the base64 of a minisign `.sig` file's text, made
-  over the artifact's bytes with the key in `TAURI_SIGNING_PRIVATE_KEY`. The
-  public key in `plugins.updater.pubkey` is the base64 of a minisign public
-  key file. The trusted comment carries `timestamp`, `file` and `version`; the
-  client checks `version` against the manifest only when a signature carries
-  one (`require_signed_version` is off).
+## How Tauri installs stop updating
 
-## What a shipped Tauri install does with it
+- **Source** (`crates/app/tauri.conf.json`). The updater endpoint is
+  `https://github.com/minodisk/handpic/releases/latest/download/latest.json`.
+- **Source** (`tauri-plugin-updater` 2.12.0's `updater.rs`, the version in
+  the root `Cargo.lock`). A response without a success status leaves no
+  release, and `check` returns `Error::ReleaseNotFound`.
+- **Source** (`crates/app/src/update.rs`). The startup check logs
+  `update failed: …`; only the menu check shows an error dialog.
+- **Source** (the three above). So the first published release without a
+  `latest.json` asset ends auto-update for every Tauri install, with no code
+  change.
+- Rule: no native release attaches an asset named `latest.json` in the Tauri
+  shape that names native artifacts, since shipped installs would try to
+  install it.
+- **Source** (`gh release list`, 2026-11-16). v1.10.0 is the latest published
+  release. The earlier record read its assets as named `Riffle`. `main`
+  already carries the Handpic rename (`tauri.conf.json` `productName`),
+  unreleased.
 
-Source: `tauri-plugin-updater` 2.12.0's `updater.rs`, and
-`crates/app/src/update.rs` for when the install runs. This is what the first
-native release must satisfy, since the installs in the field run this code
-unchanged.
+## What gpui-kit's guides say
 
-- **Source.** It looks up `{os}-{arch}-{installer}` (the installer type is
-  baked into the binary by the bundler), then `{os}-{arch}`; updates when
-  `version` is greater; downloads `url`; verifies the signature; then installs:
-  - Windows, NSIS install: writes the bytes to a temporary `.exe` (a raw exe
-    or a zip holding one) and launches it with `/P /UPDATE`, plus
-    `/R /ARGS ...` on `Restart Now`.
-  - Windows, MSI install: `msiexec /i <msi> /passive /promptrestart`. A major
-    upgrade needs the same upgrade code
-    (`15df1a23-08b6-56be-b9df-b38d92f7dd75` in `tauri.conf.json`).
-  - macOS: untars the `.app.tar.gz`, drops the first path component and swaps
-    the result into the existing bundle's path.
-  - Linux, AppImage: writes the bytes (a raw AppImage, or a `.tar.gz` holding
-    one) over the running AppImage's path.
-  - Linux, deb / rpm: checks the bytes are a deb / rpm, then
-    `pkexec dpkg -i` / `rpm -U`. An rpm install handed anything else fails
-    with `InvalidUpdaterFormat`.
-- **Source.** Nothing in the contract is private to Tauri: plain JSON,
-  minisign, and per-platform artifact shapes. A native updater can read the
-  same file with `reqwest` (already in `crates/backend`, rustls) and
-  `minisign-verify` (already in the root lock, the crate the plugin uses),
-  plus `tar` and `flate2` for macOS.
+**Source**: the two pages above, read on 2026-11-16 through a summarizing
+fetch. The exact scripts (`install.sh`, the `.iss`, the deb `control`) were
+not read line by line; the packaging sub-milestone reads them.
 
-## The candidates
+### Packaging
 
-- **Source** (crates.io and the repository). `cargo-packager` 0.11.8
-  (2025-11; commits on 2026-11-12): NSIS, WiX MSI, `.app`, DMG, deb,
-  AppImage, pacman. No rpm. Its NSIS template descends from Tauri's: it reads
-  `/P` and `/R` and uses the same `Uninstall\${PRODUCTNAME}` and
-  `Software\${MANUFACTURER}\${PRODUCTNAME}` registry keys. It does not read
-  `/UPDATE`. It ships a minisign signer.
-- **Source.** `cargo-packager-updater` 0.2.3 (2025-07): the same manifest
-  idea, but its macOS keys are `macos-<arch>`, not `darwin-<arch>`, and each
-  platform entry needs a `format` field. The Tauri plugin's entry struct does
-  not reject unknown fields, so one file could carry both sets.
-- **Source.** `cargo-bundle` 0.12.0 (2026-09): `osx`, `deb`, `rpm`,
-  `appimage`, and `msi` / `wxsmsi`, with Windows support called experimental
-  in its readme. No NSIS, no updater signatures.
+- No single packager. `cargo build --release --locked` per target and
+  architecture, on that platform.
+- macOS: a `.app` (`Info.plist`, `.icns`); Developer ID with hardened runtime
+  (`codesign --options runtime --timestamp`), nested code first, not
+  `--deep`; a DMG by `hdiutil create … -format UDZO`, signed;
+  `xcrun notarytool submit --wait` with the result checked as Accepted;
+  `xcrun stapler staple` / `validate`. A ZIP or tarball of the `.app` is the
+  portable form.
+- Windows: a portable ZIP, or an Inno Setup `.exe` installer (`ISCC.exe`, a
+  stable `AppId`). The exe is signed before packaging, then the setup; the
+  uninstaller needs Inno's signed-uninstaller workflow.
+- Linux: a `.tar.gz` with an `install.sh` that verifies a SHA-256 before a
+  per-user install under `~/.local`, and a `.deb` by
+  `dpkg-deb --root-owner-group --build` with `Depends` derived from the built
+  binary. rpm needs a separate recipe. AppImage and MSI are not mentioned.
+- SHA-256 checksums are published; install, upgrade from N to N+1 and
+  uninstall are tested on clean machines.
 
-## Recommendation
+### Auto update
 
-- **Packager: `cargo-packager`.** The deciding fact is Windows: shipped
-  installs launch the downloaded file as an NSIS installer with `/P`, and
-  `latest.json` prefers NSIS. `cargo-bundle` cannot produce one.
-  `cargo-packager` also covers every other format shipped today except rpm.
-- **Updater: self-written, in `crates/backend`,** reading the unchanged
-  `latest.json` keys with the same key pair. The same file then serves the
-  shipped Tauri installs and the native installs with one set of keys, no
-  second HTTP stack comes in, and the Windows install stays deferred to quit
-  after the sidecar flush as `crates/app/src/update.rs` does it.
-- **Not taken: `cargo-packager-updater`.** It would mean a second manifest
-  dialect in the same file (`macos-*` keys, `format`), its own HTTP stack, a
-  release from 2025-07, and still the quit-time deferral to write around it.
-  The self-written updater costs the per-platform install code (about what
-  `update.rs` plus the plugin's install functions do today) and its security
-  review.
-- So: keep the contract; no new one is written.
+- The install's owner updates it.
+- `self_update` 1.3 is an optional dependency: the GitHub backend,
+  `checksum_from_asset("SHA256SUMS")`, `is_update_available()` / `update()`.
+  It blocks, so it runs on a background worker. It is only for a writable
+  single-binary portable install.
+- A macOS `.app` from a DMG: a bundle-aware updater, or a new signed and
+  notarized app replacing the whole `.app`, never the executable alone.
+- Inno Setup: the installer owns the files, the shortcuts and the uninstall
+  record.
+- deb / rpm: the package manager.
+- A multi-file portable archive is updated as a whole.
+- Restart to finish; report the new version only after the relaunch.
+- Stage outside the live install.
+- Windows file locks and elevation are handled by a helper or the installer.
+- Do not silently switch an install from one owner to another.
+- `SHA256SUMS` proves integrity, not who published; use a signing key or
+  signed metadata where that matters.
+- Pin the selected version between the check and the install.
+
+### `self_update`'s signatures
+
+- **Source** (docs.rs feature list, 2026-11-16). `self_update` is at 1.3.3
+  and has a `signatures` feature depending on `zipsign-api` 0.2.2.
+- **Unverified.** How it signs and verifies, and where the key lives.
+
+## The decision
+
+The gpui-kit-aligned default per platform. A line that depends on an open
+question names it.
+
+- **Tooling.** Platform-native tools driven from mise tasks and the release
+  workflow; no `cargo-packager`, `cargo-bundle` or Tauri bundler. It grows
+  from what exists (**Source**: `mise.toml`, `crates/native/packaging/`,
+  `crates/native/build.rs`, `docs/agents/native-app.md`):
+  - `native:bundle:macos` lays out an unsigned `Handpic.app`, with no DMG.
+  - `native:install:linux` installs into the same `~/.local` layout
+    gpui-kit's `install.sh` uses.
+  - `build.rs` already embeds the Windows icon.
+  - The license notices (`gpui-component`, the `gpui-pre-*` crates, Lucide;
+    the models' licenses in `crates/core/models/`) are due at packaging.
+- **macOS, arm64 and x86_64 separately.** `Handpic.app` in a DMG. An update
+  replaces the whole `.app` (who performs it: open question 1; signing and
+  notarization: open question 3).
+- **Windows x64.** An Inno Setup setup `.exe` and a portable ZIP (whether the
+  ZIP ships: open question 6). The installer owns an installed copy's update
+  (open question 1); `self_update` may update the portable copy. No MSI and
+  no NSIS.
+- **Linux x64.** A `.tar.gz` with `install.sh`, and a `.deb`. `apt` / `dpkg`
+  owns a deb install's update; `self_update` may update the tarball install.
+  rpm and AppImage: open question 4.
+- **Every release** carries `SHA256SUMS` and no `latest.json` (authenticity
+  beyond it: open question 2).
+- **The update flow in the app.** A launch check and a manual check; the
+  install's owner does the install (open question 1); restart to finish; the
+  install or the relaunch only after the sidecar writer is drained on quit,
+  as `crates/app/src/update.rs` does today.
+- **Not taken.**
+  - `cargo-packager` plus the self-written `latest.json` updater: its
+    deciding fact, Windows NSIS `/P` compatibility with shipped installs, is
+    gone with the user's decision.
+  - `cargo-packager-updater`: a manifest dialect of its own for a contract
+    nobody needs to keep any more.
+  - `cargo-bundle`: no NSIS or Inno Setup, Windows support called
+    experimental (**Source**: `cargo-bundle` 0.12.0's readme, as read on
+    2026-11-14 by the earlier record), and nothing the platform-native tools above do not cover.
 
 ## Unverified
 
 To be checked in the sub-milestone that needs each one.
 
-- **Unverified.** Whether `cargo-packager`'s NSIS installer, launched with
-  `/P /UPDATE` by a shipped install, upgrades in place. `/UPDATE` is ignored,
-  so it takes its own reinstall path, which runs the old (Tauri) uninstaller
-  with `/P`. Needs a real Windows install. Also the main binary's name
-  (`riffle-app.exe` today, `riffle-native` in the port) and the shortcuts that
-  point at it.
-- **Unverified.** Whether `crates/app/nsis/hooks.nsh` (the legacy `Riffle`
-  uninstall) can be carried into a `cargo-packager` NSIS template.
-- **Unverified.** Whether `cargo-packager`'s WiX config can pin the upgrade
-  code.
-- **Unverified.** Whether `cargo-packager`'s signer accepts the existing
-  `TAURI_SIGNING_PRIVATE_KEY` and produces a signature the public key in
-  `tauri.conf.json` verifies. Whatever signs, the release job must verify
-  each signature with that public key before uploading.
-- **Unverified.** rpm. `cargo-packager` has no rpm target, and a shipped rpm
-  install looks up `linux-x86_64-rpm` and rejects anything but an rpm. Either
-  keep an rpm in the release with a second tool (for example
-  `cargo-generate-rpm`), or drop rpm and tell those users to reinstall by
-  hand. Decided in the packaging sub-milestone.
-- **Unverified.** Whether the last shipped release is still named `Riffle`
-  (v1.10.0's assets are) when the switch-over ships, which decides how many
-  legacy names the installers must handle.
+- **Unverified.** How the running app knows its install type (portable, Inno
+  Setup, DMG, deb), which "do not switch owners" requires.
+- **Unverified.** `self_update`'s asset-name and target matching, the
+  binary's path in the archive, and whether the portable archives count as
+  single-binary once the license notices ship beside the binary.
+- **Unverified.** Whether replacing the running exe works on Windows for the
+  portable copy.
+- **Unverified.** The executable's name in a release (`riffle-native` today
+  in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
+- **Unverified.** The version source: `crates/native/Cargo.toml` and
+  `Info.plist` are `0.0.0`, and `release-please-config.json` bumps neither.
+- **Unverified.** The `.desktop` file's `Exec` (relative today; gpui-kit's
+  `install.sh` writes an absolute path).
+- **Unverified.** The deb's `Depends` and the Vulkan driver requirement at
+  run time.
+- **Unverified.** What a hand reinstall over a Tauri install does on each
+  platform: the Inno Setup install next to the NSIS / MSI one, with its
+  uninstall entry and shortcuts; the deb's `Package` name against the Tauri
+  deb's, so that `apt` upgrades in place; a leftover `Riffle.app`.
+- **Unverified.** That the native app picks up the Tauri install's data.
+  **Source** (`CLAUDE.md`): `settings.rs` seeds its store from the Tauri
+  `settings.json`, and the index is the native app's own. Not checked on a
+  real install.
+
+## Open questions
+
+None is decided. Each is settled before the sub-milestone that needs it.
+
+1. **Who performs the update of installer-owned installs** (Inno Setup, DMG,
+   deb).
+   - (a) Notify only: the app says a newer version exists and opens the
+     release page; the user runs the installer, drags the new `.app` or
+     installs the deb. Least code, no elevation or file-lock handling, and no
+     authenticity question for these installs beyond the OS signature. A
+     regression from today's silent updates on Windows and macOS.
+   - (b) The app drives the owner: it downloads the setup `.exe` and runs it
+     at quit; stages and swaps the whole `.app`; a deb stays with `apt` or a
+     hand install, as today. Close to today's behavior, but it is
+     per-platform install code, and it needs its own verification of what it
+     downloads.
+   - gpui-kit allows both and forbids only replacing the binary inside such an
+     install.
+2. **Publisher authenticity beyond `SHA256SUMS`.** Today's updates are
+   minisign-verified; `SHA256SUMS` from the same GitHub release only proves
+   integrity.
+   - OS signatures (Developer ID plus notarization, Authenticode) checked on
+     the staged artifact; nothing on Linux.
+   - `self_update`'s `signatures` feature (`zipsign-api`): a verifying key
+     compiled into the app and a new signing secret in CI; covers the
+     portable archives only; unverified in detail.
+   - Accept checksum-only over GitHub HTTPS, recorded as a step down.
+   - With "notify only" in question 1, the question shrinks to the portable
+     installs.
+3. **OS code signing.** gpui-kit's standard is a Developer ID signed and
+   notarized DMG and a signed exe, setup and uninstaller. Today nothing is
+   OS-signed (`README.md` tells users how to pass Gatekeeper and
+   SmartScreen).
+   - Follow the guide: paid certificates and CI secrets, the user's call.
+   - Stay unsigned (ad hoc on macOS): a deviation from the guide, and OS
+     signatures are then no answer to question 2.
+4. **rpm and AppImage.**
+   - rpm: drop it (rpm-distribution users take the `.tar.gz` with
+     `install.sh`), or add a separate recipe (`cargo-generate-rpm`,
+     `rpmbuild`).
+   - AppImage: the Linux download `README.md` leads with, and today's only
+     self-updating Linux format. Either the `.tar.gz` + `install.sh` install
+     with `self_update` replaces it, or it is kept with a tool outside
+     gpui-kit's guide.
+   - MSI is written above as dropped, since the guide offers Inno Setup or a
+     ZIP.
+5. **What the last Tauri release tells users, and which release that is.**
+   - (a) v1.10.0, still named Riffle, stays the last one. No install is told
+     anything in the app; the notice lives in the first native release's
+     notes, the README and the usage guide; a menu check on a Tauri install
+     shows an update error from then on.
+   - (b) One final Tauri release from `main` (it would also ship the Handpic
+     rename) whose release notes announce the reinstall. Installs update to
+     it silently, so its notes are seen only on GitHub.
+   - (c) As (b), with a one-time notice in the app. It needs a change in the
+     frozen `crates/app`, an exception only the user can grant.
+   - Independent of these: attach to later native releases a frozen copy of
+     the last Tauri release's `latest.json`, pointing at that release's own
+     assets. Installs older than it could still reach it, and a Tauri check
+     would report "up to date" instead of an error. The cost is one legacy
+     asset on every release and a rule that it never names a native
+     artifact.
+6. **Whether the portable Windows ZIP ships at all.** The guide says to
+   choose only the formats users need. Without it, `self_update` has no
+   Windows target and Windows updates rest wholly on question 1.

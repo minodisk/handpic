@@ -394,26 +394,37 @@ them; their contents are deliberately coarse.
     (its Step 1), then `rejectRest` and `get_view`'s `burst` (its Step 2).
 - [ ] Step 10: Packaging, the updater, the three-platform CI and the switch-over
   - Done when: the six sub-milestones below are done, in this order, each
-    re-planned as its own plan when its turn comes. The packager
-    (`cargo-packager`) and the updater (self-written, keeping the signed
-    `latest.json` contract) are decided in
-    [`packaging-updater.md`](./packaging-updater.md), with what is still
-    unverified.
+    re-planned as its own plan when its turn comes. The packaging and the
+    updater follow gpui-kit's guides as decided in
+    [`packaging-updater.md`](./packaging-updater.md) (re-decided on
+    2026-11-16), with what is still unverified and what is still open.
     1. The `native` CI job on `windows-latest`, `ubuntu-latest` (the apt list
-       above) and `macos-latest`, and the packaging / updater decision
-       (`../20261114-gpui-ci-packaging/plan.md`).
-    2. Package the native app with `cargo-packager`, without the Tauri
-       bundler, on a manual `workflow_dispatch` only, uploading workflow
-       artifacts: Windows (NSIS, MSI), macOS arm64 and x86_64 (`.app`, DMG),
-       Linux (deb, AppImage, rpm per the decision). No release is touched.
-    3. The self-update in `crates/backend` replacing `tauri-plugin-updater`,
-       with the native app's startup check, menu item and quit-time install,
-       reading `latest.json`.
-    4. `release.yml` builds, signs and attaches the native installers for
-       Windows, macOS (both arches) and Linux and a `latest.json` with
-       today's keys, each signature verified against the public key; a
-       real-device update from the last Tauri release on each platform before
-       the first native release is published.
+       above) and `macos-latest`, and the first packaging / updater decision,
+       superseded on 2026-11-16
+       (`../_archived/20261114-gpui-ci-packaging/plan.md`).
+    2. Package the native app with platform-native tools on a manual
+       `workflow_dispatch` only, uploading workflow artifacts and touching no
+       release: `cargo build --release --locked`; Windows an Inno Setup setup
+       `.exe` and a portable ZIP; macOS arm64 and x86_64 `Handpic.app` in a
+       DMG; Linux a `.tar.gz` with `install.sh` and a `.deb`; `SHA256SUMS`;
+       the license notices; the version wired from the release version;
+       signing as open question 3 is settled; rpm and AppImage as open
+       question 4 is settled.
+    3. The native app's update flow: the launch check, the menu item,
+       `self_update` for the portable installs, the owner's path for the
+       installer, DMG and deb installs as open question 1 is settled,
+       authenticity as open question 2 is settled, and a restart to finish
+       after the sidecar drain. It replaces `tauri-plugin-updater` and reads
+       no `latest.json`.
+    4. `release.yml` builds and attaches the native artifacts and
+       `SHA256SUMS`, and no `latest.json`. With it:
+       `.claude/skills/release/scripts/verify-release.sh` (which requires
+       `latest.json`, `.msi`, `.rpm` and `.AppImage` today), the `release`
+       skill's text, `CONTRIBUTING.md`'s stats note and
+       `release-please-config.json`'s version files. Before the first native
+       release is published: a real-device install, an update from N to N+1
+       and an uninstall per format, and the notice to Tauri users as open
+       question 5 is settled.
     5. Merge the native crate into the root workspace: one `Cargo.lock`, the
        root toolchain bumped, the patches moved to the root, one `notify`
        version (deciding the `todo.md` item on whether `configure` still
@@ -421,7 +432,8 @@ them; their contents are deliberately coarse.
        `crates/app/ui` removed with their Vite+, pnpm and Tauri tooling.
     6. `README.md` / `README.ja.md`, `CONTRIBUTING.md`, `CLAUDE.md`,
        `docs/humans/**` and `docs/agents/**` rewritten for the native app,
-       `tauri-app.md` archived.
+       `tauri-app.md` archived, with the reinstall instructions for Tauri
+       users in `README.md` / `README.ja.md` and `docs/humans/**`.
 
 ## Trade-offs and risks
 
@@ -631,3 +643,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
 - (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../_archived/20261114-gpui-folder-drop/plan.md`
 - (2026-11-14) Step 8 complete: the folder tree and the strip's menu (`../_archived/20261113-gpui-tree-trash/plan.md`), the empty state, folder drag-and-drop (`../_archived/20261114-gpui-folder-drop/plan.md`) and the folder operation dialogs (`../_archived/20261113-gpui-folder-dialogs/plan.md`) have all landed
+- (2026-11-16) Step 10: the packaging / updater decision redone along gpui-kit's guides after the user dropped the update path from Tauri installs, through `../20261116-gpui-packaging-redecision/plan.md` (Step 10 stays open)
