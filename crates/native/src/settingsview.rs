@@ -89,9 +89,8 @@ pub struct SettingsView {
     label_names: LabelNames,
     /// The Sidecar page's name fields, in `LABEL_COLORS` order.
     name_fields: Vec<Entity<InputState>>,
-    /// The language `Reset` fills in, an index into `i18n::presets()`,
-    /// chosen in `languages`.
-    language: usize,
+    /// The Lightroom language whose preset names are those in force, none
+    /// while no preset's are; a choice puts its preset's names in force.
     languages: Entity<Languages>,
     /// The stored destination root and pattern.
     import_root: String,
@@ -149,14 +148,13 @@ impl SettingsView {
         cx.subscribe_in(
             &languages,
             window,
-            |this, _, event: &SelectEvent<SearchableVec<SharedString>>, _, cx| {
+            |this, _, event: &SelectEvent<SearchableVec<SharedString>>, window, cx| {
                 if let SelectEvent::Confirm(Some(name)) = event
-                    && let Some(at) = i18n::presets()
+                    && let Some(preset) = i18n::presets()
                         .iter()
-                        .position(|preset| preset.name == name.as_ref())
+                        .find(|preset| preset.name == name.as_ref())
                 {
-                    this.language = at;
-                    cx.notify();
+                    this.commit_names(preset.names.clone(), window, cx);
                 }
             },
         )
@@ -172,7 +170,6 @@ impl SettingsView {
             keymap: Keymap::defaults(),
             label_names: LabelNames::default(),
             name_fields,
-            language: 0,
             languages,
             import_root: String::new(),
             root_field,
@@ -222,6 +219,9 @@ impl SettingsView {
         cx.notify();
     }
 
+    /// Shows `names` in the fields and selects the language whose preset
+    /// they are, else none. Setting the selection emits no `SelectEvent`, so
+    /// only a choice in the menu applies a preset.
     fn show_names(&mut self, names: LabelNames, window: &mut Window, cx: &mut Context<Self>) {
         for (field, text) in self
             .name_fields
@@ -230,6 +230,13 @@ impl SettingsView {
         {
             show(field, text, window, cx);
         }
+        let preset = settingsmodal::preset_of(&names).map(|at| &i18n::presets()[at]);
+        self.languages.update(cx, |state, cx| match preset {
+            Some(preset) => {
+                state.set_selected_value(&SharedString::from(preset.name.clone()), window, cx)
+            }
+            None => state.set_selected_index(None, window, cx),
+        });
         self.label_names = names;
     }
 
@@ -256,13 +263,6 @@ impl SettingsView {
             cx.emit(Change::LabelNames(names));
         }
         cx.notify();
-    }
-
-    /// `Reset`: the chosen language's Lightroom names.
-    fn reset_names(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(preset) = i18n::presets().get(self.language) {
-            self.commit_names(preset.names.clone(), window, cx);
-        }
     }
 
     /// The example for the pattern in the field, a local call, so it follows
@@ -496,8 +496,8 @@ impl SettingsView {
     }
 
     /// The three format radios and, while the format writes XMP, the label
-    /// names: the Tauri paragraph, a name field per color, and the language
-    /// `Reset` fills in, chosen in a `Select`, beside `Reset`.
+    /// names: the Tauri paragraph, a name field per color, and the Lightroom
+    /// language in a `Select`, whose choice puts its preset's names in force.
     fn sidecar(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
         let format = self.format;
         let page = page.group(SettingGroup::new().item(SettingItem::new(
@@ -549,33 +549,15 @@ impl SettingsView {
                 .item(
                     SettingItem::new(
                         "Lightroom language",
-                        SettingField::render({
-                            let view = view.clone();
-                            move |_, window, _| {
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .gap(px(4.))
-                                    .child(
-                                        div().w(px(160.)).child(
-                                            Select::new(&languages)
-                                                .small()
-                                                .accessibility_label("Lightroom language"),
-                                        ),
-                                    )
-                                    .child(small_button("label-names-reset", "Reset").on_click(
-                                        window.listener_for(
-                                            &view,
-                                            |this, _: &ClickEvent, window, cx| {
-                                                this.leave_field(window, cx);
-                                                this.reset_names(window, cx)
-                                            },
-                                        ),
-                                    ))
-                            }
+                        SettingField::render(move |_, _, _| {
+                            div().w(px(160.)).child(
+                                Select::new(&languages)
+                                    .small()
+                                    .accessibility_label("Lightroom language"),
+                            )
                         }),
                     )
-                    .keywords(["Reset", "Language", "Lightroom"]),
+                    .keywords(["Language", "Lightroom"]),
                 ),
         )
     }

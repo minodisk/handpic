@@ -1316,11 +1316,15 @@ not open.
   list, so a focused field blurs and commits by itself.
 - Rule: the language picker (Inferred, read from `gpui-base` `select.rs`
   and gpui-component `select.rs` / `list/list.rs`). The view holds one
-  `SelectState` over the presets' names, built in `new` with the first
-  chosen, not searchable or cleanable, and a `SelectEvent::Confirm`
-  subscription that sets `language`, the preset `Reset` fills in. It is not
-  `SettingField::dropdown`, which draws a `Button` with a `PopupMenu` and
-  cannot share its item with `Reset`. Escape with the menu open closes the
+  `SelectState` over the presets' names, not searchable or cleanable, and a
+  `SelectEvent::Confirm` subscription that commits the chosen preset's names
+  through `commit_names`. `show_names`, which every open and every commit of
+  the names goes through, selects the preset whose names equal those in
+  force (`settingsmodal::preset_of`), else none (the placeholder). Setting
+  the selection emits no `SelectEvent`, so only a choice in the menu applies
+  names, and the subscription runs as an effect after the `SelectState`'s
+  own update, so its sync of the selection is no nested update. It is not
+  `SettingField::dropdown`, which draws a `Button` with a `PopupMenu`. Escape with the menu open closes the
   menu only (the list's `Cancel` propagates to the `Select`'s, which stops);
   with it closed, the `Select`'s `Cancel` propagates, so Escape reaches the
   box's `key_down` and closes the settings. Actions run before the box's
@@ -1348,7 +1352,7 @@ not open.
   and, while the format writes XMP, a `Label names` group (the
   `LABEL_NAMES_NOTE` as its description, one item per color, then a
   `Lightroom language` item, the Tauri `aria-label`, holding the `Select`
-  (`.small()`, 160 px wide) and `Reset`); the Culling page the auto-advance
+  (`.small()`, 160 px wide)); the Culling page the auto-advance
   switch; the Keyboard Shortcuts page one item per action, then `Reset all`;
   the Import page `Destination root` (its `root_note` as the description),
   `Folder pattern`, the example line, `Example patterns` and the specifier
@@ -1469,10 +1473,10 @@ folder is not re-listed.
 - Rule: a label names change takes the same path (`switch_names`, both
   through `reset_sidecars` under the `format_switch` lock). While the format
   writes XMP the Sidecar page shows the five name fields
-  (`Input`), a row of `i18n::presets()` languages and `Reset`; a
+  (`Input`) and a `Select` of `i18n::presets()` languages; a
   field's commit (Enter or blur; Escape commits and closes, as the Tauri
-  field's `change` fires when the closing dialog takes its focus) or `Reset`
-  normalizes the five with `sidecar::label_names_setting`, shows them back
+  field's `change` fires when the closing dialog takes its focus) or a
+  language's choice normalizes the five with `sidecar::label_names_setting`, shows them back
   and emits `Change::LabelNames` only when they differ. The window then
   writes `labelNames` and puts the names in force on the main thread (a
   judgment queued before keeps the names it carries; overlapping changes end

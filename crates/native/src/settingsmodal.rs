@@ -9,7 +9,7 @@ use riffle_backend::{
     shortcuts::Keymap,
     sidecar::{SidecarFormat, label_names_setting},
 };
-use riffle_core::xmp::LabelNames;
+use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::theme::{self, Mode};
 
@@ -73,6 +73,14 @@ pub fn label_names_of(texts: [&str; 5]) -> LabelNames {
 /// The change a commit asks for, none when the names are those in force.
 pub fn label_change(current: &LabelNames, committed: LabelNames) -> Option<LabelNames> {
     (committed != *current).then_some(committed)
+}
+
+/// The index into `i18n::presets()` of the preset whose names are `names`,
+/// none when no preset's are.
+pub fn preset_of(names: &LabelNames) -> Option<usize> {
+    i18n::presets()
+        .iter()
+        .position(|preset| preset.names == *names)
 }
 
 /// The Appearance tab's mode choices.
@@ -344,8 +352,8 @@ mod tests {
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         SettingsModal, TABS, display_key, edit, format_change, label_change, label_names_of,
-        label_texts, mode_change, pattern_change, root_note, shortcut_label, stops, theme_change,
-        writes_xmp,
+        label_texts, mode_change, pattern_change, preset_of, root_note, shortcut_label, stops,
+        theme_change, writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
 
@@ -430,6 +438,20 @@ mod tests {
             ["レッド", "イエロー", "グリーン", "ブルー", "パープル"]
         );
         assert_eq!(riffle_core::i18n::presets()[0].code, "en");
+    }
+
+    #[test]
+    fn the_language_shown_is_the_preset_whose_names_are_in_force() {
+        let presets = riffle_core::i18n::presets();
+        for (at, preset) in presets.iter().enumerate() {
+            assert_eq!(preset_of(&preset.names), Some(at));
+        }
+        assert_eq!(preset_of(&LabelNames::default()), Some(0));
+        for preset in presets {
+            let texts = label_texts(&preset.names);
+            let edited = label_names_of([texts[0], texts[1], texts[2], texts[3], "Custom"]);
+            assert_eq!(preset_of(&edited), None);
+        }
     }
 
     #[test]
