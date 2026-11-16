@@ -3203,6 +3203,36 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   rename; the hand check is pending in
   `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 
+### An import's end posts a system-only notification while inactive (Inferred)
+
+- `import::done_notification` decides and words it: nothing while the main
+  window is active, else `Import finished` or `Import canceled` over
+  `done_status`, the status line's summary, so the two cannot drift.
+- `import_ran` posts it after `ImportFlow::done` accepted the run (a stale
+  run posts nothing), through the view's stored `AnyWindowHandle` and a
+  `cx.defer`, since the run's task has no `Window`: the active check
+  (`is_window_active`) and the post happen in the same window update.
+- It goes through gpui-component's `push_notification` with `.system()`
+  only: no in-app toast, since the status line already shows the result.
+  The component's response handler, which `gpui_component::init` installs
+  as the one global handler, activates the app and this window on a click;
+  do not call `cx.on_system_notification_response` again, it would replace
+  that handler. A fixed id (`Notification::id::<ImportEnded>()`) makes a
+  later import's notification replace an earlier one still in the center.
+- `main` calls `cx.set_app_identity(IDENTIFIER, "Handpic")` before the
+  window opens. The window's `app_id` does not provide it: without the call
+  the platform logs `cannot show a system notification without an app
+  identity` and drops the toast. On Windows it sets the process
+  AppUserModelID (the taskbar groups and pins by it) and the first toast
+  writes `HKCU\Software\Classes\AppUserModelId\dev.minodisk.handpic` with
+  `DisplayName`; no icon is registered, so the toast shows a generic one.
+- Platform caveats: Focus Assist hides it on Windows; macOS posts only from
+  `Handpic.app` in a trusted location and asks for authorization on the
+  first post; Linux needs a notification daemon and cannot retract or
+  replace one. Not unit-tested beyond the decision and the text (no
+  `gpui::test` harness here); the hand check on Windows is pending in
+  `../plans/20261116-native-import-notification/learnings.md`.
+
 ## Timings
 
 ### `keypressToPixels` differs from the Tauri app's (Inferred)

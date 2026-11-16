@@ -84,9 +84,9 @@ use futures::{
     channel::mpsc::{self, UnboundedSender},
 };
 use gpui::{
-    Anchor, AnyElement, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask, Context,
-    Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla, KeyBinding,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
+    Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
+    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla,
+    KeyBinding, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
     WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
@@ -460,6 +460,8 @@ struct Riffle {
     folder_modal: modal::Modal,
     /// The focus of its run and Cancel buttons.
     folder_buttons: [FocusHandle; 2],
+    /// The main window, which an import's end checks and notifies from.
+    window: AnyWindowHandle,
     /// A confirmed run, or a run's undo or redo, held for the listing or
     /// scan under way; in flight while one runs, which no listing or scan
     /// starts under.
@@ -821,6 +823,7 @@ impl Riffle {
             folderops: folderops::FolderOps::default(),
             folder_modal: modal::Modal::new(window.window_handle()),
             folder_buttons: [cx.focus_handle(), cx.focus_handle()],
+            window: window.window_handle(),
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
@@ -5548,6 +5551,7 @@ fn main() {
             gpui_component::init(cx);
             cx.bind_keys(keymap_keys());
             theme::apply(theme, cx.window_appearance(), cx);
+            cx.set_app_identity(datadir::IDENTIFIER, "Handpic");
             cx.on_window_closed(|cx, _| cx.quit()).detach();
             let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
             cx.open_window(

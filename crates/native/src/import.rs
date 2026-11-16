@@ -136,6 +136,20 @@ pub fn done_status(ran: &Ran) -> String {
     parts.join(", ")
 }
 
+/// The OS notification's title and body for a run that ended, posted only
+/// while the window is not active; the body is the status line's summary.
+pub fn done_notification(ran: &Ran, window_active: bool) -> Option<(String, String)> {
+    if window_active {
+        return None;
+    }
+    let title = if ran.canceled {
+        "Import canceled"
+    } else {
+        "Import finished"
+    };
+    Some((title.to_owned(), done_status(ran)))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
     Idle,
@@ -518,6 +532,65 @@ mod tests {
             }),
             "Import canceled, 1 file copied"
         );
+    }
+
+    #[test]
+    fn no_notification_while_the_window_is_active() {
+        assert_eq!(done_notification(&ran(), true), None);
+        assert_eq!(
+            done_notification(
+                &Ran {
+                    canceled: true,
+                    ..ran()
+                },
+                true
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn the_done_notification_while_the_window_is_inactive() {
+        let plain = ran();
+        assert_eq!(
+            done_notification(&plain, false),
+            Some((
+                "Import finished".to_owned(),
+                "Imported 3 files (132.0 MB)".to_owned()
+            ))
+        );
+        let mixed = Ran {
+            copied: 1,
+            skipped: 2,
+            failed: vec![Failure {
+                path: "/a.ARW".to_owned(),
+                message: "x".to_owned(),
+            }],
+            bytes: 1_000_000,
+            ..ran()
+        };
+        assert_eq!(
+            done_notification(&mixed, false),
+            Some((
+                "Import finished".to_owned(),
+                "Imported 1 file (1.0 MB), 2 already there, 1 failed".to_owned()
+            ))
+        );
+        let canceled = Ran {
+            copied: 1,
+            canceled: true,
+            ..ran()
+        };
+        assert_eq!(
+            done_notification(&canceled, false),
+            Some((
+                "Import canceled".to_owned(),
+                "Import canceled, 1 file copied".to_owned()
+            ))
+        );
+        for ran in [plain, mixed, canceled] {
+            assert_eq!(done_notification(&ran, false).unwrap().1, done_status(&ran));
+        }
     }
 
     fn running() -> (ImportFlow, u64) {
