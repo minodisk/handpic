@@ -1,6 +1,7 @@
-//! The right-click menus, kept pure: their items and which menu is open
-//! where. A port of the Tauri app's `context.ts`, the folder tree's menu and
-//! the strip's; the window draws the open menu as a popover at the pointer.
+//! The right-click menus, kept pure: their items and what an open menu acts
+//! on. A port of the Tauri app's `context.ts`, the folder tree's menu and
+//! the strip's; the window shows the open menu as gpui-component's
+//! `PopupMenu` at the pointer.
 
 use riffle_backend::shortcuts::Binding;
 use riffle_core::Flag;
@@ -35,7 +36,7 @@ pub struct Item {
     pub action: Action,
     pub label: String,
     /// The keymap's name of the key bound to the action, drawn by `Kbd` at
-    /// the item's right end, or empty.
+    /// the menu item's right end, or empty.
     pub shortcut: String,
     /// `None` for a plain command, which has no checked state.
     pub checked: Option<bool>,
@@ -213,67 +214,6 @@ pub enum Target {
     Files { focused: String, paths: Vec<String> },
 }
 
-#[derive(Clone, Debug)]
-pub struct Open {
-    /// The pointer's position in the window when it was opened.
-    pub at: (f32, f32),
-    pub target: Target,
-    pub groups: Vec<Vec<Item>>,
-}
-
-/// The right-click menu, while one is open.
-#[derive(Debug, Default)]
-pub struct Menu {
-    open: Option<Open>,
-}
-
-impl Menu {
-    pub fn open(&self) -> Option<&Open> {
-        self.open.as_ref()
-    }
-
-    pub fn is_open(&self) -> bool {
-        self.open.is_some()
-    }
-
-    /// A right-click on a tree folder at `at`, replacing any menu open;
-    /// `root` when the folder is drawn as a root.
-    pub fn open_folder(
-        &mut self,
-        at: (f32, f32),
-        path: String,
-        name: String,
-        reveal_label: &str,
-        root: bool,
-    ) {
-        self.open = Some(Open {
-            at,
-            target: Target::Folder { path, name },
-            groups: folder_groups(reveal_label, root),
-        });
-    }
-
-    /// A right-click on a strip cell at `at`, replacing any menu open.
-    pub fn open_files(
-        &mut self,
-        at: (f32, f32),
-        focused: String,
-        paths: Vec<String>,
-        groups: Vec<Vec<Item>>,
-    ) {
-        self.open = Some(Open {
-            at,
-            target: Target::Files { focused, paths },
-            groups,
-        });
-    }
-
-    /// Escape, a press outside, or an item picked: the target the menu had.
-    pub fn close(&mut self) -> Option<Target> {
-        self.open.take().map(|open| open.target)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,35 +290,6 @@ mod tests {
             .map(|item| item.action)
             .collect();
         assert_eq!(disabled, vec![]);
-    }
-
-    #[test]
-    fn a_menu_opens_at_the_pointer_on_its_folder_and_closes_once() {
-        let mut menu = Menu::default();
-        assert!(!menu.is_open());
-        assert_eq!(menu.close(), None);
-
-        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL, false);
-        let open = menu.open().unwrap();
-        assert_eq!(open.at, (10., 20.));
-        assert_eq!(
-            open.target,
-            Target::Folder {
-                path: r"D:\a".into(),
-                name: "a".into()
-            }
-        );
-        assert_eq!(open.groups, folder_groups(REVEAL, false));
-
-        assert_eq!(
-            menu.close(),
-            Some(Target::Folder {
-                path: r"D:\a".into(),
-                name: "a".into()
-            })
-        );
-        assert!(!menu.is_open());
-        assert_eq!(menu.close(), None);
     }
 
     const FILE_REVEAL: &str = "Reveal in File Explorer";
@@ -673,46 +584,5 @@ mod tests {
         );
         assert_eq!(shown_path(r"D:\Photos\a.ARW"), r"D:\Photos\a.ARW");
         assert_eq!(shown_path("/Users/a/b.ARW"), "/Users/a/b.ARW");
-    }
-
-    #[test]
-    fn a_strip_menu_opens_on_its_files_and_closes_with_them() {
-        let mut menu = Menu::default();
-        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL, false);
-        let groups = strip(&defaults(), &State::default());
-        menu.open_files(
-            (5., 6.),
-            r"D:\a\2.ARW".into(),
-            vec![r"D:\a\1.ARW".into(), r"D:\a\2.ARW".into()],
-            groups.clone(),
-        );
-        let open = menu.open().unwrap();
-        assert_eq!(open.at, (5., 6.));
-        assert_eq!(open.groups, groups);
-        assert_eq!(
-            menu.close(),
-            Some(Target::Files {
-                focused: r"D:\a\2.ARW".into(),
-                paths: vec![r"D:\a\1.ARW".into(), r"D:\a\2.ARW".into()],
-            })
-        );
-        assert!(!menu.is_open());
-    }
-
-    #[test]
-    fn a_second_right_click_replaces_the_open_menu() {
-        let mut menu = Menu::default();
-        menu.open_folder((10., 20.), r"D:\a".into(), "a".into(), REVEAL, false);
-        menu.open_folder((30., 40.), r"D:\b".into(), "b".into(), REVEAL, true);
-        let open = menu.open().unwrap();
-        assert_eq!(open.at, (30., 40.));
-        assert_eq!(
-            open.target,
-            Target::Folder {
-                path: r"D:\b".into(),
-                name: "b".into()
-            }
-        );
-        assert_eq!(open.groups, folder_groups(REVEAL, true));
     }
 }

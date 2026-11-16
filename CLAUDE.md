@@ -478,9 +478,9 @@ shortcut (the keymap's key name, which the window draws as `Kbd` text), checked 
 / `Copy File Name`, the judgment groups checked from the focused file (left
 out in a view-only folder) and `Move to Trash…` / `Delete Permanently…`,
 `shown_path`, a path without the Windows verbatim prefix the shell refuses,
-and `Menu`, the open menu's
-position and target), which the window draws as a `deferred` / `anchored`
-popover at the pointer, `src/trash.rs` the strip's `Move to Trash…` /
+and `Target`, what an open menu acts on), which the window shows as
+gpui-component's `PopupMenu` in a `deferred` / `anchored` layer at the
+pointer, `src/trash.rs` the strip's `Move to Trash…` /
 `Delete Permanently…` (a port of `trash.ts`: `dialog_text`, the delete
 dialog's `swallowed_by_delete` and `confirms_delete`, `progress_status`,
 `trashed_status` and `TrashFlow`, idle / asking / running with the button

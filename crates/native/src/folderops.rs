@@ -300,7 +300,7 @@ impl Riffle {
                     ),
                 };
                 self.menus.close();
-                self.context.close();
+                self.context = None;
                 self.folderops.dialog = Some(Dialog::new(content, run, style, true));
                 self.follow_folder_dialog(cx);
             }
@@ -511,7 +511,7 @@ impl Riffle {
                     ..Content::default()
                 };
                 self.menus.close();
-                self.context.close();
+                self.context = None;
                 self.folderops.dialog = Some(Dialog::new(
                     content,
                     "Run",
@@ -629,7 +629,7 @@ impl Riffle {
         }
         if self.folderops.import.reopen() {
             self.menus.close();
-            self.context.close();
+            self.context = None;
             self.folderops.dialog = self.folderops.aside.take();
             self.follow_folder_dialog(cx);
             cx.notify();
@@ -712,7 +712,7 @@ impl Riffle {
                     ..Content::default()
                 };
                 self.menus.close();
-                self.context.close();
+                self.context = None;
                 self.folderops.import_plan = plan;
                 self.folderops.dialog = Some(Dialog::new(
                     content,
@@ -945,7 +945,7 @@ impl Riffle {
                     ..Content::default()
                 };
                 self.menus.close();
-                self.context.close();
+                self.context = None;
                 self.folderops.dialog = Some(Dialog::new(
                     content,
                     "Run",
