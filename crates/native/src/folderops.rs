@@ -1441,7 +1441,7 @@ impl Riffle {
     /// The name of the tree's row `at`: the text input while it is being
     /// renamed, else its name, or the held rename's name in the pending
     /// style. A click on the open folder's name arms the slow click instead
-    /// of reopening it.
+    /// of toggling the row.
     pub(crate) fn tree_name(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
         let row = &self.tree_rows[at];
         if let Some(edit) = self
@@ -1510,10 +1510,10 @@ impl Riffle {
         .into_any_element()
     }
 
-    /// A click on the open folder's name: without a modifier it does not
-    /// reopen the folder; a single click arms the slow click, whose rename
-    /// starts `SLOW_CLICK_DELAY` later unless a press or a key disarms it,
-    /// and a double-click disarms it.
+    /// A click on the open folder's name: without a modifier it neither
+    /// toggles the row nor reopens the folder; a single click arms the slow
+    /// click, whose rename starts `SLOW_CLICK_DELAY` later unless a press or
+    /// a key disarms it, and a double-click disarms it.
     fn tree_name_clicked(
         &mut self,
         path: &str,

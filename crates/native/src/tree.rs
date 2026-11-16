@@ -104,7 +104,8 @@ pub struct Row {
     pub path: String,
     pub name: String,
     pub expanded: bool,
-    /// Not listed yet, or listed with a drawn child: it gets an expander.
+    /// Not listed yet, or listed with a drawn child: a click or `Space` can
+    /// expand it.
     pub expandable: bool,
     /// The listed count, else the cached one.
     pub raw_count: Option<usize>,
@@ -432,6 +433,28 @@ pub fn tree_key(rows: &[Row], cursor: Option<&str>, key: TreeKey) -> Option<Tree
         TreeKey::Space if !row.expandable => None,
         TreeKey::Space if row.expanded => Some(TreeCommand::Collapse(row.path.clone())),
         TreeKey::Space => Some(TreeCommand::Expand(row.path.clone())),
+    }
+}
+
+/// What a left click on a row does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowClick {
+    /// Open the folder; the open's reveal expands it.
+    Open,
+    /// Open the folder and collapse its row, which the reveal leaves so.
+    OpenCollapsed,
+    /// The open folder's row: expand or collapse it without reopening.
+    Toggle,
+    Nothing,
+}
+
+/// A left click on `row`, `open` when it is the open folder's row.
+pub fn row_click(row: &Row, open: bool) -> RowClick {
+    match (open, row.expandable) {
+        (true, true) => RowClick::Toggle,
+        (true, false) => RowClick::Nothing,
+        (false, true) if row.expanded => RowClick::OpenCollapsed,
+        (false, _) => RowClick::Open,
     }
 }
 
@@ -1111,6 +1134,51 @@ mod tests {
             assert_eq!(key(&tree, Some(Y2026), k), None);
             assert_eq!(key(&Tree::default(), None, k), None);
         }
+    }
+
+    fn click(tree: &Tree, path: &str, open: bool) -> RowClick {
+        let rows = tree.rows();
+        let row = rows.iter().find(|row| row.path == path).unwrap();
+        row_click(row, open)
+    }
+
+    #[test]
+    fn a_click_opens_a_collapsed_row_that_is_not_open() {
+        assert_eq!(click(&keyed(), CARD, false), RowClick::Open);
+        assert_eq!(click(&keyed(), Y2026, false), RowClick::Open);
+    }
+
+    #[test]
+    fn a_click_opens_a_leaf_row_that_is_not_open_expanded_or_not() {
+        assert_eq!(click(&keyed(), EMPTY, false), RowClick::Open);
+        assert_eq!(
+            click(&expanded(keyed(), EMPTY), EMPTY, false),
+            RowClick::Open
+        );
+    }
+
+    #[test]
+    fn a_click_opens_and_collapses_an_expanded_row_that_is_not_open() {
+        assert_eq!(click(&keyed(), PICTURES, false), RowClick::OpenCollapsed);
+        assert_eq!(
+            click(&expanded(keyed(), CARD), CARD, false),
+            RowClick::OpenCollapsed
+        );
+    }
+
+    #[test]
+    fn a_click_toggles_the_open_row_that_can_expand() {
+        assert_eq!(click(&keyed(), PICTURES, true), RowClick::Toggle);
+        assert_eq!(click(&keyed(), CARD, true), RowClick::Toggle);
+    }
+
+    #[test]
+    fn a_click_does_nothing_on_the_open_leaf_row() {
+        assert_eq!(click(&keyed(), EMPTY, true), RowClick::Nothing);
+        assert_eq!(
+            click(&expanded(keyed(), EMPTY), EMPTY, true),
+            RowClick::Nothing
+        );
     }
 
     #[test]
