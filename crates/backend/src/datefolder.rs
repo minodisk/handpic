@@ -369,7 +369,12 @@ pub enum Ran {
 /// The open folder's watcher and the tree watches on `dir` and under it are
 /// released before the moves (Windows refuses to remove a watched folder);
 /// the open folder's watcher is put back when `dir` remains, and the tree
-/// re-render sets the tree watches again. A failed index write after the
+/// re-render sets the tree watches again. Each date folder that received
+/// files gets its `folder_counts` row (`Moved.path`, `Moved.count`, which is
+/// the count `folders::list` gives it: one per listed file, its sidecars
+/// not counting), and the row of `dir`, keyed `caller`, is always deleted:
+/// gone with the folder when it is removed, and not guessed when undated
+/// files keep it (its next listing writes the true count). A failed index write after the
 /// moves still returns `Ok` with a warning, as in `rename_folder`.
 pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Result<Split, String> {
     let path = Path::new(dir);
@@ -389,6 +394,15 @@ pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Resul
             watch::set(cx.watch, &dir, &owner);
         }
     }
+    let caller_parent = Path::new(caller).parent().unwrap_or(parent);
+    let moved: Vec<Moved> = counts
+        .into_iter()
+        .map(|(name, count)| Moved {
+            path: caller_parent.join(&name).to_string_lossy().into_owned(),
+            name,
+            count,
+        })
+        .collect();
     let mut warning = None;
     if let Some(index) = cx.index {
         let mut index = index::lock(index);
@@ -400,6 +414,14 @@ pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Resul
         if removed && result.is_ok() {
             result = index.forget_dir(dir);
         }
+        if result.is_ok() {
+            let counts: Vec<(String, usize)> = moved
+                .iter()
+                .map(|m| (m.path.clone(), m.count))
+                .chain([(caller.to_string(), 0)])
+                .collect();
+            result = index.set_folder_counts(&counts);
+        }
         if let Err(e) = result {
             log::warn!("split folder {dir} but not its index rows: {e}");
             warning = Some(format!(
@@ -408,15 +430,6 @@ pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Resul
             ));
         }
     }
-    let caller_parent = Path::new(caller).parent().unwrap_or(parent);
-    let moved = counts
-        .into_iter()
-        .map(|(name, count)| Moved {
-            path: caller_parent.join(&name).to_string_lossy().into_owned(),
-            name,
-            count,
-        })
-        .collect();
     let split = Split {
         moved,
         failed,
@@ -812,5 +825,65 @@ mod tests {
             )
         );
         assert!(dir.exists());
+    }
+
+    #[test]
+    fn a_split_gives_each_date_folder_its_count_and_drops_the_original() {
+        let dir = folder("split-counts");
+        let parent = dir.parent().unwrap().to_path_buf();
+        touch(
+            &dir,
+            &["a.ARW", "a.xmp", "b.ARW", "b.ARW.dop", "c.ARW", "d.ARW"],
+        );
+        let caller = dir.to_string_lossy().into_owned();
+        let canonical = canonicalize(&caller);
+        let files = [
+            file(Path::new(&canonical), "a.ARW", Some("2026-10-31")),
+            file(Path::new(&canonical), "b.ARW", Some("2026-10-31")),
+            file(Path::new(&canonical), "c.ARW", Some("2026-11-01")),
+            file(Path::new(&canonical), "d.ARW", None),
+        ];
+        let plan = plan(Path::new(&canonical), &files).unwrap();
+        let index = Mutex::new(Index::open(&parent.join("index.sqlite")).unwrap());
+        index::lock(&index)
+            .set_folder_counts(&[(caller.clone(), 4)])
+            .unwrap();
+        let watch = crate::watch::Watch::spawn(|_| {});
+        let trees = crate::treewatch::TreeWatch::spawn(|_| {});
+        let runs = crate::trash::Runs::default();
+        let cx = Context {
+            watch: &watch,
+            trees: &trees,
+            index: Some(&index),
+            runs: &runs,
+        };
+
+        let split = split_folder(&cx, &canonical, &caller, &plan).unwrap();
+
+        assert!(!split.removed);
+        let first = parent.join("2026-10-31");
+        let second = parent.join("2026-11-01");
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        assert_eq!(
+            split.moved,
+            [
+                Moved {
+                    name: "2026-10-31".to_string(),
+                    path: s(&first),
+                    count: 2,
+                },
+                Moved {
+                    name: "2026-11-01".to_string(),
+                    path: s(&second),
+                    count: 1,
+                },
+            ]
+        );
+        assert_eq!(crate::folders::list(&first).unwrap().raw_count, 2);
+        assert_eq!(crate::folders::list(&second).unwrap().raw_count, 1);
+        assert_eq!(
+            index::lock(&index).folder_counts().unwrap(),
+            [(s(&first), 2), (s(&second), 1)]
+        );
     }
 }

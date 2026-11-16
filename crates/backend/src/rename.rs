@@ -84,7 +84,9 @@ pub struct Context<'a> {
 /// rename a folder with a watched descendant); the caller's reopen and tree
 /// re-render under the new path set them again. The recorded trash runs
 /// follow the rename too (`Runs::rename_dir`), so an undo or redo of a run
-/// over the folder targets its new path. A failed rename changes nothing,
+/// over the folder targets its new path. The `folder_counts` rows, keyed by
+/// the caller's spelling, move from `dir` to the target as spelled from it.
+/// A failed rename changes nothing,
 /// and puts the released watcher back since there is no reopen to set it
 /// again; a failed index write after a successful rename still returns `Ok`
 /// (the disk is the source of truth, so the caller must rebase and reopen
@@ -111,7 +113,12 @@ pub fn rename_folder(cx: &Context, dir: &str, name: &str) -> Result<Renamed, Str
     );
     let mut warning = None;
     if let Some(index) = cx.index {
-        match index::lock(index).rename_dir(&old, &new) {
+        let mut index = index::lock(index);
+        match index.rename_dir(&old, &new).and_then(|moved| {
+            index
+                .rename_folder_counts(dir, &target.to_string_lossy())
+                .map(|()| moved)
+        }) {
             Ok(moved) => log::info!("renamed folder: {old} -> {new} files={moved}"),
             Err(e) => {
                 log::warn!("renamed folder {old} -> {new} but not its index rows: {e}");
@@ -202,8 +209,10 @@ pub fn file_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{check_name, file_plan, file_run, folder_target};
+    use super::{check_name, file_plan, file_run, folder_target, rename_folder, Context};
+    use crate::index::{self, Index};
     use std::path::{Path, PathBuf};
+    use std::sync::Mutex;
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("riffle-rename-{name}-{}", std::process::id()));
@@ -365,5 +374,37 @@ mod tests {
         });
         assert_eq!(result, Err("refused".to_string()));
         assert_eq!(names(&dir), ["a.ARW", "a.ARW.dop", "a.xmp"]);
+    }
+
+    #[test]
+    fn a_folder_rename_carries_its_count_rows() {
+        let root = temp_dir("folder-counts");
+        let photos = root.join("photos");
+        let sub = photos.join("sub");
+        std::fs::create_dir_all(&sub).unwrap();
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+        let sibling = root.join("photos2");
+        let index = Mutex::new(Index::open(&root.join("index.sqlite")).unwrap());
+        index::lock(&index)
+            .set_folder_counts(&[(s(&photos), 3), (s(&sub), 2), (s(&sibling), 1)])
+            .unwrap();
+        let watch = crate::watch::Watch::spawn(|_| {});
+        let trees = crate::treewatch::TreeWatch::spawn(|_| {});
+        let runs = crate::trash::Runs::default();
+        let cx = Context {
+            watch: &watch,
+            trees: &trees,
+            index: Some(&index),
+            runs: &runs,
+        };
+
+        let renamed = rename_folder(&cx, &s(&photos), "shoot").unwrap();
+
+        let shoot = root.join("shoot");
+        assert_eq!(renamed.path, s(&shoot));
+        assert_eq!(renamed.warning, None);
+        let mut expected = vec![(s(&shoot), 3), (s(&shoot.join("sub")), 2), (s(&sibling), 1)];
+        expected.sort();
+        assert_eq!(index::lock(&index).folder_counts().unwrap(), expected);
     }
 }

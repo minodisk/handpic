@@ -1502,6 +1502,34 @@ impl Index {
             .map_err(|e| e.to_string())
     }
 
+    /// Move the `folder_counts` rows of the folder `old` and of the folders
+    /// under it to `new`, in one transaction, matched as `rename_dir` matches
+    /// (`substr` on `old` plus the separator). Rows already stored under
+    /// `new` are dropped first. Both paths are taken as spelled, like every
+    /// `folder_counts` key.
+    pub fn rename_folder_counts(&mut self, old: &str, new: &str) -> Result<(), String> {
+        if old == new {
+            return Ok(());
+        }
+        let old_prefix = format!("{old}{}", std::path::MAIN_SEPARATOR);
+        let new_prefix = format!("{new}{}", std::path::MAIN_SEPARATOR);
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute(
+            "DELETE FROM folder_counts
+             WHERE dir = ?1 OR substr(dir, 1, length(?2)) = ?2",
+            params![new, new_prefix],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.execute(
+            "UPDATE folder_counts
+             SET dir = ?2 || substr(dir, length(?1) + 1)
+             WHERE dir = ?1 OR substr(dir, 1, length(?3)) = ?3",
+            params![old, new, old_prefix],
+        )
+        .map_err(|e| e.to_string())?;
+        tx.commit().map_err(|e| e.to_string())
+    }
+
     /// What the ranking reads of every `files` row of `dir`, in file-name
     /// order: the flag, whether the file was viewed, the capture time, the
     /// second pass's values when the row is at `FACES_VERSION`, and the
@@ -3813,6 +3841,41 @@ pub(crate) mod tests {
         let mut index = open(&dir);
         index.write_batch("/scanned", &[(a, Ok(entry()))]).unwrap();
         assert!(index.folder_counts().unwrap().is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn rename_folder_counts_moves_the_folder_and_its_subfolders_only() {
+        let dir = temp_dir("folder-counts-rename");
+        let mut index = open(&dir);
+        let sep = std::path::MAIN_SEPARATOR;
+        let p = |s: &str| s.replace('/', &sep.to_string());
+        index
+            .set_folder_counts(&[
+                (p("/r/ph_t%s"), 1),
+                (p("/r/ph_t%s/sub"), 2),
+                (p("/r/ph_t%s2"), 3),
+                (p("/r/phXtYs"), 4),
+                (p("/r/shoot"), 5),
+                (p("/r/shoot/stale"), 6),
+                (p("/r/shoot2"), 7),
+            ])
+            .unwrap();
+
+        index
+            .rename_folder_counts(&p("/r/ph_t%s"), &p("/r/shoot"))
+            .unwrap();
+
+        let mut expected = vec![
+            (p("/r/ph_t%s2"), 3),
+            (p("/r/phXtYs"), 4),
+            (p("/r/shoot"), 1),
+            (p("/r/shoot/sub"), 2),
+            (p("/r/shoot2"), 7),
+        ];
+        expected.sort();
+        assert_eq!(index.folder_counts().unwrap(), expected);
 
         remove_temp_dir(&dir);
     }

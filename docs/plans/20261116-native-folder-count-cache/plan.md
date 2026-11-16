@@ -128,7 +128,7 @@ What the investigation found (the facts the steps rely on):
       step and say so in the method's doc comment
     - Extend the `SCHEMA_VERSION` doc comment with the v26 sentence in the
       existing style
-- [ ] Step 2: Carry the count rows through a folder rename and a date split
+- [x] Step 2: Carry the count rows through a folder rename and a date split
   - Done when:
     - `rename::rename_folder` moves the `folder_counts` rows of the renamed
       folder and of the folders under it to the new path, in the caller's
@@ -292,3 +292,4 @@ What the investigation found (the facts the steps rely on):
 ## Progress
 
 (2026-11-16) Step 1 complete
+(2026-11-16) Step 2 complete
