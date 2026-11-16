@@ -264,9 +264,7 @@ gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 `crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
-`app_id` `IDENTIFIER` under
-gpui-component's `TitleBar` (the app icon and "Handpic") in place of the OS
-title bar, and
+`app_id` `IDENTIFIER`, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `native:bundle:macos` (`Handpic.app` under
 `target/<profile>/`) and `native:install:linux` (the release binary, the
@@ -284,8 +282,7 @@ the stored `theme` setting resolves to (`Setting`, `{"mode": "system" |
 missing or invalid mode Dark, a name that is not a shipped theme of its
 mode `NEUTRAL`; `resolve`, System following the OS appearance) and that
 mode's chosen theme: Neutral, mapped to the app's shadcn/ui Neutral dark or
-light tokens, its own `DARK` / `LIGHT` palettes, `title_bar` and
-`title_bar_border` included, or one of gpui-kit's theme files at the 0.9.1
+light tokens, its own `DARK` / `LIGHT` palettes, or one of gpui-kit's theme files at the 0.9.1
 release, vendored unchanged under `crates/native/themes/` with their
 `LICENSE`, embedded and parsed into `ThemeConfig`s (`names`, each mode's
 list) and installed unmapped through `Theme`'s `light_theme` / `dark_theme`
@@ -341,8 +338,7 @@ from `src/icons.rs` (served by `Icons`, the application's one
 star and square and the frowning `scan-face`, under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
 `gpui_kit::assets::Assets`, which serves `star`, `square` and the icons
-gpui-component's controls draw, with the title bar's
-`crates/app/icons/64x64.png` for `img(..)`),
+gpui-component's controls draw),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),

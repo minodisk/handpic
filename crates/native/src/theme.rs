@@ -75,7 +75,7 @@ pub fn names(mode: ThemeMode) -> impl Iterator<Item = &'static str> {
 struct Palette {
     background: u32,
     foreground: u32,
-    /// `--card` / `--popover`, the panes, the status and title bars and the
+    /// `--card` / `--popover`, the panes, the status bar and the
     /// settings' sidebar.
     popover: u32,
     primary: u32,
@@ -348,7 +348,7 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
     colors.scrollbar_thumb = rgba(p.border).into();
     colors.status_bar = rgba(p.popover).into();
     colors.status_bar_border = rgba(p.border).into();
-    // `TitleBar`'s surface and its border, as the panes'.
+    // gpui-component's title bar colors, as the panes' (the window keeps the OS bar).
     colors.title_bar = rgba(p.popover).into();
     colors.title_bar_border = rgba(p.border).into();
     // The settings' `Sidebar`, on the settings box's own surface, its

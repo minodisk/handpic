@@ -85,7 +85,7 @@ use futures::{
 };
 use gpui_kit::application;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT, TitleBar,
+    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
@@ -105,8 +105,8 @@ use gpui_kit::{
     MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
     ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Subscription, Task, TextAlign,
     TitlebarOptions, TransformationMatrix, UniformListScrollHandle, WeakEntity, Window,
-    WindowBounds, WindowDecorations, WindowOptions, anchored, base::POPUP_PRIORITY, canvas,
-    deferred, div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    WindowBounds, WindowOptions, anchored, base::POPUP_PRIORITY, canvas, deferred, div, fill,
+    outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -4601,15 +4601,6 @@ impl Render for Riffle {
                 this.key_down(&e.keystroke, window, cx);
             }))
             .child(
-                TitleBar::new().child(
-                    h_flex()
-                        .gap_2()
-                        .text_color(cx.theme().foreground)
-                        .child(img(icons::APP).size(px(16.)))
-                        .child("Handpic"),
-                ),
-            )
-            .child(
                 div()
                     .relative()
                     .flex_1()
@@ -4724,7 +4715,7 @@ impl Render for Riffle {
                     .on_mouse_down(
                         MouseButton::Right,
                         cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                            // The strip starts at the client-side frame's left padding.
+                            // Past the left padding `Root` draws under client-side decorations.
                             let x = f32::from(
                                 e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
@@ -4738,7 +4729,7 @@ impl Render for Riffle {
                                 toggle: e.modifiers.control || e.modifiers.platform,
                                 range: e.modifiers.shift,
                             };
-                            // The strip starts at the client-side frame's left padding.
+                            // Past the left padding `Root` draws under client-side decorations.
                             let x = f32::from(
                                 e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
@@ -4915,7 +4906,7 @@ fn drop_outline(ring: Hsla) -> impl IntoElement {
 /// frame, the title bar and a 40 px margin.
 fn menu_max_height(window: &Window) -> Pixels {
     let pad = gpui_kit::component::window_paddings(window);
-    window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT
+    window.viewport_size().height - pad.top - pad.bottom - px(40.)
 }
 
 /// An open menu's surface, `occlude()`d, the theme's popover with its border
@@ -5683,13 +5674,12 @@ fn main() {
                 WindowOptions {
                     titlebar: Some(TitlebarOptions {
                         title: Some("Handpic".into()),
-                        ..TitleBar::title_bar_options()
+                        ..Default::default()
                     }),
                     window_bounds: Some(window_bounds),
                     display_id,
                     app_id: Some(datadir::IDENTIFIER.into()),
-                    window_decorations: Some(WindowDecorations::Client),
-                    ..TitleBar::window_options()
+                    ..Default::default()
                 },
                 cx,
                 |window, cx| {

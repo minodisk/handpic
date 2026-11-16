@@ -3,8 +3,7 @@
 //! then the catalog icons selected from `gpui-kit-assets` with
 //! `icon_assets!`, then `gpui_kit::assets::Assets`, which holds `star`,
 //! `square`, the tree's chevrons and folders and the icons gpui-component's
-//! controls draw. It also serves the
-//! app's own icon PNG to the title bar's `img(..)`.
+//! controls draw.
 
 // The own SVGs below are derivatives of the Lucide `star`, `square` and
 // `scan-face` icons, lucide-static v1.48.0
@@ -42,9 +41,6 @@ pub const CHEVRON_RIGHT: &str = "icons/chevron-right.svg";
 pub const CHEVRON_DOWN: &str = "icons/chevron-down.svg";
 pub const FOLDER: &str = "icons/folder.svg";
 pub const FOLDER_OPEN: &str = "icons/folder-open.svg";
-pub const APP: &str = "icons/app.png";
-
-const APP_PNG: &[u8] = include_bytes!("../../app/icons/64x64.png");
 
 const STAR_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>"#;
 
@@ -70,9 +66,6 @@ impl AssetSource for Icons {
     /// The own paths first, then the catalog selection, then the components'
     /// set, a path in none of them loading nothing (`Assets` errs on it).
     fn load(&self, path: &str) -> Result<Option<Cow<'static, [u8]>>> {
-        if path == APP {
-            return Ok(Some(Cow::Borrowed(APP_PNG)));
-        }
         if let Some((_, svg)) = SVGS.iter().find(|(known, _)| *known == path) {
             return Ok(Some(Cow::Borrowed(svg.as_bytes())));
         }
@@ -88,9 +81,6 @@ impl AssetSource for Icons {
             .filter(|(known, _)| known.starts_with(path))
             .map(|(known, _)| SharedString::from(*known))
             .collect();
-        if APP.starts_with(path) {
-            paths.push(SharedString::from(APP));
-        }
         for other in Catalog.list(path)?.into_iter().chain(Assets.list(path)?) {
             if !paths.contains(&other) {
                 paths.push(other);
@@ -128,12 +118,6 @@ mod tests {
             assert!(bytes.starts_with(b"<svg"), "{path}");
             assert!(bytes.trim_ascii_end().ends_with(b"</svg>"), "{path}");
         }
-    }
-
-    #[test]
-    fn the_app_icon_path_loads_png_bytes() {
-        let bytes = Icons.load(APP).unwrap().expect(APP);
-        assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
     }
 
     #[test]
@@ -181,7 +165,6 @@ mod tests {
                 "{path}"
             );
         }
-        assert_eq!(listed.iter().filter(|p| p.as_ref() == APP).count(), 1);
         assert!(listed.iter().any(|p| p.as_ref() == "icons/check.svg"));
         assert!(Icons.list("fonts/").unwrap().is_empty());
     }
