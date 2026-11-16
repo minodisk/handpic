@@ -3449,6 +3449,18 @@ Files: `crates/native/themes/LICENSE`, `docs/agents/native-app.md`.
 
 - [ ] Check each adapted scheme's license and add any missing attribution to `crates/native/themes/LICENSE`, or drop a theme whose license is incompatible. Record the result in the guide's license section. Done when every file in `crates/native/themes/` has a checked upstream license noted in `LICENSE` and the guide's license section states the result.
 
+### Native: real-device checks of the right-click menus drawn as gpui-kit's PopupMenu (native-context-menu)
+
+`native-context-menu` replaced the hand-built `div` menus behind the folder tree's and the thumbnail strip's right-click menus (`context_popover`, `context_row`, `context::Menu` / `Open`) with gpui-component's `PopupMenu` through gpui-kit, placed by the view itself with `deferred` / `anchored` so the menu still flips near the window's edges. `mise run ci:local` and the remaining `context.rs` tests (`folder_groups`, `strip_groups`, `shown_path`) cover the items and groups. The crate has no GPUI view test, so the menu itself was never exercised: the step was ticked on the automated criteria only. Four things were read from the source and never run: the key order (the menu takes `escape` / `up` / `down` / `enter` before the view's `key_down`, while `left` / `right` and every other key still reach it), the canvas-based hand-back of the tree's keyboard on a press on the menu, the focus returning to the view after every close path, and `Rename…` ending with the inline `Input` focused. Windows only. Plan: `docs/plans/_archived/20261116-native-context-menu/plan.md` (the steps and expected results are also in `learnings.md` in the same folder). Files: `crates/native/src/main.rs`, `crates/native/src/context.rs`, `crates/native/src/folderops.rs`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows, the tree's menu. In `riffle-native` on a folder with RAW files, right-click a root and a non-root folder, once with the tree holding the keyboard (left-click in the pane first) and once without. Expected: a `PopupMenu` opens at the pointer with the folder groups (the root without `Rename…` and `Expand All` / `Collapse All`) and separators between groups; the folder does not open and the tree's keyboard state does not change.
+- [ ] On Windows, the strip's menu. Right-click a cell inside a multi-selection and one outside it, a gap, the empty area, and a cell in a view-only (JPEG-only) folder. Expected: the selection rule holds; the judgment groups show their shortcuts as `Kbd` text with the current flag, stars and label checked; the gap and the empty area open nothing; the view-only menu has no judgment groups.
+- [ ] On Windows, placement and size. Right-click a cell at the window's right edge: the menu flips to the pointer's left. Right-click on the strip near the bottom: it opens above the pointer. Shrink the window: the strip's menu scrolls within the window less the title bar and 40 px.
+- [ ] On Windows, the items. Run `Rename…` (ends with the inline `Input` focused), `Copy Path`, a judgment (applies to the targets) and `Move to Trash…` (its dialog opens).
+- [ ] On Windows, with a menu open. Escape closes it only. A keymap key (for example `p`) closes it and acts. Left / Right close it and page the strip. Up / Down move the highlight and Enter runs the item. A press outside closes it. A second right-click elsewhere replaces it. After each close the keymap works again (the focus is back on the view), and a press on the menu while the tree had the keyboard hands it back.
+
 ### Native: real-device check of the catalog-served icons (native-catalog-icons)
 
 #### Background

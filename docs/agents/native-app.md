@@ -2894,7 +2894,10 @@ it inside, as the Tauri `menuPosition`.
   app writes them) and file names, one per line, through
   `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
 - Not verified headless: the hand checks are pending in
-  `../plans/20261113-gpui-tree-trash/learnings.md`.
+  `../plans/20261113-gpui-tree-trash/learnings.md` and, for the `PopupMenu`
+  version of these menus (the pointer-side flip, the key routing with a menu
+  open, the hand-back of the tree's keyboard), in
+  `../plans/_archived/20261116-native-context-menu/learnings.md`.
 
 ### The tree takes the keyboard through one flag in the view (Inferred)
 
