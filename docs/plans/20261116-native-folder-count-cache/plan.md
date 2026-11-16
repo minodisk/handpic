@@ -290,3 +290,5 @@ What the investigation found (the facts the steps rely on):
   counts on collapsed rows vanish once.
 
 ## Progress
+
+(2026-11-16) Step 1 complete
