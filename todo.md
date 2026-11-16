@@ -3550,3 +3550,21 @@ Files: `crates/native/src/main.rs` (`menu_row`, `context_item`, `label_tag`, `pa
 #### TODO
 
 - [ ] On Windows (or any other desktop platform at hand), run `mise run native:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
+
+### Native app: real-device Windows check of the momentary grayscale preview
+
+#### Background
+
+The `gpui-grayscale` feature grays the shown photo in the GPUI app (`crates/native`) while the `grayscale` key (default `g`) is held. It uses the per-sprite `grayscale` flag of `Window::paint_image` on the fit image and on the 1:1 placeholder and crop. Only the photo is grayed: the peaking overlay (`e`), the `f` overlay and the performance graph (`d`) stay colored. The hold ends on the release of the held key, on the release of any modifier, on window deactivation, and when the app view's focus handle is blurred (`cx.on_blur`). Unit tests of `Hold` (`grayscale.rs`) and `mise run ci:local` cover the state machine. Nobody ran the GUI: the blur release was read from the GPUI sources only, and the visual result, the auto-repeat behavior and the focus-leaving paths were never exercised. Once all pass, change the "(Inferred)" tag of the grayscale section in `docs/agents/native-app.md` to "(Measured)". Plan: `docs/plans/_archived/20261117-gpui-grayscale/plan.md`.
+
+Files: `crates/native/src/grayscale.rs`, `crates/native/src/main.rs`, `crates/native/src/zoom.rs`
+
+#### TODO
+
+- [ ] On Windows, run the GPUI app (`mise run native:run` or the built binary), open a folder and hold `g` in the fit view. Expect the photo to turn gray, and color to return on release. Repeat in 1:1 (`z`): the placeholder and the crop both gray.
+- [ ] On Windows, with `f` and `e` (and `d`) on, hold `g`. Expect the AF mark, face boxes, mesh, labels, the peaking layer and the performance graph to stay colored, and the strip, the panes and the empty-state text to be unaffected.
+- [ ] On Windows, hold `g` long enough to auto-repeat. Expect no flicker.
+- [ ] On Windows, rebind `grayscale` to `ctrl+g` in the settings. Hold Ctrl+G and release Ctrl first, then repeat releasing `g` first. Expect color to return on the first release either way.
+- [ ] On Windows, hold `g` and Alt+Tab away and back. Expect the photo to be in color.
+- [ ] On Windows, hold `g` and open the settings (`ctrl+,`) or a right-click menu, release `g`, then close it. Expect the photo to be in color (the view's `on_blur` released the hold). If it stays gray, release the hold where the view opens the settings, a dialog or a menu instead.
+- [ ] On Windows, while `g` is held, page, press `z`, `f`, `e` and `d`. Expect them to behave as before.
