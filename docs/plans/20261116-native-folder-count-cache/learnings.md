@@ -1,0 +1,16 @@
+# Learnings
+
+## Step 1
+
+- The new methods are `Index::set_folder_counts(&[(String, usize)])` (one
+  transaction; an upsert per row, a zero deleting it) and
+  `Index::folder_counts()` (every row in `dir` order). Step 3 calls these.
+- `Index::clear` adds the deleted `folder_counts` rows to `EvictSummary.rows`,
+  as it does for `views`, so clearing only counts still `VACUUM`s; the doc
+  comment says so. `evict` and `evict_folder` do not touch the table.
+- The v25 migration test builds its fixture by opening a fresh (v26)
+  database, then `DROP TABLE folder_counts; PRAGMA user_version = 25;`, the
+  same trick the v24 test uses with its dropped column. `DirtyRow` is a
+  tuple, not a struct.
+- No per-version migration step was needed: the `CREATE TABLE IF NOT EXISTS`
+  and adding `25` to the accepted list are enough.
