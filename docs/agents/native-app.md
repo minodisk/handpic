@@ -156,8 +156,12 @@ otherwise derives them from the tokens (the surface and text from
 from `background` with alpha), which Neutral light takes. The pane colors map onto tokens exactly: the
 panes `popover`, muted text `muted_foreground`, errors `danger`, the
 selected cell and the placeholder `muted`, the current cell's outline and
-lit controls `primary`, the tree cursor, a selected cell's outline and the
-drop outline `ring`, the hover and the tree's open row `accent`, the menu
+lit controls `primary`, a selected cell's outline and the drop outline
+`ring`, the hover `accent`, the tree's rows `ListItem`'s list tokens (the
+open row `list_active`, the hover `list_hover`, the keyboard cursor's
+outline `selection`, which Neutral maps to `accent`, `accent` and `ring`;
+the built-in themes' blue otherwise, also behind `Input`'s selected text),
+the menu
 buttons `button` with an `input` border. Fixed in every theme, as constants
 with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
 `REJECT_COLOR`), the label tints with `LABELED_NAME_COLOR`, what is drawn
@@ -208,8 +212,9 @@ key-down listener, so a binding that matches takes the key from
   catalog icons selected with `gpui_kit::assets::icon_assets!`, and falls
   back to `gpui_kit::assets::Assets` (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the
   components' own icon set, not the whole-catalog `AllAssets`) for `star`,
-  `square` and the icons the components draw, the checked `Radio`'s and the
-  language menu's `icons/check.svg` and the `Select`'s
+  `square`, the tree's `chevron-right`, `chevron-down`, `folder` and
+  `folder-open` and the icons the components draw, the checked `Radio`'s and
+  the language menu's `icons/check.svg` and the `Select`'s
   `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
   served by one `AssetSource`").
 
@@ -1160,8 +1165,9 @@ own derivatives (the filled star and square, the frowning `scan-face`),
 `Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
 (`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
-then any other from `gpui_kit::assets::Assets`, which serves `star` and
-`square`, a path in none of them with `None`; `main()` registers it with
+then any other from `gpui_kit::assets::Assets`, which serves `star`,
+`square` and the tree's `chevron-right`, `chevron-down`, `folder` and
+`folder-open`, a path in none of them with `None`; `main()` registers it with
 `application().with_assets(icons::Icons)`.
 
 - Rule: to add an icon the `gpui-kit-assets` catalog has, add its variant to
@@ -2547,8 +2553,14 @@ above the strip, which still spans the window, so `strip_clicked` still takes
 the event's window `x` as the strip's. Its rows are `tree::Tree::rows`,
 rebuilt into the view's `tree_rows` whenever the tree changes (never in
 `render`), and drawn by a `uniform_list` over them: it lays out only the rows
-on screen, its rows are plain `div`s with their own click listeners (the
-expander's `on_click` stops propagation so the row's open does not run), and
+on screen, its rows are gpui-component `ListItem`s (`tree_row`: one per row,
+`selected` on the open folder, `secondary_selected` on the keyboard cursor
+while the tree has the keys, indented `12 + 16 * depth` px, a Lucide
+`chevron-right` / `chevron-down` expander, else an empty slot as wide, and a
+`folder` / `folder-open` icon, open while expanded, before the name) with
+their own click listeners (the expander's `on_click` stops propagation so the
+row's open does not run; `ListItem` does not stop it, so the pane's left
+press still gives the tree the keyboard), and
 its `UniformListScrollHandle::scroll_to_item(.., ScrollStrategy::Nearest)` is
 what the reveal and the tree's keyboard scroll a row into view with. A
 `canvas` like the strip's would need its own hit testing and scroll model; the
@@ -2576,6 +2588,9 @@ strip needed one because `uniform_list` is vertical only.
   the previous scan and joins the launch's eviction, then signals its own, so a
   second open never reconciles or scans while an earlier listing is still
   stopping the old scan or the eviction is still deleting rows.
+- Rule: `ListItem` puts its children in a block `div().w_full()`, so a tree
+  row's content is one `h_flex().w_full().min_w_0().overflow_hidden()` child
+  of it, which keeps the name truncating and the count in the row.
 - Rule: a tree row takes `w_full()` and the `uniform_list` carries the 4 px
   inset as its `px_1()`, never the row as a margin. A `uniform_list` item is
   a layout root, and taffy 0.15.0 stretches a root to the available width
@@ -2880,8 +2895,8 @@ mouse listeners were the smaller change.
   `treekeys::tree_gate` lets it through (`open`, the four pane toggles and the
   strip's `previous` / `next`, `TREE_PASSTHROUGH`) and is otherwise
   swallowed, so `q`, the judgment keys, the burst moves and undo never reach
-  the photo. The cursor row is outlined in `--sidebar-ring` only while the
-  tree has the keyboard, which Left / Right paging leaves with the tree.
+  the photo. The cursor row is outlined (`ListItem`'s `secondary_selected`,
+  `selection`) only while the tree has the keyboard, which Left / Right paging leaves with the tree.
 - Rule: this departs from the Tauri app on purpose (the user's request).
   There, Left / Right are the WAI-ARIA tree keys (expand, collapse, first
   child, parent); here they page the strip whatever has the keyboard, the

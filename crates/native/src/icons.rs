@@ -2,7 +2,8 @@
 //! `Icons`, the application's one `AssetSource`: its own derivatives first,
 //! then the catalog icons selected from `gpui-kit-assets` with
 //! `icon_assets!`, then `gpui_kit::assets::Assets`, which holds `star`,
-//! `square` and the icons gpui-component's controls draw. It also serves the
+//! `square`, the tree's chevrons and folders and the icons gpui-component's
+//! controls draw. It also serves the
 //! app's own icon PNG to the title bar's `img(..)`.
 
 // The own SVGs below are derivatives of the Lucide `star`, `square` and
@@ -37,6 +38,10 @@ pub const RECTANGLE_VERTICAL: &str = "icons/rectangle-vertical.svg";
 pub const RECTANGLE_HORIZONTAL: &str = "icons/rectangle-horizontal.svg";
 pub const SCAN_FACE: &str = "icons/scan-face.svg";
 pub const SCAN_FACE_FROWN: &str = "icons/scan-face-frown.svg";
+pub const CHEVRON_RIGHT: &str = "icons/chevron-right.svg";
+pub const CHEVRON_DOWN: &str = "icons/chevron-down.svg";
+pub const FOLDER: &str = "icons/folder.svg";
+pub const FOLDER_OPEN: &str = "icons/folder-open.svg";
 pub const APP: &str = "icons/app.png";
 
 const APP_PNG: &[u8] = include_bytes!("../../app/icons/64x64.png");
@@ -53,7 +58,8 @@ const SVGS: [(&str, &str); 3] = [
     (SCAN_FACE_FROWN, SCAN_FACE_FROWN_SVG),
 ];
 
-// `star` and `square` are left out: the default `Assets` already holds them.
+// `star`, `square`, the chevrons and the folders are left out: the default
+// `Assets` already holds them.
 // If `every_icon_path_loads_an_svg` fails after a gpui-kit-assets bump, move
 // the missing one into this list.
 gpui_kit::assets::icon_assets!(Catalog, [RectangleVertical, RectangleHorizontal, ScanFace]);
@@ -100,7 +106,7 @@ mod tests {
 
     use super::*;
 
-    const PATHS: [&str; 8] = [
+    const PATHS: [&str; 12] = [
         STAR,
         STAR_FILLED,
         SQUARE,
@@ -109,6 +115,10 @@ mod tests {
         RECTANGLE_HORIZONTAL,
         SCAN_FACE,
         SCAN_FACE_FROWN,
+        CHEVRON_RIGHT,
+        CHEVRON_DOWN,
+        FOLDER,
+        FOLDER_OPEN,
     ];
 
     #[test]
@@ -134,6 +144,10 @@ mod tests {
             (RECTANGLE_VERTICAL, IconName::RectangleVertical),
             (RECTANGLE_HORIZONTAL, IconName::RectangleHorizontal),
             (SCAN_FACE, IconName::ScanFace),
+            (CHEVRON_RIGHT, IconName::ChevronRight),
+            (CHEVRON_DOWN, IconName::ChevronDown),
+            (FOLDER, IconName::Folder),
+            (FOLDER_OPEN, IconName::FolderOpen),
         ] {
             assert_eq!(name.path().as_ref(), path);
         }

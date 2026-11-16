@@ -85,11 +85,12 @@ use futures::{
 };
 use gpui_kit::application;
 use gpui_kit::component::{
-    ActiveTheme, Disableable, Icon, IconName, Sizable, TITLE_BAR_HEIGHT, TitleBar,
+    ActiveTheme, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT, TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
     kbd::Kbd,
+    list::ListItem,
     progress::ProgressCircle,
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
@@ -4102,29 +4103,40 @@ impl Riffle {
             )
     }
 
-    /// One row of the tree: the expander, the name and, expanded, the RAW
-    /// count; the open folder highlighted, a failed one's name in red.
+    /// One row of the tree: the chevron, the folder icon, the name and,
+    /// expanded, the RAW count; the open folder selected, the keyboard
+    /// cursor outlined, a failed one's name in red.
     fn tree_row(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
         let row = &self.tree_rows[at];
         let theme = cx.theme();
-        let (accent, muted, ring) = (theme.accent, theme.muted_foreground, theme.ring);
-        let mut expander = div()
-            .id(("tree-expander", at))
-            .w(px(14.))
-            .flex_none()
-            .text_center()
-            .text_size(px(11.))
-            .text_color(muted);
+        let (accent, muted) = (theme.accent, theme.muted_foreground);
+        let icon = |path: &'static str| {
+            svg()
+                .path(path)
+                .size(px(TREE_ICON))
+                .flex_none()
+                .text_color(muted)
+        };
+        let mut expander = div().id(("tree-expander", at)).w(px(TREE_ICON)).flex_none();
         if row.expandable {
             let path = row.path.clone();
             expander = expander
                 .cursor_pointer()
-                .child(if row.expanded { "\u{25be}" } else { "\u{25b8}" })
+                .child(icon(if row.expanded {
+                    icons::CHEVRON_DOWN
+                } else {
+                    icons::CHEVRON_RIGHT
+                }))
                 .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                     cx.stop_propagation();
                     this.tree_toggle(path.clone(), cx);
                 }));
         }
+        let folder = icon(if row.expanded {
+            icons::FOLDER_OPEN
+        } else {
+            icons::FOLDER
+        });
         let count = row.raw_count.filter(|count| *count > 0).map(|count| {
             div()
                 .flex_none()
@@ -4136,31 +4148,33 @@ impl Riffle {
         });
         let path = row.path.clone();
         let (menu_path, menu_name) = (row.path.clone(), row.name.clone());
-        div()
-            .id(("tree-row", at))
+        ListItem::new(("tree-row", at))
+            .selected(self.tree_open_row == Some(at))
+            .secondary_selected(self.tree_keys && self.tree_cursor_row == Some(at))
             .h(px(TREE_ROW_HEIGHT))
             .w_full()
-            .flex()
-            .items_center()
-            .gap(px(2.))
-            .pl(px(4. + row.depth as f32 * 12.))
+            .py_0()
+            .pl(px(12. + row.depth as f32 * 16.))
             .pr_2()
+            .text_size(px(TREE_TEXT))
             .rounded_sm()
-            .border_1()
-            .border_color(if self.tree_keys && self.tree_cursor_row == Some(at) {
-                ring
-            } else {
-                rgba(0x00000000).into()
-            })
             .cursor_pointer()
             .whitespace_nowrap()
-            .hover(move |s| s.bg(accent))
             .when(self.tree_open_row == Some(at), |s| {
-                s.bg(accent).font_weight(FontWeight::SEMIBOLD)
+                s.font_weight(FontWeight::SEMIBOLD)
             })
-            .child(expander)
-            .child(self.tree_name(at, cx))
-            .children(count)
+            .child(
+                h_flex()
+                    .w_full()
+                    .min_w_0()
+                    .overflow_hidden()
+                    .items_center()
+                    .gap(px(4.))
+                    .child(expander)
+                    .child(folder)
+                    .child(self.tree_name(at, cx))
+                    .children(count),
+            )
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
                 this.open_from_tree(path.clone(), cx).detach();
             }))
@@ -5071,6 +5085,7 @@ fn strip_tips(cell: &StripCell) -> impl Iterator<Item = AnyElement> + '_ {
 /// `#folders`' 0.8 rem text in a 1.4 line, and `.folder`'s 2 px padding.
 const TREE_TEXT: f32 = 12.8;
 const TREE_ROW_HEIGHT: f32 = 22.;
+const TREE_ICON: f32 = 14.;
 /// `style.css`'s `--stars-color`, `--pick-color`, `--reject-color` and
 /// `--foreground`, and its `--label-*` tokens in `tint_color`. Fixed in every
 /// theme: the judgment's meaning, and the Lightroom label colors with the

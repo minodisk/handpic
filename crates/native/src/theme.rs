@@ -360,6 +360,12 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
     colors.sidebar_border = rgba(p.border).into();
     colors.sidebar_primary = rgba(p.primary).into();
     colors.sidebar_primary_foreground = rgba(p.primary_foreground).into();
+    // `ListItem`'s selected row, hover and cursor outline (the folder tree's
+    // open row, hover and keyboard cursor), which the built-in theme gives in
+    // blue; `selection` also paints `Input`'s selected text.
+    colors.list_active = rgba(p.accent).into();
+    colors.list_hover = rgba(p.accent).into();
+    colors.selection = rgba(p.ring).into();
     // `Button`'s default variant. The registered theme derives these at load
     // and `update` does not derive them again from the colors above.
     colors.button = rgba(p.button).into();
@@ -431,6 +437,9 @@ mod tests {
         assert_eq!(colors.sidebar_border, hex(0xffffff1a));
         assert_eq!(colors.sidebar_primary, hex(0xe5e5e5ff));
         assert_eq!(colors.sidebar_primary_foreground, hex(0x171717ff));
+        assert_eq!(colors.list_active, hex(0x262626ff));
+        assert_eq!(colors.list_hover, hex(0x262626ff));
+        assert_eq!(colors.selection, hex(0x737373ff));
         assert_eq!(colors.button, hex(0xffffff0b));
         assert_eq!(colors.button_hover, hex(0x262626ff));
         assert_eq!(colors.button_active, hex(0x262626ff));
@@ -498,6 +507,9 @@ mod tests {
         assert_eq!(colors.sidebar_border, hex(0xe5e5e5ff));
         assert_eq!(colors.sidebar_primary, hex(0x171717ff));
         assert_eq!(colors.sidebar_primary_foreground, hex(0xfafafaff));
+        assert_eq!(colors.list_active, hex(0xf5f5f5ff));
+        assert_eq!(colors.list_hover, hex(0xf5f5f5ff));
+        assert_eq!(colors.selection, hex(0xa1a1a1ff));
         assert_eq!(colors.button, hex(0xffffffff));
         assert_eq!(colors.button_hover, hex(0xf5f5f5ff));
         assert_eq!(colors.button_active, hex(0xf5f5f5ff));
