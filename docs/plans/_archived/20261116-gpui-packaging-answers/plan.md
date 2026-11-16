@@ -18,9 +18,9 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
-[`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md), the
+[`packaging-updater.md`](../../20261109-gpui-port/packaging-updater.md), the
 decision record for Step 10 of
-[the gpui-port plan](../20261109-gpui-port/plan.md), was re-decided on
+[the gpui-port plan](../../20261109-gpui-port/plan.md), was re-decided on
 2026-11-16 along gpui-kit's guides and left six open questions. The user
 answered all six on the same day, and also a seventh that came up while
 planning (what the update check does on a deb install). This plan moves each
