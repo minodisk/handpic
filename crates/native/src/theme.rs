@@ -3,8 +3,8 @@
 //! own `Roles` beside it: the one source of the colors the app paints over its
 //! themed surfaces.
 
-use gpui_kit::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use gpui_kit::component::{ActiveTheme, Theme, ThemeColor, ThemeMode};
+use gpui_kit::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use serde_json::{Value, json};
 
 /// One mode's Neutral values, each `ThemeColor` field `map` pins.
@@ -264,8 +264,8 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
 
 #[cfg(test)]
 mod tests {
-    use gpui_kit::{Hsla, WindowAppearance, rgba};
     use gpui_kit::component::{ThemeColor, ThemeMode};
+    use gpui_kit::{Hsla, WindowAppearance, rgba};
     use serde_json::json;
 
     use super::{DARK, LIGHT, Mode, Palette, Roles, Setting, map, resolve};
