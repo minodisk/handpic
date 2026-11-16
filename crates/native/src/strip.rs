@@ -5,21 +5,52 @@ use std::{
 
 use riffle_core::Flag;
 
-use crate::{burst::BurstMark, judgment::State};
+use crate::{burst::BurstMark, judgment::State, stripheight};
 
-/// The distance from one cell's left edge to the next's, the Tauri strip's
-/// `--cell-width`.
-pub const CELL_PITCH: f32 = 154.;
-/// A cell: the image box plus a 1 px border each side; the rest of the pitch
-/// is the gap.
-pub const CELL_WIDTH: f32 = BOX_WIDTH + 2.;
-pub const BOX_WIDTH: f32 = 144.;
-pub const BOX_HEIGHT: f32 = 96.;
 pub const NAME_HEIGHT: f32 = 16.;
-pub const CELL_HEIGHT: f32 = BOX_HEIGHT + NAME_HEIGHT + 2.;
 /// Above and below the cells, room for the burst band.
 pub const STRIP_PADDING: f32 = 7.;
-pub const STRIP_HEIGHT: f32 = CELL_HEIGHT + 2. * STRIP_PADDING;
+/// Between two cells.
+const CELL_GAP: f32 = 8.;
+
+/// The strip's cells as its height sizes them: the image box at 3:2 takes
+/// what the padding, the name band and the box's 1 px border each side leave
+/// of the height. At `stripheight::DEFAULT` they are the Tauri strip's.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Geometry {
+    pub height: f32,
+    pub box_width: f32,
+    pub box_height: f32,
+    /// The image box plus a 1 px border each side.
+    pub cell_width: f32,
+    pub cell_height: f32,
+    /// The distance from one cell's left edge to the next's, the Tauri
+    /// strip's `--cell-width`; the rest of it after the cell is the gap.
+    pub pitch: f32,
+}
+
+impl Geometry {
+    pub fn of(height: f32) -> Self {
+        let box_height = height - 2. * STRIP_PADDING - NAME_HEIGHT - 2.;
+        let box_width = (box_height * 1.5).round();
+        let cell_width = box_width + 2.;
+        Self {
+            height,
+            box_width,
+            box_height,
+            cell_width,
+            cell_height: box_height + NAME_HEIGHT + 2.,
+            pitch: cell_width + CELL_GAP,
+        }
+    }
+}
+
+impl Default for Geometry {
+    fn default() -> Self {
+        Self::of(stripheight::DEFAULT)
+    }
+}
+
 /// Cells kept beyond the visible range, so a short scroll shows a thumbnail
 /// that is already decoded.
 pub const RANGE_MARGIN: usize = 4;
@@ -39,6 +70,7 @@ pub enum Answer {
 /// shown list; `width` is the strip's on-screen width.
 #[derive(Default)]
 pub struct Strip {
+    geometry: Geometry,
     len: usize,
     index_of: HashMap<String, usize>,
     offset: f32,
@@ -112,8 +144,9 @@ impl Marks {
 }
 
 impl Strip {
-    pub fn new(paths: &[String]) -> Self {
+    pub fn new(paths: &[String], geometry: Geometry) -> Self {
         Self {
+            geometry,
             len: paths.len(),
             index_of: paths
                 .iter()
@@ -128,6 +161,31 @@ impl Strip {
         self.offset
     }
 
+    pub fn geometry(&self) -> Geometry {
+        self.geometry
+    }
+
+    /// Size the cells for another height, keeping the same cells in view:
+    /// the `current` cell's center stays where it is on screen when that
+    /// cell overlaps the viewport, else the cell at the viewport's left edge
+    /// stays there, then the offset is clamped to the new content. Whether
+    /// the offset moved.
+    pub fn set_geometry(&mut self, geometry: Geometry, width: f32, current: usize) -> bool {
+        let old = self.geometry;
+        let left = current as f32 * old.pitch;
+        let offset = if current < self.len
+            && left < self.offset + width
+            && left + old.cell_width > self.offset
+        {
+            let at = left + old.cell_width / 2. - self.offset;
+            current as f32 * geometry.pitch + geometry.cell_width / 2. - at
+        } else {
+            self.offset / old.pitch * geometry.pitch
+        };
+        self.geometry = geometry;
+        self.scroll_to(offset, width)
+    }
+
     pub fn is_failed(&self, index: usize) -> bool {
         self.failed.contains(&index)
     }
@@ -138,7 +196,7 @@ impl Strip {
 
     /// The width of all the cells side by side.
     pub fn content_width(&self) -> f32 {
-        self.len as f32 * CELL_PITCH
+        self.len as f32 * self.geometry.pitch
     }
 
     fn max_offset(&self, width: f32) -> f32 {
@@ -165,8 +223,8 @@ impl Strip {
     /// Scroll the least that shows the whole cell, the `block: nearest` way.
     /// Whether it moved.
     pub fn scroll_into_view(&mut self, index: usize, width: f32) -> bool {
-        let left = index as f32 * CELL_PITCH;
-        let right = left + CELL_PITCH;
+        let left = index as f32 * self.geometry.pitch;
+        let right = left + self.geometry.pitch;
         if left < self.offset {
             self.scroll_to(left, width)
         } else if right > self.offset + width {
@@ -192,8 +250,9 @@ impl Strip {
             #[allow(clippy::reversed_empty_ranges)]
             return 1..=0;
         }
-        let first = (self.offset / CELL_PITCH).floor() as usize;
-        let last = ((self.offset + width) / CELL_PITCH).ceil() as usize;
+        let pitch = self.geometry.pitch;
+        let first = (self.offset / pitch).floor() as usize;
+        let last = ((self.offset + width) / pitch).ceil() as usize;
         first.saturating_sub(margin)..=(last + margin).min(self.len - 1)
     }
 
@@ -204,15 +263,18 @@ impl Strip {
         if at < 0. {
             return None;
         }
-        let index = (at / CELL_PITCH).floor() as usize;
-        (index < self.len && at - index as f32 * CELL_PITCH < CELL_WIDTH).then_some(index)
+        let Geometry {
+            pitch, cell_width, ..
+        } = self.geometry;
+        let index = (at / pitch).floor() as usize;
+        (index < self.len && at - index as f32 * pitch < cell_width).then_some(index)
     }
 
     /// The cell in the range to ask for next, nearest the viewport's center
     /// first, so a fast scroll fills what is looked at rather than what it
     /// flew past.
     pub fn next_to_request(&self, width: f32) -> Option<usize> {
-        let center = (self.offset + width / 2.) / CELL_PITCH;
+        let center = (self.offset + width / 2.) / self.geometry.pitch;
         self.visible_range(width)
             .filter(|index| {
                 !self.requested.contains(index)
@@ -353,20 +415,24 @@ pub struct TipRegion {
 /// the cell (all of it without a label). The regions never overlap, so no
 /// two tooltips are asked for at once; an empty text gives none, as an
 /// empty `title` shows nothing.
-pub fn tip_regions(failure: Option<&str>, label: Option<&str>) -> Vec<TipRegion> {
+pub fn tip_regions(
+    geometry: Geometry,
+    failure: Option<&str>,
+    label: Option<&str>,
+) -> Vec<TipRegion> {
     let label = label.filter(|label| !label.is_empty());
-    let band_top = 1. + BOX_HEIGHT;
+    let band_top = 1. + geometry.box_height;
     let mut regions = Vec::new();
     if let Some(failure) = failure.filter(|failure| !failure.is_empty()) {
         regions.push(TipRegion {
             tip: Tip::Failure,
             x: 0.,
             y: 0.,
-            width: CELL_WIDTH,
+            width: geometry.cell_width,
             height: if label.is_some() {
                 band_top
             } else {
-                CELL_HEIGHT
+                geometry.cell_height
             },
             text: failure.to_owned(),
         });
@@ -376,7 +442,7 @@ pub fn tip_regions(failure: Option<&str>, label: Option<&str>) -> Vec<TipRegion>
             tip: Tip::Label,
             x: 0.,
             y: band_top,
-            width: CELL_WIDTH,
+            width: geometry.cell_width,
             height: NAME_HEIGHT,
             text: label.to_owned(),
         });
@@ -388,18 +454,18 @@ pub fn tip_regions(failure: Option<&str>, label: Option<&str>) -> Vec<TipRegion>
 /// strip's `carriedOffset`: the anchor is the current cell when it overlaps
 /// the viewport, else the first cell that does; the view moves by the
 /// anchor's index delta, or stays put when the anchor is gone, clamped to the
-/// new content either way.
+/// new content either way. `pitch` is the cells'.
 pub fn carried_offset(
     previous: &[String],
     next: &[String],
     offset: f32,
     width: f32,
     current: usize,
+    pitch: f32,
 ) -> f32 {
-    let overlaps = |at: usize| {
-        (at as f32 * CELL_PITCH) < offset + width && (at + 1) as f32 * CELL_PITCH > offset
-    };
-    let first = (offset / CELL_PITCH).floor() as usize;
+    let overlaps =
+        |at: usize| (at as f32 * pitch) < offset + width && (at + 1) as f32 * pitch > offset;
+    let first = (offset / pitch).floor() as usize;
     let anchor = if current < previous.len() && overlaps(current) {
         current
     } else {
@@ -410,9 +476,9 @@ pub fn carried_offset(
         && overlaps(anchor)
         && let Some(at) = next.iter().position(|p| *p == previous[anchor])
     {
-        carried = offset + (at as f32 - anchor as f32) * CELL_PITCH;
+        carried = offset + (at as f32 - anchor as f32) * pitch;
     }
-    carried.min(next.len() as f32 * CELL_PITCH - width).max(0.)
+    carried.min(next.len() as f32 * pitch - width).max(0.)
 }
 
 /// Old index to new index of each of `indices` whose path is still in
@@ -437,17 +503,123 @@ mod tests {
     use riffle_core::Flag;
 
     use super::{
-        Answer, BOX_HEIGHT, CELL_HEIGHT, CELL_PITCH, CELL_WIDTH, Marks, NAME_HEIGHT, Strip, Tint,
-        Tip, TipRegion, carried_indices, carried_offset, tip_regions,
+        Answer, Geometry, Marks, NAME_HEIGHT, Strip, Tint, Tip, TipRegion, carried_indices,
+        carried_offset, tip_regions,
     };
-    use crate::{burst::BurstMark, judgment::State};
+    use crate::{burst::BurstMark, judgment::State, stripheight};
+
+    /// The default geometry's numbers, the Tauri strip's.
+    const CELL_PITCH: f32 = 154.;
+    const CELL_WIDTH: f32 = 146.;
+    const CELL_HEIGHT: f32 = 114.;
+    const BOX_HEIGHT: f32 = 96.;
+
+    fn paths(len: usize) -> Vec<String> {
+        (0..len).map(|i| format!("D:/a/{i}.ARW")).collect()
+    }
 
     fn strip(len: usize) -> Strip {
-        Strip::new(
-            &(0..len)
-                .map(|i| format!("D:/a/{i}.ARW"))
-                .collect::<Vec<_>>(),
-        )
+        Strip::new(&paths(len), Geometry::default())
+    }
+
+    /// The geometry of a 176 px strip: a 216 x 144 image box.
+    fn tall() -> Geometry {
+        Geometry::of(176.)
+    }
+
+    #[test]
+    fn the_default_geometry_is_the_tauri_strips() {
+        assert_eq!(
+            Geometry::default(),
+            Geometry {
+                height: 128.,
+                box_width: 144.,
+                box_height: BOX_HEIGHT,
+                cell_width: CELL_WIDTH,
+                cell_height: CELL_HEIGHT,
+                pitch: CELL_PITCH,
+            }
+        );
+        assert_eq!(Geometry::of(stripheight::DEFAULT), Geometry::default());
+    }
+
+    #[test]
+    fn the_cells_are_sized_from_the_height() {
+        assert_eq!(
+            tall(),
+            Geometry {
+                height: 176.,
+                box_width: 216.,
+                box_height: 144.,
+                cell_width: 218.,
+                cell_height: 162.,
+                pitch: 226.,
+            }
+        );
+        let min = Geometry::of(stripheight::MIN);
+        assert_eq!((min.box_width, min.box_height), (96., 64.));
+        let max = Geometry::of(stripheight::MAX);
+        assert_eq!((max.box_width, max.box_height), (405., 270.));
+        // A box height whose 3:2 width is not whole is rounded.
+        assert_eq!(Geometry::of(133.).box_width, 152.);
+    }
+
+    #[test]
+    fn hit_test_range_and_content_follow_the_geometry() {
+        let mut s = Strip::new(&paths(100), tall());
+        assert_eq!(s.content_width(), 100. * 226.);
+        assert_eq!(s.hit_test(217.), Some(0));
+        assert_eq!(s.hit_test(219.), None);
+        assert_eq!(s.hit_test(227.), Some(1));
+        assert_eq!(s.on_screen(500.), 0..=3);
+        assert_eq!(s.visible_range(500.), 0..=7);
+        s.scroll_by(20. * 226. + 10., 500.);
+        assert_eq!(s.on_screen(500.), 20..=23);
+        assert_eq!(s.next_to_request(500.), Some(21));
+        assert!(s.scroll_into_view(30, 500.));
+        assert_eq!(s.offset(), 31. * 226. - 500.);
+    }
+
+    #[test]
+    fn a_new_height_keeps_the_current_cell_centered_where_it_was() {
+        let mut s = strip(100);
+        s.scroll_to(10. * CELL_PITCH, 1000.);
+        // Cell 12's center is 2 * 154 + 73 = 381 px into the viewport.
+        assert!(s.set_geometry(tall(), 1000., 12));
+        assert_eq!(s.offset(), 12. * 226. + 109. - 381.);
+        assert_eq!(s.geometry(), tall());
+        assert!(s.on_screen(1000.).contains(&12));
+        // And back.
+        s.set_geometry(Geometry::default(), 1000., 12);
+        assert_eq!(s.offset(), 10. * CELL_PITCH);
+    }
+
+    #[test]
+    fn a_new_height_keeps_the_left_edge_without_the_current_cell_on_screen() {
+        let mut s = strip(100);
+        s.scroll_to(10.5 * CELL_PITCH, 1000.);
+        s.set_geometry(tall(), 1000., 0);
+        assert_eq!(s.offset(), 10.5 * 226.);
+        // A current index past the list is not on screen either.
+        let mut s = strip(100);
+        s.scroll_to(10. * CELL_PITCH, 1000.);
+        s.set_geometry(tall(), 1000., 100);
+        assert_eq!(s.offset(), 10. * 226.);
+    }
+
+    #[test]
+    fn a_new_height_clamps_the_offset_to_the_new_content() {
+        let mut s = strip(10);
+        s.scroll_by(1e6, 1000.);
+        assert_eq!(s.offset(), 10. * CELL_PITCH - 1000.);
+        s.set_geometry(Geometry::of(stripheight::MIN), 1000., 9);
+        // Ten 106 px cells overflow 1000 px by 60 px.
+        assert_eq!(s.offset(), 60.);
+        s.set_geometry(Geometry::of(stripheight::MIN), 2000., 9);
+        assert_eq!(s.offset(), 0.);
+        let mut empty = strip(0);
+        assert!(!empty.set_geometry(tall(), 1000., 0));
+        assert_eq!(empty.offset(), 0.);
     }
 
     #[test]
@@ -614,7 +786,10 @@ mod tests {
     fn files_inserted_before_a_visible_current_cell_keep_it_in_place() {
         let previous = names("a", 20);
         let next = [names("n", 3), previous.clone()].concat();
-        assert_eq!(carried_offset(&previous, &next, 2. * P, 5. * P, 4), 5. * P);
+        assert_eq!(
+            carried_offset(&previous, &next, 2. * P, 5. * P, 4, P),
+            5. * P
+        );
     }
 
     #[test]
@@ -622,7 +797,7 @@ mod tests {
         let previous = names("a", 25);
         let next = [names("n", 100), previous.clone()].concat();
         assert_eq!(
-            carried_offset(&previous, &next, 20. * P, 5. * P, 0),
+            carried_offset(&previous, &next, 20. * P, 5. * P, 0, P),
             120. * P
         );
     }
@@ -632,15 +807,37 @@ mod tests {
         let previous = names("a", 20);
         let mut next = previous.clone();
         next.remove(5);
-        assert_eq!(carried_offset(&previous, &next, 5. * P, 5. * P, 0), 5. * P);
+        assert_eq!(
+            carried_offset(&previous, &next, 5. * P, 5. * P, 0, P),
+            5. * P
+        );
     }
 
     #[test]
     fn the_carried_offset_is_clamped_to_the_new_content() {
         let previous = names("a", 20);
         let next = previous[..8].to_vec();
-        assert_eq!(carried_offset(&previous, &next, 15. * P, 5. * P, 0), 3. * P);
-        assert_eq!(carried_offset(&previous, &[], 15. * P, 5. * P, 0), 0.);
+        assert_eq!(
+            carried_offset(&previous, &next, 15. * P, 5. * P, 0, P),
+            3. * P
+        );
+        assert_eq!(carried_offset(&previous, &[], 15. * P, 5. * P, 0, P), 0.);
+    }
+
+    #[test]
+    fn the_carried_offset_follows_the_pitch() {
+        let tall = tall().pitch;
+        let previous = names("a", 20);
+        let next = [names("n", 3), previous.clone()].concat();
+        assert_eq!(
+            carried_offset(&previous, &next, 2. * tall, 5. * tall, 4, tall),
+            5. * tall
+        );
+        let next = previous[..8].to_vec();
+        assert_eq!(
+            carried_offset(&previous, &next, 15. * tall, 5. * tall, 0, tall),
+            3. * tall
+        );
     }
 
     #[test]
@@ -729,15 +926,15 @@ mod tests {
 
     #[test]
     fn a_cell_neither_failed_nor_labeled_has_no_tooltip() {
-        assert_eq!(tip_regions(None, None), []);
-        assert_eq!(tip_regions(Some(""), None), []);
-        assert_eq!(tip_regions(Some(""), Some("")), []);
+        assert_eq!(tip_regions(Geometry::default(), None, None), []);
+        assert_eq!(tip_regions(Geometry::default(), Some(""), None), []);
+        assert_eq!(tip_regions(Geometry::default(), Some(""), Some("")), []);
     }
 
     #[test]
     fn a_failed_cell_shows_its_error_over_the_whole_cell() {
         assert_eq!(
-            tip_regions(Some("truncated"), None),
+            tip_regions(Geometry::default(), Some("truncated"), None),
             [region(Tip::Failure, 0., CELL_HEIGHT, "truncated")]
         );
     }
@@ -745,13 +942,41 @@ mod tests {
     #[test]
     fn a_labeled_cell_shows_its_label_name_over_the_name_band() {
         let band = region(Tip::Label, 1. + BOX_HEIGHT, NAME_HEIGHT, "Red");
-        assert_eq!(tip_regions(None, Some("Red")), std::slice::from_ref(&band));
-        assert_eq!(tip_regions(Some(""), Some("Red")), [band]);
+        assert_eq!(
+            tip_regions(Geometry::default(), None, Some("Red")),
+            std::slice::from_ref(&band)
+        );
+        assert_eq!(
+            tip_regions(Geometry::default(), Some(""), Some("Red")),
+            [band]
+        );
+    }
+
+    #[test]
+    fn the_tooltip_regions_follow_the_geometry() {
+        let tall = tall();
+        assert_eq!(
+            tip_regions(tall, Some("truncated"), Some("Red")),
+            [
+                TipRegion {
+                    width: 218.,
+                    ..region(Tip::Failure, 0., 145., "truncated")
+                },
+                TipRegion {
+                    width: 218.,
+                    ..region(Tip::Label, 145., NAME_HEIGHT, "Red")
+                },
+            ]
+        );
+        assert_eq!(
+            tip_regions(tall, Some("truncated"), None)[0].height,
+            tall.cell_height
+        );
     }
 
     #[test]
     fn a_failed_labeled_cell_splits_at_the_name_band() {
-        let regions = tip_regions(Some("truncated"), Some("Client pick"));
+        let regions = tip_regions(Geometry::default(), Some("truncated"), Some("Client pick"));
         assert_eq!(
             regions,
             [

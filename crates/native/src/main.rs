@@ -51,6 +51,7 @@ mod sidecars;
 mod sort;
 mod strip;
 mod stripbar;
+mod stripheight;
 mod theme;
 mod thumbs;
 mod timing;
@@ -504,6 +505,9 @@ struct Riffle {
     /// A pane's boundary has moved since the button went down; the next
     /// button release writes `panelWidths`.
     pane_dragged: bool,
+    /// The strip's top edge has moved since the button went down; the next
+    /// button release writes `stripHeight`.
+    strip_dragged: bool,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -809,7 +813,15 @@ impl Riffle {
             status: "no folder".into(),
             index,
             reader,
-            strip: Strip::default(),
+            // `--auto` starts at the default height.
+            strip: Strip::new(
+                &[],
+                strip::Geometry::of(if remember {
+                    settings.strip_height
+                } else {
+                    stripheight::DEFAULT
+                }),
+            ),
             strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
             strip_width: content_width(window),
@@ -870,6 +882,7 @@ impl Riffle {
                 PaneWidths::default()
             },
             pane_dragged: false,
+            strip_dragged: false,
             wanted: None,
             max: None,
             listing: 0,
@@ -1078,13 +1091,37 @@ impl Riffle {
         }
     }
 
-    /// A button release anywhere in the window ends a pane drag and writes
-    /// the widths once.
+    /// The strip's top edge dragged to make it `wanted` px high, the preview
+    /// and the strip sharing `shared` px: the cells are resized around the
+    /// cells in view, and a 1:1 crop is re-cut for the new canvas.
+    fn drag_strip(&mut self, wanted: f32, shared: f32, cx: &mut Context<Self>) {
+        self.strip_dragged = true;
+        let height = stripheight::dragged(wanted, shared);
+        if height != self.strip.geometry().height {
+            self.strip.set_geometry(
+                strip::Geometry::of(height),
+                self.strip_width,
+                self.pager.current(),
+            );
+            self.strip_moved(cx);
+            self.zoom_resized(cx);
+            cx.notify();
+        }
+    }
+
+    /// A button release anywhere in the window ends a pane or strip drag and
+    /// writes the widths or the height once.
     fn end_pane_drag(&mut self) {
         if std::mem::take(&mut self.pane_dragged) && self.remember_panels {
             self.settings
                 .writes
                 .set("panelWidths", self.pane_widths.setting());
+        }
+        if std::mem::take(&mut self.strip_dragged) && self.remember_panels {
+            self.settings.writes.set(
+                "stripHeight",
+                stripheight::setting(self.strip.geometry().height),
+            );
         }
     }
 
@@ -2515,7 +2552,7 @@ impl Riffle {
             if let Some(at) = resume.and_then(|r| paths.iter().position(|p| *p == r)) {
                 self.pager.go(Move::To(at));
             }
-            self.strip = Strip::new(&paths);
+            self.strip = Strip::new(&paths, self.strip.geometry());
             self.strip
                 .scroll_into_view(self.pager.current(), self.strip_width);
             let old = self.thumbs.reset();
@@ -2718,15 +2755,21 @@ impl Riffle {
     fn carry(&mut self, paths: &[String], current: usize, keep_scroll: bool) -> bool {
         let previous = path_strings(&self.files);
         let was = self.pager.current();
-        let offset =
-            strip::carried_offset(&previous, paths, self.strip.offset(), self.strip_width, was);
+        let offset = strip::carried_offset(
+            &previous,
+            paths,
+            self.strip.offset(),
+            self.strip_width,
+            was,
+            self.strip.geometry().pitch,
+        );
         let loaded: Vec<usize> = self.thumbs.loaded().collect();
         let moves = strip::carried_indices(&previous, paths, loaded);
         let old = self.thumbs.carry(&moves);
         self.retire(old);
         self.pager = Pager::new(paths.len());
         self.pager.go(Move::To(current));
-        self.strip = Strip::new(paths);
+        self.strip = Strip::new(paths, self.strip.geometry());
         self.strip.scroll_to(offset, self.strip_width);
         self.strip.keep(moves.into_values());
         let moved = previous.get(was) != paths.get(current);
@@ -3563,6 +3606,7 @@ impl Riffle {
     /// What the strip's canvas paints: the cells on screen.
     fn strip_cells(&self) -> Vec<StripCell> {
         let current = self.pager.current();
+        let geometry = self.strip.geometry();
         self.strip
             .on_screen(self.strip_width)
             .map(|index| {
@@ -3586,10 +3630,10 @@ impl Riffle {
                         key.hash(&mut hasher);
                         hasher.finish() as usize
                     },
-                    x: index as f32 * strip::CELL_PITCH - self.strip.offset(),
+                    x: index as f32 * geometry.pitch - self.strip.offset(),
                     image: self.thumbs.image(index).cloned(),
                     name: file_name(path).into(),
-                    tips: strip::tip_regions(failure.as_deref(), label),
+                    tips: strip::tip_regions(geometry, failure.as_deref(), label),
                     failure,
                     current: index == current,
                     selected: index != current && self.strip.is_selected(index),
@@ -4595,6 +4639,7 @@ impl Render for Riffle {
         let perf = self.perf.model();
         let cells = self.strip_cells();
         let strip_tips: Vec<_> = cells.iter().flat_map(strip_tips).collect();
+        let strip_geometry = self.strip.geometry();
         let mark = self.marks.mark(self.current_path().as_deref());
         let zoom_paint = self.zoom_paint();
         let viewport = self.viewport.clone();
@@ -4667,155 +4712,182 @@ impl Render for Riffle {
                         .child("Handpic"),
                 ),
             )
+            // The middle row and the strip, whose bounds give the strip's
+            // bottom edge and the height the two share to a strip drag.
             .child(
                 div()
-                    .relative()
                     .flex_1()
                     .min_h_0()
                     .flex()
-                    .children(self.panels.left.then(|| self.tree_pane(drawn.left, cx)))
+                    .flex_col()
+                    .on_drag_move(cx.listener(|this, e: &DragMoveEvent<StripDrag>, _, cx| {
+                        let bottom = f32::from(e.bounds.bottom());
+                        let shared = f32::from(e.bounds.size.height);
+                        this.drag_strip(bottom - f32::from(e.event.position.y), shared, cx);
+                    }))
                     .child(
                         div()
                             .relative()
                             .flex_1()
-                            .min_w_0()
-                            .h_full()
-                            .bg(rgb(PREVIEW_BACKGROUND))
+                            .min_h_0()
+                            .flex()
+                            .children(self.panels.left.then(|| self.tree_pane(drawn.left, cx)))
+                            .child(
+                                div()
+                                    .relative()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .h_full()
+                                    .bg(rgb(PREVIEW_BACKGROUND))
+                                    .child(
+                                        canvas(
+                                            |_, _, _| {},
+                                            move |bounds: Bounds<Pixels>, _, window, cx| {
+                                                let page = pending.borrow_mut().take();
+                                                let zoomed = zoom_pending.borrow_mut().take();
+                                                let paint_started = Instant::now();
+                                                let scale = window.scale_factor();
+                                                viewport.set((
+                                                    (f32::from(bounds.size.width) * scale).round()
+                                                        as u32,
+                                                    (f32::from(bounds.size.height) * scale).round()
+                                                        as u32,
+                                                ));
+                                                let mut want = None;
+                                                if let Some(zoom_paint) = zoom_paint {
+                                                    want = zoom_paint.paint(bounds, window).map(
+                                                        |(image, size)| (View::Crop, image, size),
+                                                    );
+                                                } else if let Some(image) = image {
+                                                    let fit = fit_centered(&image, bounds);
+                                                    if let Err(e) = window.paint_image(
+                                                        fit,
+                                                        fit,
+                                                        Corners::default(),
+                                                        image.clone(),
+                                                        0,
+                                                        grayscale,
+                                                    ) {
+                                                        println!("error paint: {e}");
+                                                    }
+                                                    want = fit_peaking
+                                                        .paint(&image, fit, fit, window)
+                                                        .map(|size| (View::Fit, image, size));
+                                                    overlay::paint(mark.as_ref(), fit, window, cx);
+                                                }
+                                                perfgraph::paint(&perf, bounds, window, cx);
+                                                hold.release();
+                                                let paint_finished = Instant::now();
+                                                let old = retired.take();
+                                                if page.is_none()
+                                                    && zoomed.is_none()
+                                                    && old.is_empty()
+                                                    && want.is_none()
+                                                {
+                                                    return;
+                                                }
+                                                // `defer` runs when the update holding the frame's
+                                                // draw and present ends.
+                                                cx.defer(move |cx| {
+                                                    let presented = Instant::now();
+                                                    if let Some((page, keyed)) = page {
+                                                        let stages = page.stages(
+                                                            paint_started,
+                                                            paint_finished,
+                                                            presented,
+                                                        );
+                                                        if keyed {
+                                                            println!("{}", page.line(&stages));
+                                                            summary.borrow_mut().record(stages);
+                                                        }
+                                                        perfgraph::add_latency(
+                                                            &perf, presented, stages,
+                                                        );
+                                                    }
+                                                    if let Some(zoomed) = zoomed {
+                                                        println!("{}", zoomed.line(presented));
+                                                    }
+                                                    for image in old {
+                                                        cx.drop_image(image, None);
+                                                    }
+                                                    if let Some((view, image, size)) = want {
+                                                        this.update(cx, |this, cx| {
+                                                            this.want_peaking(
+                                                                view, image, size, cx,
+                                                            );
+                                                        })
+                                                        .ok();
+                                                    }
+                                                });
+                                            },
+                                        )
+                                        .size_full(),
+                                    )
+                                    .children(
+                                        empty_text.map(|text| self.empty_message(empty, text, cx)),
+                                    )
+                                    .children(
+                                        self.panels
+                                            .left
+                                            .then(|| pane_handle(Panel::Left, HandleEdge::Leading)),
+                                    )
+                                    .children(
+                                        self.panels.right.then(|| {
+                                            pane_handle(Panel::Right, HandleEdge::Trailing)
+                                        }),
+                                    ),
+                            )
+                            .children(self.panels.right.then(|| self.meta_pane(drawn.right, cx)))
+                            .child(drop_outline(cx.theme().ring)),
+                    )
+                    .children(self.panels.strip.then(|| {
+                        div()
+                            .relative()
+                            .w_full()
+                            .h(px(strip_geometry.height))
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                                    // The strip starts at the client-side frame's left padding.
+                                    let x = f32::from(
+                                        e.position.x
+                                            - gpui_kit::component::window_paddings(window).left,
+                                    );
+                                    this.strip_context(e.position, x, window, cx);
+                                }),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                                    let modifiers = selection::Modifiers {
+                                        toggle: e.modifiers.control || e.modifiers.platform,
+                                        range: e.modifiers.shift,
+                                    };
+                                    // The strip starts at the client-side frame's left padding.
+                                    let x = f32::from(
+                                        e.position.x
+                                            - gpui_kit::component::window_paddings(window).left,
+                                    );
+                                    this.strip_clicked(x, modifiers, cx);
+                                }),
+                            )
+                            .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
+                                this.strip_scrolled(e, window, cx);
+                            }))
                             .child(
                                 canvas(
                                     |_, _, _| {},
-                                    move |bounds: Bounds<Pixels>, _, window, cx| {
-                                        let page = pending.borrow_mut().take();
-                                        let zoomed = zoom_pending.borrow_mut().take();
-                                        let paint_started = Instant::now();
-                                        let scale = window.scale_factor();
-                                        viewport.set((
-                                            (f32::from(bounds.size.width) * scale).round() as u32,
-                                            (f32::from(bounds.size.height) * scale).round() as u32,
-                                        ));
-                                        let mut want = None;
-                                        if let Some(zoom_paint) = zoom_paint {
-                                            want = zoom_paint
-                                                .paint(bounds, window)
-                                                .map(|(image, size)| (View::Crop, image, size));
-                                        } else if let Some(image) = image {
-                                            let fit = fit_centered(&image, bounds);
-                                            if let Err(e) = window.paint_image(
-                                                fit,
-                                                fit,
-                                                Corners::default(),
-                                                image.clone(),
-                                                0,
-                                                grayscale,
-                                            ) {
-                                                println!("error paint: {e}");
-                                            }
-                                            want = fit_peaking
-                                                .paint(&image, fit, fit, window)
-                                                .map(|size| (View::Fit, image, size));
-                                            overlay::paint(mark.as_ref(), fit, window, cx);
-                                        }
-                                        perfgraph::paint(&perf, bounds, window, cx);
-                                        hold.release();
-                                        let paint_finished = Instant::now();
-                                        let old = retired.take();
-                                        if page.is_none()
-                                            && zoomed.is_none()
-                                            && old.is_empty()
-                                            && want.is_none()
-                                        {
-                                            return;
-                                        }
-                                        // `defer` runs when the update holding the frame's
-                                        // draw and present ends.
-                                        cx.defer(move |cx| {
-                                            let presented = Instant::now();
-                                            if let Some((page, keyed)) = page {
-                                                let stages = page.stages(
-                                                    paint_started,
-                                                    paint_finished,
-                                                    presented,
-                                                );
-                                                if keyed {
-                                                    println!("{}", page.line(&stages));
-                                                    summary.borrow_mut().record(stages);
-                                                }
-                                                perfgraph::add_latency(&perf, presented, stages);
-                                            }
-                                            if let Some(zoomed) = zoomed {
-                                                println!("{}", zoomed.line(presented));
-                                            }
-                                            for image in old {
-                                                cx.drop_image(image, None);
-                                            }
-                                            if let Some((view, image, size)) = want {
-                                                this.update(cx, |this, cx| {
-                                                    this.want_peaking(view, image, size, cx);
-                                                })
-                                                .ok();
-                                            }
-                                        });
+                                    move |bounds, _, window, cx| {
+                                        paint_strip(&cells, strip_geometry, bounds, window, cx)
                                     },
                                 )
                                 .size_full(),
                             )
-                            .children(empty_text.map(|text| self.empty_message(empty, text, cx)))
-                            .children(
-                                self.panels
-                                    .left
-                                    .then(|| pane_handle(Panel::Left, HandleEdge::Leading)),
-                            )
-                            .children(
-                                self.panels
-                                    .right
-                                    .then(|| pane_handle(Panel::Right, HandleEdge::Trailing)),
-                            ),
-                    )
-                    .children(self.panels.right.then(|| self.meta_pane(drawn.right, cx)))
-                    .child(drop_outline(cx.theme().ring)),
+                            .children(strip_tips)
+                            .horizontal_scrollbar(&self.strip_bar)
+                            .child(strip_handle())
+                    })),
             )
-            .children(self.panels.strip.then(|| {
-                div()
-                    .relative()
-                    .w_full()
-                    .h(px(strip::STRIP_HEIGHT))
-                    .on_mouse_down(
-                        MouseButton::Right,
-                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                            // The strip starts at the client-side frame's left padding.
-                            let x = f32::from(
-                                e.position.x - gpui_kit::component::window_paddings(window).left,
-                            );
-                            this.strip_context(e.position, x, window, cx);
-                        }),
-                    )
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(|this, e: &MouseDownEvent, window, cx| {
-                            let modifiers = selection::Modifiers {
-                                toggle: e.modifiers.control || e.modifiers.platform,
-                                range: e.modifiers.shift,
-                            };
-                            // The strip starts at the client-side frame's left padding.
-                            let x = f32::from(
-                                e.position.x - gpui_kit::component::window_paddings(window).left,
-                            );
-                            this.strip_clicked(x, modifiers, cx);
-                        }),
-                    )
-                    .on_scroll(cx.listener(|this, e: &ScrollEvent, window, cx| {
-                        this.strip_scrolled(e, window, cx);
-                    }))
-                    .child(
-                        canvas(
-                            |_, _, _| {},
-                            move |bounds, _, window, cx| paint_strip(&cells, bounds, window, cx),
-                        )
-                        .size_full(),
-                    )
-                    .children(strip_tips)
-                    .horizontal_scrollbar(&self.strip_bar)
-            }))
             .child(self.status_row(menu_max, cx))
             .children(self.context_layer(cx))
             .children(
@@ -4953,6 +5025,25 @@ fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
     resize_handle::<PaneDrag, PaneDrag>(id, Axis::Horizontal)
         .inside(edge)
         .on_drag(PaneDrag(pane), |drag, _, _, cx| cx.new(|_| *drag))
+}
+
+/// The drag payload of the strip's top edge, and its dragged item, drawn as
+/// nothing.
+#[derive(Clone, Copy)]
+struct StripDrag;
+
+impl Render for StripDrag {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui_kit::Empty
+    }
+}
+
+/// The grab band over the strip's top padding, which the `on_drag_move` of
+/// the wrapper around the middle row and the strip follows.
+fn strip_handle() -> impl IntoElement {
+    resize_handle::<StripDrag, StripDrag>("strip-edge", Axis::Vertical)
+        .inside(HandleEdge::Leading)
+        .on_drag(StripDrag, |drag, _, _, cx| cx.new(|_| *drag))
 }
 
 /// The Tauri `body.dragging #main` outline, laid over the main area while an
@@ -5329,8 +5420,21 @@ fn label_tag(tint: Option<Tint>) -> Tag {
     .small()
 }
 
-fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window, cx: &mut App) {
-    use strip::{BOX_HEIGHT, BOX_WIDTH, CELL_HEIGHT, CELL_WIDTH, NAME_HEIGHT, STRIP_PADDING};
+fn paint_strip(
+    cells: &[StripCell],
+    geometry: strip::Geometry,
+    bounds: Bounds<Pixels>,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    use strip::{NAME_HEIGHT, STRIP_PADDING};
+    let strip::Geometry {
+        box_width,
+        box_height,
+        cell_width,
+        cell_height,
+        ..
+    } = geometry;
     let colors = &cx.theme().colors;
     let (primary, muted, ring) = (colors.primary, colors.muted, colors.ring);
     let roles = theme::roles(cx);
@@ -5340,16 +5444,16 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
         for cell in cells {
             if let Some(mark) = &cell.burst {
                 let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
-                paint_burst_band(mark, cell.marks.dimmed(), origin, &roles, window);
+                paint_burst_band(mark, cell.marks.dimmed(), origin, geometry, &roles, window);
             }
         }
     });
     for cell in cells {
         let origin = bounds.origin + point(px(cell.x), px(STRIP_PADDING));
-        let cell_bounds = Bounds::new(origin, size(px(CELL_WIDTH), px(CELL_HEIGHT)));
+        let cell_bounds = Bounds::new(origin, size(px(cell_width), px(cell_height)));
         let image_box = Bounds::new(
             origin + point(px(1.), px(1.)),
-            size(px(BOX_WIDTH), px(BOX_HEIGHT)),
+            size(px(box_width), px(box_height)),
         );
         if cell.current {
             window.paint_quad(outline(cell_bounds, primary, Default::default()));
@@ -5392,7 +5496,7 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                 let at = point(origin.x, image_box.bottom());
                 let name_color = match cell.marks.label {
                     Some(tint) => {
-                        let band = Bounds::new(at, size(px(CELL_WIDTH), px(NAME_HEIGHT)));
+                        let band = Bounds::new(at, size(px(cell_width), px(NAME_HEIGHT)));
                         window.paint_quad(fill(band, label_color(tint).scale(LABEL_BAND_SCALE)));
                         rgb(LABELED_NAME_COLOR).into()
                     }
@@ -5408,7 +5512,7 @@ fn paint_strip(cells: &[StripCell], bounds: Bounds<Pixels>, window: &mut Window,
                     at,
                     px(NAME_HEIGHT),
                     TextAlign::Center,
-                    Some(px(CELL_WIDTH)),
+                    Some(px(cell_width)),
                     window,
                     cx,
                 );
@@ -5429,17 +5533,23 @@ fn paint_burst_band(
     mark: &BurstMark,
     dimmed: bool,
     origin: Point<Pixels>,
+    geometry: strip::Geometry,
     roles: &theme::Roles,
     window: &mut Window,
 ) {
-    use strip::{CELL_HEIGHT, CELL_PITCH, CELL_WIDTH};
+    let strip::Geometry {
+        cell_width,
+        cell_height,
+        pitch,
+        ..
+    } = geometry;
     // The padding box sits inside the cell's 1 px border.
-    let (inner_left, inner_right) = (1., CELL_WIDTH - 1.);
-    let (top, bottom) = (1. - 5., CELL_HEIGHT - 1. + 5.);
+    let (inner_left, inner_right) = (1., cell_width - 1.);
+    let (top, bottom) = (1. - 5., cell_height - 1. + 5.);
     let left = if mark.first {
         inner_left - 2.
     } else {
-        inner_left - 1. - (CELL_PITCH - CELL_WIDTH)
+        inner_left - 1. - (pitch - cell_width)
     };
     let right = if mark.last {
         inner_right + 2.
