@@ -11,8 +11,6 @@ use std::{
 
 use riffle_backend::folders::FolderNode;
 
-use crate::context::shown_path;
-
 /// Whether paths compare ignoring case, as the file systems of Windows and
 /// macOS do by default.
 pub const IGNORE_CASE: bool = cfg!(any(windows, target_os = "macos"));
@@ -54,15 +52,48 @@ pub struct Node {
 pub struct Tree {
     roots: Vec<Child>,
     nodes: HashMap<String, Node>,
-    indexed: Indexed,
+    cached: Cached,
 }
 
-/// The index's row count of each folder holding rows, keyed by its path
-/// without the verbatim prefix, folded the way `ignore_case` says.
+/// The counts the index's `folder_counts` table holds, each by the tree
+/// spelling it was listed under, folded the way `ignore_case` says.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-struct Indexed {
+struct Cached {
     counts: HashMap<String, usize>,
     ignore_case: bool,
+}
+
+/// Serializes the writes of the counts the tree learns to `folder_counts`:
+/// one in flight at a time, and the counts pushed meanwhile collected, per
+/// folder with the latest winning, into the next write, so two listings of
+/// one folder cannot land out of order. `viewed.rs`'s `Batches`.
+#[derive(Default)]
+pub struct CountWrites {
+    /// In the order the folders were first pushed, each folder once.
+    pending: Vec<(String, usize)>,
+    in_flight: bool,
+}
+
+impl CountWrites {
+    /// The counts to write now, `None` while a write is out.
+    pub fn push(&mut self, path: &str, count: usize) -> Option<Vec<(String, usize)>> {
+        match self.pending.iter_mut().find(|(p, _)| p == path) {
+            Some(pending) => pending.1 = count,
+            None => self.pending.push((path.to_owned(), count)),
+        }
+        if self.in_flight { None } else { self.next() }
+    }
+
+    /// The write out has ended, failed or not. The counts to write next.
+    pub fn settled(&mut self) -> Option<Vec<(String, usize)>> {
+        self.next()
+    }
+
+    fn next(&mut self) -> Option<Vec<(String, usize)>> {
+        let counts = (!self.pending.is_empty()).then(|| std::mem::take(&mut self.pending));
+        self.in_flight = counts.is_some();
+        counts
+    }
 }
 
 /// One drawn row, owned so the window keeps the rows between changes.
@@ -74,7 +105,7 @@ pub struct Row {
     pub expanded: bool,
     /// Not listed yet, or listed with a drawn child: it gets an expander.
     pub expandable: bool,
-    /// The listed count, else the index's.
+    /// The listed count, else the cached one.
     pub raw_count: Option<usize>,
     pub failed: Option<String>,
 }
@@ -158,37 +189,41 @@ impl Tree {
         }
     }
 
-    /// Replaces the index's counts, each by the index's canonical `dir`;
-    /// a node not listed yet shows the one its path matches.
-    pub fn set_index_counts(
+    /// Replaces the cached counts, each by the node path it was listed
+    /// under; a node not listed yet shows the one its path matches.
+    pub fn set_cached_counts(
         &mut self,
         counts: impl IntoIterator<Item = (String, usize)>,
         ignore_case: bool,
     ) {
-        self.indexed = Indexed {
+        self.cached = Cached {
             counts: counts
                 .into_iter()
-                .map(|(dir, count)| (fold(&shown_path(&dir), ignore_case), count))
+                .map(|(dir, count)| (fold(&dir, ignore_case), count))
                 .collect(),
             ignore_case,
         };
     }
 
-    /// Sets the listed count of the node that is `path`, as a listing of it
-    /// would, leaving its children as they are.
-    pub fn set_listed_count(&mut self, path: &str, count: usize, ignore_case: bool) {
+    /// Sets the listed count of the nodes that are `path`, as a listing of
+    /// it would, leaving their children as they are. The paths of the nodes
+    /// it set, empty when none is `path`.
+    pub fn set_listed_count(&mut self, path: &str, count: usize, ignore_case: bool) -> Vec<String> {
+        let mut set = Vec::new();
         for node in self.nodes.values_mut() {
             if relation(&node.path, path, ignore_case) == Some(Relation::Same) {
                 node.raw_count = Some(count);
+                set.push(node.path.clone());
             }
         }
+        set
     }
 
     fn count_of(&self, node: &Node) -> Option<usize> {
         node.raw_count.or_else(|| {
-            self.indexed
+            self.cached
                 .counts
-                .get(&fold(&node.path, self.indexed.ignore_case))
+                .get(&fold(&node.path, self.cached.ignore_case))
                 .copied()
         })
     }
@@ -1647,7 +1682,7 @@ mod tests {
             .and_then(|row| row.raw_count)
     }
 
-    fn indexed(pairs: &[(&str, usize)]) -> Vec<(String, usize)> {
+    fn cached(pairs: &[(&str, usize)]) -> Vec<(String, usize)> {
         pairs
             .iter()
             .map(|(dir, n)| ((*dir).to_owned(), *n))
@@ -1655,47 +1690,27 @@ mod tests {
     }
 
     #[test]
-    fn an_unlisted_folder_takes_the_index_count() {
+    fn an_unlisted_folder_takes_the_cached_count() {
         let mut tree = with_roots(&[home(), card()]);
-        tree.set_index_counts(indexed(&[("/home/me", 4)]), false);
+        tree.set_cached_counts(cached(&[("/home/me", 4)]), false);
         assert_eq!(count(&tree, "/home/me"), Some(4));
         assert_eq!(count(&tree, "/media/me/card"), None);
         assert!(!tree.rows()[0].expanded);
     }
 
     #[test]
-    fn a_verbatim_index_dir_matches_the_trees_drive_and_unc_spelling() {
-        let mut tree = with_roots(&[
-            child("Photos", r"C:\Photos"),
-            child(r"C:\", r"C:\"),
-            child("raw", r"\\server\share\raw"),
-        ]);
-        tree.set_index_counts(
-            indexed(&[
-                (r"\\?\C:\Photos", 3),
-                (r"\\?\C:\", 1),
-                (r"\\?\UNC\server\share\raw", 7),
-            ]),
-            false,
-        );
-        assert_eq!(count(&tree, r"C:\Photos"), Some(3));
-        assert_eq!(count(&tree, r"C:\"), Some(1));
-        assert_eq!(count(&tree, r"\\server\share\raw"), Some(7));
-    }
-
-    #[test]
-    fn the_index_count_ignores_case_only_when_asked() {
+    fn the_cached_count_ignores_case_only_when_asked() {
         let mut tree = with_roots(&[child("Photos", r"C:\Photos")]);
-        tree.set_index_counts(indexed(&[(r"\\?\C:\PHOTOS", 3)]), true);
+        tree.set_cached_counts(cached(&[(r"C:\PHOTOS", 3)]), true);
         assert_eq!(count(&tree, r"C:\Photos"), Some(3));
-        tree.set_index_counts(indexed(&[(r"\\?\C:\PHOTOS", 3)]), false);
+        tree.set_cached_counts(cached(&[(r"C:\PHOTOS", 3)]), false);
         assert_eq!(count(&tree, r"C:\Photos"), None);
     }
 
     #[test]
-    fn a_listed_count_wins_over_the_index_zero_included() {
+    fn a_listed_count_wins_over_the_cached_one_zero_included() {
         let mut tree = with_roots(&[home(), card()]);
-        tree.set_index_counts(indexed(&[("/home/me", 4), ("/media/me/card", 2)]), false);
+        tree.set_cached_counts(cached(&[("/home/me", 4), ("/media/me/card", 2)]), false);
         tree.set_children("/home/me", 0, vec![]);
         tree.set_listed_count("/media/me/card", 5, false);
         assert_eq!(count(&tree, "/home/me"), Some(0));
@@ -1705,25 +1720,46 @@ mod tests {
     #[test]
     fn the_listed_count_is_set_on_the_node_in_another_case_when_asked() {
         let mut tree = with_roots(&[child("Photos", "/Users/me/Photos")]);
-        tree.set_listed_count("/users/me/photos", 2, false);
+        assert!(
+            tree.set_listed_count("/users/me/photos", 2, false)
+                .is_empty()
+        );
         assert_eq!(count(&tree, "/Users/me/Photos"), None);
-        tree.set_listed_count("/users/me/photos", 2, true);
+        assert_eq!(
+            tree.set_listed_count("/users/me/photos", 2, true),
+            ["/Users/me/Photos"]
+        );
         assert_eq!(count(&tree, "/Users/me/Photos"), Some(2));
     }
 
     #[test]
-    fn replacing_the_index_counts_drops_a_folder_no_longer_in_them() {
+    fn replacing_the_cached_counts_drops_a_folder_no_longer_in_them() {
         let mut tree = with_roots(&[home(), card()]);
-        tree.set_index_counts(indexed(&[("/home/me", 4), ("/media/me/card", 2)]), false);
-        tree.set_index_counts(indexed(&[("/media/me/card", 3)]), false);
+        tree.set_cached_counts(cached(&[("/home/me", 4), ("/media/me/card", 2)]), false);
+        tree.set_cached_counts(cached(&[("/media/me/card", 3)]), false);
         assert_eq!(count(&tree, "/home/me"), None);
         assert_eq!(count(&tree, "/media/me/card"), Some(3));
     }
 
     #[test]
+    fn count_writes_go_one_at_a_time_the_latest_count_of_a_folder_winning() {
+        let mut writes = CountWrites::default();
+        assert_eq!(writes.push("/a", 1), Some(vec![("/a".to_owned(), 1)]));
+        assert_eq!(writes.push("/b", 2), None);
+        assert_eq!(writes.push("/a", 3), None);
+        assert_eq!(writes.push("/b", 0), None);
+        assert_eq!(
+            writes.settled(),
+            Some(vec![("/b".to_owned(), 0), ("/a".to_owned(), 3)])
+        );
+        assert_eq!(writes.settled(), None);
+        assert_eq!(writes.push("/c", 4), Some(vec![("/c".to_owned(), 4)]));
+    }
+
+    #[test]
     fn a_renamed_folder_keeps_its_listed_count() {
         let mut tree = renamed_tree();
-        tree.set_index_counts(indexed(&[("/home/me/a", 9), ("/home/me/b", 6)]), false);
+        tree.set_cached_counts(cached(&[("/home/me/a", 9), ("/home/me/b", 6)]), false);
         tree.rename_folder("/home/me/a", "/home/me/a1", "a1", false);
         assert_eq!(count(&tree, "/home/me/a1"), Some(2));
         assert_eq!(count(&tree, "/home/me/a1/x"), Some(1));

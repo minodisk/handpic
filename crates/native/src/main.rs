@@ -143,7 +143,7 @@ use strip::{Answer, Marks, Strip, Tint, Tip, TipRegion};
 use stripbar::StripBar;
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Source, Summary};
-use tree::{Child, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
+use tree::{Child, CountWrites, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
 use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
@@ -420,9 +420,11 @@ struct Riffle {
     /// The open folder as the tree spells it, and its row while drawn.
     tree_open: Option<String>,
     tree_open_row: Option<usize>,
-    /// Bumped by every read of the index's per-folder counts: an answer
+    /// Bumped by every read of the cached per-folder counts: an answer
     /// older than the latest read is dropped.
-    dir_counts: u64,
+    count_reads: u64,
+    /// The counts the tree learned, on their way to `folder_counts`.
+    count_writes: CountWrites,
     tree_scroll: UniformListScrollHandle,
     /// The tree has the keyboard: a click in its pane gave it, `escape` or a
     /// press elsewhere hands it back to the photo.
@@ -675,7 +677,7 @@ impl Riffle {
         }
         Self::read_roots(cx);
         cx.spawn(async |this, cx| {
-            this.update(cx, |this, cx| this.read_dir_counts(cx)).ok();
+            this.update(cx, |this, cx| this.read_folder_counts(cx)).ok();
         })
         .detach();
         // The window's own appearance, which gpui-component prefers on Linux
@@ -803,7 +805,8 @@ impl Riffle {
             tree_rows: Vec::new(),
             tree_open: None,
             tree_open_row: None,
-            dir_counts: 0,
+            count_reads: 0,
+            count_writes: CountWrites::default(),
             tree_scroll: UniformListScrollHandle::new(),
             tree_keys: false,
             tree_cursor: None,
@@ -1083,25 +1086,25 @@ impl Riffle {
         .detach();
     }
 
-    /// Read the index's row count of every folder on the reader, off the UI
-    /// thread, and hand them to the tree; nothing without an index.
-    fn read_dir_counts(&mut self, cx: &mut Context<Self>) {
+    /// Read every cached folder count on the reader, off the UI thread, and
+    /// hand them to the tree; nothing without an index.
+    fn read_folder_counts(&mut self, cx: &mut Context<Self>) {
         let Some(reader) = self.reader.clone() else {
             return;
         };
-        self.dir_counts += 1;
-        let read = self.dir_counts;
+        self.count_reads += 1;
+        let read = self.count_reads;
         cx.spawn(async move |this, cx| {
             let counts = cx
-                .background_spawn(async move { index::lock(&reader).dir_counts() })
+                .background_spawn(async move { index::lock(&reader).folder_counts() })
                 .await;
             this.update(cx, |this, cx| {
-                if read != this.dir_counts {
+                if read != this.count_reads {
                     return;
                 }
                 match counts {
                     Ok(counts) => {
-                        this.tree.set_index_counts(counts, IGNORE_CASE);
+                        this.tree.set_cached_counts(counts, IGNORE_CASE);
                         this.tree_changed(cx);
                     }
                     Err(e) => log::warn!("failed to read the folder counts: {e}"),
@@ -1177,7 +1180,7 @@ impl Riffle {
             match listed {
                 Ok(folder) => {
                     this.update(cx, |this, cx| {
-                        this.tree_listed(&dir, Ok(folder), false);
+                        this.tree_listed(&dir, Ok(folder), false, cx);
                         this.tree_changed(cx);
                     })
                     .ok();
@@ -1205,7 +1208,7 @@ impl Riffle {
                 .background_spawn(async move { folders::list(Path::new(&listing)) })
                 .await;
             this.update(cx, |this, cx| {
-                this.tree_listed(&dir, listed, true);
+                this.tree_listed(&dir, listed, true, cx);
                 this.tree_watched = None;
                 this.tree_changed(cx);
             })
@@ -1818,7 +1821,7 @@ impl Riffle {
                     .background_spawn(async move { folders::list(Path::new(&listing)) })
                     .await;
                 let Ok(children) = this.update(cx, |this, cx| {
-                    let listed = this.tree_listed(&dir, listed, true).is_some();
+                    let listed = this.tree_listed(&dir, listed, true, cx).is_some();
                     this.tree_changed(cx);
                     if listed {
                         this.tree.drawn_children_of(&dir)
@@ -1911,20 +1914,22 @@ impl Riffle {
         true
     }
 
-    /// A listing of the tree's `dir` answered: its children, or `None` with
-    /// the folder collapsed and marked, and the error in the notes when
-    /// `report`.
+    /// A listing of the tree's `dir` answered: its children, its count
+    /// cached, or `None` with the folder collapsed and marked, and the error
+    /// in the notes when `report`.
     fn tree_listed(
         &mut self,
         dir: &str,
         listed: Result<Folder, String>,
         report: bool,
+        cx: &mut Context<Self>,
     ) -> Option<Vec<Child>> {
         match listed {
             Ok(folder) => {
                 let children: Vec<Child> = folder.children.into_iter().map(Child::from).collect();
                 self.tree
                     .set_children(dir, folder.raw_count, children.clone());
+                self.cache_count(dir, folder.raw_count, cx);
                 Some(children)
             }
             Err(e) => {
@@ -1937,6 +1942,38 @@ impl Riffle {
                 None
             }
         }
+    }
+
+    /// Queue `count`, learned from a listing of the tree's `path`, for
+    /// `folder_counts`; nothing without an index.
+    fn cache_count(&mut self, path: &str, count: usize, cx: &mut Context<Self>) {
+        if self.index.is_err() {
+            return;
+        }
+        if let Some(counts) = self.count_writes.push(path, count) {
+            self.write_folder_counts(counts, cx);
+        }
+    }
+
+    fn write_folder_counts(&self, counts: Vec<(String, usize)>, cx: &mut Context<Self>) {
+        let Ok(index) = self.index.clone() else {
+            return;
+        };
+        cx.spawn(async move |this, cx| {
+            let written = cx
+                .background_spawn(async move { index::lock(&index).set_folder_counts(&counts) })
+                .await;
+            if let Err(e) = written {
+                log::warn!("failed to cache the folder counts: {e}");
+            }
+            this.update(cx, |this, cx| {
+                if let Some(counts) = this.count_writes.settled() {
+                    this.write_folder_counts(counts, cx);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     /// An expander click: collapse, or expand and list the folder again, its
@@ -1959,7 +1996,7 @@ impl Riffle {
                 .background_spawn(async move { folders::list(Path::new(&listing)) })
                 .await;
             this.update(cx, |this, cx| {
-                this.tree_listed(&dir, listed, true);
+                this.tree_listed(&dir, listed, true, cx);
                 this.tree_changed(cx);
             })
             .ok();
@@ -2016,7 +2053,7 @@ impl Riffle {
                     if !current && listed.is_ok() {
                         return None;
                     }
-                    let children = this.tree_listed(&dir, listed, current);
+                    let children = this.tree_listed(&dir, listed, current, cx);
                     this.tree_changed(cx);
                     children.filter(|_| current)
                 });
@@ -2445,10 +2482,12 @@ impl Riffle {
             _ => self.finished(cx),
         }
         if let Some(open) = &self.tree_open {
-            self.tree.set_listed_count(open, listed_count, IGNORE_CASE);
+            let set = self.tree.set_listed_count(open, listed_count, IGNORE_CASE);
+            for path in set {
+                self.cache_count(&path, listed_count, cx);
+            }
             self.tree_changed(cx);
         }
-        self.read_dir_counts(cx);
         cx.notify();
     }
 
@@ -2637,7 +2676,6 @@ impl Riffle {
                 self.failed = summary.errors;
                 self.strip.refresh();
                 self.read_entries(cx);
-                self.read_dir_counts(cx);
             }
             Event::FacesProgress {
                 done, total, ready, ..

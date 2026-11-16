@@ -88,6 +88,10 @@ and the files shown in the preview in the separate `views` table (kept by
 eviction, dropped by Clear Cache), which gives the ranking its negatives
 (a viewed file left unflagged) and spares a folder holding a viewed file or
 a reject from the 30-day eviction, not from the size cap or Clear Cache,
+and in the separate `folder_counts` table each folder's file count as the
+native app's tree last listed it, keyed by the tree's spelling of the path
+(`set_folder_counts`, `folder_counts`, `rename_folder_counts`; kept by the
+eviction, emptied by Clear Cache),
 re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in three
 passes on the one scan task: `run_scan` (thumbnail, metadata), then
 `run_faces_scan`, which runs the face cue (YuNet, then the face mesh on the face nearest the AF point) and fills the `sharpness` /
@@ -150,10 +154,12 @@ callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
 `mcp_enabled_setting`, the stored `mcpEnabled` rule), `src/rename.rs` the
 folder and RAW file rename (`check_name`, `folder_target`, `file_plan` /
 `file_run`, and `rename_folder`, which releases the watcher and the tree
-watches around the rename and carries the index rows and the recorded trash
-runs along, given them in a `Context`), `src/datefolder.rs` the `Rename by
+watches around the rename and carries the index rows, the folder count rows
+and the recorded trash runs along, given them in a `Context`),
+`src/datefolder.rs` the `Rename by
 Capture Date…` plan (`plan_of` from the index's capture times, else the file
-head; `preview`) and the split (`split_folder`, over the same `Context`),
+head; `preview`) and the split (`split_folder`, over the same `Context`,
+writing each date folder's count row and dropping the original's),
 `src/foldersidecars.rs` the counting, the rewrite and the delete of a
 folder's sidecars (`preview`, `rewrite`, `doomed`, `delete_preview` and
 `delete_run`, which records the run and clears the judgments), none of the
@@ -454,9 +460,10 @@ the crop and the scaled-preview placeholder are painted, one JPEG pixel per
 device pixel with the focus point at the canvas center), `src/tree.rs` the
 left pane's folder tree (a port of the state half of `tree.ts`: the roots,
 each folder's listed children, expansion, RAW count and failed listing, the
-index's per-folder row counts (`set_index_counts`, keyed by the canonical
-`dir` without its verbatim prefix, which an unlisted row shows until a listing
-or an open's `set_listed_count` gives its own), the
+cached counts of the index's `folder_counts` table (`set_cached_counts`,
+keyed by the tree's own spelling, which an unlisted row shows until a listing
+or an open's `set_listed_count` gives its own; `CountWrites`, the coalescing
+of the counts the tree learns on their way to that table), the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
 draws as a `uniform_list`, fills from the backend's `folders`, expands

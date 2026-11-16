@@ -1107,7 +1107,7 @@ impl Riffle {
             self.settle_folder_run(cx);
         }
         self.tree_refresh(datefolder::parent_of(&dir), cx);
-        self.read_dir_counts(cx);
+        self.read_folder_counts(cx);
         cx.notify();
     }
 
@@ -1139,7 +1139,7 @@ impl Riffle {
         });
         self.tree_watched = None;
         self.tree_changed(cx);
-        self.read_dir_counts(cx);
+        self.read_folder_counts(cx);
         let reopen = match self.deferred_open.take() {
             Some(folder) => Some(
                 moved(&folder.to_string_lossy())
