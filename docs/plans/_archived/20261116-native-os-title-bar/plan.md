@@ -170,3 +170,5 @@ removes the code that only the bar needed, and makes `CLAUDE.md` and
   one step.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete

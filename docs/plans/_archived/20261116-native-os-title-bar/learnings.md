@@ -25,6 +25,9 @@
   maximizes / restores, minimizes and closes normally; the taskbar and
   Alt+Tab read "Handpic"; a long Sort / Filter menu stops 40 px short of the
   window's height. Step 1's checkbox was ticked on the automated criteria.
+  Done when the check passes and the "(Inferred)" tag of `native-app.md`'s
+  "The window keeps the OS title bar" section is dropped, or a failure is
+  recorded there.
   Source: plan Step 1's last Done-when; files `crates/native/src/main.rs`.
 - **todo.md cleanup at wrap-up**: the section "Native: real-device checks of
   the title bar (native-title-bar)" is obsolete after this revert, and the
