@@ -140,3 +140,5 @@ equal the label names in force, or its placeholder when none does. So the
   `i18n.rs`, which the frozen Tauri app also compiles.
 
 ## Progress
+
+(2026-11-17) Step 1 complete
