@@ -3515,3 +3515,13 @@ Files: `crates/native/src/context.rs`, `crates/native/src/main.rs`.
 
 - [ ] On Windows, run `mise run native:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/native-app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
+
+### Native: real-device check of the Keyboard Shortcuts page's groups
+
+#### Background
+
+The `native-shortcut-groups` feature grouped the native settings modal's Keyboard Shortcuts page into `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, with `Reset all` alone in a final untitled group. Unit tests in `settingsmodal.rs` and `mise run ci:local` cover the category mapping, its order and titles, and that every default action has an explicit category. Nobody has run the page on screen: the key edits in the groups, the key capture, the sidebar sub-entries and the search were never exercised. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/_archived/20261116-native-shortcut-groups/plan.md`. Files: `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`.
+
+#### TODO
+
+- [ ] On Windows (any platform the native app runs on), run `mise run native:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.

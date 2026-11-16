@@ -132,3 +132,4 @@ app) lets the user go straight to the part they want to rebind.
 ## Progress
 
 - Step 1: the Keyboard Shortcuts page now groups its rows into one titled `SettingGroup` per `SHORTCUT_GROUPS` entry, `Reset all` alone in a final untitled group. The manual check recorded in `learnings.md` is still pending.
+- (2026-11-17) Step 1 complete
