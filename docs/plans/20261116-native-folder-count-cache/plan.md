@@ -88,7 +88,7 @@ What the investigation found (the facts the steps rely on):
 
 ## Steps
 
-- [ ] Step 1: Add the `folder_counts` table to the index, with its write, read, eviction and clear rules
+- [x] Step 1: Add the `folder_counts` table to the index, with its write, read, eviction and clear rules
   - Done when:
     - `SCHEMA_VERSION` is 26; `prepare` creates
       `folder_counts(dir TEXT PRIMARY KEY, count INTEGER NOT NULL)` and

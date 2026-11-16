@@ -97,8 +97,11 @@ use crate::exif::{exif, Exif};
 /// `ALTER TABLE` and keeps `files`, `ratings` and `folders`. v25 dropped
 /// `files.eye_focus`, `full_eye_sharp` being the only eye-focus measure; a
 /// v16 to v24 database drops it in place with an `ALTER TABLE`, an older one
-/// never gains it, and both keep `files`, `ratings` and `folders`.
-const SCHEMA_VERSION: i64 = 25;
+/// never gains it, and both keep `files`, `ratings` and `folders`. v26 added
+/// `folder_counts`, the media count of each folder as last learned from disk,
+/// keyed by the caller's spelling of the folder; every older database gains
+/// the empty table and keeps the rest.
+const SCHEMA_VERSION: i64 = 26;
 
 /// The version of what `riffle_core::scan::extract` produces, stored on every
 /// `files` row. Bump it on any change to that output: ARW/DNG/NEF/CR3/RAF/ORF parsing
@@ -650,6 +653,7 @@ impl Index {
             22,
             23,
             24,
+            25,
             SCHEMA_VERSION,
         ]
         .contains(&version)
@@ -752,7 +756,15 @@ impl Index {
                      dir TEXT NOT NULL,
                      viewed_at INTEGER NOT NULL
                  );
-                 CREATE INDEX IF NOT EXISTS views_dir ON views (dir);",
+                 CREATE INDEX IF NOT EXISTS views_dir ON views (dir);
+                 -- The media count of each folder as last learned from disk,
+                 -- keyed by the caller's spelling of `dir`, which is never
+                 -- canonicalized here. Eviction keeps it, only `clear` drops
+                 -- it; a count of zero is no row.
+                 CREATE TABLE IF NOT EXISTS folder_counts (
+                     dir TEXT PRIMARY KEY,
+                     count INTEGER NOT NULL
+                 );",
         )
         .map_err(|e| e.to_string())?;
         // `files` was just dropped, so this seeds nothing; kept so a v7
@@ -999,7 +1011,9 @@ impl Index {
     /// `VACUUM` and truncate the WAL so the space is given back to the file
     /// system. A folder keeping a dirty rating keeps its `folders` row and
     /// that rating, as in `evict`. Unlike `evict`, it also drops every
-    /// `views` row. Like `evict`, call this with no scan running.
+    /// `views` and `folder_counts` row, both counted in the summary's `rows`
+    /// so that deleting them alone still `VACUUM`s. Like `evict`, call this
+    /// with no scan running.
     pub fn clear(&mut self) -> Result<EvictSummary, String> {
         let folders: Vec<String> = {
             let mut stmt = self
@@ -1021,6 +1035,10 @@ impl Index {
         summary.rows += self
             .conn
             .execute("DELETE FROM views", [])
+            .map_err(|e| e.to_string())?;
+        summary.rows += self
+            .conn
+            .execute("DELETE FROM folder_counts", [])
             .map_err(|e| e.to_string())?;
         if self.vacuum_if_deleted(&mut summary)? {
             // `VACUUM` writes the rebuilt database through the WAL, which
@@ -1437,6 +1455,45 @@ impl Index {
         let mut stmt = self
             .conn
             .prepare("SELECT dir, COUNT(*) FROM files GROUP BY dir ORDER BY dir")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize)))
+            .map_err(|e| e.to_string())?;
+        rows.collect::<rusqlite::Result<_>>()
+            .map_err(|e| e.to_string())
+    }
+
+    /// Store each folder's media count, replacing the one stored; a count of
+    /// zero deletes the folder's row. `dir` is kept as given.
+    pub fn set_folder_counts(&mut self, counts: &[(String, usize)]) -> Result<(), String> {
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        {
+            let mut upsert = tx
+                .prepare(
+                    "INSERT INTO folder_counts (dir, count) VALUES (?1, ?2)
+                     ON CONFLICT (dir) DO UPDATE SET count = excluded.count",
+                )
+                .map_err(|e| e.to_string())?;
+            let mut delete = tx
+                .prepare("DELETE FROM folder_counts WHERE dir = ?1")
+                .map_err(|e| e.to_string())?;
+            for (dir, count) in counts {
+                if *count == 0 {
+                    delete.execute(params![dir])
+                } else {
+                    upsert.execute(params![dir, *count as i64])
+                }
+                .map_err(|e| e.to_string())?;
+            }
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    /// Every stored folder media count, in `dir` order.
+    pub fn folder_counts(&self) -> Result<Vec<(String, usize)>, String> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT dir, count FROM folder_counts ORDER BY dir")
             .map_err(|e| e.to_string())?;
         let rows = stmt
             .query_map([], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as usize)))
@@ -3706,6 +3763,131 @@ pub(crate) mod tests {
         assert_eq!(
             index.dir_counts().unwrap(),
             [("/one".to_string(), 1), ("/two".to_string(), 2)]
+        );
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn folder_counts_are_written_replaced_and_deleted_by_a_zero() {
+        let dir = temp_dir("folder-counts");
+        let mut index = open(&dir);
+        assert!(index.folder_counts().unwrap().is_empty());
+
+        index
+            .set_folder_counts(&[
+                ("/b".to_string(), 2),
+                ("/a".to_string(), 5),
+                ("/c".to_string(), 1),
+            ])
+            .unwrap();
+        assert_eq!(
+            index.folder_counts().unwrap(),
+            [
+                ("/a".to_string(), 5),
+                ("/b".to_string(), 2),
+                ("/c".to_string(), 1)
+            ]
+        );
+
+        index
+            .set_folder_counts(&[("/a".to_string(), 7), ("/c".to_string(), 0)])
+            .unwrap();
+        assert_eq!(
+            index.folder_counts().unwrap(),
+            [("/a".to_string(), 7), ("/b".to_string(), 2)]
+        );
+
+        index
+            .set_folder_counts(&[("/never".to_string(), 0)])
+            .unwrap();
+        assert_eq!(index.folder_counts().unwrap().len(), 2);
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn folder_counts_are_read_from_their_own_table_only() {
+        let dir = temp_dir("folder-counts-own");
+        let a = file(&dir, "a.ARW", b"a");
+        let mut index = open(&dir);
+        index.write_batch("/scanned", &[(a, Ok(entry()))]).unwrap();
+        assert!(index.folder_counts().unwrap().is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn eviction_keeps_the_folder_counts_and_clear_drops_them() {
+        let dir = temp_dir("folder-counts-evict");
+        let mut index = open(&dir);
+        index
+            .write_batch("old", &[(synthetic(&dir, 0), Ok(entry()))])
+            .unwrap();
+        set_opened_at(&index, "old", NOW - 31 * DAY);
+        index
+            .set_folder_counts(&[("old".to_string(), 1), ("other".to_string(), 3)])
+            .unwrap();
+
+        let policy = EvictPolicy {
+            max_age_secs: MAX_AGE_SECS,
+            max_bytes: 0,
+        };
+        assert_eq!(index.evict(NOW, policy).unwrap().folders, 1);
+        assert_eq!(
+            index.folder_counts().unwrap(),
+            [("old".to_string(), 1), ("other".to_string(), 3)]
+        );
+
+        let summary = index.clear().unwrap();
+        assert_eq!(summary.rows, 2);
+        assert!(summary.vacuumed);
+        assert!(index.folder_counts().unwrap().is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn a_v25_database_gains_an_empty_folder_counts_table_and_keeps_the_rest() {
+        let dir = temp_dir("migrate-v25");
+        let db = dir.join("index.sqlite");
+        let a = file(&dir, "a.ARW", b"a");
+        {
+            let mut index = open(&dir);
+            index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
+            index.reconcile("d", std::slice::from_ref(&a)).unwrap();
+            index.set_last_viewed("d", "/d/a.ARW").unwrap();
+            index
+                .conn
+                .execute_batch(
+                    "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
+                         ('/rated.ARW', 'd', 4, 1, 1);
+                     DROP TABLE folder_counts;
+                     PRAGMA user_version = 25;",
+                )
+                .unwrap();
+        }
+
+        let index = Index::open(&db).unwrap();
+        let version: i64 = index
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        assert_eq!(index.entries("d").unwrap().len(), 1, "files are kept");
+        assert_eq!(
+            index.dirty_rows("d").unwrap(),
+            [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)],
+            "ratings are kept"
+        );
+        assert_eq!(
+            index.last_viewed("d").unwrap().as_deref(),
+            Some("/d/a.ARW"),
+            "folders are kept"
+        );
+        assert!(
+            index.folder_counts().unwrap().is_empty(),
+            "nothing is seeded from files"
         );
 
         remove_temp_dir(&dir);
