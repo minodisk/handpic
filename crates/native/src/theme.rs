@@ -301,10 +301,13 @@ pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
     let dark = config(ThemeMode::Dark, registry.default_dark_theme());
     // `change` loads the mode's config from these slots, Neutral's the
     // built-in `Default Light` / `Default Dark`. It reloads over color edits
-    // made in the same `update`, so the map comes after it.
+    // made in the same `update`, so the map comes after it. `shadow` is reset
+    // to its default first: `change` writes it only for a config that sets it,
+    // so a theme that turned it off would otherwise leave it off.
     Theme::update(cx, |theme| {
         theme.light_theme = light;
         theme.dark_theme = dark;
+        theme.shadow = true;
     });
     Theme::change(mode, None, cx);
     let neutral = setting.name(mode) == NEUTRAL;

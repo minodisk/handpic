@@ -59,6 +59,10 @@
   dark. No name repeats and none is
   `Neutral`. No file sets `font.size`, `radius` or `radius.lg`; Hybrid,
   macOS Classic, Mellifluous and Molokai set `shadow`.
+  `Theme::apply_config` writes `shadow` (and `highlight`) only when the
+  config sets it, so `apply` resets `theme.shadow = true` before `change`;
+  otherwise Neutral after Molokai would keep `shadow` false. `highlight`
+  is not reset: the app draws no code view.
 - Origin: the files carry no license of their own; upstream ships them in
   the Apache-2.0 repository (`LICENSE-APACHE`, Copyright 2024 - 2026
   Longbridge). Each file's `author` / `url` names the scheme it adapts:

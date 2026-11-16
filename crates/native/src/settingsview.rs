@@ -888,7 +888,6 @@ impl SettingsView {
     }
 }
 
-/// Enter or the focus leaving a field commits it.
 /// A picker over `mode`'s themes, Neutral chosen until `open` shows the
 /// stored one; a choice is handed to `choose_theme`.
 fn themes(mode: ThemeMode, window: &mut Window, cx: &mut Context<SettingsView>) -> Entity<Themes> {
@@ -914,6 +913,7 @@ fn themes(mode: ThemeMode, window: &mut Window, cx: &mut Context<SettingsView>) 
     themes
 }
 
+/// Enter or the focus leaving a field commits it.
 fn commits(event: &InputEvent) -> bool {
     matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur)
 }
