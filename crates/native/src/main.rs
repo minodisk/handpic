@@ -102,8 +102,8 @@ use gpui_kit::{
     KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred, div,
-    fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
+    div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -4466,7 +4466,7 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
-        let pad = gpui_component::window_paddings(window);
+        let pad = gpui_kit::component::window_paddings(window);
         let menu_max =
             window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT;
         let main = div()
@@ -4626,7 +4626,7 @@ impl Render for Riffle {
                         cx.listener(|this, e: &MouseDownEvent, window, cx| {
                             // The strip starts at the client-side frame's left padding.
                             let x = f32::from(
-                                e.position.x - gpui_component::window_paddings(window).left,
+                                e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
                             this.strip_context(e.position, x, cx);
                         }),
@@ -4640,7 +4640,7 @@ impl Render for Riffle {
                             };
                             // The strip starts at the client-side frame's left padding.
                             let x = f32::from(
-                                e.position.x - gpui_component::window_paddings(window).left,
+                                e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
                             this.strip_clicked(x, modifiers, cx);
                         }),
@@ -5451,7 +5451,7 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
 /// (zero under server-side decorations and off Linux), which is what the
 /// strip really spans.
 fn content_width(window: &Window) -> f32 {
-    let pad = gpui_component::window_paddings(window);
+    let pad = gpui_kit::component::window_paddings(window);
     f32::from(window.viewport_size().width - pad.left - pad.right)
 }
 
