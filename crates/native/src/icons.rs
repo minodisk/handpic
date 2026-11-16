@@ -2,12 +2,12 @@
 //! `Icons`, the application's one `AssetSource`: its own derivatives first,
 //! then the catalog icons selected from `gpui-kit-assets` with
 //! `icon_assets!`, then `gpui_kit::assets::Assets`, which holds `star`,
-//! `square`, the tree's folders and the icons gpui-component's
+//! the tree's folders and the icons gpui-component's
 //! controls draw. It also serves the
 //! app's own icon PNG to the title bar's `img(..)`.
 
-// The own SVGs below are derivatives of the Lucide `star`, `square` and
-// `scan-face` icons, lucide-static v1.48.0
+// The own SVGs below are derivatives of the Lucide `star` and `scan-face`
+// icons, lucide-static v1.48.0
 // (https://github.com/lucide-icons/lucide), ISC License, Copyright (c) 2026
 // Lucide Icons and Contributors.
 //
@@ -16,11 +16,7 @@
 // copyright notice and this permission notice appear in all copies.
 //
 // The Face focus Low icon is `scan-face` with its mouth turned down, and the
-// filled star and square are `star` and `square` with
-// `fill="currentColor"`, derivatives.
-//
-// `square` is derived from the Feather project, MIT License, Copyright (c)
-// 2013-present Cole Bemis.
+// filled star is `star` with `fill="currentColor"`, derivatives.
 //
 // Full notice in `crates/native/LICENSE-lucide`. The unmodified icons come
 // from `gpui-kit-assets`, under its own `LICENSE-LUCIDE`.
@@ -32,8 +28,6 @@ use gpui_kit::{AssetSource, Result, SharedString};
 
 pub const STAR: &str = "icons/star.svg";
 pub const STAR_FILLED: &str = "icons/star-filled.svg";
-pub const SQUARE: &str = "icons/square.svg";
-pub const SQUARE_FILLED: &str = "icons/square-filled.svg";
 pub const RECTANGLE_VERTICAL: &str = "icons/rectangle-vertical.svg";
 pub const RECTANGLE_HORIZONTAL: &str = "icons/rectangle-horizontal.svg";
 pub const SCAN_FACE: &str = "icons/scan-face.svg";
@@ -46,17 +40,14 @@ const APP_PNG: &[u8] = include_bytes!("../../app/icons/64x64.png");
 
 const STAR_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>"#;
 
-const SQUARE_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>"#;
-
 const SCAN_FACE_FROWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 16s1.5-2 4-2 4 2 4 2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>"#;
 
-const SVGS: [(&str, &str); 3] = [
+const SVGS: [(&str, &str); 2] = [
     (STAR_FILLED, STAR_FILLED_SVG),
-    (SQUARE_FILLED, SQUARE_FILLED_SVG),
     (SCAN_FACE_FROWN, SCAN_FACE_FROWN_SVG),
 ];
 
-// `star`, `square` and the folders are left out: the default
+// `star` and the folders are left out: the default
 // `Assets` already holds them.
 // If `every_icon_path_loads_an_svg` fails after a gpui-kit-assets bump, move
 // the missing one into this list.
@@ -107,8 +98,6 @@ mod tests {
     const PATHS: [&str; 10] = [
         STAR,
         STAR_FILLED,
-        SQUARE,
-        SQUARE_FILLED,
         RECTANGLE_VERTICAL,
         RECTANGLE_HORIZONTAL,
         SCAN_FACE,
@@ -136,7 +125,6 @@ mod tests {
     fn the_catalog_paths_equal_their_icon_names() {
         for (path, name) in [
             (STAR, IconName::Star),
-            (SQUARE, IconName::Square),
             (RECTANGLE_VERTICAL, IconName::RectangleVertical),
             (RECTANGLE_HORIZONTAL, IconName::RectangleHorizontal),
             (SCAN_FACE, IconName::ScanFace),
