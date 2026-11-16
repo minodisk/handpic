@@ -248,6 +248,61 @@ pub fn shortcut_label(action: &'static str) -> &'static str {
     }
 }
 
+/// The area a shortcut acts on, the Keyboard Shortcuts page's groups.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ShortcutGroup {
+    Filmstrip,
+    Judgment,
+    Preview,
+    Panes,
+    General,
+}
+
+/// The groups in the page's order.
+pub const SHORTCUT_GROUPS: [ShortcutGroup; 5] = [
+    ShortcutGroup::Filmstrip,
+    ShortcutGroup::Judgment,
+    ShortcutGroup::Preview,
+    ShortcutGroup::Panes,
+    ShortcutGroup::General,
+];
+
+impl ShortcutGroup {
+    pub fn title(self) -> &'static str {
+        match self {
+            ShortcutGroup::Filmstrip => "Filmstrip",
+            ShortcutGroup::Judgment => "Judgment",
+            ShortcutGroup::Preview => "Preview",
+            ShortcutGroup::Panes => "Panes",
+            ShortcutGroup::General => "General",
+        }
+    }
+}
+
+/// The group of an action's row, `General` for an action it does not know
+/// so that no row leaves the page.
+pub fn shortcut_group(action: &str) -> ShortcutGroup {
+    known_group(action).unwrap_or(ShortcutGroup::General)
+}
+
+fn known_group(action: &str) -> Option<ShortcutGroup> {
+    Some(match action {
+        "previous" | "next" | "burstPrevious" | "burstNext" | "burstFramePrevious"
+        | "burstFrameNext" | "extendPrevious" | "extendNext" | "selectAll" => {
+            ShortcutGroup::Filmstrip
+        }
+        "rate1" | "rate2" | "rate3" | "rate4" | "rate5" | "reject" | "rejectRest" | "pick"
+        | "unflag" | "clear" | "red" | "orange" | "yellow" | "green" | "blue" | "pink"
+        | "purple" | "clearlabel" | "clearall" => ShortcutGroup::Judgment,
+        "focus" | "zoom" | "grayscale" | "compare" | "performance" | "peaking" => {
+            ShortcutGroup::Preview
+        }
+        "toggleLeft" | "toggleRight" | "toggleStrip" | "toggleSides" => ShortcutGroup::Panes,
+        "open" | "undo" | "redo" => ShortcutGroup::General,
+        _ => return None,
+    })
+}
+
 /// A key as the keymap spells it in running text, such as the empty state's
 /// "Or press …" sentence, `keys.ts`'s `displayKey`. The Keyboard Shortcuts
 /// chips use `Kbd::format` instead.
@@ -351,9 +406,9 @@ mod tests {
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
-        SettingsModal, TABS, display_key, edit, format_change, label_change, label_names_of,
-        label_texts, mode_change, pattern_change, preset_of, root_note, shortcut_label, stops,
-        theme_change, writes_xmp,
+        SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit, format_change,
+        known_group, label_change, label_names_of, label_texts, mode_change, pattern_change,
+        preset_of, root_note, shortcut_group, shortcut_label, stops, theme_change, writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
 
@@ -554,6 +609,35 @@ mod tests {
         assert_eq!(shortcut_label("pick"), "Pick");
         assert_eq!(shortcut_label("clear"), "0 star");
         assert_eq!(shortcut_label("somethingNew"), "somethingNew");
+    }
+
+    #[test]
+    fn every_action_has_its_own_group() {
+        for binding in Keymap::defaults().bindings() {
+            assert!(known_group(binding.action).is_some(), "{}", binding.action);
+        }
+        assert_eq!(shortcut_group("pick"), ShortcutGroup::Judgment);
+        assert_eq!(shortcut_group("somethingNew"), ShortcutGroup::General);
+    }
+
+    #[test]
+    fn every_group_holds_an_action() {
+        let bindings = Keymap::defaults().bindings();
+        for group in SHORTCUT_GROUPS {
+            assert!(
+                bindings.iter().any(|b| shortcut_group(b.action) == group),
+                "{group:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_groups_are_in_the_page_order() {
+        let titles: Vec<_> = SHORTCUT_GROUPS.iter().map(|g| g.title()).collect();
+        assert_eq!(
+            titles,
+            ["Filmstrip", "Judgment", "Preview", "Panes", "General"]
+        );
     }
 
     #[test]
