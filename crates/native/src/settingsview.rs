@@ -5,7 +5,7 @@
 //! owns the values, to apply.
 
 use gpui_kit::component::{
-    ActiveTheme, FocusTrapElement, IndexPath, Sizable,
+    ActiveTheme, FocusTrapElement, IndexPath, Sizable, ThemeMode,
     button::{Button, ButtonVariants},
     input::{
         Input, InputEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment, InputGroupButton,
@@ -57,6 +57,9 @@ const FIELD_HEIGHT: Pixels = px(29.);
 /// order.
 type Languages = SelectState<SearchableVec<SharedString>>;
 
+/// The Appearance page's theme pickers, `theme::names` of one mode.
+type Themes = SelectState<SearchableVec<SharedString>>;
+
 /// What the main view applies.
 pub enum Change {
     AutoAdvance(bool),
@@ -100,6 +103,9 @@ pub struct SettingsView {
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
     theme: theme::Setting,
+    /// The light and the dark theme's pickers.
+    light_themes: Entity<Themes>,
+    dark_themes: Entity<Themes>,
     status: Option<SharedString>,
 }
 
@@ -156,6 +162,8 @@ impl SettingsView {
         )
         .detach();
         let root_field = cx.new(|cx| InputState::new(window, cx));
+        let light_themes = themes(ThemeMode::Light, window, cx);
+        let dark_themes = themes(ThemeMode::Dark, window, cx);
         Self {
             focus: cx.focus_handle(),
             model: SettingsModal::default(),
@@ -172,6 +180,8 @@ impl SettingsView {
             pattern_field,
             example: Ok(String::new()),
             theme: theme::Setting::default(),
+            light_themes,
+            dark_themes,
             status: None,
         }
     }
@@ -199,6 +209,14 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.theme = settings.theme;
+        for (themes, name) in [
+            (&self.light_themes, self.theme.light),
+            (&self.dark_themes, self.theme.dark),
+        ] {
+            themes.update(cx, |state, cx| {
+                state.set_selected_value(&SharedString::new_static(name), window, cx)
+            });
+        }
         self.status = (!settings.writes.is_open()).then(|| settingsmodal::NOT_SAVED.into());
         window.focus(&self.focus, cx);
         cx.notify();
@@ -444,6 +462,16 @@ impl SettingsView {
         cx.notify();
     }
 
+    fn choose_theme(&mut self, mode: ThemeMode, chosen: &str, cx: &mut Context<Self>) {
+        let Some(setting) = settingsmodal::theme_change(self.theme, mode, chosen) else {
+            return;
+        };
+        self.theme = setting;
+        self.status = None;
+        cx.emit(Change::Theme(setting));
+        cx.notify();
+    }
+
     /// A switch failed: its message goes to the status line.
     pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
         self.status = Some(message.into());
@@ -552,33 +580,49 @@ impl SettingsView {
         )
     }
 
-    /// The mode radios, drawn as the Sidecar page's format radios.
+    /// The mode radios, drawn as the Sidecar page's format radios, and the
+    /// light and the dark theme, each a `Select` like the label names'
+    /// language.
     fn appearance(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
         let mode = self.theme.mode;
         let view = view.clone();
-        page.group(SettingGroup::new().item(SettingItem::new(
-            "Mode",
-            SettingField::render(move |_, window, _| {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .children(MODES.iter().map(|&(choice, label)| {
-                        Radio::new(choice.setting())
-                            .small()
-                            .checked(choice == mode)
-                            .label(label)
-                            .text_size(px(13.))
-                            .on_click(window.listener_for(
-                                &view,
-                                move |this, _: &bool, window, cx| {
-                                    this.leave_field(window, cx);
-                                    this.choose_mode(choice, cx);
-                                },
-                            ))
-                    }))
-            }),
-        )))
+        let picker = |title: &'static str, themes: &Entity<Themes>| {
+            let themes = themes.clone();
+            SettingItem::new(
+                title,
+                SettingField::render(move |_, _, _| {
+                    div()
+                        .w(px(200.))
+                        .child(Select::new(&themes).small().accessibility_label(title))
+                }),
+            )
+        };
+        page.group(
+            SettingGroup::new()
+                .item(SettingItem::new(
+                    "Mode",
+                    SettingField::render(move |_, window, _| {
+                        div().flex().flex_col().gap_2().children(MODES.iter().map(
+                            |&(choice, label)| {
+                                Radio::new(choice.setting())
+                                    .small()
+                                    .checked(choice == mode)
+                                    .label(label)
+                                    .text_size(px(13.))
+                                    .on_click(window.listener_for(
+                                        &view,
+                                        move |this, _: &bool, window, cx| {
+                                            this.leave_field(window, cx);
+                                            this.choose_mode(choice, cx);
+                                        },
+                                    ))
+                            },
+                        ))
+                    }),
+                ))
+                .item(picker("Light theme", &self.light_themes))
+                .item(picker("Dark theme", &self.dark_themes)),
+        )
     }
 
     fn culling(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
@@ -842,6 +886,31 @@ impl SettingsView {
             }))
             .focus_trap("settings-trap", &self.focus)
     }
+}
+
+/// A picker over `mode`'s themes, Neutral chosen until `open` shows the
+/// stored one; a choice is handed to `choose_theme`.
+fn themes(mode: ThemeMode, window: &mut Window, cx: &mut Context<SettingsView>) -> Entity<Themes> {
+    let names: Vec<_> = theme::names(mode).map(SharedString::new_static).collect();
+    let themes = cx.new(|cx| {
+        SelectState::new(
+            SearchableVec::new(names),
+            Some(IndexPath::new(0)),
+            window,
+            cx,
+        )
+    });
+    cx.subscribe_in(
+        &themes,
+        window,
+        move |this, _, event: &SelectEvent<SearchableVec<SharedString>>, _, cx| {
+            if let SelectEvent::Confirm(Some(name)) = event {
+                this.choose_theme(mode, name, cx);
+            }
+        },
+    )
+    .detach();
+    themes
 }
 
 /// Enter or the focus leaving a field commits it.

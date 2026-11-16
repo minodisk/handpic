@@ -1,11 +1,75 @@
-//! gpui-component's global `Theme`, mapped to the app's shadcn/ui Neutral
-//! tokens in the mode the stored `theme` setting resolves to, and the app's
-//! own `Roles` beside it: the one source of the colors the app paints over its
-//! themed surfaces.
+//! gpui-component's global `Theme`, in the mode the stored `theme` setting
+//! resolves to: that mode's chosen theme, either Neutral (the built-in one
+//! mapped to the app's shadcn/ui Neutral tokens) or one of gpui-kit's
+//! theme files embedded from `themes/`, and the app's own `Roles` beside it:
+//! the one source of the colors the app paints over its themed surfaces.
 
-use gpui_kit::component::{ActiveTheme, Theme, ThemeColor, ThemeMode};
+use std::{rc::Rc, sync::LazyLock};
+
+use gpui_kit::component::{
+    ActiveTheme, Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeRegistry, ThemeSet,
+};
 use gpui_kit::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use serde_json::{Value, json};
+
+/// The app's own theme in either mode, offered first in both lists.
+pub const NEUTRAL: &str = "Neutral";
+
+/// gpui-kit's theme files at the `gpui-component` 0.9.1 release, unchanged
+/// (`themes/LICENSE`); a bump of the crate copies them again.
+const FILES: [&str; 21] = [
+    include_str!("../themes/adventure.json"),
+    include_str!("../themes/alduin.json"),
+    include_str!("../themes/asciinema.json"),
+    include_str!("../themes/aurora.json"),
+    include_str!("../themes/ayu.json"),
+    include_str!("../themes/catppuccin.json"),
+    include_str!("../themes/everforest.json"),
+    include_str!("../themes/fahrenheit.json"),
+    include_str!("../themes/flexoki.json"),
+    include_str!("../themes/gruvbox.json"),
+    include_str!("../themes/harper.json"),
+    include_str!("../themes/hybrid.json"),
+    include_str!("../themes/jellybeans.json"),
+    include_str!("../themes/kibble.json"),
+    include_str!("../themes/macos-classic.json"),
+    include_str!("../themes/mellifluous.json"),
+    include_str!("../themes/molokai.json"),
+    include_str!("../themes/solarized.json"),
+    include_str!("../themes/spaceduck.json"),
+    include_str!("../themes/tokyonight.json"),
+    include_str!("../themes/twilight.json"),
+];
+
+/// Every theme the files hold, in file order.
+static SHIPPED: LazyLock<Vec<ThemeConfig>> = LazyLock::new(|| {
+    FILES
+        .iter()
+        .flat_map(|file| {
+            serde_json::from_str::<ThemeSet>(file)
+                .expect("an embedded theme file parses")
+                .themes
+        })
+        .collect()
+});
+
+/// The shipped theme of `mode` named `name`.
+fn shipped(name: &str, mode: ThemeMode) -> Option<&'static ThemeConfig> {
+    SHIPPED
+        .iter()
+        .find(|config| config.mode == mode && config.name.as_ref() == name)
+}
+
+/// The names the Appearance tab offers for `mode`: Neutral, then the
+/// shipped themes of that mode.
+pub fn names(mode: ThemeMode) -> impl Iterator<Item = &'static str> {
+    std::iter::once(NEUTRAL).chain(
+        SHIPPED
+            .iter()
+            .filter(move |config| config.mode == mode)
+            .map(|config| config.name.as_ref()),
+    )
+}
 
 /// One mode's Neutral values, each `ThemeColor` field `map` pins.
 struct Palette {
@@ -165,22 +229,52 @@ impl Mode {
 }
 
 /// The value stored under `theme`, an object read field by field: a missing
-/// or invalid field is its default, whatever the others hold.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// or invalid field is its default, whatever the others hold. `light` and
+/// `dark` are the theme of each mode, Neutral unless a shipped theme of that
+/// mode has the name.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Setting {
     pub mode: Mode,
+    pub light: &'static str,
+    pub dark: &'static str,
+}
+
+impl Default for Setting {
+    fn default() -> Self {
+        Self {
+            mode: Mode::default(),
+            light: NEUTRAL,
+            dark: NEUTRAL,
+        }
+    }
 }
 
 impl Setting {
     pub fn from_setting(value: Option<&Value>) -> Self {
         let field = |name: &str| value.and_then(|v| v.get(name)).and_then(Value::as_str);
+        let theme = |name: &str, mode| {
+            field(name)
+                .and_then(|name| shipped(name, mode))
+                .map_or(NEUTRAL, |config| config.name.as_ref())
+        };
         Self {
             mode: Mode::from_setting(field("mode")).unwrap_or_default(),
+            light: theme("light", ThemeMode::Light),
+            dark: theme("dark", ThemeMode::Dark),
         }
     }
 
     pub fn setting(self) -> Value {
-        json!({"mode": self.mode.setting()})
+        json!({"mode": self.mode.setting(), "light": self.light, "dark": self.dark})
+    }
+
+    /// The theme chosen for `mode`.
+    pub fn name(self, mode: ThemeMode) -> &'static str {
+        if mode.is_dark() {
+            self.dark
+        } else {
+            self.light
+        }
     }
 }
 
@@ -193,22 +287,39 @@ pub fn resolve(setting: Setting, appearance: WindowAppearance) -> ThemeMode {
     }
 }
 
-/// Installs the Neutral theme in the mode `setting` resolves to under the OS
-/// `appearance`, maps it and sets the roles. Runs after
+/// Installs the theme `setting` chooses for the mode it resolves to under the
+/// OS `appearance`, maps it when it is Neutral and sets the roles. Runs after
 /// `gpui_kit::init`, which leaves it light, and again on a change of
 /// the setting or, in System mode, of the appearance.
 pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
     let mode = resolve(setting, appearance);
-    // `change` reloads the registered theme over color edits made in the
-    // same `update`, so the switch comes first.
-    Theme::change(mode, None, cx);
+    let registry = ThemeRegistry::global(cx);
+    let config = |mode: ThemeMode, default: &Rc<ThemeConfig>| {
+        shipped(setting.name(mode), mode).map_or_else(|| default.clone(), |c| Rc::new(c.clone()))
+    };
+    let light = config(ThemeMode::Light, registry.default_light_theme());
+    let dark = config(ThemeMode::Dark, registry.default_dark_theme());
+    // `change` loads the mode's config from these slots, Neutral's the
+    // built-in `Default Light` / `Default Dark`. It reloads over color edits
+    // made in the same `update`, so the map comes after it. `shadow` is reset
+    // to its default first: `change` writes it only for a config that sets it,
+    // so a theme that turned it off would otherwise leave it off.
     Theme::update(cx, |theme| {
-        map(&mut theme.colors, palette(mode));
+        theme.light_theme = light;
+        theme.dark_theme = dark;
+        theme.shadow = true;
+    });
+    Theme::change(mode, None, cx);
+    let neutral = setting.name(mode) == NEUTRAL;
+    Theme::update(cx, |theme| {
+        if neutral {
+            map(&mut theme.colors, palette(mode));
+        }
         theme.font_size = FONT_SIZE;
         theme.radius = RADIUS;
         theme.radius_lg = RADIUS_LG;
     });
-    let roles = Roles::of(&cx.theme().colors, mode.is_dark());
+    let roles = Roles::of(&cx.theme().colors, neutral && mode.is_dark());
     cx.set_global(roles);
 }
 
@@ -264,11 +375,15 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
 
 #[cfg(test)]
 mod tests {
-    use gpui_kit::component::{ThemeColor, ThemeMode};
+    use std::collections::HashSet;
+
+    use gpui_kit::component::{ThemeColor, ThemeMode, ThemeSet};
     use gpui_kit::{Hsla, WindowAppearance, rgba};
     use serde_json::json;
 
-    use super::{DARK, LIGHT, Mode, Palette, Roles, Setting, map, resolve};
+    use super::{
+        DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SHIPPED, Setting, map, names, resolve,
+    };
 
     fn hex(value: u32) -> Hsla {
         rgba(value).into()
@@ -394,8 +509,53 @@ mod tests {
     }
 
     #[test]
+    fn every_embedded_file_is_a_theme_set() {
+        for file in FILES {
+            let set: ThemeSet = serde_json::from_str(file).unwrap();
+            assert!(!set.name.is_empty());
+            assert!(!set.themes.is_empty(), "{}", set.name);
+        }
+        assert_eq!(FILES.len(), 21);
+    }
+
+    #[test]
+    fn the_shipped_names_are_unique_and_none_is_neutral() {
+        let mut seen = HashSet::new();
+        for config in SHIPPED.iter() {
+            assert!(!config.name.is_empty());
+            assert_ne!(config.name.as_ref(), NEUTRAL);
+            assert!(seen.insert(config.name.as_ref()), "{}", config.name);
+        }
+    }
+
+    #[test]
+    fn each_list_is_neutral_then_the_themes_of_its_mode() {
+        for mode in [ThemeMode::Light, ThemeMode::Dark] {
+            let listed: Vec<_> = names(mode).collect();
+            assert_eq!(listed[0], NEUTRAL);
+            let of_mode: Vec<_> = SHIPPED
+                .iter()
+                .filter(|config| config.mode == mode)
+                .map(|config| config.name.as_ref())
+                .collect();
+            assert!(!of_mode.is_empty());
+            assert_eq!(listed[1..], of_mode[..]);
+        }
+        assert!(names(ThemeMode::Light).any(|name| name == "Catppuccin Latte"));
+        assert!(names(ThemeMode::Dark).any(|name| name == "Catppuccin Mocha"));
+    }
+
+    #[test]
     fn a_missing_or_invalid_setting_is_neutral_dark() {
-        let dark = Setting { mode: Mode::Dark };
+        let dark = Setting::default();
+        assert_eq!(
+            dark,
+            Setting {
+                mode: Mode::Dark,
+                light: NEUTRAL,
+                dark: NEUTRAL
+            }
+        );
         assert_eq!(Setting::from_setting(None), dark);
         for value in [
             json!({}),
@@ -404,29 +564,77 @@ mod tests {
             json!({"mode": "sepia"}),
             json!({"mode": 1}),
             json!({"mode": "Light"}),
+            json!({"light": 1, "dark": null}),
         ] {
             assert_eq!(Setting::from_setting(Some(&value)), dark, "{value}");
         }
     }
 
     #[test]
-    fn each_mode_is_read_and_round_trips() {
+    fn an_unknown_or_wrong_mode_name_is_neutral() {
+        for value in [
+            json!({"light": "Sepia", "dark": "Sepia"}),
+            json!({"light": "Catppuccin Mocha", "dark": "Catppuccin Latte"}),
+            json!({"light": "catppuccin latte", "dark": "tokyo night"}),
+            json!({"light": "Default Light", "dark": "Default Dark"}),
+        ] {
+            let setting = Setting::from_setting(Some(&value));
+            assert_eq!((setting.light, setting.dark), (NEUTRAL, NEUTRAL), "{value}");
+        }
+    }
+
+    #[test]
+    fn each_field_falls_back_on_its_own() {
+        let value = json!({"mode": "sepia", "light": "Ayu Light", "dark": "Ayu Light"});
+        assert_eq!(
+            Setting::from_setting(Some(&value)),
+            Setting {
+                mode: Mode::Dark,
+                light: "Ayu Light",
+                dark: NEUTRAL
+            }
+        );
+    }
+
+    #[test]
+    fn each_mode_and_name_is_read_and_round_trips() {
         for (stored, mode) in [
             ("system", Mode::System),
             ("light", Mode::Light),
             ("dark", Mode::Dark),
         ] {
-            let value = json!({"mode": stored, "light": "Neutral"});
+            let value = json!({"mode": stored, "light": "Catppuccin Latte", "dark": "Tokyo Night"});
             let setting = Setting::from_setting(Some(&value));
-            assert_eq!(setting, Setting { mode });
-            assert_eq!(setting.setting(), json!({"mode": stored}));
+            assert_eq!(
+                setting,
+                Setting {
+                    mode,
+                    light: "Catppuccin Latte",
+                    dark: "Tokyo Night"
+                }
+            );
+            assert_eq!(setting.setting(), value);
             assert_eq!(Setting::from_setting(Some(&setting.setting())), setting);
+        }
+        for mode in [ThemeMode::Light, ThemeMode::Dark] {
+            for name in names(mode) {
+                let setting = Setting {
+                    mode: Mode::System,
+                    light: if mode.is_dark() { NEUTRAL } else { name },
+                    dark: if mode.is_dark() { name } else { NEUTRAL },
+                };
+                assert_eq!(Setting::from_setting(Some(&setting.setting())), setting);
+                assert_eq!(setting.name(mode), name);
+            }
         }
     }
 
     #[test]
     fn system_follows_the_os_appearance_and_the_others_are_forced() {
-        let of = |mode| Setting { mode };
+        let of = |mode| Setting {
+            mode,
+            ..Setting::default()
+        };
         for (appearance, follows) in [
             (WindowAppearance::Light, ThemeMode::Light),
             (WindowAppearance::VibrantLight, ThemeMode::Light),

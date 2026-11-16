@@ -274,10 +274,16 @@ and to a `Handpic.log` in the Tauri app's line format under its own folder (or
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
 global `Theme`, which `gpui_kit::init` installs at startup, to the mode
 the stored `theme` setting resolves to (`Setting`, `{"mode": "system" |
-"light" | "dark"}` read field by field, a missing or invalid one Dark;
-`resolve`, System following the OS appearance) and maps it to the app's
-shadcn/ui Neutral dark or light tokens, its own `DARK` / `LIGHT` palettes,
-`title_bar` and `title_bar_border` included (`apply`, at startup, on a choice
+"light" | "dark", "light": <name>, "dark": <name>}` read field by field, a
+missing or invalid mode Dark, a name that is not a shipped theme of its
+mode `NEUTRAL`; `resolve`, System following the OS appearance) and that
+mode's chosen theme: Neutral, mapped to the app's shadcn/ui Neutral dark or
+light tokens, its own `DARK` / `LIGHT` palettes, `title_bar` and
+`title_bar_border` included, or one of gpui-kit's theme files at the 0.9.1
+release, vendored unchanged under `crates/native/themes/` with their
+`LICENSE`, embedded and parsed into `ThemeConfig`s (`names`, each mode's
+list) and installed unmapped through `Theme`'s `light_theme` / `dark_theme`
+slots and `Theme::change` (`apply`, at startup, on a choice
 in the Appearance page and, in System mode, on a change of the window's
 appearance),
 and sets beside it the `Roles` global, the colors the app paints that equal
@@ -333,7 +339,7 @@ rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
-holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` beside `Reset`), the Culling page's auto-advance switch, the Keyboard Shortcuts page (each key a `Kbd`), which replaces the keymap and `Bindings` live, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`), applied live and written to `theme`,
+holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` beside `Reset`), the Culling page's auto-advance switch, the Keyboard Shortcuts page (each key a `Kbd`), which replaces the keymap and `Bindings` live, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
 (`keystroke_of`) and resolves it to its action (`Bindings`),

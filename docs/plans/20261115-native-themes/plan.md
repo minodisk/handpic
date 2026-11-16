@@ -197,7 +197,7 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
       progress bar. Record what is hard to read in `learnings.md`; do not
       retune the fixed colors in this step unless something is unreadable.
 
-- [ ] Step 3: Ship gpui-component's themes and add the theme picker
+- [x] Step 3: Ship gpui-component's themes and add the theme picker
   - Done when:
     - The upstream theme files are vendored under `crates/native`, embedded in
       the binary and offered in the `Appearance` tab next to Neutral, as a
@@ -314,3 +314,4 @@ What the vendored gpui-component 0.9.1 source says (read at planning time, in
 
 - (2026-11-16) Step 1 complete
 - (2026-11-16) Step 2 complete
+- (2026-11-16) Step 3 complete

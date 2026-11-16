@@ -3,6 +3,7 @@
 //! pages' order and titles, and the Keyboard Shortcuts page's edits of the
 //! keymap.
 
+use gpui_kit::component::ThemeMode;
 use riffle_backend::{
     import,
     shortcuts::Keymap,
@@ -84,7 +85,31 @@ pub const MODES: [(Mode, &str); 3] = [
 /// The setting a click on `chosen` asks for, none when it is the mode in
 /// force.
 pub fn mode_change(current: theme::Setting, chosen: Mode) -> Option<theme::Setting> {
-    (chosen != current.mode).then_some(theme::Setting { mode: chosen })
+    (chosen != current.mode).then_some(theme::Setting {
+        mode: chosen,
+        ..current
+    })
+}
+
+/// The setting a choice of `chosen` in the `mode` list asks for, none when
+/// it is the theme in force or no theme of that mode.
+pub fn theme_change(
+    current: theme::Setting,
+    mode: ThemeMode,
+    chosen: &str,
+) -> Option<theme::Setting> {
+    let name = theme::names(mode).find(|&name| name == chosen)?;
+    (name != current.name(mode)).then_some(if mode.is_dark() {
+        theme::Setting {
+            dark: name,
+            ..current
+        }
+    } else {
+        theme::Setting {
+            light: name,
+            ..current
+        }
+    })
 }
 
 /// The Tauri paragraph at the top of the Import tab.
@@ -312,15 +337,17 @@ impl SettingsModal {
 
 #[cfg(test)]
 mod tests {
+    use gpui_kit::component::ThemeMode;
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
     use riffle_core::xmp::LabelNames;
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         SettingsModal, TABS, display_key, edit, format_change, label_change, label_names_of,
-        label_texts, mode_change, pattern_change, root_note, shortcut_label, stops, writes_xmp,
+        label_texts, mode_change, pattern_change, root_note, shortcut_label, stops, theme_change,
+        writes_xmp,
     };
-    use crate::theme::{Mode, Setting};
+    use crate::theme::{Mode, NEUTRAL, Setting};
 
     #[test]
     fn the_specifiers_are_the_date_ones_and_the_folder_separator() {
@@ -611,12 +638,50 @@ mod tests {
     #[test]
     fn choosing_the_mode_in_force_changes_nothing_and_another_is_set() {
         for (mode, _) in MODES {
-            assert_eq!(mode_change(Setting { mode }, mode), None);
+            let current = Setting {
+                mode,
+                ..Setting::default()
+            };
+            assert_eq!(mode_change(current, mode), None);
         }
+        let current = Setting {
+            mode: Mode::Dark,
+            light: "Ayu Light",
+            dark: "Ayu Dark",
+        };
         assert_eq!(
-            mode_change(Setting { mode: Mode::Dark }, Mode::System),
-            Some(Setting { mode: Mode::System })
+            mode_change(current, Mode::System),
+            Some(Setting {
+                mode: Mode::System,
+                ..current
+            })
         );
+    }
+
+    #[test]
+    fn choosing_a_theme_sets_its_mode_only() {
+        let current = Setting::default();
+        assert_eq!(theme_change(current, ThemeMode::Light, NEUTRAL), None);
+        assert_eq!(theme_change(current, ThemeMode::Dark, NEUTRAL), None);
+        assert_eq!(
+            theme_change(current, ThemeMode::Light, "Ayu Light"),
+            Some(Setting {
+                light: "Ayu Light",
+                ..current
+            })
+        );
+        let dark = theme_change(current, ThemeMode::Dark, "Tokyo Night").unwrap();
+        assert_eq!(
+            dark,
+            Setting {
+                dark: "Tokyo Night",
+                ..current
+            }
+        );
+        assert_eq!(theme_change(dark, ThemeMode::Dark, "Tokyo Night"), None);
+        assert_eq!(theme_change(dark, ThemeMode::Dark, NEUTRAL), Some(current));
+        assert_eq!(theme_change(current, ThemeMode::Dark, "Ayu Light"), None);
+        assert_eq!(theme_change(current, ThemeMode::Light, "Sepia"), None);
     }
 
     #[test]
