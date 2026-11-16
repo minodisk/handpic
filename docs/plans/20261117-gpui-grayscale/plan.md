@@ -156,3 +156,5 @@ gray photo.
   Windows host; macOS and Linux behaviour is read from the sources.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete (the manual GUI check is still pending on the user, as recorded in `learnings.md`)
