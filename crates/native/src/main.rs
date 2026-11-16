@@ -98,8 +98,8 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
-    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla, KeyBinding,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
+    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla,
+    KeyBinding, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
     PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
     SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
     WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
