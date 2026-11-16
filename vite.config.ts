@@ -41,6 +41,8 @@ export default defineConfig({
       "crates/core/genres/**",
       // Written by the image-embeddings plan's rank_prior.py.
       "crates/core/ranking/**",
+      // gpui-kit's theme files, vendored unchanged.
+      "crates/native/themes/**",
       "target/**",
       "crates/app/ui/dist/**",
       ".claude/**",

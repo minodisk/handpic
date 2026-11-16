@@ -43,7 +43,10 @@ cost of a longer cold build.
 - Rule: the native crate never picks a GPUI version of its own. An upgrade
   is a `gpui-kit` bump (one exact pin) in one deliberate chore PR, which
   checks in the lock diff that `gpui-pre` and gpui-component moved with it,
-  and records the API changes met at the bump here.
+  and records the API changes met at the bump here. A `gpui-component` bump
+  (through `gpui-kit`) also copies `crates/native/themes/` again from the
+  new release's `themes/` folder and updates the commit in its `LICENSE`,
+  so the files match the schema of the pinned crate.
 - Rule: the `gpui-fast` feature stays off.
 - Rule: `cargo tree` shows one GPUI: no package from
   `git+https://github.com/zed-industries/zed`, `gpui-pre` at one version. Two
@@ -69,11 +72,22 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
 `gpui_kit::init(cx)`, which with the `component` feature is exactly
 `gpui_component::init(cx)`, runs first in the `application().run` closure,
 before the window opens, then `theme.rs`'s `apply` sets the global `Theme`
-to the mode the stored `theme` setting resolves to
-(`Theme::change(mode, ..)`, the built-in `Default Dark` or `Default Light`)
-and maps it over it in a second `Theme::update`, since a mode switch reloads
-the registered theme over color edits made in the same closure. With no
-`theme` key the mode is Dark. The mapping reads `theme.rs`'s own `DARK` or
+to the mode the stored `theme` setting resolves to and that mode's chosen
+theme. It puts the two chosen configs in `Theme`'s `light_theme` /
+`dark_theme` slots in one `Theme::update` and then calls
+`Theme::change(mode, ..)`, which installs the mode's slot
+(`apply_config`). Neutral's slot is the registry's built-in `Default Dark`
+or `Default Light`, which a second `Theme::update` maps, since a mode
+switch reloads the slot's config over color edits made in the same closure;
+a shipped theme is installed as it is, unmapped. The shipped themes are
+gpui-kit's 21 theme files at the 0.9.1 release, copied unchanged into
+`crates/native/themes/` (with its `LICENSE`), embedded with `include_str!`
+and parsed once into `ThemeConfig`s (`serde_json` over `ThemeSet`); the app
+never registers them (`ThemeRegistry::load_themes_from_str` would make
+gpui-component's registry observer reload the registered theme over the
+Neutral mapping) nor watches a folder. Every theme keeps the app's
+`font_size` and radii below. With no `theme` key the mode is Dark and both
+themes Neutral. The mapping reads `theme.rs`'s own `DARK` or
 `LIGHT` palette, the one source of each color (the overlay included, which
 the three backdrops read). In dark:
 `background` `#0a0a0a`, `foreground` and every
@@ -112,8 +126,8 @@ components drawn are the settings modal's: `setting::Settings` (with its
 `Sidebar`, search `Input`, `h_resizable` split, `GroupBox`es and the page
 list's scrollbar), `Input` (its text fields, see "Text is typed through
 gpui-component's `Input`"), `Button`, `Switch` (auto-advance, through
-`SettingField::switch`), `Radio`, `Select` (the label names' language, with
-its menu's `List`), `Kbd` (the Keyboard Shortcuts page's keys) and
+`SettingField::switch`), `Radio`, `Select` (the label names' language and
+the Appearance page's light and dark themes, with its menu's `List`), `Kbd` (the Keyboard Shortcuts page's keys) and
 `InputGroup` (the read-only Destination root with `Choose…`) (see "The
 settings modal is its own entity"), the status row's `Sort ▾` / `Filter ▾`
 `Button`s (see "The sort and filter menus are deferred popovers over the
@@ -171,8 +185,8 @@ key-down listener, so a binding that matches takes the key from
 | `Root` | `tab`, `shift-tab`, `ctrl-c` (`cmd-c` on macOS) | `Tab` / `TabPrev`, which move the focus (inside a dialog's focus trap) and do not propagate, masked by `NoAction` in the app view's `Handpic` context; `Copy`, which propagates when no text is selected |
 | `Input` | the editing keys, `enter` / `escape`, `tab` / `shift-tab`, the arrows, Home / End, word and line movement, undo / redo, the clipboard keys | the input's own; `PressEnter`, `Escape` and the indents propagate on a single-line input |
 | `Dialog` (only with `.keyboard(true)`) | `escape`, `enter` | `dialog::Cancel`, `dialog::Confirm` |
-| `Select` (the settings' language picker, while focused) | `space` (`Select && !Input`), `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down`, `escape` | `Confirm` (opens the menu, or picks the highlighted row), `SelectUp` / `SelectDown`, `Cancel`, which closes an open menu and stops there, and propagates while it is closed |
-| `List` (the open language menu, which takes the focus) | `escape`, `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down` | the list's own; its `Cancel` propagates to the `Select`'s, which closes the menu only |
+| `Select` (the settings' language and theme pickers, while focused) | `space` (`Select && !Input`), `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down`, `escape` | `Confirm` (opens the menu, or picks the highlighted row), `SelectUp` / `SelectDown`, `Cancel`, which closes an open menu and stops there, and propagates while it is closed |
+| `List` (an open picker's menu, which takes the focus) | `escape`, `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down` | the list's own; its `Cancel` propagates to the `Select`'s, which closes the menu only |
 | `Popover`, `PopupMenu`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
 
 - Rule: the inspector binding is left in place. In a debug build
@@ -271,8 +285,13 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
 (`LICENSE-APACHE`, Copyright Longbridge; GitHub shows NOASSERTION only for the
 file name), and `gpui-kit-assets` embeds Lucide (ISC).
 
+The shipped themes under `crates/native/themes/` are copied unchanged from
+gpui-kit's `themes/` at tag v0.9.1 (commit `39ab849a`), under the same
+Apache-2.0; their `LICENSE` names that source, each file's own `author` and
+`url` (the color scheme it adapts) and carries the license text.
+
 - Rule: no notice file while the native app has never shipped; add these
-  notices when it is packaged.
+  notices when it is packaged, the themes' `LICENSE` among them.
 
 ### Linux needs system libraries, macOS and Windows do not (Inferred)
 
@@ -1177,8 +1196,8 @@ handle with `window.focus`.
 A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
-`Theme` (the Appearance page's System / Light / Dark radios) applies the
-setting under the window's appearance and writes `theme` (read and written
+`Theme` (the Appearance page's System / Light / Dark radios and its light
+and dark theme pickers) applies the setting under the window's appearance and writes `theme` (read and written
 under `--auto` too, as the other settings of the modal),
 `Keymap` replaces the keymap (next section),
 `Closed` focuses the window's handle and redraws, dropping the layer; the
@@ -1229,7 +1248,7 @@ not open.
   the `InputGroupButton` `Choose…`), `Switch` (auto-advance, the built-in
   `SettingField::switch`), `Radio` (the three formats, standalone, not
   a `RadioGroup`, whose arrow-key roving would change the cycle) and the
-  `Select` of the label names' language, each a tab
+  `Select`s of the label names' language and of the two themes, each a tab
   stop at the default `tab_index(0)` with a focus handle of its own (keyed
   state, or `track_focus`), and the `Input` fields, the read-only
   Destination root among them. `Kbd` is not a tab stop. The sidebar's page
@@ -1288,6 +1307,12 @@ not open.
   box's `key_down` and closes the settings. Actions run before the box's
   listener, so `settingsmodal::stops` is unchanged. The menu is `deferred`
   inside the view, under the box's key listener and focus trap.
+- Rule: the theme pickers are two more `SelectState`s built the same way,
+  each over `theme::names` of its mode (Neutral, then the shipped themes of
+  that mode in file order), shown the stored name on every `open`
+  (`set_selected_value`), their `Confirm` going through
+  `settingsmodal::theme_change`, which refuses the name in force and a name
+  not of that mode. Their keys are the language picker's above.
 - Rule: the Destination root is an `InputGroup` holding a read-only `Input`
   over the view's own `root_field` (`show` on every open and after a
   `Choose…` answer) and, in an `InlineEnd` addon, the `InputGroupButton`
@@ -1308,7 +1333,8 @@ not open.
   switch; the Keyboard Shortcuts page one item per action, then `Reset all`;
   the Import page `Destination root` (its `root_note` as the description),
   `Folder pattern`, the example line, `Example patterns` and the specifier
-  table.
+  table; the Appearance page `Mode` (the three radios), then `Light theme`
+  and `Dark theme`, each a `Select` (`.small()`, 200 px wide).
   The outlined buttons are `Button`'s default variant at
   `.small()` (24 px tall) with `px(6.)`, `rounded_sm` and a 13 px label
   child (the variant's own label is `text_sm`, 14 px at the window's 16 px

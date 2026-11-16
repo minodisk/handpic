@@ -492,10 +492,21 @@ mod tests {
     #[test]
     fn the_theme_is_read_with_its_rule() {
         let dir = tempfile::tempdir().unwrap();
-        let s = seeded(dir.path(), "light", r#"{"theme":{"mode":"light"}}"#);
-        assert_eq!(s.theme, theme::Setting { mode: Mode::Light });
+        let s = seeded(
+            dir.path(),
+            "light",
+            r#"{"theme":{"mode":"light","light":"Ayu Light","dark":"Ayu Light"}}"#,
+        );
+        assert_eq!(
+            s.theme,
+            theme::Setting {
+                mode: Mode::Light,
+                light: "Ayu Light",
+                dark: theme::NEUTRAL
+            }
+        );
         let s = seeded(dir.path(), "odd", r#"{"theme":{"mode":"sepia"}}"#);
-        assert_eq!(s.theme, theme::Setting { mode: Mode::Dark });
+        assert_eq!(s.theme, theme::Setting::default());
         assert_eq!(
             seeded(dir.path(), "none", "{}").theme,
             theme::Setting::default()

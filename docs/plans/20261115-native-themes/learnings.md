@@ -49,6 +49,39 @@
 - The Appearance page is appended after Import, so the Tauri pages keep
   their order and every open still starts on Sidecar.
 
+## Step 3
+
+- Vendored from `longbridge/gpui-kit` `themes/` at tag `v0.9.1`, commit
+  `39ab849a93b5f15507b969164d49891db8d5b470`, which is the `sha1` in the
+  published crate's `.cargo_vcs_info.json` (`path_in_vcs`
+  `crates/component`). 21 files, byte-for-byte (fetched from
+  `raw.githubusercontent.com` at that commit), 36 themes: 11 light, 25
+  dark. No name repeats and none is
+  `Neutral`. No file sets `font.size`, `radius` or `radius.lg`; Hybrid,
+  macOS Classic, Mellifluous and Molokai set `shadow`.
+- Origin: the files carry no license of their own; upstream ships them in
+  the Apache-2.0 repository (`LICENSE-APACHE`, Copyright 2024 - 2026
+  Longbridge). Each file's `author` / `url` names the scheme it adapts:
+  iTerm2-Color-Schemes (Adventure, Fahrenheit, Harper, Kibble), Zed
+  Industries' Ayu, Catppuccin, Everforest, Flexoki, Gruvbox, vim-hybrid,
+  Jellybeans, Alduin, Asciinema, macOS Classic (huacnlee's Zed theme),
+  Mellifluous, Molokai, Solarized, Spaceduck, Tokyo Night, Twilight
+  (MacroMates) and Longbridge's own Aurora. The upstream schemes' own
+  licenses were not checked one by one; `crates/native/themes/LICENSE`
+  records the source, the per-file author / url table and the Apache-2.0
+  text.
+- `Theme::change` reloads the config in the mode's `light_theme` /
+  `dark_theme` slot, not the registry's default, so once a shipped theme
+  sits in a slot, going back to Neutral must put `Default Light` / `Dark`
+  back in the slot first. `apply` therefore always sets both slots in one
+  `update`, then `change`s, then maps in a third `update` only for Neutral.
+- `ThemeConfig` is `Send + Sync`, so the parsed configs live in a
+  `LazyLock` static and `Setting` keeps `&'static str` names and stays
+  `Copy`; `apply` wraps a clone of the config in a fresh `Rc` each time.
+- The settings modal already had a `Select` (the label names' language), so
+  the pickers are two more `Select`s; the binding table only needed its
+  wording widened.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, native-themes; the step's checkbox was
@@ -64,3 +97,21 @@
   Record what is hard to read in this file (the fixed judgment colors are
   not retuned in this plan). Files: `crates/native/src/theme.rs`,
   `crates/native/src/main.rs`, `crates/native/src/settingsview.rs`.
+- Pending manual check (Step 3, native-themes; the step's checkbox was
+  ticked on the automated criteria): on Windows, macOS and Linux, open the
+  settings (`ctrl+,` / `meta+,`), Appearance. In Dark mode pick at least
+  one shipped dark theme (e.g. Tokyo Night, Catppuccin Mocha) from `Dark
+  theme`, and in Light mode one shipped light theme (e.g. Catppuccin Latte,
+  Solarized Light) from `Light theme`: the panes, the strip (names, burst
+  band, reject dim), the status row, the menus, the dialogs, the settings
+  box and the `TitleBar` should take the theme at once and stay readable,
+  the preview's surround staying black. Check the derived `Roles` on both
+  (the strip's file names and failures, the burst band, the dimmed reject)
+  and the fixed stars / pick / reject colors on each. Pick Neutral again:
+  the app should look exactly as before (Neutral dark unchanged). In System
+  mode with two non-Neutral themes chosen, switch the OS appearance: the app
+  should swap between them. Restart: the choice is restored. Also check the
+  pickers' keys: Space / Enter open the menu, the arrows move, Enter picks,
+  Escape with the menu open closes the menu only, with it closed closes the
+  settings. Record what is hard to read in this file. Files:
+  `crates/native/src/theme.rs`, `crates/native/src/settingsview.rs`.
