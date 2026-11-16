@@ -433,6 +433,8 @@ pub struct Paint {
     pub placeholder: Option<(Arc<RenderImage>, Rect)>,
     pub crop: Option<(Arc<RenderImage>, (u32, u32))>,
     pub peaking: peaking::Paint,
+    /// Whether the placeholder and the crop are drawn in grayscale.
+    pub grayscale: bool,
 }
 
 impl Paint {
@@ -457,8 +459,10 @@ impl Paint {
                 size(px(w / scale), px(h / scale)),
             )
         };
+        let grayscale = self.grayscale;
         let mut draw = |image: Arc<RenderImage>, target: Bounds<Pixels>| {
-            if let Err(e) = window.paint_image(bounds, target, Corners::default(), image, 0, false)
+            if let Err(e) =
+                window.paint_image(bounds, target, Corners::default(), image, 0, grayscale)
             {
                 println!("error paint: {e}");
             }

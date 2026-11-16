@@ -2153,6 +2153,34 @@ overlay comes about 50-60 ms after the image; the held-key measurement showed
 no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
 resize (Sobel 4-6 ms).
 
+### A held `g` grays only the photo, through the sprite flag (Inferred)
+
+`grayscale` (default `g`) is held, not toggled: `grayscale.rs`'s `Hold` is on
+from the key's press until its release. The pinned `gpui-pre`'s
+`Window::paint_image` takes a `grayscale: bool` that the sprite shader turns
+into the color's luminance, alpha kept, on all three backends, so the fit
+image in the preview canvas's closure and `zoom::Paint`'s placeholder and crop
+pass `Hold::is_on()` and no texture is re-uploaded or copied. Unlike the Tauri
+app, whose CSS filter on `#canvas` also grayed them, the peaking layer, the
+`f` overlay and the performance graph keep their colors, by the user's choice,
+so they stay readable over the gray photo.
+
+The press is a `grayscale` arm of `key_down`'s action `match`, so the
+settings, a dialog, an inline rename and the tree's gate swallow it as any
+other key. GPUI has no `event.code`: the held key is `Keystroke.key`,
+lower-cased, compared with the key-up's. `ModifiersChangedEvent` carries only
+the new state, so `Hold` remembers the last modifiers; one going up ends the
+hold, one going down does not, so a rebound `ctrl+g` ends on whichever of `g`
+and Ctrl goes up first. Each method says whether the state changed, so an
+auto-repeated press calls no `cx.notify()`.
+
+- Rule: key-up and modifiers-changed are dispatched only along the focused
+  node's path, so the main `div`'s `on_key_up` / `on_modifiers_changed` never
+  see a release once the settings layer, a dialog, a `PopupMenu` or an
+  `Input` has the focus. `cx.on_blur(&focus, ..)` releases the hold when the
+  view's own focus handle loses the focus, and the window activation observer
+  releases it on deactivation.
+
 ### The performance overlay is a band painted last in the preview canvas (Inferred)
 
 `d` (the keymap's `performance`) toggles `perfgraph.rs`'s `Overlay`. Showing
