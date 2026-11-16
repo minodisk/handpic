@@ -146,7 +146,9 @@ use strip::{Answer, Marks, Strip, Tint, Tip, TipRegion};
 use stripbar::StripBar;
 use thumbs::{MAX_IN_FLIGHT, Read, Thumbs};
 use timing::{Page, Source, Summary};
-use tree::{Child, CountWrites, IGNORE_CASE, Relation, StepKey, Tree, TreeCommand, TreeKey, Typed};
+use tree::{
+    Child, CountWrites, IGNORE_CASE, Relation, RowClick, StepKey, Tree, TreeCommand, TreeKey, Typed,
+};
 use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
@@ -441,6 +443,9 @@ struct Riffle {
     /// `reveal_wanted`.
     roots_loaded: bool,
     reveal_wanted: Option<String>,
+    /// The folder a row click opened and collapsed, as the tree spells it:
+    /// the next reveal, if it is of that folder, leaves it collapsed.
+    reveal_collapsed: Option<String>,
     /// The last folder listing of the tree that failed, until another open.
     tree_note: Option<String>,
     /// The watcher on the tree's expanded, drawn folders, the set last handed
@@ -815,6 +820,7 @@ impl Riffle {
             typed: Typed::default(),
             roots_loaded: false,
             reveal_wanted: None,
+            reveal_collapsed: None,
             tree_note: None,
             tree_watch: Arc::new(tree_watch),
             tree_watched: None,
@@ -962,7 +968,7 @@ impl Riffle {
         self.opens.load(Ordering::SeqCst)
     }
 
-    /// A click on a folder's name in the tree, or an import's first folder:
+    /// A click on a folder's row in the tree, or an import's first folder:
     /// open it whole, without the command line's `--size` / `--max`.
     fn open_from_tree(&mut self, path: String, cx: &mut Context<Self>) -> Task<()> {
         if self.refuse_renaming(&path, cx) {
@@ -1842,7 +1848,7 @@ impl Riffle {
     }
 
     /// The menu's `Expand All`: expand `path` and every subfolder under it,
-    /// listing each as an expander click does, one listing at a time, as
+    /// listing each as `Space` on a collapsed row does, one listing at a time, as
     /// `folders.ts`'s `expandAll`. A branch stops once a folder on its chain
     /// was collapsed or dropped meanwhile; a folder that fails to list is
     /// marked and reported and the rest go on; a link is not descended into,
@@ -2028,8 +2034,30 @@ impl Riffle {
         .detach();
     }
 
-    /// An expander click: collapse, or expand and list the folder again, its
-    /// cached children drawn meanwhile.
+    /// A left click on the row of `path`: open the folder, open it and
+    /// collapse its row, or toggle the open folder's row (`tree::row_click`).
+    fn tree_row_clicked(&mut self, path: String, cx: &mut Context<Self>) {
+        let Some(at) = self.tree_rows.iter().position(|row| row.path == path) else {
+            return;
+        };
+        match tree::row_click(&self.tree_rows[at], self.tree_open_row == Some(at)) {
+            RowClick::Open => self.open_from_tree(path, cx).detach(),
+            RowClick::OpenCollapsed => {
+                if self.refuse_renaming(&path, cx) {
+                    return;
+                }
+                self.tree.collapse(&path);
+                self.reveal_collapsed = Some(path.clone());
+                self.tree_changed(cx);
+                self.open(PathBuf::from(path), None, None, cx).detach();
+            }
+            RowClick::Toggle => self.tree_toggle(path, cx),
+            RowClick::Nothing => {}
+        }
+    }
+
+    /// `Space`, or a click on the open folder's row: collapse, or expand and
+    /// list the folder again, its cached children drawn meanwhile.
     fn tree_toggle(&mut self, dir: String, cx: &mut Context<Self>) {
         if self
             .tree_rows
@@ -2059,7 +2087,9 @@ impl Riffle {
     /// Expand and list the chain from the root holding `path` (a root added
     /// for a folder none holds) down to it, respelling the chain from the
     /// listings, then highlight it and scroll it into view, as `folders.ts`'s
-    /// `reveal`. A later open owns the tree: this one stops at its next step.
+    /// `reveal`; the chain's end is left collapsed and unlisted when a row
+    /// click collapsed it (`reveal_collapsed`). A later open owns the tree:
+    /// this one stops at its next step.
     fn reveal(&mut self, path: String, cx: &mut Context<Self>) {
         self.tree_open = Some(path.clone());
         self.tree_changed(cx);
@@ -2067,6 +2097,9 @@ impl Riffle {
             self.reveal_wanted = Some(path);
             return;
         }
+        let keep_collapsed = self.reveal_collapsed.take().is_some_and(|collapsed| {
+            tree::relation(&collapsed, &path, IGNORE_CASE) == Some(Relation::Same)
+        });
         let chain = match tree::ancestors_within(self.tree.roots(), &path, IGNORE_CASE) {
             Some(chain) => Some(chain),
             None => {
@@ -2084,6 +2117,9 @@ impl Riffle {
         let token = self.opens();
         cx.spawn(async move |this, cx| {
             for at in 0..chain.len() {
+                if keep_collapsed && at + 1 == chain.len() {
+                    break;
+                }
                 let dir = chain[at].clone();
                 let walking = this.update(cx, |this, cx| {
                     if this.opens() != token || !this.tree.has(&dir) {
@@ -4192,40 +4228,23 @@ impl Riffle {
             )
     }
 
-    /// One row of the tree: the chevron, the folder icon, the name and,
-    /// expanded, the RAW count; the open folder selected, the keyboard
-    /// cursor outlined, a failed one's name in red.
+    /// One row of the tree: the folder icon (open while expanded), the name
+    /// and the RAW count; the open folder selected, the keyboard cursor
+    /// outlined, a failed one's name in red. A left click goes through
+    /// `tree_row_clicked`.
     fn tree_row(&self, at: usize, cx: &mut Context<Self>) -> AnyElement {
         let row = &self.tree_rows[at];
         let theme = cx.theme();
         let (accent, muted) = (theme.accent, theme.muted_foreground);
-        let icon = |path: &'static str| {
-            svg()
-                .path(path)
-                .size(px(TREE_ICON))
-                .flex_none()
-                .text_color(muted)
-        };
-        let mut expander = div().id(("tree-expander", at)).w(px(TREE_ICON)).flex_none();
-        if row.expandable {
-            let path = row.path.clone();
-            expander = expander
-                .cursor_pointer()
-                .child(icon(if row.expanded {
-                    icons::CHEVRON_DOWN
-                } else {
-                    icons::CHEVRON_RIGHT
-                }))
-                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    cx.stop_propagation();
-                    this.tree_toggle(path.clone(), cx);
-                }));
-        }
-        let folder = icon(if row.expanded {
-            icons::FOLDER_OPEN
-        } else {
-            icons::FOLDER
-        });
+        let folder = svg()
+            .path(if row.expanded {
+                icons::FOLDER_OPEN
+            } else {
+                icons::FOLDER
+            })
+            .size(px(TREE_ICON))
+            .flex_none()
+            .text_color(muted);
         let count = row.raw_count.filter(|count| *count > 0).map(|count| {
             div()
                 .flex_none()
@@ -4259,13 +4278,12 @@ impl Riffle {
                     .overflow_hidden()
                     .items_center()
                     .gap(px(4.))
-                    .child(expander)
                     .child(folder)
                     .child(self.tree_name(at, cx))
                     .children(count),
             )
             .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                this.open_from_tree(path.clone(), cx).detach();
+                this.tree_row_clicked(path.clone(), cx);
             }))
             .on_mouse_down(
                 MouseButton::Right,

@@ -217,8 +217,8 @@ key-down listener, so a binding that matches takes the key from
   catalog icons selected with `gpui_kit::assets::icon_assets!`, and falls
   back to `gpui_kit::assets::Assets` (`gpui-kit-assets` 0.9.1, through `gpui-kit`, the
   components' own icon set, not the whole-catalog `AllAssets`) for `star`,
-  `square`, the tree's `chevron-right`, `chevron-down`, `folder` and
-  `folder-open` and the icons the components draw, the checked `Radio`'s and
+  `square`, the tree's `folder` and `folder-open` and the icons the
+  components draw, the checked `Radio`'s and
   the language menu's `icons/check.svg` and the `Select`'s
   `icons/chevron-down.svg` so far (see "The icons are Lucide SVGs
   served by one `AssetSource`").
@@ -1171,8 +1171,8 @@ own derivatives (the filled star and square, the frowning `scan-face`),
 (`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
 then any other from `gpui_kit::assets::Assets`, which serves `star`,
-`square` and the tree's `chevron-right`, `chevron-down`, `folder` and
-`folder-open`, a path in none of them with `None`; `main()` registers it with
+`square` and the tree's `folder` and `folder-open`, a path in none of them
+with `None`; `main()` registers it with
 `application().with_assets(icons::Icons)`.
 
 - Rule: to add an icon the `gpui-kit-assets` catalog has, add its variant to
@@ -2587,17 +2587,33 @@ rebuilt into the view's `tree_rows` whenever the tree changes (never in
 `render`), and drawn by a `uniform_list` over them: it lays out only the rows
 on screen, its rows are gpui-component `ListItem`s (`tree_row`: one per row,
 `selected` on the open folder, `secondary_selected` on the keyboard cursor
-while the tree has the keys, indented `12 + 16 * depth` px, a Lucide
-`chevron-right` / `chevron-down` expander, else an empty slot as wide, and a
-`folder` / `folder-open` icon, open while expanded, before the name) with
-their own click listeners (the expander's `on_click` stops propagation so the
-row's open does not run; `ListItem` does not stop it, so the pane's left
-press still gives the tree the keyboard), and
+while the tree has the keys, indented `12 + 16 * depth` px, then a Lucide
+`folder` / `folder-open` icon, open while expanded, the name and the count;
+no chevron and no slot for one, as in gpui-component's `Tree`) with one
+click listener on the row (`tree_row_clicked`; `ListItem` does not stop
+propagation, so the pane's left press still gives the tree the keyboard), and
 its `UniformListScrollHandle::scroll_to_item(.., ScrollStrategy::Nearest)` is
 what the reveal and the tree's keyboard scroll a row into view with. A
 `canvas` like the strip's would need its own hit testing and scroll model; the
 strip needed one because `uniform_list` is vertical only.
 
+- Rule: a left click on a row does what `tree::row_click` decides from the
+  row's `expanded` / `expandable` and whether it is the open folder's row. A
+  row that is not open and is collapsed or cannot expand opens; the open's
+  reveal expands it. A row that is not open and is expanded opens and
+  collapses at the click: `tree_row_clicked` collapses it and names it in
+  `reveal_collapsed`, which the next `reveal` takes and, when it is of that
+  folder (`tree::relation`), leaves the chain's end collapsed and unlisted
+  (its spelling comes from its parent's listing, its count from the open's
+  `set_listed_count`). The field survives an open deferred by the gate
+  (`deferred_open`) or waiting in `reveal_wanted`, and any other reveal
+  drops it. The open folder's row toggles through `tree_toggle` without
+  reopening (no re-listing, no new scan), and does nothing when it cannot
+  expand. A click on the open row's name without a modifier stops at the
+  name (the slow click below); with Ctrl / Cmd / Shift it reaches the row and
+  toggles. An open refused by `refuse_renaming` collapses nothing.
+  Double-clicks are not special-cased. Inferred, not yet observed in the
+  running app.
 - Rule: tree nodes are keyed by the tree's own spelling (the root's, then one
   separator per level), never by the canonical `\\?\` path the index uses.
   The open folder's row is found with `tree::relation`, case ignored on
@@ -2605,8 +2621,9 @@ strip needed one because `uniform_list` is vertical only.
 - Rule: every open (`open`, from the command line or the tree) bumps the
   `opens` counter and reveals the folder: the chain from its root (a root
   added for a folder none holds) is expanded and listed one level at a time on
-  `background_spawn`, respelled from each listing, and the end row is
-  highlighted and scrolled to. A step that finds `opens` moved on stops, so a
+  `background_spawn`, respelled from each listing (the end left collapsed
+  and unlisted after a row click that collapsed it, see above), and the end
+  row is highlighted and scrolled to. A step that finds `opens` moved on stops, so a
   later open owns the tree. An open before the roots have been read waits in
   `reveal_wanted`.
 - Rule: the same counter guards the listing of the open: its background task
@@ -2708,8 +2725,9 @@ context meets the app view's) is not verified.
   `right_clicked_ix` to `None`.
 - A click on a row always selects it and toggles its expansion
   (`on_entry_click`: `selected_ix = Some(ix)`, then `toggle_expand`). Ours
-  opens the folder on a click on the name and toggles only on the expander,
-  whose `on_click` stops propagation.
+  has no chevron either, but a click on a row opens the folder (collapsing an
+  expanded row) and only the open folder's row toggles, its name arming the
+  slow-click rename instead (`tree::row_click`).
 - It has its own `FocusHandle` (`track_focus`) and the `"Tree"` key context.
   The app keeps one window focus and routes keys through the `tree_keys`
   flag and `treekeys::tree_gate` (see "The tree takes the keyboard through
@@ -3379,8 +3397,10 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
 - Rule: the slow click (`SLOW_CLICK_DELAY`, 500 ms) is armed by a single
   click on the open folder's name (not a root, no Ctrl / Shift) and fired by
   a `spawn_in` timer; any press in or outside the tree pane, any key and a
-  second click (`click_count` 2) disarm it. That click no longer reopens the
-  folder, as in the Tauri tree.
+  second click (`click_count` 2) disarm it. That click neither reopens the
+  folder, as in the Tauri tree, nor toggles the row; the open row toggles
+  from its icon, indent, gaps or count, or with a modified click on the
+  name.
 - The operations' rules during a scan, in one place: `Rename…`, `Rewrite
   Sidecars from Index…` and `Delete Sidecars…` are held by the gate and
   never cancel the scan; `Move to Trash` and `Delete Permanently` are held
