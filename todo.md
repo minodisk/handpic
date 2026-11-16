@@ -3358,3 +3358,45 @@ Files: `crates/native/src/main.rs`, `crates/native/src/icons.rs`, `crates/native
 - [ ] Once `feature/native-themes` maps `title_bar` / `title_bar_border` in `crates/native/src/theme.rs`, on any platform, expect the bar to take those colors and follow a theme switch.
 - [ ] On macOS, expect the traffic lights to sit inside the bar without overlapping the icon and title (80 px left padding), the content to start below the bar, and double-click on the bar to follow the system setting.
 - [ ] On Linux, under client-side decorations expect the bar to draw its controls and `Root`'s frame and shadow. Under server-side decorations (X11 without a compositor, or a Wayland compositor that insists) expect no second set of controls. WSLg can serve as a first pass once a WSL distribution is installed, but it does not replace a check on a regular GNOME / KDE desktop.
+
+### Native: real-device check of the Sort / Filter buttons drawn with gpui-component's `Button` (native-component-controls)
+
+#### Background
+
+The `native-component-controls` feature replaced the status row's hand-drawn `Sort ▾` / `Filter ▾` `div`s (`menu_button`) with gpui-component `Button`s, pinned to 21 px (`MENU_BUTTON_HEIGHT`) to keep the status row and the 842 px preview canvas. `mise run ci:local`, clippy and the unit tests cover the build and the pure rules. Nobody has pressed the buttons in the running window: the toggle, the lit and dimmed states and the popover's corner are unverified, and the button height was read from `gpui-pre` 0.3.12 `style.rs`, not measured on screen. Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
+
+Files: `crates/native/src/main.rs` (`menu_button`).
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev`, open a RAW folder, press `Sort ▾`, then press it again with the menu open; set a filter; open a JPEG-only folder. Expected: a press toggles the menu; a press on the open menu's own button closes it without reopening; `Filter ▾` shows the `primary` border and label while a filter is on (the border goes to `input` while hovered, a known `Button` hover limit); the view-only sort button is dimmed, does not hover and does not open; the popover opens upward from the button's top-right corner; the preview canvas stays 1160 x 842 in the default window.
+
+### Native: real-device check of the settings controls drawn with gpui-component (native-component-controls)
+
+#### Background
+
+The `native-component-controls` feature drew the settings' language picker as a `Select` next to `Reset`, auto-advance as `SettingField::switch`, the Destination root as an `InputGroup` holding a read-only `Input` and `Choose…`, and the shortcut keys as `Kbd` chips. `mise run ci:local`, clippy and the unit tests (`keys.rs`, `settingsmodal.rs`) cover the pure models. The focus trap with the `Select` menu open, the `Select` / `List` key contexts (read from the sources, marked Inferred in the plan), Escape with the menu open and closed, the blur commit of a name field when the menu opens, and the read-only root field were never exercised: `--auto` cannot drive the GUI, and the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
+
+Files: `crates/native/src/settingsview.rs`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev`, open the settings (`ctrl+,`) and check each of these. Expected: all as described.
+  1. Tab / Shift+Tab through every page: the focus stays inside the settings on every Tab, including with the language menu open.
+  2. Culling: Space and Enter toggle the auto-advance switch.
+  3. Sidecar (XMP on): open the language menu by pointer and by keys (Space / Enter, Up / Down); Escape with the menu open closes only the menu, with it closed closes the settings; choose a language and press `Reset`, which fills in the chosen language's names.
+  4. Type in a name field, then open the language menu: the field commits on blur. A name or pattern field still commits on Enter, blur and Escape.
+  5. Import: press `Choose…`, then select and copy the root path in its field; the path is selectable and copyable, not editable; Escape in it closes the settings.
+  6. Keyboard Shortcuts: press `+` then a key, and the capture takes the next key; remove a key with its `×`.
+
+### Native: real-device check of the look of the switch and the `Kbd` keys (native-component-controls)
+
+#### Background
+
+The `native-component-controls` feature drew auto-advance as a switch and the Keyboard Shortcuts chips and the right-click menu's shortcuts as `Kbd`. The switch's `switch` / `switch_thumb` tokens are `Default Dark`'s, because `theme.rs` maps neither; the plan decided to map them only if the off state is hard to read on screen. Nobody has looked at it. Mapping them would conflict with `20261115-native-themes` Step 1's rewrite of `map`. The key spelling also changed (`Ctrl+Alt+1`, `Left`, `Esc`). Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
+
+Files: `crates/native/src/settingsview.rs`, `crates/native/src/main.rs` (`context_row`), `crates/native/src/theme.rs`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.

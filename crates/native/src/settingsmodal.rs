@@ -215,7 +215,9 @@ pub fn shortcut_label(action: &'static str) -> &'static str {
     }
 }
 
-/// A key as its chip shows it, `keys.ts`'s `displayKey`.
+/// A key as the keymap spells it in running text, such as the empty state's
+/// "Or press …" sentence, `keys.ts`'s `displayKey`. The Keyboard Shortcuts
+/// chips use `Kbd::format` instead.
 pub fn display_key(key: &str) -> &str {
     if key == "space" { "Space" } else { key }
 }

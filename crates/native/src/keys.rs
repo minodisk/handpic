@@ -3,7 +3,7 @@
 
 use std::collections::HashMap;
 
-use gpui::Keystroke;
+use gpui::{Keystroke, Modifiers};
 use riffle_backend::shortcuts::Keymap;
 
 /// The modifiers held in `ctrl+alt+shift+meta+` order, then the key
@@ -37,6 +37,38 @@ pub fn key_name(keystroke: &Keystroke) -> Option<String> {
     }
     name.push_str(key);
     Some(name)
+}
+
+/// The keystroke a keymap key name stands for, the inverse of `key_name`,
+/// for `Kbd` to draw: the `ctrl+` / `alt+` / `shift+` / `meta+` prefixes
+/// stripped in that order (not split on `+`, which can be the key), the
+/// arrows given GPUI's names back.
+pub fn keystroke_of(name: &str) -> Keystroke {
+    let mut modifiers = Modifiers::default();
+    let mut rest = name;
+    for (prefix, held) in [
+        ("ctrl+", &mut modifiers.control),
+        ("alt+", &mut modifiers.alt),
+        ("shift+", &mut modifiers.shift),
+        ("meta+", &mut modifiers.platform),
+    ] {
+        if let Some(after) = rest.strip_prefix(prefix) {
+            *held = true;
+            rest = after;
+        }
+    }
+    let key = match rest {
+        "arrowleft" => "left",
+        "arrowright" => "right",
+        "arrowup" => "up",
+        "arrowdown" => "down",
+        other => other,
+    };
+    Keystroke {
+        modifiers,
+        key: key.to_owned(),
+        key_char: None,
+    }
 }
 
 /// The character a printable key types, Shift or not, for the tree's
@@ -83,7 +115,7 @@ impl Bindings {
 
 #[cfg(test)]
 mod tests {
-    use super::{Bindings, key_name, typed_char};
+    use super::{Bindings, key_name, keystroke_of, typed_char};
     use gpui::{Keystroke, Modifiers};
     use riffle_backend::shortcuts::Keymap;
 
@@ -117,6 +149,49 @@ mod tests {
         ];
         for (keystroke, name) in cases {
             assert_eq!(key_name(&keystroke).as_deref(), Some(name));
+        }
+    }
+
+    #[test]
+    fn every_default_key_round_trips_through_its_keystroke() {
+        for binding in Keymap::defaults().bindings() {
+            for key in binding.keys {
+                assert_eq!(
+                    key_name(&keystroke_of(&key)).as_deref(),
+                    Some(key.as_str()),
+                    "{key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_keystroke_takes_the_prefixes_in_order_and_keeps_a_plus_key() {
+        let plus = keystroke_of("ctrl+shift++");
+        assert!(plus.modifiers.control && plus.modifiers.shift);
+        assert!(!plus.modifiers.alt && !plus.modifiers.platform);
+        assert_eq!(plus.key, "+");
+        assert_eq!(keystroke_of("+").key, "+");
+        let meta = keystroke_of("meta+arrowdown");
+        assert!(meta.modifiers.platform);
+        assert_eq!(meta.key, "down");
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn kbd_spells_a_keymap_key() {
+        use gpui_component::kbd::Kbd;
+
+        let cases = [
+            ("ctrl+alt+1", "Ctrl+Alt+1"),
+            ("arrowleft", "Left"),
+            ("shift+x", "Shift+X"),
+            ("x", "X"),
+            ("space", "Space"),
+            ("escape", "Esc"),
+        ];
+        for (name, shown) in cases {
+            assert_eq!(Kbd::format(&keystroke_of(name)), shown, "{name}");
         }
     }
 

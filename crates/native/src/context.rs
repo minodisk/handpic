@@ -34,7 +34,8 @@ pub enum Action {
 pub struct Item {
     pub action: Action,
     pub label: String,
-    /// The key bound to the action, shown at the item's right end, or empty.
+    /// The keymap's name of the key bound to the action, drawn by `Kbd` at
+    /// the item's right end, or empty.
     pub shortcut: String,
     /// `None` for a plain command, which has no checked state.
     pub checked: Option<bool>,
@@ -117,22 +118,14 @@ const JUDGMENT_GROUPS: [&[(&str, &str, Checked)]; 3] = [
     ],
 ];
 
-/// `keys.ts`'s `displayKey`: a key as the menu shows it.
-fn display_key(key: &str) -> String {
-    if key == "space" {
-        "Space".to_owned()
-    } else {
-        key.to_owned()
-    }
-}
-
-/// The first key bound to `action`, as shown, or empty.
+/// The first key bound to `action`, by its keymap name, or empty.
 fn shortcut_of(bindings: &[Binding], action: &str) -> String {
     bindings
         .iter()
         .find(|binding| binding.action == action)
         .and_then(|binding| binding.keys.first())
-        .map_or_else(String::new, |key| display_key(key))
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// The strip's menu, a port of `contextMenuGroups` less `Rename…` (part 2):
@@ -548,9 +541,9 @@ mod tests {
     }
 
     #[test]
-    fn strip_groups_show_an_overridden_key_as_displayed() {
+    fn strip_groups_show_an_overridden_key_by_its_keymap_name() {
         let groups = strip(&rebound("rate3", &["space"]), &State::default());
-        assert_eq!(groups[4][2].shortcut, "Space");
+        assert_eq!(groups[4][2].shortcut, "space");
         let groups = strip(&rebound("selectAll", &["ctrl+alt+a"]), &State::default());
         assert_eq!(groups[0][0].shortcut, "ctrl+alt+a");
     }

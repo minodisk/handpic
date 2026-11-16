@@ -318,7 +318,7 @@ without the `Face focus` help, the filter menu heading every section, its
 rating rows from 5 stars down and each kind its own lead; `apply`, what a
 click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
-`deferred` / `anchored` popovers above their buttons, its leads Lucide icons
+`deferred` / `anchored` popovers above their gpui-component `Button`s, its leads Lucide icons
 from `src/icons.rs` (the SVGs under their license header, served by `Icons`,
 the application's one `AssetSource`, to `svg().path(..)`, with the title
 bar's `crates/app/icons/64x64.png` for `img(..)`, falling back to
@@ -327,10 +327,11 @@ bar's `crates/app/icons/64x64.png` for `img(..)`, falling back to
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
-`Checkbox`, `Radio`, `Input`),
-holding the Sidecar page's format radios and label names (`Input` fields), the Culling page's auto-advance toggle, the Keyboard Shortcuts page, which replaces the keymap and `Bindings` live, the Import page's root (`Choose…`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`), applied live and written to `theme`,
+`Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
+holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` beside `Reset`), the Culling page's auto-advance switch, the Keyboard Shortcuts page (each key a `Kbd`), which replaces the keymap and `Bindings` live, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`), applied live and written to `theme`,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
-`keys.ts`'s `keyName`) and resolves it to its action (`Bindings`),
+`keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
+(`keystroke_of`) and resolves it to its action (`Bindings`),
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
 `IndexedFile`) and what a judgment key makes of it (`Command`, `apply`,
 `label_known`, `advances_after`, `should_advance`, a port of the Tauri `judge` and `advance.ts`)
@@ -457,7 +458,7 @@ letting the strip's `previous` / `next` through, so Left / Right page the
 strip, unlike the Tauri app),
 `src/context.rs` the
 right-click menus (a port of `context.ts`: the items with their action, label,
-shortcut, checked and disabled state, `folder_groups`, the tree's reveal,
+shortcut (the keymap's key name, which the window draws as `Kbd` text), checked and disabled state, `folder_groups`, the tree's reveal,
 `Copy Path`, `Copy Folder Name`, `Refresh` and, off a root, `Expand All` /
 `Collapse All`, `strip_groups`, the strip's `Select All`, reveal, `Copy Path`
 / `Copy File Name`, the judgment groups checked from the focused file (left
