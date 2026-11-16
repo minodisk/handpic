@@ -85,7 +85,8 @@ use futures::{
 };
 use gpui_kit::application;
 use gpui_kit::component::{
-    ActiveTheme, ColorName, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT, TitleBar,
+    ActiveTheme, ColorName, Disableable, Icon, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+    TitleBar,
     button::{Button, ButtonVariants},
     dialog::{Dialog, DialogFooter},
     h_flex,
