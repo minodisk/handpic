@@ -91,6 +91,7 @@ use gpui_kit::component::{
     h_flex,
     kbd::Kbd,
     list::ListItem,
+    menu::{PopupMenu, PopupMenuItem},
     progress::ProgressCircle,
     resizable::{HandleEdge, resize_handle},
     scroll::ScrollableElement,
@@ -99,12 +100,13 @@ use gpui_kit::component::{
 };
 use gpui_kit::{
     Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
-    Context, Corners, DragMoveEvent, Entity, ExternalPaths, FocusHandle, FontWeight, Hsla,
-    KeyBinding, KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, NoAction,
-    PathPromptOptions, Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy,
-    SharedString, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored, canvas, deferred,
-    div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    Context, Corners, DismissEvent, DispatchPhase, DragMoveEvent, Entity, ExternalPaths,
+    FocusHandle, Focusable, FontWeight, Hsla, KeyBinding, KeyDownEvent, Keystroke, MouseButton,
+    MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
+    ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Subscription, Task, TextAlign,
+    TitlebarOptions, TransformationMatrix, UniformListScrollHandle, WeakEntity, Window,
+    WindowBounds, WindowDecorations, WindowOptions, anchored, base::POPUP_PRIORITY, canvas,
+    deferred, div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -446,9 +448,7 @@ struct Riffle {
     tree_watched: Option<Vec<String>>,
     tree_syncing: Option<Task<()>>,
     /// The right-click menu, while one is open.
-    context: context::Menu,
-    /// The open right-click menu's scroll, new on every open.
-    context_scroll: ScrollHandle,
+    context: Option<ContextOpen>,
     /// The strip's `Move to Trash…` / `Delete Permanently…` flow.
     trash: trash::TrashFlow,
     /// Its dialog in `Root`'s layer, open while the flow asks or runs.
@@ -816,8 +816,7 @@ impl Riffle {
             tree_watch: Arc::new(tree_watch),
             tree_watched: None,
             tree_syncing: None,
-            context: context::Menu::default(),
-            context_scroll: ScrollHandle::new(),
+            context: None,
             trash: trash::TrashFlow::default(),
             trash_modal: modal::Modal::new(window.window_handle()),
             trash_buttons: [cx.focus_handle(), cx.focus_handle()],
@@ -1222,6 +1221,7 @@ impl Riffle {
         at: Point<Pixels>,
         path: String,
         name: String,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.menus.close();
@@ -1229,15 +1229,14 @@ impl Riffle {
             .tree_rows
             .iter()
             .any(|row| row.path == path && row.depth == 0);
-        self.context_scroll = ScrollHandle::new();
-        self.context.open_folder(
-            (f32::from(at.x), f32::from(at.y)),
-            path,
-            name,
-            folders::REVEAL_LABEL,
-            root,
+        let groups = context::folder_groups(folders::REVEAL_LABEL, root);
+        self.open_context(
+            at,
+            context::Target::Folder { path, name },
+            groups,
+            window,
+            cx,
         );
-        cx.notify();
     }
 
     /// A right-click on the strip at `at`, `x` from its left edge, as the
@@ -1245,7 +1244,13 @@ impl Riffle {
     /// becomes the selection alone, one inside keeps it, the focus moves to
     /// the cell, and the menu opens on the selection's targets. The strip's
     /// empty area opens nothing.
-    fn strip_context(&mut self, at: Point<Pixels>, x: f32, cx: &mut Context<Self>) {
+    fn strip_context(
+        &mut self,
+        at: Point<Pixels>,
+        x: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(index) = self.strip.hit_test(x) else {
             return;
         };
@@ -1266,32 +1271,78 @@ impl Riffle {
             paths.len(),
             self.trashing.is_some(),
         );
-        self.context_scroll = ScrollHandle::new();
-        self.context
-            .open_files((f32::from(at.x), f32::from(at.y)), focused, paths, groups);
-        cx.notify();
+        self.open_context(
+            at,
+            context::Target::Files { focused, paths },
+            groups,
+            window,
+            cx,
+        );
     }
 
-    /// A click on an item of the right-click menu.
-    fn context_action(
+    /// Open the right-click menu of `target` at `at` as the component's
+    /// `PopupMenu`, replacing any menu open, and give it the keyboard, which
+    /// a dismiss returns to the view. Its height is capped as the window
+    /// stands now.
+    fn open_context(
         &mut self,
-        action: context::Action,
+        at: Point<Pixels>,
+        target: context::Target,
+        groups: Vec<Vec<context::Item>>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        match self.context.close() {
-            Some(context::Target::Folder { path, .. })
-                if action == context::Action::RenameFolder =>
-            {
+        let view = cx.entity().downgrade();
+        let focus = self.focus.clone();
+        let max_height = menu_max_height(window);
+        let menu = PopupMenu::build(window, cx, move |mut menu, _, _| {
+            menu = menu
+                .action_context(focus)
+                .min_w(px(180.))
+                .max_h(max_height)
+                .scrollable(true);
+            for (at, group) in groups.into_iter().enumerate() {
+                if at > 0 {
+                    menu = menu.separator();
+                }
+                for item in group {
+                    menu = menu.item(context_item(item, &target, &view));
+                }
+            }
+            menu
+        });
+        menu.focus_handle(cx).focus(window, cx);
+        let dismissed = cx.subscribe(&menu, |this, _, _: &DismissEvent, cx| {
+            this.context = None;
+            cx.notify();
+        });
+        self.context = Some(ContextOpen {
+            menu,
+            at,
+            _dismissed: dismissed,
+        });
+        cx.notify();
+    }
+
+    /// A click on an item of the right-click menu, or Enter on it, on the
+    /// target taken when the menu opened.
+    fn context_action(
+        &mut self,
+        action: context::Action,
+        target: context::Target,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match target {
+            context::Target::Folder { path, .. } if action == context::Action::RenameFolder => {
                 self.start_rename(path, window, cx);
             }
-            Some(context::Target::Folder { path, name }) => {
+            context::Target::Folder { path, name } => {
                 self.folder_action(action, path, name, cx);
             }
-            Some(context::Target::Files { focused, paths }) => {
+            context::Target::Files { focused, paths } => {
                 self.files_action(action, &focused, &paths, cx);
             }
-            None => {}
         }
         cx.notify();
     }
@@ -2773,8 +2824,8 @@ impl Riffle {
         log::debug!("key: {name} action={action:?}");
         // Any key closes the right-click menu; only `escape` stops there, as
         // in the Tauri app's keydown handler.
-        if self.context.is_open() {
-            self.context.close();
+        if self.context.take().is_some() {
+            window.focus(&self.focus, cx);
             cx.notify();
             if name == "escape" {
                 return;
@@ -4180,8 +4231,8 @@ impl Riffle {
             }))
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |this, e: &MouseDownEvent, _, cx| {
-                    this.tree_context(e.position, menu_path.clone(), menu_name.clone(), cx);
+                cx.listener(move |this, e: &MouseDownEvent, window, cx| {
+                    this.tree_context(e.position, menu_path.clone(), menu_name.clone(), window, cx);
                 }),
             )
             .into_any_element()
@@ -4348,44 +4399,43 @@ impl Riffle {
     }
 
     /// The open right-click menu at the pointer, drawn after the rest of the
-    /// window and over it, flipped and kept inside the window; laid out only
-    /// while open.
-    fn context_popover(&self, max_height: Pixels, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let open = self.context.open()?;
-        let (x, y) = open.at;
-        let mut rows: Vec<AnyElement> = Vec::new();
-        for (group, items) in open.groups.iter().enumerate() {
-            if group > 0 {
-                rows.push(menu_separator(cx));
-            }
-            for item in items {
-                rows.push(context_row(rows.len(), item, cx));
-            }
-        }
-        let popover = menu_surface(rows, max_height, &self.context_scroll, cx)
-            .id("context-menu")
-            .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                this.context.close();
-                cx.notify();
-            }))
-            // A press on the menu is one outside the tree, also where the
-            // menu is drawn over the pane, as a Tauri menu button takes the
-            // focus. In the capture phase, since the scrollbar stops a press
-            // on it from bubbling.
-            .capture_any_mouse_down(cx.listener(|this, _: &MouseDownEvent, _, cx| {
-                this.set_tree_keys(false, cx);
-            }))
-            .min_w(px(180.));
+    /// window and over it; `anchored`'s default fit flips it to the
+    /// pointer's other side near an edge, as the Tauri `menuPosition`.
+    fn context_layer(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let open = self.context.as_ref()?;
+        let view = cx.entity().downgrade();
+        // A press on the menu is one outside the tree, also where the menu is
+        // drawn over the pane, as a Tauri menu button takes the focus. Tested
+        // by its bounds in the capture phase, since the menu occludes every
+        // hitbox under it, its wrapper's too.
+        let hand_back = canvas(
+            |_, _, _| {},
+            move |bounds, _, window, _| {
+                window.on_mouse_event(move |e: &MouseDownEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture && bounds.contains(&e.position) {
+                        view.update(cx, |this, cx| this.set_tree_keys(false, cx))
+                            .ok();
+                    }
+                });
+            },
+        )
+        .absolute()
+        .top_0()
+        .left_0()
+        .size_full();
         Some(
             div()
                 .absolute()
                 .top_0()
                 .left_0()
-                // `anchored`'s default fit flips the menu to the pointer's
-                // other side near an edge, as the Tauri `menuPosition`.
-                .child(deferred(
-                    anchored().position(point(px(x), px(y))).child(popover),
-                ))
+                .child(
+                    deferred(
+                        anchored()
+                            .position(open.at)
+                            .child(div().relative().child(open.menu.clone()).child(hand_back)),
+                    )
+                    .with_priority(POPUP_PRIORITY),
+                )
                 .into_any_element(),
         )
     }
@@ -4480,9 +4530,7 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
-        let pad = gpui_kit::component::window_paddings(window);
-        let menu_max =
-            window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT;
+        let menu_max = menu_max_height(window);
         let main = div()
             .size_full()
             .flex()
@@ -4642,7 +4690,7 @@ impl Render for Riffle {
                             let x = f32::from(
                                 e.position.x - gpui_kit::component::window_paddings(window).left,
                             );
-                            this.strip_context(e.position, x, cx);
+                            this.strip_context(e.position, x, window, cx);
                         }),
                     )
                     .on_mouse_down(
@@ -4673,7 +4721,7 @@ impl Render for Riffle {
                     .horizontal_scrollbar(&self.strip_bar)
             }))
             .child(self.status_row(menu_max, cx))
-            .children(self.context_popover(menu_max, cx))
+            .children(self.context_layer(cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
             );
@@ -4823,6 +4871,13 @@ fn drop_outline(ring: Hsla) -> impl IntoElement {
         .border_color(rgba(0))
         .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
         .group_drag_over::<ExternalPaths>(DROP_GROUP, lit)
+}
+
+/// The height an open menu is capped at: the window's less its client-side
+/// frame, the title bar and a 40 px margin.
+fn menu_max_height(window: &Window) -> Pixels {
+    let pad = gpui_kit::component::window_paddings(window);
+    window.viewport_size().height - pad.top - pad.bottom - px(40.) - TITLE_BAR_HEIGHT
 }
 
 /// An open menu's surface, `occlude()`d, the theme's popover with its border
@@ -4994,40 +5049,57 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         .into_any_element()
 }
 
-/// One item of the right-click menu: its check mark, its label and its
-/// shortcut at the right end, in the muted color and inert while disabled.
-fn context_row(at: usize, item: &context::Item, cx: &mut Context<Riffle>) -> AnyElement {
-    let action = item.action;
-    let muted = cx.theme().muted_foreground;
-    let row =
-        menu_item(
-            ("context-item", at),
-            item.checked == Some(true),
-            item.disabled,
-            cx,
-        )
-        .child(
-            div()
+/// The open right-click menu, the pointer's position when it opened and
+/// the subscription that clears it on a dismiss, dropped with it so a
+/// replaced menu's dismiss leaves the new one alone.
+struct ContextOpen {
+    menu: Entity<PopupMenu>,
+    at: Point<Pixels>,
+    _dismissed: Subscription,
+}
+
+/// One item of the right-click menu as the component's: checked, disabled,
+/// and, with a shortcut, its label and the keymap's key at the right end in
+/// the muted color, since the component draws a key only from GPUI's keymap.
+/// A pick runs its action on `target` in the view.
+fn context_item(
+    item: context::Item,
+    target: &context::Target,
+    view: &WeakEntity<Riffle>,
+) -> PopupMenuItem {
+    let label = SharedString::from(item.label);
+    let entry = if item.shortcut.is_empty() {
+        PopupMenuItem::new(label)
+    } else {
+        let key = keys::keystroke_of(&item.shortcut);
+        PopupMenuItem::element(move |_, cx| {
+            h_flex()
                 .flex_1()
-                .flex()
-                .items_center()
                 .justify_between()
                 .gap_3()
-                .child(item.label.clone())
-                .child(div().flex_none().text_xs().text_color(muted).when(
-                    !item.shortcut.is_empty(),
-                    |slot| {
-                        slot.child(Kbd::new(keys::keystroke_of(&item.shortcut)).appearance(false))
-                    },
-                )),
-        );
-    if item.disabled {
-        return row.into_any_element();
-    }
-    row.on_click(cx.listener(move |this, _, window, cx| {
-        this.context_action(action, window, cx);
-    }))
-    .into_any_element()
+                .child(label.clone())
+                .child(
+                    div()
+                        .flex_none()
+                        .text_xs()
+                        .text_color(cx.theme().muted_foreground)
+                        .child(Kbd::new(key.clone()).appearance(false)),
+                )
+        })
+    };
+    let action = item.action;
+    let target = target.clone();
+    let view = view.clone();
+    entry
+        .checked(item.checked == Some(true))
+        .disabled(item.disabled)
+        .on_click(move |_, window, cx| {
+            let target = target.clone();
+            view.update(cx, |this, cx| {
+                this.context_action(action, target, window, cx)
+            })
+            .ok();
+        })
 }
 
 struct StripCell {

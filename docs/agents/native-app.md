@@ -135,8 +135,9 @@ the Appearance page's light and dark themes, with its menu's `List`), `Kbd` (the
 `InputGroup` (the read-only Destination root with `Choose…`) (see "The
 settings modal is its own entity"), the status row's `Sort ▾` / `Filter ▾`
 `Button`s (see "The sort and filter menus are deferred popovers over the
-window"), the right-click menu's shortcuts as `Kbd` text (see "The
-right-click menu is a deferred popover at the pointer"), the tree's inline
+window"), the right-click menu (`PopupMenu`, its shortcuts as `Kbd` text;
+see "The right-click menu is gpui-component's `PopupMenu` at the
+pointer"), the tree's inline
 rename's `Input` (see "The tree's inline
 rename is a text input in the row") and `Tooltip`, every tooltip of the app
 (see "A strip cell's tooltips are transparent `div`s over the canvas"). The
@@ -198,7 +199,8 @@ key-down listener, so a binding that matches takes the key from
 | `Dialog` (only with `.keyboard(true)`) | `escape`, `enter` | `dialog::Cancel`, `dialog::Confirm` |
 | `Select` (the settings' language and theme pickers, while focused) | `space` (`Select && !Input`), `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down`, `escape` | `Confirm` (opens the menu, or picks the highlighted row), `SelectUp` / `SelectDown`, `Cancel`, which closes an open menu and stops there, and propagates while it is closed |
 | `List` (an open picker's menu, which takes the focus) | `escape`, `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down` | the list's own; its `Cancel` propagates to the `Select`'s, which closes the menu only |
-| `Popover`, `PopupMenu`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
+| `PopupMenu` (an open right-click menu, which takes the focus) | `enter`, `escape`, `up`, `down`, `left`, `right` | `Confirm` (runs the highlighted item, then dismisses), `Cancel` (dismisses), `SelectUp` / `SelectDown`; `SelectLeft` / `SelectRight` propagate in a menu without submenus, so they reach `Riffle::key_down` |
+| `Popover`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
 
 - Rule: the inspector binding is left in place. In a debug build
   `ctrl+shift+i` opens the inspector and a user binding on it is shadowed;
@@ -1111,7 +1113,7 @@ dimmed, shows capture order and keeps the stored key.
   after everything else. The popover is `occlude()`d, so the strip's
   `on_mouse_down`, which checks `hitbox.is_hovered`, does not see a press
   inside it, and its height is capped at the window's less 40 px: its row
-  list (`main.rs`'s `menu_surface`, shared with the right-click menu) is
+  list (`main.rs`'s `menu_surface`) is
   `overflow_y_scroll` with `track_scroll` on a `ScrollHandle` the view keeps
   (`menu_scroll`, new on every press of a menu's button, so a menu opens at
   its top), and the popover carries gpui-component's scrollbar over it
@@ -1127,10 +1129,10 @@ dimmed, shows capture order and keeps the stored key.
   padding, the theme's radius, `accent` / `accent_foreground` on hover, a
   12 px column with the component's `IconName::Check` for a checked item;
   `menu_item`), the text kept at 13 px. The leads keep their own colors.
-  `PopupMenu`, `Popover` and `ContextMenu` are not used: they take the GPUI
-  focus (the window routes every key through its own handler on its one
-  focus handle), and `PopupMenu::activate` always dismisses the menu, where
-  a Sort / Filter item click applies and leaves it open. Their row element
+  `PopupMenu`, `Popover` and `ContextMenu` are not used for these two menus:
+  `PopupMenu::activate` always dismisses the menu, where a Sort / Filter item
+  click applies and leaves it open, and they take the GPUI focus. Their row
+  element
   (`MenuItemElement`) is `pub(crate)`, so the rows are this app's `div`s
   styled the same.
 - Rule: `on_mouse_down_out` (a capture-phase listener, run before any
@@ -2669,10 +2671,9 @@ context meets the app view's) is not verified.
   the `"Tree"` context, so Enter does nothing there unless the app binds it.
 - It tracks one selected index and one right-clicked index. The folder tree
   needs the keyboard cursor and the open folder's row apart.
-- The styled wrapper's `context_menu` builds a gpui-component `PopupMenu`,
-  not `context.rs`'s items (checked, disabled, shortcut) the strip's menu
-  shares. "The sort and filter menus are deferred popovers over the window"
-  says why `PopupMenu` is not used.
+- The styled wrapper's `context_menu` wraps the `.context_menu()` extension,
+  which "The right-click menu is gpui-component's `PopupMenu` at the
+  pointer" says why the app does not use.
 - A `TreeItem` holds its whole subtree (`children: Vec<TreeItem>`) and its
   expansion in an `Rc<RefCell<..>>`. That state would duplicate `tree.rs`'s
   `Tree`, which stays for the lazy listing, the failed listings, `respell`
@@ -2813,38 +2814,61 @@ answered); `add_roots` skips the roots already shown.
   `with_released` (see "A folder rename releases the watches, then follows in
   the tree and reopens").
 
-### The right-click menu is a deferred popover at the pointer (Inferred)
+### The right-click menu is gpui-component's `PopupMenu` at the pointer (Inferred)
 
-`context.rs` holds the menus' items and the open menu (`Menu`: where it was
-opened, in window coordinates, and its target, a tree folder or the strip's
-focused file and targets); `main.rs` maps them to `div`s. A right press
-(`on_mouse_down(MouseButton::Right, ..)`) on a tree row opens the folder
-menu, and one on a strip cell (the strip's wrapping `div`, `strip::hit_test`
-giving the cell) the strip's menu, closing the status row's menus. The
-popover is `div().absolute()` holding `deferred(anchored().position(at))`:
-`anchored`'s default `AnchoredPositionMode::Window` takes the
-`MouseDownEvent`'s window position as is, and its default fit,
-`AnchoredFitMode::SwitchAnchor`, puts the menu on the pointer's other side
-when it overflows an edge and then still snaps it inside, as the Tauri
-`menuPosition`. `snap_to_window` would only shift it, so a menu opened on
-the strip at the window's bottom would cover the pointer. It is
-`occlude()`d with `on_mouse_down_out` closing it on any press outside, of
-any button, so a right press on another row closes the menu in the capture
-phase and opens that row's in the bubble phase; any key closes it (`escape` stops there,
-the others then act as usual), as in the Tauri app. Items use `on_click`; a disabled item is in
-`muted_foreground` with no hover and no handler.
+`context.rs` holds the menus' items (`folder_groups`, `strip_groups`) and
+what a menu acts on (`Target`, a tree folder or the strip's focused file and
+targets); `main.rs` builds them into a gpui-component `PopupMenu` and places
+it. A right press (`on_mouse_down(MouseButton::Right, ..)`) on a tree row
+opens the folder menu, and one on a strip cell (the strip's wrapping `div`,
+`strip::hit_test` giving the cell) the strip's menu, closing the status
+row's menus. `open_context` builds the menu with `PopupMenu::build`: a
+`separator()` between groups, one `PopupMenuItem` per item with
+`.checked(..)`, `.disabled(..)` and an `on_click` that updates the view
+through a `WeakEntity` with the item's action and the target taken at the
+open; `.min_w(180 px)`, `.scrollable(true)` and `.max_h` of the height cap
+as the window stands at the open; `.action_context(self.focus)`. It focuses
+the menu at once, as `ContextMenu` does, and keeps the entity, the pointer's
+window position and the `DismissEvent` subscription together in the view's
+`context` field (`ContextOpen`), the subscription clearing it, so a replaced
+menu's late dismiss cannot clear the new one.
 
-- Rule: the look is the sort and filter menus' (`menu_surface`,
-  `menu_separator`, `menu_item`; see "The sort and filter menus are deferred
-  popovers over the window" for the theme tokens and why `PopupMenu`,
-  `Popover` and `ContextMenu` are not used), each item's shortcut at the
-  row's right end in `muted_foreground` at `text_xs`, as `PopupMenu` places
-  its key binding, drawn as `Kbd::new(keys::keystroke_of(..))
+`context_layer` draws it as `div().absolute()` holding
+`deferred(anchored().position(at))` at `POPUP_PRIORITY` (`gpui_kit::base`,
+the layer priority `ContextMenu` gives its menu): `anchored`'s default
+`AnchoredPositionMode::Window` takes the `MouseDownEvent`'s window position
+as is, and its default fit, `AnchoredFitMode::SwitchAnchor`, puts the menu
+on the pointer's other side when it overflows an edge and then still snaps
+it inside, as the Tauri `menuPosition`.
+
+- Rule: the `.context_menu()` extension (`ContextMenuExt`) is not used. It
+  places its menu with `snap_to_window_with_margin` at a fixed
+  `Anchor::TopLeft`, which only shifts and never flips, so a menu opened on
+  the strip at the window's bottom would cover the pointer; its open state
+  lives in element state the view cannot close (a key, a folder dialog); and
+  it opens on any right press in its hitbox, where the strip's empty area
+  must open nothing.
+- Rule: the menu closes itself on a press outside (its own
+  `on_mouse_down_out`, the capture phase, so a right press on another row
+  dismisses it and then opens that row's in the bubble phase), on Escape and
+  after any item runs (`activate` always dismisses); each dismiss gives the
+  focus back to the `action_context`, the view's handle, unless the item's
+  handler already moved it (the inline `Rename…` focusing its `Input`, a
+  dialog). It binds Up / Down (move the highlight) and Enter (run it) in its
+  `PopupMenu` key context, which act before `key_down`; any other key bubbles
+  from the menu's focus to the view's root `div` (the deferred layer keeps
+  its parent's dispatch node), where `key_down` drops the menu, refocuses the
+  view and then acts as usual, as in the Tauri app. Opening a folder
+  operation's dialog drops it too.
+- Rule: the component's look: 14 px text, the check column only when some
+  item is checked, a disabled item muted and inert, and a scrollable menu
+  that overflows opens scrolled to its first checked item. A standard item
+  draws a shortcut only from an action bound in GPUI's keymap, which the
+  app's keymap is not, so an item with a shortcut is a
+  `PopupMenuItem::element` drawing its label and, at the right end in
+  `muted_foreground` at `text_xs`, `Kbd::new(keys::keystroke_of(..))
   .appearance(false)` (the formatted text alone, as gpui-component's
-  `Tooltip` draws its key binding); an item without a shortcut draws
-  nothing there. A menu taller than the window less 40 px scrolls under the
-  component's scrollbar on `context_scroll`, new on every open.
-
+  `Tooltip` draws its key binding).
 - Rule: the strip's right-click follows the Tauri strip's `contextmenu`
   handler: a cell outside the selection becomes the selection alone, one
   inside keeps it, and the focus moves to the cell either way; the strip's
@@ -2887,9 +2911,13 @@ mouse listeners were the smaller change.
   keyboard; a press of any button outside it (`on_mouse_down_out`, the
   capture phase, so the press still reaches its target) hands it back; a
   right press in the pane does neither. A press on the right-click menu hands
-  it back too (`capture_any_mouse_down` on the popover, which is `occlude()`d
-  and may be drawn over the pane; the capture phase, since the scrollbar stops
-  a press on it from bubbling), as a Tauri menu button takes the focus.
+  it back too, as a Tauri menu button takes the focus: the menu may be drawn
+  over the pane, which `on_mouse_down_out` (a bounds test, not occlusion)
+  does not count as outside, so a `canvas` over the menu's wrapper registers
+  a capture-phase `on_mouse_event` that tests the press against its bounds
+  (the menu is `occlude()`d, so a hitbox listener on the wrapper, inserted
+  before the menu's, would never be hovered). The menu taking the GPUI focus
+  leaves the flag alone.
   `escape` and hiding the pane (`toggleLeft`, `toggleSides`) hand it back as
   well. The
   type-ahead buffer starts over whenever the keyboard moves.
