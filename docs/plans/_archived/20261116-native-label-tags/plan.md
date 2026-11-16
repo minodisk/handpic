@@ -38,9 +38,9 @@ Tauri app (`crates/app`) is frozen and is not touched.
 
 ## Steps
 
-- [ ] Step 1: Draw the color labels with gpui-component's `Tag` and
+- [x] Step 1: Draw the color labels with gpui-component's `Tag` and
       `ColorName` in the two menus and the strip band
-  - Incomplete: the visual check of both menus and a labeled strip cell in a dark and a light theme has not been done yet (see learnings.md); do it and note what was seen in the PR description, then tick this box.
+  - Deferred by the user (2026-11-17): the visual check of both menus and a labeled strip cell in a dark and a light theme was not done before the PR; it is filed in `todo.md` as a pending manual check.
   - Done when:
     - In the `Filter ▾` menu, each of `Red`, `Orange`, `Yellow`, `Green`,
       `Blue`, `Pink`, `Purple` is a small `Tag::color(..)` of the same-named
@@ -192,4 +192,4 @@ Tauri app (`crates/app`) is frozen and is not touched.
 
 ## Progress
 
-- 2026-11-17: Step 1 code landed (commit 3884e094, PR reference to be added once it exists): label Tags in the Filter menu and the strip right-click menu, the band filled from the same `ColorName`. The automated criteria pass; the manual visual check in a dark and a light theme is still pending, so the step stays unticked.
+- (2026-11-17) Step 1 complete (the visual check in a dark and a light theme deferred to `todo.md` by the user)

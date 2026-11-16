@@ -3538,3 +3538,15 @@ Files: `crates/native/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collap
 
 - [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
 - [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.
+
+### Native: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
+
+#### Background
+
+The `native-label-tags` feature draws the color labels with gpui-component's `Tag` and `ColorName`: the `Filter ▾` menu's label rows and the strip right-click menu's eight label items are small Tags holding the label's name (`No label` an outline secondary Tag), and a labeled strip cell's name band is filled with the label's `ColorName` at scale 600 (`LABEL_BAND_SCALE`). `mise run ci:local`, clippy and the pure-model tests (`menu.rs`, `context.rs`) cover the build and the rules. Nobody has looked at the running window: the Tags' size and clipping, the row height, the hover readability and the band's contrast were never seen, and the step's checkbox was ticked on the automated criteria only. The user deferred this check on 2026-11-17, and no PR description records what was seen. Plan: `docs/plans/_archived/20261116-native-label-tags/plan.md`.
+
+Files: `crates/native/src/main.rs` (`menu_row`, `context_item`, `label_tag`, `paint_strip`).
+
+#### TODO
+
+- [ ] On Windows (or any other desktop platform at hand), run `mise run native:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
