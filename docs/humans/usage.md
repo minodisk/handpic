@@ -563,7 +563,7 @@ viewer shows a prompt in its center; click it to open the folder picker.
     by `, K already there` and `, J failed` when there are any. When the run
     ends while the Handpic window is not active, an OS notification titled
     `Import finished` (or `Import canceled`) shows the same summary, and a
-    click on it brings the window forward; the next import's notification
+    click on it brings the window forward; on Windows and macOS the next import's notification
     replaces it. A file that
     fails is listed as `name: reason` in the error list at the bottom of the
     right pane, and the others are still copied. An import has no undo: its
