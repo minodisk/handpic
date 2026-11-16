@@ -3527,3 +3527,16 @@ The `native-shortcut-groups` feature grouped the native settings modal's Keyboar
 #### TODO
 
 - [ ] On Windows (any platform the native app runs on), run `mise run native:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.
+
+### Native: a held open-and-collapse click leaves the row expanded when a rename moves the folder
+
+#### Background
+
+`native-tree-no-chevron` made a click on an expanded row that is not open open the folder and collapse the row. `tree_row_clicked` collapses the row and sets `Riffle::reveal_collapsed`, and `reveal` skips the chain's last step only when the path matches it through `tree::relation`. When the gate holds the open (`deferred_open`, `self.gate.in_flight()`), a rename that moves that folder before the deferred reveal runs makes the stored path no longer match, so `reveal` expands the end and the row ends up expanded. Local review noted this and no test covers it. `crates/native` has no GPUI window test. Plan: `docs/plans/_archived/20261117-native-tree-no-chevron/plan.md`.
+
+Files: `crates/native/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collapsed`, `deferred_open`), `crates/native/src/tree.rs` (`relation`), `crates/native/src/folderops.rs`.
+
+#### TODO
+
+- [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
+- [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.

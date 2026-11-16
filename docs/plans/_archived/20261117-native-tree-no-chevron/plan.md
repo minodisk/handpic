@@ -171,3 +171,5 @@ hand-built `uniform_list`. The Tauri app is frozen and is not touched.
   may need a rebase.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete; manual visual check pending (see todo.md)
