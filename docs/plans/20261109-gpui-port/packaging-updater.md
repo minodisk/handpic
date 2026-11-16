@@ -5,7 +5,10 @@ native app is packaged, how an install of it is updated, and what happens to
 the Tauri installs already in the field. First written on 2026-11-14 by the
 gpui-ci-packaging plan (`../_archived/20261114-gpui-ci-packaging/plan.md`),
 and re-decided on 2026-11-16 by the gpui-packaging-redecision plan
-(`../20261116-gpui-packaging-redecision/plan.md`). The earlier text
+(`../_archived/20261116-gpui-packaging-redecision/plan.md`). The open
+questions that re-decision left were answered by the user on 2026-11-16 and
+recorded by the gpui-packaging-answers plan
+(`../_archived/20261116-gpui-packaging-answers/plan.md`). The earlier text
 (`cargo-packager` and a self-written updater keeping the full `latest.json`
 contract) is in git history only.
 
@@ -18,13 +21,30 @@ packaging or updater code was written.
 
 - Auto-update for Tauri installs stops at the last Tauri release. Tauri users
   reinstall the native app by hand.
-- Dropped with it: the `latest.json` manifest, the minisign key pair
-  (`TAURI_SIGNING_PRIVATE_KEY`, `plugins.updater.pubkey`), NSIS
+- Dropped with it: the `latest.json` manifest, the Tauri updater's use of
+  the minisign key pair (`plugins.updater.pubkey`, and
+  `TAURI_SIGNING_PRIVATE_KEY` as the Tauri bundler's input), NSIS
   `/P /UPDATE` compatibility, the MSI upgrade code, an rpm for shipped rpm
-  installs, and the "real-device update from the last Tauri release" gate.
+  installs, and the "real-device update from the last Tauri release" gate. A
+  project-owned signing key itself is kept (answer 2 below).
 - The native app's packaging and updating follow gpui-kit's standard guides,
   https://gpui-kit.com/docs/packaging/ and
   https://gpui-kit.com/docs/auto-update/.
+
+The user's answers to the questions the re-decision left, also on
+2026-11-16, each spelled out in "The decision" below:
+
+1. Installer-owned installs: the app drives the owner (the setup `.exe` run
+   at quit, the whole `.app` swapped); a deb stays with the package manager.
+2. Publisher authenticity: every update the app installs is verified against
+   a project-owned signing key.
+3. OS code signing: none.
+4. Linux formats: gpui-kit's only, a `.tar.gz` with `install.sh` and a
+   `.deb`; no AppImage, no rpm.
+5. The last Tauri release is v1.10.0, with no in-app notice and no frozen
+   legacy `latest.json`.
+6. The Windows portable ZIP ships.
+7. The update check on a deb install notifies and installs nothing.
 
 ## How Tauri installs stop updating
 
@@ -101,8 +121,8 @@ not read line by line; the packaging sub-milestone reads them.
 
 ## The decision
 
-The gpui-kit-aligned default per platform. A line that depends on an open
-question names it.
+The gpui-kit-aligned layout per platform, with the user's answers of
+2026-11-16 in place.
 
 - **Tooling.** Platform-native tools driven from mise tasks and the release
   workflow; no `cargo-packager`, `cargo-bundle` or Tauri bundler. It grows
@@ -114,22 +134,67 @@ question names it.
   - `build.rs` already embeds the Windows icon.
   - The license notices (`gpui-component`, the `gpui-pre-*` crates, Lucide;
     the models' licenses in `crates/core/models/`) are due at packaging.
-- **macOS, arm64 and x86_64 separately.** `Handpic.app` in a DMG. An update
-  replaces the whole `.app` (who performs it: open question 1; signing and
-  notarization: open question 3).
-- **Windows x64.** An Inno Setup setup `.exe` and a portable ZIP (whether the
-  ZIP ships: open question 6). The installer owns an installed copy's update
-  (open question 1); `self_update` may update the portable copy. No MSI and
-  no NSIS.
-- **Linux x64.** A `.tar.gz` with `install.sh`, and a `.deb`. `apt` / `dpkg`
-  owns a deb install's update; `self_update` may update the tarball install.
-  rpm and AppImage: open question 4.
-- **Every release** carries `SHA256SUMS` and no `latest.json` (authenticity
-  beyond it: open question 2).
-- **The update flow in the app.** A launch check and a manual check; the
-  install's owner does the install (open question 1); restart to finish; the
+- **macOS, arm64 and x86_64 separately.** `Handpic.app` in a DMG, ad hoc
+  signed. The app updates a DMG install itself (answer 1): it stages the new
+  version and swaps the whole `.app`, never the executable alone.
+- **Windows x64.** A per-user Inno Setup setup `.exe`, installed under
+  `%LOCALAPPDATA%` so that there is no UAC prompt, and a portable ZIP next
+  to it, as gpui-kit's guide has it (answer 6). For an Inno Setup install
+  the app downloads the new setup `.exe` in the background and runs it at
+  quit, silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`); the next
+  launch is the new version (answer 1). `self_update` updates the portable
+  copy. No MSI and no NSIS.
+- **Linux x64.** A `.tar.gz` with `install.sh`, updated by `self_update`,
+  and a `.deb`, left to the package manager with no in-app install
+  (answer 1). There is no apt repository, so in effect a deb install is
+  reinstalled by hand after the app's notice: the launch check and the menu
+  item run on a deb install too, and when a newer version exists the app
+  says so and offers to open the release page; it installs nothing
+  (answer 7). No rpm and no AppImage (answer 4).
+  - **Source** (`tauri-plugin-updater` 2.12.0's `updater.rs`,
+    `install_deb`). Today's updater runs `dpkg -i` through `pkexec` for a
+    deb install.
+  - **Source** (`docs/humans/usage.md`, "Updating"). The usage guide
+    nevertheless says a deb install is updated by installing the newer
+    package.
+  - **Unverified.** Whether a shipped deb install really updates itself, and
+    so whether leaving the deb to the package manager is a regression.
+  - **Source** (`README.md` line 32). The AppImage is the Linux download the
+    README leads with today; sub-milestone 6 of Step 10 rewrites that.
+- **OS code signing: none** (answer 3). No Apple Developer ID and no
+  notarization (macOS stays ad hoc); no Authenticode. This deviates from
+  gpui-kit's guide. **Source** (`README.md`, "Install"): the README tells
+  users how to pass Gatekeeper and SmartScreen, and keeps doing so.
+- **Publisher authenticity: a project-owned signing key** (answer 2). Every
+  update the app installs is verified against a key the project owns, as
+  minisign does for the Tauri app today; `SHA256SUMS` alone is not enough.
+  For the portable archives the candidate is `self_update`'s `signatures`
+  feature (`zipsign-api`). The mechanism for the setup `.exe` and the `.app`
+  download is chosen in the updater sub-milestone and must use the project's
+  own key; whether that is the existing minisign key pair or a new one is
+  chosen there too.
+- **Every release** carries `SHA256SUMS` and the signatures of the project's
+  key, and no `latest.json` of any kind: neither one naming native artifacts
+  nor a frozen copy of the last Tauri release's.
+- **The update flow in the app.** A launch check and a manual check, on
+  every install type. The app drives the install's owner: the setup `.exe`
+  at quit, the `.app` swap, `self_update` for the portable ZIP and the
+  `.tar.gz`; a deb install only gets the notice. Every download is verified
+  with the project's key before it is installed. Restart to finish; the
   install or the relaunch only after the sidecar writer is drained on quit,
-  as `crates/app/src/update.rs` does today.
+  as `crates/app/src/update.rs` does today. gpui-kit's rule "do not silently
+  switch an install from one owner to another" still holds.
+- **Tauri installs** (answer 5). The last Tauri release is v1.10.0, still
+  named Riffle. No further Tauri release and no in-app notice. The reinstall
+  notice lives in the first native release's notes, in `README.md` /
+  `README.ja.md` and in the usage guide under `docs/humans/`. No frozen
+  legacy `latest.json` is attached to native releases, so a menu check on a
+  Tauri install shows an update error from the first native release on.
+  Consequences:
+  - The Tauri-side changes on `main` since v1.10.0, the Handpic rename among
+    them, never ship.
+  - No release is published from `main` until sub-milestone 4 of Step 10 has
+    switched `release.yml` to the native artifacts.
 - **Not taken.**
   - `cargo-packager` plus the self-written `latest.json` updater: its
     deciding fact, Windows NSIS `/P` compatibility with shipped installs, is
@@ -139,13 +204,33 @@ question names it.
   - `cargo-bundle`: no NSIS or Inno Setup, Windows support called
     experimental (**Source**: `cargo-bundle` 0.12.0's readme, as read on
     2026-11-14 by the earlier record), and nothing the platform-native tools above do not cover.
+  - Notify only for the installer, DMG and deb installs: a regression from
+    today's silent updates on Windows and macOS.
+  - OS signatures as the authenticity answer: there is no OS code signing.
+  - Checksum-only over GitHub HTTPS: `SHA256SUMS` proves integrity, not who
+    published.
+  - Paid certificates (Developer ID, Authenticode): the user chose no OS
+    code signing.
+  - Free signing for open source, such as SignPath Foundation: left out with
+    the rest of OS code signing. **Unverified**: nothing was read about it.
+  - rpm and AppImage: outside gpui-kit's guide; the `.tar.gz` with
+    `install.sh` covers rpm distributions and replaces the AppImage.
+  - A final Tauri release from `main`, with or without an in-app notice: its
+    notes would be seen only on GitHub, and an in-app notice needs a change
+    in the frozen `crates/app`.
+  - A frozen copy of the last Tauri release's `latest.json` on native
+    releases: one legacy asset on every release, and a rule that it never
+    names a native artifact, only to turn an update error into "up to date".
+  - No check, or a manual-only check, on a deb install: a deb user would not
+    learn of a new version.
 
 ## Unverified
 
 To be checked in the sub-milestone that needs each one.
 
 - **Unverified.** How the running app knows its install type (portable, Inno
-  Setup, DMG, deb), which "do not switch owners" requires.
+  Setup, DMG, deb), which "do not switch owners" requires, and, for answer 7,
+  whether a deb install only notifies.
 - **Unverified.** `self_update`'s asset-name and target matching, the
   binary's path in the archive, and whether the portable archives count as
   single-binary once the license notices ship beside the binary.
@@ -162,74 +247,31 @@ To be checked in the sub-milestone that needs each one.
 - **Unverified.** What a hand reinstall over a Tauri install does on each
   platform: the Inno Setup install next to the NSIS / MSI one, with its
   uninstall entry and shortcuts; the deb's `Package` name against the Tauri
-  deb's, so that `apt` upgrades in place; a leftover `Riffle.app`.
+  deb's, so that `apt` upgrades in place; a leftover `Riffle.app`; an
+  AppImage file and an rpm package of the Tauri app, formats now dropped,
+  left for the user to remove.
 - **Unverified.** That the native app picks up the Tauri install's data.
   **Source** (`CLAUDE.md`): `settings.rs` seeds its store from the Tauri
   `settings.json`, and the index is the native app's own. Not checked on a
   real install.
-
-## Open questions
-
-None is decided. Each is settled before the sub-milestone that needs it.
-
-1. **Who performs the update of installer-owned installs** (Inno Setup, DMG,
-   deb).
-   - (a) Notify only: the app says a newer version exists and opens the
-     release page; the user runs the installer, drags the new `.app` or
-     installs the deb. Least code, no elevation or file-lock handling, and no
-     authenticity question for these installs beyond the OS signature. A
-     regression from today's silent updates on Windows and macOS.
-   - (b) The app drives the owner: it downloads the setup `.exe` and runs it
-     at quit; stages and swaps the whole `.app`; a deb stays with `apt` or a
-     hand install, as today. Close to today's behavior, but it is
-     per-platform install code, and it needs its own verification of what it
-     downloads.
-   - gpui-kit allows both and forbids only replacing the binary inside such an
-     install.
-2. **Publisher authenticity beyond `SHA256SUMS`.** Today's updates are
-   minisign-verified; `SHA256SUMS` from the same GitHub release only proves
-   integrity.
-   - OS signatures (Developer ID plus notarization, Authenticode) checked on
-     the staged artifact; nothing on Linux.
-   - `self_update`'s `signatures` feature (`zipsign-api`): a verifying key
-     compiled into the app and a new signing secret in CI; covers the
-     portable archives only; unverified in detail.
-   - Accept checksum-only over GitHub HTTPS, recorded as a step down.
-   - With "notify only" in question 1, the question shrinks to the portable
-     installs.
-3. **OS code signing.** gpui-kit's standard is a Developer ID signed and
-   notarized DMG and a signed exe, setup and uninstaller. Today nothing is
-   OS-signed (`README.md` tells users how to pass Gatekeeper and
-   SmartScreen).
-   - Follow the guide: paid certificates and CI secrets, the user's call.
-   - Stay unsigned (ad hoc on macOS): a deviation from the guide, and OS
-     signatures are then no answer to question 2.
-4. **rpm and AppImage.**
-   - rpm: drop it (rpm-distribution users take the `.tar.gz` with
-     `install.sh`), or add a separate recipe (`cargo-generate-rpm`,
-     `rpmbuild`).
-   - AppImage: the Linux download `README.md` leads with, and today's only
-     self-updating Linux format. Either the `.tar.gz` + `install.sh` install
-     with `self_update` replaces it, or it is kept with a tool outside
-     gpui-kit's guide.
-   - MSI is written above as dropped, since the guide offers Inno Setup or a
-     ZIP.
-5. **What the last Tauri release tells users, and which release that is.**
-   - (a) v1.10.0, still named Riffle, stays the last one. No install is told
-     anything in the app; the notice lives in the first native release's
-     notes, the README and the usage guide; a menu check on a Tauri install
-     shows an update error from then on.
-   - (b) One final Tauri release from `main` (it would also ship the Handpic
-     rename) whose release notes announce the reinstall. Installs update to
-     it silently, so its notes are seen only on GitHub.
-   - (c) As (b), with a one-time notice in the app. It needs a change in the
-     frozen `crates/app`, an exception only the user can grant.
-   - Independent of these: attach to later native releases a frozen copy of
-     the last Tauri release's `latest.json`, pointing at that release's own
-     assets. Installs older than it could still reach it, and a Tauri check
-     would report "up to date" instead of an error. The cost is one legacy
-     asset on every release and a rule that it never names a native
-     artifact.
-6. **Whether the portable Windows ZIP ships at all.** The guide says to
-   choose only the formats users need. Without it, `self_update` has no
-   Windows target and Windows updates rest wholly on question 1.
+- **Unverified.** Which Inno Setup directives give a per-user install under
+  `%LOCALAPPDATA%` with no UAC prompt, and whether an upgrade under
+  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` shows none either.
+- **Unverified.** Whether the setup started at quit outlives the app's
+  process and replaces the exe once it has exited (file locks, Inno's
+  close-applications handling).
+- **Unverified.** How `Restart Now` relaunches the app after a silent setup
+  run.
+- **Unverified.** Whether SmartScreen warns on a setup `.exe` the app
+  downloaded itself.
+- **Unverified.** Where the staged `.app` comes from on macOS: the DMG
+  mounted, or an archive of the `.app` published beside it. The updater
+  sub-milestone chooses, and the packaging adds the asset it needs.
+- **Unverified.** Whether the `.app` swap works where the app is installed:
+  a standard user's `/Applications`, or an app run from the DMG or from
+  Downloads under App Translocation.
+- **Unverified.** Whether Gatekeeper quarantines the swapped ad hoc bundle,
+  and whether the folder-access grants survive a swap to a bundle with
+  another ad hoc signature.
+- **Unverified.** Which archive formats `zipsign` signs, and what verifies
+  the setup `.exe` and the `.app` download with the project's key.

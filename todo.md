@@ -3461,3 +3461,13 @@ Files: `crates/native/src/icons.rs`.
 
 - [ ] On Windows, run `mise run native:dev` and open the status row's `Filter ▾` menu. Confirm the star rows (outlined and filled), the label squares (outlined and filled), the orientation rectangles (vertical, horizontal) and the `Face focus` faces (smiling and frowning) look as they did on `main`. Then, with a folder open and pass 2 finished, confirm the strip's face focus icon on a good frame and on a low frame looks as before. Expected: no visible change.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
+
+### Docs: the gpui-port plan's Progress entries link plan folders that have since been archived
+
+#### Background
+
+`docs/plans/20261109-gpui-port/plan.md` (Progress section) has an entry for sub-milestone 1 on 2026-11-14 that links `../20261114-gpui-ci-packaging/plan.md`. Its 2026-11-16 re-decision entry links `../20261116-gpui-packaging-redecision/plan.md`. Both folders are archived under `../_archived/`, or will be once their wrap-up runs. The gpui-packaging-answers plan fixed the stale path only in the lead of `packaging-updater.md`. It left these Progress entries as history, as its "Trade-offs and risks" says. Plan: `docs/plans/_archived/20261116-gpui-packaging-answers/plan.md`. Files: `docs/plans/20261109-gpui-port/plan.md`.
+
+#### TODO
+
+- [ ] Retarget the two Progress links to `../_archived/20261114-gpui-ci-packaging/plan.md` and `../_archived/20261116-gpui-packaging-redecision/plan.md` (check the folders' actual names under `_archived/` first), then run `mise run lint` (lychee) to confirm the links resolve.
