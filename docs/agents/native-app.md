@@ -1296,7 +1296,9 @@ not open.
   (`SettingItem::render`) is hidden while the query is not empty unless its
   `keywords` match, so the language row, `Reset all`, the example line and
   the specifier table carry keywords, and each Keyboard Shortcuts item is
-  titled with its `shortcut_label` so the search finds actions.
+  titled with its `shortcut_label` so the search finds actions; `Settings`
+  draws only a group with a matching item, so a shortcut group none of whose
+  rows match is not drawn, heading included.
   `SettingField::input` calls its setter on every `InputEvent::Change`, a
   write per keystroke (for the label names, `switch_names` with its writer
   drain and re-listing; for the pattern, a half-typed one stored), so the
@@ -1368,7 +1370,10 @@ not open.
   `LABEL_NAMES_NOTE` as its description, one item per color, then a
   `Lightroom language` item, the Tauri `aria-label`, holding the `Select`
   (`.small()`, 160 px wide)); the Culling page the auto-advance
-  switch; the Keyboard Shortcuts page one item per action, then `Reset all`;
+  switch; the Keyboard Shortcuts page one titled group per
+  `settingsmodal::SHORTCUT_GROUPS` entry (`Filmstrip`, `Judgment`,
+  `Preview`, `Panes`, `General`) of one item per action, then an untitled
+  group holding only `Reset all`;
   the Import page `Destination root` (its `root_note` as the description),
   `Folder pattern`, the example line, `Example patterns` and the specifier
   table; the Appearance page `Mode` (the three radios), then `Light theme`
@@ -1406,10 +1411,22 @@ not open.
 
 ### The keymap is edited in the modal and replaced whole (Inferred)
 
-The Keyboard Shortcuts page lists `Keymap::bindings()` in order, labeled by
+The Keyboard Shortcuts page groups `Keymap::bindings()` by the area an action
+acts on, the native page's own grouping (the backend's `DEFAULTS` order is
+unchanged): `settingsmodal::shortcut_group` gives each action one
+`ShortcutGroup`, an action it does not know (one the backend gained later)
+falling back to `General` so no row leaves the page, and the page draws one
+`SettingGroup` titled `ShortcutGroup::title` per `SHORTCUT_GROUPS` entry, in
+that order (`Filmstrip`, `Judgment`, `Preview`, `Panes`, `General`), each
+keeping the keymap's order within it. A titled group is also a sub-entry of
+the page in the settings sidebar, a click scrolling to it. gpui-component
+renders each group under `group-{ix}` and each item under `item-{ix}`, so the
+rows' repeated button ids stay unique though the item index restarts in every
+group. Each row is labeled by
 `settingsmodal::shortcut_label` (`settings.ts`'s `shortcutLabels`), each key a
 `Kbd` of `keys::keystroke_of(key)` with a `×` beside it, then `+` or `Press a
-key...`, then `Reset`; `Reset all` is the last item. `Kbd::format` spells the
+key...`, then `Reset`; `Reset all` is the last item, alone in an untitled
+group. `Kbd::format` spells the
 key: `ctrl+alt+1` as `Ctrl+Alt+1` (`⌃⌥1` on macOS), `arrowleft` as `Left`
 (`←`), `shift+x` as `Shift+X`, `escape` as `Esc`, `meta+o` as `⌘O` on macOS;
 there is no option to keep the keymap's lowercase names. The empty state's

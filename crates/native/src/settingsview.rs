@@ -22,7 +22,11 @@ use gpui_kit::{
     SharedString, Window, div, prelude::*, px, transparent_black,
 };
 
-use riffle_backend::{import, shortcuts::Keymap, sidecar::SidecarFormat};
+use riffle_backend::{
+    import,
+    shortcuts::{Binding, Keymap},
+    sidecar::SidecarFormat,
+};
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
@@ -619,13 +623,15 @@ impl SettingsView {
         )))
     }
 
-    /// One item per action, titled with its label so the search finds it: a
-    /// `Kbd` per key with its remove button, `+` or the capture prompt, and
-    /// `Reset`; then `Reset all`.
+    /// One titled group per `SHORTCUT_GROUPS` entry, each holding one item per
+    /// action of that group in the keymap's order, titled with its label so the
+    /// search finds it: a `Kbd` per key with its remove button, `+` or the
+    /// capture prompt, and `Reset`; then `Reset all` in a final untitled group.
     fn shortcuts(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
-        let rows = self.keymap.bindings().into_iter().map(|b| {
+        let bindings = self.keymap.bindings();
+        let row = |b: &Binding| {
             let action = b.action;
-            let keys = b.keys;
+            let keys = b.keys.clone();
             let capturing = self.model.capturing == Some(action);
             let view = view.clone();
             SettingItem::new(
@@ -680,10 +686,22 @@ impl SettingsView {
                         )))
                 }),
             )
-        });
+        };
+        let page = settingsmodal::SHORTCUT_GROUPS
+            .into_iter()
+            .fold(page, |page, group| {
+                page.group(
+                    SettingGroup::new().title(group.title()).items(
+                        bindings
+                            .iter()
+                            .filter(|b| settingsmodal::shortcut_group(b.action) == group)
+                            .map(&row),
+                    ),
+                )
+            });
         let view = view.clone();
         page.group(
-            SettingGroup::new().items(rows).item(
+            SettingGroup::new().item(
                 SettingItem::render(move |_, window, _| {
                     div().flex().justify_end().child(
                         small_button("shortcuts-reset-all", "Reset all").on_click(
