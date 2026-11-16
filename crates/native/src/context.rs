@@ -2,11 +2,15 @@
 //! on. A port of the Tauri app's `context.ts`, the folder tree's menu and
 //! the strip's; the window shows the open menu as gpui-component's
 //! `PopupMenu` at the pointer.
+//! The strip menu's judgment groups differ from `context.ts` on purpose: they
+//! follow the filter menu's (`menu::filter_rows`) order, the flags Pick,
+//! Unflag, Reject and the rating from 5 stars down to the unrated, and the
+//! rating rows draw its stars.
 
 use riffle_backend::shortcuts::Binding;
 use riffle_core::Flag;
 
-use crate::judgment::State;
+use crate::{judgment::State, menu::Label};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
@@ -34,7 +38,7 @@ pub enum Action {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
     pub action: Action,
-    pub label: String,
+    pub label: Label,
     /// The keymap's name of the key bound to the action, drawn by `Kbd` at
     /// the menu item's right end, or empty.
     pub shortcut: String,
@@ -46,7 +50,7 @@ pub struct Item {
 fn command(action: Action, label: &str) -> Item {
     Item {
         action,
-        label: label.to_owned(),
+        label: Label::Owned(label.to_owned()),
         shortcut: String::new(),
         checked: None,
         disabled: false,
@@ -92,30 +96,45 @@ pub fn folder_groups(reveal_label: &str, root: bool) -> Vec<Vec<Item>> {
 type Checked = fn(&State) -> bool;
 
 /// The judgment groups: the flags, the stars, the labels, each item's action
-/// the keymap's, checked from the focused file's state.
-const JUDGMENT_GROUPS: [&[(&str, &str, Checked)]; 3] = [
+/// the keymap's, checked from the focused file's state, in the filter menu's
+/// order.
+const JUDGMENT_GROUPS: [&[(&str, Label, Checked)]; 3] = [
     &[
-        ("pick", "Pick", |s| s.flag == Flag::Pick),
-        ("reject", "Reject", |s| s.flag == Flag::Reject),
-        ("unflag", "Unflag", |s| s.flag == Flag::None),
+        ("pick", Label::Text("Pick"), |s| s.flag == Flag::Pick),
+        ("unflag", Label::Text("Unflag"), |s| s.flag == Flag::None),
+        ("reject", Label::Text("Reject"), |s| s.flag == Flag::Reject),
     ],
     &[
-        ("rate1", "1 star", |s| s.rating == Some(1)),
-        ("rate2", "2 stars", |s| s.rating == Some(2)),
-        ("rate3", "3 stars", |s| s.rating == Some(3)),
-        ("rate4", "4 stars", |s| s.rating == Some(4)),
-        ("rate5", "5 stars", |s| s.rating == Some(5)),
-        ("clear", "No stars", |s| s.rating.is_none()),
+        ("rate5", Label::Stars(5), |s| s.rating == Some(5)),
+        ("rate4", Label::Stars(4), |s| s.rating == Some(4)),
+        ("rate3", Label::Stars(3), |s| s.rating == Some(3)),
+        ("rate2", Label::Stars(2), |s| s.rating == Some(2)),
+        ("rate1", Label::Stars(1), |s| s.rating == Some(1)),
+        ("clear", Label::Stars(0), |s| s.rating.is_none()),
     ],
     &[
-        ("red", "Red", |s| s.label.as_deref() == Some("Red")),
-        ("orange", "Orange", |s| s.label.as_deref() == Some("Orange")),
-        ("yellow", "Yellow", |s| s.label.as_deref() == Some("Yellow")),
-        ("green", "Green", |s| s.label.as_deref() == Some("Green")),
-        ("blue", "Blue", |s| s.label.as_deref() == Some("Blue")),
-        ("pink", "Pink", |s| s.label.as_deref() == Some("Pink")),
-        ("purple", "Purple", |s| s.label.as_deref() == Some("Purple")),
-        ("clearlabel", "No label", |s| s.label.is_none()),
+        ("red", Label::Text("Red"), |s| {
+            s.label.as_deref() == Some("Red")
+        }),
+        ("orange", Label::Text("Orange"), |s| {
+            s.label.as_deref() == Some("Orange")
+        }),
+        ("yellow", Label::Text("Yellow"), |s| {
+            s.label.as_deref() == Some("Yellow")
+        }),
+        ("green", Label::Text("Green"), |s| {
+            s.label.as_deref() == Some("Green")
+        }),
+        ("blue", Label::Text("Blue"), |s| {
+            s.label.as_deref() == Some("Blue")
+        }),
+        ("pink", Label::Text("Pink"), |s| {
+            s.label.as_deref() == Some("Pink")
+        }),
+        ("purple", Label::Text("Purple"), |s| {
+            s.label.as_deref() == Some("Purple")
+        }),
+        ("clearlabel", Label::Text("No label"), |s| s.label.is_none()),
     ],
 ];
 
@@ -132,7 +151,8 @@ fn shortcut_of(bindings: &[Binding], action: &str) -> String {
 /// The strip's menu, a port of `contextMenuGroups` less `Rename…` (part 2):
 /// `Select All`, the reveal item, labeled per platform, copying the targets'
 /// paths or names, the judgment groups with their checked state from the
-/// focused file's `state`, left out in a view-only folder, then `Move to
+/// focused file's `state`, left out in a view-only folder, in the filter
+/// menu's order rather than `contextMenuGroups`', then `Move to
 /// Trash…` and `Delete Permanently…`, naming the `count` targets when there
 /// are several and disabled while `trashing`. Each item shows its action's
 /// first key.
@@ -159,9 +179,9 @@ pub fn strip_groups(
         groups.extend(JUDGMENT_GROUPS.iter().map(|group| {
             group
                 .iter()
-                .map(|&(action, label, checked)| Item {
+                .map(|(action, label, checked)| Item {
                     action: Action::Judge(action),
-                    label: label.to_owned(),
+                    label: label.clone(),
                     shortcut: shortcut_of(bindings, action),
                     checked: Some(checked(state)),
                     disabled: false,
@@ -217,6 +237,11 @@ pub enum Target {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        exif::Groups,
+        filter::{FilterFlag, FilterState},
+        menu::{Action as MenuAction, Item as MenuItem, Row, Toggle, filter_rows},
+    };
 
     const REVEAL: &str = "Reveal in Finder";
 
@@ -357,49 +382,100 @@ mod tests {
             .collect()
     }
 
-    /// `context.test.ts`'s `contextMenuGroups` cases, less `Rename…`.
+    /// `context.test.ts`'s `contextMenuGroups` cases, less `Rename…`, with
+    /// the judgment groups in the filter menu's order and the rating rows as
+    /// its stars.
     #[test]
     fn strip_groups_list_select_all_reveal_copy_the_judgments_then_trash_and_delete() {
         let groups = strip(&defaults(), &State::default());
-        let judge = |action: &'static str, label: &str| (Action::Judge(action), label.to_owned());
+        let owned = |action: Action, text: &str| (action, Label::Owned(text.to_owned()));
+        let judge = |action: &'static str, label: Label| (Action::Judge(action), label);
         assert_eq!(
             map(&groups, |item| (item.action, item.label.clone())),
             vec![
-                vec![(Action::SelectAll, "Select All".to_owned())],
-                vec![(Action::RevealFile, FILE_REVEAL.to_owned())],
+                vec![owned(Action::SelectAll, "Select All")],
+                vec![owned(Action::RevealFile, FILE_REVEAL)],
                 vec![
-                    (Action::CopyPath, "Copy Path".to_owned()),
-                    (Action::CopyFileName, "Copy File Name".to_owned()),
+                    owned(Action::CopyPath, "Copy Path"),
+                    owned(Action::CopyFileName, "Copy File Name"),
                 ],
                 vec![
-                    judge("pick", "Pick"),
-                    judge("reject", "Reject"),
-                    judge("unflag", "Unflag"),
+                    judge("pick", Label::Text("Pick")),
+                    judge("unflag", Label::Text("Unflag")),
+                    judge("reject", Label::Text("Reject")),
                 ],
                 vec![
-                    judge("rate1", "1 star"),
-                    judge("rate2", "2 stars"),
-                    judge("rate3", "3 stars"),
-                    judge("rate4", "4 stars"),
-                    judge("rate5", "5 stars"),
-                    judge("clear", "No stars"),
+                    judge("rate5", Label::Stars(5)),
+                    judge("rate4", Label::Stars(4)),
+                    judge("rate3", Label::Stars(3)),
+                    judge("rate2", Label::Stars(2)),
+                    judge("rate1", Label::Stars(1)),
+                    judge("clear", Label::Stars(0)),
                 ],
                 vec![
-                    judge("red", "Red"),
-                    judge("orange", "Orange"),
-                    judge("yellow", "Yellow"),
-                    judge("green", "Green"),
-                    judge("blue", "Blue"),
-                    judge("pink", "Pink"),
-                    judge("purple", "Purple"),
-                    judge("clearlabel", "No label"),
+                    judge("red", Label::Text("Red")),
+                    judge("orange", Label::Text("Orange")),
+                    judge("yellow", Label::Text("Yellow")),
+                    judge("green", Label::Text("Green")),
+                    judge("blue", Label::Text("Blue")),
+                    judge("pink", Label::Text("Pink")),
+                    judge("purple", Label::Text("Purple")),
+                    judge("clearlabel", Label::Text("No label")),
                 ],
                 vec![
-                    (Action::TrashFiles, "Move to Trash…".to_owned()),
-                    (Action::DeleteFiles, "Delete Permanently…".to_owned()),
+                    owned(Action::TrashFiles, "Move to Trash…"),
+                    owned(Action::DeleteFiles, "Delete Permanently…"),
                 ],
             ]
         );
+    }
+
+    /// The filter menu's item each judgment action stands for.
+    fn toggle_of(action: &'static str) -> Toggle {
+        match action {
+            "pick" => Toggle::Flag(FilterFlag::Picked),
+            "unflag" => Toggle::Flag(FilterFlag::Untagged),
+            "reject" => Toggle::Flag(FilterFlag::Rejected),
+            "clear" => Toggle::Stars(0),
+            "clearlabel" => Toggle::Label("none"),
+            rate if rate.starts_with("rate") => Toggle::Stars(rate[4..].parse().unwrap()),
+            color => Toggle::Label(color),
+        }
+    }
+
+    /// The flag, rating and label items of the strip menu, as filter items,
+    /// run in `filter_rows`' order, and the rating rows draw its stars.
+    #[test]
+    fn strip_judgment_groups_follow_the_filter_menus_order_and_stars() {
+        let filter: Vec<(Toggle, Option<Label>)> =
+            filter_rows(&FilterState::default(), false, &Groups::default())
+                .into_iter()
+                .filter_map(|row| match row {
+                    Row::Item(MenuItem {
+                        label,
+                        action: MenuAction::Toggle(toggle),
+                        ..
+                    }) => match toggle {
+                        Toggle::Flag(_) | Toggle::Label(_) => Some((toggle, None)),
+                        Toggle::Stars(_) => Some((toggle, Some(label))),
+                        _ => None,
+                    },
+                    _ => None,
+                })
+                .collect();
+        let judgments: Vec<(Toggle, Option<Label>)> = strip(&defaults(), &State::default())[3..6]
+            .iter()
+            .flatten()
+            .map(|item| {
+                let Action::Judge(action) = item.action else {
+                    panic!("{:?}", item.action);
+                };
+                let toggle = toggle_of(action);
+                let label = matches!(toggle, Toggle::Stars(_)).then(|| item.label.clone());
+                (toggle, label)
+            })
+            .collect();
+        assert_eq!(judgments, filter);
     }
 
     #[test]
@@ -440,8 +516,8 @@ mod tests {
                 vec!["meta+a".to_owned()],
                 vec![String::new()],
                 vec![String::new(), String::new()],
-                vec!["p".to_owned(), "x".to_owned(), "u".to_owned()],
-                ["1", "2", "3", "4", "5", "0"]
+                vec!["p".to_owned(), "u".to_owned(), "x".to_owned()],
+                ["5", "4", "3", "2", "1", "0"]
                     .into_iter()
                     .map(str::to_owned)
                     .collect(),
@@ -465,7 +541,7 @@ mod tests {
             action: "reject",
             keys: vec!["d".into(), "x".into()],
         }];
-        assert_eq!(strip(&bindings, &State::default())[3][1].shortcut, "d");
+        assert_eq!(strip(&bindings, &State::default())[3][2].shortcut, "d");
     }
 
     #[test]
@@ -560,16 +636,19 @@ mod tests {
         assert_eq!(
             map(&groups[1..3], |item| item.label.clone()),
             vec![
-                vec![FILE_REVEAL.to_owned()],
-                vec!["Copy Path".to_owned(), "Copy File Name".to_owned()],
+                vec![Label::Owned(FILE_REVEAL.to_owned())],
+                vec![
+                    Label::Owned("Copy Path".to_owned()),
+                    Label::Owned("Copy File Name".to_owned()),
+                ],
             ]
         );
         let view_only = strip_groups(&defaults(), &State::default(), FILE_REVEAL, true, 2, false);
         assert_eq!(
             map(&view_only[3..], |item| item.label.clone()),
             vec![vec![
-                "Move 2 Files to Trash…".to_owned(),
-                "Delete 2 Files Permanently…".to_owned(),
+                Label::Owned("Move 2 Files to Trash…".to_owned()),
+                Label::Owned("Delete 2 Files Permanently…".to_owned()),
             ]]
         );
     }

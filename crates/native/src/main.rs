@@ -5058,21 +5058,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         ),
         Lead::Face(None) => Some(div().size(px(MENU_ICON)).flex_none().into_any_element()),
     };
-    let label = match item.label {
-        menu::Label::Text(text) => div().child(text),
-        menu::Label::Owned(text) => div().child(text),
-        menu::Label::Stars(on) => div()
-            .flex()
-            .items_center()
-            .gap(px(2.))
-            .children((0..5u8).map(|at| {
-                if at < on {
-                    icon(icons::STAR_FILLED).text_color(rgb(STARS_COLOR))
-                } else {
-                    icon(icons::STAR).text_color(muted.alpha(0.4))
-                }
-            })),
-    };
+    let label = menu_label(item.label, cx);
     let action = item.action;
     menu_item(("menu-item", at), item.checked, false, cx)
         .child(
@@ -5085,6 +5071,30 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
         )
         .on_click(cx.listener(move |this, _, _, cx| this.menu_action(action.clone(), cx)))
         .into_any_element()
+}
+
+/// A menu item's text, or its `on` lit stars then `5 - on` dim ones, as the
+/// filter menu and the strip's right-click menu both draw them.
+fn menu_label(label: menu::Label, cx: &App) -> Div {
+    match label {
+        menu::Label::Text(text) => div().child(text),
+        menu::Label::Owned(text) => div().child(text),
+        menu::Label::Stars(on) => {
+            let muted = cx.theme().muted_foreground;
+            div()
+                .flex()
+                .items_center()
+                .gap(px(2.))
+                .children((0..5u8).map(|at| {
+                    let star = svg().size(px(MENU_ICON)).flex_none();
+                    if at < on {
+                        star.path(icons::STAR_FILLED).text_color(rgb(STARS_COLOR))
+                    } else {
+                        star.path(icons::STAR).text_color(muted.alpha(0.4))
+                    }
+                }))
+        }
+    }
 }
 
 /// The open right-click menu, the pointer's position when it opened and
@@ -5105,25 +5115,24 @@ fn context_item(
     target: &context::Target,
     view: &WeakEntity<Riffle>,
 ) -> PopupMenuItem {
-    let label = SharedString::from(item.label);
-    let entry = if item.shortcut.is_empty() {
-        PopupMenuItem::new(label)
-    } else {
-        let key = keys::keystroke_of(&item.shortcut);
-        PopupMenuItem::element(move |_, cx| {
-            h_flex()
-                .flex_1()
-                .justify_between()
-                .gap_3()
-                .child(label.clone())
-                .child(
-                    div()
-                        .flex_none()
-                        .text_xs()
-                        .text_color(cx.theme().muted_foreground)
-                        .child(Kbd::new(key.clone()).appearance(false)),
-                )
-        })
+    let label = item.label;
+    let entry = match (&label, item.shortcut.is_empty()) {
+        (menu::Label::Text(text), true) => PopupMenuItem::new(*text),
+        (menu::Label::Owned(text), true) => PopupMenuItem::new(SharedString::from(text.clone())),
+        _ => {
+            let key = (!item.shortcut.is_empty()).then(|| keys::keystroke_of(&item.shortcut));
+            PopupMenuItem::element(move |_, cx| {
+                h_flex()
+                    .flex_1()
+                    .justify_between()
+                    .gap_3()
+                    .child(menu_label(label.clone(), cx))
+                    .child(div().flex_none().text_xs().text_color(cx.theme().muted_foreground).when_some(
+                        key.clone(),
+                        |slot, key| slot.child(Kbd::new(key).appearance(false)),
+                    ))
+            })
+        }
     };
     let action = item.action;
     let target = target.clone();

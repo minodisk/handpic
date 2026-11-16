@@ -2881,6 +2881,17 @@ it inside, as the Tauri `menuPosition`.
   `muted_foreground` at `text_xs`, `Kbd::new(keys::keystroke_of(..))
   .appearance(false)` (the formatted text alone, as gpui-component's
   `Tooltip` draws its key binding).
+
+- Rule: the strip menu's judgment groups follow the filter menu
+  (`menu::filter_rows`), not `context.ts`: the flags run Pick, Unflag,
+  Reject, the rating runs from 5 stars down to the unrated (`clear`), and the
+  labels Red to Purple, then `No label`. An item's label is a `menu::Label`,
+  and the rating rows are its `Stars`, drawn by the same `menu_label` helper
+  the filter menu's rows use (`on` lit `STAR_FILLED` in `STARS_COLOR`, then
+  dim `STAR`, the unrated five dim stars; a `PopupMenuItem::element`), so the
+  two menus cannot drift. A test in `context.rs` pins the order to
+  `filter_rows`'. The filter menu's flag dots, label squares and section
+  headings are not drawn here (the user's decision).
 - Rule: the strip's right-click follows the Tauri strip's `contextmenu`
   handler: a cell outside the selection becomes the selection alone, one
   inside keeps it, and the focus moves to the cell either way; the strip's
