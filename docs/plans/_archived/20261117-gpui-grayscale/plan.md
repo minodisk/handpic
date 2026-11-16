@@ -20,9 +20,9 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 The Tauri app shows the viewed photo in grayscale while the `grayscale` key
 (default `g`) is held, to judge composition without color
-([the original plan](../_archived/20260922-grayscale-preview/plan.md)). The
+([the original plan](../20260922-grayscale-preview/plan.md)). The
 Tauri app is frozen and the GPUI app in `crates/native` is the one that
-grows; [its zoom and peaking plan](../_archived/20261110-gpui-zoom-peaking/plan.md)
+grows; [its zoom and peaking plan](../20261110-gpui-zoom-peaking/plan.md)
 left the hold unported. The keymap entry (`("grayscale", &["g"])` in
 `crates/backend/src/shortcuts.rs`) and the settings label ("Grayscale" in
 `crates/native/src/settingsmodal.rs`) already exist, so today the key is
