@@ -180,3 +180,5 @@ as they are. gpui-component's `tree()` / `TreeState` are not adopted (see
    assumptions to confirm during implementation.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete; manual visual check pending (see learnings.md)

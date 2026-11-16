@@ -159,8 +159,9 @@ selected cell and the placeholder `muted`, the current cell's outline and
 lit controls `primary`, a selected cell's outline and the drop outline
 `ring`, the hover `accent`, the tree's rows `ListItem`'s list tokens (the
 open row `list_active`, the hover `list_hover`, the keyboard cursor's
-outline `selection`, which Neutral maps to `accent`, `accent` and `ring`;
-the built-in themes' blue otherwise, also behind `Input`'s selected text),
+outline `selection`, which Neutral maps to `accent`, `accent` and `ring`
+(the built-in base theme's are blue), a vendored theme giving its own;
+`selection` also paints `Input`'s selected text),
 the menu
 buttons `button` with an `input` border. Fixed in every theme, as constants
 with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
