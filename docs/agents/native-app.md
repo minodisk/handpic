@@ -2607,7 +2607,8 @@ strip needed one because `uniform_list` is vertical only.
   (its spelling comes from its parent's listing, its count from the open's
   `set_listed_count`). The field survives an open deferred by the gate
   (`deferred_open`) or waiting in `reveal_wanted`, and any other reveal
-  drops it. The open folder's row toggles through `tree_toggle` without
+  drops it, as does a later open of the folder by another route (a plain
+  click, `Enter`, a pick or a drop), the last request winning. The open folder's row toggles through `tree_toggle` without
   reopening (no re-listing, no new scan), and does nothing when it cannot
   expand. A click on the open row's name without a modifier stops at the
   name (the slow click below); with Ctrl / Cmd / Shift it reaches the row and

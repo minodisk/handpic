@@ -974,6 +974,7 @@ impl Riffle {
         if self.refuse_renaming(&path, cx) {
             return Task::ready(());
         }
+        self.reveal_collapsed = None;
         self.open(PathBuf::from(path), None, None, cx)
     }
 
@@ -1003,6 +1004,7 @@ impl Riffle {
             let Some(folder) = chosen else { return };
             this.update(cx, |this, cx| {
                 if this.opens() == opens {
+                    this.reveal_collapsed = None;
                     this.open(folder, None, None, cx).detach();
                 }
             })
@@ -1031,7 +1033,10 @@ impl Riffle {
                     return;
                 }
                 match folder {
-                    Some(folder) => this.open(folder, None, None, cx).detach(),
+                    Some(folder) => {
+                        this.reveal_collapsed = None;
+                        this.open(folder, None, None, cx).detach();
+                    }
                     None => {
                         this.status = dropped::DROP_TEXT.into();
                         cx.notify();
