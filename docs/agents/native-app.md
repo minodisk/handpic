@@ -2144,8 +2144,8 @@ subscribes to `InputEvent`:
   default line height plus the padding and border). These are `Styled`
   refinements, applied after the component's own size and theme styling;
   `Input::h` is the multi-line height, so the frame's is set through
-  `Styled::h`. The caret and selection colors are `Default Dark`'s, which
-  `theme.rs` does not map.
+  `Styled::h`. The caret and selection colors are the installed registered
+  theme's (`Default Dark` or `Default Light`), which `theme.rs` does not map.
 - Rule: a right-click opens the component's edit menu (Cut, Copy, Paste,
   Select All) as an OS-native menu on Windows and macOS (`native_menu`),
   which needs no `Root`. On Linux it is a drawn `PopupMenu` held by `Root`'s
