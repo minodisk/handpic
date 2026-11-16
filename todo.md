@@ -3471,3 +3471,22 @@ Files: `crates/native/src/icons.rs`.
 #### TODO
 
 - [ ] Retarget the two Progress links to `../_archived/20261114-gpui-ci-packaging/plan.md` and `../_archived/20261116-gpui-packaging-redecision/plan.md` (check the folders' actual names under `_archived/` first), then run `mise run lint` (lychee) to confirm the links resolve.
+
+### Native: real-device check of the folder tree rows drawn as ListItems (native-tree-listitem)
+
+#### Background
+
+The native-tree-listitem work draws each row of the GPUI app's folder tree (`tree_row`) as a gpui-component `ListItem`, with Lucide `chevron-right` / `chevron-down` and `folder` / `folder-open` icons. The open row is `.selected(true)` and the keyboard cursor's row is `.secondary_selected(true)`. `theme.rs`'s `map` now sets `list_active` and `list_hover` to `accent` and `selection` to `ring` for Neutral, decided from the sources and not from a running app. `selection` also paints `Input` text selection, so the settings modal's and the inline rename's text selection should now read gray in Neutral. `mise run ci:local` and the `every_icon_path_loads_an_svg` test cover the icon paths and the build. `crates/native` has no GPUI window test, so the app was never run: the row layout inside `ListItem` (name truncation, the count position), the colors in each theme and the click behavior are unverified. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-tree-listitem/plan.md`.
+
+Files: `crates/native/src/main.rs` (`tree_row`), `crates/native/src/icons.rs`, `crates/native/src/theme.rs` (`map`), `crates/native/src/folderops.rs` (`tree_name`), `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows (and any platform the native app runs on, best on Windows), run `mise run native:dev` and open a folder tree. Check each of the following in Neutral dark, Neutral light and one vendored theme.
+  - States: the open row is lit (Neutral: `accent`, semibold). The hover lights other rows only, not the open or cursor row. The keyboard cursor is outlined (Neutral: `ring`) only after a click in the pane, and the outline also shows on the open row.
+  - Clicks: a click on the cursor row still opens it. A click on a chevron toggles without opening the folder. A right-click opens the context menu.
+  - Rename: a slow click on the open row's name starts the inline rename, whose input fits the 22 px row, and Escape cancels it.
+  - Name states: a failed folder's name is red, also on the open row. A pending rename is italic and muted.
+  - Layout: the RAW count badge sits at the row's right end. A deep path at the default 220 px pane width truncates the name and keeps the count in the row. A long tree scrolls with uniform row heights. Chevron and folder icons draw (a non-expandable row keeps an empty slot of the same width; an expanded row shows `folder-open`).
+  - Text selection: the settings modal's and the inline rename's text selection reads as gray in Neutral.
+- [ ] If Neutral's open row, hover or cursor outline looks wrong, or the 16 px indent leaves too little room for names, record the observed result in the archived `learnings.md` and decide whether to adjust `theme.rs`'s `map` or the indent.

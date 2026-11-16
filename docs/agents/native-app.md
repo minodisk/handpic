@@ -161,7 +161,9 @@ lit controls `primary`, a selected cell's outline and the drop outline
 open row `list_active`, the hover `list_hover`, the keyboard cursor's
 outline `selection`, which Neutral maps to `accent`, `accent` and `ring`
 (the built-in base theme's are blue), a vendored theme giving its own;
-`selection` also paints `Input`'s selected text),
+`selection` also paints `Input`'s selected text, and `list_active` /
+`list_hover` also light a `Select`'s list row (also a `ListItem`) in
+`accent`, so a change to either token reaches every `Select`),
 the menu
 buttons `button` with an `input` border. Fixed in every theme, as constants
 with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
@@ -2354,8 +2356,10 @@ subscribes to `InputEvent`:
   default line height plus the padding and border). These are `Styled`
   refinements, applied after the component's own size and theme styling;
   `Input::h` is the multi-line height, so the frame's is set through
-  `Styled::h`. The caret and selection colors are the installed registered
-  theme's (`Default Dark` or `Default Light`), which `theme.rs` does not map.
+  `Styled::h`. The caret color is the installed registered theme's
+  (`Default Dark` or `Default Light`), which `theme.rs` does not map. The
+  selected text's color is `selection`, which `theme.rs` maps to `ring` for
+  Neutral (gray) and which a vendored theme gives its own.
 - Rule: a right-click opens the component's edit menu (Cut, Copy, Paste,
   Select All) as an OS-native menu on Windows and macOS (`native_menu`),
   which needs no `Root`. On Linux it is a drawn `PopupMenu` held by `Root`'s
