@@ -3501,3 +3501,16 @@ Files: `crates/native/src/main.rs` (`tree_row`), `crates/native/src/icons.rs`, `
   - Layout: the RAW count badge sits at the row's right end. A deep path at the default 220 px pane width truncates the name and keeps the count in the row. A long tree scrolls with uniform row heights. Chevron and folder icons draw (a non-expandable row keeps an empty slot of the same width; an expanded row shows `folder-open`).
   - Text selection: the settings modal's and the inline rename's text selection reads as gray in Neutral.
 - [ ] If Neutral's open row, hover or cursor outline looks wrong, or the 16 px indent leaves too little room for names, record the observed result in the archived `learnings.md` and decide whether to adjust `theme.rs`'s `map` or the indent.
+
+### Native: real-device check of the strip menu's judgment order and star rows (native-strip-menu-order)
+
+#### Background
+
+`native-strip-menu-order` made the strip's right-click menu in the GPUI app (`crates/native`) follow the Filter menu for its judgment groups. The flag group now runs Pick, Unflag, Reject. The rating group runs from 5 stars down to the unrated item, and each row draws the Filter menu's star icons in place of the `N stars` / `No stars` text. The label group is unchanged. Each item keeps its shortcut, its checked state and its `Action::Judge` action. `context::Item.label` now reuses `menu::Label`, and `main.rs` draws both menus' labels through one `menu_label` helper. Unit tests in `context.rs` assert the new order and the star counts, and a pin test compares the flag, rating and label order with `filter_rows`. `menu.rs`'s tests pass unmodified, and `mise run ci:local` and the PR's GitHub checks pass. Nobody has right-clicked a strip cell in the running app, and Step 1's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261116-native-strip-menu-order/plan.md`.
+
+Files: `crates/native/src/context.rs`, `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/native-app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
+- [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.

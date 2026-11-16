@@ -132,3 +132,5 @@ not touched.
   draws).
 
 ## Progress
+
+- (2026-11-17) Step 1 complete
