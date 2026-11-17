@@ -719,14 +719,15 @@ impl Riffle {
             self.write_failed(failure.path.clone(), failure.message.clone());
         }
         self.step_note = sequence::done_status(&ran);
+        // The slot may name a trash run that overlapped; that run's end owns it.
         if self.running_op == Some(sequence::LABEL) {
             self.running_op = None;
-            match sequence::folder_error(&ran) {
-                Some(failure) => {
-                    self.record_failed(sequence::LABEL, sequence::failure_text(failure));
-                }
-                None => self.record_op(sequence::LABEL, true),
+        }
+        match sequence::folder_error(&ran) {
+            Some(failure) => {
+                self.record_failed(sequence::LABEL, sequence::failure_text(failure));
             }
+            None => self.record_op(sequence::LABEL, true),
         }
         if let Some(out) = sequence::reveal_after(&ran) {
             cx.reveal_path(Path::new(out));

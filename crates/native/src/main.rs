@@ -133,7 +133,7 @@ use riffle_backend::{
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, SidecarFormat, Writer},
-    text::{SIZE_BASE, format_bytes},
+    text::{self, SIZE_BASE, format_bytes},
     treewatch::TreeWatch,
     watch::{self, Watch},
 };
@@ -4739,6 +4739,16 @@ impl Riffle {
                 dialog: None,
             });
         }
+        // A sequencing run the shared slot lost to an overlapping trash run.
+        if self.folderops.sequence_running() {
+            return Some(Operation {
+                name: sequence::LABEL,
+                state: OpState::Running,
+                progress: self.folderops.sequence_progress(),
+                message: None,
+                dialog: None,
+            });
+        }
         if let Some((name, true)) = flow {
             return Some(Operation {
                 name,
@@ -5224,7 +5234,7 @@ impl Riffle {
                 Ok(companion::previewed(self.keep_pending(op)))
             }
             Ok(Some(companion::Action::Run(op))) => {
-                self.mcp_pending = None;
+                let pending = self.mcp_pending.take();
                 match op {
                     companion::Op::Trash(target) => {
                         log::info!(
@@ -5235,9 +5245,17 @@ impl Riffle {
                         self.request_run(target, false, cx);
                         Ok(companion::get_status(&self.status_of()))
                     }
-                    companion::Op::Folder(op, _) => self
-                        .run_confirmed(op, cx)
-                        .map(|()| companion::get_status(&self.status_of())),
+                    companion::Op::Folder(op, _) => match self.run_confirmed(op, cx) {
+                        Ok(()) => Ok(companion::get_status(&self.status_of())),
+                        Err(refusal) if refusal == text::SCAN_RUNNING => {
+                            // The preview survives: confirm the same id after wait_for_idle.
+                            self.mcp_pending = pending;
+                            Err(format!(
+                                "{refusal}; wait_for_idle, then confirm the same id again"
+                            ))
+                        }
+                        Err(refusal) => Err(refusal),
+                    },
                 }
             }
             Ok(Some(companion::Action::Folder { op, dialog })) => {

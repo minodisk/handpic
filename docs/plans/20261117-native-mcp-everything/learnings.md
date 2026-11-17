@@ -252,9 +252,15 @@
 - **The confirm restarts the flow with no dialog** (`run_confirmed`:
   `start` → `previewed` → `run_sidecars` / `run_sequence`), so the UI's run
   rules hold: a sidecar run with a listing or scan under way is refused with
-  `SCAN_RUNNING` (detected as the flow ending inside `run_sidecars`), Delete
-  Sidecars goes through `trashed` and is recorded for undo. The trash
-  confirm's `HELD_REFUSAL` is not applied: these runs never enter the gate.
+  `SCAN_RUNNING` (detected as the flow ending inside `run_sidecars`; the
+  `Pending` is put back and the reply points to `wait_for_idle` and the same
+  id), Delete Sidecars goes through `trashed` and is recorded for undo. The
+  confirm's `HELD_REFUSAL` is not applied (these runs never enter the gate),
+  but a sidecar *start* goes through `gate_request` and would drop a held
+  operation, so it is refused with `HELD_REFUSAL` while `view.held`.
+- A sequencing run's state is read from the flow (`sequence_running`) when an
+  overlapping trash run owns `running_op`, and `sequence_ran` records the
+  result whether or not the slot still names it.
 - `trash_label` became `held_name` with the sidecar arm, so a held sidecar
   request dropped by an open, a later request or the drain is reported
   `failed` too. `record_dropped` now goes through a new `record_failed`.

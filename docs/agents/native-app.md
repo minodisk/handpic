@@ -917,7 +917,9 @@ folder tree menu's `Rewrite Sidecars from Index…`, `Delete Sidecars…` and
 `Sequence JPEG Timestamps…` on an absolute folder (checked in the backend),
 `Op::Folder(FolderOp, Option<Dialog>)`. They are refused while another
 folder flow (`FolderOps::busy`) or an MCP-confirmed trash run is under way.
-Without `confirm` the call is `Action::Folder`: the view calls `folder_op`,
+A sidecar start without `confirm` is refused with `HELD_REFUSAL` while the
+gate holds an operation, as the gate would drop it (a sequence start does not
+touch the gate). Without `confirm` the call is `Action::Folder`: the view calls `folder_op`,
 the menu item's own entry, so the sidecar request goes through the gate
 (held for the scan's end without canceling it) and the preview is read as
 for a click; the reply is `get_status` at once (`companion::started`, the
@@ -936,13 +938,15 @@ reports with its id once `wait_for_idle` returns. A call with that `id` and
 disabled (its `reason`), and runs through `run_confirmed`: the flow taken to
 its previewed state with no dialog, then `run_sidecars` / `run_sequence`, so
 a sidecar run started while a listing or scan is under way is refused with
-`SCAN_RUNNING`, and a Delete Sidecars run is recorded for `undo` as the
+`SCAN_RUNNING` plus a pointer to `wait_for_idle` (the `Pending` is put back, so
+the same id confirms again once idle), and a Delete Sidecars run is recorded for `undo` as the
 menu's is. A sidecar `Pending` goes when the sidecar format switches (its
 counts are of the old format); a folder operation's `Pending` survives a
 folder open, a trash one does not. `get_status` reports the flows:
 `previewing` while a preview is read with no dialog, `running` with the
 sequencing run's done / total (`running_op` set in `run_sidecars` /
-`run_sequence`), then `finished` with the status line or `failed`
+`run_sequence`, the sequencing run read from the flow when an overlapping
+trash run took the slot, its result recorded either way), then `finished` with the status line or `failed`
 (`record_failed`: a failed preview, the `SCAN_RUNNING` refusal, a held
 sidecar request dropped).
 

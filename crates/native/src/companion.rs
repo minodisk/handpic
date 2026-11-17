@@ -901,8 +901,13 @@ fn folder_operation(view: &View, args: &Value, tool: &str) -> Result<Action, Str
             return Err("an id goes with confirm: true".into());
         }
         let path = given_field(args, "path").ok_or("path must be the folder's absolute path")?;
+        let op = FolderOp::of(tool, folder_path(path)?);
+        // A sidecar start goes through the gate, which drops what it holds.
+        if view.held && matches!(op, FolderOp::Sidecars(_)) {
+            return Err(HELD_REFUSAL.into());
+        }
         return Ok(Action::Folder {
-            op: FolderOp::of(tool, folder_path(path)?),
+            op,
             dialog: !view.settings.mcp_allow_destructive,
         });
     }
@@ -3390,6 +3395,12 @@ mod tests {
         };
         assert_eq!(ask("undo", json!({}), &trash_top), refusal);
         assert_eq!(ask("redo", json!({}), &trash_top), refusal);
+        // A sidecar start goes through the gate and would drop it; a
+        // sequence start does not.
+        for tool in ["rewrite_sidecars", "delete_sidecars"] {
+            assert_eq!(ask(tool, json!({"path": "/d"}), &held), refusal);
+        }
+        assert!(ask("sequence_timestamps", json!({"path": "/d"}), &held).is_ok());
     }
 
     #[test]
