@@ -276,7 +276,7 @@ Made with the user on 2026-11-17.
       and a client would be switching off its own connection. Record it for
       Step 8's exclusion list.
 
-- [ ] Step 5: Move to Trash, Delete Permanently, and undo / redo of trash runs
+- [x] Step 5: Move to Trash, Delete Permanently, and undo / redo of trash runs
   - Done when:
     - `trash_photos` moves the given photos (or the selection's targets) to
       the OS trash, or with the delete mode deletes them, through
@@ -428,3 +428,4 @@ Made with the user on 2026-11-17.
 - (2026-11-17) Step 2 complete
 - (2026-11-17) Step 3 complete
 - (2026-11-17) Step 4 complete
+- (2026-11-17) Step 5 complete

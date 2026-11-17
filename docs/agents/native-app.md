@@ -812,7 +812,7 @@ not touched); `Mcp::with_all_tools` adds the `native_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
-`set_settings`) and the native
+`set_settings`, `trash_photos`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -823,9 +823,13 @@ call `perform` with a `companion::Key` (`Key::of_action` names the keymap
 actions; Home and End are `First` and `Last`), so a key and its tool cannot
 drift. `navigate` and `select_all` need a shown photo, `reject_rest` a current
 photo in a burst of two or more outside a view-only folder, and `undo` /
-`redo` a judgment batch on top of their history (`history::Top`); a trash run
-on top, or an undo or redo of one in flight, is refused, since its restore is
-not exposed yet. Each replies with the new `get_view`.
+`redo` a judgment batch on top of their history (`history::Top`), each
+replying with the new `get_view`. A trash run on top is `Action::StepTrash`:
+`perform` runs the key, so `step` hands it to `step_trash` (the gate, the
+restore or the new run), and the reply is `get_status` at once, the
+operation `running` or `held_for_scan`. Its redo moves files to the Trash
+with no dialog, so it is refused unless `mcpAllowDestructive` is on (only recoverable operations run without a dialog); an undo or redo of one in
+flight is refused.
 
 The view-state tools set a state rather than toggle it, so a repeated call
 changes nothing. `set_sort` and `set_filter` become the menu clicks
@@ -874,7 +878,38 @@ flight), the scan pass as the status line names it (`scan::Status::pass`,
 `scanning` or `analyzing` with done / total), a run in flight
 (`IdleGate::in_flight`), the status line's text (`status()`), and the meta
 pane's notes and error lines, which the pane draws from the same
-`pane_notes` / `pane_errors`. `idle` is none of them. `wait_for_idle` replies
+`pane_notes` / `pane_errors`, and the `operation` (`operation_of`): the
+trash dialog asking (`awaiting_confirmation`, with its line), an operation
+the gate holds (`held_for_scan`, by its label), the run, undo or redo out
+(`running`, its label kept in `running_op`, with the `trashing` done / total),
+else the last one to come back (`last_op`, `finished` or `failed` with the
+step note `record_op` copies; a held run, undo or redo dropped before it ran is
+recorded `failed` by `record_dropped` with a `dropped: <reason>` message and
+moved nothing, from its four drop sites: a folder open's `gate.discard`, a
+dialog open when `finished` drains the gate, an undo or redo `finished` could
+not run, and `gate_request`'s replacement of a held one by a later request). `idle` is none of them under way; a finished
+or failed operation stays reported and does not hold `idle` off.
+
+`trash_photos` is the strip menu's `Move to Trash…` / `Delete Permanently…`
+on the given photos (each one the strip shows) or the selection's targets,
+also in a view-only folder, whose menu keeps both items. It is refused while
+a run, delete or redo is out (`trashing`, which no dialog blocks for an MCP
+run), a folder operation runs, or no folder is open. The confirmation is
+D1's: without `confirm`, a move while `mcpAllowDestructive` is on is
+`Action::Preview(Op)`, which the view keeps as `companion::Pending` under the
+next `mcp_next_id` and answers with the dialog's text, the paths and the id;
+anything else is `Action::Ask(Op)`, `confirm_trash` opening the app's own
+dialog, answered with `awaiting_confirmation`, so a delete only ever runs on
+the user's single click. A call with that `id` and `confirm: true` is
+`Action::Run(Op)`, refused for a delete, with `mcpAllowDestructive` off, for
+an unknown id and once a previewed photo is no longer shown or the folder
+changed; it forgets the `Pending` and calls `request_run`, the tail of
+`confirm_run` (the gate, the scan canceled when held, the writer drain, the
+recorded run and the undo entry) with `own` false, so no dialog opens and
+the flow stays idle, as for a held run drained later: the backdrop and the
+key lock of a running dialog are not drawn for a run the user never saw ask.
+It replies with `get_status` at once. Steps 6 and 7 add their operations to
+`Op`, whose `tool` and `content` name the tool and the dialog's text. `wait_for_idle` replies
 at once when idle; otherwise the view keeps the call's id in `idle_waiters`
 and answers it from an `observe_self` callback (registered from a task, once
 the entity exists), which runs after every `cx.notify()` and replies to every

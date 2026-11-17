@@ -177,6 +177,56 @@
 - Python run with `-I` ignores `PYTHONIOENCODING`; `-I -X utf8` prints the
   Japanese preset names on a cp932 console.
 
+## Step 5: Move to Trash, Delete Permanently, and undo / redo of trash runs
+
+- **The confirmation mechanism for Steps 6 and 7.** `companion::Op` is the
+  destructive operation (today `Op::Trash(trash::Target)`), with `tool()` and
+  `content()` (the dialog's title, line, run label and what it acts on). The
+  companion answers `Action::Preview(Op)` (the view stores it as
+  `companion::Pending { id, op }` under `mcp_next_id`, one at a time, a new
+  preview replacing it, and replies `companion::previewed`), `Action::Ask(Op)`
+  (the view opens the app's dialog and replies `companion::awaiting`) or
+  `Action::Run(Op)` (a call with `id` and `confirm: true` matching
+  `View.pending`; the view forgets the `Pending`, runs it and replies with
+  `get_status`). A later step adds an `Op` variant, its arm in `tool` /
+  `content`, and its arms in `mcp_request`'s `Ask` / `Run`.
+- **An MCP-confirmed run does not drive `TrashFlow`.** The plan suggested
+  driving the flow's own transitions; `trash.start` + `confirm_run` would
+  leave the flow `Running` with no dialog, and the view draws
+  `modal::backdrop` and `key_down` drops every key while `trash.busy()`, so
+  the window would dim and go deaf with nothing on it. `confirm_run`'s tail
+  became `request_run(target, own)`; the MCP run calls it with `own` false,
+  the state a held run drained at a scan's end is already in (the flow idle,
+  `trashing`, the gate's in-flight count and `resync.hold` set by
+  `run_trash`). With no dialog to refuse by, the companion refuses a second
+  `trash_photos` on `View.trashing`.
+- **`get_status.operation`** comes from `operation_of`: the dialog asking,
+  the gate's held label, `running_op` (set by `run_trash`, `undo_trash`,
+  `redo_trash`) with `trashing`'s progress, else `last_op`, which
+  `record_op` fills from the step note in `trashed` / `restored` only when
+  `running_op` was set (a Delete Sidecars run goes through `trashed` too and
+  is not reported until Step 6 sets its label). Asking and held count as not
+  idle, so `wait_for_idle` after an `Ask` returns once the user answers.
+- **A confirm re-checks the preview**: refused when the open folder changed or
+  a previewed photo is no longer shown (a re-listing or a filter change in
+  between), "preview again".
+- **End to end** (`--mcp-port 41971`, a fresh `--settings` seeded with
+  `mcpEnabled` and `mcpAllowDestructive` true, five ARW copies under
+  `D:\handpic-mcp-e2e\step5\photos`): `tools/list` gave 25 tools; a preview
+  of two paths answered id 1 with the dialog's text; `id` without `confirm`,
+  an unknown id, `confirm` with `mode: delete` and a path outside the folder
+  were refused; the confirm answered `running 0/2`, `wait_for_idle` returned
+  `finished` "Moved 2 files to the Trash" and both files were gone; reusing
+  id 1 was refused; `undo` restored both ("Restored 2 files from the
+  Trash"), `redo` moved them again as `Redo Move to Trash`, a second `undo`
+  brought them back; `trash_photos` with `mode: delete` answered
+  `awaiting_confirmation`, a screenshot showed the Delete Permanently dialog,
+  `get_status` was not idle, `navigate` was refused as busy, and the app was
+  killed without a click: no file was deleted.
+- Git Bash plus `json.loads` of a command-line argument mangles the verbatim-prefixed
+  paths again; the test client substituted a `%P%` placeholder with the
+  JSON-escaped folder prefix instead.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: `open_folder` deferred by a run and refused during
@@ -227,3 +277,18 @@
   `set_settings {"auto_advance":false}`: expect `Handpic's settings are open;
   try again once the user closes them`, while `get_settings` still answers.
   Step 4's checkbox was ticked on the automated criteria.
+- **Pending manual check: Move to Trash over MCP with
+  `mcpAllowDestructive` off, and the redo refusal.** Unit-tested in
+  `crates/native/src/companion.rs`, and the dialog path was seen end to end
+  for a delete only. On Windows, run the native app with MCP on a test port
+  as `docs/agents/native-app.md` prescribes, with `mcpAllowDestructive`
+  off and a folder of test copies open: (1) call `trash_photos` on one photo:
+  expect `awaiting_confirmation` and the Move to Trash dialog with its run
+  button focused; click Move to Trash: `wait_for_idle` returns `finished`
+  "Moved 1 file to the Trash"; (2) call `undo`: the file comes back; call
+  `redo`: expect the refusal starting "the next redo moves files to the Trash
+  again without a dialog"; (3) open the delete dialog over MCP, click
+  Delete Permanently once: the file is deleted and `get_status` reports
+  `Delete Permanently` `finished`; open it again and press Cancel:
+  `wait_for_idle` returns idle with nothing deleted. Step 5's checkbox was
+  ticked on the automated criteria.

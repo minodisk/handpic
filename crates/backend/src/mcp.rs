@@ -74,8 +74,12 @@ settings and the current stars, pick / reject flag and color label), look at a s
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
 filter, the panes shown and the overlays, browse the folders, open one, expand or collapse the \
 folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
-scan) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
-undo and sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
+scan, a move to the trash) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+undo and sidecar files stay consistent. `trash_photos` moves photos to the trash or deletes \
+them, and only with the user's confirmation: unless the user has allowed MCP clients to run \
+destructive operations in Handpic's settings, it opens Handpic's own dialog and the user \
+confirms there; a permanent delete always waits for the user's click in that dialog. Move \
+photos to the trash only when the user asks. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
 them only when the user asks you to.";
@@ -606,6 +610,31 @@ pub struct RevealArgs {
     path: String,
 }
 
+/// What `trash_photos` does with the photos, as the strip menu's items do.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum TrashMode {
+    Trash,
+    Delete,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct TrashArgs {
+    /// The photos' paths as `get_view` reports them, in the open folder and
+    /// shown by the filter; the selection when omitted.
+    paths: Option<Vec<String>>,
+    /// `trash` (the default) moves them to the trash with their sidecars;
+    /// `delete` deletes them permanently.
+    mode: Option<TrashMode>,
+    /// The `id` a preview returned, with `confirm: true`.
+    id: Option<u64>,
+    /// True to run the preview `id` names.
+    confirm: Option<bool>,
+}
+
 #[derive(Debug, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 #[serde(deny_unknown_fields)]
@@ -782,6 +811,24 @@ fn settings(args: SettingsArgs) -> Reply {
         "sidecar_format, label_names, label_language, auto_advance, shortcuts, import_root, \
         import_pattern, theme",
     )
+}
+
+/// `trash_photos`' request: the fields given.
+fn trash(args: TrashArgs) -> Value {
+    let mut request = serde_json::Map::new();
+    if let Some(paths) = args.paths {
+        request.insert("paths".into(), json!(paths));
+    }
+    if let Some(mode) = args.mode {
+        request.insert("mode".into(), json!(mode));
+    }
+    if let Some(id) = args.id {
+        request.insert("id".into(), json!(id));
+    }
+    if let Some(confirm) = args.confirm {
+        request.insert("confirm".into(), json!(confirm));
+    }
+    Value::Object(request)
 }
 
 /// How long `wait_for_idle` waits for `timeout_ms`.
@@ -1028,19 +1075,22 @@ impl Companion {
     }
 
     #[tool(
-        description = "Undo the newest change of stars, flags and labels in Handpic, whether a \
-        key, a menu or a tool made it, as the undo key does; a change of one photo makes it the \
-        current one. Undoing a move to the trash is not available here. Returns the new view, \
-        as `get_view` does."
+        description = "Undo the newest change in Handpic, as the undo key does, whether a key, \
+        a menu or a tool made it: a change of stars, flags and labels (a change of one photo \
+        makes it the current one; returns the new view, as `get_view` does), or a move to the \
+        trash, whose files are restored (replies at once with `get_status`; the restore \
+        finishes after it)."
     )]
     async fn undo(&self) -> CallToolResult {
         self.view_call("undo").await
     }
 
     #[tool(
-        description = "Redo the change of stars, flags and labels last undone in Handpic, as \
-        the redo key does; a change of one photo makes it the current one. Redoing a move to \
-        the trash is not available here. Returns the new view, as `get_view` does."
+        description = "Redo the change last undone in Handpic, as the redo key does: a change \
+        of stars, flags and labels (a change of one photo makes it the current one; returns \
+        the new view, as `get_view` does), or a move to the trash, which moves the restored \
+        files to the trash again with no dialog, so it is refused unless the user allowed MCP \
+        clients to run destructive operations (replies at once with `get_status`)."
     )]
     async fn redo(&self) -> CallToolResult {
         self.view_call("redo").await
@@ -1159,11 +1209,32 @@ impl Companion {
         description = "What Handpic's status row and pane notes tell the user: `idle` (nothing \
         under way), the open `folder`, a folder `opening` once a run ends, whether a `listing` \
         or a `scan` pass (`scanning` or `analyzing`, with done / total) is under way, whether a \
-        run on the open folder's files is `running`, the status line's text, and the pane's \
-        `notes` and `errors`."
+        run on the open folder's files is `running`, the status line's text, the pane's \
+        `notes` and `errors`, and the `operation` under way, else the last one to end (its \
+        `name`, such as `Move to Trash` or `Undo Move to Trash`, its `state`: \
+        `awaiting_confirmation` in Handpic's dialog, `held_for_scan`, `running` with `done` / \
+        `total`, `finished` or `failed`, and the `message` it ended with). A held operation dropped \
+        before it ran (by a folder open, a later request or a dialog open at the scan's end) \
+        is `failed` with a `dropped: ...` message and moved nothing."
     )]
     async fn get_status(&self) -> CallToolResult {
         self.view_call("get_status").await
+    }
+
+    #[tool(
+        description = "Move photos to the trash, or with `mode: delete` delete them for good, \
+        as the filmstrip's Move to Trash and Delete Permanently items do, each with its \
+        sidecars. Applies to the given paths or to the selection. A move is confirmed: while \
+        the user allows MCP clients to run destructive operations (`get_settings`' \
+        `mcp_allow_destructive`), the call returns a preview (the dialog's text, the paths and \
+        an `id`) and a second call with that `id` and `confirm: true` runs it; otherwise the \
+        call opens Handpic's dialog and the user confirms there. A delete always opens the \
+        dialog and runs only on the user's click. A run replies at once; follow it with \
+        `get_status` or `wait_for_idle`. A move can be undone with `undo`. Use only when the \
+        user asks."
+    )]
+    async fn trash_photos(&self, Parameters(args): Parameters<TrashArgs>) -> CallToolResult {
+        tool_result(self.bridge.call("trash_photos", trash(args)).await)
     }
 
     #[tool(
@@ -1670,6 +1741,7 @@ mod tests {
                 "set_sort",
                 "set_view",
                 "show_photo",
+                "trash_photos",
                 "tree_folder",
                 "undo",
                 "wait_for_idle"
@@ -1889,6 +1961,25 @@ mod tests {
             serde_json::from_value::<TreeArgs>(json!({ "path": "/d", "action": "open" })).is_err()
         );
         assert!(serde_json::from_value::<FolderArgs>(json!({ "folder": "/d" })).is_err());
+    }
+
+    #[test]
+    fn trash_forwards_only_the_given_fields_and_refuses_an_unknown_mode() {
+        let args: TrashArgs = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(trash(args), json!({}));
+        let args: TrashArgs = serde_json::from_value(json!({
+            "paths": ["/d/a.ARW"],
+            "mode": "delete",
+        }))
+        .unwrap();
+        assert_eq!(
+            trash(args),
+            json!({ "paths": ["/d/a.ARW"], "mode": "delete" })
+        );
+        let args: TrashArgs = serde_json::from_value(json!({ "id": 3, "confirm": true })).unwrap();
+        assert_eq!(trash(args), json!({ "id": 3, "confirm": true }));
+        assert!(serde_json::from_value::<TrashArgs>(json!({ "mode": "shred" })).is_err());
+        assert!(serde_json::from_value::<TrashArgs>(json!({ "force": true })).is_err());
     }
 
     #[test]

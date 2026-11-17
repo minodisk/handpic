@@ -414,8 +414,8 @@ over a snapshot of the view: the strip's selection, its targets as
 `set_judgment`'s changes, one undo
 entry through the judgment keys' view, row and writer path, the `Key` a
 keymap action and its tool both run through the view's `perform` (the moves,
-`select_all`, `reject_rest`, `undo` and `redo`, an undo of a trash run
-refused), `set_sort` and `set_filter` as the menu clicks the view's
+`select_all`, `reject_rest`, `undo` and `redo`, a trash run on top stepped
+as `StepTrash`, its redo refused unless `mcpAllowDestructive`), `set_sort` and `set_filter` as the menu clicks the view's
 `apply_menu` applies (the `recommended` sort refused, a view-only folder
 refusing the sort), `set_panes` through `change_panels` and `set_overlays`
 flipping only the `f`, `e` and `d` overlays that differ, each reported back
@@ -424,7 +424,13 @@ through `open_from_tree` (the open folder not reopened), `tree_folder` through
 `tree_toggle` and the tree menu's `folder_action` on the drawn row of the
 path, `reveal` through `folder_action` / `files_action`, `Status`, the
 `get_status` answer of the status line, the scan pass, a listing or run under
-way and the pane's notes (`pane_notes`, `pane_errors`), and `wait_for_idle`,
+way, the pane's notes (`pane_notes`, `pane_errors`) and the `Operation` under
+way or last ended (asking, held, running with done / total, finished,
+failed), `trash_photos`, the strip menu's Move to Trash / Delete Permanently
+on the given photos or the targets, a move previewed as an `Op` the view keeps
+as the `Pending` its id names and run on a confirming call while
+`mcpAllowDestructive` is on (through `request_run`, no dialog), else, like
+every delete, the app's dialog opened through `confirm_trash`, and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
 timeout, `get_settings`, what the settings modal shows, `set_settings`, the
 modal's own `settingsview::Change`s by its rules, which the view's
