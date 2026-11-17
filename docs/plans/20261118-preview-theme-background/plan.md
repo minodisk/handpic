@@ -107,3 +107,5 @@ the user chose), and it follows a theme change live like the other `Roles`.
   tones; inherent in the request. Neutral dark, the default, is unchanged.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
