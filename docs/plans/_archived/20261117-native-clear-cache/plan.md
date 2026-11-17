@@ -193,3 +193,5 @@ and of the tree's cached counts afterwards.
   clear or the refresh; these go to `todo.md` as a real-device check.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete

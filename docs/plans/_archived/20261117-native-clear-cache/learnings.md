@@ -59,3 +59,14 @@
      running scan finishes.`, then the dialog opens by itself when the scan
      ends. Repeat and close the settings while waiting: expected no dialog
      at the scan's end.
+- **A held Clear Cache misses idle points that do not pass through
+  `finished`** (accepted by the local review as a known gap). Basis: the
+  held clear is drained only in `Riffle::finished`; a view that goes idle
+  without a listing ending, e.g. after a trash undo into another folder
+  (`restored`) or a failed rename (`settle_folder_run`), leaves it held while
+  the page still says it clears when the scan finishes, until the user
+  presses `Clear Cache` again (round 1's fix made that second press ask at
+  once). Change: drain the held clear at those idle points too
+  (`crates/native/src/main.rs`). Done when: a held clear asks by itself after
+  a trash undo into another folder and after a failed rename, with a test of
+  the pure part where possible.
