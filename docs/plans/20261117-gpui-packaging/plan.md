@@ -36,7 +36,7 @@ touched; its icons are only read.
 
 ## Steps
 
-- [ ] Step 1: The `Package` workflow, the version and notices plumbing, and the macOS DMG
+- [x] Step 1: The `Package` workflow, the version and notices plumbing, and the macOS DMG
   - Done when:
     - `.github/workflows/package.yml` exists, triggered by `workflow_dispatch`
       only, with `permissions: contents: read`, and touches no release.
@@ -286,3 +286,5 @@ touched; its icons are only read.
   file with a different name.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete

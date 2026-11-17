@@ -40,6 +40,22 @@ token lacks the `workflow` scope.
 - Rule: run `gh auth refresh -h github.com -s workflow` once before pushing
   a workflow change.
 
+## A manual workflow
+
+### A `workflow_dispatch` workflow is dispatchable only from the default branch (Inferred)
+
+GitHub lists a workflow, and `gh workflow run` accepts it, only once its file
+is on the default branch; after that, `gh workflow run <file> --ref <branch>`
+runs the file as the branch has it. `.github/workflows/package.yml` (the
+native app's `Package` workflow, see
+[`native-app.md`](./native-app.md#the-package-workflow-builds-the-distributables-inferred))
+is `workflow_dispatch` only, so the PR that adds it cannot dispatch it.
+
+- Rule: to run a new dispatch-only workflow on its own PR, push a temporary
+  commit adding a `pull_request` trigger, inspect that run and its
+  artifacts, and remove the trigger before the merge. A later change to the
+  workflow runs with `gh workflow run package.yml --ref <branch>`.
+
 ## Linting
 
 ### `shellcheck` and `actionlint` are only on the `PATH` inside mise (Hit)

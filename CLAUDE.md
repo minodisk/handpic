@@ -273,8 +273,17 @@ gpui-component's `TitleBar` (the app icon and "Handpic") in place of the OS
 title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `native:bundle:macos` (`Handpic.app` under
-`target/<profile>/`) and `native:install:linux` (the release binary, the
-`.desktop` file and the icon under `~/.local`) mise tasks use; its `src/datadir.rs` places
+`target/<profile>/`, its `Info.plist` given the version and
+`Contents/Resources/licenses/` the notices) and `native:install:linux` (the release binary, the
+`.desktop` file and the icon under `~/.local`) mise tasks use, and
+`NOTICE-gpui`, the GPUI crates' Apache-2.0 notice; the manual
+`.github/workflows/package.yml` (`Package`, `workflow_dispatch` only) builds the
+release binary per platform and packages it with the scripts of
+`tools/package/` (`version.sh`, the crate's `[package].version`; `notices.sh`,
+the license notices every package ships into one `licenses/` folder;
+`macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg`, also
+`mise run native:package:macos`), uploading each package and one
+`SHA256SUMS` as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the

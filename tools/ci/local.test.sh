@@ -131,14 +131,18 @@ clippy native"
 # --- shell scripts and workflows ---------------------------------------------
 expect none "tools/git/x.sh" "shellcheck tools/git/x.sh"
 expect none "tools/stats/x.sh" "shellcheck tools/stats/x.sh"
+expect none "tools/package/x.sh" "shellcheck tools/package/x.sh"
 expect none ".claude/skills/develop/scripts/commit-push.sh" "shellcheck .claude/skills/develop/scripts/commit-push.sh"
 expect none "scripts/x.sh
 tools/git/sub/x.sh
+tools/package/sub/x.sh
 .claude/skills/x/scripts/sub/y.sh" ""
 expect none "tools/ci/local.sh" "shellcheck tools/ci/local.sh
 bash-test tools/ci/local.test.sh"
 expect none ".github/workflows/ci.yml" "vp-check
 actionlint"
+expect none "crates/native/packaging/NOTICE-gpui" "clippy native
+test native"
 
 # --- bash tests -------------------------------------------------------------
 expect none ".claude/skills/merge/scripts/check-merge-approval.sh" "shellcheck .claude/skills/merge/scripts/check-merge-approval.sh

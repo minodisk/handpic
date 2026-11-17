@@ -1,0 +1,64 @@
+# Learnings
+
+## Step 1
+
+- The GPUI crates carry two copyright holders, not one: `gpui-component`,
+  `gpui-component-macros`, `gpui-base`, `gpui-kit` and `gpui-kit-assets`
+  0.9.1 are Longbridge's (`Copyright 2024 - 2026 Longbridge`), while the
+  `gpui-pre-*` 0.3.12 crates' `LICENSE-APACHE` reads `Copyright 2022 - 2025 Zed
+  Industries, Inc.`. `crates/native/packaging/NOTICE-gpui` names these lines
+  and then carries the Apache-2.0 text of `gpui-component`'s
+  `LICENSE-APACHE` (from "Apache License, Version 2.0, January 2004" on).
+  `gpui-kit` itself ships no `LICENSE-APACHE` file in its crate, only the
+  `license` field. `gpui-pre-reqwest` 0.12.15 is a fork of reqwest, `MIT OR Apache-2.0`, with
+  `Copyright 2016 Sean McArthur`; it has its own entry in `NOTICE-gpui`, and
+  the Apache text covers it.
+- `crates/core/models/LICENSE` is YuNet's MIT license; `notices.sh` ships it
+  as `LICENSE-yunet` so the names in `licenses/` do not collide with the
+  themes' `LICENSE` (shipped as `LICENSE-themes`).
+- The layout stays in `native:bundle:macos`, as the plan says. So the
+  workflow runs `cargo build --release --locked` through `mise exec`, then
+  `mise run native:bundle:macos` (whose own release `cargo build` finds the
+  binary up to date), then `tools/package/macos.sh`, which only signs and
+  makes the DMG. `macos.sh` stages the app with `ditto` rather than
+  `cp -R`, so the ad hoc signature's extended attributes survive the copy.
+- The DMG's `<arch>` comes from `uname -m` (`arm64` / `x86_64`), which is
+  what the plan's file names use; the workflow's check step asserts the
+  executable's `lipo -archs` equals the matrix's `arch`.
+- A change to `mise.toml` selects every check in `mise run ci:local`, so
+  this step's local run includes the root crates' and the native crate's
+  clippy and tests.
+- Nothing macOS-specific could run here (Windows host): `actionlint`,
+  `shellcheck` and `local.test.sh` pass, `version.sh` prints `0.0.0` and
+  `notices.sh` copies the six files, but `plutil`, `codesign`, `hdiutil` and
+  the bundle and package tasks are only exercised by a GitHub run.
+- The `Package` run on the branch: run 43986612196, green on the first
+  attempt (no fix needed). It was triggered by a temporary
+  `push: branches: [gpui-packaging-step-1]` on `package.yml` (a push trigger
+  rather than the plan's `pull_request`, because the PR did not exist yet),
+  removed again in the next commit. The arm64 leg took 11m44s, the
+  `macos-15-intel` leg 27m8s (both cold caches), `checksums` 15s. Both legs'
+  "Check the DMG" step passed: `hdiutil verify` VALID, `codesign --verify
+  --strict` "valid on disk" and "satisfies its Designated Requirement", the
+  six notices listed under `Contents/Resources/licenses`, plus the step's
+  `lipo`, `plutil` version and `/Applications` symlink asserts. Downloaded
+  with `gh run download`: `Handpic-0.0.0-macos-arm64.dmg` (27,338,311
+  bytes), `Handpic-0.0.0-macos-x86_64.dmg` (30,919,229 bytes) and
+  `SHA256SUMS` (193 bytes), which lists both DMGs, and `sha256sum -c` passed
+  for both. The DMG contents were not inspected on Windows (no mount); the
+  runner's check step stands for that. The run annotates that
+  `actions/cache@v4`, `checkout@v4`, `upload-artifact@v4`,
+  `ilammy/setup-nasm@v1` and `jdx/mise-action@v2` target Node.js 20 and are
+  forced onto Node.js 24 (a warning only).
+
+## Deferred issues (todo candidates)
+
+- Pending manual check (Step 1, macOS only, the user's): `mise run
+  native:package:macos` on a Mac writes
+  `crates/native/target/release/Handpic-0.0.0-macos-<arch>.dmg`; open it, drag
+  `Handpic.app` to `Applications` and start it (Gatekeeper asks for the ad
+  hoc signed app's first launch to be allowed under System Settings, Privacy
+  & Security). Not runnable on the Windows host. Source: plan Step 1, "Done
+  when" (`mise run native:package:macos`); files `mise.toml`,
+  `tools/package/macos.sh`. Step 1's checkbox was ticked on the automated
+  criteria (the green `Package` run 43986612196 and `mise run ci:local`).

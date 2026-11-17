@@ -71,7 +71,7 @@ pnpm install --frozen-lockfile
 pnpm exec vp check
 cargo fmt --all -- --check
 cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
-shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh
+shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh
@@ -156,7 +156,20 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp packaging/macos/Info.plist "$app/Contents/Info.plist"
 cp "target/$profile/riffle-native" "$app/Contents/MacOS/riffle-native"
 cp ../app/icons/icon.icns "$app/Contents/Resources/icon.icns"
+version="$(bash ../../tools/package/version.sh)"
+plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
+bash ../../tools/package/notices.sh "$app/Contents/Resources/licenses"
 echo "$app"
+"""
+
+[tasks."native:package:macos"]
+description = "Build the release Handpic.app and package it as an ad hoc signed DMG for this Mac's architecture under crates/native/target/release (macOS)"
+shell = "bash -c"
+run = """
+set -euo pipefail
+mise run native:bundle:macos
+bash tools/package/macos.sh
 """
 
 [tasks."native:install:linux"]

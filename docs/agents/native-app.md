@@ -308,8 +308,19 @@ gpui-kit's `themes/` at tag v0.9.1 (commit `39ab849a`), under the same
 Apache-2.0; their `LICENSE` names that source, each file's own `author` and
 `url` (the color scheme it adapts) and carries the license text.
 
-- Rule: no notice file while the native app has never shipped; add these
-  notices when it is packaged, the themes' `LICENSE` among them.
+`tools/package/notices.sh <dir>` copies the set every package ships into one
+`licenses/` folder: `crates/native/packaging/NOTICE-gpui` (the GPUI crates'
+copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
+`gpui-pre-reqwest`), and the Apache-2.0 text of
+their `LICENSE-APACHE`), `crates/native/LICENSE-lucide`, the themes' `LICENSE`
+as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
+`LICENSE-mediapipe` and `LICENSE-siglip2`. The repository has no project
+`LICENSE` file, so none is shipped.
+
+- Rule: every package gets its notices from `notices.sh`, never a list of
+  its own; a new bundled asset under another license adds its notice there.
+- Rule: a version bump of the GPUI crates re-checks `NOTICE-gpui`'s crate
+  list, versions and copyright lines against the crates' `LICENSE-APACHE`.
 
 ### Linux needs system libraries, macOS and Windows do not (Inferred)
 
@@ -421,9 +432,13 @@ so `~/.local/bin` must be on the session's `PATH`.
 `mise run native:bundle:macos [profile]` (release by default) builds and lays
 out `crates/native/target/<profile>/Handpic.app` with the checked-in
 `crates/native/packaging/macos/Info.plist`, `Contents/MacOS/riffle-native` and
-`crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`. No signing,
-notarization or `.dmg`. The `native` CI job's macOS leg bundles the debug
-build and checks it (`plutil -lint`, the executable and the `.icns` present).
+`crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
+version `tools/package/version.sh` prints into the copied `Info.plist`'s
+`CFBundleShortVersionString` and `CFBundleVersion` (`plutil -replace`; the
+checked-in file keeps `0.0.0`) and copies the notices into
+`Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `native`
+CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
+executable and the `.icns` present).
 
 - Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`,
   shared with the Tauri app, which the native app replaces. `datadir.rs`'s
@@ -436,6 +451,38 @@ build and checks it (`plutil -lint`, the executable and the `.icns` present).
 - Pending manual checks, not done here: the Dock / Finder icon of the built
   `.app` on a Mac, and the running window's icon after the install task on a
   Wayland and an X11 session.
+
+### The `Package` workflow builds the distributables (Inferred)
+
+`.github/workflows/package.yml` (`workflow_dispatch` only, `contents: read`,
+no release touched) builds each platform's packages and uploads each as a
+workflow artifact, then a `checksums` job uploads one `SHA256SUMS` over all
+of them. Each leg builds with `mise exec rust@1.98.1 -- cargo build --release
+--locked` in `crates/native`, as the `native` CI job runs cargo, and then
+packages the built `target/release` binary with a script under
+`tools/package/`, which builds nothing.
+
+- `version.sh` prints `[package].version` of `crates/native/Cargo.toml`
+  (`0.0.0` until release-please owns it), which the bundle and every file
+  name carry.
+- `macos.sh` signs the laid-out `Handpic.app` ad hoc (`codesign --force
+  --sign -`, then `codesign --verify --strict`; no Developer ID, no
+  notarization), stages it beside an `/Applications` link and writes
+  `crates/native/target/release/Handpic-<version>-macos-<arch>.dmg`
+  (`hdiutil create -format UDZO`, `<arch>` from `uname -m`). The workflow
+  runs it on `macos-latest` (arm64) and `macos-15-intel` (x86_64), after
+  `mise run native:bundle:macos`, and checks the DMG (`hdiutil verify`, then
+  attached: the signature, the executable's architecture, both version
+  fields and the notices).
+- `mise run native:package:macos` is the same locally on a Mac: the bundle
+  task (its release build included), then `macos.sh`.
+
+- Rule: `native:bundle:macos` stays the one place that lays out
+  `Handpic.app`; `macos.sh` only signs and packages it.
+- Rule: the executable's name is one `binary` variable per script
+  (`riffle-native` until the rename-to-handpic plan changes it).
+- Rule: the workflow's cargo cache is keyed by `matrix.os`, not `runner.os`:
+  both macOS runners report `macOS` but build for different architectures.
 
 ### `mise run native:watch` rebuilds and restarts the app (Inferred)
 
