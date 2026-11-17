@@ -4529,15 +4529,7 @@ impl Riffle {
                 Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
                 Shown::Failed { name, error } => (name, None, Some(error)),
             };
-            body = body.child(
-                div()
-                    .child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()))
-                    .child(
-                        div()
-                            .text_color(muted)
-                            .child(meta::position(self.pager.current(), self.files.len())),
-                    ),
-            );
+            body = body.child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()));
             if let Some(error) = error {
                 body = body.child(div().text_color(danger).child(error.clone()));
             }
@@ -4885,10 +4877,18 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The status line with the progress circle, while an operation with a
-    /// count runs, and the sort and filter buttons at its right end.
+    /// The status line, then the strip position (while a file is shown), the
+    /// progress circle while an operation with a count runs, and the sort and
+    /// filter buttons at its right end.
     fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         let mut row = StatusBar::new().child(self.status());
+        if let Some(position) = pager::position(
+            self.pager.current(),
+            self.files.len(),
+            self.filter.is_active().then_some(self.all.len()),
+        ) {
+            row = row.right(position);
+        }
         if let Some(circle) = self.progress_circle(cx) {
             row = row.right(circle);
         }

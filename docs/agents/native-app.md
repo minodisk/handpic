@@ -1014,7 +1014,7 @@ preview reads, and always reads the current preview again.
 The view keeps `all` (the listing in natural order narrowed by `--size` /
 `--max`, the Tauri `allFiles`) apart from `files` (`all` in the sort in force,
 later also filtered), which the pager, the strip, the thumbnails, the hot
-list, `current_path` and the pane's `n / total` index into.
+list, `current_path` and the status bar's position index into.
 The order reads `facts` (each listed file's orientation, capture time, subsec
 and `Focus`, keyed by the listed path) and the judgments, both from the one
 `Index::entries` read at the open and at pass 1's `Done`. A view-only folder
@@ -1097,8 +1097,8 @@ last, and a JPEG folder under `"name"` paged in capture order.
   (`exif::exif_key`), a file without one failing a non-empty group.
 - Measured: `groups_of` over 5,000 synthetic entries (six groups, a few dozen
   labels) took 5.8 ms in a debug test build.
-- Rule: the pane's `n / total` is the pager's current index over `files`
-  (`meta::position`, the Tauri `positionEl`), not the shown file's index, so
+- Rule: the status bar's position is the pager's current index over `files`
+  (`pager::position`, the Tauri `positionEl`), not the shown file's index, so
   a refilter that hides the file on screen (`p` under `untagged`) moves it at
   once; the name still names the file on screen until the next preview
   arrives. The shown file's index becomes `None` when a refilter hides it
@@ -1194,13 +1194,19 @@ time a burst of its own. The view keeps the open folder's grouping in
 
 The status row is gpui-component's `StatusBar` (see "The status row is
 gpui-component's `StatusBar` with its defaults"): the status text in its
-center region, then, in its right region, the progress circle while an
-operation runs and `Sort ▾` and `Filter ▾`. The status text is a transient note (an error, the drop
+center region, then, in its right region, the strip position, the progress
+circle while an operation runs and `Sort ▾` and `Filter ▾`. The status text is a transient note (an error, the drop
 refusal, the empty-folder and filtered texts) that `present` clears on every
 presented preview, as the Tauri `present`'s `setStatus()`, followed by
 `status()`'s suffixes with no leading separator when the note is empty; the
-current file's position, name and shooting settings live in the meta pane
-only. `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
+current file's name and shooting settings live in the meta pane only, which
+holds only the shown photo's details. The position (`pager::position`) is
+`n / shown` (`3 / 120`), and while `FilterState::is_active` the listing
+`all`'s count follows in parentheses (`3 / 80 (120)`, also `3 / 120 (120)`
+when the filter hides nothing), mirroring the lit `Filter ▾`. It shows
+whenever `files` is non-empty, from the listing on, not only once a preview
+has arrived, and not at all with no shown file (the pager's index is 0 on an
+empty list, so a bare format would print `1 / 0`). `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
 `main.rs` only maps rows to `div`s. The filter button is lit while
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open.
@@ -2414,9 +2420,10 @@ operations run: a Move to Trash, Delete Permanently or trash redo run first
 running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
 gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
-size), colored `primary`, its value `fraction * 100`, the first item of
-the `StatusBar`'s right region, left of `Sort ▾`, and only while `shown`
-yields a count. The Tauri app draws a bar along the row's top edge
+size), colored `primary`, its value `fraction * 100`, in the
+`StatusBar`'s right region right of the position and left of `Sort ▾`, and
+only while `shown` yields a count, so the position shifts by the circle's
+width when it appears or goes. The Tauri app draws a bar along the row's top edge
 (`#scan-progress`); the circle is the user's decision.
 
 The linear `Progress` was ruled out for that bar, and the reasons hold for
@@ -2477,8 +2484,9 @@ text was 16 px white, the row transparent over the root's black).
   `theme.tokens`, which the bar's `bg` reads. Unmapped, they would fall back
   to `Default Dark`'s `#171717` and a solid `#262626` border. Seen on screen
   in a debug build: a filled row with a thin top border.
-- Rule: the status text is the center `child`, with no `left`; the circle
-  (while shown), `Sort ▾` and `Filter ▾` are each their own `.right(..)`, in
+- Rule: the status text is the center `child`, with no `left`; the position
+  (while a file is shown), the circle (while shown), `Sort ▾` and `Filter ▾`
+  are each their own `.right(..)`, in
   that order, 8 px apart (the region's `gap_2`, 4 px before). With only
   `right`, the center is `flex_1` and start-aligned. Never put anything in
   `left` while the right region holds the buttons: with both ends pinned the
@@ -3764,7 +3772,8 @@ its `wait` is the time `go` took before the hit.
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 
 The right-hand pane (220 px by default, the Tauri `#info` width) lays out the file
-name, `n / total`, the `meta.rs` groups and the notes as `div`s, built from
+name (and the error line of a failed preview), the `meta.rs` groups and the
+notes as `div`s, with no position (that is the status bar's), built from
 the `Metadata` that `load` formats on the background thread next to the
 preview, so paging reads nothing new. Release, `--auto 20` on the 20-file ARW
 compare folder, a fresh `--index` per run, before and after interleaved in one

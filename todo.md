@@ -2600,7 +2600,7 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 
 ### Native: real-device checks of the EXIF filter sections and the refilter fixes
 
-`gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the meta pane's `n / total` follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/native/src/exif.rs`, `crates/native/src/filter.rs`, `crates/native/src/menu.rs`, `crates/native/src/main.rs`.
+`gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the strip position (then the meta pane's `n / total`, now the status bar's, see `native-status-position`) follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/native/src/exif.rs`, `crates/native/src/filter.rs`, `crates/native/src/menu.rs`, `crates/native/src/main.rs`.
 
 Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build`, then run `target\debug\riffle-native.exe <folder> --index <fresh path> --settings <file>`, with a fresh index per run. Use only copies under `D:\Photos\tests\` (a folder with several cameras, such as `D:\Photos\tests\20261113-filter-sort\sort\raw`), and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`.
 
@@ -2609,7 +2609,7 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 - [ ] On Windows, the filter menu ends with `Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`, each listing the folder's values in order; it scrolls when taller than the window. On a fresh index the sections appear once pass 1 ends.
 - [ ] On Windows, checking one camera narrows the strip and lights the button; a second camera widens it (OR); an ISO item on top narrows it (AND); `Reset` clears all.
 - [ ] On Windows, copying in a RAW from another camera adds its item after the re-scan; removing the only file of a checked camera drops that check instead of leaving an empty strip.
-- [ ] On Windows, under the `untagged` filter, `p` on the current file updates the pane's `n / total` at once (the name follows when the next preview arrives).
+- [ ] On Windows, under the `untagged` filter, `p` on the current file updates the status bar's `n / shown (listed)` position at once (the name follows when the next preview arrives).
 - [ ] On Windows, with a filter that hides every file, `Reset` or unchecking the item comes back to the file shown before, not the first one.
 - [ ] On Windows, the settings file is untouched (its modification time unchanged).
 - [ ] On Windows, on a fresh index with `untagged` plus a `Face focus` item checked, press `p` repeatedly while pass 2 runs: the image on screen must always end up the current file's, never a judged file's left behind (the `shown_after` fix in `refilter`, found by reading only; the race is timing-dependent and may not show either way).
@@ -3612,3 +3612,15 @@ Files: `crates/native/src/main.rs`.
 #### TODO
 
 - [ ] Drain the held clear at those idle points too. Done when a held clear asks by itself after a trash undo into another folder and after a failed rename, with a test of the pure part where possible.
+
+### Native: real-device check of the strip position in the status bar
+
+`native-status-position` moved the GPUI app's strip position (`3 / 120`) from the meta pane to the status bar's right region, as its first item, left of the progress circle, `Sort ▾` and `Filter ▾`. While `FilterState::is_active` it appends the listed count (`3 / 80 (120)`), and with no shown file it shows nothing. The pure format is `pager::position`. CI, the `pager.rs` unit tests and `mise run ci:local` cover the format and the build. The window was never run, so the placement was never seen on screen: the step was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-status-position/plan.md`.
+
+Files: `crates/native/src/main.rs` (`status_row`, the meta pane's name `div`), `crates/native/src/pager.rs` (`position`).
+
+#### TODO
+
+- [ ] On Windows, in a debug build (`mise run native:run` or equivalent, with a fresh `--index` and `--settings`, on a copy under `D:\Photos\tests\`), open a folder. Expect the status bar's right region to show `n / total` as its first item, left of the progress circle (visible during a scan), `Sort ▾` and `Filter ▾`. With a filter on it reads `n / shown (listed)`, including `n / total (total)` when the filter hides nothing. With no shown file (an empty folder, a filter that hides everything) no position shows.
+- [ ] On Windows, with a long status text (for example an error), expect the position not to be clipped by the right region's `overflow_hidden`. Expect the `Sort ▾` and `Filter ▾` popovers to still anchor to their buttons.
+- [ ] On Windows, expect the meta pane to show the file name (and the error line of a failed preview) and no position. Hide the meta pane (`toggleRight`): the position stays visible in the status bar.
