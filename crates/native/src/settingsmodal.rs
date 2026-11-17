@@ -171,7 +171,7 @@ pub const NOT_SAVED: &str = "The settings store did not open, so changes last un
 /// The MCP page's switch and its note.
 pub const ALLOW_DESTRUCTIVE_LABEL: &str =
     "Let MCP clients run destructive operations without asking";
-pub const ALLOW_DESTRUCTIVE_NOTE: &str = "When on, an MCP client can move photos to the Trash,     redo a move to the Trash and run the folder operations (rewriting or deleting sidecars,     sequencing, importing, renaming) once it has shown you the preview, without the app's     dialog. When off, those calls open the app's dialog for you to confirm. Delete Permanently     always asks you. MCP clients cannot change this setting.";
+pub const ALLOW_DESTRUCTIVE_NOTE: &str = "When on, an MCP client can move photos to the Trash, redo a move to the Trash and run the folder operations (rewriting or deleting sidecars, sequencing, importing, renaming) once it has shown you the preview, without the app's dialog. When off, those calls open the app's dialog for you to confirm. Delete Permanently always asks you. MCP clients cannot change this setting.";
 
 /// The native app's own keys, which `key_down` takes before the keymap, so a
 /// binding to one would never fire. `escape` cannot be captured (it cancels)
