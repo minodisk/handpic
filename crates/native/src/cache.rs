@@ -90,8 +90,14 @@ pub struct ClearFlow {
 }
 
 impl ClearFlow {
-    /// `Clear Cache` pressed; ignored while a clear is held, asked or runs.
+    /// `Clear Cache` pressed; ignored while a clear is asked or runs. A held
+    /// one the view has since left idle for goes on at the press, for no
+    /// listing's end may be left to drain it.
     pub fn press(&mut self, busy: bool) -> Next {
+        if self.state == (State::Waiting { confirmed: false }) && !busy {
+            self.state = State::Asking;
+            return Next::Ask;
+        }
         if self.state != State::Idle {
             return Next::Wait;
         }
@@ -216,10 +222,18 @@ mod tests {
     }
 
     #[test]
+    fn a_press_while_held_and_idle_asks() {
+        let mut flow = ClearFlow::default();
+        flow.press(true);
+        assert_eq!(flow.press(false), Next::Ask);
+        assert!(flow.asking());
+    }
+
+    #[test]
     fn a_second_press_is_ignored() {
         let mut flow = ClearFlow::default();
         flow.press(true);
-        assert_eq!(flow.press(false), Next::Wait);
+        assert_eq!(flow.press(true), Next::Wait);
         assert!(flow.waiting());
         let mut flow = ClearFlow::default();
         flow.press(false);
