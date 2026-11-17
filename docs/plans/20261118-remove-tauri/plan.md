@@ -468,3 +468,5 @@ says so (the binary's name in Step 2, the data folders in Step 3).
   of them will conflict in the Layout paragraph.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
