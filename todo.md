@@ -3648,3 +3648,20 @@ Files: `crates/native/src/main.rs` (`status_row`, the meta pane's name `div`), `
 - [ ] On Windows, in a debug build (`mise run native:run` or equivalent, with a fresh `--index` and `--settings`, on a copy under `D:\Photos\tests\`), open a folder. Expect the status bar's right region to show `n / total` as its first item, left of the progress circle (visible during a scan), `Sort ▾` and `Filter ▾`. With a filter on it reads `n / shown (listed)`, including `n / total (total)` when the filter hides nothing. With no shown file (an empty folder, a filter that hides everything) no position shows.
 - [ ] On Windows, with a long status text (for example an error), expect the position not to be clipped by the right region's `overflow_hidden`. Expect the `Sort ▾` and `Filter ▾` popovers to still anchor to their buttons.
 - [ ] On Windows, expect the meta pane to show the file name (and the error line of a failed preview) and no position. Hide the meta pane (`toggleRight`): the position stays visible in the status bar.
+
+### Native: real-device checks of the always-visible scrollbars
+
+#### Background
+
+The `native-scrollbars-always` feature made `theme::apply` set the GPUI native app's theme `scrollbar_mode` to `ScrollbarMode::Always` (in `theme.rs`'s `finish`). The folder tree's bar, the strip's `StripBar`, the meta pane's bar and the dialog bodies' bars now show at rest and take a press without scrolling first. The mode is global, so the settings modal's lists, the `Sort ▾` / `Filter ▾` popovers, `PopupMenu` and `Select` lists show their bar when they overflow too. A unit test on a plain `Theme` and `mise run ci:local` cover that the mode is `Always` after a vendored config. Nobody has watched the running window: the bars' look, dragging, and what a press on a bar over the strip's bottom edge or the tree rows' right 16 px does and does not reach were never exercised. gpui-base 0.9.1 still skips a bar whose content fits, so a short folder should show no bar. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-scrollbars-always/plan.md`.
+
+Files: `crates/native/src/theme.rs` (`finish`, `apply`), `crates/native/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/native/src/stripbar.rs` (`StripBar`), `docs/agents/native-app.md` ("The strip, the tree and the meta pane draw the theme's scrollbar").
+
+#### TODO
+
+- [ ] On Windows, open a folder with more files than the strip holds, expand the tree past the pane's height, show a file whose meta pane overflows, and open a dialog whose body overflows (e.g. Import… on a large folder). Expect each of the four bars (tree, strip `StripBar`, meta pane, dialog body) to be visible at rest, without scrolling first.
+- [ ] On Windows, drag each thumb and click each track without scrolling first. Expect the view to follow (the strip's range thumbnails load as on a wheel scroll).
+- [ ] On Windows, where the content fits (a folder with few files, a collapsed tree), expect no bar to be drawn and presses to reach the strip cells and tree rows as before.
+- [ ] On Windows, press on the strip's bar over its bottom edge and on the tree's bar over the rows' right 16 px. Expect the press to hit the bar, not a cell or row (the accepted trade-off). Note whether padding under the bars is wanted.
+- [ ] On Windows, look at the bar in Neutral dark, Neutral light and one vendored theme (e.g. Catppuccin Mocha), switching on the Appearance page and, in System mode, on an OS appearance change. Expect the bar's look to be acceptable in each.
+- [ ] On macOS and Linux, repeat the checks above.

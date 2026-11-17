@@ -308,7 +308,7 @@ release, vendored unchanged under `crates/native/themes/` with their
 list) and installed unmapped through `Theme`'s `light_theme` / `dark_theme`
 slots and `Theme::change` (`apply`, at startup, on a choice
 in the Appearance page and, in System mode, on a change of the window's
-appearance),
+appearance, which also sets the theme's scrollbar mode to always shown),
 and sets beside it the `Roles` global, the colors the app paints that equal
 no token (the window's surface and text, the strip's names, failures, burst
 band and reject dim; today's values for Neutral dark, else derived from the
