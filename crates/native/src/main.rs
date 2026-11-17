@@ -2366,14 +2366,14 @@ impl Riffle {
                 if self.undo_trash(entry, cx) {
                     return;
                 }
-                self.record_dropped(name, "the run was no longer on top of the history");
+                self.record_dropped(name, "it could not run (another step or run was out, or the run was no longer on top of the history)");
             }
             Some(HeldOp::Redo(entry)) => {
                 let name = entry.what.step_labels().1;
                 if self.redo_trash(entry, cx) {
                     return;
                 }
-                self.record_dropped(name, "the run was no longer on top of the history");
+                self.record_dropped(name, "it could not run (another step or run was out, or the run was no longer on top of the history)");
             }
             Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
             Some(HeldOp::Rename(held)) => {

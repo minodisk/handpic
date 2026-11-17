@@ -883,7 +883,11 @@ trash dialog asking (`awaiting_confirmation`, with its line), an operation
 the gate holds (`held_for_scan`, by its label), the run, undo or redo out
 (`running`, its label kept in `running_op`, with the `trashing` done / total),
 else the last one to come back (`last_op`, `finished` or `failed` with the
-step note `record_op` copies). `idle` is none of them under way; a finished
+step note `record_op` copies; a held run, undo or redo dropped before it ran is
+recorded `failed` by `record_dropped` with a `dropped: <reason>` message and
+moved nothing, from its three drop sites: a folder open's `gate.discard`, a
+dialog open when `finished` drains the gate, and an undo or redo `finished`
+could not run). `idle` is none of them under way; a finished
 or failed operation stays reported and does not hold `idle` off.
 
 `trash_photos` is the strip menu's `Move to Trash…` / `Delete Permanently…`
