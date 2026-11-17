@@ -240,6 +240,15 @@ pub fn shown_path(path: &str) -> String {
     }
 }
 
+/// The title bar's name of the open folder: its last component, else (a
+/// drive root such as `C:\` or `/`) the shown path.
+pub fn folder_title(dir: &str) -> String {
+    match std::path::Path::new(dir).file_name() {
+        Some(name) => name.to_string_lossy().into_owned(),
+        None => shown_path(dir),
+    }
+}
+
 /// What an open menu acts on.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Target {
@@ -707,5 +716,16 @@ mod tests {
         );
         assert_eq!(shown_path(r"D:\Photos\a.ARW"), r"D:\Photos\a.ARW");
         assert_eq!(shown_path("/Users/a/b.ARW"), "/Users/a/b.ARW");
+    }
+
+    #[test]
+    fn a_folder_title_is_the_last_component_else_the_shown_path() {
+        assert_eq!(folder_title("/Users/a/Photos"), "Photos");
+        assert_eq!(folder_title("/"), "/");
+        #[cfg(windows)]
+        {
+            assert_eq!(folder_title(r"\\?\D:\Photos\2026"), "2026");
+            assert_eq!(folder_title(r"\\?\D:\"), r"D:\");
+        }
     }
 }

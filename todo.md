@@ -3751,3 +3751,15 @@ Files: `crates/native/packaging/linux/control`, `tools/package/linux.sh`.
 
 - [ ] Decide whether `control` gets `Conflicts` / `Replaces: riffle`, after the real-device deb check above. Done when the choice is in the template or `native-app.md` records why not.
 - [ ] Decide whether `Depends` gets `libegl1`, or `libvulkan1 | libegl1`, after the Vulkan-less machine check. Done when `linux.sh` reflects the choice or the guide records why not.
+
+### Native: real-device checks of the title bar's smaller text and centered folder name (native-title-bar-folder-name)
+
+#### Background
+
+The `native-title-bar-folder-name` feature drew "Handpic" in the native app's title bar at `text_sm` (14 px) instead of the inherited 16 px. It also draws the open folder's name (`context::folder_title`: the last path component, else the shown path for a root such as `C:\` or `/`) centered across the whole window width. The name is an `absolute().inset_0()` overlay `div` over `TitleBar`, padded `TITLE_NAME_MARGIN` (160 px) a side and truncated with an ellipsis. CI and the unit tests cover the build on all three platforms and `folder_title` in `context.rs`. Nobody has looked at the bar running. Never exercised: the text size, the name's centering and truncation in a narrow window, whether 160 px a side of `TITLE_NAME_MARGIN` is right (it was estimated from the control widths, not tuned against a running window; on macOS the 80 px traffic-light padding leaves only about 4 px between the name's edge and "Handpic"), and whether a press on the name still reaches the bar's `WindowControlArea::Drag` row. That last point rests on the source of `gpui-pre` 0.3.12, where a listener-free `div` inserts no hitbox; it was never seen running. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261118-native-title-bar-folder-name/plan.md`.
+
+Files: `crates/native/src/main.rs` (the title bar in `impl Render for Riffle`, `TITLE_NAME_MARGIN`), `crates/native/src/context.rs` (`folder_title`).
+
+#### TODO
+
+- [ ] On Windows 11 (`mise run native:run` or a debug build of `crates/native`), open a folder. Expect "Handpic" next to the icon to be visibly smaller than before (14 px) with the icon still 16 px. Expect the folder's name to be centered on the whole window width at the same size as "Handpic", and to disappear with no folder open. Then narrow the window: expect a long name to be truncated with an ellipsis before it reaches "Handpic" or the gear. If 160 px a side of `TITLE_NAME_MARGIN` looks wrong, tune it. Press and drag starting on the name: expect the window to move. Double-click on the name: expect the window to maximize. Expect the minimize / maximize / close controls and the gear to still take their clicks. If the drag over the name does not move the window, fall back to a third `TitleBar` child as the plan says. Also open another folder, rename the open folder and run `Rename by Capture Date…` on it: expect the name to follow.

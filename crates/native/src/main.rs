@@ -5671,16 +5671,37 @@ impl Render for Riffle {
                     cx.notify();
                 }
             }))
+            // The folder's name is an overlay so it centers on the whole bar;
+            // listener-free, it inserts no hitbox and leaves the press to the
+            // bar's drag row and controls beneath.
             .child(
-                TitleBar::new()
+                div()
+                    .relative()
+                    .flex_shrink_0()
                     .child(
-                        h_flex()
-                            .gap_2()
-                            .text_color(cx.theme().foreground)
-                            .child(img(icons::APP).size(px(16.)))
-                            .child("Handpic"),
+                        TitleBar::new()
+                            .child(
+                                h_flex()
+                                    .gap_2()
+                                    .text_sm()
+                                    .text_color(cx.theme().foreground)
+                                    .child(img(icons::APP).size(px(16.)))
+                                    .child("Handpic"),
+                            )
+                            .child(self.settings_button(cx)),
                     )
-                    .child(self.settings_button(cx)),
+                    .children(self.dir.as_deref().map(|dir| {
+                        div()
+                            .absolute()
+                            .inset_0()
+                            .px(px(TITLE_NAME_MARGIN))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .text_sm()
+                            .text_color(cx.theme().foreground)
+                            .child(div().min_w_0().truncate().child(context::folder_title(dir)))
+                    })),
             )
             // The middle row and the strip, whose bounds give the strip's
             // bottom edge and the height the two share to a strip drag.
@@ -6361,6 +6382,10 @@ struct StripCell {
     burst: Option<BurstMark>,
 }
 
+/// The room kept on each side of the title bar's folder name, past the
+/// gear and Windows' three 34 px controls, so a truncated name never reaches
+/// them or the icon and "Handpic".
+const TITLE_NAME_MARGIN: f32 = 160.;
 /// The widest a strip tooltip gets before its text wraps.
 const TIP_MAX_WIDTH: f32 = 360.;
 /// `.cell span.marks svg`'s size.

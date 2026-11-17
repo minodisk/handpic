@@ -2883,7 +2883,7 @@ text was 16 px white, the row transparent over the root's black).
   12 px), so without the pin the row would shrink and the canvas grow when
   the buttons left. Inferred from the sources, not re-measured on screen.
 
-### The title bar is gpui-component's `TitleBar` with the icon, "Handpic" and the settings gear (Inferred)
+### The title bar is gpui-component's `TitleBar` with the icon, "Handpic", the open folder's name and the settings gear (Inferred)
 
 The window draws no OS title bar. `main()` opens it with
 `..TitleBar::window_options()` (gpui-component `=0.9.1`,
@@ -2894,8 +2894,8 @@ The window draws no OS title bar. `main()` opens it with
 `impl Render for Riffle` puts `TitleBar::new()` first in the root's
 `flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
 every platform, so the main area below it shrinks by itself. Its first child
-is an `h_flex().gap_2()` of `img(icons::APP)` at 16 px and the text
-"Handpic" in `cx.theme().foreground`; its second, which the bar's
+is an `h_flex().gap_2().text_sm()` of `img(icons::APP)` at 16 px and the
+text "Handpic" at 14 px in `cx.theme().foreground`; its second, which the bar's
 `justify_between` row puts at the right end (left of the window controls on
 Windows / Linux), is `settings_button`: a ghost, small, `tab_stop(false)`
 gpui-component `Button` with `IconName::Settings` in a `div` with a `mr_2`
@@ -2903,6 +2903,25 @@ margin and the tooltip. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
 window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
+- Rule: the open folder's name (`context::folder_title` of `Riffle::dir`:
+  the path's last component, else, for a root such as `C:\` or `/`, its
+  `shown_path`) is centered across the whole window, not only `TitleBar`'s
+  inner row, which starts after the left padding and ends before the window
+  controls. A `relative`, `flex_shrink_0` `div` wraps `TitleBar` (its
+  height stays `TITLE_BAR_HEIGHT`) and, while a folder is open, holds after
+  it an `absolute().inset_0()` overlay at `text_sm` in the theme's
+  `foreground`, padded `TITLE_NAME_MARGIN` (160 px) a side so the name,
+  `min_w_0().truncate()`, ends in an ellipsis before the icon, "Handpic",
+  the gear or the controls. The name is read in `render`, so another open,
+  a folder rename and a `Rename by Capture Date…` of the open folder change
+  it with no state of its own. Keep the overlay free of listeners, ids,
+  cursors and hover styles: `gpui-pre` 0.3.12's `div` inserts a hitbox only
+  for those (`should_insert_hitbox`; `overflow_hidden` is not one), so a
+  press on the name falls through to the bar's `WindowControlArea::Drag`
+  row and the controls. Read from the source, not yet seen running (a
+  manual check is pending in the plan); the fallback is a third `TitleBar`
+  child, centered only between the left group and the gear. Source:
+  [the plan](../plans/_archived/20261118-native-title-bar-folder-name/plan.md).
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
 - A press on the bar still reaches the root `div`'s `track_focus`, so a click
