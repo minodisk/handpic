@@ -109,9 +109,45 @@ pub enum Finished {
     Dropped,
 }
 
+/// The status bar's `n / shown`: the current file over the shown list, as the
+/// Tauri `positionEl`, so a refilter that hides the file on screen moves it at
+/// once. `listed`, the whole listing while a filter is active, follows in
+/// parentheses. Nothing while no file is shown.
+pub fn position(current: usize, shown: usize, listed: Option<usize>) -> Option<String> {
+    if shown == 0 {
+        return None;
+    }
+    let position = format!("{} / {}", current + 1, shown);
+    Some(match listed {
+        Some(listed) => format!("{position} ({listed})"),
+        None => position,
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Finished, Move, Pager};
+    use super::{Finished, Move, Pager, position};
+
+    #[test]
+    fn the_position_is_one_based() {
+        assert_eq!(position(0, 120, None).as_deref(), Some("1 / 120"));
+        assert_eq!(position(119, 120, None).as_deref(), Some("120 / 120"));
+    }
+
+    #[test]
+    fn an_active_filter_adds_the_listed_count() {
+        assert_eq!(position(2, 80, Some(120)).as_deref(), Some("3 / 80 (120)"));
+        assert_eq!(
+            position(2, 120, Some(120)).as_deref(),
+            Some("3 / 120 (120)")
+        );
+    }
+
+    #[test]
+    fn no_shown_file_has_no_position() {
+        assert_eq!(position(0, 0, None), None);
+        assert_eq!(position(0, 0, Some(120)), None);
+    }
 
     #[test]
     fn wraps_around_both_ways() {
