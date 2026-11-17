@@ -2079,22 +2079,25 @@ invalid one leaves the stored one and shows its reason.
   check is pending in `../plans/20261113-gpui-settings/learnings.md`.
   `Import…` itself is port Step 8's.
 
-### The native app keeps its own index (Inferred)
+### The native app's index (Inferred)
 
-The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic.native/index.sqlite`,
-apart from the Tauri app's `dev.minodisk.handpic/index.sqlite`; `--index <path>`
-overrides it. The folder is named after the Handpic identifier
-(`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`) and nothing is
-migrated from the earlier `com.minodisk.riffle.native` or
-`com.minodisk.handpic.native`: the native app never shipped, so an old
-developer cache is simply rebuilt by pass 1. Sharing one file would put two processes on it (the Tauri
-launch's `VACUUM` against a native scan's writes), make two
-`EXTRACTOR_VERSION`s re-extract each other's rows, and let a native run's
-`reconcile` drop the user's rows. The cost is a cold pass 1 on each folder's
-first native open. An index that cannot be opened leaves the pager working
-with `no index: …` on the status line.
+The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic/index.sqlite`;
+`--index <path>` overrides it. The folder is named after the Handpic
+identifier (`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`).
+While the Tauri app still existed, the native app kept its index apart under
+`dev.minodisk.handpic.native`. Without `--index`, `open_index` first runs
+`datadir::move_native_index`: an `index.sqlite` left under
+`dev.minodisk.handpic.native` moves into the plain folder with its `-wal` and
+`-shm`, and an index already there (a Tauri build's from `main`) is renamed
+aside to the first free `index-aside-<n>.sqlite` rather than deleted; the
+emptied `.native` folder goes. A failed move is logged and the app opens
+whatever the plain folder then holds. Nothing is migrated from the earlier
+`com.minodisk.riffle.native` or `com.minodisk.handpic.native`: the native app
+never shipped, so an old developer cache is simply rebuilt by pass 1. An index
+that cannot be opened leaves the pager working with `no index: …` on the
+status line.
 
-- Rule: never point a debug or measurement run at the Tauri app's index; use
+- Rule: never point a debug or measurement run at the user's index; use
   `--index` with a fresh file.
 - Rule: `reconcile` drops every row of the folder it was not given, so it
   always gets the whole listing; `--size` / `--max` narrow only what is shown.

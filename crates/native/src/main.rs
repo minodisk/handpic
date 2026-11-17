@@ -6808,6 +6808,19 @@ fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
 type Indexes = (Arc<Mutex<Index>>, Arc<Mutex<Index>>, PathBuf);
 
 fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
+    if flag.is_none()
+        && let Some(cache) = dirs::cache_dir()
+    {
+        match datadir::move_native_index(&cache) {
+            Ok(datadir::IndexMove::Nothing) => {}
+            Ok(datadir::IndexMove::Moved) => log::info!("index: moved in from the .native folder"),
+            Ok(datadir::IndexMove::Aside(aside)) => log::info!(
+                "index: moved in from the .native folder, the one there renamed to {}",
+                aside.display()
+            ),
+            Err(e) => log::error!("failed to move the .native index: {e}"),
+        }
+    }
     let path = datadir::index_path(flag, dirs::cache_dir().as_deref())
         .ok_or("no cache dir to keep the index in")?;
     let index = Index::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;

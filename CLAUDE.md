@@ -214,11 +214,13 @@ the license notices every package ships into one `licenses/` folder;
 (`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
 `mise run native:package:linux`), uploading each package and one
 `SHA256SUMS` as workflow artifacts; `crates/native`'s `src/datadir.rs` places
-its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
-`--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
+its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
+`--index <path>`; without it, an index an earlier build left under
+`<IDENTIFIER>.native` is moved in first, one already there renamed aside,
+`move_native_index`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
-and to a `Handpic.log` in the line format `docs/agents/app-log.md` describes under its own folder (or
+and to a `Handpic.log` in the line format `docs/agents/app-log.md` describes under the `<IDENTIFIER>` folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
 global `Theme`, which `gpui_kit::init` installs at startup, to the mode
