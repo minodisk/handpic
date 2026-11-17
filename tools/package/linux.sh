@@ -22,6 +22,7 @@ identifier="dev.minodisk.handpic"
 packaging="${root}/crates/native/packaging/linux"
 release="${root}/crates/native/target/release"
 version="$(bash "${root}/tools/package/version.sh")"
+deb_version="$(bash "${root}/tools/package/version.sh" deb)"
 tarball="${release}/Handpic-${version}-linux-x64.tar.gz"
 installer="${release}/install.sh"
 deb="${release}/handpic_${version}_amd64.deb"
@@ -76,7 +77,7 @@ done
 
 installed_size="$(du -sk "${debroot}/usr" | cut -f1)"
 mkdir -p "${debroot}/DEBIAN"
-sed -e "s|@VERSION@|${version}|" \
+sed -e "s|@VERSION@|${deb_version}|" \
 	-e "s|@INSTALLED_SIZE@|${installed_size}|" \
 	-e "s|@DEPENDS@|${depends}|" \
 	"${packaging}/control" >"${debroot}/DEBIAN/control"
