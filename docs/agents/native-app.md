@@ -2215,7 +2215,9 @@ menus do: no bar sets a mode of its own. `theme.rs`'s `apply` sets that mode
 to `ScrollbarMode::Always` (the user's choice on 2026-11-17, over the
 auto-hiding `Scrolling` of 2026-11-14), so a bar is drawn at rest whenever
 its content overflows and takes a press without a scroll first. Where the
-content fits, nothing is drawn. The mode is global: the `Sort ▾` /
+content fits, nothing is drawn, even in `Always`: gpui-base 0.9.1's
+scrollbar prepaint skips a bar whose `scroll_area_size <=
+scroll_viewport_size`. The mode is global: the `Sort ▾` /
 `Filter ▾` popovers, `PopupMenu` and `Select` lists show their bar too when
 they overflow.
 
@@ -2258,7 +2260,7 @@ they overflow.
   The user accepted these covered edges on 2026-11-17.
 - Not verified by hand yet; the checks are pending in
   `../plans/_archived/20261115-native-scrollbars/learnings.md` and
-  `../plans/20261117-native-scrollbars-always/learnings.md`.
+  `../plans/_archived/20261117-native-scrollbars-always/learnings.md`.
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 
