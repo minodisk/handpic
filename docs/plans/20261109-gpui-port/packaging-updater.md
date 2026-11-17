@@ -15,7 +15,9 @@ contract) is in git history only.
 Each claim is tagged **Source** (read from the named source on 2026-11-16) or
 **Unverified** (to be checked in the sub-milestone that needs it). Nothing
 here comes from running a packaging tool, `self_update` or an update; no
-packaging or updater code was written.
+packaging or updater code was written. The exceptions are the items tagged
+**Measured**, rewritten by the gpui-packaging plan
+(`../20261117-gpui-packaging/plan.md`) from its `Package` runs.
 
 ## The user's decision (2026-11-16)
 
@@ -254,9 +256,24 @@ To be checked in the sub-milestone that needs each one.
   **Source** (`CLAUDE.md`): `settings.rs` seeds its store from the Tauri
   `settings.json`, and the index is the native app's own. Not checked on a
   real install.
-- **Unverified.** Which Inno Setup directives give a per-user install under
-  `%LOCALAPPDATA%` with no UAC prompt, and whether an upgrade under
-  `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART` shows none either.
+- **Measured** (2026-11-17, the gpui-packaging plan's Step 2, `Package` run
+  44077941693 on `windows-latest`). `PrivilegesRequired=lowest` with
+  `DefaultDirName={autopf}\Handpic` installs to
+  `%LOCALAPPDATA%\Programs\Handpic` (`C:\Users\runneradmin\AppData\Local\Programs\Handpic\`
+  on the runner), with the uninstall entry under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1`
+  and none under `HKLM`, and a Start menu shortcut under `%APPDATA%`.
+  The install under `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, a second run
+  over it (the upgrade) and the silent uninstall each exit 0, the uninstall
+  removing the exe, the entry and the shortcut. Directives:
+  `AppId=dev.minodisk.handpic` (never to change), `ArchitecturesAllowed` and
+  `ArchitecturesInstallIn64BitMode` `x64compatible`, `SetupIconFile`
+  `crates/app/icons/icon.ico`, the version given as `ISCC
+  /DAppVersion=<version>`. The runner image ships Inno Setup 6.7.1, its
+  `ISCC.exe` on `PATH` as Chocolatey's `iscc` shim, so the workflow
+  installs nothing. **Unverified**: the hosted runner runs elevated, so the
+  absence of a UAC prompt for a standard user, at the install and at a
+  silent upgrade, is for a real machine (sub-milestone 4's gate).
 - **Unverified.** Whether the setup started at quit outlives the app's
   process and replaces the exe once it has exited (file locks, Inno's
   close-applications handling).
