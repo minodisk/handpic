@@ -801,13 +801,15 @@ view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
 returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
 with the file selected alone for `show_photo` or with
 `selection::selection_of` over the given paths for `select_photos`,
-`toggle_zoom`, `judge_paths`, or `perform` with a `companion::Key`) and
-replies through `Mcp::reply`.
+`toggle_zoom`, `judge_paths`, `perform` with a `companion::Key`,
+`apply_menu`, `change_panels`, or the overlays' toggles) and replies through
+`Mcp::reply`.
 
 The tool list is the host's. `Mcp::new` lists the seven companion tools with
 the Tauri `INSTRUCTIONS`, which is what the Tauri app keeps (`crates/app` is
 not touched); `Mcp::with_all_tools` adds the `native_router` tools
-(`navigate`, `select_all`, `reject_rest`, `undo`, `redo`) and the native
+(`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
+`set_filter`, `set_panes`, `set_overlays`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -821,6 +823,24 @@ photo in a burst of two or more outside a view-only folder, and `undo` /
 `redo` a judgment batch on top of their history (`history::Top`); a trash run
 on top, or an undo or redo of one in flight, is refused, since its restore is
 not exposed yet. Each replies with the new `get_view`.
+
+The view-state tools set a state rather than toggle it, so a repeated call
+changes nothing. `set_sort` and `set_filter` become the menu clicks
+(`menu::Action`) that reach the asked state, which `apply_menu` applies, the
+same tail a menu click runs: `sortOrder` and the remembered `filter` written
+when they change, then `refilter` on `kept_anchor`, so the current file lands
+where `filter::anchor_after_filter` puts it. A `set_filter` section given
+replaces its checks, one left out keeps them, and `reset` is the menu's
+`Reset` click first; the `Output` items need the folder's export answer and
+an EXIF label one of the folder's groups (`get_view`'s `filter_offers`).
+`set_sort` refuses `recommended` (the ranking is not ported) and a view-only
+folder, whose Sort menu is disabled; `get_view.sort` there reports `capture`,
+the order in force (`viewonly::sort_for`). `set_panes` goes through
+`change_panels` (the tree's keyboard handed back from a hidden left pane, a
+1:1 crop re-cut, `panels` written), and `set_overlays` flips only the `f`
+(`toggle_marks`), `e` (`toggle_peaking`) and `d` (`toggle_perf`) overlays
+that differ. The pane widths and the strip height, set by a drag, have no
+tool: they are pointer-only geometry, like the window's.
 
 Every request but `get_view` is refused while `key_down` drops keys
 (`companion::Busy`): the settings modal open, a Move to Trash or Delete

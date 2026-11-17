@@ -65,8 +65,8 @@ ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. Thi
 connects you to the running app so you can assist while they cull: read what Handpic is showing \
 (the current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
 settings and the current stars, pick / reject flag and color label), look at a small copy of a \
-photo's preview, move through the photos and the bursts, select photos, and record stars, picks \
-/ rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+photo's preview, move through the photos and the bursts, select photos, set the sort, the \
+filter, the panes shown and the overlays, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
 undo and sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
@@ -359,6 +359,198 @@ pub struct NavigateArgs {
     to: Direction,
 }
 
+/// The strip's order `set_sort` sets, as the sort menu's items name it.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum SortBy {
+    Name,
+    Capture,
+    Rating,
+    Recommended,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct SortArgs {
+    /// `name`, `capture` (capture time) or `rating`; `recommended` is not in
+    /// the native app yet.
+    by: SortBy,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum FlagItem {
+    Picked,
+    Untagged,
+    Rejected,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum LabelItem {
+    Red,
+    Orange,
+    Yellow,
+    Green,
+    Blue,
+    Pink,
+    Purple,
+    None,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum OrientationItem {
+    Portrait,
+    Landscape,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum FaceFocusItem {
+    Good,
+    Neutral,
+    Low,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum EyesItem {
+    Open,
+    Closed,
+    Unknown,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum OutputItem {
+    Output,
+    NoOutput,
+}
+
+/// The EXIF sections `set_filter` sets, each the labels to check among the
+/// ones `get_view`'s `filter_offers.exif` lists.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct ExifArgs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    camera: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lens: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    aperture: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shutter: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    iso: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    focal: Option<Vec<String>>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct FilterArgs {
+    /// Uncheck every item first, as the menu's Reset does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reset: Option<bool>,
+    /// The flags to check: `picked`, `untagged`, `rejected`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    flags: Option<Vec<FlagItem>>,
+    /// The star counts to check, 0 (unrated) to 5.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stars: Option<Vec<u8>>,
+    /// The color labels to check, lower-cased, or `none` for no label.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    labels: Option<Vec<LabelItem>>,
+    /// `portrait` and / or `landscape`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    orientations: Option<Vec<OrientationItem>>,
+    /// The `Face focus` items: `good`, `neutral`, `low`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    face_focus: Option<Vec<FaceFocusItem>>,
+    /// The `Eyes` items: `open`, `closed`, `unknown`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    eyes: Option<Vec<EyesItem>>,
+    /// `output` and / or `no_output`; only when the folder offers them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output: Option<Vec<OutputItem>>,
+    /// The EXIF sections to set; a section left out keeps its checks.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    exif: Option<ExifArgs>,
+}
+
+/// The `set_filter` request for the main window, with only the sections
+/// given.
+fn filter(args: FilterArgs) -> Result<Value, String> {
+    if args
+        .stars
+        .as_ref()
+        .is_some_and(|s| s.iter().any(|n| *n > 5))
+    {
+        return Err("stars must be integers from 0 to 5".into());
+    }
+    let request = serde_json::to_value(args).map_err(|e| e.to_string())?;
+    if request.as_object().is_none_or(|o| o.is_empty()) {
+        return Err(
+            "set reset or at least one of flags, stars, labels, orientations, face_focus, \
+            eyes, output, exif"
+                .into(),
+        );
+    }
+    Ok(request)
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct PanesArgs {
+    /// Whether the left pane (the folder tree) is shown; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    left: Option<bool>,
+    /// Whether the right pane (the shooting settings) is shown; kept when
+    /// omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    right: Option<bool>,
+    /// Whether the thumbnail strip is shown; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strip: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct OverlaysArgs {
+    /// The `f` overlay: the AF point, the face boxes and the eye judgment;
+    /// kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    focus: Option<bool>,
+    /// The `e` focus peaking; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    peaking: Option<bool>,
+    /// The `d` performance graph; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    performance: Option<bool>,
+}
+
+/// The request of a tool whose fields are all optional switches, refused
+/// when none is given.
+fn switches(args: impl serde::Serialize, names: &str) -> Result<Value, String> {
+    let request = serde_json::to_value(args).map_err(|e| e.to_string())?;
+    if request.as_object().is_none_or(|o| o.is_empty()) {
+        return Err(format!("set at least one of {names}"));
+    }
+    Ok(request)
+}
+
 /// The MCP handler each client session gets.
 #[derive(Clone)]
 pub struct Companion {
@@ -591,6 +783,58 @@ impl Companion {
     )]
     async fn redo(&self) -> CallToolResult {
         self.view_call("redo").await
+    }
+
+    #[tool(
+        description = "Set the filmstrip's order, as the Sort menu does, keeping the current \
+        photo: `name`, `capture` or `rating`. Remembered for the next launch. A JPEG-only \
+        folder stays in capture order and refuses it. Returns the new view, as `get_view` \
+        does (its `sort`)."
+    )]
+    async fn set_sort(&self, Parameters(args): Parameters<SortArgs>) -> CallToolResult {
+        tool_result(self.bridge.call("set_sort", json!({ "by": args.by })).await)
+    }
+
+    #[tool(
+        description = "Set which items of the Filter menu are checked. A section given \
+        replaces its checks (an empty list unchecks it), a section left out keeps them, and \
+        `reset` unchecks everything first. Within a section any checked item passes; across \
+        sections all must. The output and EXIF sections take only what `get_view`'s \
+        `filter_offers` lists for the open folder. The current photo stays when the filter \
+        still shows it, else the nearest shown one becomes current. Returns the new view, as \
+        `get_view` does (its `filter`)."
+    )]
+    async fn set_filter(&self, Parameters(args): Parameters<FilterArgs>) -> CallToolResult {
+        match filter(args) {
+            Ok(request) => tool_result(self.bridge.call("set_filter", request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
+        }
+    }
+
+    #[tool(
+        description = "Show or hide Handpic's left pane (the folder tree), right pane (the \
+        shooting settings) and thumbnail strip, as their keys do; an omitted one is kept. \
+        Remembered for the next launch. Returns the new view, as `get_view` does (its \
+        `panes`)."
+    )]
+    async fn set_panes(&self, Parameters(args): Parameters<PanesArgs>) -> CallToolResult {
+        match switches(args, "left, right, strip") {
+            Ok(request) => tool_result(self.bridge.call("set_panes", request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
+        }
+    }
+
+    #[tool(
+        description = "Turn Handpic's overlays on or off, as their keys do: `focus` (the AF \
+        point, face boxes and eye judgment over the photo), `peaking` (focus peaking) and \
+        `performance` (the CPU, disk and latency graph); an omitted one is kept. Returns the \
+        new view, as `get_view` does (its `overlays`)."
+    )]
+    async fn set_overlays(&self, Parameters(args): Parameters<OverlaysArgs>) -> CallToolResult {
+        match switches(args, "focus, peaking, performance") {
+            Ok(request) => tool_result(self.bridge.call("set_overlays", request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
+        }
     }
 }
 
@@ -1028,7 +1272,11 @@ mod tests {
                 "reject_rest",
                 "select_all",
                 "select_photos",
+                "set_filter",
                 "set_judgment",
+                "set_overlays",
+                "set_panes",
+                "set_sort",
                 "set_view",
                 "show_photo",
                 "undo"
@@ -1050,6 +1298,65 @@ mod tests {
             json!({ "to": "burst_frame_next" })
         );
         assert!(serde_json::from_value::<NavigateArgs>(json!({ "to": "up" })).is_err());
+    }
+
+    #[test]
+    fn set_sort_takes_the_menus_keys_by_name() {
+        let args: SortArgs = serde_json::from_value(json!({ "by": "capture" })).unwrap();
+        assert_eq!(json!({ "by": args.by }), json!({ "by": "capture" }));
+        assert!(serde_json::from_value::<SortArgs>(json!({ "by": "size" })).is_err());
+    }
+
+    fn filter_args(value: Value) -> Result<Value, String> {
+        filter(serde_json::from_value(value).map_err(|e| e.to_string())?)
+    }
+
+    #[test]
+    fn filter_forwards_only_the_given_sections() {
+        assert_eq!(
+            filter_args(json!({
+                "flags": ["picked"],
+                "output": ["no_output"],
+                "exif": { "lens": [] },
+            })),
+            Ok(json!({ "flags": ["picked"], "output": ["no_output"], "exif": { "lens": [] } }))
+        );
+        assert_eq!(
+            filter_args(json!({ "reset": true })),
+            Ok(json!({ "reset": true }))
+        );
+    }
+
+    #[test]
+    fn filter_refuses_an_empty_call_and_stars_out_of_range() {
+        assert!(filter_args(json!({})).unwrap_err().starts_with("set reset"));
+        assert_eq!(
+            filter_args(json!({ "stars": [6] })),
+            Err("stars must be integers from 0 to 5".into())
+        );
+        assert!(filter_args(json!({ "labels": ["teal"] })).is_err());
+    }
+
+    #[test]
+    fn filter_refuses_a_misspelled_field_or_exif_section() {
+        assert!(filter_args(json!({ "exif": { "body": [] } })).is_err());
+        assert!(filter_args(json!({ "flag": ["picked"], "stars": [5] })).is_err());
+        assert!(serde_json::from_value::<PanesArgs>(json!({ "leftt": true })).is_err());
+        assert!(serde_json::from_value::<OverlaysArgs>(json!({ "nope": true })).is_err());
+    }
+
+    #[test]
+    fn switches_forward_the_given_ones_and_refuse_none() {
+        let panes: PanesArgs = serde_json::from_value(json!({ "left": false })).unwrap();
+        assert_eq!(
+            switches(panes, "left, right, strip"),
+            Ok(json!({ "left": false }))
+        );
+        let none: OverlaysArgs = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(
+            switches(none, "focus, peaking, performance"),
+            Err("set at least one of focus, peaking, performance".into())
+        );
     }
 
     #[test]

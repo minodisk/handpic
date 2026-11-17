@@ -107,6 +107,10 @@ impl<S, O> Default for Peaking<S, O> {
 }
 
 impl<S: Clone + PartialEq, O> Peaking<S, O> {
+    pub fn is_on(&self) -> bool {
+        self.on
+    }
+
     /// `e`. Turning off clears both layers and returns their overlays.
     pub fn toggle(&mut self) -> Vec<O> {
         self.on = !self.on;

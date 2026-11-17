@@ -1,12 +1,15 @@
 //! The answering side of the MCP companion, a port of `companion.ts` over a
 //! snapshot of the view, extended with the native app's own tools: the
 //! moves, Select All, Reject Rest, undo and redo, each the `Key` its keymap
-//! action runs. The selection is the strip's (`selection::targets`). The
-//! native view has no compare, so compare is refused, and so is every
-//! request but `get_view` while the view drops keys (`Busy`).
+//! action runs, and the sort, the filter, the panes and the overlays, each
+//! set to a given state rather than toggled. The selection is the strip's
+//! (`selection::targets`). The native view has no compare and no ranking, so
+//! compare and the `recommended` sort are refused, and so is every request
+//! but `get_view` while the view drops keys (`Busy`).
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
+    hash::Hash,
     path::PathBuf,
     sync::Arc,
 };
@@ -20,19 +23,38 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     burst::BurstMember,
-    filter::Facts,
+    exif::{GROUPS, Group, Groups},
+    filter::{self, Facts, FilterState, OutputState},
     history::Top,
     judgment::State,
+    menu::{self, Toggle},
+    panels::Panels,
     selection::{self, Selection},
+    sort::SortKey,
+    viewonly,
 };
 
 const COMPARE_REFUSAL: &str = "compare is not supported by Handpic's native app yet";
+const RECOMMENDED_REFUSAL: &str =
+    "the recommended sort is not implemented in Handpic's native app yet";
 const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
 /// The color labels the judgment keys set, as `State.label` holds them.
 const LABELS: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Pink", "Purple"];
+/// The `Output` items' names.
+const OUTPUTS: [(OutputState, &str); 2] =
+    [(OutputState::Yes, "output"), (OutputState::No, "no_output")];
+/// The EXIF sections' names.
+const GROUP_NAMES: [(Group, &str); 6] = [
+    (Group::Camera, "camera"),
+    (Group::Lens, "lens"),
+    (Group::Aperture, "aperture"),
+    (Group::Shutter, "shutter"),
+    (Group::Iso, "iso"),
+    (Group::Focal, "focal"),
+];
 
 /// What a request reads of the view.
 pub struct View<'a> {
@@ -42,9 +64,15 @@ pub struct View<'a> {
     pub files: &'a [PathBuf],
     pub index: usize,
     pub zoomed: bool,
-    /// The sort key's setting name.
-    pub sort: &'static str,
-    pub filtered: bool,
+    /// The user's sort key, which a view-only folder sets aside.
+    pub sort: SortKey,
+    pub filter: &'a FilterState,
+    /// The open folder gave an export answer, so the `Output` section applies.
+    pub output_known: bool,
+    /// The open folder's EXIF labels per group, the menu's EXIF sections.
+    pub groups: &'a Groups,
+    pub panes: Panels,
+    pub overlays: Overlays,
     /// The current file's eyes: `None` not judged yet, `Some(None)` judged
     /// with the eyes unknown.
     pub eyes: Option<Option<Arc<EyesJudgment>>>,
@@ -65,6 +93,14 @@ pub struct View<'a> {
     pub redo: Top,
     /// An undo or a redo of a run to the Trash is out.
     pub trash_stepping: bool,
+}
+
+/// Which of the `f`, `e` and `d` overlays are on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Overlays {
+    pub focus: bool,
+    pub peaking: bool,
+    pub performance: bool,
 }
 
 /// The states in which `key_down` drops a key, which refuse every request
@@ -143,6 +179,12 @@ pub enum Action {
         paths: Vec<String>,
     },
     ToggleZoom,
+    /// Apply these sort or filter menu clicks in order, as the menu does.
+    Menu(Vec<menu::Action>),
+    /// Show these panes, as their keys do.
+    Panes(Panels),
+    /// Flip the overlays marked true, as their keys do.
+    Overlays(Overlays),
     /// Record `changes` as one undo entry, as a judgment key does, and reply
     /// with `judged` instead of `get_view`.
     Judge {
@@ -180,6 +222,10 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "reject_rest" => reject_rest(view).map(|_| Some(Action::Key(Key::RejectRest))),
         "undo" => step(view, false).map(|key| Some(Action::Key(key))),
         "redo" => step(view, true).map(|key| Some(Action::Key(key))),
+        "set_sort" => set_sort(view, &args["by"]),
+        "set_filter" => set_filter(view, args),
+        "set_panes" => set_panes(view, args),
+        "set_overlays" => set_overlays(view, args),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -329,8 +375,66 @@ pub fn get_view(view: &View) -> Value {
         "mode": if view.zoomed { "zoom" } else { "normal" },
         "compare_active": null,
         "burst": burst,
-        "sort": view.sort,
-        "filtered": view.filtered,
+        "sort": viewonly::sort_for(view.view_only, view.sort).setting(),
+        "filtered": view.filter.is_active(),
+        "filter": filter_of(view.filter),
+        "filter_offers": {
+            "output": view.output_known,
+            "exif": exif_of(GROUPS.iter().map(|&g| (g, view.groups.labels(g)))),
+        },
+        "panes": { "left": view.panes.left, "right": view.panes.right, "strip": view.panes.strip },
+        "overlays": {
+            "focus": view.overlays.focus,
+            "peaking": view.overlays.peaking,
+            "performance": view.overlays.performance,
+        },
+    })
+}
+
+fn named<T: Copy + Eq + Hash>(items: &[(T, &'static str)], set: &HashSet<T>) -> Vec<&'static str> {
+    items
+        .iter()
+        .filter(|(item, _)| set.contains(item))
+        .map(|(_, name)| *name)
+        .collect()
+}
+
+fn group_name(group: Group) -> &'static str {
+    GROUP_NAMES
+        .iter()
+        .find(|(g, _)| *g == group)
+        .map_or("", |(_, name)| *name)
+}
+
+/// Each group's labels by the group's name, a group without any left out.
+fn exif_of<'s>(groups: impl Iterator<Item = (Group, &'s [String])>) -> Value {
+    Value::Object(
+        groups
+            .filter(|(_, labels)| !labels.is_empty())
+            .map(|(group, labels)| (group_name(group).to_owned(), json!(labels)))
+            .collect(),
+    )
+}
+
+/// The filter's checked items per section, as `set_filter` names them.
+fn filter_of(filter: &FilterState) -> Value {
+    let exif: Vec<(Group, Vec<String>)> = filter
+        .exif
+        .iter()
+        .map(|(group, labels)| (*group, labels.iter().cloned().collect()))
+        .collect();
+    json!({
+        "flags": named(&filter::FLAGS, &filter.flags),
+        "stars": (0..=5).filter(|s| filter.stars.contains(s)).collect::<Vec<u8>>(),
+        "labels": filter::LABELS
+            .iter()
+            .filter(|l| filter.labels.contains(**l))
+            .collect::<Vec<_>>(),
+        "orientations": named(&filter::ORIENTATIONS, &filter.orientations),
+        "face_focus": named(&filter::CANDIDATES, &filter.candidates),
+        "eyes": named(&filter::EYES, &filter.eyes),
+        "output": named(&OUTPUTS, &filter.outputs),
+        "exif": exif_of(exif.iter().map(|(g, labels)| (*g, labels.as_slice()))),
     })
 }
 
@@ -378,6 +482,295 @@ fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
         return Err(COMPARE_REFUSAL.into());
     }
     Ok(((mode == "zoom") != view.zoomed).then_some(Action::ToggleZoom))
+}
+
+/// The sort menu's pick; a JPEG-only folder, whose menu is disabled, keeps
+/// capture order.
+fn set_sort(view: &View, by: &Value) -> Result<Option<Action>, String> {
+    let key = match by.as_str() {
+        Some("name") => SortKey::Name,
+        Some("capture") => SortKey::Capture,
+        Some("rating") => SortKey::Rating,
+        Some("recommended") => return Err(RECOMMENDED_REFUSAL.into()),
+        _ => return Err("by must be one of name, capture, rating".into()),
+    };
+    if view.view_only {
+        return Err("a JPEG folder stays in capture order; the sort does not apply to it".into());
+    }
+    Ok((key != view.sort).then(|| Action::Menu(vec![menu::Action::Sort(key)])))
+}
+
+/// A section's items given by name, each one of `items`.
+fn items<T: Copy + Eq + Hash>(
+    value: &Value,
+    items: &[(T, &str)],
+    field: &str,
+) -> Result<HashSet<T>, String> {
+    let refusal = || {
+        let names: Vec<&str> = items.iter().map(|(_, name)| *name).collect();
+        format!("{field} must be an array of {}", names.join(", "))
+    };
+    value
+        .as_array()
+        .ok_or_else(refusal)?
+        .iter()
+        .map(|item| {
+            let name = item.as_str().ok_or_else(refusal)?;
+            items
+                .iter()
+                .find(|(_, n)| *n == name)
+                .map(|(item, _)| *item)
+                .ok_or_else(refusal)
+        })
+        .collect()
+}
+
+/// A field `args` gives, `null` counting as left out.
+fn given_field<'v>(args: &'v Value, name: &str) -> Option<&'v Value> {
+    args.get(name).filter(|v| !v.is_null())
+}
+
+fn exif_section(
+    view: &View,
+    name: &str,
+    labels: &Value,
+) -> Result<(Group, BTreeSet<String>), String> {
+    let group = GROUP_NAMES
+        .iter()
+        .find(|(_, n)| *n == name)
+        .map(|(group, _)| *group)
+        .ok_or_else(|| {
+            let names: Vec<&str> = GROUP_NAMES.iter().map(|(_, n)| *n).collect();
+            format!("exif sections must be among {}", names.join(", "))
+        })?;
+    let offered = view.groups.labels(group);
+    let refusal =
+        || format!("exif.{name} must be an array of the labels get_view's filter_offers lists");
+    let checked = labels
+        .as_array()
+        .ok_or_else(refusal)?
+        .iter()
+        .map(|label| {
+            label
+                .as_str()
+                .filter(|l| offered.iter().any(|o| o == l))
+                .map(str::to_owned)
+                .ok_or_else(refusal)
+        })
+        .collect::<Result<_, _>>()?;
+    Ok((group, checked))
+}
+
+/// The filter `args` asks for over the one in force: `reset` unchecks every
+/// item first, a section given replaces its checks, one left out keeps them.
+fn wanted_filter(view: &View, args: &Value) -> Result<FilterState, String> {
+    let reset = switch(args, "reset")?.unwrap_or(false);
+    let mut wanted = if reset {
+        FilterState::default()
+    } else {
+        view.filter.clone()
+    };
+    let mut given = reset;
+    if let Some(v) = given_field(args, "flags") {
+        wanted.flags = items(v, &filter::FLAGS, "flags")?;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "stars") {
+        let refusal = "stars must be an array of integers from 0 to 5";
+        wanted.stars = v
+            .as_array()
+            .ok_or(refusal)?
+            .iter()
+            .map(|n| {
+                n.as_u64()
+                    .filter(|n| *n <= 5)
+                    .map(|n| n as u8)
+                    .ok_or(refusal)
+            })
+            .collect::<Result<_, _>>()?;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "labels") {
+        let labels: Vec<(&str, &str)> = filter::LABELS.iter().map(|l| (*l, *l)).collect();
+        wanted.labels = items(v, &labels, "labels")?
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        given = true;
+    }
+    if let Some(v) = given_field(args, "orientations") {
+        wanted.orientations = items(v, &filter::ORIENTATIONS, "orientations")?;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "face_focus") {
+        wanted.candidates = items(v, &filter::CANDIDATES, "face_focus")?;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "eyes") {
+        wanted.eyes = items(v, &filter::EYES, "eyes")?;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "output") {
+        let outputs = items(v, &OUTPUTS, "output")?;
+        if !outputs.is_empty() && !view.output_known {
+            return Err(
+                "the open folder has no Output folder, so the output section does not apply".into(),
+            );
+        }
+        wanted.outputs = outputs;
+        given = true;
+    }
+    if let Some(v) = given_field(args, "exif") {
+        let sections = v.as_object().ok_or("exif must be an object of sections")?;
+        for (name, labels) in sections {
+            let (group, checked) = exif_section(view, name, labels)?;
+            if checked.is_empty() {
+                wanted.exif.remove(&group);
+            } else {
+                wanted.exif.insert(group, checked);
+            }
+        }
+        given = true;
+    }
+    if !given {
+        return Err(
+            "set reset or at least one of flags, stars, labels, orientations, \
+            face_focus, eyes, output, exif"
+                .into(),
+        );
+    }
+    Ok(wanted)
+}
+
+/// The item clicks that turn the checks of `from` into those of `to`.
+fn toggles(from: &FilterState, to: &FilterState) -> Vec<menu::Action> {
+    fn differ<T: Copy + Eq + Hash>(
+        items: impl IntoIterator<Item = T>,
+        from: &HashSet<T>,
+        to: &HashSet<T>,
+        toggle: impl Fn(T) -> Toggle,
+        out: &mut Vec<menu::Action>,
+    ) {
+        for item in items {
+            if from.contains(&item) != to.contains(&item) {
+                out.push(menu::Action::Toggle(toggle(item)));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    differ(
+        filter::FLAGS.map(|(f, _)| f),
+        &from.flags,
+        &to.flags,
+        Toggle::Flag,
+        &mut out,
+    );
+    differ(0..=5, &from.stars, &to.stars, Toggle::Stars, &mut out);
+    for label in filter::LABELS {
+        if from.labels.contains(*label) != to.labels.contains(*label) {
+            out.push(menu::Action::Toggle(Toggle::Label(label)));
+        }
+    }
+    differ(
+        filter::ORIENTATIONS.map(|(o, _)| o),
+        &from.orientations,
+        &to.orientations,
+        Toggle::Orientation,
+        &mut out,
+    );
+    differ(
+        filter::CANDIDATES.map(|(c, _)| c),
+        &from.candidates,
+        &to.candidates,
+        Toggle::Candidate,
+        &mut out,
+    );
+    differ(
+        filter::EYES.map(|(e, _)| e),
+        &from.eyes,
+        &to.eyes,
+        Toggle::Eyes,
+        &mut out,
+    );
+    differ(
+        OUTPUTS.map(|(o, _)| o),
+        &from.outputs,
+        &to.outputs,
+        Toggle::Output,
+        &mut out,
+    );
+    let none = BTreeSet::new();
+    for group in GROUPS {
+        let was = from.exif.get(&group).unwrap_or(&none);
+        let will = to.exif.get(&group).unwrap_or(&none);
+        for label in was.symmetric_difference(will) {
+            out.push(menu::Action::Toggle(Toggle::Exif(group, label.clone())));
+        }
+    }
+    out
+}
+
+/// The menu clicks that check what `args` asks for, the menu's `Reset`
+/// first when it asks for one.
+fn set_filter(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    let wanted = wanted_filter(view, args)?;
+    if wanted == *view.filter {
+        return Ok(None);
+    }
+    let actions = if switch(args, "reset")? == Some(true) {
+        let mut actions = vec![menu::Action::Reset];
+        actions.extend(toggles(&FilterState::default(), &wanted));
+        actions
+    } else {
+        toggles(view.filter, &wanted)
+    };
+    Ok(Some(Action::Menu(actions)))
+}
+
+/// A switch `args` gives, `None` when left out.
+fn switch(args: &Value, name: &str) -> Result<Option<bool>, String> {
+    given_field(args, name)
+        .map(|on| {
+            on.as_bool()
+                .ok_or_else(|| format!("{name} must be true or false"))
+        })
+        .transpose()
+}
+
+fn set_panes(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    let (left, right, strip) = (
+        switch(args, "left")?,
+        switch(args, "right")?,
+        switch(args, "strip")?,
+    );
+    if left.is_none() && right.is_none() && strip.is_none() {
+        return Err("set at least one of left, right, strip".into());
+    }
+    let panes = Panels {
+        left: left.unwrap_or(view.panes.left),
+        right: right.unwrap_or(view.panes.right),
+        strip: strip.unwrap_or(view.panes.strip),
+    };
+    Ok((panes != view.panes).then_some(Action::Panes(panes)))
+}
+
+/// The overlays to flip, those given that differ from the ones on.
+fn set_overlays(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    let (focus, peaking, performance) = (
+        switch(args, "focus")?,
+        switch(args, "peaking")?,
+        switch(args, "performance")?,
+    );
+    if focus.is_none() && peaking.is_none() && performance.is_none() {
+        return Err("set at least one of focus, peaking, performance".into());
+    }
+    let on = view.overlays;
+    let flips = Overlays {
+        focus: focus.is_some_and(|f| f != on.focus),
+        peaking: peaking.is_some_and(|p| p != on.peaking),
+        performance: performance.is_some_and(|p| p != on.performance),
+    };
+    Ok((flips != Overlays::default()).then_some(Action::Overlays(flips)))
 }
 
 /// The fields `set_judgment` gives, `None` where it keeps each photo's own.
@@ -505,13 +898,17 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Busy, Change, Key, View, answer, get_view};
+    use super::{Action, Busy, Change, Key, Overlays, View, answer, get_view};
     use crate::{
         burst::BurstMember,
-        filter::Facts,
+        exif::{Group, Groups},
+        filter::{EyesItem, Facts, FilterFlag, FilterState, OutputState},
         history::Top,
         judgment::State,
+        menu::{self, Toggle},
+        panels::Panels,
         selection::{Selection, selection_of},
+        sort::SortKey,
     };
     use riffle_backend::{
         index::EyesPose,
@@ -534,6 +931,8 @@ mod tests {
     static NO_BURSTS: LazyLock<HashMap<String, BurstMember>> = LazyLock::new(HashMap::new);
     static NO_FACTS: LazyLock<HashMap<String, Facts>> = LazyLock::new(HashMap::new);
     static NO_SELECTION: LazyLock<Selection> = LazyLock::new(Selection::default);
+    static NO_FILTER: LazyLock<FilterState> = LazyLock::new(FilterState::default);
+    static NO_GROUPS: LazyLock<Groups> = LazyLock::new(Groups::default);
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -541,8 +940,12 @@ mod tests {
             files,
             index: 0,
             zoomed: false,
-            sort: "name",
-            filtered: false,
+            sort: SortKey::Name,
+            filter: &NO_FILTER,
+            output_known: false,
+            groups: &NO_GROUPS,
+            panes: Panels::default(),
+            overlays: Overlays::default(),
             eyes: None,
             view_only: false,
             judgments: &NO_JUDGMENTS,
@@ -579,6 +982,19 @@ mod tests {
                 "burst": [],
                 "sort": "name",
                 "filtered": false,
+                "filter": {
+                    "flags": [],
+                    "stars": [],
+                    "labels": [],
+                    "orientations": [],
+                    "face_focus": [],
+                    "eyes": [],
+                    "output": [],
+                    "exif": {},
+                },
+                "filter_offers": { "output": false, "exif": {} },
+                "panes": { "left": true, "right": true, "strip": true },
+                "overlays": { "focus": false, "peaking": false, "performance": false },
             })
         );
     }
@@ -586,26 +1002,33 @@ mod tests {
     #[test]
     fn reports_the_current_file_as_the_selection_and_no_burst() {
         let files = paths(&["/d/a.ARW", "/d/b.ARW"]);
+        let filter = FilterState {
+            flags: HashSet::from([FilterFlag::Picked]),
+            ..FilterState::default()
+        };
         let view = View {
             index: 1,
             zoomed: true,
-            sort: "capture",
-            filtered: true,
+            sort: SortKey::Capture,
+            filter: &filter,
             ..view(&files)
         };
+        let got = get_view(&view);
         assert_eq!(
-            get_view(&view),
-            json!({
-                "folder": "/d",
-                "count": 2,
-                "current": { "path": "/d/b.ARW", "position": 2 },
-                "selected": ["/d/b.ARW"],
-                "mode": "zoom",
-                "compare_active": null,
-                "burst": [],
-                "sort": "capture",
-                "filtered": true,
-            })
+            [
+                "folder", "count", "current", "selected", "mode", "burst", "sort", "filtered"
+            ]
+            .map(|key| got[key].clone()),
+            [
+                json!("/d"),
+                json!(2),
+                json!({ "path": "/d/b.ARW", "position": 2 }),
+                json!(["/d/b.ARW"]),
+                json!("zoom"),
+                json!([]),
+                json!("capture"),
+                json!(true),
+            ]
         );
     }
 
@@ -1054,6 +1477,10 @@ mod tests {
                 ("reject_rest", json!({})),
                 ("undo", json!({})),
                 ("redo", json!({})),
+                ("set_sort", json!({ "by": "rating" })),
+                ("set_filter", json!({ "reset": true })),
+                ("set_panes", json!({ "left": false })),
+                ("set_overlays", json!({ "focus": true })),
             ] {
                 assert_eq!(ask(kind, args, &view), Err(message.into()), "{kind}");
             }
@@ -1331,5 +1758,351 @@ mod tests {
             ])
         );
         assert_eq!(changes.len(), 2);
+    }
+
+    fn lens_groups() -> Groups {
+        Groups(vec![(
+            Group::Lens,
+            vec!["FE 24mm".to_owned(), "FE 50mm".to_owned()],
+        )])
+    }
+
+    #[test]
+    fn reports_the_filters_checks_what_the_folder_offers_the_panes_and_the_overlays() {
+        let groups = lens_groups();
+        let filter = FilterState {
+            flags: HashSet::from([FilterFlag::Rejected, FilterFlag::Picked]),
+            stars: HashSet::from([5, 0]),
+            labels: HashSet::from(["none".to_owned(), "red".to_owned()]),
+            outputs: HashSet::from([OutputState::No]),
+            exif: [(Group::Lens, ["FE 50mm".to_owned()].into())].into(),
+            ..FilterState::default()
+        };
+        let view = View {
+            filter: &filter,
+            output_known: true,
+            groups: &groups,
+            panes: Panels {
+                left: false,
+                strip: true,
+                right: true,
+            },
+            overlays: Overlays {
+                peaking: true,
+                ..Overlays::default()
+            },
+            ..view(&[])
+        };
+        let got = get_view(&view);
+        assert_eq!(got["filtered"], json!(true));
+        assert_eq!(
+            got["filter"],
+            json!({
+                "flags": ["picked", "rejected"],
+                "stars": [0, 5],
+                "labels": ["red", "none"],
+                "orientations": [],
+                "face_focus": [],
+                "eyes": [],
+                "output": ["no_output"],
+                "exif": { "lens": ["FE 50mm"] },
+            })
+        );
+        assert_eq!(
+            got["filter_offers"],
+            json!({ "output": true, "exif": { "lens": ["FE 24mm", "FE 50mm"] } })
+        );
+        assert_eq!(
+            got["panes"],
+            json!({ "left": false, "right": true, "strip": true })
+        );
+        assert_eq!(
+            got["overlays"],
+            json!({ "focus": false, "peaking": true, "performance": false })
+        );
+    }
+
+    #[test]
+    fn set_sort_picks_a_menu_key_only_when_it_differs() {
+        let view = view(&[]);
+        assert_eq!(
+            ask("set_sort", json!({ "by": "rating" }), &view),
+            Ok(Some(Action::Menu(vec![menu::Action::Sort(
+                SortKey::Rating
+            )])))
+        );
+        assert_eq!(ask("set_sort", json!({ "by": "name" }), &view), Ok(None));
+        assert_eq!(
+            ask("set_sort", json!({ "by": "recommended" }), &view),
+            Err("the recommended sort is not implemented in Handpic's native app yet".into())
+        );
+        assert_eq!(
+            ask("set_sort", json!({ "by": "size" }), &view),
+            Err("by must be one of name, capture, rating".into())
+        );
+    }
+
+    #[test]
+    fn set_sort_is_refused_in_a_view_only_folder_which_reports_capture_order() {
+        let files = paths(&["/d/a.jpg"]);
+        let view = View {
+            view_only: true,
+            sort: SortKey::Rating,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("set_sort", json!({ "by": "name" }), &view),
+            Err("a JPEG folder stays in capture order; the sort does not apply to it".into())
+        );
+        assert_eq!(get_view(&view)["sort"], json!("capture"));
+    }
+
+    /// The filter `set_filter`'s clicks give over `view`'s.
+    fn filtered(args: Value, view: &View) -> FilterState {
+        let Ok(Some(Action::Menu(actions))) = ask("set_filter", args, view) else {
+            panic!("set_filter gave no menu clicks");
+        };
+        let (mut filter, mut sort) = (view.filter.clone(), view.sort);
+        for action in actions {
+            menu::apply(&mut filter, &mut sort, action);
+        }
+        filter
+    }
+
+    #[test]
+    fn set_filter_replaces_the_given_sections_and_keeps_the_others() {
+        let groups = lens_groups();
+        let filter = FilterState {
+            flags: HashSet::from([FilterFlag::Rejected]),
+            stars: HashSet::from([1]),
+            ..FilterState::default()
+        };
+        let view = View {
+            filter: &filter,
+            groups: &groups,
+            ..view(&[])
+        };
+        let got = filtered(
+            json!({
+                "flags": ["picked", "untagged"],
+                "labels": ["green", "none"],
+                "eyes": ["closed"],
+                "exif": { "lens": ["FE 24mm"] },
+            }),
+            &view,
+        );
+        assert_eq!(
+            got,
+            FilterState {
+                flags: HashSet::from([FilterFlag::Picked, FilterFlag::Untagged]),
+                stars: HashSet::from([1]),
+                labels: HashSet::from(["green".to_owned(), "none".to_owned()]),
+                eyes: HashSet::from([EyesItem::Closed]),
+                exif: [(Group::Lens, ["FE 24mm".to_owned()].into())].into(),
+                ..FilterState::default()
+            }
+        );
+    }
+
+    #[test]
+    fn set_filter_resets_through_the_menus_reset_then_checks_what_it_gives() {
+        let filter = FilterState {
+            flags: HashSet::from([FilterFlag::Rejected]),
+            stars: HashSet::from([1]),
+            ..FilterState::default()
+        };
+        let view = View {
+            filter: &filter,
+            ..view(&[])
+        };
+        let Ok(Some(Action::Menu(actions))) =
+            ask("set_filter", json!({ "reset": true, "stars": [5] }), &view)
+        else {
+            panic!("set_filter gave no menu clicks");
+        };
+        assert_eq!(
+            actions,
+            [menu::Action::Reset, menu::Action::Toggle(Toggle::Stars(5))]
+        );
+        assert_eq!(
+            filtered(json!({ "reset": true }), &view),
+            FilterState::default()
+        );
+    }
+
+    #[test]
+    fn set_filter_changes_nothing_when_the_checks_already_match() {
+        let filter = FilterState {
+            stars: HashSet::from([4, 5]),
+            ..FilterState::default()
+        };
+        let checked = View {
+            filter: &filter,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("set_filter", json!({ "stars": [5, 4] }), &checked),
+            Ok(None)
+        );
+        assert_eq!(
+            ask("set_filter", json!({ "flags": [] }), &checked),
+            Ok(None)
+        );
+        let unfiltered = view(&[]);
+        assert_eq!(
+            ask("set_filter", json!({ "reset": true }), &unfiltered),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn set_filter_takes_an_empty_exif_section_as_unchecking_it() {
+        let groups = lens_groups();
+        let filter = FilterState {
+            exif: [(Group::Lens, ["FE 50mm".to_owned()].into())].into(),
+            ..FilterState::default()
+        };
+        let view = View {
+            filter: &filter,
+            groups: &groups,
+            ..view(&[])
+        };
+        assert_eq!(
+            filtered(json!({ "exif": { "lens": [] } }), &view),
+            FilterState::default()
+        );
+    }
+
+    #[test]
+    fn set_filter_refuses_what_the_menu_does_not_offer() {
+        let groups = lens_groups();
+        let view = View {
+            groups: &groups,
+            ..view(&[])
+        };
+        for (args, message) in [
+            (
+                json!({}),
+                "set reset or at least one of flags, stars, labels, orientations, \
+                face_focus, eyes, output, exif",
+            ),
+            (json!({ "reset": "yes" }), "reset must be true or false"),
+            (
+                json!({ "flags": ["starred"] }),
+                "flags must be an array of picked, untagged, rejected",
+            ),
+            (
+                json!({ "stars": [6] }),
+                "stars must be an array of integers from 0 to 5",
+            ),
+            (
+                json!({ "labels": ["Red"] }),
+                "labels must be an array of red, orange, yellow, green, blue, pink, purple, none",
+            ),
+            (
+                json!({ "face_focus": "good" }),
+                "face_focus must be an array of good, neutral, low",
+            ),
+            (
+                json!({ "output": ["output"] }),
+                "the open folder has no Output folder, so the output section does not apply",
+            ),
+            (
+                json!({ "exif": { "camera": ["ILCE-1"] } }),
+                "exif.camera must be an array of the labels get_view's filter_offers lists",
+            ),
+            (
+                json!({ "exif": { "lens": ["FE 85mm"] } }),
+                "exif.lens must be an array of the labels get_view's filter_offers lists",
+            ),
+            (
+                json!({ "exif": { "body": [] } }),
+                "exif sections must be among camera, lens, aperture, shutter, iso, focal",
+            ),
+        ] {
+            assert_eq!(
+                ask("set_filter", args.clone(), &view),
+                Err(message.into()),
+                "{args}"
+            );
+        }
+        assert_eq!(ask("set_filter", json!({ "output": [] }), &view), Ok(None));
+        let known = View {
+            output_known: true,
+            ..self::view(&[])
+        };
+        assert_eq!(
+            filtered(json!({ "output": ["output"] }), &known).outputs,
+            HashSet::from([OutputState::Yes])
+        );
+    }
+
+    #[test]
+    fn set_panes_shows_the_given_panes_keeping_the_others() {
+        let view = View {
+            panes: Panels {
+                left: true,
+                strip: false,
+                right: true,
+            },
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("set_panes", json!({ "left": false, "strip": true }), &view),
+            Ok(Some(Action::Panes(Panels {
+                left: false,
+                strip: true,
+                right: true,
+            })))
+        );
+        assert_eq!(
+            ask("set_panes", json!({ "left": true, "strip": false }), &view),
+            Ok(None)
+        );
+        assert_eq!(
+            ask("set_panes", json!({}), &view),
+            Err("set at least one of left, right, strip".into())
+        );
+        assert_eq!(
+            ask("set_panes", json!({ "right": 0 }), &view),
+            Err("right must be true or false".into())
+        );
+    }
+
+    #[test]
+    fn set_overlays_flips_only_the_ones_that_differ() {
+        let view = View {
+            overlays: Overlays {
+                focus: true,
+                ..Overlays::default()
+            },
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "set_overlays",
+                json!({ "focus": true, "peaking": true, "performance": false }),
+                &view
+            ),
+            Ok(Some(Action::Overlays(Overlays {
+                peaking: true,
+                ..Overlays::default()
+            })))
+        );
+        assert_eq!(
+            ask("set_overlays", json!({ "focus": false }), &view),
+            Ok(Some(Action::Overlays(Overlays {
+                focus: true,
+                ..Overlays::default()
+            })))
+        );
+        assert_eq!(
+            ask("set_overlays", json!({ "focus": true }), &view),
+            Ok(None)
+        );
+        assert_eq!(
+            ask("set_overlays", json!({}), &view),
+            Err("set at least one of focus, peaking, performance".into())
+        );
     }
 }

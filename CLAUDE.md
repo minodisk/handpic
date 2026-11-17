@@ -413,7 +413,11 @@ over a snapshot of the view: the strip's selection, its targets as
 entry through the judgment keys' view, row and writer path, the `Key` a
 keymap action and its tool both run through the view's `perform` (the moves,
 `select_all`, `reject_rest`, `undo` and `redo`, an undo of a trash run
-refused), and `Busy`, which refuses every request but `get_view` while
+refused), `set_sort` and `set_filter` as the menu clicks the view's
+`apply_menu` applies (the `recommended` sort refused, a view-only folder
+refusing the sort), `set_panes` through `change_panels` and `set_overlays`
+flipping only the `f`, `e` and `d` overlays that differ, each reported back
+by `get_view` (`filter`, `filter_offers`, `panes`, `overlays`), and `Busy`, which refuses every request but `get_view` while
 `key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`

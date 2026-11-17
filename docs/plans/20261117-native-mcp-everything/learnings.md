@@ -43,6 +43,48 @@
   that builds the `\\?\` paths; write the JSON-building script to a file and
   call it.
 
+## Step 2: Sort, filter, panes and overlays
+
+- **Sort and filter become menu clicks.** `companion::set_sort` /
+  `set_filter` answer `Action::Menu(Vec<menu::Action>)`: the clicks that turn
+  the filter in force into the asked one (`toggles`, the menu's `Reset` first
+  when `reset` is given). `menu_action`'s tail moved into `apply_menu`, which
+  both the menu click and the tool run, so the `sortOrder` / `filter` writes
+  and the `kept_anchor` refilter are one path. A call that changes nothing
+  answers no action (D4).
+- **The sort in a view-only folder:** the Sort menu's button is disabled
+  there (`status_row`'s `!self.view_only`), so `set_sort` refuses it, and
+  `get_view.sort` now reports the order in force (`viewonly::sort_for`,
+  `capture`), not the user's kept key.
+- **`recommended` is a `set_sort` value refused with "not implemented in
+  Handpic's native app yet"** (D6, its natural place being this step's tool).
+  The `Genre` filter section was not added to `set_filter`: it needs the
+  ranking's label list, so Step 8 adds it with the other AI refusals.
+  Grayscale (the momentary hold landed in #1125) is not in `set_overlays`
+  either: a hold has no on / off state to set; Step 8 decides.
+- **Pane widths and the strip height are excluded** from `set_panes` as
+  pointer-only geometry, like the window's; Step 8's exclusion list takes
+  them (`docs/agents/native-app.md` says so).
+- `filter.rs`'s item name tables (`FLAGS`, `ORIENTATIONS`, `CANDIDATES`,
+  `EYES`, `LABELS`) are now `pub`, so `set_filter` and `get_view.filter` use
+  the stored names; `Peaking` got an `is_on`, and the `d` key's toggle moved
+  into `toggle_perf`.
+- **End to end** (`--mcp-port 41968`, fresh `--settings` seeded with
+  `mcpEnabled`, six ARW / NEF copies of four cameras): `get_view` listed the
+  folder's EXIF groups under `filter_offers`; `set_filter` with two cameras
+  and `picked` / `untagged` hid the rejected current file and landed on its
+  neighbour; repeating it changed nothing; `set_sort rating`, `set_panes`
+  and `set_overlays` were reported back by `get_view`, and the settings store
+  held `sortOrder` `"rating"`, the `filter` sections and `panels`;
+  `recommended` and `output` (no `Output` folder) were refused; `reset`
+  showed all six again.
+- **A Bash heredoc holding a large Python script failed** with "unexpected
+  EOF while looking for matching `'`" twice; writing the script with the
+  Write tool and running the file worked.
+- The first `mise run ci:local` failed on clippy's `explicit_auto_deref`
+  (`Toggle::Label(*label)` over `filter::LABELS`, a `&[&str]`); the
+  `cargo test` run before it had compiled it fine.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: the busy guard's wiring in the running app.** The
@@ -58,3 +100,11 @@
   open, a folder menu dialog (e.g. `Delete Sidecars…`) open, and a folder's
   inline rename open, each expecting its own message. Step 1's checkbox was
   ticked on the automated criteria.
+- **An empty lens label in the filter's EXIF groups.** Found by Step 2's end
+  to end check: `get_view.filter_offers.exif.lens` listed `""` for a folder
+  where a compact camera's ARW (`DSC-HX95` / `DSC-HX99`) reports an empty
+  lens string, so the Filter menu presumably draws a blank `Lens` item too.
+  `exif::exif_key` (`crates/native/src/exif.rs`) takes `Exif.lens` as is;
+  check whether the backend's `exif` reader should give `None` for an empty
+  string, or the key skip it, and whether the Tauri `exif.ts` behaves the
+  same.

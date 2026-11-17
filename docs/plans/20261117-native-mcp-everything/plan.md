@@ -158,7 +158,7 @@ Made with the user on 2026-11-17.
       `--log` and `--index` in the test folder, the `curl` body on stdin), on
       test copies of photos.
 
-- [ ] Step 2: Sort, filter, panes and overlays
+- [x] Step 2: Sort, filter, panes and overlays
   - Done when:
     - Tools exist for the view state a user changes without touching files:
       `set_sort` (the native sort keys), `set_filter` (flags, stars, labels,
@@ -425,3 +425,4 @@ Made with the user on 2026-11-17.
 ## Progress
 
 - (2026-11-17) Step 1 complete
+- (2026-11-17) Step 2 complete
