@@ -100,3 +100,5 @@ one order in all three places.
   order; the request does not cover it.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
