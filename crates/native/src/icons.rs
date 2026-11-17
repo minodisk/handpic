@@ -145,6 +145,8 @@ mod tests {
     fn a_component_icon_loads_from_their_set() {
         let bytes = Icons.load("icons/check.svg").unwrap().expect("check");
         assert!(bytes.starts_with(b"<svg"));
+        let bytes = Icons.load("icons/settings.svg").unwrap().expect("settings");
+        assert!(bytes.starts_with(b"<svg"));
     }
 
     #[test]
