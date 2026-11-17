@@ -216,3 +216,5 @@ What the investigation found (the facts the step relies on):
   criteria only (unit tests and `mise run ci:local`); the drag, cursor and
   look were not observed in the running app, and the hand checks are listed
   in `learnings.md`.
+
+(2026-11-17) Step 1 complete

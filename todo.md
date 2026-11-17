@@ -2498,11 +2498,11 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 
 ### Native: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
 
-`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` is 144x144 (`crates/app/ui/style.css` `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the native strip against 96x144 in the Tauri one. Growing it makes the strip about 50 px taller. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/native/src/strip.rs` (`BOX_HEIGHT`, `CELL_HEIGHT`), `crates/native/src/main.rs` (`paint_strip`).
+`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` is 144x144 (`crates/app/ui/style.css` `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the native strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/native/src/strip.rs` (`Geometry`), `crates/native/src/main.rs` (`paint_strip`).
 
 #### TODO
 
-- [ ] Decide when the strip gains its marks (port Steps 6-8) whether the native cell grows to the Tauri size, and change `BOX_HEIGHT` / `CELL_HEIGHT` if so.
+- [ ] Decide whether the default strip height, or the box's aspect, changes so the native cell matches the Tauri size, now that the user can drag the strip taller (`stripheight.rs` `DEFAULT`, `strip::Geometry`).
 
 ### Native: `present` p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
 
@@ -3568,3 +3568,19 @@ Files: `crates/native/src/grayscale.rs`, `crates/native/src/main.rs`, `crates/na
 - [ ] On Windows, hold `g` and Alt+Tab away and back. Expect the photo to be in color.
 - [ ] On Windows, hold `g` and open the settings (`ctrl+,`) or a right-click menu, release `g`, then close it. Expect the photo to be in color (the view's `on_blur` released the hold). If it stays gray, release the hold where the view opens the settings, a dialog or a menu instead.
 - [ ] On Windows, while `g` is held, page, press `z`, `f`, `e` and `d`. Expect them to behave as before.
+
+### Native: real-device checks of the drag-resizable strip height (native-strip-resize)
+
+`native-strip-resize` made the thumbnail strip's height in the GPUI app (`crates/native`) draggable by its top edge, stored under the `stripHeight` key of the settings store (default 128 px, 96 to 302 px, the preview at least 240 px), with the cells' image box scaling with the height. Unit tests (`stripheight.rs`, `strip.rs`'s geometry, hit test, range, content width and carried-offset tests, `settings.rs`'s read of `stripHeight`) and `mise run ci:local` cover the arithmetic and the setting. Nobody has dragged the handle in the running window: the drag itself, the cursor and the handle's line, the marks on the smallest cells, the sharpness of the largest, a release outside the window, the 1:1 re-cut and `--auto` are all unchecked. The limits (96 / 302 / 240) were not judged by eye. Plan: `docs/plans/_archived/20261117-native-strip-resize/plan.md`. Files: `crates/native/src/main.rs` (`strip_handle`, `StripDrag`, `drag_strip`, `end_pane_drag`, the wrapper `div` around the middle row and the strip in `render`), `crates/native/src/stripheight.rs`, `crates/native/src/strip.rs` (`Geometry`, `Strip::set_geometry`).
+
+Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store (except where a check says to restart).
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` on a folder and hover the strip's top edge. Expect the cursor to turn row-resize and the handle's 1 px line to read well on the theme, with clicks on the cells and the scrollbar still working.
+- [ ] On Windows, drag the strip's top edge up and down. Expect the strip to follow the pointer between 96 and 302 px, the thumbnails to scale with it, the preview never to get under 240 px, and the cells that were in view (the current one when on screen) to stay in view. Note whether the edge jumps a few px at the first move.
+- [ ] On Windows, at 96 px, check that the stars, the flag dot, the burst badge, the face icon and the file name are legible on the 96 x 64 boxes. At 302 px, check the thumbnails' sharpness at 100 % and on a HiDPI display.
+- [ ] On Windows, release the drag over the preview, over a pane, over the status row and outside the window, and restart each time. Expect the height to come back each time. For a release outside the window, note whether the height is written at once or only at the next click inside.
+- [ ] On Windows, press `z` for 1:1, then drag the edge. Expect the crop to be re-cut once the drag settles. Press `toggleStrip` to hide the strip and its handle, and again to bring both back at the dragged height.
+- [ ] On Windows, launch with `--auto`. Expect the strip to start at 128 whatever is stored and a drag to write nothing to `stripHeight`.
+- [ ] On macOS and Linux, repeat the hover, drag, scaling, restart, 1:1 and hide / show checks above. CI only builds these platforms.
