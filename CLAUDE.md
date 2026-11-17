@@ -152,7 +152,9 @@ loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
 tools, or every tool after `with_all_tools` (the native app's), started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
-callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
+callback and waits for its `reply`, `wait_for_idle`'s call waiting up to
+`IDLE_WAIT_MAX`; the `get_photo` / `get_preview` reads and `list_folders`,
+over `folders` from the home directory `with_home` gives;
 `mcp_enabled_setting`, the stored `mcpEnabled` rule), `src/rename.rs` the
 folder and RAW file rename (`check_name`, `folder_target`, `file_plan` /
 `file_run`, and `rename_folder`, which releases the watcher and the tree
@@ -402,7 +404,7 @@ file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
 an open or a re-listing and narrowed by `retain` on a `refilter`; off under
 `--no-prefetch`), `src/mcp.rs` the MCP
-companion's server (the backend's `Mcp` with all its tools on a tokio runtime of its own on one
+companion's server (the backend's `Mcp` with all its tools and the tree's home directory on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
@@ -417,7 +419,14 @@ refused), `set_sort` and `set_filter` as the menu clicks the view's
 `apply_menu` applies (the `recommended` sort refused, a view-only folder
 refusing the sort), `set_panes` through `change_panels` and `set_overlays`
 flipping only the `f`, `e` and `d` overlays that differ, each reported back
-by `get_view` (`filter`, `filter_offers`, `panes`, `overlays`), and `Busy`, which refuses every request but `get_view` while
+by `get_view` (`filter`, `filter_offers`, `panes`, `overlays`), `open_folder`
+through `open_from_tree` (the open folder not reopened), `tree_folder` through
+`tree_toggle` and the tree menu's `folder_action` on the drawn row of the
+path, `reveal` through `folder_action` / `files_action`, `Status`, the
+`get_status` answer of the status line, the scan pass, a listing or run under
+way and the pane's notes (`pane_notes`, `pane_errors`), and `wait_for_idle`,
+answered by the view's `observe_self` once `Status::idle`, else at its
+timeout, and `Busy`, which refuses every request but the reads (`READS`) while
 `key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`

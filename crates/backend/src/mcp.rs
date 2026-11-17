@@ -29,6 +29,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use crate::exif::{read_metadata, Metadata};
+use crate::folders;
 use crate::index::{self, Focus, Index};
 use crate::ondemand::read_preview;
 
@@ -38,6 +39,11 @@ pub const MCP_PORT: u16 = 41917;
 
 /// How long a tool call waits for the main window to answer.
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long `wait_for_idle` waits when no timeout is given, and the most it
+/// waits, under the call timeouts MCP clients commonly set.
+const IDLE_WAIT: Duration = Duration::from_secs(30);
+const IDLE_WAIT_MAX: Duration = Duration::from_secs(55);
 
 /// The long edge `get_preview` scales to when none is asked for, and the
 /// range it clamps a request to (the top is the embedded preview's own).
@@ -66,7 +72,9 @@ connects you to the running app so you can assist while they cull: read what Han
 (the current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
 settings and the current stars, pick / reject flag and color label), look at a small copy of a \
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
-filter, the panes shown and the overlays, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+filter, the panes shown and the overlays, browse the folders, open one, expand or collapse the \
+folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
+scan) and wait for it to end, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
 undo and sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
@@ -551,6 +559,108 @@ fn switches(args: impl serde::Serialize, names: &str) -> Result<Value, String> {
     Ok(request)
 }
 
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct FoldersArgs {
+    /// An absolute folder path; the tree's roots when omitted.
+    path: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct FolderArgs {
+    /// An absolute folder path.
+    path: String,
+}
+
+/// What `tree_folder` does to a folder's row, as the tree's expander and
+/// right-click items do.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum TreeAction {
+    Expand,
+    Collapse,
+    Refresh,
+    ExpandAll,
+    CollapseAll,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct TreeArgs {
+    /// The folder's absolute path, a row the tree shows.
+    path: String,
+    /// `expand`, `collapse`, `refresh`, `expand_all` or `collapse_all`.
+    action: TreeAction,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct RevealArgs {
+    /// An absolute folder path, or a photo's path as `get_view` reports it.
+    path: String,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct WaitArgs {
+    /// How long to wait in milliseconds, at most 55000; 30000 when omitted.
+    timeout_ms: Option<u64>,
+}
+
+/// `path` as an absolute path, refused when relative.
+fn absolute(path: &str) -> Result<&Path, String> {
+    let absolute = Path::new(path);
+    if !absolute.is_absolute() {
+        return Err(format!("{path} is not an absolute path"));
+    }
+    Ok(absolute)
+}
+
+/// `path`, checked to be an absolute path to a folder.
+fn folder(path: &str) -> Result<&Path, String> {
+    let dir = absolute(path)?;
+    if !dir.is_dir() {
+        return Err(format!("{path} is not a folder"));
+    }
+    Ok(dir)
+}
+
+/// `list_folders`: the roots the tree starts from (the home directory, then
+/// the volumes), or one folder's photo count and visible subfolders, as the
+/// tree lists them.
+fn list_folders(home: Option<PathBuf>, path: Option<String>) -> Reply {
+    let Some(path) = path else {
+        return Ok(json!({ "roots": folders::roots(home) }));
+    };
+    let listed = folders::list(absolute(&path)?)?;
+    Ok(json!({
+        "path": path,
+        "photo_count": listed.raw_count,
+        "children": listed.children,
+    }))
+}
+
+/// The `reveal` request: the path and whether it names a folder.
+fn reveal(path: String) -> Reply {
+    let kind = std::fs::metadata(absolute(&path)?)
+        .map_err(|_| format!("{path} is neither a folder nor a file"))?;
+    Ok(json!({ "path": path, "folder": kind.is_dir() }))
+}
+
+/// How long `wait_for_idle` waits for `timeout_ms`.
+fn idle_wait(timeout_ms: Option<u64>) -> Duration {
+    timeout_ms
+        .map_or(IDLE_WAIT, Duration::from_millis)
+        .min(IDLE_WAIT_MAX)
+}
+
 /// The MCP handler each client session gets.
 #[derive(Clone)]
 pub struct Companion {
@@ -560,6 +670,9 @@ pub struct Companion {
     /// The tools this host lists and answers.
     tools: ToolRouter<Companion>,
     instructions: &'static str,
+    /// The home directory `list_folders` starts the roots from, as the
+    /// host's tree does.
+    home: Option<PathBuf>,
 }
 
 impl Companion {
@@ -578,6 +691,24 @@ impl Companion {
             index,
             tools: Self::tool_router(),
             instructions: INSTRUCTIONS,
+            home: None,
+        }
+    }
+
+    /// The result of `call` once `check` passed on tokio's blocking pool,
+    /// whose answer is the request.
+    async fn checked_call(
+        &self,
+        kind: &'static str,
+        check: impl FnOnce() -> Reply + Send + 'static,
+    ) -> CallToolResult {
+        let request = tokio::task::spawn_blocking(check)
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|checked| checked);
+        match request {
+            Ok(request) => tool_result(self.bridge.call(kind, request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
         }
     }
 
@@ -836,6 +967,92 @@ impl Companion {
             Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
         }
     }
+
+    #[tool(
+        description = "The folders Handpic's folder tree starts from (the home folder, then \
+        the volumes) when `path` is omitted; else that folder's photo count (its RAW files, or \
+        its JPEGs when it holds no RAW) and its visible subfolders, as the tree lists them."
+    )]
+    async fn list_folders(&self, Parameters(args): Parameters<FoldersArgs>) -> CallToolResult {
+        let home = self.home.clone();
+        tool_result(
+            tokio::task::spawn_blocking(move || list_folders(home, args.path))
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|listed| listed),
+        )
+    }
+
+    #[tool(
+        description = "Open a folder in Handpic, as a click on its name in the folder tree \
+        does. Replies at once, before the folder is listed, with `get_status`'s answer; call \
+        `wait_for_idle`, then `get_view`. Opening the open folder changes nothing. While a move \
+        to the trash or a folder operation runs, the open waits for its end (`opening`); while \
+        that folder is being renamed it is refused."
+    )]
+    async fn open_folder(&self, Parameters(args): Parameters<FolderArgs>) -> CallToolResult {
+        self.checked_call("open_folder", move || {
+            folder(&args.path)?;
+            Ok(json!({ "path": args.path }))
+        })
+        .await
+    }
+
+    #[tool(
+        description = "Act on a folder's row in Handpic's folder tree, as its expander and \
+        right-click items do: `expand` (listing it again) or `collapse`, `refresh`, and below a \
+        root `expand_all` (the folder and every subfolder) or `collapse_all` (every subfolder, \
+        the folder itself kept). The folder must be a row the tree shows: expand its parents \
+        first. Returns its path as the tree spells it and whether it is expanded; listings \
+        finish after the reply."
+    )]
+    async fn tree_folder(&self, Parameters(args): Parameters<TreeArgs>) -> CallToolResult {
+        tool_result(
+            self.bridge
+                .call(
+                    "tree_folder",
+                    json!({ "path": args.path, "action": args.action }),
+                )
+                .await,
+        )
+    }
+
+    #[tool(
+        description = "Show a folder, or a photo of the open folder that the filter shows, in \
+        the OS file manager, as the right-click menus' reveal item does; a root folder opens."
+    )]
+    async fn reveal(&self, Parameters(args): Parameters<RevealArgs>) -> CallToolResult {
+        self.checked_call("reveal", move || reveal(args.path)).await
+    }
+
+    #[tool(
+        description = "What Handpic's status row and pane notes tell the user: `idle` (nothing \
+        under way), the open `folder`, a folder `opening` once a run ends, whether a `listing` \
+        or a `scan` pass (`scanning` or `analyzing`, with done / total) is under way, whether a \
+        run on the open folder's files is `running`, the status line's text, and the pane's \
+        `notes` and `errors`."
+    )]
+    async fn get_status(&self) -> CallToolResult {
+        self.view_call("get_status").await
+    }
+
+    #[tool(
+        description = "Wait until nothing is under way in Handpic (no listing, scan or run), \
+        or until `timeout_ms` passes (30000 by default, at most 55000), and return \
+        `get_status`'s answer; its `idle` is false after a timeout."
+    )]
+    async fn wait_for_idle(&self, Parameters(args): Parameters<WaitArgs>) -> CallToolResult {
+        let wait = idle_wait(args.timeout_ms);
+        tool_result(
+            self.bridge
+                .call_within(
+                    "wait_for_idle",
+                    json!({ "timeout_ms": wait.as_millis() as u64 }),
+                    wait + BRIDGE_TIMEOUT,
+                )
+                .await,
+        )
+    }
 }
 
 #[tool_handler(router = self.tools)]
@@ -890,6 +1107,16 @@ impl Mcp {
         let companion = Companion {
             tools: Companion::tool_router() + Companion::native_router(),
             instructions: NATIVE_INSTRUCTIONS,
+            ..self.companion
+        };
+        Mcp { companion, ..self }
+    }
+
+    /// The home directory `list_folders` starts the roots from, the one the
+    /// host's tree is given.
+    pub fn with_home(self, home: Option<PathBuf>) -> Self {
+        let companion = Companion {
+            home,
             ..self.companion
         };
         Mcp { companion, ..self }
@@ -1266,10 +1493,14 @@ mod tests {
             [
                 "get_photo",
                 "get_preview",
+                "get_status",
                 "get_view",
+                "list_folders",
                 "navigate",
+                "open_folder",
                 "redo",
                 "reject_rest",
+                "reveal",
                 "select_all",
                 "select_photos",
                 "set_filter",
@@ -1279,7 +1510,9 @@ mod tests {
                 "set_sort",
                 "set_view",
                 "show_photo",
-                "undo"
+                "tree_folder",
+                "undo",
+                "wait_for_idle"
             ]
         );
         assert_eq!(mcp.port, 1);
@@ -1357,6 +1590,92 @@ mod tests {
             switches(none, "focus, peaking, performance"),
             Err("set at least one of focus, peaking, performance".into())
         );
+    }
+
+    #[test]
+    fn list_folders_answers_the_roots_or_one_folders_count_and_subfolders() {
+        let dir = temp_dir("folders");
+        std::fs::create_dir_all(dir.join("b")).unwrap();
+        std::fs::create_dir_all(dir.join("A")).unwrap();
+        std::fs::write(dir.join("x.ARW"), b"").unwrap();
+        let home = dir.join("b");
+        let roots = list_folders(Some(home.clone()), None).unwrap();
+        assert_eq!(roots["roots"][0]["path"], json!(home.to_string_lossy()));
+        let path = dir.to_string_lossy().into_owned();
+        let listed = list_folders(None, Some(path.clone())).unwrap();
+        assert_eq!(listed["path"], json!(path));
+        assert_eq!(listed["photo_count"], json!(1));
+        let names: Vec<&str> = listed["children"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|child| child["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["A", "b"]);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_folder_path_must_be_absolute_and_a_folder() {
+        let dir = temp_dir("folder");
+        let file = dir.join("x.ARW");
+        std::fs::write(&file, b"").unwrap();
+        assert_eq!(
+            list_folders(None, Some("photos".into())),
+            Err("photos is not an absolute path".into())
+        );
+        assert_eq!(
+            folder("photos"),
+            Err("photos is not an absolute path".into())
+        );
+        let file_path = file.to_string_lossy().into_owned();
+        assert_eq!(
+            folder(&file_path),
+            Err(format!("{file_path} is not a folder"))
+        );
+        assert_eq!(folder(&dir.to_string_lossy()), Ok(dir.as_path()));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn reveal_tells_a_folder_from_a_file_and_refuses_a_missing_path() {
+        let dir = temp_dir("reveal");
+        let file = dir.join("x.ARW");
+        std::fs::write(&file, b"").unwrap();
+        let path = dir.to_string_lossy().into_owned();
+        assert_eq!(
+            reveal(path.clone()),
+            Ok(json!({ "path": path, "folder": true }))
+        );
+        let file_path = file.to_string_lossy().into_owned();
+        assert_eq!(
+            reveal(file_path.clone()),
+            Ok(json!({ "path": file_path, "folder": false }))
+        );
+        let missing = dir.join("gone").to_string_lossy().into_owned();
+        assert_eq!(
+            reveal(missing.clone()),
+            Err(format!("{missing} is neither a folder nor a file"))
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn tree_folder_takes_the_actions_by_their_snake_case_names() {
+        let args: TreeArgs =
+            serde_json::from_value(json!({ "path": "/d", "action": "expand_all" })).unwrap();
+        assert_eq!(json!(args.action), json!("expand_all"));
+        assert!(
+            serde_json::from_value::<TreeArgs>(json!({ "path": "/d", "action": "open" })).is_err()
+        );
+        assert!(serde_json::from_value::<FolderArgs>(json!({ "folder": "/d" })).is_err());
+    }
+
+    #[test]
+    fn idle_wait_defaults_and_caps_the_timeout() {
+        assert_eq!(idle_wait(None), IDLE_WAIT);
+        assert_eq!(idle_wait(Some(200)), Duration::from_millis(200));
+        assert_eq!(idle_wait(Some(600_000)), IDLE_WAIT_MAX);
     }
 
     #[test]

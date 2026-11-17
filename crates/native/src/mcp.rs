@@ -1,5 +1,5 @@
 //! The MCP companion's server, the backend's `mcp::Mcp` with every tool
-//! (`with_all_tools`), on a tokio runtime
+//! (`with_all_tools`) and the tree's home directory (`with_home`), on a tokio runtime
 //! of its own on one named thread, started only when `mcpEnabled` is on. A
 //! tool call reaches the view as `Event::Mcp` through the view's channel,
 //! and the view answers through `Server::reply`.
@@ -60,6 +60,7 @@ pub fn start(
     let mcp = Arc::new(
         Mcp::new(bridge, index)
             .with_all_tools()
+            .with_home(dirs::home_dir())
             .with_port(port.unwrap_or(MCP_PORT)),
     );
     let runtime = match tokio::runtime::Builder::new_current_thread()

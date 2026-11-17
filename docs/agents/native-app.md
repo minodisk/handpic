@@ -802,14 +802,16 @@ returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
 with the file selected alone for `show_photo` or with
 `selection::selection_of` over the given paths for `select_photos`,
 `toggle_zoom`, `judge_paths`, `perform` with a `companion::Key`,
-`apply_menu`, `change_panels`, or the overlays' toggles) and replies through
-`Mcp::reply`.
+`apply_menu`, `change_panels`, the overlays' toggles, `open_from_tree`,
+`tree_toggle` or `folder_action`, or `files_action`'s reveal) and replies
+through `Mcp::reply`.
 
 The tool list is the host's. `Mcp::new` lists the seven companion tools with
 the Tauri `INSTRUCTIONS`, which is what the Tauri app keeps (`crates/app` is
 not touched); `Mcp::with_all_tools` adds the `native_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
-`set_filter`, `set_panes`, `set_overlays`) and the native
+`set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
+`tree_folder`, `reveal`, `get_status`, `wait_for_idle`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -842,15 +844,57 @@ the order in force (`viewonly::sort_for`). `set_panes` goes through
 that differ. The pane widths and the strip height, set by a drag, have no
 tool: they are pointer-only geometry, like the window's.
 
-Every request but `get_view` is refused while `key_down` drops keys
-(`companion::Busy`): the settings modal open, a Move to Trash or Delete
-Permanently flow under way (`trash.busy()`), a folder operation's dialog open,
-or an inline rename live (`FolderOps::editing`, not `rename_owns_keys`, which
-also disarms the slow click). `get_view` still answers, so `get_photo` and
-`get_preview`, which resolve their path through it, keep working.
-`get_photo` and `get_preview` never reach the view: the backend reads them on
-tokio's blocking pool against the index's read-only connection, outside
-`ReadSlots`, as in the Tauri app.
+The folder tools act as the tree does. `list_folders` never reaches the view:
+the backend answers it on the blocking pool with `folders::roots`, from the
+home directory the native app gives `Mcp::with_home` (`dirs::home_dir()`, the
+tree's), or `folders::list` of one absolute folder (its `raw_count` as
+`photo_count`). `open_folder` takes an absolute path to a folder, checked in
+the backend (a file is refused, not opened by its parent as a drop is: a
+client has `list_folders`), and runs `open_from_tree`, so an open is deferred
+while a run is in flight (`deferred_open`, `get_status`'s `opening`) and
+refused with `rename::RENAMING` while that folder is being renamed
+(`refuse_renaming`, its tree note shown as for a click). It replies at once
+with `get_status`, the listing under way, since a slow folder's listing
+outlasts `BRIDGE_TIMEOUT`; the folder the tree shows open is not opened again,
+as a click on its row only expands or collapses it. `tree_folder` finds the drawn row whose
+path `tree::relation` calls the same (a `\\?\` prefix dropped, case ignored
+on Windows and macOS), toggles it with `tree_toggle` when it is not already
+as asked, or runs the tree menu's `Refresh`, `Expand All` or `Collapse All`
+through `folder_action` (the last two refused on a root, whose menu lacks
+them; `Collapse All` keeps the folder itself as it is); it replies with the
+row's path and expansion, also when nothing changed, before any listing it
+started ends. `reveal` runs `folder_action`'s `RevealFolder` (a root opens)
+for any existing folder and `files_action`'s `RevealFile` for a file the strip
+shows.
+
+`get_status` is `companion::Status`, built by `status_of`: the open folder,
+the deferred open, a listing (`Resync::busy` with no scan pass and no run in
+flight), the scan pass as the status line names it (`scan::Status::pass`,
+`scanning` or `analyzing` with done / total), a run in flight
+(`IdleGate::in_flight`), the status line's text (`status()`), and the meta
+pane's notes and error lines, which the pane draws from the same
+`pane_notes` / `pane_errors`. `idle` is none of them. `wait_for_idle` replies
+at once when idle; otherwise the view keeps the call's id in `idle_waiters`
+and answers it from an `observe_self` callback (registered from a task, once
+the entity exists), which runs after every `cx.notify()` and replies to every
+waiter once `Status::idle`, or from a timer at `timeout_ms` with the status as
+it is. The backend caps the wait at 55 s (`IDLE_WAIT_MAX`, 30 s by default)
+and waits `BRIDGE_TIMEOUT` longer than that through `Bridge::call_within`.
+
+Every request but the reads (`get_view`, `get_status`, `wait_for_idle`) is
+refused while `key_down` drops keys (`companion::Busy`): the settings modal
+open, a Move to Trash or Delete Permanently flow under way (`trash.busy()`), a
+folder operation's dialog open, or an inline rename live
+(`FolderOps::editing`, not `rename_owns_keys`, which also disarms the slow
+click). `get_view` still answers, so `get_photo` and `get_preview`, which
+resolve their path through it, keep working. `get_photo`, `get_preview` and
+`list_folders` never reach the view: the backend reads them on tokio's
+blocking pool, the photo reads against the index's read-only connection,
+outside `ReadSlots`, as in the Tauri app.
+
+- Rule: a test run of the folder tools uses a test folder outside any hidden
+  folder: the tree skips hidden folders (`AppData`, a dot folder), so a folder
+  under one is opened but never drawn, and `tree_folder` cannot find its row.
 
 `set_judgment` goes the judgment keys' way: `companion.rs` merges the given
 fields over each photo's own state (an omitted field kept, a rating of 0 and a

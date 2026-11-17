@@ -606,6 +606,8 @@ struct Riffle {
     perf: perfgraph::Overlay,
     /// The MCP companion's server, `None` while `mcpEnabled` is off.
     mcp: Option<mcp::Server>,
+    /// The `wait_for_idle` calls waiting for the view to be idle, by id.
+    idle_waiters: Vec<u64>,
     /// The decoded neighbours of the current file, `None` under
     /// `--no-prefetch`.
     prefetch: Option<Ring<Held>>,
@@ -708,6 +710,13 @@ impl Riffle {
             this.update(cx, |this, cx| this.read_folder_counts(cx)).ok();
         })
         .detach();
+        // Every change of the view notifies it, so a `wait_for_idle` is
+        // answered as the view becomes idle, without polling.
+        cx.spawn(async |this, cx| {
+            this.update(cx, |_, cx| cx.observe_self(Self::answer_idle).detach())
+                .ok();
+        })
+        .detach();
         // The window's own appearance, which gpui-component prefers on Linux
         // to the app's one the startup apply read.
         if settings.theme.mode == theme::Mode::System {
@@ -805,6 +814,7 @@ impl Riffle {
                 reader.clone(),
                 cx,
             ),
+            idle_waiters: Vec::new(),
             focus,
             all: Vec::new(),
             files: Vec::new(),
@@ -4470,15 +4480,26 @@ impl Riffle {
             .text_size(px(13.))
             .child(body.overflow_y_scrollbar())
             .children(
-                self.view_only
-                    .then(|| div().text_color(muted).child(viewonly::VIEW_ONLY_NOTE)),
-            )
-            .children(
-                self.step_note
-                    .clone()
+                self.pane_notes()
+                    .into_iter()
                     .map(|note| div().text_color(muted).child(note)),
             )
             .children(
+                self.pane_errors()
+                    .into_iter()
+                    .map(|note| div().text_color(danger).child(note)),
+            )
+    }
+
+    /// The meta pane's notes, as `get_status` reports them too: the
+    /// view-only note, the last step's, the run under way's or the held
+    /// operation's, and the import's.
+    fn pane_notes(&self) -> Vec<String> {
+        self.view_only
+            .then(|| viewonly::VIEW_ONLY_NOTE.to_owned())
+            .into_iter()
+            .chain(self.step_note.clone())
+            .chain(
                 self.trashing
                     .map(|(mode, done, total)| trash::progress_status(mode, done, total))
                     .or_else(|| self.folderops.note())
@@ -4486,25 +4507,86 @@ impl Riffle {
                         self.gate
                             .waiting()
                             .map(|label| format!("{label}: waiting for the scan to finish"))
-                    })
-                    .map(|note| div().text_color(muted).child(note)),
+                    }),
             )
-            .children(
-                self.folderops
-                    .import_note()
-                    .map(|note| div().text_color(muted).child(note)),
-            )
-            .children(
-                self.notes
+            .chain(self.folderops.import_note())
+            .collect()
+    }
+
+    /// The meta pane's error lines, as `get_status` reports them too.
+    fn pane_errors(&self) -> Vec<String> {
+        self.notes
+            .iter()
+            .cloned()
+            .chain(self.outputs_failure.clone())
+            .chain(self.tree_note.clone())
+            .chain(
+                self.write_errors
                     .iter()
-                    .cloned()
-                    .chain(self.outputs_failure.clone())
-                    .chain(self.tree_note.clone())
-                    .chain(self.write_errors.iter().map(|(path, message)| {
-                        format!("{}: {message}", file_name(Path::new(path)))
-                    }))
-                    .map(|note| div().text_color(danger).child(note)),
+                    .map(|(path, message)| format!("{}: {message}", file_name(Path::new(path)))),
             )
+            .collect()
+    }
+
+    /// What the status row and the pane's notes tell the user, for
+    /// `get_status`. A listing is `Resync`'s busy time less the scan's and
+    /// a run's.
+    fn status_of(&self) -> companion::Status {
+        let scanning = self.scan_status.scanning();
+        let running = self.gate.in_flight();
+        companion::Status {
+            folder: self.dir.clone(),
+            opening: self
+                .deferred_open
+                .as_ref()
+                .map(|folder| folder.to_string_lossy().into_owned()),
+            listing: self.resync.busy() && !scanning && !running,
+            scan: self.scan_status.pass(),
+            running,
+            line: self.status().to_string(),
+            notes: self.pane_notes(),
+            errors: self.pane_errors(),
+        }
+    }
+
+    /// Hold the `wait_for_idle` call `id` until the view is idle, or reply
+    /// with the status as it is after `timeout_ms`.
+    fn wait_idle(&mut self, id: u64, timeout_ms: u64, cx: &mut Context<Self>) {
+        self.idle_waiters.push(id);
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_millis(timeout_ms))
+                .await;
+            this.update(cx, |this, _| {
+                let Some(at) = this.idle_waiters.iter().position(|w| *w == id) else {
+                    return;
+                };
+                this.idle_waiters.remove(at);
+                let status = companion::get_status(&this.status_of());
+                if let Some(server) = &this.mcp {
+                    server.reply(id, Ok(status));
+                }
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The view changed: answer the `wait_for_idle` calls once it is idle.
+    fn answer_idle(&mut self, _: &mut Context<Self>) {
+        if self.idle_waiters.is_empty() {
+            return;
+        }
+        let status = self.status_of();
+        if !status.idle() {
+            return;
+        }
+        let status = companion::get_status(&status);
+        for id in std::mem::take(&mut self.idle_waiters) {
+            if let Some(server) = &self.mcp {
+                server.reply(id, Ok(status.clone()));
+            }
+        }
     }
 
     /// The left-hand folder tree: a `uniform_list`, so only the rows on
@@ -4869,6 +4951,9 @@ impl Riffle {
                 undo: this.undo.top(false),
                 redo: this.undo.top(true),
                 trash_stepping: this.trash_step.is_some(),
+                tree: &this.tree_rows,
+                tree_open: this.tree_open.as_deref(),
+                idle: this.status_of().idle(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -4876,6 +4961,26 @@ impl Riffle {
             Ok(Some(companion::Action::Judge { changes, judged })) => {
                 self.judge_paths(changes, cx);
                 Ok(judged)
+            }
+            Ok(Some(companion::Action::Wait(timeout_ms))) => {
+                self.wait_idle(request.id, timeout_ms, cx);
+                return;
+            }
+            Ok(Some(companion::Action::Open(path))) if self.refuse_renaming(&path, cx) => {
+                Err(rename::RENAMING.to_owned())
+            }
+            Ok(Some(companion::Action::Reveal { path, folder })) => {
+                if folder {
+                    self.folder_action(
+                        context::Action::RevealFolder,
+                        path.clone(),
+                        String::new(),
+                        cx,
+                    );
+                } else {
+                    self.files_action(context::Action::RevealFile, &path, &[], cx);
+                }
+                Ok(serde_json::json!({ "revealed": context::shown_path(&path) }))
             }
             Ok(action) => {
                 match action {
@@ -4902,9 +5007,32 @@ impl Riffle {
                         }
                     }
                     Some(companion::Action::Key(key)) => self.perform(key, cx),
+                    Some(companion::Action::Open(path)) => self.open_from_tree(path, cx).detach(),
+                    Some(companion::Action::Tree { path, op }) => {
+                        // The menu's items through the menu's own path.
+                        let item = match op {
+                            companion::TreeOp::Toggle => None,
+                            companion::TreeOp::Refresh => Some(context::Action::RefreshFolder),
+                            companion::TreeOp::ExpandAll => Some(context::Action::ExpandAll),
+                            companion::TreeOp::CollapseAll => Some(context::Action::CollapseAll),
+                        };
+                        match item {
+                            Some(item) => self.folder_action(item, path, String::new(), cx),
+                            None => self.tree_toggle(path, cx),
+                        }
+                    }
                     _ => {}
                 }
-                Ok(companion::get_view(&view(self, cx)))
+                match request.kind {
+                    "get_status" | "open_folder" | "wait_for_idle" => {
+                        Ok(companion::get_status(&self.status_of()))
+                    }
+                    "tree_folder" => Ok(companion::tree_reply(
+                        &view(self, cx),
+                        &request.args["path"],
+                    )),
+                    _ => Ok(companion::get_view(&view(self, cx))),
+                }
             }
             Err(e) => Err(e),
         };
