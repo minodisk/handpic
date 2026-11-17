@@ -269,7 +269,9 @@ gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
 `app_id` `IDENTIFIER` under
-gpui-component's `TitleBar` (the app icon and "Handpic", and at its right end
+gpui-component's `TitleBar` (the app icon and "Handpic" at `text_sm`, the
+open folder's name at the same size centered across the whole bar by a
+listener-free overlay and truncated before the sides, and at its right end
 a gear `Button` whose click opens the settings as `ctrl+,` does, its press
 kept from the bar's window drag) in place of the OS title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
