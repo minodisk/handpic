@@ -1,6 +1,7 @@
 //! The thumbnail strip's height, set by dragging its top edge and stored
 //! under `stripHeight`, in logical px. The cells are sized from it
-//! (`strip::Geometry`).
+//! (`strip::Geometry`); the drawn strip pane is `HEADER` taller, the row of
+//! `Sort ▾` / `Filter ▾` over the cells.
 
 use serde_json::{Value, json};
 
@@ -13,6 +14,9 @@ pub const MIN: f32 = 96.;
 pub const MAX: f32 = 302.;
 /// What a drag leaves the preview.
 pub const PREVIEW_MIN: f32 = 240.;
+/// The header row over the cells: the resize handle's 5 px band, a 1 px gap,
+/// the 21 px buttons and 5 px under them.
+pub const HEADER: f32 = 32.;
 
 /// The stored `stripHeight` value; a missing, non-number or non-finite value
 /// means `DEFAULT`, and a number out of range is clamped.
@@ -27,17 +31,20 @@ pub fn setting(height: f32) -> Value {
     json!(height)
 }
 
-/// The height after the strip's top edge is dragged to make it `wanted` px
-/// high, the preview and the strip sharing `shared` px: rounded to whole px,
-/// within `MIN` and `MAX` and leaving the preview `PREVIEW_MIN`, never under
-/// `MIN`.
+/// The cells' height after the strip pane's top edge is dragged to make the
+/// pane, header included, `wanted` px high, the preview and the pane sharing
+/// `shared` px: rounded to whole px, within `MIN` and `MAX` and leaving the
+/// preview `PREVIEW_MIN`, never under `MIN`.
 pub fn dragged(wanted: f32, shared: f32) -> f32 {
-    wanted.round().min(shared - PREVIEW_MIN).clamp(MIN, MAX)
+    (wanted - HEADER)
+        .round()
+        .min(shared - PREVIEW_MIN - HEADER)
+        .clamp(MIN, MAX)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT, MAX, MIN, PREVIEW_MIN, dragged, from_setting, setting};
+    use super::{DEFAULT, HEADER, MAX, MIN, PREVIEW_MIN, dragged, from_setting, setting};
     use serde_json::json;
 
     #[test]
@@ -65,19 +72,27 @@ mod tests {
 
     #[test]
     fn a_drag_follows_the_pointer_within_the_range() {
-        assert_eq!(dragged(200.4, 900.), 200.);
-        assert_eq!(dragged(200.6, 900.), 201.);
-        assert_eq!(dragged(20., 900.), MIN);
+        assert_eq!(dragged(HEADER + 200.4, 900.), 200.);
+        assert_eq!(dragged(HEADER + 200.6, 900.), 201.);
+        assert_eq!(dragged(HEADER + MIN, 900.), MIN);
+        assert_eq!(dragged(HEADER + MAX, 900.), MAX);
+        // The header alone, or less, still leaves the cells their minimum.
+        assert_eq!(dragged(HEADER + 20., 900.), MIN);
+        assert_eq!(dragged(HEADER, 900.), MIN);
         assert_eq!(dragged(-50., 900.), MIN);
         assert_eq!(dragged(600., 900.), MAX);
     }
 
     #[test]
     fn a_drag_leaves_the_preview_its_minimum() {
-        // 500 - 240 leaves 260 for the strip.
-        assert_eq!(dragged(300., 500.), 260.);
-        assert_eq!(dragged(300., 260. + PREVIEW_MIN), 260.);
+        // 500 - 240 - 32 leaves 228 for the cells.
+        assert_eq!(dragged(HEADER + 300., 500.), 228.);
+        assert_eq!(dragged(HEADER + 300., HEADER + 260. + PREVIEW_MIN), 260.);
+        // The preview keeps its minimum: the pane ends at `shared - PREVIEW_MIN`.
+        let shared = 500.;
+        assert_eq!(HEADER + dragged(shared, shared), shared - PREVIEW_MIN);
         // Never under the minimum, whatever the room.
-        assert_eq!(dragged(300., 200.), MIN);
+        assert_eq!(dragged(HEADER + 300., 200.), MIN);
+        assert_eq!(dragged(HEADER + 300., HEADER + PREVIEW_MIN + 50.), MIN);
     }
 }
