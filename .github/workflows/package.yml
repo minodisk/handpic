@@ -199,9 +199,126 @@ jobs:
           path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-windows-x64.zip
           if-no-files-found: error
 
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same list as ci.yml's `native` job (native-app.md keeps the two
+      # equal). dpkg-dev, for dpkg-shlibdeps, is on the runner image.
+      - name: Install the Linux GPUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y             libfontconfig-dev             libwayland-dev             libx11-xcb-dev             libxkbcommon-x11-dev             libvulkan1
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      - uses: ilammy/setup-nasm@v1
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            crates/native/target
+          key: cargo-native-release-ubuntu-latest-${{ hashFiles('crates/native/Cargo.lock') }}
+          restore-keys: cargo-native-release-ubuntu-latest-
+
+      - name: Read the version
+        id: version
+        shell: bash
+        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the release binary
+        shell: bash
+        working-directory: crates/native
+        run: mise exec rust@1.98.1 -- cargo build --release --locked
+
+      - name: Package the tarball, install.sh and the .deb
+        shell: bash
+        run: bash tools/package/linux.sh
+
+      # What the binary links and what it opens at run time, and the image's
+      # glibc, which the deb's Depends follows.
+      - name: Show the binary's libraries
+        shell: bash
+        run: |
+          binary=crates/native/target/release/riffle-native
+          objdump -p "$binary" | grep -E 'NEEDED|GLIBC_' || true
+          objdump -T "$binary" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
+          grep -aoE 'lib[A-Za-z0-9_+-]+\.so(\.[0-9]+)*' "$binary" | sort -u
+          ldd --version | head -n 1
+          grep PRETTY_NAME /etc/os-release
+
+      # The runner has no display and no Vulkan driver, so nothing is launched.
+      - name: Check the tarball and install.sh
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          release="$PWD/crates/native/target/release"
+          tarball="$release/Handpic-$VERSION-linux-x64.tar.gz"
+          tar -tzvf "$tarball"
+          digest="$(sha256sum "$tarball" | cut -d' ' -f1)"
+          home="$(mktemp -d)"
+          HOME="$home" sh "$release/install.sh" "$tarball" "$digest"
+          test -x "$home/.local/bin/riffle-native"
+          desktop="$home/.local/share/applications/dev.minodisk.handpic.desktop"
+          cat "$desktop"
+          grep -qx "Exec=\"$home/.local/bin/riffle-native\"" "$desktop"
+          grep -qx 'Icon=dev.minodisk.handpic' "$desktop"
+          grep -qx 'StartupWMClass=dev.minodisk.handpic' "$desktop"
+          test -s "$home/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png"
+          wrong="$(mktemp -d)"
+          if HOME="$wrong" sh "$release/install.sh" "$tarball" "$(printf '%064d' 0)"; then
+            echo "a wrong digest installed" >&2
+            exit 1
+          fi
+          test ! -e "$wrong/.local"
+
+      - name: Check the .deb
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          deb="$PWD/crates/native/target/release/handpic_${VERSION}_amd64.deb"
+          dpkg-deb --info "$deb"
+          dpkg-deb --contents "$deb"
+          sudo apt-get install -y "$deb"
+          dpkg -s handpic
+          test -x /usr/lib/handpic/riffle-native
+          grep -qx 'Exec=/usr/lib/handpic/riffle-native' /usr/share/applications/dev.minodisk.handpic.desktop
+          test -s /usr/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png
+          test -s /usr/share/doc/handpic/NOTICE-gpui
+          sudo apt-get remove -y handpic
+          test ! -e /usr/lib/handpic/riffle-native
+          test ! -e /usr/share/applications/dev.minodisk.handpic.desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-linux-x64.tar.gz
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-linux-x64.tar.gz
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install.sh
+          path: crates/native/target/release/install.sh
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: handpic_${{ steps.version.outputs.version }}_amd64.deb
+          path: crates/native/target/release/handpic_${{ steps.version.outputs.version }}_amd64.deb
+          if-no-files-found: error
+
   # One SHA256SUMS over every artifact the run built.
   checksums:
-    needs: [macos, windows]
+    needs: [macos, windows, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
