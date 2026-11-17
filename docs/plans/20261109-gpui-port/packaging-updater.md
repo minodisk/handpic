@@ -240,18 +240,48 @@ To be checked in the sub-milestone that needs each one.
   portable copy.
 - **Unverified.** The executable's name in a release (`riffle-native` today
   in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
-- **Unverified.** The version source: `crates/native/Cargo.toml` and
-  `Info.plist` are `0.0.0`, and `release-please-config.json` bumps neither.
-- **Unverified.** The `.desktop` file's `Exec` (relative today; gpui-kit's
-  `install.sh` writes an absolute path).
-- **Unverified.** The deb's `Depends` and the Vulkan driver requirement at
-  run time.
+- **Measured** (2026-11-17, the gpui-packaging plan). The version source is
+  `[package].version` of `crates/native/Cargo.toml`, which
+  `tools/package/version.sh` prints and every package and file name carries
+  (the copied `Info.plist`'s two version fields, the setup's `AppVersion`,
+  the deb's `Version`); the checked-in `Info.plist` stays `0.0.0`. It is
+  `0.0.0` in every `Package` run. **Unverified**: `release-please-config.json`
+  bumps neither `crates/native/Cargo.toml` nor `crates/native/Cargo.lock`
+  yet; wiring them is sub-milestone 4's.
+- **Measured** (2026-11-17, the gpui-packaging plan's Step 3, `Package` run
+  44096260804 on `ubuntu-latest`). The `.desktop` file's `Exec`: the
+  checked-in file keeps the bare `Exec=riffle-native` (`datadir.rs` tests
+  it; `native:install:linux` installs it as is), and the packaged copies
+  are absolute: `install.sh` writes the quoted
+  `Exec="<home>/.local/bin/riffle-native"` and the deb carries
+  `Exec=/usr/lib/handpic/riffle-native`. **Unverified**: a launch from the
+  desktop menu on a real session.
+- **Measured** (2026-11-17, the gpui-packaging plan's Step 3, `Package` runs
+  44096260804 and 44099086987 on `ubuntu-latest`, Ubuntu 24.04.5, glibc
+  2.39). The deb's `Depends` is `dpkg-shlibdeps`'s over the built binary,
+  `libc6 (>= 2.39), libgcc-s1 (>= 4.2), libxcb1 (>= 1.12),
+  libxkbcommon-x11-0 (>= 0.5.0), libxkbcommon0 (>= 0.5.0)`, plus
+  `libvulkan1` and `libwayland-client0` added by hand: the binary's
+  `NEEDED` names neither, because wgpu loads `libvulkan.so.1` (or
+  `libEGL.so.1` for its GL fallback) and GPUI's `wayland-backend` loads
+  `libwayland-client.so.0` at run time. So the packages need glibc 2.39 or
+  later, the `ubuntu-latest` baseline. **Unverified**: the run time on a
+  real machine, with and without a Vulkan driver (the GL fallback), and on
+  X11 and Wayland.
 - **Unverified.** What a hand reinstall over a Tauri install does on each
   platform: the Inno Setup install next to the NSIS / MSI one, with its
-  uninstall entry and shortcuts; the deb's `Package` name against the Tauri
-  deb's, so that `apt` upgrades in place; a leftover `Riffle.app`; an
+  uninstall entry and shortcuts; a leftover `Riffle.app`; an
   AppImage file and an rpm package of the Tauri app, formats now dropped,
   left for the user to remove.
+- **Measured** (2026-11-17, the gpui-packaging plan's Step 3). The deb's
+  `Package` name against the Tauri deb's: the native deb is `handpic`, while
+  the shipped Tauri v1.10.0 deb is `Package: riffle` (its control file, read
+  from the release's `Riffle_1.10.0_amd64.deb`; `main`'s unreleased
+  `tauri.conf.json` would name it `handpic` with `Conflicts` / `Replaces`
+  `riffle`). So `apt` does not upgrade a Riffle install in place; a
+  hand-installed native deb sits beside it. **Unverified**: whether the
+  native deb should declare `Conflicts` / `Replaces: riffle`, left to
+  sub-milestone 4's real-device check.
 - **Unverified.** That the native app picks up the Tauri install's data.
   **Source** (`CLAUDE.md`): `settings.rs` seeds its store from the Tauri
   `settings.json`, and the index is the native app's own. Not checked on a

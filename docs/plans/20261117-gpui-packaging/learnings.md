@@ -105,6 +105,67 @@
 
   The setup was not run on this machine.
 
+## Step 3
+
+- `install.sh` takes gpui-kit's script nearly as is (Apache-2.0, said in its
+  header). The one change of substance: the tarball carries the checked-in
+  desktop entry under `Handpic/share/applications/`, and `install.sh`
+  requires it and rewrites its one `Exec=` line to the quoted absolute
+  path, instead of writing a desktop entry of its own. So the checked-in
+  file stays the one source (its `Icon`, `StartupWMClass`, `Categories`),
+  and `datadir.rs`'s test of the bare `Exec` still holds. `linux.sh` does
+  the same rewrite for the deb with `sed`, then `grep -qx` fails the run if
+  the line did not change.
+- The binary links neither Vulkan nor Wayland. Its `NEEDED` entries are
+  `libxcb.so.1`, `libxkbcommon.so.0`, `libxkbcommon-x11.so.0`,
+  `libgcc_s.so.1`, `libm.so.6`, `libc.so.6` and `ld-linux-x86-64.so.2`; a
+  `grep -ao` of sonames in the binary also finds `libvulkan.so.1`,
+  `libEGL.so.1`, `libwayland-client.so.0` and `libwayland-egl.so.1`, the
+  libraries it opens at run time. From the crates' sources: `gpui-pre-wgpu`
+  0.3.12 builds wgpu 30 with the `vulkan` and `gles` backends and creates
+  the instance with `Backends::VULKAN | Backends::GL`, so a machine without
+  a Vulkan driver falls back to GL through `libEGL`. `gpui-pre-linux`
+  turns on `wayland-backend`'s `client_system` and `dlopen`. So `linux.sh`
+  adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result;
+  `libegl1` (the fallback) is not added. The first run (44096260804) had
+  only `libvulkan1`; the Wayland one came from reading that run's output.
+- The `ubuntu-latest` image is Ubuntu 24.04.5 with glibc 2.39, and the
+  binary's newest symbol version is `GLIBC_2.39`, so `dpkg-shlibdeps` writes
+  `libc6 (>= 2.39)`. `dpkg-dev` is on the image, so the apt list stays
+  equal to `ci.yml`'s. `dpkg-shlibdeps` needs a `debian/control` in its
+  working folder; `linux.sh` writes a two-stanza one in a temp folder. Its
+  warnings ("diversions involved", "binaries to analyze should already be
+  installed in their package's directory") are harmless here.
+- The Tauri v1.10.0 deb's control, read on this host from the release's
+  `Riffle_1.10.0_amd64.deb` with a small Python `ar` + `tarfile` reader:
+  `Package: riffle`, `Maintainer: minodisk`, `Depends: libwebkit2gtk-4.1-0,
+  libgtk-3-0`. `main`'s `tauri.conf.json` (`productName` `Handpic`) also has
+  `linux.deb.replaces` / `conflicts` `["riffle"]`, never released.
+- Runs:
+  - 44096260804: the `linux` leg green on the first attempt (cold cache,
+    release build 9m37s). The `macos-latest` arm64 leg failed before
+    building: `mise` could not install `rust@1.98.1` because `rustup` was
+    killed by SIGKILL, a runner fault. The run was cancelled once the deb's
+    `Depends` needed the Wayland fix.
+  - 44099086987: the run on the fix commit. The `linux` leg green again
+    (warm cache, build 52 s); its `Depends` reads `libc6 (>= 2.39),
+    libgcc-s1 (>= 4.2), libxcb1 (>= 1.12), libxkbcommon-x11-0 (>= 0.5.0),
+    libxkbcommon0 (>= 0.5.0), libvulkan1, libwayland-client0`; `apt-get`
+    installed and removed the deb, and the wrong digest printed "Checksum
+    mismatch; nothing installed" and left no `~/.local`.
+    The other legs and `checksums` were green on the first attempt, so one
+    run yields every artifact of sub-milestone 2.
+- Artifacts of run 44099086987, downloaded with `gh run download`: the two
+  DMGs (27,587,400 and 31,164,616 bytes), the setup `.exe` (18,713,443),
+  the ZIP (25,020,358), `Handpic-0.0.0-linux-x64.tar.gz` (36,038,379; one
+  `Handpic/` folder with the binary, the desktop entry, the icon and the six
+  notices), `install.sh` (4,907, byte-identical to the checked-in one),
+  `handpic_0.0.0_amd64.deb` (26,545,332) and `SHA256SUMS`, which lists all
+  seven and passes `sha256sum -c`. The deb's control could not be read on
+  this host: Ubuntu 24.04's `dpkg-deb` compresses its members with zstd,
+  which Python's `tarfile` here does not read; the runner's `dpkg-deb
+  --info` stands for it.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 1, macOS only, the user's): `mise run
@@ -143,3 +204,35 @@
   example `-size` from `du` plus a margin, or a retry) would make the
   `Package` run less flaky. Not done in Step 2, which touches no macOS
   file. Files: `tools/package/macos.sh`, `.github/workflows/package.yml`.
+- Pending manual check (Step 3, Linux x86_64, the user's): on a Linux
+  machine with `dpkg-dev` and the GPUI apt list installed:
+  1. Run `mise run native:package:linux`. It should write
+     `crates/native/target/release/Handpic-0.0.0-linux-x64.tar.gz`,
+     `install.sh` and `handpic_0.0.0_amd64.deb`.
+  2. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from
+     the desktop menu on a Wayland and an X11 session. Expect the window to
+     show the Handpic icon (matched by `dev.minodisk.handpic`).
+  3. Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`,
+     start it from the menu, and remove it with `sudo apt remove handpic`.
+  4. If a machine without a Vulkan driver is at hand, check that the app
+     still starts (wgpu's GL fallback through `libEGL`).
+
+  Not run here: this host is Windows, and the hosted runner has no display
+  or GPU, so nothing was launched. Source: plan Step 3, "Done when"
+  (`mise run native:package:linux`) and its approach ("No package is
+  launched in the workflow"). Files: `mise.toml`, `tools/package/linux.sh`,
+  `crates/native/packaging/linux/install.sh`,
+  `crates/native/packaging/linux/control`. Step 3's checkbox was ticked on
+  the automated criteria (the green `Package` run and `mise run ci:local`).
+- The native deb (`Package: handpic`) does not replace the shipped Tauri
+  deb (`Package: riffle`, v1.10.0); both can be installed side by side.
+  Whether to add `Conflicts` / `Replaces: riffle` to
+  `crates/native/packaging/linux/control` is open. Source: plan Step 3's
+  approach and the "The deb does not upgrade a Riffle deb in place" risk;
+  `packaging-updater.md`'s Measured item on the deb's `Package` name.
+  Files: `crates/native/packaging/linux/control`.
+- The deb does not declare `libegl1`, which wgpu's GL fallback opens when no
+  Vulkan adapter is found. On a machine without Vulkan the app would need
+  it (a desktop normally has it). Decide whether to add it, or `libvulkan1
+  | libegl1`, after a real-machine check. Source: Step 3's `Depends`
+  measurement. Files: `tools/package/linux.sh`.

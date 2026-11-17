@@ -412,7 +412,10 @@ them; their contents are deliberately coarse.
        the license notices; the version wired from the release version; no
        OS code signing (macOS ad hoc; no Developer ID, notarization or
        Authenticode); no rpm and no AppImage; the Inno Setup install per
-       user.
+       user. Done through `../20261117-gpui-packaging/plan.md`: the manual
+       `Package` workflow and the `native:package:*` mise tasks build all of
+       it, the version read from `crates/native/Cargo.toml` (`0.0.0`) until
+       sub-milestone 4 wires it to the release.
     3. The native app's update flow: the launch check, the menu item,
        `self_update` with signature verification for the portable ZIP and
        the `.tar.gz`; the setup `.exe` downloaded in the background and run
@@ -656,3 +659,4 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 8 complete: the folder tree and the strip's menu (`../_archived/20261113-gpui-tree-trash/plan.md`), the empty state, folder drag-and-drop (`../_archived/20261114-gpui-folder-drop/plan.md`) and the folder operation dialogs (`../_archived/20261113-gpui-folder-dialogs/plan.md`) have all landed
 - (2026-11-16) Step 10: the packaging / updater decision redone along gpui-kit's guides after the user dropped the update path from Tauri installs, through `../20261116-gpui-packaging-redecision/plan.md` (Step 10 stays open)
 - (2026-11-16) Step 10: the open questions of the packaging / updater record answered by the user and recorded, through `../_archived/20261116-gpui-packaging-answers/plan.md` (Step 10 stays open)
+- (2026-11-17) Step 10, sub-milestone 2: the native app packaged by the manual `Package` workflow (DMGs for arm64 and x86_64, the per-user Inno Setup setup `.exe`, the Windows ZIP, the Linux `.tar.gz` with `install.sh`, the `.deb` and `SHA256SUMS`), through `../20261117-gpui-packaging/plan.md` (Step 10 stays open)
