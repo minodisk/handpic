@@ -715,6 +715,12 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
   direct call; the mise tasks find it on their own. Source:
   `docs/plans/_archived/20261115-native-scrollbars/learnings.md`, Step 1.
+- Rule: the native crate's binary target is `handpic`, not `handpic-native`
+  (the package name); run its unit tests with `cargo test --bin handpic` in
+  `crates/native`. To get a color's luminance in `crates/native`, call
+  `Hsla::to_rgb()` (gpui-pre's `color.rs`) on the `gpui_kit` re-export; the
+  method needs no import. Source:
+  `docs/plans/_archived/20261118-preview-theme-background/learnings.md`, Step 1.
 - Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
