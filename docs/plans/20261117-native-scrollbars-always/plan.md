@@ -140,3 +140,5 @@ recorded in `../_archived/20261115-native-scrollbars/plan.md` (Trade-offs 1).
    recorded as pending in `learnings.md`.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete
