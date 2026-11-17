@@ -18,9 +18,9 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
-Sub-milestone 2 of Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md):
+Sub-milestone 2 of Step 10 of [the gpui-port plan](../../20261109-gpui-port/plan.md):
 package the GPUI app (`crates/native`) with platform-native tools, as decided
-in [`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md), and
+in [`packaging-updater.md`](../../20261109-gpui-port/packaging-updater.md), and
 build the distributables from a manually triggered GitHub Actions workflow
 that uploads them as workflow artifacts. Once it is done a maintainer can
 download a DMG per macOS architecture, a per-user Inno Setup setup `.exe`, a
