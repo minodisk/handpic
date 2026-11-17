@@ -43,6 +43,8 @@ pub struct InlineRename {
     pub path: String,
     pub original: String,
     committed: bool,
+    /// Opened with an MCP client's name filled in: only Enter confirms.
+    asked: bool,
 }
 
 impl InlineRename {
@@ -51,6 +53,26 @@ impl InlineRename {
             path,
             original,
             committed: false,
+            asked: false,
+        }
+    }
+
+    /// An edit holding a client's name, which the user has to confirm with
+    /// Enter.
+    pub fn asked(path: String, original: String) -> Self {
+        Self {
+            asked: true,
+            ..Self::new(path, original)
+        }
+    }
+
+    /// What a lost focus, or another edit starting, makes of this edit: the
+    /// user's own edit confirms, a client's name is dropped.
+    pub fn implicit(&self) -> Decision {
+        if self.asked {
+            Decision::Cancel
+        } else {
+            Decision::Confirm
         }
     }
 }
@@ -303,6 +325,14 @@ mod tests {
             Some(Decision::Confirm)
         );
         assert_eq!(commit(&mut rename, Decision::Confirm), None);
+    }
+
+    #[test]
+    fn only_a_clients_name_is_dropped_by_an_implicit_decision() {
+        let own = InlineRename::new("/a/b".into(), "b".into());
+        let asked = InlineRename::asked("/a/b".into(), "b".into());
+        assert_eq!(own.implicit(), Decision::Confirm);
+        assert_eq!(asked.implicit(), Decision::Cancel);
     }
 
     #[test]

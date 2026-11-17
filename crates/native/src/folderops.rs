@@ -1792,8 +1792,9 @@ impl Riffle {
         if self.refuse_renaming(&path, cx) {
             return;
         }
-        if self.folderops.editing.is_some() {
-            self.finish_rename(Decision::Confirm, cx);
+        if let Some(edit) = &self.folderops.editing {
+            let decision = edit.rename.implicit();
+            self.finish_rename(decision, cx);
         }
         let Some(at) = self.tree_rows.iter().position(|row| row.path == path) else {
             return;
@@ -1809,14 +1810,25 @@ impl Riffle {
             input.set_value(filled.as_deref().unwrap_or(&name), window, cx);
             input.select_all(window, cx);
         });
-        let events = cx.subscribe_in(&input, window, |this, _, event, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
-                this.rename_event(true, window, cx);
+        let events = cx.subscribe_in(&input, window, |this, _, event, window, cx| match event {
+            InputEvent::PressEnter { .. } => this.rename_event(true, window, cx),
+            InputEvent::Blur => {
+                let commit = this
+                    .folderops
+                    .editing
+                    .as_ref()
+                    .is_none_or(|edit| edit.rename.implicit() == Decision::Confirm);
+                this.rename_event_blur(commit, window, cx);
             }
+            _ => {}
         });
         window.focus(&input.focus_handle(cx), cx);
         self.folderops.editing = Some(Edit {
-            rename: InlineRename::new(path, name),
+            rename: if filled.is_some() {
+                InlineRename::asked(path, name)
+            } else {
+                InlineRename::new(path, name)
+            },
             input,
             _events: events,
         });
@@ -1828,6 +1840,13 @@ impl Riffle {
     /// lost to another app does not: the edit waits for the window to come
     /// back, as the Tauri editor's blur checks `document.hasFocus()`. After
     /// Enter or Escape the tree has the keyboard again.
+    fn rename_event_blur(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !window.is_window_active() {
+            return;
+        }
+        self.rename_event(commit, window, cx);
+    }
+
     fn rename_event(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
         if commit && !window.is_window_active() {
             return;

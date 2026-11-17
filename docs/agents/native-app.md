@@ -1037,7 +1037,9 @@ folder follows its new path. While it is off, the equivalent of a dialog is
 the inline editor itself: the folder must be a row the tree draws, and
 `ask_rename` opens the editor on it with the name filled in and selected
 (`start_rename`'s `filled`, deferred to reach the window), the reply
-`awaiting_confirmation`; the user's Enter renames, Escape cancels. While the
+`awaiting_confirmation`; the user's Enter renames, Escape cancels, and a lost focus (a click
+elsewhere in the active window) or another edit starting cancels it too
+(`InlineRename::asked`, `implicit`), so only Enter confirms. While the
 editor is live, `get_status` reports `Rename…` `awaiting_confirmation` (and
 every other changing call is refused as for any inline edit), then
 `held_for_scan`, `running` and `finished` with the new path or `failed`.
