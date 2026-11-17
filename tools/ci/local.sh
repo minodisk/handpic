@@ -29,7 +29,7 @@ native_rust="rust@1.98.1"
 
 # The root packages checked one by one (crates/core, crates/backend,
 # crates/cli).
-root_packages=(riffle-core riffle-backend riffle-cli)
+root_packages=(handpic-core handpic-backend handpic-cli)
 
 # Each bash test and the paths whose change runs it.
 bash_tests=(
@@ -82,13 +82,13 @@ function select_checks() {
 		fi
 		case "${path}" in
 		Cargo.toml | Cargo.lock)
-			packages+="riffle-core "
-			packages+="riffle-backend "
-			packages+="riffle-cli "
+			packages+="handpic-core "
+			packages+="handpic-backend "
+			packages+="handpic-cli "
 			;;
-		crates/core/*) packages+="riffle-core " ;;
-		crates/backend/*) packages+="riffle-backend " ;;
-		crates/cli/*) packages+="riffle-cli " ;;
+		crates/core/*) packages+="handpic-core " ;;
+		crates/backend/*) packages+="handpic-backend " ;;
+		crates/cli/*) packages+="handpic-cli " ;;
 		crates/native/*) native=1 ;;
 		esac
 		for pattern in "${shellcheck_patterns[@]}"; do
@@ -134,7 +134,7 @@ function select_checks() {
 		done
 	fi
 	local native_clippy="${native}"
-	if [[ "${packages}" == *" riffle-core "* || "${packages}" == *" riffle-backend "* ]]; then
+	if [[ "${packages}" == *" handpic-core "* || "${packages}" == *" handpic-backend "* ]]; then
 		native_clippy=1
 	fi
 

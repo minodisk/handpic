@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use riffle_backend::index;
+use handpic_backend::index;
 
 use crate::dialog::{Content, Dialog, Style};
 

@@ -5,7 +5,7 @@ for what it is and the current status.
 
 ## Layout
 
-A Cargo workspace: `crates/core` (ARW, DNG, NEF, CR3, RAF and ORF parsing and JPEG decoding, `riffle-core`,
+A Cargo workspace: `crates/core` (ARW, DNG, NEF, CR3, RAF and ORF parsing and JPEG decoding, `handpic-core`,
 whose `src/xmp.rs` parses and patches XMP sidecar bytes (`xmp:Rating`, the
 tri-state pick / reject flag as `xmpDM:good`, and the color label as
 `photoshop:LabelColor` and `xmp:Label`) and `src/dop.rs` DxO PhotoLab `.dop`
@@ -75,9 +75,9 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
-`crates/backend` (`riffle-backend`, the GUI-free backend the app depends on,
+`crates/backend` (`handpic-backend`, the GUI-free backend the app depends on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
-like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
+like `handpic-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
@@ -173,13 +173,13 @@ import's settings rules (`format_date`, `validate_pattern`, `root_setting`,
 `plan_dir`, `summarize`, `refusal`, `prepare`, which creates the destination
 folders, `run_plan`, with a cancel flag and a progress callback, and
 `log_line`), `src/sequence.rs` the `Sequence JPEG Timestamps…` preview and
-run over `riffle_core::sequence` (`preview`, `run`, with a cancel flag and a
+run over `handpic_core::sequence` (`preview`, `run`, with a cancel flag and a
 `(done, total)` callback), neither touching the index, `src/text.rs` the
 `SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
-those failures in `Riffle.log` under greppable prefixes (see
-`docs/agents/app-log.md`)), `crates/native` (`riffle-native`)
+those failures in `Handpic.log` under greppable prefixes (see
+`docs/agents/app-log.md`)), `crates/native` (`handpic-native`)
 is the desktop app, built on GPUI, a separate Cargo workspace with its own
-`Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend`, takes GPUI and
+`Cargo.lock` and Rust toolchain that uses `handpic-core` and `handpic-backend`, takes GPUI and
 gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 `gpui_kit::component` gpui-component, started by `gpui_kit::init` and
 `gpui_kit::open_window`, see `docs/agents/native-app.md`); its `build.rs`

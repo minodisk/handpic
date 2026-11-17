@@ -4,7 +4,7 @@
 //! import: every RAW and JPEG under the folder, a RAW's sidecars with it,
 //! grouped into destination folders by capture date, each file copied,
 //! skipped as already imported or refused as a collision, and the run that
-//! copies a plan through `riffle_core::copy`, without touching the index.
+//! copies a plan through `handpic_core::copy`, without touching the index.
 //!
 //! The pattern is chrono strftime syntax over the capture date, `/`
 //! separating folders. Only date specifiers are allowed, and every folder
@@ -18,8 +18,8 @@ use std::sync::atomic::AtomicBool;
 
 use chrono::format::{Item, StrftimeItems};
 use chrono::NaiveDate;
-use riffle_core::copy;
-use riffle_core::scan::{is_jpeg_file, is_raw_file};
+use handpic_core::copy;
+use handpic_core::scan::{is_jpeg_file, is_raw_file};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -426,7 +426,7 @@ pub fn plan_dir(source: &Path, settings: &ImportSettings) -> Result<Plan, String
     let dated: Vec<(Photo, Option<String>)> = walk(source)?
         .into_iter()
         .map(|photo| {
-            let time = riffle_core::reader::read_metadata(&photo.file.path)
+            let time = handpic_core::reader::read_metadata(&photo.file.path)
                 .ok()
                 .and_then(|arw| arw.shot.capture_time);
             (photo, time)
@@ -723,7 +723,8 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-import-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("handpic-import-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

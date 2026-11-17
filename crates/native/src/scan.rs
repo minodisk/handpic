@@ -11,14 +11,14 @@ use std::{
 };
 
 use futures::channel::mpsc::UnboundedSender;
-use riffle_backend::{
+use handpic_backend::{
     diagnostics::invariant,
     index::{self, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing, stat_sidecars},
     output,
     sidecar::{self, SidecarError, SidecarFormat, Writer},
 };
-use riffle_core::{scan::ScanFocus, xmp::LabelNames};
+use handpic_core::{scan::ScanFocus, xmp::LabelNames};
 
 use crate::viewonly;
 
@@ -93,7 +93,7 @@ pub enum Event {
         message: String,
     },
     /// A tool call of the MCP companion for the view to answer.
-    Mcp(riffle_backend::mcp::Request),
+    Mcp(handpic_backend::mcp::Request),
     /// How far the move to the Trash or the delete in flight got.
     TrashProgress {
         mode: crate::trash::Mode,
@@ -103,7 +103,7 @@ pub enum Event {
     /// A message of a folder operation's run.
     FolderOp(crate::folderops::Message),
     /// A performance overlay sample from the sampler's thread.
-    Perf(riffle_backend::perf::Sample),
+    Perf(handpic_backend::perf::Sample),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its
@@ -550,11 +550,11 @@ mod tests {
     use super::{
         Running, STOP_TIMEOUT, Scan, Status, faces_threads_for, list, natural_order, threads_for,
     };
-    use riffle_backend::{
+    use handpic_backend::{
         index::Index,
         sidecar::{DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
     };
-    use riffle_core::{Flag, scan::ScanFocus};
+    use handpic_core::{Flag, scan::ScanFocus};
     use std::{
         fs,
         path::PathBuf,

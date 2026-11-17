@@ -63,11 +63,11 @@ mise run ci:local
 `mise run ci:local` runs only the checks the branch's changed paths select
 (`tools/ci/local.sh`). It runs on this platform only and does not test a
 crate that depends on a changed one, so a failed GitHub check can lie outside
-it: a dependent crate's test (a `riffle-core` change breaking a
-`riffle-backend` or `riffle-native` test), or a failure only one platform
+it: a dependent crate's test (a `handpic-core` change breaking a
+`handpic-backend` or `handpic-native` test), or a failure only one platform
 shows. To confirm the fix for such a check, first re-run the narrowest failing
 command where this platform allows it (one test of one crate, e.g.
-`cargo test -p riffle-backend <test name>`), then `mise run ci:local`.
+`cargo test -p handpic-backend <test name>`), then `mise run ci:local`.
 Do not fall back to the full `mise run ci` (the full root workspace build has
 run this host out of memory). A failure only
 another platform shows cannot be reproduced here; fix it from the log and let

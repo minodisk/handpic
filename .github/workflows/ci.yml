@@ -135,7 +135,7 @@ jobs:
           mise run native:bundle:macos debug
           app=crates/native/target/debug/Handpic.app
           plutil -lint "$app/Contents/Info.plist"
-          test -x "$app/Contents/MacOS/riffle-native"
+          test -x "$app/Contents/MacOS/handpic"
           test -s "$app/Contents/Resources/icon.icns"
 
   # Branch protection requires a single check named `ci`. This job stands in for

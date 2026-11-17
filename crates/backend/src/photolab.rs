@@ -5,7 +5,7 @@
 //! it apply to the master instead. Windows and macOS; on any other platform
 //! every fresh `.dop` gets random Uuids.
 
-use riffle_core::dop::Uuids;
+use handpic_core::dop::Uuids;
 use std::path::Path;
 
 /// The Uuids PhotoLab registered for `arw`, `None` when PhotoLab's database
@@ -332,7 +332,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("riffle-app-photolab-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-photolab-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -524,7 +524,7 @@ mod macos_tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("riffle-app-photolab-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-photolab-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

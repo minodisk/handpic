@@ -381,7 +381,7 @@ two of the four R5 Mark II samples on raw.pixls.us are like this.
   R5 Mark II, inside the 1 MiB `HEAD_LIMIT` prefix. In release, `read_full`
   on them takes ~90-125 ms (the `hpvcd` decode 65-110 ms, the tone map ~7 ms
   over rayon, the JPEG ~17 ms with libjpeg's fastest settings; mozjpeg's
-  defaults took ~200 ms), and one `riffle-cli scan` extraction ~150 ms more
+  defaults took ~200 ms), and one `handpic-cli scan` extraction ~150 ms more
   than a JPEG CR3 on one thread.
 - `hpvcd` did not panic on 60 randomly corrupted or truncated `PRVW` streams
   (it returned a frame every time), so `hevc::to_jpeg` does not wrap the

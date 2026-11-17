@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use riffle_core::xmp::LabelNames;
-use riffle_core::Flag;
+use handpic_core::xmp::LabelNames;
+use handpic_core::Flag;
 use serde::Serialize;
 
 use crate::index::{self, DirtyRow, Index};
@@ -74,7 +74,7 @@ pub fn targets(dir: &str, index: &Arc<Mutex<Index>>) -> Result<(Vec<DirtyRow>, u
     let raws: HashSet<&str> = listing
         .files
         .iter()
-        .filter(|path| riffle_core::scan::is_raw_file(Path::new(path)))
+        .filter(|path| handpic_core::scan::is_raw_file(Path::new(path)))
         .map(String::as_str)
         .collect();
     if raws.is_empty() {
@@ -200,7 +200,7 @@ pub fn doomed(dir: &str, format: SidecarFormat) -> Result<Vec<Doomed>, String> {
     let raws: Vec<&String> = listing
         .files
         .iter()
-        .filter(|path| riffle_core::scan::is_raw_file(Path::new(path)))
+        .filter(|path| handpic_core::scan::is_raw_file(Path::new(path)))
         .collect();
     if raws.is_empty() {
         return Err(format!(
@@ -329,13 +329,13 @@ pub fn delete_run(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riffle_core::{dop, xmp};
+    use handpic_core::{dop, xmp};
 
     const PHOTOLAB: &[u8] = include_bytes!("../../core/src/fixtures/dop/_DSC0003.ARW.dop");
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!(
-            "riffle-foldersidecars-{name}-{}",
+            "handpic-foldersidecars-{name}-{}",
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&dir);

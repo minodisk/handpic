@@ -45,7 +45,7 @@ impl From<(f32, f32)> for FacePoint {
 /// view-only, so no client can rate it, write a sidecar next to it or run
 /// face detection on its full-size image.
 pub fn raw_only(path: &Path, what: &str) -> Result<(), String> {
-    if riffle_core::scan::is_raw_file(path) {
+    if handpic_core::scan::is_raw_file(path) {
         Ok(())
     } else {
         Err(format!(
@@ -60,7 +60,7 @@ pub fn raw_only(path: &Path, what: &str) -> Result<(), String> {
 /// 48 MB file.
 pub fn read_preview(path: &Path) -> Result<(u16, Vec<u8>), String> {
     let (arw, jpeg) =
-        riffle_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        handpic_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok((arw.orientation, jpeg))
 }
 
@@ -70,11 +70,11 @@ pub fn read_preview(path: &Path) -> Result<(u16, Vec<u8>), String> {
 pub fn read_faces(path: &Path) -> Result<FacesResponse, String> {
     raw_only(path, "face detection")?;
     let (arw, jpeg) =
-        riffle_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let found = riffle_core::faces::detect_around(
+        handpic_core::reader::read_preview(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let found = handpic_core::faces::detect_around(
         &jpeg,
         arw.orientation,
-        riffle_core::sharpness::trusted_focus(&arw.shot),
+        handpic_core::sharpness::trusted_focus(&arw.shot),
     )
     .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(FacesResponse {
@@ -148,7 +148,7 @@ fn micros(since: std::time::Instant) -> u32 {
 /// before the detection and before the model, and a `false` stops the
 /// judgment as superseded.
 pub fn read_eyes(path: &Path, current: impl Fn() -> bool) -> Result<EyesResponse, String> {
-    use riffle_core::{decode, eyes, faces};
+    use handpic_core::{decode, eyes, faces};
     raw_only(path, "eye state judgment")?;
     let err = |e: &dyn std::fmt::Display| format!("{}: {e}", path.display());
     let mut out = EyesResponse::default();
@@ -157,10 +157,10 @@ pub fn read_eyes(path: &Path, current: impl Fn() -> bool) -> Result<EyesResponse
         Ok(out)
     };
     let t = std::time::Instant::now();
-    let (arw, jpeg) = riffle_core::reader::read_preview(path).map_err(|e| err(&e))?;
+    let (arw, jpeg) = handpic_core::reader::read_preview(path).map_err(|e| err(&e))?;
     out.read_us = micros(t);
     let orientation = arw.orientation;
-    let focus = riffle_core::sharpness::trusted_focus(&arw.shot);
+    let focus = handpic_core::sharpness::trusted_focus(&arw.shot);
     let t = std::time::Instant::now();
     let (found, full) = if focus.is_some() {
         let (rgb, w, h) = decode::decode_rgb(&jpeg).map_err(|e| err(&e))?;
@@ -234,7 +234,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("riffle-ondemand-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-ondemand-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -260,7 +260,7 @@ mod tests {
     }
 
     /// A TIFF shell whose IFD0 carries an Orientation and a preview of `body`,
-    /// as `riffle_core::scan`'s tests build one.
+    /// as `handpic_core::scan`'s tests build one.
     fn arw_with_preview(orientation: u16, body: &[u8]) -> Vec<u8> {
         let mut buf = Vec::new();
         buf.extend_from_slice(b"II\x2a\x00");
@@ -325,7 +325,7 @@ mod tests {
                 points: vec![[1.0, 2.0]],
             },
         };
-        let pose = riffle_core::pose::Pose {
+        let pose = handpic_core::pose::Pose {
             yaw: 12.5,
             pitch: -5.25,
             roll: 3.0,
@@ -354,13 +354,13 @@ mod tests {
     }
 
     /// The `eyes_of` breakdown on real files, one line per file: set
-    /// `RIFFLE_EYES_FILES` to RAW paths separated by `;`, then run in
+    /// `HANDPIC_EYES_FILES` to RAW paths separated by `;`, then run in
     /// release with `--ignored --nocapture`. The first file pays the model
     /// builds.
     #[test]
     #[ignore]
     fn times_eyes_of_on_real_files() {
-        let paths = std::env::var("RIFFLE_EYES_FILES").expect("RIFFLE_EYES_FILES");
+        let paths = std::env::var("HANDPIC_EYES_FILES").expect("HANDPIC_EYES_FILES");
         for path in paths.split(';').filter(|p| !p.is_empty()) {
             let started = std::time::Instant::now();
             let r = read_eyes(Path::new(path), || true).unwrap();

@@ -1,5 +1,5 @@
 //! The native app's settings, kept in its own store
-//! (`riffle_backend::store`) and read with the backend's rules, so a native
+//! (`handpic_backend::store`) and read with the backend's rules, so a native
 //! judgment writes the same sidecars with the same label names and keys as
 //! the Tauri app. A new store is seeded once from the Tauri app's
 //! `settings.json`, which is only ever read; after that the two apps'
@@ -12,13 +12,13 @@ use std::{
     time::Duration,
 };
 
-use riffle_backend::{
+use handpic_backend::{
     import, mcp,
     shortcuts::Keymap,
     sidecar::{self, SidecarFormat},
     store::Store,
 };
-use riffle_core::xmp::LabelNames;
+use handpic_core::xmp::LabelNames;
 use serde_json::{Map, Value};
 
 use crate::{
@@ -303,8 +303,8 @@ mod tests {
         stripheight,
         theme::{self, Mode},
     };
-    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
-    use riffle_core::xmp::LabelNames;
+    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
+    use handpic_core::xmp::LabelNames;
     use serde_json::{Map, Value, json};
     use std::{
         fs,

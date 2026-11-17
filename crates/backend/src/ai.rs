@@ -1,6 +1,6 @@
 //! The `aiEnabled` state and the embedding model it needs: whether the
 //! scan's third pass runs, and the model file it runs, downloaded on the
-//! first enable (`riffle_core::embed::MODEL_URL`, checked against
+//! first enable (`handpic_core::embed::MODEL_URL`, checked against
 //! `MODEL_SIZE` and `MODEL_SHA256`) to the path the caller gives, each state
 //! change handed to the caller's callback.
 
@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use riffle_core::embed::{MODEL_SHA256, MODEL_SIZE, MODEL_URL};
+use handpic_core::embed::{MODEL_SHA256, MODEL_SIZE, MODEL_URL};
 use sha2::{Digest, Sha256};
 
 use crate::index::{lock, with_suffix};
@@ -290,7 +290,7 @@ mod tests {
     const WRONG_SHA256: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-ai-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("handpic-ai-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -413,7 +413,7 @@ mod tests {
     #[ignore = "downloads 378 MB from huggingface.co"]
     fn the_pinned_model_downloads_and_matches_its_hash() {
         let dir = temp_dir("download");
-        let dest = dir.join(riffle_core::embed::MODEL_FILE);
+        let dest = dir.join(handpic_core::embed::MODEL_FILE);
         let started = Instant::now();
         fetch(MODEL_URL)
             .and_then(|mut body| {

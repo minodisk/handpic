@@ -55,6 +55,8 @@ says so (the binary's name in Step 2, the data folders in Step 3).
   obsolete be deleted: each step deletes the items its own change closes or
   makes moot (an item about a removed file, task or tool), and Step 4 sweeps
   the rest.
+- (2026-11-18) The user chose `handpic` as the native app's binary name
+  (`[[bin]].name`); the package stays `handpic-native`.
 - Step 2's binary name and Step 3's index option are asked of the user before
   each of those steps starts.
 
@@ -201,7 +203,7 @@ says so (the binary's name in Step 2, the data folders in Step 3).
       lockfile, so the merge approval check will ask the user. Pushing a
       workflow change needs the `workflow` scope
       (`docs/agents/github-actions-workflows.md`).
-- [ ] Step 2: Rename the crates, the binaries and the remaining Riffle names to Handpic
+- [x] Step 2: Rename the crates, the binaries and the remaining Riffle names to Handpic
   - Done when:
     - The packages are `handpic-core`, `handpic-backend`, `handpic-cli` and
       `handpic-native`; the binaries are `handpic-cli` and the native app's

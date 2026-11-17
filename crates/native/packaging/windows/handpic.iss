@@ -1,7 +1,7 @@
 ; handpic.iss: the per-user Inno Setup installer of the native app, compiled by
 ; tools/package/windows.sh, which passes these defines:
 ;   AppVersion  the version, tools/package/version.sh's
-;   Binary      the executable's file name, e.g. riffle-native.exe
+;   Binary      the executable's file name, e.g. handpic.exe
 ;   ReleaseDir  the folder holding the built executable
 ;   LicensesDir the folder notices.sh filled
 

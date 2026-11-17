@@ -154,7 +154,7 @@ the RGB, and the scaled crop's pixels differ.
 
 - Rule: the cue path keeps its single full RGB decode. Only a change that
   passes an identity check of the face cue on the labeled folders (identical
-  per-file `riffle-cli facechoice` lines) may replace it, otherwise it needs a
+  per-file `handpic-cli facechoice` lines) may replace it, otherwise it needs a
   `FACES_VERSION` bump.
 - Source: [face-detection-recall-cost learnings, Step 3 "Cue-path variant"](../plans/_archived/20261005-face-detection-recall-cost/learnings.md).
 
@@ -183,7 +183,7 @@ and a labeled set, not only whether it loads.
   maps it with the horizontal factor `kx` only; `pose::head_pose` reads it
   for the head pose (MediaPipe's face geometry pipeline). Checked by hand:
   the yaw / pitch signs it yields agree with the face crops of a few
-  turned and tilted faces, and keeping z left the `riffle-cli eyes` EAR
+  turned and tilted faces, and keeping z left the `handpic-cli eyes` EAR
   columns of 40 labeled faces byte-identical (Measured).
 - The head pose (`pose::head_pose`, a port of MediaPipe's face geometry
   pipeline at commit `212f110c`) needs no linear algebra crate. The 3x3
@@ -225,7 +225,7 @@ and a labeled set, not only whether it loads.
 - The first call builds the plan: 156-169 ms for the first call against
   ~35 ms for a later one on the Windows 11 machine, so ~120-135 ms of plan
   build, three to four times YuNet's (Measured). A caller that times
-  per-face runs warms it first, as `riffle-cli eyes` and `bench` do.
+  per-face runs warms it first, as `handpic-cli eyes` and `bench` do.
 - Per face, crop and resize included: 34.5-35.5 ms mean over the 504
   labeled faces, one thread (Measured). The Step 1 survey measured 49-51 ms
   for the same function while it ran three other models on each face in
@@ -256,8 +256,8 @@ and a labeled set, not only whether it loads.
   folder. One probability moved (`_DSC2748.ARW`, a 58x49 face, `p 0.209` ->
   `0.328`, `eye L only` -> `window`, still not a candidate), so
   `FACES_VERSION` was not bumped (Measured). Every mesh call site must use
-  `candidate::meshes_face`, including `riffle-cli facechoice`. Otherwise its
-  line disagrees with the cue the scan stores. No non-ignored `riffle-core`
+  `candidate::meshes_face`, including `handpic-cli facechoice`. Otherwise its
+  line disagrees with the cue the scan stores. No non-ignored `handpic-core`
   test runs the mesh model, so prove a gate with a small face in the
   synthetic image (`face_mesh` gives no mesh) plus a predicate check at
   `EYES_MIN_FACE` and `EYES_MIN_FACE.next_down()`. Source:
@@ -323,7 +323,7 @@ side resize and a center crop for OpenCLIP and TinyCLIP).
 
 `include_bytes!` puts the model in a `static`; the linker drops it from a
 binary that never reaches the code reading it. Adding `eyes.rs` grew the
-release `riffle-cli` (whose `eyes` and `bench` call it) by 4.97 MB and the
+release `handpic-cli` (whose `eyes` and `bench` call it) by 4.97 MB and the
 release `riffle-app` (which did not call it yet) by 8 KB. Measure a model's
 binary cost on a build where the app actually calls it.
 

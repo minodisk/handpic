@@ -12,11 +12,11 @@ use std::{
 
 use futures::channel::oneshot;
 
-use riffle_backend::{
+use handpic_backend::{
     index::{self, Index, IndexedFile},
     sidecar::{SidecarFormat, Writer},
 };
-use riffle_core::{Flag, xmp::LabelNames};
+use handpic_core::{Flag, xmp::LabelNames};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct State {
@@ -280,11 +280,11 @@ mod tests {
         Command, Queue, State, advances_after, apply, changed, label_known, should_advance, store,
         writes,
     };
-    use riffle_backend::{
+    use handpic_backend::{
         index::{Index, IndexedFile},
         sidecar::{DEBOUNCE, DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
     };
-    use riffle_core::{Flag, xmp::LabelNames};
+    use handpic_core::{Flag, xmp::LabelNames};
     use serde_json::json;
     use std::{
         fs,

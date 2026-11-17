@@ -4,12 +4,12 @@
 //! keymap.
 
 use gpui_kit::component::ThemeMode;
-use riffle_backend::{
+use handpic_backend::{
     import,
     shortcuts::Keymap,
     sidecar::{SidecarFormat, label_names_setting},
 };
-use riffle_core::{i18n, xmp::LabelNames};
+use handpic_core::{i18n, xmp::LabelNames};
 
 use crate::theme::{self, Mode};
 
@@ -415,8 +415,8 @@ impl SettingsModal {
 #[cfg(test)]
 mod tests {
     use gpui_kit::component::ThemeMode;
-    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
-    use riffle_core::xmp::LabelNames;
+    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use handpic_core::xmp::LabelNames;
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
@@ -456,10 +456,10 @@ mod tests {
         );
         assert_eq!(
             IMPORT_PATTERN_EXAMPLES[0],
-            riffle_backend::import::DEFAULT_PATTERN
+            handpic_backend::import::DEFAULT_PATTERN
         );
         for pattern in IMPORT_PATTERN_EXAMPLES {
-            assert!(riffle_backend::import::validate_pattern(pattern).is_ok());
+            assert!(handpic_backend::import::validate_pattern(pattern).is_ok());
         }
     }
 
@@ -512,17 +512,17 @@ mod tests {
 
     #[test]
     fn a_preset_fills_the_fields_in_the_tauri_order() {
-        let ja = riffle_core::i18n::preset("ja").unwrap();
+        let ja = handpic_core::i18n::preset("ja").unwrap();
         assert_eq!(
             label_texts(&ja.names),
             ["レッド", "イエロー", "グリーン", "ブルー", "パープル"]
         );
-        assert_eq!(riffle_core::i18n::presets()[0].code, "en");
+        assert_eq!(handpic_core::i18n::presets()[0].code, "en");
     }
 
     #[test]
     fn the_language_shown_is_the_preset_whose_names_are_in_force() {
-        let presets = riffle_core::i18n::presets();
+        let presets = handpic_core::i18n::presets();
         for (at, preset) in presets.iter().enumerate() {
             assert_eq!(preset_of(&preset.names), Some(at));
         }

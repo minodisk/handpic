@@ -3,7 +3,7 @@
 
 use std::path::Path;
 
-use riffle_core::arw::{excluded_dsc, Rational, Shot};
+use handpic_core::arw::{excluded_dsc, Rational, Shot};
 
 /// A numeric setting: `value` to sort by, `label` to show.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
@@ -377,8 +377,8 @@ pub fn read_metadata(path: &Path) -> Result<Metadata, String> {
     let name = path
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    let arw =
-        riffle_core::reader::read_metadata(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let arw = handpic_core::reader::read_metadata(path)
+        .map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(metadata(name, &arw.shot))
 }
 

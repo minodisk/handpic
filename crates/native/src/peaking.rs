@@ -9,7 +9,7 @@ use image::{
     imageops::{self, FilterType},
 };
 
-use crate::Riffle;
+use crate::Handpic;
 
 /// A pixel is lit when `|gx| + |gy|` of the 3x3 Sobel on its luminance
 /// reaches this, as the Tauri app's.
@@ -295,7 +295,7 @@ pub fn compute(source: &RenderImage, width: u32, height: u32) -> Overlay {
 
 /// Compute the overlay `job` asks for on the background executor, then hand
 /// it to the view.
-pub fn send(job: Job<Arc<RenderImage>>, cx: &mut Context<Riffle>) {
+pub fn send(job: Job<Arc<RenderImage>>, cx: &mut Context<Handpic>) {
     let Job {
         tag,
         source,

@@ -40,7 +40,7 @@ Rust change is needed.
 ## Checking
 
 ```sh
-cargo test -p riffle-core
+cargo test -p handpic-core
 ```
 
 The tests check that each file parses, is named by a plausible language

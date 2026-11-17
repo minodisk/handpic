@@ -152,7 +152,7 @@ pub struct FilePlan {
 /// its source is a case-only rename).
 pub fn file_plan(dir: &Path, path: &str, name: &str) -> Result<FilePlan, String> {
     let raw = PathBuf::from(path);
-    if !riffle_core::scan::is_raw_file(&raw) {
+    if !handpic_core::scan::is_raw_file(&raw) {
         return Err(format!("not a RAW file: {path}"));
     }
     if raw.parent() != Some(dir) {
@@ -160,7 +160,7 @@ pub fn file_plan(dir: &Path, path: &str, name: &str) -> Result<FilePlan, String>
     }
     check_name(name)?;
     let target = dir.join(name);
-    if !riffle_core::scan::is_raw_file(&target) {
+    if !handpic_core::scan::is_raw_file(&target) {
         return Err(format!("{name}: not a RAW file name"));
     }
     let mut moves = vec![(raw.clone(), target.clone())];
@@ -215,7 +215,8 @@ mod tests {
     use std::sync::Mutex;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-rename-{name}-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("handpic-rename-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

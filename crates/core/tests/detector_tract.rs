@@ -5,9 +5,9 @@
 //! --tensors`) wrote, so the boxes can be compared with onnxruntime's.
 //!
 //! Run in release with `--ignored --nocapture` and:
-//! - `RIFFLE_DETECTOR_ONNX`: the model file;
-//! - `RIFFLE_DETECTOR_INPUT`: the input shape, e.g. `1,3,640,640`;
-//! - `RIFFLE_DETECTOR_TENSORS` (optional): a folder of `<name>.f32` input
+//! - `HANDPIC_DETECTOR_ONNX`: the model file;
+//! - `HANDPIC_DETECTOR_INPUT`: the input shape, e.g. `1,3,640,640`;
+//! - `HANDPIC_DETECTOR_TENSORS` (optional): a folder of `<name>.f32` input
 //!   tensors (little-endian, that shape), each run once, its outputs
 //!   written next to it as `<name>.<output label>.f32`.
 
@@ -17,13 +17,13 @@ use tract_onnx::prelude::*;
 const WARM_RUNS: usize = 20;
 
 fn input_shape() -> Vec<usize> {
-    std::env::var("RIFFLE_DETECTOR_INPUT")
-        .expect("RIFFLE_DETECTOR_INPUT")
+    std::env::var("HANDPIC_DETECTOR_INPUT")
+        .expect("HANDPIC_DETECTOR_INPUT")
         .split(',')
         .map(|d| {
             d.trim()
                 .parse()
-                .expect("RIFFLE_DETECTOR_INPUT: a comma-separated shape")
+                .expect("HANDPIC_DETECTOR_INPUT: a comma-separated shape")
         })
         .collect()
 }
@@ -31,7 +31,7 @@ fn input_shape() -> Vec<usize> {
 #[test]
 #[ignore]
 fn detector_loads_and_runs_in_tract() {
-    let path = std::env::var("RIFFLE_DETECTOR_ONNX").expect("RIFFLE_DETECTOR_ONNX");
+    let path = std::env::var("HANDPIC_DETECTOR_ONNX").expect("HANDPIC_DETECTOR_ONNX");
     let shape = input_shape();
     let t = Instant::now();
     let model = tract_onnx::onnx()
@@ -71,7 +71,7 @@ fn detector_loads_and_runs_in_tract() {
         t.elapsed().as_secs_f64() * 1000.0 / WARM_RUNS as f64
     );
 
-    let Ok(dir) = std::env::var("RIFFLE_DETECTOR_TENSORS") else {
+    let Ok(dir) = std::env::var("HANDPIC_DETECTOR_TENSORS") else {
         return;
     };
     let mut names: Vec<_> = std::fs::read_dir(&dir)

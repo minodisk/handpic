@@ -223,7 +223,7 @@ mod tests {
         single, targets,
     };
     use crate::judgment::{Command, State};
-    use riffle_core::Flag;
+    use handpic_core::Flag;
     use std::collections::HashMap;
 
     fn files() -> Vec<String> {

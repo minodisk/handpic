@@ -2,7 +2,7 @@
 //! open, the folder has no RAW or JPEG files, the filter hides every file, or
 //! the current file's preview could not be shown.
 
-use riffle_backend::shortcuts::Binding;
+use handpic_backend::shortcuts::Binding;
 
 use crate::{filter::FILTERED_TEXT, settingsmodal::display_key};
 
@@ -65,7 +65,7 @@ pub fn text(state: State, bindings: &[Binding]) -> Option<String> {
 mod tests {
     use super::{State, open_hint, state, text};
     use crate::filter::FILTERED_TEXT;
-    use riffle_backend::shortcuts::Binding;
+    use handpic_backend::shortcuts::Binding;
 
     fn open(keys: &[&str]) -> Vec<Binding> {
         vec![Binding {

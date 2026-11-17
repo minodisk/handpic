@@ -12,13 +12,13 @@ use gpui_kit::{
     App, AppContext, Bounds, Context, Hsla, PaintQuad, PathBuilder, Pixels, Point, TextAlign,
     Window, fill, hsla, point, px, rgb, size,
 };
-use riffle_backend::{
+use handpic_backend::{
     index::{self, Focus, Index},
     ondemand::{self, EyesJudgment, FacesResponse},
 };
 
 use crate::{
-    Riffle,
+    Handpic,
     eyes::{EyesCache, EyesTicket},
     facemesh,
     faces::{self, FaceCache},
@@ -210,13 +210,13 @@ impl Marks {
 /// A JPEG folder is view-only: its faces are not detected. A folder lists
 /// either its RAW files or its JPEGs, so the file tells the folder.
 fn is_raw(path: &str) -> bool {
-    riffle_core::scan::is_raw_file(Path::new(path))
+    handpic_core::scan::is_raw_file(Path::new(path))
 }
 
 /// Read `path`'s stored focus through the index's read-only connection on
 /// the background executor and hand it to the view, unless `path` is no
 /// longer current by then.
-pub fn read(reader: Arc<Mutex<Index>>, path: String, ticket: u64, cx: &mut Context<Riffle>) {
+pub fn read(reader: Arc<Mutex<Index>>, path: String, ticket: u64, cx: &mut Context<Handpic>) {
     cx.spawn(async move |this, cx| {
         let entry = {
             let path = path.clone();
@@ -244,7 +244,7 @@ pub fn read(reader: Arc<Mutex<Index>>, path: String, ticket: u64, cx: &mut Conte
 /// Detect `path`'s faces through the backend on the background executor and
 /// keep them by path; a failure is logged and kept as no faces. The view
 /// repaints only when `path` is still current.
-pub fn detect(path: String, token: u64, cx: &mut Context<Riffle>) {
+pub fn detect(path: String, token: u64, cx: &mut Context<Handpic>) {
     cx.spawn(async move |this, cx| {
         let found = {
             let path = path.clone();
@@ -274,7 +274,7 @@ pub fn judge(
     path: String,
     ticket: EyesTicket,
     current: impl Fn() -> bool + Send + 'static,
-    cx: &mut Context<Riffle>,
+    cx: &mut Context<Handpic>,
 ) {
     cx.spawn(async move |this, cx| {
         let started = Instant::now();
@@ -535,7 +535,7 @@ fn segments(m: &FocusMark, width: f32) -> [((f32, f32), (f32, f32)); 4] {
 mod tests {
     use super::*;
     use crate::mark::MarkState;
-    use riffle_backend::index::{FocusPoint, StoredEyes};
+    use handpic_backend::index::{FocusPoint, StoredEyes};
 
     fn focus() -> Focus {
         Focus {

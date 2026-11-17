@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use riffle_core::Flag;
+use handpic_core::Flag;
 
 use crate::{
     companion::Change,
@@ -568,7 +568,7 @@ mod tests {
 mod reject_rest_tests {
     use std::collections::{HashMap, HashSet};
 
-    use riffle_core::Flag;
+    use handpic_core::Flag;
 
     use super::{BurstMember, reject_rest};
     use crate::{companion::Change, judgment::State};

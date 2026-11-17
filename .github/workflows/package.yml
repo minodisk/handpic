@@ -81,8 +81,8 @@ jobs:
           hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
           app="$mount/Handpic.app"
           codesign --verify --strict --verbose=2 "$app"
-          test -x "$app/Contents/MacOS/riffle-native"
-          lipo -archs "$app/Contents/MacOS/riffle-native" | grep -qx "$ARCH"
+          test -x "$app/Contents/MacOS/handpic"
+          lipo -archs "$app/Contents/MacOS/handpic" | grep -qx "$ARCH"
           test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$VERSION"
           test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$VERSION"
           ls "$app/Contents/Resources/licenses"
@@ -156,7 +156,7 @@ jobs:
             if ($p.ExitCode -ne 0) { throw "$what exited with $($p.ExitCode)" }
           }
           $app = Join-Path $env:LOCALAPPDATA 'Programs\Handpic'
-          $exe = Join-Path $app 'riffle-native.exe'
+          $exe = Join-Path $app 'handpic.exe'
           $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1'
           $machineKeys = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1',
             'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1'
@@ -184,7 +184,7 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'zip'
           Expand-Archive -Path $zip -DestinationPath $out
           Get-ChildItem -Recurse $out | Select-Object -ExpandProperty FullName
-          if (-not (Test-Path (Join-Path $out 'Handpic\riffle-native.exe'))) { throw 'no exe in the ZIP' }
+          if (-not (Test-Path (Join-Path $out 'Handpic\handpic.exe'))) { throw 'no exe in the ZIP' }
           if (-not (Test-Path (Join-Path $out 'Handpic\licenses\NOTICE-gpui'))) { throw 'no licenses in the ZIP' }
 
       - uses: actions/upload-artifact@v4
@@ -252,7 +252,7 @@ jobs:
       - name: Show the binary's libraries
         shell: bash
         run: |
-          binary=crates/native/target/release/riffle-native
+          binary=crates/native/target/release/handpic
           objdump -p "$binary" | grep -E 'NEEDED|GLIBC_' || true
           objdump -T "$binary" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -n 1
           grep -aoE 'lib[A-Za-z0-9_+-]+\.so(\.[0-9]+)*' "$binary" | sort -u
@@ -271,10 +271,10 @@ jobs:
           digest="$(sha256sum "$tarball" | cut -d' ' -f1)"
           home="$(mktemp -d)"
           HOME="$home" sh "$release/install.sh" "$tarball" "$digest"
-          test -x "$home/.local/bin/riffle-native"
+          test -x "$home/.local/bin/handpic"
           desktop="$home/.local/share/applications/dev.minodisk.handpic.desktop"
           cat "$desktop"
-          grep -qx "Exec=\"$home/.local/bin/riffle-native\"" "$desktop"
+          grep -qx "Exec=\"$home/.local/bin/handpic\"" "$desktop"
           grep -qx 'Icon=dev.minodisk.handpic' "$desktop"
           grep -qx 'StartupWMClass=dev.minodisk.handpic' "$desktop"
           test -s "$home/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png"
@@ -299,12 +299,12 @@ jobs:
           done
           sudo apt-get install -y "$deb"
           dpkg -s handpic
-          test -x /usr/lib/handpic/riffle-native
-          grep -qx 'Exec=/usr/lib/handpic/riffle-native' /usr/share/applications/dev.minodisk.handpic.desktop
+          test -x /usr/lib/handpic/handpic
+          grep -qx 'Exec=/usr/lib/handpic/handpic' /usr/share/applications/dev.minodisk.handpic.desktop
           test -s /usr/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png
           test -s /usr/share/doc/handpic/NOTICE-gpui
           sudo apt-get remove -y handpic
-          test ! -e /usr/lib/handpic/riffle-native
+          test ! -e /usr/lib/handpic/handpic
           test ! -e /usr/share/applications/dev.minodisk.handpic.desktop
 
       - uses: actions/upload-artifact@v4

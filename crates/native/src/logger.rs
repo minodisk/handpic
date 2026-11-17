@@ -182,17 +182,17 @@ mod tests {
     #[test]
     fn a_line_carries_the_utc_date_time_target_and_level() {
         assert_eq!(
-            line(0, "riffle_native", log::Level::Info, &format_args!("a b")),
-            "[1970-01-01][00:00:00][riffle_native][INFO] a b\n"
+            line(0, "handpic", log::Level::Info, &format_args!("a b")),
+            "[1970-01-01][00:00:00][handpic][INFO] a b\n"
         );
         assert_eq!(
             line(
                 1_709_251_199,
-                "riffle_backend::index",
+                "handpic_backend::index",
                 log::Level::Warn,
                 &format_args!("x={}", 1)
             ),
-            "[2024-02-29][23:59:59][riffle_backend::index][WARN] x=1\n"
+            "[2024-02-29][23:59:59][handpic_backend::index][WARN] x=1\n"
         );
         assert_eq!(
             line(1_794_618_123, "t", log::Level::Error, &format_args!("m")),

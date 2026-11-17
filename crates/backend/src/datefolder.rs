@@ -222,7 +222,7 @@ pub fn plan_of(index: Option<&Mutex<Index>>, dir: &str) -> Result<Plan, String> 
     };
     let dir = Path::new(dir);
     let files = dated(dir, &indexed, |path| {
-        riffle_core::reader::read_metadata(path)
+        handpic_core::reader::read_metadata(path)
             .ok()
             .and_then(|arw| arw.shot.capture_time)
     })?;
@@ -237,7 +237,7 @@ pub fn plan_of(index: Option<&Mutex<Index>>, dir: &str) -> Result<Plan, String> 
 pub fn move_plan(file: &Path, target: &Path) -> Result<FilePlan, String> {
     let to = target.join(file.file_name().unwrap_or_default());
     let mut moves = vec![(file.to_path_buf(), to.clone())];
-    if riffle_core::scan::is_raw_file(file) {
+    if handpic_core::scan::is_raw_file(file) {
         for format in [SidecarFormat::Xmp, SidecarFormat::Dop] {
             if let Some(sidecar) = existing_sidecar(file, format) {
                 moves.push((sidecar, format.sidecar_path(&to)));
@@ -447,7 +447,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("riffle-datefolder-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-datefolder-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

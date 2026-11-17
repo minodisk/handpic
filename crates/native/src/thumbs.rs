@@ -4,10 +4,10 @@ use std::{
 };
 
 use gpui_kit::{AppContext, Context, RenderImage};
+use handpic_backend::index::{self, Index};
 use image::{Frame, RgbaImage};
-use riffle_backend::index::{self, Index};
 
-use crate::{Riffle, guarded, orient};
+use crate::{Handpic, guarded, orient};
 
 /// Thumbnail reads out at once, as the Tauri strip's.
 pub const MAX_IN_FLIGHT: usize = 4;
@@ -97,7 +97,7 @@ impl Thumbs {
         reader: Arc<Mutex<Index>>,
         index: usize,
         path: String,
-        cx: &mut Context<Riffle>,
+        cx: &mut Context<Handpic>,
     ) {
         let generation = self.generation;
         cx.spawn(async move |this, cx| {

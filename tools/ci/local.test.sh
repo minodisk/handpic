@@ -47,12 +47,12 @@ bash-test .claude/skills/merge/scripts/check-merge-approval.test.sh
 bash-test .claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 bash-test .claude/skills/merge-settings/scripts/merge.test.sh
 bash-test tools/ci/local.test.sh
-clippy riffle-core
-clippy riffle-backend
-clippy riffle-cli
-test riffle-core
-test riffle-backend
-test riffle-cli
+clippy handpic-core
+clippy handpic-backend
+clippy handpic-cli
+test handpic-core
+test handpic-backend
+test handpic-cli
 clippy native
 test native"
 
@@ -60,8 +60,8 @@ test native"
 expect none "" ""
 expect moved "" ""
 expect none "tools/stats/foo.py" ""
-expect none "crates/core/models/LICENSE-x" "clippy riffle-core
-test riffle-core
+expect none "crates/core/models/LICENSE-x" "clippy handpic-core
+test handpic-core
 clippy native"
 
 # --- Markdown ---------------------------------------------------------------
@@ -73,8 +73,8 @@ docs/b.md" "lychee"
 expect moved "docs/old.md
 docs/new.md" "lychee"
 expect moved "crates/core/genres/old.py" "lychee
-clippy riffle-core
-test riffle-core
+clippy handpic-core
+test handpic-core
 clippy native"
 expect none "docs/plans/20260101-x/plan.md
 docs/plans/20260101-x/data.json" "lychee"
@@ -82,37 +82,37 @@ expect none ".claude/settings.json" ""
 
 # --- Rust -------------------------------------------------------------------
 expect none "crates/core/src/x.rs" "fmt root
-clippy riffle-core
-test riffle-core
+clippy handpic-core
+test handpic-core
 clippy native"
 expect none "crates/backend/src/x.rs" "fmt root
-clippy riffle-backend
-test riffle-backend
+clippy handpic-backend
+test handpic-backend
 clippy native"
 expect none "crates/cli/src/x.rs" "fmt root
-clippy riffle-cli
-test riffle-cli"
+clippy handpic-cli
+test handpic-cli"
 expect none "crates/native/src/x.rs" "fmt native
 clippy native
 test native"
 expect none "crates/native/Cargo.lock" "clippy native
 test native"
-expect none "crates/core/Cargo.toml" "clippy riffle-core
-test riffle-core
+expect none "crates/core/Cargo.toml" "clippy handpic-core
+test handpic-core
 clippy native"
-expect none "Cargo.lock" "clippy riffle-core
-clippy riffle-backend
-clippy riffle-cli
-test riffle-core
-test riffle-backend
-test riffle-cli
+expect none "Cargo.lock" "clippy handpic-core
+clippy handpic-backend
+clippy handpic-cli
+test handpic-core
+test handpic-backend
+test handpic-cli
 clippy native"
 expect none "crates/cli/src/x.rs
 crates/core/src/y.rs" "fmt root
-clippy riffle-core
-clippy riffle-cli
-test riffle-core
-test riffle-cli
+clippy handpic-core
+clippy handpic-cli
+test handpic-core
+test handpic-cli
 clippy native"
 
 # --- shell scripts and workflows ---------------------------------------------

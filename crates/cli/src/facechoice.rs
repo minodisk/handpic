@@ -1,17 +1,18 @@
 use anyhow::{bail, Result};
-use riffle_core::candidate;
-use riffle_core::decode::decode_rgb;
-use riffle_core::eyes;
-use riffle_core::faces::{self, Face};
-use riffle_core::fullsharp;
-use riffle_core::pose::Pose;
-use riffle_core::reader;
-use riffle_core::scan;
-use riffle_core::sharpness;
+use handpic_core::candidate;
+use handpic_core::decode::decode_rgb;
+use handpic_core::eyes;
+use handpic_core::faces::{self, Face};
+use handpic_core::fullsharp;
+use handpic_core::pose::Pose;
+use handpic_core::reader;
+use handpic_core::scan;
+use handpic_core::sharpness;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-pub const USAGE: &str = "riffle-cli facechoice <dir|file>... [threads] [--out <out.tsv>] [--check]";
+pub const USAGE: &str =
+    "handpic-cli facechoice <dir|file>... [threads] [--out <out.tsv>] [--check]";
 
 /// The header of the dump, the column names of `frame_lines`.
 const HEADER: &str = "folder\tfile\taf\taf_x\taf_y\tset\tface\tx\ty\tw\th\tscore\tleft_eye\tright_eye\tnearest\tear\tyaw\tpitch\troll\tmesh_ms\tnose\tmesh_left_eye\tmesh_right_eye\tmesh_nose\teye_offset\tnose_offset\tmax_offset\tedge_gap\tfull_sharp";
