@@ -7,7 +7,12 @@
 //! pane's notes tell the user (`Status`), which `wait_for_idle` waits on.
 //! `get_settings` reports what the settings modal shows, and `set_settings`
 //! turns a call into the modal's own `settingsview::Change`s, by its rules,
-//! never `mcpAllowDestructive`, which only the user grants. The
+//! never `mcpAllowDestructive`, which only the user grants. `trash_photos`
+//! moves photos to the Trash or deletes them: a destructive operation runs
+//! on a preview (`Op`, kept by the view as the `Pending` its id names) and a
+//! confirming call while `mcpAllowDestructive` is on, else opens the app's
+//! own dialog, and Delete Permanently always opens it; `Status::operation`
+//! reports it until it ends. The
 //! selection is the strip's (`selection::targets`). The native view has no
 //! compare and no ranking, so compare and the `recommended` sort are refused,
 //! and so is every request but the reads (`READS`) while the view drops keys
@@ -45,6 +50,7 @@ use crate::{
     settingsview::Change as SettingChange,
     sort::SortKey,
     theme,
+    trash::{self, Mode, Target},
     tree::{self, IGNORE_CASE, Relation, Row},
     viewonly,
 };
@@ -64,6 +70,18 @@ const ALLOW_DESTRUCTIVE_REFUSAL: &str = "mcp_allow_destructive is the user's to 
 /// run reads the format and the import settings.
 const FOLDER_OP_REFUSAL: &str =
     "a folder operation is under way in Handpic; try again once it ends";
+const NO_FOLDER: &str = "no folder is open in Handpic";
+/// A run to the Trash, a delete or a redo out, with no dialog to refuse by.
+const TRASH_RUNNING: &str =
+    "a Move to Trash or Delete Permanently is under way in Handpic; try again once it ends";
+/// Why a destructive operation will not run on a client's word alone.
+const DESTRUCTIVE_OFF: &str = "mcp_allow_destructive is off, so only the user confirms this, in \
+     Handpic's dialog: call without confirm to open it";
+const DELETE_NEEDS_CLICK: &str = "Delete Permanently runs only on the user's click in Handpic's \
+     dialog: call without confirm to open it";
+const REDO_TRASH_OFF: &str = "the next redo moves files to the Trash again without a dialog, \
+     which needs mcp_allow_destructive, on the MCP page of Handpic's settings; only the user \
+     can turn it on";
 /// The color labels the judgment keys set, as `State.label` holds them.
 const LABELS: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Pink", "Purple"];
 /// The `Output` items' names.
@@ -126,6 +144,121 @@ pub struct View<'a> {
     /// A folder operation is under way (`FolderOps::busy`), which keeps the
     /// settings modal from opening.
     pub folder_op: bool,
+    /// A run to the Trash, a delete or a redo of a run is out.
+    pub trashing: bool,
+    /// The destructive operation a preview returned the id of.
+    pub pending: Option<&'a Pending>,
+}
+
+/// A destructive operation a tool previews, then runs on a confirming call
+/// or through the app's dialog.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Op {
+    Trash(Target),
+}
+
+impl Op {
+    /// The tool that runs it.
+    fn tool(&self) -> &'static str {
+        match self {
+            Op::Trash(_) => "trash_photos",
+        }
+    }
+
+    /// What its dialog says, and what it acts on.
+    fn content(&self) -> Map<String, Value> {
+        match self {
+            Op::Trash(target) => {
+                let text = trash::dialog_text(target.mode, target.paths.len());
+                let mut content = Map::new();
+                content.insert("operation".into(), json!(target.mode.label()));
+                content.insert("title".into(), json!(text.title));
+                content.insert("text".into(), json!(text.line));
+                content.insert("run".into(), json!(text.run));
+                content.insert("folder".into(), json!(target.dir));
+                content.insert("paths".into(), json!(target.paths));
+                content
+            }
+        }
+    }
+}
+
+/// The operation a preview returned `id` for, which a call naming that id
+/// with `confirm` runs.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pending {
+    pub id: u64,
+    pub op: Op,
+}
+
+/// A preview's reply: the dialog's content and the id to confirm it with.
+pub fn previewed(pending: &Pending) -> Value {
+    let mut reply = pending.op.content();
+    reply.insert("id".into(), json!(pending.id));
+    reply.insert(
+        "next".into(),
+        json!(format!(
+            "call {} with this id and confirm: true to run it",
+            pending.op.tool()
+        )),
+    );
+    Value::Object(reply)
+}
+
+/// The reply once the app's dialog asks the user.
+pub fn awaiting(op: &Op) -> Value {
+    let mut reply = op.content();
+    reply.insert("awaiting_confirmation".into(), json!(true));
+    reply.insert(
+        "next".into(),
+        json!(
+            "the user confirms or cancels in Handpic's dialog; follow it with get_status or \
+             wait_for_idle"
+        ),
+    );
+    Value::Object(reply)
+}
+
+/// Where an operation `get_status` reports stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpState {
+    /// Its dialog asks the user.
+    Awaiting,
+    /// Confirmed, held by the idle gate for the listing or scan under way.
+    Held,
+    Running,
+    /// Came back; `message` is the status line's summary.
+    Finished,
+    /// Came back with an error; `message` says it.
+    Failed,
+}
+
+impl OpState {
+    fn name(self) -> &'static str {
+        match self {
+            OpState::Awaiting => "awaiting_confirmation",
+            OpState::Held => "held_for_scan",
+            OpState::Running => "running",
+            OpState::Finished => "finished",
+            OpState::Failed => "failed",
+        }
+    }
+
+    fn under_way(self) -> bool {
+        matches!(self, OpState::Awaiting | OpState::Held | OpState::Running)
+    }
+}
+
+/// The operation under way, else the last one to come back.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Operation {
+    /// Its label, as the dialog and the pane name it (`Move to Trash`,
+    /// `Undo Move to Trash`, ...).
+    pub name: &'static str,
+    pub state: OpState,
+    /// `(done, total)` while a run reports its progress.
+    pub progress: Option<(usize, usize)>,
+    pub message: Option<String>,
 }
 
 /// What `get_status` reads of the view: what the status row and the pane's
@@ -149,13 +282,22 @@ pub struct Status {
     /// The pane's notes, then its error lines.
     pub notes: Vec<String>,
     pub errors: Vec<String>,
+    /// The operation under way, else the last one to come back.
+    pub operation: Option<Operation>,
 }
 
 impl Status {
     /// Nothing is under way: no listing, no scan pass, no run, no open
-    /// waiting for one.
+    /// waiting for one, no operation asking or held.
     pub fn idle(&self) -> bool {
-        !self.listing && self.scan.is_none() && !self.running && self.opening.is_none()
+        !self.listing
+            && self.scan.is_none()
+            && !self.running
+            && self.opening.is_none()
+            && !self
+                .operation
+                .as_ref()
+                .is_some_and(|op| op.state.under_way())
     }
 }
 
@@ -172,6 +314,13 @@ pub fn get_status(status: &Status) -> Value {
         "status": status.line,
         "notes": status.notes,
         "errors": status.errors,
+        "operation": status.operation.as_ref().map(|op| json!({
+            "name": op.name,
+            "state": op.state.name(),
+            "done": op.progress.map(|(done, _)| done),
+            "total": op.progress.map(|(_, total)| total),
+            "message": op.message,
+        })),
     })
 }
 
@@ -292,6 +441,18 @@ pub enum Action {
     /// Apply these settings changes in order, as the settings modal's, and
     /// reply with `get_settings`.
     Settings(Vec<SettingChange>),
+    /// Open the app's dialog asking about this operation, and reply with
+    /// `awaiting`.
+    Ask(Op),
+    /// Keep this operation as the `Pending` a new id names, and reply with
+    /// `previewed`.
+    Preview(Op),
+    /// Run this confirmed operation, forgetting the `Pending`, and reply
+    /// with `get_status`.
+    Run(Op),
+    /// Undo (or redo) the run to the Trash on top of the history, as the
+    /// key does, and reply with `get_status`.
+    StepTrash(Key),
 }
 
 /// What `tree_folder` does: the expander, `Space` on a row, and the tree
@@ -331,8 +492,8 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "navigate" => navigate(view, &args["to"]).map(|key| Some(Action::Key(key))),
         "select_all" => shown(view).map(|_| Some(Action::Key(Key::SelectAll))),
         "reject_rest" => reject_rest(view).map(|_| Some(Action::Key(Key::RejectRest))),
-        "undo" => step(view, false).map(|key| Some(Action::Key(key))),
-        "redo" => step(view, true).map(|key| Some(Action::Key(key))),
+        "undo" => step(view, false).map(Some),
+        "redo" => step(view, true).map(Some),
         "set_sort" => set_sort(view, &args["by"]),
         "set_filter" => set_filter(view, args),
         "set_panes" => set_panes(view, args),
@@ -344,6 +505,7 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "reveal" => reveal(view, args).map(Some),
         "get_settings" => Ok(None),
         "set_settings" => set_settings(view, args),
+        "trash_photos" => trash_photos(view, args).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -406,8 +568,9 @@ fn reject_rest(view: &View) -> Result<(), String> {
 }
 
 /// The view's `step` rules, in its order: a run to the Trash first, then a
-/// view-only folder, then an empty history.
-fn step(view: &View, redo: bool) -> Result<Key, String> {
+/// view-only folder, then an empty history. A run's redo moves files to the
+/// Trash with no dialog, so it needs `mcpAllowDestructive`.
+fn step(view: &View, redo: bool) -> Result<Action, String> {
     let (verb, top) = if redo {
         ("redo", view.redo)
     } else {
@@ -419,14 +582,116 @@ fn step(view: &View, redo: bool) -> Result<Key, String> {
                 .into(),
         );
     }
+    let key = if redo { Key::Redo } else { Key::Undo };
     match top {
-        Top::Trash => Err(format!(
-            "the next {verb} is of a move to the Trash, which is not available over MCP yet"
-        )),
+        Top::Trash if redo && !view.settings.mcp_allow_destructive => Err(REDO_TRASH_OFF.into()),
+        Top::Trash => Ok(Action::StepTrash(key)),
         _ if view.view_only => Err(VIEW_ONLY_REFUSAL.into()),
         Top::Empty => Err(format!("nothing to {verb}")),
-        Top::Judgments => Ok(if redo { Key::Redo } else { Key::Undo }),
+        Top::Judgments => Ok(Action::Key(key)),
     }
+}
+
+/// The photos `paths` names, each one the strip shows, in the order given,
+/// or else the selection's targets.
+fn photos(view: &View, paths: Option<&Value>) -> Result<Vec<String>, String> {
+    let Some(paths) = paths else {
+        let targets = targets(view);
+        if targets.is_empty() {
+            return Err(NOTHING_SHOWN.into());
+        }
+        return Ok(targets);
+    };
+    let mut picked: Vec<String> = Vec::new();
+    for path in paths
+        .as_array()
+        .ok_or("paths must be an array of strings")?
+    {
+        let path = view.files[visible(view, path)?]
+            .to_string_lossy()
+            .into_owned();
+        if !picked.contains(&path) {
+            picked.push(path);
+        }
+    }
+    if picked.is_empty() {
+        return Err("paths must name at least one photo".into());
+    }
+    Ok(picked)
+}
+
+/// The strip menu's `Move to Trash…` / `Delete Permanently…` on the given
+/// photos or the selection's targets. Without `confirm`, a move previews
+/// while `mcpAllowDestructive` is on and otherwise, like any delete, opens
+/// the app's dialog; with it, the move a preview's `id` names runs, its
+/// photos still shown. A view-only folder trashes too, as its menu offers.
+fn trash_photos(view: &View, args: &Value) -> Result<Action, String> {
+    let mode = match given_field(args, "mode").map(Value::as_str) {
+        None | Some(Some("trash")) => Mode::Trash,
+        Some(Some("delete")) => Mode::Delete,
+        Some(_) => return Err("mode must be trash or delete".into()),
+    };
+    let confirm = switch(args, "confirm")?.unwrap_or(false);
+    let id = given_field(args, "id")
+        .map(|id| {
+            id.as_u64()
+                .ok_or("id must be the number a preview returned")
+        })
+        .transpose()?;
+    if view.trashing {
+        return Err(TRASH_RUNNING.into());
+    }
+    if view.folder_op {
+        return Err(FOLDER_OP_REFUSAL.into());
+    }
+    let folder = view.folder.ok_or(NO_FOLDER)?;
+    if !confirm {
+        if id.is_some() {
+            return Err("an id goes with confirm: true".into());
+        }
+        let op = Op::Trash(Target {
+            dir: folder.to_owned(),
+            paths: photos(view, given_field(args, "paths"))?,
+            mode,
+        });
+        return Ok(
+            if mode == Mode::Trash && view.settings.mcp_allow_destructive {
+                Action::Preview(op)
+            } else {
+                Action::Ask(op)
+            },
+        );
+    }
+    if mode == Mode::Delete {
+        return Err(DELETE_NEEDS_CLICK.into());
+    }
+    if !view.settings.mcp_allow_destructive {
+        return Err(DESTRUCTIVE_OFF.into());
+    }
+    if given_field(args, "paths").is_some() {
+        return Err("confirm runs the photos its preview named; give only the id".into());
+    }
+    let id = id.ok_or("confirm: true needs the id a preview returned")?;
+    let Some(Pending {
+        op: Op::Trash(target),
+        ..
+    }) = view.pending.filter(|pending| pending.id == id)
+    else {
+        return Err(format!(
+            "no preview of trash_photos has id {id}; preview again"
+        ));
+    };
+    let shown = |path: &String| {
+        view.files
+            .iter()
+            .any(|file| file.to_string_lossy() == path.as_str())
+    };
+    if target.dir != folder || !target.paths.iter().all(shown) {
+        return Err(
+            "the previewed photos are no longer all shown in Handpic; preview again".into(),
+        );
+    }
+    Ok(Action::Run(Op::Trash(target.clone())))
 }
 
 /// `companion.ts`'s `burstOf`: the current file's burst in capture order,
@@ -1359,8 +1624,8 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, Busy, Change, Key, Overlays, Status, TreeOp, View, answer, get_settings,
-        get_status, get_view, tree_reply,
+        Action, Busy, Change, Key, Op, OpState, Operation, Overlays, Pending, Status, TreeOp, View,
+        answer, awaiting, get_settings, get_status, get_view, previewed, tree_reply,
     };
     use crate::{
         burst::BurstMember,
@@ -1376,6 +1641,7 @@ mod tests {
         settingsview::Change as SettingChange,
         sort::SortKey,
         theme::{self, Mode, NEUTRAL},
+        trash::{self, Target},
         tree::Row,
     };
     use riffle_backend::{
@@ -1403,6 +1669,10 @@ mod tests {
     static NO_FILTER: LazyLock<FilterState> = LazyLock::new(FilterState::default);
     static NO_GROUPS: LazyLock<Groups> = LazyLock::new(Groups::default);
     static DEFAULT_SETTINGS: LazyLock<Settings> = LazyLock::new(settings::defaults);
+    static ALLOW_DESTRUCTIVE: LazyLock<Settings> = LazyLock::new(|| Settings {
+        mcp_allow_destructive: true,
+        ..settings::defaults()
+    });
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -1432,6 +1702,8 @@ mod tests {
             idle: true,
             settings: &DEFAULT_SETTINGS,
             folder_op: false,
+            trashing: false,
+            pending: None,
         }
     }
 
@@ -1876,19 +2148,35 @@ mod tests {
     }
 
     #[test]
-    fn undo_and_redo_refuse_a_trash_run_an_empty_history_and_a_view_only_folder() {
+    fn undo_steps_a_trash_run_and_redo_only_while_destructive_operations_are_allowed() {
         let trash = View {
             undo: Top::Trash,
             redo: Top::Trash,
+            view_only: true,
             ..view(&[])
         };
+        assert_eq!(
+            ask("undo", json!({}), &trash),
+            Ok(Some(Action::StepTrash(Key::Undo)))
+        );
+        assert!(
+            ask("redo", json!({}), &trash)
+                .unwrap_err()
+                .starts_with("the next redo moves files to the Trash again without a dialog")
+        );
+        let allowed = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            ..trash
+        };
+        assert_eq!(
+            ask("redo", json!({}), &allowed),
+            Ok(Some(Action::StepTrash(Key::Redo)))
+        );
+    }
+
+    #[test]
+    fn undo_and_redo_refuse_an_empty_history_and_a_view_only_folder() {
         for verb in ["undo", "redo"] {
-            assert_eq!(
-                ask(verb, json!({}), &trash),
-                Err(format!(
-                    "the next {verb} is of a move to the Trash, which is not available over MCP yet"
-                ))
-            );
             assert_eq!(
                 ask(verb, json!({}), &view(&[])),
                 Err(format!("nothing to {verb}"))
@@ -1964,6 +2252,7 @@ mod tests {
                 ("open_folder", json!({ "path": "/e" })),
                 ("tree_folder", json!({ "path": "/d", "action": "refresh" })),
                 ("reveal", json!({ "path": "/d", "folder": true })),
+                ("trash_photos", json!({})),
             ] {
                 assert_eq!(ask(kind, args, &view), Err(message.into()), "{kind}");
             }
@@ -2623,7 +2912,322 @@ mod tests {
                 "status": "a.ARW  analyzing 4/9",
                 "notes": ["Move to Trash: waiting for the scan to finish"],
                 "errors": ["a.ARW: denied"],
+                "operation": null,
             })
+        );
+    }
+
+    #[test]
+    fn get_status_reports_the_operation_and_waits_while_it_asks_is_held_or_runs() {
+        let operation = |state, progress, message: Option<&str>| Status {
+            operation: Some(Operation {
+                name: "Move to Trash",
+                state,
+                progress,
+                message: message.map(str::to_owned),
+            }),
+            ..Status::default()
+        };
+        let running = operation(OpState::Running, Some((2, 5)), None);
+        assert_eq!(
+            get_status(&running)["operation"],
+            json!({
+                "name": "Move to Trash",
+                "state": "running",
+                "done": 2,
+                "total": 5,
+                "message": null,
+            })
+        );
+        assert!(!running.idle());
+        for (state, name) in [
+            (OpState::Awaiting, "awaiting_confirmation"),
+            (OpState::Held, "held_for_scan"),
+        ] {
+            let status = operation(state, None, None);
+            assert_eq!(get_status(&status)["operation"]["state"], json!(name));
+            assert!(!status.idle());
+        }
+        for (state, name) in [(OpState::Finished, "finished"), (OpState::Failed, "failed")] {
+            let status = operation(state, None, Some("Moved 2 files to the Trash"));
+            assert_eq!(get_status(&status)["operation"]["state"], json!(name));
+            assert_eq!(
+                get_status(&status)["operation"]["message"],
+                json!("Moved 2 files to the Trash")
+            );
+            assert!(status.idle());
+        }
+    }
+
+    fn target(paths: &[&str], mode: trash::Mode) -> Target {
+        Target {
+            dir: "/d".into(),
+            paths: paths.iter().map(|p| (*p).to_owned()).collect(),
+            mode,
+        }
+    }
+
+    #[test]
+    fn trash_photos_opens_the_dialog_while_destructive_operations_are_not_allowed() {
+        let files = paths(&["/d/a", "/d/b", "/d/c"]);
+        let view = view(&files);
+        assert_eq!(
+            ask(
+                "trash_photos",
+                json!({ "paths": ["/d/c", "/d/a", "/d/c"] }),
+                &view
+            ),
+            Ok(Some(Action::Ask(Op::Trash(target(
+                &["/d/c", "/d/a"],
+                trash::Mode::Trash
+            )))))
+        );
+        assert_eq!(
+            ask("trash_photos", json!({}), &view),
+            Ok(Some(Action::Ask(Op::Trash(target(
+                &["/d/a"],
+                trash::Mode::Trash
+            )))))
+        );
+    }
+
+    #[test]
+    fn trash_photos_without_paths_takes_the_selections_targets() {
+        let files = paths(&["/d/a", "/d/b", "/d/c"]);
+        let selection = selection_of(&["/d/c".to_owned(), "/d/a".to_owned()]);
+        let view = View {
+            selection: &selection,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({ "mode": "delete" }), &view),
+            Ok(Some(Action::Ask(Op::Trash(target(
+                &["/d/a", "/d/c"],
+                trash::Mode::Delete
+            )))))
+        );
+    }
+
+    #[test]
+    fn trash_photos_previews_a_move_while_allowed_but_always_asks_about_a_delete() {
+        let files = paths(&["/d/a"]);
+        let view = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({ "mode": "trash" }), &view),
+            Ok(Some(Action::Preview(Op::Trash(target(
+                &["/d/a"],
+                trash::Mode::Trash
+            )))))
+        );
+        assert_eq!(
+            ask("trash_photos", json!({ "mode": "delete" }), &view),
+            Ok(Some(Action::Ask(Op::Trash(target(
+                &["/d/a"],
+                trash::Mode::Delete
+            )))))
+        );
+    }
+
+    #[test]
+    fn trash_photos_refuses_paths_outside_the_open_folder_or_hidden_by_the_filter() {
+        let files = paths(&["/d/a"]);
+        let view = view(&files);
+        for path in ["/e/a", "/d/hidden"] {
+            assert_eq!(
+                ask("trash_photos", json!({ "paths": [path] }), &view),
+                Err(format!(
+                    "{path} is not shown in Handpic: not in the open folder, or hidden by the filter"
+                ))
+            );
+        }
+        assert_eq!(
+            ask("trash_photos", json!({ "paths": [] }), &view),
+            Err("paths must name at least one photo".into())
+        );
+        let empty = super::tests::view(&[]);
+        assert_eq!(
+            ask("trash_photos", json!({}), &empty),
+            Err("no photo is shown in Handpic".into())
+        );
+        let closed = View {
+            folder: None,
+            ..empty
+        };
+        assert_eq!(
+            ask("trash_photos", json!({}), &closed),
+            Err("no folder is open in Handpic".into())
+        );
+        assert_eq!(
+            ask("trash_photos", json!({ "mode": "shred" }), &view),
+            Err("mode must be trash or delete".into())
+        );
+    }
+
+    #[test]
+    fn trash_photos_trashes_in_a_view_only_folder_as_its_menu_offers() {
+        let files = paths(&["/d/a.jpg"]);
+        let view = View {
+            view_only: true,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({}), &view),
+            Ok(Some(Action::Ask(Op::Trash(target(
+                &["/d/a.jpg"],
+                trash::Mode::Trash
+            )))))
+        );
+    }
+
+    #[test]
+    fn trash_photos_is_refused_while_a_run_or_a_folder_operation_is_out() {
+        let files = paths(&["/d/a"]);
+        let running = View {
+            trashing: true,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({}), &running),
+            Err(
+                "a Move to Trash or Delete Permanently is under way in Handpic; try again once it ends"
+                    .into()
+            )
+        );
+        let folder_op = View {
+            folder_op: true,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({}), &folder_op),
+            Err("a folder operation is under way in Handpic; try again once it ends".into())
+        );
+    }
+
+    #[test]
+    fn trash_photos_runs_the_preview_its_id_names_on_confirm() {
+        let files = paths(&["/d/a", "/d/b"]);
+        let pending = Pending {
+            id: 4,
+            op: Op::Trash(target(&["/d/b"], trash::Mode::Trash)),
+        };
+        let view = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            pending: Some(&pending),
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("trash_photos", json!({ "id": 4, "confirm": true }), &view),
+            Ok(Some(Action::Run(Op::Trash(target(
+                &["/d/b"],
+                trash::Mode::Trash
+            )))))
+        );
+        assert_eq!(
+            ask("trash_photos", json!({ "id": 3, "confirm": true }), &view),
+            Err("no preview of trash_photos has id 3; preview again".into())
+        );
+        assert_eq!(
+            ask("trash_photos", json!({ "confirm": true }), &view),
+            Err("confirm: true needs the id a preview returned".into())
+        );
+        assert_eq!(
+            ask("trash_photos", json!({ "id": 4 }), &view),
+            Err("an id goes with confirm: true".into())
+        );
+        assert_eq!(
+            ask(
+                "trash_photos",
+                json!({ "id": 4, "confirm": true, "paths": ["/d/a"] }),
+                &view
+            ),
+            Err("confirm runs the photos its preview named; give only the id".into())
+        );
+    }
+
+    #[test]
+    fn trash_photos_refuses_a_confirm_without_permission_a_delete_or_a_stale_preview() {
+        let files = paths(&["/d/a"]);
+        let pending = Pending {
+            id: 1,
+            op: Op::Trash(target(&["/d/a"], trash::Mode::Trash)),
+        };
+        let off = View {
+            pending: Some(&pending),
+            ..view(&files)
+        };
+        assert!(
+            ask("trash_photos", json!({ "id": 1, "confirm": true }), &off)
+                .unwrap_err()
+                .starts_with("mcp_allow_destructive is off")
+        );
+        let on = || View {
+            settings: &ALLOW_DESTRUCTIVE,
+            pending: Some(&pending),
+            ..view(&files)
+        };
+        assert!(
+            ask(
+                "trash_photos",
+                json!({ "id": 1, "confirm": true, "mode": "delete" }),
+                &on()
+            )
+            .unwrap_err()
+            .starts_with("Delete Permanently runs only on the user's click")
+        );
+        let hidden = paths(&["/d/b"]);
+        let stale = View {
+            files: &hidden,
+            ..on()
+        };
+        assert_eq!(
+            ask("trash_photos", json!({ "id": 1, "confirm": true }), &stale),
+            Err("the previewed photos are no longer all shown in Handpic; preview again".into())
+        );
+        let elsewhere = View {
+            folder: Some("/e"),
+            ..on()
+        };
+        assert_eq!(
+            ask(
+                "trash_photos",
+                json!({ "id": 1, "confirm": true }),
+                &elsewhere
+            ),
+            Err("the previewed photos are no longer all shown in Handpic; preview again".into())
+        );
+    }
+
+    #[test]
+    fn a_preview_names_its_id_and_the_dialogs_text_and_awaiting_says_the_user_confirms() {
+        let pending = Pending {
+            id: 7,
+            op: Op::Trash(target(&["/d/a", "/d/b"], trash::Mode::Trash)),
+        };
+        assert_eq!(
+            previewed(&pending),
+            json!({
+                "id": 7,
+                "operation": "Move to Trash",
+                "title": "Move to Trash",
+                "text": "Move 2 files to the Trash?",
+                "run": "Move to Trash",
+                "folder": "/d",
+                "paths": ["/d/a", "/d/b"],
+                "next": "call trash_photos with this id and confirm: true to run it",
+            })
+        );
+        let reply = awaiting(&Op::Trash(target(&["/d/a"], trash::Mode::Delete)));
+        assert_eq!(reply["awaiting_confirmation"], json!(true));
+        assert_eq!(reply["operation"], json!("Delete Permanently"));
+        assert_eq!(reply["paths"], json!(["/d/a"]));
+        assert!(
+            reply["next"]
+                .as_str()
+                .unwrap()
+                .starts_with("the user confirms")
         );
     }
 

@@ -502,6 +502,14 @@ struct Riffle {
     /// How far the run in flight got, `(mode, done, total)`, in the pane's
     /// notes and the progress circle.
     trashing: Option<(trash::Mode, usize, usize)>,
+    /// The label of the run, undo or redo out, for `get_status`.
+    running_op: Option<&'static str>,
+    /// The last run, undo or redo to come back, for `get_status`.
+    last_op: Option<companion::Operation>,
+    /// The destructive operation an MCP preview returned the id of, and the
+    /// next id.
+    mcp_pending: Option<companion::Pending>,
+    mcp_next_id: u64,
     /// A folder the tree opened while a run was in flight, opened whole at
     /// its end (only the launch's open has `--size` / `--max`).
     deferred_open: Option<PathBuf>,
@@ -872,6 +880,10 @@ impl Riffle {
             trash_step: None,
             trashed_state: HashMap::new(),
             trashing: None,
+            running_op: None,
+            last_op: None,
+            mcp_pending: None,
+            mcp_next_id: 1,
             deferred_open: None,
             // `--auto` starts with every pane shown and leaves the stored
             // panes alone.
@@ -1491,10 +1503,19 @@ impl Riffle {
         let Some(target) = self.trash.run() else {
             return;
         };
+        self.request_run(target, true, cx);
+    }
+
+    /// A confirmed run, through the gate: at once with no listing or scan
+    /// under way; else held for the scan's end, the dialog closed and the
+    /// scan canceled. `own` when the dialog is open for it; an MCP run
+    /// confirmed by its client has none, as a held run drained later has
+    /// none.
+    fn request_run(&mut self, target: trash::Target, own: bool, cx: &mut Context<Self>) {
         let busy = self.resync.busy() || self.gate.in_flight();
         let label = target.mode.label();
         match self.gate_request(label, HeldOp::Run(target), busy) {
-            Some(HeldOp::Run(target)) => self.run_trash(target, true, cx),
+            Some(HeldOp::Run(target)) => self.run_trash(target, own, cx),
             Some(_) => {}
             None => {
                 log::info!("trash: {label} held for the scan's end");
@@ -1567,6 +1588,7 @@ impl Riffle {
         self.gate.enter_in_flight();
         self.resync.hold();
         self.trashing = Some((mode, 0, paths.len()));
+        self.running_op = Some(mode.label());
         let (stores, writer, runs, events) = (
             self.stores.clone(),
             self.writer.clone(),
@@ -1629,6 +1651,7 @@ impl Riffle {
     ) {
         self.gate.leave_in_flight();
         self.trashing = None;
+        let ok = result.is_ok();
         if own {
             self.trash.end();
             self.follow_trash(cx);
@@ -1679,6 +1702,9 @@ impl Riffle {
                 self.step_note = Some(e);
             }
         }
+        if let Some(name) = self.running_op.take() {
+            self.record_op(name, ok);
+        }
         if let Some(folder) = self.deferred_open.take() {
             self.open(folder, None, None, cx).detach();
         } else if self.dir.is_some() {
@@ -1687,6 +1713,21 @@ impl Riffle {
             self.relist(cx);
         }
         cx.notify();
+    }
+
+    /// The run, undo or redo `name` came back, `ok` or with the error the
+    /// step note now says, which `get_status` reports until another ends.
+    fn record_op(&mut self, name: &'static str, ok: bool) {
+        self.last_op = Some(companion::Operation {
+            name,
+            state: if ok {
+                companion::OpState::Finished
+            } else {
+                companion::OpState::Failed
+            },
+            progress: None,
+            message: self.step_note.clone(),
+        });
     }
 
     /// An undo or a redo with the run `entry` on top: through the gate,
@@ -1720,6 +1761,7 @@ impl Riffle {
             return false;
         }
         self.trash_step = Some(entry.id);
+        self.running_op = Some(entry.what.step_labels().0);
         self.gate.enter_in_flight();
         self.resync.hold();
         let runs = self.runs.clone();
@@ -1755,6 +1797,7 @@ impl Riffle {
         self.trash_step = None;
         self.gate.leave_in_flight();
         let mut refresh = false;
+        let ok = result.is_ok();
         match result {
             Ok(restored) => {
                 self.undo.undone(&entry, &restored);
@@ -1802,6 +1845,9 @@ impl Riffle {
                 self.step_note = Some(e);
             }
         }
+        if let Some(name) = self.running_op.take() {
+            self.record_op(name, ok);
+        }
         if let Some(folder) = self.deferred_open.take() {
             self.open(folder, None, None, cx).detach();
         } else if refresh {
@@ -1825,6 +1871,7 @@ impl Riffle {
             return false;
         }
         self.trash_step = Some(entry.id);
+        self.running_op = Some(entry.what.step_labels().1);
         self.gate.enter_in_flight();
         self.resync.hold();
         self.trashing = Some((trash::Mode::Trash, 0, entry.count));
@@ -4566,7 +4613,42 @@ impl Riffle {
             line: self.status().to_string(),
             notes: self.pane_notes(),
             errors: self.pane_errors(),
+            operation: self.operation_of(),
         }
+    }
+
+    /// The operation under way, else the last one to come back: the trash
+    /// dialog asking, an operation the gate holds, the run, undo or redo out
+    /// with how far a run got.
+    fn operation_of(&self) -> Option<companion::Operation> {
+        use companion::{OpState, Operation};
+        if let Some(target) = self.trash.target()
+            && !self.trash.running()
+        {
+            return Some(Operation {
+                name: target.mode.label(),
+                state: OpState::Awaiting,
+                progress: None,
+                message: Some(trash::dialog_text(target.mode, target.paths.len()).line),
+            });
+        }
+        if let Some(name) = self.gate.waiting() {
+            return Some(Operation {
+                name,
+                state: OpState::Held,
+                progress: None,
+                message: None,
+            });
+        }
+        if let Some(name) = self.running_op {
+            return Some(Operation {
+                name,
+                state: OpState::Running,
+                progress: self.trashing.map(|(_, done, total)| (done, total)),
+                message: None,
+            });
+        }
+        self.last_op.clone()
     }
 
     /// Hold the `wait_for_idle` call `id` until the view is idle, or reply
@@ -4976,6 +5058,8 @@ impl Riffle {
                 idle: this.status_of().idle(),
                 settings: &this.settings,
                 folder_op: this.folderops.busy(),
+                trashing: this.trashing.is_some(),
+                pending: this.mcp_pending.as_ref(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -4990,6 +5074,40 @@ impl Riffle {
             }
             Ok(Some(companion::Action::Open(path))) if self.refuse_renaming(&path, cx) => {
                 Err(rename::RENAMING.to_owned())
+            }
+            Ok(Some(companion::Action::Ask(op))) => {
+                let companion::Op::Trash(target) = &op;
+                self.confirm_trash(&target.paths, target.mode, cx);
+                if self.trash.busy() {
+                    Ok(companion::awaiting(&op))
+                } else {
+                    Err("Handpic could not open its dialog; try again".to_owned())
+                }
+            }
+            Ok(Some(companion::Action::Preview(op))) => {
+                let pending = companion::Pending {
+                    id: self.mcp_next_id,
+                    op,
+                };
+                self.mcp_next_id += 1;
+                let reply = companion::previewed(&pending);
+                self.mcp_pending = Some(pending);
+                Ok(reply)
+            }
+            Ok(Some(companion::Action::Run(op))) => {
+                self.mcp_pending = None;
+                let companion::Op::Trash(target) = op;
+                log::info!(
+                    "trash: {} of {} files confirmed over MCP",
+                    target.mode.label(),
+                    target.paths.len()
+                );
+                self.request_run(target, false, cx);
+                Ok(companion::get_status(&self.status_of()))
+            }
+            Ok(Some(companion::Action::StepTrash(key))) => {
+                self.perform(key, cx);
+                Ok(companion::get_status(&self.status_of()))
             }
             Ok(Some(companion::Action::Reveal { path, folder })) => {
                 if folder {
