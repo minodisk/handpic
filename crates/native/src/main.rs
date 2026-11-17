@@ -5098,8 +5098,6 @@ impl Riffle {
         )
     }
 
-    /// A menu's button, lit while `lit`, with its popover above it while
-    /// open; laid out only then.
     /// The title bar's gear. The wrapper stops the press after the button's
     /// own listeners so it does not reach the bar's drag (gpui-component's
     /// Linux `ControlIcon` does the same).
@@ -5126,6 +5124,8 @@ impl Riffle {
             )
     }
 
+    /// A menu's button, lit while `lit`, with its popover above it while
+    /// open; laid out only then.
     fn menu_button(
         &self,
         which: Which,
