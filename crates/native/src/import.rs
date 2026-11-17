@@ -4,6 +4,9 @@
 
 use riffle_backend::import::{Preview, Ran};
 
+/// The operation's name, the dialog's title.
+pub const LABEL: &str = "Import";
+
 pub const RUNNING_NOTE: &str = "Cancel stops at once and drops the file in flight; the files copied so far stay, and the next import skips them.";
 
 pub const COLLISIONS_HEADING: &str = "Already at the destination with another size, not copied:";
@@ -226,6 +229,11 @@ impl ImportFlow {
         self.aside = false;
         self.reopened = false;
         true
+    }
+
+    /// The preview is being read.
+    pub fn previewing(&self) -> bool {
+        self.phase == Phase::Previewing
     }
 
     /// While a run is under way with its dialog aside: show the dialog again.

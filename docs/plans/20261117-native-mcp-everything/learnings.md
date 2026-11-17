@@ -298,6 +298,89 @@
 - Git Bash mangles `\\` in a JSON argument even inside single quotes; the
   test client took `%photos%` / `%jpegs%` placeholders it expanded itself.
 
+## Step 7: Folder operations II: Import, Rename by Capture Date, folder rename
+
+- **`import_folder` and `rename_by_capture_date` reuse Step 6's path**
+  (`Action::Folder` → `folder_op` → the flow's preview, the `mcp_folder` mark
+  turning the dialog into the `Pending`, `run_confirmed` on the confirm).
+  `FolderOp::Import { dir, plan }` carries the preview's plan id: the mark is
+  set with `plan: None` and `import_previewed` keeps the `Pending` with the
+  id, while `folderops.import_plan` keeps the plan itself. The confirm runs
+  only while the kept plan has that id, so a menu preview read in between
+  refuses it ("preview again"). A change of `importRoot` / `importPattern`
+  drops an import `Pending`; an unusable root or pattern is refused at the
+  start (`import::refusal`) with a pointer to `set_settings`.
+- **The confirmed import's dialog goes aside, not away.** `run_import` works
+  with no dialog, but the tree's `Import…` would then bring back nothing
+  during the run. `run_confirmed` puts the previewed `Dialog`, set running and
+  cancelable, into `aside`, and `import_started` now keeps an `aside` already
+  there instead of overwriting it with the empty dialog slot.
+- **The import run is cancelable while aside** (Step 6's deferred gap):
+  `cancel_of` answers `Cancel::Folder` on `import_running` (the cancel flag
+  being set), and `dismiss_folder_dialog`'s import arm runs on
+  `is_open() || import_running()`; `ImportFlow::dismiss(false)` on a running
+  flow is the Cancel whether or not the dialog shows.
+- **`FolderOps::flow` reports the import and the date flows too**
+  (`ImportFlow::previewing`, `DateFolderFlow::previewing`), so `get_status`
+  gives `previewing` / `awaiting_confirmation` with the dialog for them, and
+  `running_op` / `record_finished` / `record_failed` cover the import (with
+  `import_progress`), the date run and the folder rename.
+- **`Rename by Capture Date…` is refused, not held,** during a listing, scan
+  or run; the start reports `SCAN_RUNNING` plus "wait_for_idle, then try
+  again" (`folder_op` starts nothing then, so `mcp_request` checks
+  `resync.busy() || gate.in_flight()` after it to pick the message), and a
+  confirm refused that way keeps the `Pending`, as the sidecar run's does.
+  Its folder is respelled to the tree's row, since its rename ends in
+  `folder_renamed`, which renames the tree's row by path.
+- **`rename_folder` with `mcpAllowDestructive` off opens the tree's inline
+  rename prefilled** (the D1 choice for a rename, rather than a refusal): the
+  folder must be a drawn tree row, `ask_rename` defers to reach the window
+  (`self.window.update` inside `cx.defer`, as `import_ran`'s notification
+  does; the view is leased during `mcp_request`) and calls `start_rename`
+  with a new `filled` name, selected whole. `operation_of` reports `Rename…`
+  `awaiting_confirmation` while an edit is live, so `wait_for_idle` waits for
+  the user's Enter or Escape; `cancel_operation` cannot close it (refused
+  naming `Rename…`). With the grant on, it is an `Op::Rename` preview and a
+  confirm through `request_rename` (now `pub(crate)`), refused while the gate
+  holds an operation. `held_name` now names a held rename, so a dropped one
+  is reported `failed`.
+- **Name checks live in the backend** (`rename_request`:
+  `rename::folder_target`, so `check_name`, a root and a taken name), the
+  unchanged name in the companion (`rename::confirm_name`); a confirm that
+  repeats `name` is refused by the backend's "path and name go together".
+- **End to end** (`--mcp-port 41973`, fresh `--settings` seeded with
+  `mcpEnabled`, `importRoot` / `importPattern` under the test folder (and
+  `mcpAllowDestructive` for the first run), three ARW copies under
+  `D:\handpic-mcp-e2e\step7`): grant on: `tools/list` gave 32 tools;
+  `import_folder` previewed (id 1, "3 files (130.4 MB) to copy into 1
+  folder"), an unknown id and an id without `confirm` were refused, the
+  confirm ran, opened `dest\2026\2026-10-24` and finished "Imported 3 files
+  (130.4 MB)"; a 60-file import confirmed then `cancel_operation` ended
+  "Import canceled, 0 files copied"; `rename_by_capture_date` on the open
+  folder during its scan was refused with the scan message, then previewed,
+  confirmed and the view followed to `step7\2026-10-24`; `rename_folder`
+  refused a taken name, `a:b`, the unchanged name and a missing name, then
+  previewed and renamed the open folder to `renamed`, the view following.
+  Grant off: `import_folder` opened the dialog (`awaiting_confirmation` with
+  its content, "Nothing left to copy"), a confirm and `navigate` were refused
+  as busy, `cancel_operation` closed it; `rename_by_capture_date` likewise;
+  `rename_folder` answered `awaiting_confirmation`, `get_status` reported
+  `Rename…` awaiting and `navigate` was refused as a name being edited; the
+  app was killed without a key, and nothing was renamed.
+- `wait_for_idle` after the confirmed import returned idle with the
+  destination open but not yet showing the copies (`no RAW files in ...`);
+  the watcher's re-list showed them a second later. The same race exists for
+  a menu import (`import_ran` re-lists only on `resync.changed()`).
+- Git Bash mangled `\\` in the JSON arguments again; the test client took
+  `%S%` (the test folder, JSON-escaped) and `%B%` (an escaped backslash)
+  placeholders. A heredoc holding a long Python edit script failed again;
+  scripts written with the Write tool ran.
+- The first `mise run ci:local` failed on clippy's `large_enum_variant` for
+  `companion::Op` (the `Import` variant's plan id grew `FolderOp`, so
+  `Op::Folder` crossed the 200-byte gap); `cargo check` and the tests had
+  passed. One `Op` is kept or passed at a time, so it is allowed rather than
+  boxing the `Dialog`.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: `open_folder` deferred by a run and refused during
@@ -375,3 +458,22 @@
   "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps`
   (click Run: the `-sequenced` folder written and revealed). Step 6's
   checkbox was ticked on the automated criteria.
+- **Pending manual check: Import, Rename by Capture Date and the folder
+  rename confirmed in the app after an MCP call.** The grant-off paths were
+  opened and canceled over MCP end to end (`get_status` reported each
+  dialog's content and the rename field awaiting), but the dialogs, the
+  prefilled rename field and a confirm need the user. On Windows, run the
+  native app with MCP on a test port as `docs/agents/native-app.md`
+  prescribes, `mcpAllowDestructive` off, `importRoot` set to a scratch
+  folder, the test folder outside any hidden folder: (1) `import_folder` on
+  a folder of test copies: the Import dialog shows; click Run:
+  `wait_for_idle` returns `finished` "Imported N files ..."; (2)
+  `rename_by_capture_date` on a folder of one date: click Run, the folder
+  becomes `YYYY-MM-DD`; (3) `rename_folder {"path": <a drawn folder>,
+  "name": "x"}`: the tree's row turns into a field holding `x`, selected;
+  press Enter: `wait_for_idle` returns `Rename…` `finished` and the row (and
+  the open folder, when it was that one) follows; repeat and press Escape:
+  nothing renamed, `idle` true. Then with `mcpAllowDestructive` on, confirm
+  an `import_folder` preview and, while it runs, right-click the source
+  folder's `Import…`: the dialog comes back running with Cancel enabled.
+  Step 7's checkbox was ticked on the automated criteria.

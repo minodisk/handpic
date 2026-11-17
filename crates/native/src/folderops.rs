@@ -82,6 +82,7 @@ pub struct FolderOps {
     /// until the next open of a folder or import.
     importing: Option<String>,
     imported: Option<String>,
+    import_progress: Option<(usize, usize)>,
     date: DateFolderFlow,
     /// The tree's live inline rename, the rename the gate holds as its row
     /// shows it, the renames in flight and the slow second click.
@@ -149,9 +150,26 @@ impl FolderOps {
         if let Some(target) = self.sidecars.target() {
             return Some((target.kind.label(), !self.sidecars.is_open()));
         }
+        if self.import.busy() {
+            return Some((import::LABEL, self.import.previewing()));
+        }
+        if self.date.busy() {
+            return Some((datefolder::LABEL, self.date.previewing()));
+        }
         self.sequence
             .busy()
             .then(|| (sequence::LABEL, !self.sequence.is_open()))
+    }
+
+    /// An import run is under way, its dialog shown or aside, which its
+    /// Cancel stops.
+    pub fn import_running(&self) -> bool {
+        self.import_cancel.is_some()
+    }
+
+    /// How many files the import run has copied, `(done, total)`.
+    pub fn import_progress(&self) -> Option<(usize, usize)> {
+        self.import_progress
     }
 
     /// A sequencing run is under way, which its Cancel stops.
@@ -389,6 +407,7 @@ impl Riffle {
     pub(crate) fn run_confirmed(
         &mut self,
         op: FolderOp,
+        dialog: Option<Dialog>,
         cx: &mut Context<Self>,
     ) -> Result<(), String> {
         log::info!("{}: {} confirmed over MCP", op.label(), op.dir());
@@ -409,6 +428,32 @@ impl Riffle {
                 }
                 self.folderops.sequence.previewed();
                 self.run_sequence(cx);
+            }
+            FolderOp::Import { plan, .. } => {
+                // The run copies the plan the preview read, not one read since.
+                if self.folderops.import_plan.as_ref().map(|kept| kept.id) != plan {
+                    return Err("the import was previewed again since; preview again".to_owned());
+                }
+                if !self.folderops.import.start() {
+                    return Err("another folder operation is under way in Handpic".to_owned());
+                }
+                self.folderops.import.previewed(plan);
+                self.run_import(cx);
+                // The dialog the tree's `Import…` brings back to cancel the run.
+                self.folderops.aside = dialog.map(|mut dialog| {
+                    dialog.set_running_cancelable();
+                    dialog
+                });
+            }
+            FolderOp::Date(dir) => {
+                if !self.folderops.date.start(dir) {
+                    return Err("another folder operation is under way in Handpic".to_owned());
+                }
+                self.folderops.date.previewed();
+                self.run_date_folder(cx);
+                if !self.folderops.date.busy() {
+                    return Err(SCAN_RUNNING.to_owned());
+                }
             }
         }
         Ok(())
@@ -820,7 +865,7 @@ impl Riffle {
                     lines.push(import::total_line(&preview));
                 }
                 let content = Content {
-                    title: "Import".to_owned(),
+                    title: import::LABEL.to_owned(),
                     lines,
                     rows: rows(import::folder_rows(&preview)),
                     lists: vec![
@@ -834,20 +879,28 @@ impl Riffle {
                     running_note: import::RUNNING_NOTE.to_owned(),
                     ..Content::default()
                 };
-                self.menus.close();
-                self.context = None;
                 self.folderops.import_plan = plan;
-                self.folderops.dialog = Some(Dialog::new(
-                    content,
-                    "Run",
-                    Style::Primary,
-                    import::can_run(&preview),
-                ));
-                self.follow_folder_dialog(cx);
+                let dialog = Dialog::new(content, "Run", Style::Primary, import::can_run(&preview));
+                if self.mcp_folder
+                    == Some(FolderOp::Import {
+                        dir: dir.clone(),
+                        plan: None,
+                    })
+                {
+                    self.folderops.import.fail();
+                    let op = FolderOp::Import {
+                        dir,
+                        plan: preview.id,
+                    };
+                    self.mcp_previewed(Some(op), dialog);
+                } else {
+                    self.show_folder_dialog(dialog, cx);
+                }
             }
             Ok(_) => {}
             Err(e) => {
                 self.folderops.import.fail();
+                self.record_failed(import::LABEL, e.clone());
                 self.write_failed(dir, e);
             }
         }
@@ -881,6 +934,11 @@ impl Riffle {
             dialog.set_running_cancelable();
         }
         self.folderops.importing = Some(import::progress_status(0, 0));
+        self.folderops.import_progress = Some((0, 0));
+        // A trash run an MCP client confirmed keeps its own label.
+        if self.running_op.is_none() {
+            self.running_op = Some(import::LABEL);
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         self.folderops.import_cancel = Some(cancel.clone());
         self.folderops.import_quit = Some({
@@ -953,7 +1011,10 @@ impl Riffle {
             return None;
         }
         if self.folderops.import.started(run) {
-            self.folderops.aside = self.folderops.dialog.take();
+            // A run an MCP client confirmed has its dialog aside already.
+            if let Some(dialog) = self.folderops.dialog.take() {
+                self.folderops.aside = Some(dialog);
+            }
             self.follow_folder_dialog(cx);
         }
         cx.notify();
@@ -973,12 +1034,18 @@ impl Riffle {
         self.folderops.aside = None;
         self.follow_folder_dialog(cx);
         self.folderops.importing = None;
+        self.folderops.import_progress = None;
         self.folderops.import_cancel = None;
         self.folderops.import_quit = None;
         for failure in &ran.failed {
             self.write_failed(failure.path.clone(), failure.message.clone());
         }
         self.folderops.imported = Some(import::done_status(&ran));
+        // The slot may name a trash run that overlapped; that run's end owns it.
+        if self.running_op == Some(import::LABEL) {
+            self.running_op = None;
+        }
+        self.record_finished(import::LABEL, import::done_status(&ran));
         let window = self.window;
         let ended = ran.clone();
         cx.defer(move |cx| {
@@ -1053,7 +1120,7 @@ impl Riffle {
             Ok(preview) if self.folderops.date.previewed() => {
                 let reason = datefolder::disabled_reason(&preview);
                 let content = Content {
-                    title: "Rename by Capture Date".to_owned(),
+                    title: datefolder::LABEL.to_owned(),
                     lines: vec![datefolder::date_title_line(&preview)],
                     rows: rows(datefolder::date_rows(&preview)),
                     notes: [
@@ -1067,19 +1134,23 @@ impl Riffle {
                     running_note: datefolder::RUNNING_NOTE.to_owned(),
                     ..Content::default()
                 };
-                self.menus.close();
-                self.context = None;
-                self.folderops.dialog = Some(Dialog::new(
-                    content,
-                    "Run",
-                    Style::Primary,
-                    reason.is_none(),
-                ));
-                self.follow_folder_dialog(cx);
+                let dialog = Dialog::new(content, "Run", Style::Primary, reason.is_none());
+                let op = self
+                    .folderops
+                    .date
+                    .dir()
+                    .map(|dir| FolderOp::Date(dir.to_owned()));
+                if op.is_some() && self.mcp_folder == op {
+                    self.folderops.date.end();
+                    self.mcp_previewed(op, dialog);
+                } else {
+                    self.show_folder_dialog(dialog, cx);
+                }
             }
             Ok(_) => {}
             Err(e) => {
                 self.folderops.date.end();
+                self.record_failed(datefolder::LABEL, e.clone());
                 self.step_note = Some(e);
             }
         }
@@ -1103,11 +1174,15 @@ impl Riffle {
             self.folderops.dialog = None;
             self.follow_folder_dialog(cx);
             self.step_note = Some(SCAN_RUNNING.to_owned());
+            self.record_failed(datefolder::LABEL, SCAN_RUNNING.to_owned());
             cx.notify();
             return;
         }
         if let Some(dialog) = &mut self.folderops.dialog {
             dialog.set_running();
+        }
+        if self.running_op.is_none() {
+            self.running_op = Some(datefolder::LABEL);
         }
         self.gate.enter_in_flight();
         if self.dir.is_some() {
@@ -1192,12 +1267,17 @@ impl Riffle {
         self.folderops.date.end();
         self.folderops.dialog = None;
         self.follow_folder_dialog(cx);
+        if self.running_op == Some(datefolder::LABEL) {
+            self.running_op = None;
+        }
         let (split, canonical) = match ran {
             Ok(DateRan::Renamed(renamed, canonical)) => {
+                self.record_finished(datefolder::LABEL, renamed_text(&renamed));
                 return self.folder_renamed(&dir, &renamed.path, canonical, renamed.warning, cx);
             }
             Ok(DateRan::Split(split, canonical)) => (split, canonical),
             Err(e) => {
+                self.record_failed(datefolder::LABEL, e.clone());
                 self.step_note = Some(e);
                 self.settle_folder_run(cx);
                 cx.notify();
@@ -1211,6 +1291,7 @@ impl Riffle {
             );
         }
         let status = datefolder::split_status(&split, &name_of(&dir));
+        self.record_finished(datefolder::LABEL, status.clone());
         let opens = self
             .dir
             .as_deref()
@@ -1328,6 +1409,7 @@ impl Riffle {
             Message::ImportProgress { run, done, total } => {
                 if self.folderops.import.accepts(run) {
                     self.folderops.importing = Some(import::progress_status(done, total));
+                    self.folderops.import_progress = Some((done, total));
                     cx.notify();
                 }
             }
@@ -1335,8 +1417,10 @@ impl Riffle {
     }
 
     /// The dialog's Cancel, or Escape when `key`.
+    /// An import run whose dialog is aside (an MCP client's
+    /// `cancel_operation`) is canceled as its Cancel does.
     pub(crate) fn dismiss_folder_dialog(&mut self, key: bool, cx: &mut Context<Self>) {
-        if self.folderops.import.is_open() {
+        if self.folderops.import.is_open() || self.folderops.import_running() {
             match self.folderops.import.dismiss(key) {
                 import::Dismiss::Close => {
                     self.folderops.dialog = None;
@@ -1660,7 +1744,7 @@ impl Riffle {
             cx.background_executor().timer(SLOW_CLICK_DELAY).await;
             this.update_in(cx, |this, window, cx| {
                 if this.folderops.slow.due(&path, Instant::now()) {
-                    this.start_rename(path, window, cx);
+                    this.start_rename(path, None, window, cx);
                 }
             })
             .ok();
@@ -1694,12 +1778,14 @@ impl Riffle {
     }
 
     /// `Rename…`, or a slow click: the row's name turns into a text input
-    /// holding its name (the pending one while a rename of it is held),
-    /// selected whole and focused. A live edit of another row is confirmed
-    /// first.
+    /// holding its name (the pending one while a rename of it is held), or
+    /// `filled` (an MCP client's name), selected whole and focused. A live
+    /// edit is ended by its `implicit` decision first (confirmed when it is
+    /// the user's own, dropped when it holds a client's name).
     pub(crate) fn start_rename(
         &mut self,
         path: String,
+        filled: Option<String>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -1707,8 +1793,9 @@ impl Riffle {
         if self.refuse_renaming(&path, cx) {
             return;
         }
-        if self.folderops.editing.is_some() {
-            self.finish_rename(Decision::Confirm, cx);
+        if let Some(edit) = &self.folderops.editing {
+            let decision = edit.rename.implicit();
+            self.finish_rename(decision, cx);
         }
         let Some(at) = self.tree_rows.iter().position(|row| row.path == path) else {
             return;
@@ -1721,17 +1808,28 @@ impl Riffle {
         .to_owned();
         let input = cx.new(|cx| InputState::new(window, cx));
         input.update(cx, |input, cx| {
-            input.set_value(name.as_str(), window, cx);
+            input.set_value(filled.as_deref().unwrap_or(&name), window, cx);
             input.select_all(window, cx);
         });
-        let events = cx.subscribe_in(&input, window, |this, _, event, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. } | InputEvent::Blur) {
-                this.rename_event(true, window, cx);
+        let events = cx.subscribe_in(&input, window, |this, _, event, window, cx| match event {
+            InputEvent::PressEnter { .. } => this.rename_event(true, window, cx),
+            InputEvent::Blur => {
+                let commit = this
+                    .folderops
+                    .editing
+                    .as_ref()
+                    .is_none_or(|edit| edit.rename.implicit() == Decision::Confirm);
+                this.rename_event_blur(commit, window, cx);
             }
+            _ => {}
         });
         window.focus(&input.focus_handle(cx), cx);
         self.folderops.editing = Some(Edit {
-            rename: InlineRename::new(path, name),
+            rename: if filled.is_some() {
+                InlineRename::asked(path, name)
+            } else {
+                InlineRename::new(path, name)
+            },
             input,
             _events: events,
         });
@@ -1739,10 +1837,19 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The input's Enter or lost focus confirms, its Escape cancels. A focus
-    /// lost to another app does not: the edit waits for the window to come
-    /// back, as the Tauri editor's blur checks `document.hasFocus()`. After
-    /// Enter or Escape the tree has the keyboard again.
+    /// A lost focus ends the edit by `InlineRename::implicit` (`commit`), but
+    /// does nothing while the window is inactive: the edit waits for the
+    /// window to come back, as the Tauri editor's blur checks
+    /// `document.hasFocus()`.
+    fn rename_event_blur(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
+        if !window.is_window_active() {
+            return;
+        }
+        self.rename_event(commit, window, cx);
+    }
+
+    /// The input's Enter confirms, its Escape cancels. After either the tree
+    /// has the keyboard again.
     fn rename_event(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
         if commit && !window.is_window_active() {
             return;
@@ -1798,6 +1905,24 @@ impl Riffle {
         }
     }
 
+    /// An MCP client's `rename_folder` while `mcpAllowDestructive` is off:
+    /// the tree's inline rename opens on `path` with `name` filled in, for
+    /// the user to confirm with Enter, once this update is over and the
+    /// window can be reached.
+    pub(crate) fn ask_rename(&mut self, path: String, name: String, cx: &mut Context<Self>) {
+        let (window, this) = (self.window, cx.weak_entity());
+        cx.defer(move |cx| {
+            window
+                .update(cx, |_, window, cx| {
+                    this.update(cx, |this, cx| {
+                        this.start_rename(path, Some(name), window, cx);
+                    })
+                    .ok();
+                })
+                .ok();
+        });
+    }
+
     /// The real name typed back on the row whose rename is held: the held
     /// rename is dropped, the row shows its real name and the status says
     /// so. Only while that rename is still the one held.
@@ -1819,7 +1944,7 @@ impl Riffle {
     /// no listing, scan or run under way, else held, its row showing the new
     /// name in the pending style, without canceling the scan. Refused while
     /// an import runs.
-    fn request_rename(&mut self, path: String, name: String, cx: &mut Context<Self>) {
+    pub(crate) fn request_rename(&mut self, path: String, name: String, cx: &mut Context<Self>) {
         if self.folderops.import_busy() {
             self.step_note = Some(RENAME_REFUSED.to_owned());
             return;
@@ -1909,10 +2034,14 @@ impl Riffle {
                 self.folderops.pending.clear(mark);
             }
             self.step_note = Some(RENAME_REFUSED.to_owned());
+            self.record_failed(rename::LABEL, RENAME_REFUSED.to_owned());
             cx.notify();
             return false;
         }
         self.folderops.renames.start(path.clone());
+        if self.running_op.is_none() {
+            self.running_op = Some(rename::LABEL);
+        }
         self.gate.enter_in_flight();
         if self.dir.is_some() {
             self.resync.hold();
@@ -1977,16 +2106,30 @@ impl Riffle {
         if let Some(mark) = &mark {
             self.folderops.pending.clear(mark);
         }
+        if self.running_op == Some(rename::LABEL) {
+            self.running_op = None;
+        }
         match ran {
             Ok((renamed, canonical)) => {
+                self.record_finished(rename::LABEL, renamed_text(&renamed));
                 self.folder_renamed(&path, &renamed.path, canonical, renamed.warning, cx);
             }
             Err(e) => {
+                self.record_failed(rename::LABEL, e.clone());
                 self.step_note = Some(e);
                 self.settle_folder_run(cx);
                 cx.notify();
             }
         }
+    }
+}
+
+/// What `get_status` reports of a folder rename that came back: the new
+/// path, and the warning the status shows, if any.
+fn renamed_text(renamed: &Renamed) -> String {
+    match &renamed.warning {
+        Some(warning) => format!("renamed to {}; {warning}", renamed.path),
+        None => format!("renamed to {}", renamed.path),
     }
 }
 

@@ -5,6 +5,9 @@
 
 use riffle_backend::datefolder::{Preview, Split};
 
+/// The operation's name, the dialog's title.
+pub const LABEL: &str = "Rename by Capture Date";
+
 pub const RUNNING_NOTE: &str = "Moving the files; this closes once every file is moved.";
 
 fn files(count: usize) -> String {
@@ -152,6 +155,16 @@ impl DateFolderFlow {
 
     pub fn busy(&self) -> bool {
         self.phase != Phase::Idle
+    }
+
+    /// The folder of the flow under way.
+    pub fn dir(&self) -> Option<&str> {
+        self.dir.as_deref()
+    }
+
+    /// The plan is being read.
+    pub fn previewing(&self) -> bool {
+        self.phase == Phase::Previewing
     }
 
     pub fn start(&mut self, dir: String) -> bool {

@@ -860,7 +860,8 @@ not touched); `Mcp::with_all_tools` adds the `native_router` tools
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
 `set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
-`sequence_timestamps`, `cancel_operation`) and the native
+`sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
+`rename_folder`, `cancel_operation`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -956,8 +957,8 @@ changed; it forgets the `Pending` and calls `request_run`, the tail of
 recorded run and the undo entry) with `own` false, so no dialog opens and
 the flow stays idle, as for a held run drained later: the backdrop and the
 key lock of a running dialog are not drawn for a run the user never saw ask.
-It replies with `get_status` at once. Step 7 adds its operations to
-`Op`, whose `tool` and `content` name the tool and the dialog's text.
+It replies with `get_status` at once. `Op`'s `tool` and `content` name
+each operation's tool and what its dialog says.
 
 `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` are the
 folder tree menu's `Rewrite Sidecars from Index…`, `Delete Sidecars…` and
@@ -997,11 +998,57 @@ trash run took the slot, its result recorded either way), then `finished` with t
 (`record_failed`: a failed preview, the `SCAN_RUNNING` refusal, a held
 sidecar request dropped).
 
+`import_folder` and `rename_by_capture_date` are the tree menu's `Import…`
+and `Rename by Capture Date…` through the same `Action::Folder` /
+`run_confirmed` path. An import is refused up front while the import root or
+pattern is unusable (`import::refusal`, with a pointer to `set_settings`).
+Its `FolderOp::Import` carries the id of the plan its preview read
+(`ImportPlan`): `import_previewed` keeps the plan and, under the
+`mcp_folder` mark, ends the flow and keeps the dialog as the `Pending` with
+that id, and the confirm runs only while the kept plan is still that one (a
+preview read since, by the menu or a client, refuses it: "preview again").
+A change of the import root or pattern drops an import `Pending`. The
+confirmed run is `run_import` with no dialog shown: its dialog is put aside
+(`aside`, running and cancelable), so the tree's `Import…` brings it back as
+for a run the user started, and `import_started` keeps it rather than taking
+the empty dialog slot; the run still opens its first destination folder, and
+the OS notification still fires only while the window is not active.
+`get_status` reports it `running` with the copied files' done / total
+(`import_progress`) and `finished` with the pane's result line
+(`import::done_status`); `cancel_operation` stops it with its dialog shown or
+aside (`dismiss_folder_dialog` on `import_running`, the Cancel's flag).
+`Rename by Capture Date…` names the folder by the tree's spelling when the
+tree draws it (its rename ends in `folder_renamed`, which renames the tree's
+row), is refused with `SCAN_RUNNING` while a listing, scan or run is under
+way (at the start as at the confirm, the `Pending` kept for the same id),
+cannot be canceled while it runs, and reports `finished` with the split's
+status line or the new path.
+
+`rename_folder` is the tree's inline `Rename…` with the name given: the
+backend checks the folder and the name with `rename::folder_target`
+(`check_name`, a root, a name already taken), the companion refuses an
+unchanged name (`rename::confirm_name`) and a rename while an import runs
+(`RENAME_REFUSED`). While `mcpAllowDestructive` is on it is an
+`Op::Rename` previewed as a `Pending`, whose confirm (refused while the gate
+holds an operation, which `gate_request` would drop) runs `request_rename`,
+the inline edit's own tail: run at once, or held for the scan's end with the
+row's pending name, then `run_rename` and `folder_renamed`, so the open
+folder follows its new path. While it is off, the equivalent of a dialog is
+the inline editor itself: the folder must be a row the tree draws, and
+`ask_rename` opens the editor on it with the name filled in and selected
+(`start_rename`'s `filled`, deferred to reach the window), the reply
+`awaiting_confirmation`; the user's Enter renames, Escape cancels, and a lost focus (a click
+elsewhere in the active window) or another edit starting cancels it too
+(`InlineRename::asked`, `implicit`), so only Enter confirms. While the
+editor is live, `get_status` reports `Rename…` `awaiting_confirmation` (and
+every other changing call is refused as for any inline edit), then
+`held_for_scan`, `running` and `finished` with the new path or `failed`.
+
 `cancel_operation` passes the busy guard (`companion::CANCEL`): it cancels
 what the user's Cancel would (`cancel_of`): the trash dialog asking
-(`dismiss_trash`), a folder dialog asking or a sequencing run, with its
-dialog or without one (`dismiss_folder_dialog`, whose sequence arm sets the
-run's cancel flag); else it forgets the `Pending`; else it is refused naming
+(`dismiss_trash`), a folder dialog asking or a sequencing or import run, with
+its dialog or without one (`dismiss_folder_dialog`, whose sequence and import
+arms set the run's cancel flag); else it forgets the `Pending`; else it is refused naming
 the operation under way that cannot be canceled (a run to the Trash, a
 sidecar run, a held request, a preview being read), or with nothing to
 cancel. `wait_for_idle` replies
