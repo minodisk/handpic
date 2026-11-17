@@ -475,7 +475,9 @@ packages the built `target/release` binary with a script under
   name carry.
 - `macos.sh` signs the laid-out `Handpic.app` ad hoc (`codesign --force
   --sign -`, then `codesign --verify --strict`; no Developer ID, no
-  notarization), stages it beside an `/Applications` link and writes
+  notarization), stages it with `ditto` (not `cp -R`, so the ad hoc
+  signature's extended attributes survive the copy) beside an
+  `/Applications` link and writes
   `crates/native/target/release/Handpic-<version>-macos-<arch>.dmg`
   (`hdiutil create -format UDZO`, `<arch>` from `uname -m`). The workflow
   runs it on `macos-latest` (arm64) and `macos-15-intel` (x86_64), after

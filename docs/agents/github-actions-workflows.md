@@ -52,7 +52,9 @@ native app's `Package` workflow, see
 is `workflow_dispatch` only, so the PR that adds it cannot dispatch it.
 
 - Rule: to run a new dispatch-only workflow on its own PR, push a temporary
-  commit adding a `pull_request` trigger, inspect that run and its
+  commit adding a `pull_request` trigger (or `push: branches: [<branch>]`
+  when the PR does not exist yet, as `package.yml` did in run 43986612196),
+  inspect that run and its
   artifacts, and remove the trigger before the merge. A later change to the
   workflow runs with `gh workflow run package.yml --ref <branch>`.
 
