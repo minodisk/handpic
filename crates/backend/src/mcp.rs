@@ -439,6 +439,7 @@ pub enum OutputItem {
 /// ones `get_view`'s `filter_offers.exif` lists.
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct ExifArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     camera: Option<Vec<String>>,
@@ -456,6 +457,7 @@ pub struct ExifArgs {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct FilterArgs {
     /// Uncheck every item first, as the menu's Reset does.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -509,6 +511,7 @@ fn filter(args: FilterArgs) -> Result<Value, String> {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct PanesArgs {
     /// Whether the left pane (the folder tree) is shown; kept when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -524,6 +527,7 @@ pub struct PanesArgs {
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct OverlaysArgs {
     /// The `f` overlay: the AF point, the face boxes and the eye judgment;
     /// kept when omitted.
@@ -1331,6 +1335,14 @@ mod tests {
             Err("stars must be integers from 0 to 5".into())
         );
         assert!(filter_args(json!({ "labels": ["teal"] })).is_err());
+    }
+
+    #[test]
+    fn filter_refuses_a_misspelled_field_or_exif_section() {
+        assert!(filter_args(json!({ "exif": { "body": [] } })).is_err());
+        assert!(filter_args(json!({ "flag": ["picked"], "stars": [5] })).is_err());
+        assert!(serde_json::from_value::<PanesArgs>(json!({ "leftt": true })).is_err());
+        assert!(serde_json::from_value::<OverlaysArgs>(json!({ "nope": true })).is_err());
     }
 
     #[test]
