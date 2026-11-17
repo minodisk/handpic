@@ -115,3 +115,5 @@ folder is being culled without looking at the tree.
   pads the content, so the wrapper centers within the padded area.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
