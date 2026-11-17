@@ -381,6 +381,63 @@
   passed. One `Op` is kept or passed at a time, so it is allowed rather than
   boxing the `Dialog`.
 
+## Step 8: The coverage table, the final instructions and the exclusions
+
+- **The coverage table is a test-only module.** `companion.rs`'s `coverage`
+  (`Coverage`, `KEYMAP`, `context_coverage`, `menu_coverage`,
+  `folder_op_coverage`, `page_coverage`, `OTHER`) is read only by its tests,
+  and a binary crate warns on (and clippy's `-D warnings` refuses) unused
+  `pub` items, so it is `#[cfg(test)]`, as `import.rs`'s `phase` is. The
+  enums' entries are exhaustive `match`es (a new variant does not compile
+  without one); the keymap's is compared with `Keymap::defaults().bindings()`
+  (public, so no accessor on the private `DEFAULTS` was needed); and a test
+  asks the companion for every tool the table names, failing on `unknown
+  request`.
+- **Grayscale got a tool, as a latch.** The `g` hold has no state that
+  outlives the key, so `set_overlays { grayscale }` latches it
+  (`grayscale::Hold::set`): on until set off or the user's own press of the
+  key goes up. `release` (the window's deactivation, the view's blur, a
+  modifier going up), which ends a hold because its key-up may never arrive,
+  leaves a latch on: otherwise a client's gray would end the moment the user
+  clicked the tree. `get_view.overlays.grayscale` reports it.
+- **Clear Cache is a real tool** (it landed in #1128, after the plan's D6
+  listed it missing): `Op::ClearCache` through the Step 5 `Pending`
+  mechanism. With the grant off it presses the button (`press_clear`), so its
+  confirmation opens over the main window with the settings closed; that
+  dialog then needed a `Busy` state (`CacheDialog`) and a place in
+  `key_down`'s guard, which only the settings modal covered before. A
+  confirmed clear needed a dialog-less path in the flow,
+  `ClearFlow::confirmed` (run now, or held and run at the idle point without
+  asking). `get_status` reports it, and `cancel_operation` cancels its dialog
+  or drops a held one.
+- **The not-implemented tools** share `not_in_native(feature)`: compare,
+  the recommended sort, `set_filter`'s new `genres`, `rename_file`,
+  `refit_ranking` and `set_settings`' new `ai_enabled`. The two whole tools
+  are refused before the busy guard (`UNPORTED_TOOLS`), so a client learns
+  the feature is missing rather than that a dialog is open. The first wording
+  of the AI switch, "the AI features is not implemented", read wrong; it is
+  "the AI switch".
+- The shared `set_view` description and `ViewArgs` doc (the Tauri app's
+  seven tools) were left unchanged so the Tauri listing stays as it was (D3);
+  the native instructions name the refused features instead.
+- **End to end** (`--mcp-port 41974`, fresh `--settings` seeded with
+  `mcpEnabled` (and `mcpAllowDestructive` for the first run), three ARW
+  copies under `D:\handpic-mcp-e2e\step8`): `tools/list` gave 35 tools;
+  `set_overlays {"grayscale": true}` reported `grayscale: true` and a repeat
+  changed nothing, `false` turned it off; each not-implemented call answered
+  its shared message; `clear_cache` previewed (id 1), an id without
+  `confirm` and an unknown id were refused, the confirm reported `Clear
+  Cache` `running`, `wait_for_idle` returned `finished` "Cleared the index
+  cache" (log: `cache: Clear Cache confirmed over MCP`, `cleared in 6ms`),
+  and the id could not be reused. Grant off: a confirm was refused,
+  `clear_cache` answered `awaiting_confirmation`, `get_status` showed the
+  dialog's content, `navigate` and a second `clear_cache` were refused with
+  the Clear Cache dialog's message, and `cancel_operation` closed it, idle,
+  nothing cleared.
+- `taskkill //IM riffle-native.exe` was refused by the permission
+  classifier (it could kill the user's own instance); stopping the test
+  instance by the PID whose command line names the scratch folder worked.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: `open_folder` deferred by a run and refused during
@@ -477,3 +534,18 @@
   an `import_folder` preview and, while it runs, right-click the source
   folder's `Import…`: the dialog comes back running with Cancel enabled.
   Step 7's checkbox was ticked on the automated criteria.
+- **Pending manual check: the Clear Cache dialog opened over MCP, and the
+  grayscale latch on screen.** Both were checked over MCP end to end
+  (`get_status` reported the dialog awaiting, the busy refusals held, and
+  `get_view` the grayscale), but no window capture was taken. On Windows, run
+  the native app with MCP on a test port as `docs/agents/native-app.md`
+  prescribes, `mcpAllowDestructive` off, a folder of test copies open, the
+  settings closed: (1) call `clear_cache`: expect the "Clear the index
+  cache?" dialog over the dimmed main window with Clear focused; click Clear:
+  `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache"
+  and the folder is scanned again; call it again and press Escape: idle,
+  nothing cleared, and the main window takes keys again; (2) call
+  `set_overlays {"grayscale": true}`: the photo turns gray and stays gray
+  after clicking the tree and switching to another window and back; press
+  and release `g`: it turns back to color. Step 8's checkbox was ticked on
+  the automated criteria.

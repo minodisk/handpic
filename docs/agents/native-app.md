@@ -893,7 +893,8 @@ not touched); `Mcp::with_all_tools` adds the `native_router` tools
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
 `set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
 `sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
-`rename_folder`, `cancel_operation`) and the native
+`rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`,
+`refit_ranking`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -921,13 +922,17 @@ where `filter::anchor_after_filter` puts it. A `set_filter` section given
 replaces its checks, one left out keeps them, and `reset` is the menu's
 `Reset` click first; the `Output` items need the folder's export answer and
 an EXIF label one of the folder's groups (`get_view`'s `filter_offers`).
-`set_sort` refuses `recommended` (the ranking is not ported) and a view-only
+`set_sort` refuses `recommended` (`not_in_native`, below) and a view-only
 folder, whose Sort menu is disabled; `get_view.sort` there reports `capture`,
 the order in force (`viewonly::sort_for`). `set_panes` goes through
 `change_panels` (the tree's keyboard handed back from a hidden left pane, a
 1:1 crop re-cut, `panels` written), and `set_overlays` flips only the `f`
 (`toggle_marks`), `e` (`toggle_peaking`) and `d` (`toggle_perf`) overlays
-that differ. The pane widths and the strip height, set by a drag, have no
+and the grayscale that differ. The grayscale is a hold on `g` with no state
+that outlives the key, so `set_overlays` latches it (`grayscale::Hold::set`):
+on until a call sets it off or the user's own press of the key goes up; the
+window's deactivation, the view's blur and a modifier going up, which end a
+key's hold because its key-up may never arrive, leave a latch on. The pane widths and the strip height, set by a drag, have no
 tool: they are pointer-only geometry, like the window's.
 
 The folder tools act as the tree does. `list_folders` never reaches the view:
@@ -1121,13 +1126,70 @@ a client would be switching off its own connection.
 Every request but the reads (`get_view`, `get_status`, `wait_for_idle`,
 `get_settings`) is refused while `key_down` drops keys (`companion::Busy`): the settings modal
 open, a Move to Trash or Delete Permanently flow under way (`trash.busy()`), a
-folder operation's dialog open, or an inline rename live
+folder operation's dialog open, the Clear Cache dialog asking with the
+settings closed (an MCP call opened it; `key_down` drops keys then too), or an inline rename live
 (`FolderOps::editing`, not `rename_owns_keys`, which also disarms the slow
 click). `get_view` still answers, so `get_photo` and `get_preview`, which
 resolve their path through it, keep working. `get_photo`, `get_preview` and
 `list_folders` never reach the view: the backend reads them on tokio's
 blocking pool, the photo reads against the index's read-only connection,
 outside `ReadSlots`, as in the Tauri app.
+
+`clear_cache` is the Cache page's `Clear Cache`, confirmed as D1 decides
+(`Op::ClearCache`, refused while a clear is held, asked or running,
+`ClearFlow::busy`, and while a folder operation runs, which keeps the
+settings shut). While `mcpAllowDestructive` is off it presses the button
+(`press_clear`): the confirmation opens over the main window (the settings
+stay closed), or once the listing or scan under way ends. While it is on, a
+preview with the dialog's text and an id, then a confirm that runs
+`ClearFlow::confirmed`: the clear at once, or held for the idle point and
+run there without asking (`confirmed_clear`). `get_status` reports it
+(`awaiting_confirmation` with the dialog, `held_for_scan`, `running`, then
+`finished` "Cleared the index cache" or `failed`; a held clear dropped by the
+settings closing or by `cancel_operation` is `failed`, `dropped: ...`), and
+`cancel_operation` presses the dialog's Cancel or drops a held clear.
+
+Every user-facing action has a tool, a tool refused until the feature lands,
+or a documented reason for none, in `companion.rs`'s coverage table (the
+`coverage` module, compiled for its tests, which keep it complete, so the
+app carries no unused table): `KEYMAP`, every keymap action in `DEFAULTS` order, which a
+test compares with `Keymap::defaults()`; `context_coverage`,
+`menu_coverage`, `folder_op_coverage` and `page_coverage`, exhaustive
+`match`es over `context::Action`, `menu::Action` (with each `Toggle`),
+`FolderOp` and `settingsmodal::Tab`, so a new variant does not compile
+without its entry; and `OTHER`, the rest. A test asks the companion for every
+tool the table names and fails on `unknown request`.
+
+The features of the Tauri app the native app does not have yet still have
+their tools (D6), refused with one message, `not_in_native`'s "`<feature>` is
+not implemented in Handpic's native app yet", which a test checks for each:
+compare (`set_view`'s `compare`), the recommended sort (`set_sort`'s
+`recommended`), the Genre filter (`set_filter`'s `genres`), file rename
+(`rename_file`), the personal ranking (`refit_ranking`) and the AI switch
+(`set_settings`' `ai_enabled`). `rename_file` and `refit_ranking` are refused
+before the busy guard (`UNPORTED_TOOLS`). When a feature lands, its tool or
+value is implemented in place and its table entry becomes a `Tool`.
+
+Excluded, each with its reason (the table's `Excluded` entries):
+
+- Quitting (`q`): a client would end the app the user is working in, and its
+  own connection.
+- Opening the Sort, Filter and right-click menus: a menu is a way to an
+  action, and each item has its tool.
+- Opening the settings modal: `get_settings` and `set_settings` read and
+  change what it shows. Its MCP page, `mcpAllowDestructive`, is the user's to
+  grant.
+- The tree's keyboard cursor and type-ahead: a way to a row, which the folder
+  tools name by path.
+- Strip scrolling, the pane widths, the strip height and the window's
+  geometry: pointer-only geometry; `show_photo` brings a photo into view.
+- The OS folder pickers (`open`, the Import page's `Choose…`) and drag and
+  drop: replaced by the path arguments of `open_folder` and `set_settings`.
+- `mcpEnabled`: read only at startup, and a client would cut its own
+  connection.
+- The clipboard copies (`Copy Path`, `Copy File Name`, `Copy Folder Name`):
+  a client has the paths already, and a tool would write the user's
+  clipboard unseen.
 
 - Rule: a test run of the folder tools uses a test folder outside any hidden
   folder: the tree skips hidden folders (`AppData`, a dot folder), so a folder
@@ -1146,7 +1208,6 @@ color names are what `judgment::State.label` holds, so no mapping is needed.
 A `curl` check on test copies found the stars, the pick and the label in each
 `.xmp` and the `ratings` row after `--auto` quit.
 
-Not supported yet, refused with a message naming the native app: compare.
 `selected` is the selection's targets in strip order (`selection::targets`:
 the current file alone when one or none is selected), which a `set_judgment`
 without `paths` judges, as a judgment key does, and `current.eyes` is present only once the `f` overlay has judged the

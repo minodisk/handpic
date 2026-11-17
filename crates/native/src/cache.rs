@@ -140,6 +140,22 @@ impl ClearFlow {
         }
     }
 
+    /// A clear confirmed without the dialog, by an MCP client's confirming
+    /// call: run now, or wait for the idle point and run without asking;
+    /// ignored while another is under way.
+    pub fn confirmed(&mut self, busy: bool) -> Next {
+        if self.state != State::Idle {
+            return Next::Wait;
+        }
+        if busy {
+            self.state = State::Waiting { confirmed: true };
+            Next::Wait
+        } else {
+            self.state = State::Running;
+            Next::Run
+        }
+    }
+
     /// The dialog's Cancel or Escape.
     pub fn cancel(&mut self) {
         if self.state == State::Asking {
@@ -160,6 +176,11 @@ impl ClearFlow {
         if self.state != State::Running {
             self.state = State::Idle;
         }
+    }
+
+    /// Held, asked or running.
+    pub fn busy(&self) -> bool {
+        self.state != State::Idle
     }
 
     pub fn waiting(&self) -> bool {
@@ -219,6 +240,23 @@ mod tests {
         assert!(!flow.asking() && !flow.running() && !flow.waiting());
         assert_eq!(flow.drain(), Next::Wait);
         assert_eq!(flow.confirm(false), Next::Wait);
+    }
+
+    #[test]
+    fn a_confirmed_clear_runs_or_waits_without_asking() {
+        let mut flow = ClearFlow::default();
+        assert!(!flow.busy());
+        assert_eq!(flow.confirmed(false), Next::Run);
+        assert!(flow.running() && flow.busy());
+        assert_eq!(flow.confirmed(false), Next::Wait);
+        flow.done();
+        assert_eq!(flow.confirmed(true), Next::Wait);
+        assert!(flow.waiting() && !flow.asking());
+        assert_eq!(flow.drain(), Next::Run);
+        let mut flow = ClearFlow::default();
+        flow.press(false);
+        assert_eq!(flow.confirmed(false), Next::Wait);
+        assert!(flow.asking());
     }
 
     #[test]
