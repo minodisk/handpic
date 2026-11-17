@@ -154,3 +154,5 @@ revert was considered and abandoned in PR #1112).
   checks in `learnings.md`.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete

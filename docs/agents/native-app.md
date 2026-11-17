@@ -2729,7 +2729,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   Windows 11 in a debug build: a press and drag on the gear leaves the window
   in place, a drag on the rest of the bar moves it, the click opens the
   settings and the tooltip shows on hover. Source:
-  [the plan](../plans/20261117-native-title-bar-settings/plan.md), Step 1.
+  [the plan](../plans/_archived/20261117-native-title-bar-settings/plan.md), Step 1.
 - Rule: the gear opens the settings through `Riffle::open_settings`, the one
   method `key_down`'s `settingsmodal::OPEN_KEY` arm calls too; it applies the
   refusals itself (the settings already open, a trash or folder-operation
@@ -2739,6 +2739,13 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   (`keys::keystroke_of(OPEN_KEY)`), on the wrapping `div`'s `.tooltip`
   because `Button`'s own tooltip takes only a string or a GPUI action and
   `OPEN_KEY` binds none.
+- Known limit: after a click on the gear the tooltip stays drawn over the
+  opened settings modal while the pointer rests on the gear (the modal's
+  `occlude()` covers the bar, but the tooltip lives in a higher layer); it
+  goes when the pointer moves. Left as is. Scripted pointer checks of the
+  bar must keep presses off the empty preview's "click here" message,
+  which opens the folder picker. Source:
+  [learnings](../plans/_archived/20261117-native-title-bar-settings/learnings.md), Step 1.
 - Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
   `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
   PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
