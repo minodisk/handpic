@@ -194,7 +194,7 @@ Made with the user on 2026-11-17.
       drag) are settable through `set_panes` or excluded as pointer-only
       geometry; record the choice for Step 8's exclusion list.
 
-- [ ] Step 3: Folders, the tree, `get_status` and `wait_for_idle`
+- [x] Step 3: Folders, the tree, `get_status` and `wait_for_idle`
   - Done when:
     - `list_folders` answers the roots (no path) or one folder's subfolders
       and photo count, as the tree shows them; `open_folder` opens a

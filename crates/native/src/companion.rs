@@ -2,10 +2,13 @@
 //! snapshot of the view, extended with the native app's own tools: the
 //! moves, Select All, Reject Rest, undo and redo, each the `Key` its keymap
 //! action runs, and the sort, the filter, the panes and the overlays, each
-//! set to a given state rather than toggled. The selection is the strip's
-//! (`selection::targets`). The native view has no compare and no ranking, so
-//! compare and the `recommended` sort are refused, and so is every request
-//! but `get_view` while the view drops keys (`Busy`).
+//! set to a given state rather than toggled, and the folder tree's opens,
+//! expansions and reveals. `get_status` reports what the status row and the
+//! pane's notes tell the user (`Status`), which `wait_for_idle` waits on. The
+//! selection is the strip's (`selection::targets`). The native view has no
+//! compare and no ranking, so compare and the `recommended` sort are refused,
+//! and so is every request but the reads (`READS`) while the view drops keys
+//! (`Busy`).
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -23,6 +26,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     burst::BurstMember,
+    context,
     exif::{GROUPS, Group, Groups},
     filter::{self, Facts, FilterState, OutputState},
     history::Top,
@@ -31,6 +35,7 @@ use crate::{
     panels::Panels,
     selection::{self, Selection},
     sort::SortKey,
+    tree::{self, IGNORE_CASE, Relation, Row},
     viewonly,
 };
 
@@ -41,6 +46,8 @@ const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
+/// The requests that change nothing, answered while the view drops keys.
+const READS: [&str; 3] = ["get_view", "get_status", "wait_for_idle"];
 /// The color labels the judgment keys set, as `State.label` holds them.
 const LABELS: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Pink", "Purple"];
 /// The `Output` items' names.
@@ -93,6 +100,59 @@ pub struct View<'a> {
     pub redo: Top,
     /// An undo or a redo of a run to the Trash is out.
     pub trash_stepping: bool,
+    /// The folder tree's drawn rows.
+    pub tree: &'a [Row],
+    /// The folder the tree shows open, in its spelling.
+    pub tree_open: Option<&'a str>,
+    /// Nothing is under way (`Status::idle`).
+    pub idle: bool,
+}
+
+/// What `get_status` reads of the view: what the status row and the pane's
+/// notes tell the user.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Status {
+    /// The open folder, as `get_view` reports it.
+    pub folder: Option<String>,
+    /// A folder whose open waits for the run under way.
+    pub opening: Option<String>,
+    /// The open folder is being listed, or listed again.
+    pub listing: bool,
+    /// The scan's running pass, as the status line names it, with its
+    /// `(done, total)`.
+    pub scan: Option<(&'static str, usize, usize)>,
+    /// A run on the open folder's files is out (the idle gate's in-flight
+    /// count).
+    pub running: bool,
+    /// The status line's text.
+    pub line: String,
+    /// The pane's notes, then its error lines.
+    pub notes: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+impl Status {
+    /// Nothing is under way: no listing, no scan pass, no run, no open
+    /// waiting for one.
+    pub fn idle(&self) -> bool {
+        !self.listing && self.scan.is_none() && !self.running && self.opening.is_none()
+    }
+}
+
+pub fn get_status(status: &Status) -> Value {
+    json!({
+        "idle": status.idle(),
+        "folder": status.folder,
+        "opening": status.opening,
+        "listing": status.listing,
+        "scan": status.scan.map(|(pass, done, total)| {
+            json!({ "pass": pass, "done": done, "total": total })
+        }),
+        "running": status.running,
+        "status": status.line,
+        "notes": status.notes,
+        "errors": status.errors,
+    })
 }
 
 /// Which of the `f`, `e` and `d` overlays are on.
@@ -192,6 +252,34 @@ pub enum Action {
         judged: Value,
     },
     Key(Key),
+    /// Open this folder as a click on its name in the tree does, and reply
+    /// with `get_status`.
+    Open(String),
+    /// Act on the tree's row of this folder, by the tree's spelling.
+    Tree {
+        path: String,
+        op: TreeOp,
+    },
+    /// Reveal this folder, or this file of the open folder, in the OS file
+    /// manager.
+    Reveal {
+        path: String,
+        folder: bool,
+    },
+    /// Reply with `get_status` once the view is idle, or after this many
+    /// milliseconds.
+    Wait(u64),
+}
+
+/// What `tree_folder` does: the expander, `Space` on a row, and the tree
+/// menu's items.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreeOp {
+    /// Expand, listing the folder again, or collapse, as `tree_toggle` does.
+    Toggle,
+    Refresh,
+    ExpandAll,
+    CollapseAll,
 }
 
 /// One file's judgment `set_judgment` changes.
@@ -206,7 +294,7 @@ pub struct Change {
 /// The answer to `kind` over `view`: what the view has to do, if anything,
 /// before it replies with `get_view`, or the refusal's message.
 pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, String> {
-    if kind != "get_view"
+    if !READS.contains(&kind)
         && let Some(busy) = view.busy
     {
         return Err(busy.refusal().into());
@@ -226,6 +314,11 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "set_filter" => set_filter(view, args),
         "set_panes" => set_panes(view, args),
         "set_overlays" => set_overlays(view, args),
+        "get_status" => Ok(None),
+        "wait_for_idle" => wait_for_idle(view, &args["timeout_ms"]),
+        "open_folder" => open_folder(view, &args["path"]),
+        "tree_folder" => tree_folder(view, args),
+        "reveal" => reveal(view, args).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -773,6 +866,101 @@ fn set_overlays(view: &View, args: &Value) -> Result<Option<Action>, String> {
     Ok((flips != Overlays::default()).then_some(Action::Overlays(flips)))
 }
 
+/// No wait when the view is idle already.
+fn wait_for_idle(view: &View, timeout_ms: &Value) -> Result<Option<Action>, String> {
+    let timeout_ms = timeout_ms
+        .as_u64()
+        .ok_or("timeout_ms must be a number of milliseconds")?;
+    Ok((!view.idle).then_some(Action::Wait(timeout_ms)))
+}
+
+/// A folder path without the Windows verbatim prefix, as the tree spells
+/// folders.
+fn folder_path(path: &Value) -> Result<String, String> {
+    path.as_str()
+        .map(context::shown_path)
+        .ok_or_else(|| "path must be a string".into())
+}
+
+/// The folder the tree shows open is not opened again, as a click on its
+/// row only expands or collapses it.
+fn open_folder(view: &View, path: &Value) -> Result<Option<Action>, String> {
+    let path = folder_path(path)?;
+    let open = view
+        .tree_open
+        .is_some_and(|open| tree::relation(open, &path, IGNORE_CASE) == Some(Relation::Same));
+    Ok((!open).then_some(Action::Open(path)))
+}
+
+/// The tree's row of `path`, compared as the tree compares paths.
+fn tree_row<'v>(view: &'v View, path: &str) -> Option<&'v Row> {
+    view.tree
+        .iter()
+        .find(|row| tree::relation(&row.path, path, IGNORE_CASE) == Some(Relation::Same))
+}
+
+/// The row's action, nothing when it is already expanded or collapsed as
+/// asked; `Expand All` and `Collapse All` are the menu's below a root only.
+fn tree_folder(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    let wanted = folder_path(&args["path"])?;
+    let action = args["action"].as_str().unwrap_or_default();
+    let row = tree_row(view, &wanted).ok_or_else(|| {
+        format!("{wanted} is not a folder the tree shows; expand its parent first")
+    })?;
+    let op = match action {
+        "expand" | "collapse" => {
+            if row.expanded == (action == "expand") {
+                return Ok(None);
+            }
+            TreeOp::Toggle
+        }
+        "refresh" => TreeOp::Refresh,
+        "expand_all" | "collapse_all" if row.depth == 0 => {
+            return Err(format!(
+                "{action} does not apply to a root, as the tree's menu offers it only below one"
+            ));
+        }
+        "expand_all" => TreeOp::ExpandAll,
+        "collapse_all" => TreeOp::CollapseAll,
+        _ => {
+            return Err(
+                "action must be one of expand, collapse, refresh, expand_all, collapse_all".into(),
+            );
+        }
+    };
+    Ok(Some(Action::Tree {
+        path: row.path.clone(),
+        op,
+    }))
+}
+
+/// `tree_folder`'s reply, also when it changed nothing: the row of `path`
+/// by the tree's spelling and whether it is expanded.
+pub fn tree_reply(view: &View, path: &Value) -> Value {
+    let path = folder_path(path).unwrap_or_default();
+    let row = tree_row(view, &path);
+    json!({
+        "path": row.map_or(path.as_str(), |row| row.path.as_str()),
+        "expanded": row.is_some_and(|row| row.expanded),
+    })
+}
+
+/// A folder anywhere, or a file the strip shows, as the strip's menu
+/// reveals only those.
+fn reveal(view: &View, args: &Value) -> Result<Action, String> {
+    let folder = args["folder"]
+        .as_bool()
+        .ok_or("folder must be true or false")?;
+    let path = if folder {
+        folder_path(&args["path"])?
+    } else {
+        view.files[visible(view, &args["path"])?]
+            .to_string_lossy()
+            .into_owned()
+    };
+    Ok(Action::Reveal { path, folder })
+}
+
 /// The fields `set_judgment` gives, `None` where it keeps each photo's own.
 struct Given {
     /// `Some(None)` clears the stars.
@@ -898,7 +1086,10 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Busy, Change, Key, Overlays, View, answer, get_view};
+    use super::{
+        Action, Busy, Change, Key, Overlays, Status, TreeOp, View, answer, get_status, get_view,
+        tree_reply,
+    };
     use crate::{
         burst::BurstMember,
         exif::{Group, Groups},
@@ -909,6 +1100,7 @@ mod tests {
         panels::Panels,
         selection::{Selection, selection_of},
         sort::SortKey,
+        tree::Row,
     };
     use riffle_backend::{
         index::EyesPose,
@@ -957,6 +1149,9 @@ mod tests {
             undo: Top::Empty,
             redo: Top::Empty,
             trash_stepping: false,
+            tree: &[],
+            tree_open: None,
+            idle: true,
         }
     }
 
@@ -1467,6 +1662,11 @@ mod tests {
                 ..view(&files)
             };
             assert_eq!(ask("get_view", json!({}), &view), Ok(None));
+            assert_eq!(ask("get_status", json!({}), &view), Ok(None));
+            assert_eq!(
+                ask("wait_for_idle", json!({ "timeout_ms": 10 }), &view),
+                Ok(None)
+            );
             for (kind, args) in [
                 ("show_photo", json!({ "path": "/d/a" })),
                 ("select_photos", json!({ "paths": ["/d/a"] })),
@@ -1481,6 +1681,9 @@ mod tests {
                 ("set_filter", json!({ "reset": true })),
                 ("set_panes", json!({ "left": false })),
                 ("set_overlays", json!({ "focus": true })),
+                ("open_folder", json!({ "path": "/e" })),
+                ("tree_folder", json!({ "path": "/d", "action": "refresh" })),
+                ("reveal", json!({ "path": "/d", "folder": true })),
             ] {
                 assert_eq!(ask(kind, args, &view), Err(message.into()), "{kind}");
             }
@@ -2103,6 +2306,292 @@ mod tests {
         assert_eq!(
             ask("set_overlays", json!({}), &view),
             Err("set at least one of focus, peaking, performance".into())
+        );
+    }
+
+    fn row(path: &str, depth: usize, expanded: bool) -> Row {
+        Row {
+            depth,
+            path: path.to_owned(),
+            name: path.rsplit('/').next().unwrap_or(path).to_owned(),
+            expanded,
+            expandable: true,
+            raw_count: None,
+            failed: None,
+        }
+    }
+
+    #[test]
+    fn get_status_reports_the_scan_pass_the_line_and_the_notes() {
+        let status = Status {
+            folder: Some("/d".into()),
+            scan: Some(("analyzing", 4, 9)),
+            line: "a.ARW  analyzing 4/9".into(),
+            notes: vec!["Move to Trash: waiting for the scan to finish".into()],
+            errors: vec!["a.ARW: denied".into()],
+            ..Status::default()
+        };
+        assert_eq!(
+            get_status(&status),
+            json!({
+                "idle": false,
+                "folder": "/d",
+                "opening": null,
+                "listing": false,
+                "scan": { "pass": "analyzing", "done": 4, "total": 9 },
+                "running": false,
+                "status": "a.ARW  analyzing 4/9",
+                "notes": ["Move to Trash: waiting for the scan to finish"],
+                "errors": ["a.ARW: denied"],
+            })
+        );
+    }
+
+    #[test]
+    fn idle_is_no_listing_no_scan_no_run_and_no_open_waiting() {
+        assert!(Status::default().idle());
+        for status in [
+            Status {
+                listing: true,
+                ..Status::default()
+            },
+            Status {
+                scan: Some(("scanning", 0, 3)),
+                ..Status::default()
+            },
+            Status {
+                running: true,
+                ..Status::default()
+            },
+            Status {
+                opening: Some("/e".into()),
+                ..Status::default()
+            },
+        ] {
+            assert!(!status.idle(), "{status:?}");
+            assert_eq!(get_status(&status)["idle"], json!(false));
+        }
+    }
+
+    #[test]
+    fn wait_for_idle_waits_only_while_something_is_under_way() {
+        let idle = view(&[]);
+        assert_eq!(
+            ask("wait_for_idle", json!({ "timeout_ms": 500 }), &idle),
+            Ok(None)
+        );
+        let busy = View {
+            idle: false,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("wait_for_idle", json!({ "timeout_ms": 500 }), &busy),
+            Ok(Some(Action::Wait(500)))
+        );
+        assert_eq!(
+            ask("wait_for_idle", json!({}), &busy),
+            Err("timeout_ms must be a number of milliseconds".into())
+        );
+    }
+
+    #[test]
+    fn open_folder_opens_another_folder_without_the_verbatim_prefix() {
+        let view = View {
+            tree_open: Some("C:\\d"),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("open_folder", json!({ "path": "\\\\?\\C:\\e" }), &view),
+            Ok(Some(Action::Open("C:\\e".into())))
+        );
+        assert_eq!(
+            ask("open_folder", json!({ "path": 3 }), &view),
+            Err("path must be a string".into())
+        );
+    }
+
+    #[test]
+    fn open_folder_of_the_open_folder_changes_nothing() {
+        let view = View {
+            tree_open: Some("/photos/day"),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("open_folder", json!({ "path": "/photos/day/" }), &view),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn tree_folder_expands_or_collapses_only_a_row_not_already_so() {
+        let rows = [row("/r", 0, true), row("/r/a", 1, false)];
+        let view = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r/a", "action": "expand" }),
+                &view
+            ),
+            Ok(Some(Action::Tree {
+                path: "/r/a".into(),
+                op: TreeOp::Toggle
+            }))
+        );
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r/a", "action": "collapse" }),
+                &view
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r", "action": "expand" }),
+                &view
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r", "action": "collapse" }),
+                &view
+            ),
+            Ok(Some(Action::Tree {
+                path: "/r".into(),
+                op: TreeOp::Toggle
+            }))
+        );
+    }
+
+    #[test]
+    fn tree_folder_runs_the_menus_items_on_the_rows_spelling() {
+        let rows = [row("C:\\", 0, true), row("C:\\Photos", 1, false)];
+        let view = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        for (action, op) in [
+            ("refresh", TreeOp::Refresh),
+            ("expand_all", TreeOp::ExpandAll),
+            ("collapse_all", TreeOp::CollapseAll),
+        ] {
+            assert_eq!(
+                ask(
+                    "tree_folder",
+                    json!({ "path": "C:/Photos/", "action": action }),
+                    &view
+                ),
+                Ok(Some(Action::Tree {
+                    path: "C:\\Photos".into(),
+                    op
+                })),
+                "{action}"
+            );
+        }
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "C:\\", "action": "refresh" }),
+                &view
+            ),
+            Ok(Some(Action::Tree {
+                path: "C:\\".into(),
+                op: TreeOp::Refresh
+            }))
+        );
+    }
+
+    #[test]
+    fn tree_folder_refuses_a_root_for_expand_all_a_hidden_row_and_an_unknown_action() {
+        let rows = [row("/r", 0, false)];
+        let view = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r", "action": "expand_all" }),
+                &view
+            ),
+            Err(
+                "expand_all does not apply to a root, as the tree's menu offers it only below one"
+                    .into()
+            )
+        );
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r/a", "action": "expand" }),
+                &view
+            ),
+            Err("/r/a is not a folder the tree shows; expand its parent first".into())
+        );
+        assert_eq!(
+            ask(
+                "tree_folder",
+                json!({ "path": "/r", "action": "open" }),
+                &view
+            ),
+            Err("action must be one of expand, collapse, refresh, expand_all, collapse_all".into())
+        );
+    }
+
+    #[test]
+    fn tree_reply_names_the_row_and_whether_it_is_expanded() {
+        let rows = [row("/r", 0, true)];
+        let view = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        assert_eq!(
+            tree_reply(&view, &json!("/r/")),
+            json!({ "path": "/r", "expanded": true })
+        );
+        assert_eq!(
+            tree_reply(&view, &json!("/gone")),
+            json!({ "path": "/gone", "expanded": false })
+        );
+    }
+
+    #[test]
+    fn reveal_takes_any_folder_but_only_a_file_the_strip_shows() {
+        let files = paths(&["/d/a.ARW"]);
+        let view = view(&files);
+        assert_eq!(
+            ask("reveal", json!({ "path": "/e", "folder": true }), &view),
+            Ok(Some(Action::Reveal {
+                path: "/e".into(),
+                folder: true
+            }))
+        );
+        assert_eq!(
+            ask(
+                "reveal",
+                json!({ "path": "/d/a.ARW", "folder": false }),
+                &view
+            ),
+            Ok(Some(Action::Reveal {
+                path: "/d/a.ARW".into(),
+                folder: false
+            }))
+        );
+        assert_eq!(
+            ask(
+                "reveal",
+                json!({ "path": "/d/b.ARW", "folder": false }),
+                &view
+            ),
+            Err(
+                "/d/b.ARW is not shown in Handpic: not in the open folder, or hidden by the filter"
+                    .into()
+            )
         );
     }
 }

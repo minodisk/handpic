@@ -236,6 +236,16 @@ impl Status {
         self.progress.or(self.analyzing)
     }
 
+    /// The running pass as the status line names it, with its
+    /// `(done, total)`.
+    pub fn pass(&self) -> Option<(&'static str, usize, usize)> {
+        match (self.progress, self.analyzing) {
+            (Some((done, total)), _) => Some(("scanning", done, total)),
+            (None, Some((done, total))) => Some(("analyzing", done, total)),
+            (None, None) => None,
+        }
+    }
+
     /// What the status line says of the running pass.
     pub fn suffix(&self) -> Option<String> {
         if let Some((done, total)) = self.progress {
@@ -587,6 +597,20 @@ mod tests {
         assert_eq!(status.running(), Some((4, 9)));
         status.clear();
         assert_eq!(status.running(), None);
+    }
+
+    #[test]
+    fn the_running_pass_is_named_as_the_status_line_names_it() {
+        let mut status = Status::default();
+        assert_eq!(status.pass(), None);
+        status.started(10);
+        status.extracting(3, 10);
+        assert_eq!(status.pass(), Some(("scanning", 3, 10)));
+        status.extracted();
+        status.analyzing(4, 9);
+        assert_eq!(status.pass(), Some(("analyzing", 4, 9)));
+        status.clear();
+        assert_eq!(status.pass(), None);
     }
 
     #[test]

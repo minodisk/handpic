@@ -85,8 +85,69 @@
   (`Toggle::Label(*label)` over `filter::LABELS`, a `&[&str]`); the
   `cargo test` run before it had compiled it fine.
 
+## Step 3: Folders, the tree, `get_status` and `wait_for_idle`
+
+- **`open_folder` refuses a file** rather than opening its parent as a drop
+  does (`dropped::dropped_dir`): a client has `list_folders`, and opening a
+  folder other than the one named would surprise it. The backend checks the
+  path is absolute and a folder on the blocking pool; the view strips the
+  `\\?\` prefix (`context::shown_path`) so the tree's `root_of` and
+  `ancestors_within` see the spelling they expect. Opening the folder the tree
+  shows open changes nothing, as a click on that row only toggles it.
+- **`get_status` is `companion::Status`**, built by `status_of` in
+  `main.rs`. Steps 5 to 7 add the operation under way as another field (and
+  to `Status::idle`); today `running` is only `IdleGate::in_flight`, since
+  every run on the open folder's files enters it. A listing is
+  `Resync::busy` with no scan pass and nothing in flight: `Resync` stays busy
+  from the open through pass 2's end (`finished`), and a run holds it too.
+  The meta pane's notes moved into `pane_notes` / `pane_errors`, which the
+  pane and `get_status` both read, so they cannot drift.
+- **`wait_for_idle` without polling:** GPUI's `Context::observe_self` runs
+  after every `cx.notify()` of the view, and every idle transition (a scan's
+  `finished`, a run's end) notifies. `observe_self` needs the entity, which
+  does not exist yet inside `cx.new`'s closure (`Riffle::new` runs there), so
+  it is registered from a spawned task, as `read_folder_counts` is. A timer
+  per call replies with the status as it is at `timeout_ms`.
+- **Read-only requests skip the busy guard** (`companion::READS`:
+  `get_view`, `get_status`, `wait_for_idle`); `list_folders` never reaches
+  the view. `reveal` and the tree actions stay guarded like any key.
+- **`tree_folder` replies with the row, also on a no-op.** The first end to
+  end run answered a repeated `collapse` with `get_view`, since a call that
+  changes nothing has no action; the reply is now chosen by the request kind.
+  `collapse_all` leaves the folder itself expanded (`Tree::collapse_all`, as
+  the menu item does), which the tool description now says.
+- **A test folder under a hidden folder is never drawn in the tree.** The
+  first end to end run used the scratchpad under `AppData` (hidden on
+  Windows): `open_folder` and the scan worked, but no tree row existed for
+  `tree_folder` to act on. `docs/agents/native-app.md` has a rule for it.
+- **End to end** (`--mcp-port 41969`, `mcpEnabled` seeded into a fresh
+  `--settings`, three ARW copies in `a`, a NEF in `b`, an empty `b\c`):
+  `get_status` / `wait_for_idle` answered idle
+  with no folder; `list_folders` gave the home and the drives, then a folder's
+  children; a relative path and a file were refused; `open_folder` replied at
+  once with `listing: true`, `get_status` then showed `scanning 0/3`, and
+  `wait_for_idle` returned idle 0.6 s later; a 1 ms `wait_for_idle` right
+  after an open returned `idle: false` with the scan pass; reopening the open
+  folder changed nothing; `tree_folder` matched `d:/.../PHOTOS/` to the row
+  `D:\...\photos`, collapsed and expanded it (repeats unchanged), ran
+  `expand_all`, `refresh` and `collapse_all`, refused `expand_all` on `C:\`
+  and an undrawn row; `reveal` opened Explorer on a folder and a strip file
+  (`\\?\` path) and refused a file outside the open folder and a missing path.
+
 ## Deferred issues (todo candidates)
 
+- **Pending manual check: `open_folder` deferred by a run and refused during
+  a rename.** Both go through the UI's own code (`open_from_tree` →
+  `open`'s `deferred_open`, and `refuse_renaming`), but neither state could
+  be reached end to end without the user's input. On Windows, run the native
+  app with MCP on a test port as `docs/agents/native-app.md` prescribes, with
+  a folder of test copies open: (1) start a Move to Trash of a few files and,
+  while its run is in flight, call `open_folder` on another folder: expect
+  `opening` set to it and `idle: false` in the reply, then `wait_for_idle`
+  returning with that folder open; (2) rename a folder in the tree and, while
+  the rename is in flight (a slow share helps), call `open_folder` on it:
+  expect `A folder is being renamed; try again in a moment.` Step 3's
+  checkbox was ticked on the automated criteria.
 - **Pending manual check: the busy guard's wiring in the running app.** The
   refusal rules are unit-tested in `crates/native/src/companion.rs`
   (`a_busy_view_refuses_every_request_but_get_view`), but the `busy` value
