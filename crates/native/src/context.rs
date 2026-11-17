@@ -153,6 +153,13 @@ const JUDGMENT_GROUPS: [&[(&str, Label, Checked)]; 3] = [
     ],
 ];
 
+/// The actions of the judgment groups in the menu's order.
+pub fn judgment_actions() -> impl Iterator<Item = &'static str> {
+    JUDGMENT_GROUPS
+        .into_iter()
+        .flat_map(|group| group.iter().map(|(action, _, _)| *action))
+}
+
 /// The first key bound to `action`, by its keymap name, or empty.
 fn shortcut_of(bindings: &[Binding], action: &str) -> String {
     bindings
