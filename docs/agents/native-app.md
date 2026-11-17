@@ -2504,7 +2504,11 @@ they overflow.
   The wheel is not stopped: the strip's `on_scroll` still runs under it.
 - Every bar is an overlay whose track, the last 16 px of its parent, takes
   every press on it; `theme.rs`'s `SCROLLBAR_TRACK` is that width, with a
-  test against the pinned `Scrollbar::width()`. The tree's rows, the meta
+  test against the pinned `Scrollbar::width()`. gpui-base also reads a
+  theme's own `scrollbar` track width (`themed_track_width`, falling back to
+  `WIDTH`); none of the vendored themes under `crates/native/themes/` sets
+  one, so 16 px holds for every shipped theme, and a theme vendored later
+  that sets one would break `SCROLLBAR_TRACK`'s assumption. The tree's rows, the meta
   pane's body, the dialog bodies and the strip's cells keep their content
   out of the whole track, always, not only while the bar is drawn: the user
   reversed the covered edges accepted on 2026-11-17 after a look on a real
@@ -2515,7 +2519,9 @@ they overflow.
 - Not verified by hand yet; the checks are pending in
   `../plans/_archived/20261115-native-scrollbars/learnings.md`,
   `../plans/_archived/20261117-native-scrollbars-always/learnings.md` and
-  `../plans/20261117-native-scrollbar-gutter/learnings.md`.
+  `../plans/_archived/20261117-native-scrollbar-gutter/learnings.md`.
+  The pending checks are listed in the last of these (the tree and meta pane
+  at its Step 1, the strip at its Step 2).
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 
