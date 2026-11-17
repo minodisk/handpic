@@ -37,7 +37,7 @@ scope.
 
 ## Steps
 
-- [ ] Step 1: Keep the tree rows, the meta pane's values and the dialog bodies clear of the vertical bar's track
+- [x] Step 1: Keep the tree rows, the meta pane's values and the dialog bodies clear of the vertical bar's track
   - Done when:
     - In the folder tree, a row's content (icon, name, inline rename field,
       count badge) ends at least the scrollbar track's width (16 px) from the
@@ -241,3 +241,5 @@ scope.
    `learnings.md`.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete

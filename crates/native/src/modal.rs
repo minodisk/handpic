@@ -87,6 +87,8 @@ fn shell(dialog: Dialog, cx: &App) -> Dialog {
         .on_ok(|_, _, _| false)
         .on_cancel(|_, _, _| false)
         .w(WIDTH)
+        // Also the body scrollbar's room: `Dialog` pads its scrolled body by
+        // these 16 px, the width of the bar's track (`theme::SCROLLBAR_TRACK`).
         .px_4()
         .py_3()
         .gap_2()

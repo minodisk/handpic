@@ -317,6 +317,12 @@ pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
     cx.set_global(roles);
 }
 
+/// The width in logical px of a scrollbar's track, the last 16 px of its
+/// parent, which takes every press on it (gpui-base 0.9.1's `WIDTH` in
+/// `src/scrollbar.rs`, which no theme file overrides). The tree's rows and
+/// the meta pane's body keep their content out of it.
+pub const SCROLLBAR_TRACK: f32 = 16.;
+
 /// The app's edits over the loaded config: Neutral's colors, the sizes and
 /// the scrollbar mode. `gpui_kit::init` leaves the OS's auto-hiding mode and
 /// no theme file sets one, so every `apply` sets it to always shown.
@@ -392,13 +398,16 @@ mod tests {
 
     use std::rc::Rc;
 
-    use gpui_kit::component::{Theme, ThemeColor, ThemeMode, ThemeSet, scroll::ScrollbarMode};
+    use gpui_kit::component::{
+        Theme, ThemeColor, ThemeMode, ThemeSet,
+        scroll::{Scrollbar, ScrollbarMode},
+    };
     use gpui_kit::{Hsla, WindowAppearance, rgba};
     use serde_json::json;
 
     use super::{
-        DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SHIPPED, Setting, finish, map, names,
-        resolve, shipped,
+        DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SCROLLBAR_TRACK, SHIPPED, Setting,
+        finish, map, names, resolve, shipped,
     };
 
     fn hex(value: u32) -> Hsla {
@@ -413,6 +422,11 @@ mod tests {
 
     fn mapped() -> ThemeColor {
         mapped_with(&DARK)
+    }
+
+    #[test]
+    fn scrollbar_track_is_the_pinned_scrollbars() {
+        assert_eq!(SCROLLBAR_TRACK, f32::from(Scrollbar::width()));
     }
 
     #[test]

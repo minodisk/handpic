@@ -4659,19 +4659,20 @@ impl Riffle {
             .flex()
             .flex_col()
             .gap_3()
-            .p_3()
+            .pl_3()
+            .py_3()
             .bg(theme.popover)
             .text_size(px(13.))
-            .child(body.overflow_y_scrollbar())
+            .child(body.pr(px(theme::SCROLLBAR_TRACK)).overflow_y_scrollbar())
             .children(
                 self.pane_notes()
                     .into_iter()
-                    .map(|note| div().text_color(muted).child(note)),
+                    .map(|note| div().pr_3().text_color(muted).child(note)),
             )
             .children(
                 self.pane_errors()
                     .into_iter()
-                    .map(|note| div().text_color(danger).child(note)),
+                    .map(|note| div().pr_3().text_color(danger).child(note)),
             )
     }
 
@@ -5015,7 +5016,8 @@ impl Riffle {
             .w_full()
             .py_0()
             .pl(px(12. + row.depth as f32 * 16.))
-            .pr_2()
+            // With the list's 4 px `px_1()`, the scrollbar's whole track.
+            .pr(px(theme::SCROLLBAR_TRACK - 4.))
             .text_size(px(TREE_TEXT))
             .rounded_sm()
             .cursor_pointer()
