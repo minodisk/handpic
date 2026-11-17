@@ -8,6 +8,7 @@ use std::{rc::Rc, sync::LazyLock};
 
 use gpui_kit::component::{
     ActiveTheme, Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeRegistry, ThemeSet,
+    scroll::ScrollbarMode,
 };
 use gpui_kit::{App, Global, Hsla, Pixels, WindowAppearance, px, rgb, rgba};
 use serde_json::{Value, json};
@@ -311,16 +312,22 @@ pub fn apply(setting: Setting, appearance: WindowAppearance, cx: &mut App) {
     });
     Theme::change(mode, None, cx);
     let neutral = setting.name(mode) == NEUTRAL;
-    Theme::update(cx, |theme| {
-        if neutral {
-            map(&mut theme.colors, palette(mode));
-        }
-        theme.font_size = FONT_SIZE;
-        theme.radius = RADIUS;
-        theme.radius_lg = RADIUS_LG;
-    });
+    Theme::update(cx, |theme| finish(theme, neutral, mode));
     let roles = Roles::of(&cx.theme().colors, neutral && mode.is_dark());
     cx.set_global(roles);
+}
+
+/// The app's edits over the loaded config: Neutral's colors, the sizes and
+/// the scrollbar mode. `gpui_kit::init` leaves the OS's auto-hiding mode and
+/// no theme file sets one, so every `apply` sets it to always shown.
+fn finish(theme: &mut Theme, neutral: bool, mode: ThemeMode) {
+    if neutral {
+        map(&mut theme.colors, palette(mode));
+    }
+    theme.font_size = FONT_SIZE;
+    theme.radius = RADIUS;
+    theme.radius_lg = RADIUS_LG;
+    theme.scrollbar_mode = ScrollbarMode::Always;
 }
 
 fn palette(mode: ThemeMode) -> &'static Palette {
@@ -383,12 +390,15 @@ fn map(colors: &mut ThemeColor, p: &Palette) {
 mod tests {
     use std::collections::HashSet;
 
-    use gpui_kit::component::{ThemeColor, ThemeMode, ThemeSet};
+    use std::rc::Rc;
+
+    use gpui_kit::component::{Theme, ThemeColor, ThemeMode, ThemeSet, scroll::ScrollbarMode};
     use gpui_kit::{Hsla, WindowAppearance, rgba};
     use serde_json::json;
 
     use super::{
-        DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SHIPPED, Setting, map, names, resolve,
+        DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SHIPPED, Setting, finish, map, names,
+        resolve, shipped,
     };
 
     fn hex(value: u32) -> Hsla {
@@ -403,6 +413,20 @@ mod tests {
 
     fn mapped() -> ThemeColor {
         mapped_with(&DARK)
+    }
+
+    #[test]
+    fn scrollbars_are_always_shown_after_finish() {
+        for mode in [ThemeMode::Light, ThemeMode::Dark] {
+            let mut theme = Theme::default();
+            finish(&mut theme, true, mode);
+            assert_eq!(theme.scrollbar_mode, ScrollbarMode::Always);
+        }
+        let mut theme = Theme::default();
+        let config = shipped("Catppuccin Mocha", ThemeMode::Dark).expect("a shipped theme");
+        theme.apply_config(&Rc::new(config.clone()));
+        finish(&mut theme, false, ThemeMode::Dark);
+        assert_eq!(theme.scrollbar_mode, ScrollbarMode::Always);
     }
 
     #[test]

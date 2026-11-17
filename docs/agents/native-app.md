@@ -90,7 +90,11 @@ and parsed once into `ThemeConfig`s (`serde_json` over `ThemeSet`); the app
 never registers them (`ThemeRegistry::load_themes_from_str` would make
 gpui-component's registry observer reload the registered theme over the
 Neutral mapping) nor watches a folder. Every theme keeps the app's
-`font_size` and radii below. With no `theme` key the mode is Dark and both
+`font_size` and radii below. The second `Theme::update` (`finish`) also sets
+`scrollbar_mode` to `ScrollbarMode::Always` on every `apply`:
+`gpui_component::init` sets the OS's mode once (`Scrolling` or `Hover`,
+`sync_scrollbar_appearance`), and neither `change` nor `apply_config` writes
+it, since the theme files have no key for it. With no `theme` key the mode is Dark and both
 themes Neutral. The mapping reads `theme.rs`'s own `DARK` or
 `LIGHT` palette, the one source of each color (the overlay included, which
 the three backdrops read). In dark:
@@ -1696,8 +1700,8 @@ not open.
   `Default Dark`, so a focused control gets the `ring` border and a ring
   outside it.
 - Rule: a page scrolls in the component's `list` of its groups, with the
-  theme's scrollbar in its default `ScrollbarMode::Scrolling` (shown while
-  scrolling, fading after). Nothing scrolls a focused row into view.
+  theme's scrollbar in the `ScrollbarMode::Always` `apply` sets (shown
+  whenever the list overflows). Nothing scrolls a focused row into view.
 - Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
   features (`aiEnabled` with the model download, pass 3, genres, the ranking,
   `recommended`); a seeded `aiEnabled` key stays in the store, unread.
@@ -2206,12 +2210,14 @@ both ask for a tooltip.
 ### The strip, the tree and the meta pane draw the theme's scrollbar (Inferred)
 
 The three draw gpui-component's scrollbar (`ScrollableElement`, at `=0.9.1`)
-in the theme's `ScrollbarMode::Scrolling`, as the settings modal's lists and
-the menus do: no bar sets a mode of its own and the theme's is not changed.
-A bar shows when its prepaint sees the handle's offset differ from the last
-one it saw, stays for the theme's idle time (2 s) or while hovered or
-dragged, and takes a press only while shown. Where the content fits, nothing
-is drawn.
+in the theme's mode, as the settings modal's lists, the dialog bodies and the
+menus do: no bar sets a mode of its own. `theme.rs`'s `apply` sets that mode
+to `ScrollbarMode::Always` (the user's choice on 2026-11-17, over the
+auto-hiding `Scrolling` of 2026-11-14), so a bar is drawn at rest whenever
+its content overflows and takes a press without a scroll first. Where the
+content fits, nothing is drawn. The mode is global: the `Sort ▾` /
+`Filter ▾` popovers, `PopupMenu` and `Select` lists show their bar too when
+they overflow.
 
 - The tree: its `uniform_list` sits in a `relative()`, `size_full()` wrapper
   inside the pane's padding that carries `vertical_scrollbar(&tree_scroll)`,
@@ -2240,14 +2246,19 @@ is drawn.
   parents' and stops propagation. A press on a shown strip bar selects no
   cell and opens no right-click menu; a press on a shown tree bar reaches
   neither a row's click nor the pane's `on_mouse_down`, so it does not give
-  the tree the keyboard (`on_mouse_down_out` is unaffected). With a bar not
-  shown, no listener is registered and the press goes where it went before.
+  the tree the keyboard (`on_mouse_down_out` is unaffected). With the
+  content fitting, no bar is drawn, no listener is registered and the press
+  goes where it went before.
   The wheel is not stopped: the strip's `on_scroll` still runs under it.
-- The strip's bar is drawn over its bottom edge (the 7 px `STRIP_PADDING`
-  and possibly the bottom of the name band) while shown; the strip's height
-  (`stripheight.rs`) and the layout are unchanged by it.
-- Not verified by hand yet; the check is pending in
-  `../plans/20261115-native-scrollbars/learnings.md`.
+- Every bar stays an overlay (no gutter; track 16 px). The strip's bar lies
+  over its bottom edge (the 7 px `STRIP_PADDING` and possibly the bottom of
+  the name band) whenever the cells overflow, the tree's over the right
+  16 px of its rows and the meta pane's over the right edge of its values;
+  the strip's height (`stripheight.rs`) and the layout are unchanged by it.
+  The user accepted these covered edges on 2026-11-17.
+- Not verified by hand yet; the checks are pending in
+  `../plans/_archived/20261115-native-scrollbars/learnings.md` and
+  `../plans/20261117-native-scrollbars-always/learnings.md`.
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 
