@@ -207,3 +207,12 @@ What the investigation found (the facts the step relies on):
   not updated for the strip's either.
 
 ## Progress
+
+- Step 1: the strip's height resizes by dragging its top edge, the cells
+  scale with it, and the height persists in the `stripHeight` setting (the
+  pure arithmetic in `crates/native/src/stripheight.rs`, `strip::Geometry` /
+  `Strip::set_geometry`, the `StripDrag` handle and the wrapper's
+  `on_drag_move` in `crates/native/src/main.rs`). Ticked on the automated
+  criteria only (unit tests and `mise run ci:local`); the drag, cursor and
+  look were not observed in the running app, and the hand checks are listed
+  in `learnings.md`.
