@@ -21,6 +21,9 @@ pub const OPEN_KEY: &str = if cfg!(target_os = "macos") {
     "ctrl+,"
 };
 
+/// The title bar button's tooltip: the action and the key that opens it.
+pub const OPEN_TIP: (&str, &str) = ("Settings", OPEN_KEY);
+
 /// The Sidecar tab's choices, in the Tauri order.
 pub const FORMATS: [(SidecarFormat, &str); 3] = [
     (SidecarFormat::Xmp, "Lightroom (.xmp)"),
@@ -417,11 +420,22 @@ mod tests {
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
-        SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit, format_change,
-        known_group, label_change, label_names_of, label_texts, mode_change, pattern_change,
-        preset_of, root_note, shortcut_group, shortcut_label, stops, theme_change, writes_xmp,
+        OPEN_TIP, SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit,
+        format_change, known_group, label_change, label_names_of, label_texts, mode_change,
+        pattern_change, preset_of, root_note, shortcut_group, shortcut_label, stops, theme_change,
+        writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
+
+    #[test]
+    fn the_open_tip_names_the_settings_and_their_key() {
+        let key = if cfg!(target_os = "macos") {
+            "meta+,"
+        } else {
+            "ctrl+,"
+        };
+        assert_eq!(OPEN_TIP, ("Settings", key));
+    }
 
     #[test]
     fn the_specifiers_are_the_date_ones_and_the_folder_separator() {

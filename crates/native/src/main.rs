@@ -2760,6 +2760,28 @@ impl Riffle {
         cx.notify();
     }
 
+    /// Open the settings modal, from `OPEN_KEY` or the title bar's button.
+    /// Not while the settings, a trash or folder-operation dialog is open,
+    /// nor while a folder flow is under way, as in the Tauri app: the dialog
+    /// would open over the settings and the run would read a format changed
+    /// meanwhile.
+    fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.settings_view.read(cx).is_open()
+            || self.trash.busy()
+            || self.folderops.dialog_open()
+            || self.folderops.busy()
+        {
+            return;
+        }
+        self.menus.close();
+        let settings = &self.settings;
+        self.settings_view.update(cx, |view, cx| {
+            view.open(settings, window, cx);
+        });
+        self.refresh_index_size(cx);
+        cx.notify();
+    }
+
     /// Read the index's size on disk off the UI thread and show it on the
     /// Cache page; `0 B` without an index. Not while a clear runs, whose end
     /// reads it.
@@ -3384,16 +3406,7 @@ impl Riffle {
             // Not while a folder flow is under way, as in the Tauri app: the
             // dialog would open over the settings and the run would read a
             // format changed meanwhile.
-            (name, _) if name == settingsmodal::OPEN_KEY && self.folderops.busy() => {}
-            (name, _) if name == settingsmodal::OPEN_KEY => {
-                self.menus.close();
-                let settings = &self.settings;
-                self.settings_view.update(cx, |view, cx| {
-                    view.open(settings, window, cx);
-                });
-                self.refresh_index_size(cx);
-                cx.notify();
-            }
+            (name, _) if name == settingsmodal::OPEN_KEY => self.open_settings(window, cx),
             ("escape", _) if self.menus.is_open() => {
                 self.menus.close();
                 cx.notify();
@@ -5085,6 +5098,32 @@ impl Riffle {
         )
     }
 
+    /// The title bar's gear. The wrapper stops the press after the button's
+    /// own listeners so it does not reach the bar's drag (gpui-component's
+    /// Linux `ControlIcon` does the same).
+    fn settings_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let (text, key) = settingsmodal::OPEN_TIP;
+        div()
+            .id("settings-tip")
+            .mr_2()
+            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+            .tooltip(move |window, cx| {
+                Tooltip::new(text)
+                    .key_binding(Some(Kbd::new(keys::keystroke_of(key))))
+                    .build(window, cx)
+            })
+            .child(
+                Button::new("settings-open")
+                    .ghost()
+                    .small()
+                    .tab_stop(false)
+                    .icon(IconName::Settings)
+                    .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                        this.open_settings(window, cx);
+                    })),
+            )
+    }
+
     /// A menu's button, lit while `lit`, with its popover above it while
     /// open; laid out only then.
     fn menu_button(
@@ -5537,13 +5576,15 @@ impl Render for Riffle {
                 }
             }))
             .child(
-                TitleBar::new().child(
-                    h_flex()
-                        .gap_2()
-                        .text_color(cx.theme().foreground)
-                        .child(img(icons::APP).size(px(16.)))
-                        .child("Handpic"),
-                ),
+                TitleBar::new()
+                    .child(
+                        h_flex()
+                            .gap_2()
+                            .text_color(cx.theme().foreground)
+                            .child(img(icons::APP).size(px(16.)))
+                            .child("Handpic"),
+                    )
+                    .child(self.settings_button(cx)),
             )
             // The middle row and the strip, whose bounds give the strip's
             // bottom edge and the height the two share to a strip drag.

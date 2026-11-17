@@ -3359,6 +3359,30 @@ Files: `crates/native/src/main.rs`, `crates/native/src/icons.rs`, `crates/native
 - [ ] On macOS, expect the traffic lights to sit inside the bar without overlapping the icon and title (80 px left padding), the content to start below the bar, and double-click on the bar to follow the system setting.
 - [ ] On Linux, under client-side decorations expect the bar to draw its controls and `Root`'s frame and shadow. Under server-side decorations (X11 without a compositor, or a Wayland compositor that insists) expect no second set of controls. WSLg can serve as a first pass once a WSL distribution is installed, but it does not replace a check on a regular GNOME / KDE desktop.
 
+### Native: real-device checks of the title bar's settings button (native-title-bar-settings)
+
+#### Background
+
+The `native-title-bar-settings` feature added a gpui-component `Button` with the Lucide `settings` icon as the second child of the native app's `TitleBar`, at the right end of the bar. A click opens the settings modal through `Riffle::open_settings`, the same method `ctrl+,` (`meta+,` on macOS) uses, with the same refusals. The press does not move the window: a wrapping `div` stops the left mouse-down from propagating. The tooltip is "Settings" with the `OPEN_KEY` as a `Kbd`. CI and the unit tests cover the tooltip's text and key per platform and that `icons/settings.svg` loads through `Icons`. By hand on Windows 11 (debug build, driven by a script) the author saw the following:
+- A press and drag on the gear left the window where it was, and a drag on the empty bar moved it.
+- A click opened the settings.
+- `Escape` closed the settings and `ctrl+,` reopened them right away.
+- The tooltip showed on hover.
+- The gear and its hover fill were visible in Neutral Light and Dark.
+
+Never exercised: any shipped non-Neutral theme; minimize / maximize / close after the change; a judgment key or paging after closing the settings the gear opened; the gear pressed while the tree holds the keyboard, a menu is open or an inline rename is under way; macOS; Linux. The Step 1 checkbox was ticked on the automated criteria and the checks above. Plan: `docs/plans/_archived/20261117-native-title-bar-settings/plan.md`.
+
+Files: `crates/native/src/main.rs` (`settings_button`, `open_settings`), `crates/native/src/settingsmodal.rs`, `crates/native/src/icons.rs`, `docs/agents/native-app.md`.
+
+#### TODO
+
+- [ ] On Windows (`mise run native:dev`), switch to one shipped (non-Neutral) theme in Settings > Appearance, in Light or Dark. Expect the gear and its hover fill to be visible and to follow the theme.
+- [ ] On Windows, click minimize, maximize / restore and close after this change. Expect all three to work, and expect a drag on the bar's empty part to still move the window.
+- [ ] On Windows, open the settings with the gear, close them, then press a judgment key and page with the arrow keys. Expect them to work at once, with the keyboard back on the view (only `ctrl+,` was tried).
+- [ ] On Windows, click the gear (a) with the tree holding the keyboard, (b) with `Sort ▾` / `Filter ▾` open, (c) with a right-click menu open, (d) during an inline folder rename. Expect the settings to open, the menu to close, and the rename to end as a press elsewhere ends it.
+- [ ] On macOS (`mise run native:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
+- [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
+
 ### Native: real-device check of the Sort / Filter buttons drawn with gpui-component's `Button` (native-component-controls)
 
 #### Background

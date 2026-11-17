@@ -2689,7 +2689,7 @@ text was 16 px white, the row transparent over the root's black).
   would have grown the canvas by a pixel, so the height is pinned to the
   replaced `div`'s. Inferred from the sources, not re-measured on screen.
 
-### The title bar is gpui-component's `TitleBar` with the icon and "Handpic" (Inferred)
+### The title bar is gpui-component's `TitleBar` with the icon, "Handpic" and the settings gear (Inferred)
 
 The window draws no OS title bar. `main()` opens it with
 `..TitleBar::window_options()` (gpui-component `=0.9.1`,
@@ -2699,9 +2699,13 @@ The window draws no OS title bar. `main()` opens it with
 (`appears_transparent`) and the macOS traffic lights sit at (9, 9).
 `impl Render for Riffle` puts `TitleBar::new()` first in the root's
 `flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
-every platform, so the main area below it shrinks by itself. Its one child
+every platform, so the main area below it shrinks by itself. Its first child
 is an `h_flex().gap_2()` of `img(icons::APP)` at 16 px and the text
-"Handpic" in `cx.theme().foreground`. The bar draws the window controls on
+"Handpic" in `cx.theme().foreground`; its second, which the bar's
+`justify_between` row puts at the right end (left of the window controls on
+Windows / Linux), is `settings_button`: a ghost, small, `tab_stop(false)`
+gpui-component `Button` with `IconName::Settings` in a `div` with a `mr_2`
+margin and the tooltip. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
 window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
@@ -2709,10 +2713,39 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   None`, which would empty the taskbar and Alt+Tab text.
 - A press on the bar still reaches the root `div`'s `track_focus`, so a click
   on the bar keeps the keyboard with the view. The bar has no focus handle of
-  its own, so do not add one to the bar or to its children. Seen in a debug
-  build on Windows 11; the controls' clicks and the drag were not exercised
-  by hand. Source:
+  its own: do not `track_focus` the bar or its children, and keep a `Button`
+  in it at `tab_stop(false)` (its internal handle stays unfocused, its
+  mouse-down preventing the focus change). Seen in a debug build on Windows
+  11; the controls' clicks were not exercised by hand. Source:
   [learnings](../plans/_archived/20261116-native-title-bar/learnings.md), Step 1.
+- Rule: a control in the bar stops the left press's propagation, or the press
+  moves the window. `TitleBar` puts its children in a row marked
+  `WindowControlArea::Drag`: on Windows `gpui-pre` 0.3.12 answers `HTCAPTION`
+  there and starts the OS drag unless GPUI's dispatch of the non-client press
+  stopped propagation; on macOS / Linux the bar's own mouse-down arms
+  `start_window_move`. The gear's wrapping `div` calls `cx.stop_propagation()`
+  on the left mouse-down, after the `Button`'s own listeners (gpui-component's
+  Linux `ControlIcon` is the precedent), so the click still fires. Seen on
+  Windows 11 in a debug build: a press and drag on the gear leaves the window
+  in place, a drag on the rest of the bar moves it, the click opens the
+  settings and the tooltip shows on hover. Source:
+  [the plan](../plans/_archived/20261117-native-title-bar-settings/plan.md), Step 1.
+- Rule: the gear opens the settings through `Riffle::open_settings`, the one
+  method `key_down`'s `settingsmodal::OPEN_KEY` arm calls too; it applies the
+  refusals itself (the settings already open, a trash or folder-operation
+  dialog open, a folder flow under way), since a click does not pass through
+  `key_down`'s early returns. Its tooltip is `Tooltip::new` with
+  `settingsmodal::OPEN_TIP`'s text and its key as a `Kbd`
+  (`keys::keystroke_of(OPEN_KEY)`), on the wrapping `div`'s `.tooltip`
+  because `Button`'s own tooltip takes only a string or a GPUI action and
+  `OPEN_KEY` binds none.
+- Known limit: after a click on the gear the tooltip stays drawn over the
+  opened settings modal while the pointer rests on the gear (the modal's
+  `occlude()` covers the bar, but the tooltip lives in a higher layer); it
+  goes when the pointer moves. Left as is. Scripted pointer checks of the
+  bar must keep presses off the empty preview's "click here" message,
+  which opens the folder picker. Source:
+  [learnings](../plans/_archived/20261117-native-title-bar-settings/learnings.md), Step 1.
 - Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
   `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
   PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
