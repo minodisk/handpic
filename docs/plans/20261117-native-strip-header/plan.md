@@ -180,3 +180,5 @@ header and its lit `Filter ▾` are gone.
   CI build and the unit tests only.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete; the on-screen checks are pending (see learnings.md "Deferred issues (todo candidates)")
