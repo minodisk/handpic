@@ -5729,7 +5729,7 @@ impl Render for Handpic {
                                     .flex_1()
                                     .min_w_0()
                                     .h_full()
-                                    .bg(rgb(PREVIEW_BACKGROUND))
+                                    .bg(roles.preview)
                                     .child(
                                         canvas(
                                             |_, _, _| {},
@@ -6432,9 +6432,6 @@ const LABELED_NAME_COLOR: u32 = 0xfafafa;
 /// A burst badge's text, over the photo on its dark halo, so fixed in every
 /// theme.
 const BADGE_COLOR: u32 = 0xfafafa;
-/// The preview's surround, fixed in every theme: the photo is judged against
-/// it, and the marks and the performance band over it are drawn for it.
-const PREVIEW_BACKGROUND: u32 = 0x000000;
 const MARK_SIZE: f32 = 11.;
 /// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;

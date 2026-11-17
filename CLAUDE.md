@@ -239,7 +239,8 @@ in the Appearance page and, in System mode, on a change of the window's
 appearance, which also sets the theme's scrollbar mode to always shown),
 and sets beside it the `Roles` global, the colors the app paints that equal
 no token (the window's surface and text, the strip's names, failures, burst
-band and reject dim; today's values for Neutral dark, else derived from the
+band and reject dim, and the preview's surround, the theme's darkest opaque
+surface; today's values for Neutral dark, else derived from the
 tokens by `Roles::of`), which the panes, the strip, the status row, the
 menus and the dialogs read with the theme (`cx.theme()`, `roles`), the
 judgment, label band and over-the-photo colors staying fixed, and

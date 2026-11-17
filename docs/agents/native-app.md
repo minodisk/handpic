@@ -154,11 +154,14 @@ from the theme (`cx.theme()`; a canvas's paint closure reads it from its
 GPUI global `apply` sets with the theme (`theme::roles(cx)`): the window's
 surface `#000000` and text `#ffffff` (over `Root`'s surface, behind the
 strip and the status row), the strip's file name `#d4d4d4` and scan failure
-`#a3a3a3`, the burst band (white at 8 %, dimmed 3.6 %) and the reject dim
-(black at 55 %). `Roles::of` gives today's values for Neutral dark and
+`#a3a3a3`, the burst band (white at 8 %, dimmed 3.6 %), the reject dim
+(black at 55 %) and the preview's surround behind the photo `#000000`.
+`Roles::of` gives today's values for Neutral dark and
 otherwise derives them from the tokens (the surface and text from
 `background` / `foreground`, the band from `foreground` with alpha, the dim
-from `background` with alpha), which Neutral light takes. The pane colors map onto tokens exactly: the
+from `background` with alpha, the surround the least luminant, by relative
+luminance, of the opaque `background`, `popover`, `title_bar`, `status_bar`
+and `sidebar`), which Neutral light takes. The pane colors map onto tokens exactly: the
 panes `popover`, muted text `muted_foreground`, errors `danger`, the
 selected cell and the placeholder `muted`, the current cell's outline and
 lit controls `primary`, a selected cell's outline and the drop outline
@@ -176,8 +179,7 @@ with their reason: the judgment colors (`STARS_COLOR`, `PICK_COLOR`,
 `LABEL_BAND_SCALE`, a palette value no theme changes) with
 `LABELED_NAME_COLOR`, what is drawn
 over the photo (`mark.rs`, `overlay.rs`, `peaking.rs`, `perfgraph.rs`, the
-burst badge's `BADGE_COLOR` and the halos), and the preview's black
-surround (`PREVIEW_BACKGROUND`).
+burst badge's `BADGE_COLOR` and the halos).
 
 None of its optional features (`tree-sitter*`, `syntect`, `speech`,
 `inspector`, `decimal`, `gpui-fast`) is on. `gpui-kit` itself turns on

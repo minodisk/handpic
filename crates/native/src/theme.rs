@@ -165,6 +165,8 @@ pub struct Roles {
     pub band_dimmed: Hsla,
     /// `.cell.rejected`'s `opacity: 0.45` over the strip's surface.
     pub rejected_dim: Hsla,
+    /// The preview's surround behind the photo, the theme's darkest surface.
+    pub preview: Hsla,
 }
 
 impl Global for Roles {}
@@ -182,6 +184,7 @@ impl Roles {
                 // The band at the rejected cell's 0.45 opacity: 0.08 x 0.45.
                 band_dimmed: rgba(0xffffff09).into(),
                 rejected_dim: rgba(0x0000008c).into(),
+                preview: rgb(0x000000).into(),
             };
         }
         Self {
@@ -192,8 +195,45 @@ impl Roles {
             band: colors.foreground.alpha(0.08),
             band_dimmed: colors.foreground.alpha(0.036),
             rejected_dim: colors.background.alpha(0.55),
+            preview: darkest(
+                colors.background,
+                &[
+                    colors.popover,
+                    colors.title_bar,
+                    colors.status_bar,
+                    colors.sidebar,
+                ],
+            ),
         }
     }
+}
+
+/// The least luminant of `fallback` and the opaque `others`.
+fn darkest(fallback: Hsla, others: &[Hsla]) -> Hsla {
+    others
+        .iter()
+        .copied()
+        .filter(|color| color.a >= 1.)
+        .fold(fallback, |darkest, color| {
+            if luminance(color) < luminance(darkest) {
+                color
+            } else {
+                darkest
+            }
+        })
+}
+
+/// The relative luminance of `color`'s sRGB.
+fn luminance(color: Hsla) -> f32 {
+    let linear = |c: f32| {
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let rgb = color.to_rgb();
+    0.2126 * linear(rgb.r) + 0.7152 * linear(rgb.g) + 0.0722 * linear(rgb.b)
 }
 
 /// The app's roles under the theme in place.
@@ -407,7 +447,7 @@ mod tests {
 
     use super::{
         DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SCROLLBAR_TRACK, SHIPPED, Setting,
-        finish, map, names, resolve, shipped,
+        darkest, finish, luminance, map, names, resolve, shipped,
     };
 
     fn hex(value: u32) -> Hsla {
@@ -498,6 +538,7 @@ mod tests {
         assert_eq!(roles.band, hex(0xffffff14));
         assert_eq!(roles.band_dimmed, hex(0xffffff09));
         assert_eq!(roles.rejected_dim, hex(0x0000008c));
+        assert_eq!(roles.preview, hex(0x000000ff));
     }
 
     #[test]
@@ -511,6 +552,64 @@ mod tests {
         assert_eq!(roles.band, colors.foreground.alpha(0.08));
         assert_eq!(roles.band_dimmed, colors.foreground.alpha(0.036));
         assert_eq!(roles.rejected_dim, colors.background.alpha(0.55));
+        assert_eq!(roles.preview, colors.background);
+    }
+
+    #[test]
+    fn the_preview_is_the_darkest_opaque_surface() {
+        let background = hex(0x303030ff);
+        let dark = hex(0x101010ff);
+        let mid = hex(0x202020ff);
+        assert_eq!(darkest(background, &[mid, dark, mid]), dark);
+        assert_eq!(darkest(background, &[dark, mid]), dark);
+        assert_eq!(darkest(background, &[hex(0x00000080), mid]), mid);
+        assert_eq!(darkest(background, &[hex(0x404040ff)]), background);
+        assert_eq!(darkest(background, &[]), background);
+        let mut colors = mapped();
+        colors.sidebar = hex(0x050505ff);
+        assert_eq!(Roles::of(&colors, false).preview, hex(0x050505ff));
+        colors.status_bar = hex(0x000000ff);
+        assert_eq!(Roles::of(&colors, false).preview, hex(0x000000ff));
+    }
+
+    #[test]
+    fn the_preview_is_luminance_not_lightness() {
+        // Pure blue has a higher HSL lightness than dark gray but far less
+        // luminance.
+        let blue = hex(0x0000ffff);
+        let gray = hex(0x606060ff);
+        assert!(blue.l > gray.l);
+        assert_eq!(darkest(gray, &[blue]), blue);
+    }
+
+    #[test]
+    fn every_shipped_preview_is_opaque_and_no_lighter_than_its_background() {
+        for config in SHIPPED.iter() {
+            let mut theme = Theme::default();
+            theme.apply_config(&Rc::new(config.clone()));
+            let colors = &theme.colors;
+            let preview = Roles::of(colors, false).preview;
+            assert_eq!(preview.a, 1., "{}", config.name);
+            assert!(
+                luminance(preview) <= luminance(colors.background),
+                "{}",
+                config.name
+            );
+        }
+    }
+
+    #[test]
+    fn the_preview_of_some_shipped_themes() {
+        for (name, expected) in [("Catppuccin Mocha", 0x11111bff), ("Jellybeans", 0x101010ff)] {
+            let mut theme = Theme::default();
+            let config = shipped(name, ThemeMode::Dark).expect("a shipped theme");
+            theme.apply_config(&Rc::new(config.clone()));
+            assert_eq!(
+                Roles::of(&theme.colors, false).preview,
+                hex(expected),
+                "{name}"
+            );
+        }
     }
 
     #[test]
