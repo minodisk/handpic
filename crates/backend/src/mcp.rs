@@ -4,7 +4,9 @@
 //! state and the judgments the tools read and drive are the app's, reached
 //! through the `Bridge`'s send callback; the server's tasks run on the
 //! caller's tokio runtime, so `Mcp::switch` and `Mcp::stop` must run inside
-//! one.
+//! one. The tools a server lists are its host's: the seven companion tools by
+//! default (the Tauri app), all of them after `Mcp::with_all_tools` (the
+//! native app).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -13,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use base64::Engine;
+use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerConfig};
 use rmcp::schemars::JsonSchema;
@@ -55,6 +58,19 @@ color label), look at a small copy of a photo's preview, move the view, and reco
 picks / rejects and color labels the same way the user's keys do, so the app's undo and \
 sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
 Suggest judgments and explain them; write them only when the user asks you to.";
+
+/// The native app's instructions, over the whole tool set.
+const NATIVE_INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (Sony \
+ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. This server \
+connects you to the running app so you can assist while they cull: read what Handpic is showing \
+(the current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
+settings and the current stars, pick / reject flag and color label), look at a small copy of a \
+photo's preview, move through the photos and the bursts, select photos, and record stars, picks \
+/ rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+undo and sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
+A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
+folder rename open; try again once they are done. Suggest judgments and explain them; write \
+them only when the user asks you to.";
 
 type Reply = Result<Value, String>;
 
@@ -319,12 +335,39 @@ fn judgment(args: JudgmentArgs) -> Result<Value, String> {
     Ok(Value::Object(request))
 }
 
+/// Where `navigate` moves the current photo, as the paging keys do.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum Direction {
+    Previous,
+    Next,
+    First,
+    Last,
+    BurstPrevious,
+    BurstNext,
+    BurstFramePrevious,
+    BurstFrameNext,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+pub struct NavigateArgs {
+    /// `previous` / `next` (wrapping around), `first` / `last`,
+    /// `burst_previous` / `burst_next`, or `burst_frame_previous` /
+    /// `burst_frame_next`.
+    to: Direction,
+}
+
 /// The MCP handler each client session gets.
 #[derive(Clone)]
 pub struct Companion {
     bridge: Arc<Bridge>,
     /// The index reader, `None` when the index cache is unavailable.
     index: Option<Arc<Mutex<Index>>>,
+    /// The tools this host lists and answers.
+    tools: ToolRouter<Companion>,
+    instructions: &'static str,
 }
 
 impl Companion {
@@ -334,6 +377,24 @@ impl Companion {
             .call("get_view", Value::Object(Default::default()))
             .await?;
         resolve(&view, path)
+    }
+
+    /// The seven companion tools and the instructions over them.
+    fn seven(bridge: Arc<Bridge>, index: Option<Arc<Mutex<Index>>>) -> Self {
+        Companion {
+            bridge,
+            index,
+            tools: Self::tool_router(),
+            instructions: INSTRUCTIONS,
+        }
+    }
+
+    async fn view_call(&self, kind: &'static str) -> CallToolResult {
+        tool_result(
+            self.bridge
+                .call(kind, Value::Object(Default::default()))
+                .await,
+        )
     }
 
     async fn photo(&self, path: Option<String>) -> Reply {
@@ -480,12 +541,65 @@ impl Companion {
     }
 }
 
-#[tool_handler]
+/// The tools only the native app lists.
+#[tool_router(router = native_router)]
+impl Companion {
+    #[tool(
+        description = "Move Handpic's current photo as the paging keys do: `previous` / `next` \
+        (wrapping around), `first` / `last`, `burst_previous` / `burst_next` (the first frame of \
+        the previous / next burst, or of the current one), `burst_frame_previous` / \
+        `burst_frame_next` (the neighboring frame within the current burst). Only the photos \
+        the filter shows count. The photo moved to becomes the only selected one. Returns the \
+        new view, as `get_view` does."
+    )]
+    async fn navigate(&self, Parameters(args): Parameters<NavigateArgs>) -> CallToolResult {
+        tool_result(self.bridge.call("navigate", json!({ "to": args.to })).await)
+    }
+
+    #[tool(
+        description = "Select every photo the filter shows, as Select All does; the current \
+        photo stays. Returns the new view, as `get_view` does."
+    )]
+    async fn select_all(&self) -> CallToolResult {
+        self.view_call("select_all").await
+    }
+
+    #[tool(
+        description = "Reject the other frames of the current photo's burst, the ones the \
+        filter hides too, keeping their stars and labels, as one entry the user can undo, as \
+        the Reject Rest key does. Write only when the user asks. Returns the new view, as \
+        `get_view` does."
+    )]
+    async fn reject_rest(&self) -> CallToolResult {
+        self.view_call("reject_rest").await
+    }
+
+    #[tool(
+        description = "Undo the newest change of stars, flags and labels in Handpic, whether a \
+        key, a menu or a tool made it, as the undo key does; a change of one photo makes it the \
+        current one. Undoing a move to the trash is not available here. Returns the new view, \
+        as `get_view` does."
+    )]
+    async fn undo(&self) -> CallToolResult {
+        self.view_call("undo").await
+    }
+
+    #[tool(
+        description = "Redo the change of stars, flags and labels last undone in Handpic, as \
+        the redo key does; a change of one photo makes it the current one. Redoing a move to \
+        the trash is not available here. Returns the new view, as `get_view` does."
+    )]
+    async fn redo(&self) -> CallToolResult {
+        self.view_call("redo").await
+    }
+}
+
+#[tool_handler(router = self.tools)]
 impl ServerHandler for Companion {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("handpic", env!("CARGO_PKG_VERSION")))
-            .with_instructions(INSTRUCTIONS)
+            .with_instructions(self.instructions)
     }
 }
 
@@ -516,10 +630,7 @@ impl Mcp {
     pub fn new(bridge: Bridge, index: Option<Arc<Mutex<Index>>>) -> Self {
         Mcp {
             status: Default::default(),
-            companion: Companion {
-                bridge: Arc::new(bridge),
-                index,
-            },
+            companion: Companion::seven(Arc::new(bridge), index),
             port: MCP_PORT,
         }
     }
@@ -527,6 +638,17 @@ impl Mcp {
     /// The server listening on `port` instead of `MCP_PORT`.
     pub fn with_port(self, port: u16) -> Self {
         Mcp { port, ..self }
+    }
+
+    /// The server listing every tool, with the instructions over them: the
+    /// native app's. The Tauri app keeps the seven.
+    pub fn with_all_tools(self) -> Self {
+        let companion = Companion {
+            tools: Companion::tool_router() + Companion::native_router(),
+            instructions: NATIVE_INSTRUCTIONS,
+            ..self.companion
+        };
+        Mcp { companion, ..self }
     }
 
     /// Complete a bridge call with the main window's answer.
@@ -667,10 +789,7 @@ mod tests {
     const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
     fn silent() -> Companion {
-        Companion {
-            bridge: Arc::new(Bridge::new(|_| Ok(()))),
-            index: None,
-        }
+        Companion::seven(Arc::new(Bridge::new(|_| Ok(()))), None)
     }
 
     fn initialize(origin: Option<&str>) -> Request<Body> {
@@ -863,15 +982,20 @@ mod tests {
         assert!(info.instructions.is_some());
     }
 
-    #[test]
-    fn the_tools_are_exactly_the_seven_companion_tools() {
-        let names: Vec<_> = Companion::tool_router()
+    fn names(companion: &Companion) -> Vec<String> {
+        companion
+            .tools
             .list_all()
             .into_iter()
             .map(|tool| tool.name.to_string())
-            .collect();
+            .collect()
+    }
+
+    #[test]
+    fn the_tools_are_exactly_the_seven_companion_tools() {
+        let mcp = Mcp::new(Bridge::new(|_| Ok(())), None).with_port(1);
         assert_eq!(
-            names,
+            names(&mcp.companion),
             [
                 "get_photo",
                 "get_preview",
@@ -882,6 +1006,50 @@ mod tests {
                 "show_photo"
             ]
         );
+        assert_eq!(
+            mcp.companion.get_info().instructions.as_deref(),
+            Some(INSTRUCTIONS)
+        );
+    }
+
+    #[test]
+    fn all_tools_lists_the_native_apps_full_set() {
+        let mcp = Mcp::new(Bridge::new(|_| Ok(())), None)
+            .with_all_tools()
+            .with_port(1);
+        assert_eq!(
+            names(&mcp.companion),
+            [
+                "get_photo",
+                "get_preview",
+                "get_view",
+                "navigate",
+                "redo",
+                "reject_rest",
+                "select_all",
+                "select_photos",
+                "set_judgment",
+                "set_view",
+                "show_photo",
+                "undo"
+            ]
+        );
+        assert_eq!(mcp.port, 1);
+        assert_eq!(
+            mcp.companion.get_info().instructions.as_deref(),
+            Some(NATIVE_INSTRUCTIONS)
+        );
+    }
+
+    #[test]
+    fn navigate_forwards_the_direction_by_its_snake_case_name() {
+        let args: NavigateArgs =
+            serde_json::from_value(json!({ "to": "burst_frame_next" })).unwrap();
+        assert_eq!(
+            json!({ "to": args.to }),
+            json!({ "to": "burst_frame_next" })
+        );
+        assert!(serde_json::from_value::<NavigateArgs>(json!({ "to": "up" })).is_err());
     }
 
     #[test]

@@ -1,7 +1,9 @@
 //! The answering side of the MCP companion, a port of `companion.ts` over a
-//! snapshot of the view. The native view has no compare and answers with no
-//! selection yet, so the selection is the current file, and compare and a
-//! selection of several photos are refused.
+//! snapshot of the view, extended with the native app's own tools: the
+//! moves, Select All, Reject Rest, undo and redo, each the `Key` its keymap
+//! action runs. The selection is the strip's (`selection::targets`). The
+//! native view has no compare, so compare is refused, and so is every
+//! request but `get_view` while the view drops keys (`Busy`).
 
 use std::{
     collections::{HashMap, HashSet},
@@ -16,11 +18,16 @@ use riffle_backend::{
 use riffle_core::Flag;
 use serde_json::{Map, Value, json};
 
-use crate::{burst::BurstMember, filter::Facts, judgment::State};
+use crate::{
+    burst::BurstMember,
+    filter::Facts,
+    history::Top,
+    judgment::State,
+    selection::{self, Selection},
+};
 
 const COMPARE_REFUSAL: &str = "compare is not supported by Handpic's native app yet";
-const SELECTION_REFUSAL: &str =
-    "selecting more than one photo is not supported by Handpic's native app yet";
+const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
@@ -50,6 +57,78 @@ pub struct View<'a> {
     pub bursts: &'a HashMap<String, BurstMember>,
     /// The listed files' facts, for each burst frame's sharpness.
     pub facts: &'a HashMap<String, Facts>,
+    pub selection: &'a Selection,
+    /// Why the view drops keys now, if it does.
+    pub busy: Option<Busy>,
+    /// What an undo and a redo would step next.
+    pub undo: Top,
+    pub redo: Top,
+    /// An undo or a redo of a run to the Trash is out.
+    pub trash_stepping: bool,
+}
+
+/// The states in which `key_down` drops a key, which refuse every request
+/// but `get_view`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Busy {
+    Settings,
+    Trash,
+    FolderDialog,
+    Rename,
+}
+
+impl Busy {
+    fn refusal(self) -> &'static str {
+        match self {
+            Busy::Settings => "Handpic's settings are open; try again once the user closes them",
+            Busy::Trash => {
+                "a Move to Trash or Delete Permanently is under way in Handpic; try again once it ends"
+            }
+            Busy::FolderDialog => {
+                "a folder operation's dialog is open in Handpic; try again once the user closes it"
+            }
+            Busy::Rename => {
+                "a folder name is being edited in Handpic; try again once the user is done"
+            }
+        }
+    }
+}
+
+/// What a keymap action and its tool both run, through the view's `perform`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Key {
+    Previous,
+    Next,
+    First,
+    Last,
+    BurstPrevious,
+    BurstNext,
+    BurstFramePrevious,
+    BurstFrameNext,
+    SelectAll,
+    RejectRest,
+    Undo,
+    Redo,
+}
+
+impl Key {
+    /// The keymap action's; `First` and `Last` are Home and End, which no
+    /// action names.
+    pub fn of_action(action: &str) -> Option<Self> {
+        Some(match action {
+            "previous" => Key::Previous,
+            "next" => Key::Next,
+            "burstPrevious" => Key::BurstPrevious,
+            "burstNext" => Key::BurstNext,
+            "burstFramePrevious" => Key::BurstFramePrevious,
+            "burstFrameNext" => Key::BurstFrameNext,
+            "selectAll" => Key::SelectAll,
+            "rejectRest" => Key::RejectRest,
+            "undo" => Key::Undo,
+            "redo" => Key::Redo,
+            _ => return None,
+        })
+    }
 }
 
 /// What the view does before it answers with the new `get_view`.
@@ -57,6 +136,12 @@ pub struct View<'a> {
 pub enum Action {
     /// Make the file at this index of `files` current.
     Show(usize),
+    /// Make the file at `at` of `files` current and select `paths`, the
+    /// first one the anchor.
+    Select {
+        at: usize,
+        paths: Vec<String>,
+    },
     ToggleZoom,
     /// Record `changes` as one undo entry, as a judgment key does, and reply
     /// with `judged` instead of `get_view`.
@@ -64,6 +149,7 @@ pub enum Action {
         changes: Vec<Change>,
         judged: Value,
     },
+    Key(Key),
 }
 
 /// One file's judgment `set_judgment` changes.
@@ -78,13 +164,104 @@ pub struct Change {
 /// The answer to `kind` over `view`: what the view has to do, if anything,
 /// before it replies with `get_view`, or the refusal's message.
 pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, String> {
+    if kind != "get_view"
+        && let Some(busy) = view.busy
+    {
+        return Err(busy.refusal().into());
+    }
     match kind {
         "get_view" => Ok(None),
         "show_photo" => visible(view, &args["path"]).map(|at| Some(Action::Show(at))),
         "select_photos" => select_photos(view, &args["paths"]).map(Some),
         "set_view" => set_view(view, &args["mode"]),
         "set_judgment" => set_judgment(view, args).map(Some),
+        "navigate" => navigate(view, &args["to"]).map(|key| Some(Action::Key(key))),
+        "select_all" => shown(view).map(|_| Some(Action::Key(Key::SelectAll))),
+        "reject_rest" => reject_rest(view).map(|_| Some(Action::Key(Key::RejectRest))),
+        "undo" => step(view, false).map(|key| Some(Action::Key(key))),
+        "redo" => step(view, true).map(|key| Some(Action::Key(key))),
         _ => Err(format!("unknown request: {kind}")),
+    }
+}
+
+/// The selection's targets, the current file alone when one or none is
+/// selected.
+fn targets(view: &View) -> Vec<String> {
+    let files: Vec<String> = view
+        .files
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    selection::targets(view.selection, &files, view.index)
+}
+
+fn shown(view: &View) -> Result<(), String> {
+    if view.files.is_empty() {
+        return Err(NOTHING_SHOWN.into());
+    }
+    Ok(())
+}
+
+fn navigate(view: &View, to: &Value) -> Result<Key, String> {
+    let key = match to.as_str() {
+        Some("previous") => Key::Previous,
+        Some("next") => Key::Next,
+        Some("first") => Key::First,
+        Some("last") => Key::Last,
+        Some("burst_previous") => Key::BurstPrevious,
+        Some("burst_next") => Key::BurstNext,
+        Some("burst_frame_previous") => Key::BurstFramePrevious,
+        Some("burst_frame_next") => Key::BurstFrameNext,
+        _ => {
+            return Err(
+                "to must be one of previous, next, first, last, burst_previous, \
+                burst_next, burst_frame_previous, burst_frame_next"
+                    .into(),
+            );
+        }
+    };
+    shown(view)?;
+    Ok(key)
+}
+
+/// `rejectRest` is the current file's, which must be in a burst of two or
+/// more.
+fn reject_rest(view: &View) -> Result<(), String> {
+    if view.view_only {
+        return Err(VIEW_ONLY_REFUSAL.into());
+    }
+    let current = view.files.get(view.index).ok_or(NOTHING_SHOWN)?;
+    if view
+        .bursts
+        .get(current.to_string_lossy().as_ref())
+        .is_none_or(|member| member.size < 2)
+    {
+        return Err("the current photo is not part of a burst".into());
+    }
+    Ok(())
+}
+
+/// The view's `step` rules, in its order: a run to the Trash first, then a
+/// view-only folder, then an empty history.
+fn step(view: &View, redo: bool) -> Result<Key, String> {
+    let (verb, top) = if redo {
+        ("redo", view.redo)
+    } else {
+        ("undo", view.undo)
+    };
+    if view.trash_stepping {
+        return Err(
+            "an undo or redo of a move to the Trash is under way in Handpic; try again once it ends"
+                .into(),
+        );
+    }
+    match top {
+        Top::Trash => Err(format!(
+            "the next {verb} is of a move to the Trash, which is not available over MCP yet"
+        )),
+        _ if view.view_only => Err(VIEW_ONLY_REFUSAL.into()),
+        Top::Empty => Err(format!("nothing to {verb}")),
+        Top::Judgments => Ok(if redo { Key::Redo } else { Key::Undo }),
     }
 }
 
@@ -137,18 +314,18 @@ pub fn get_view(view: &View) -> Value {
         }
         (path.to_string_lossy().into_owned(), Value::Object(current))
     });
-    let (selected, current, burst) = match current {
+    let (current, burst) = match current {
         Some((path, current)) => {
             let burst = burst_of(view, &path);
-            (vec![path], current, burst)
+            (current, burst)
         }
-        None => (Vec::new(), Value::Null, Vec::new()),
+        None => (Value::Null, Vec::new()),
     };
     json!({
         "folder": view.folder,
         "count": view.files.len(),
         "current": current,
-        "selected": selected,
+        "selected": targets(view),
         "mode": if view.zoomed { "zoom" } else { "normal" },
         "compare_active": null,
         "burst": burst,
@@ -174,19 +351,19 @@ fn select_photos(view: &View, paths: &Value) -> Result<Action, String> {
     let paths = paths
         .as_array()
         .ok_or("paths must be an array of strings")?;
-    let mut seen = HashSet::new();
     let mut picked = Vec::new();
     for path in paths {
         let at = visible(view, path)?;
-        if seen.insert(at) {
+        if !picked.contains(&at) {
             picked.push(at);
         }
     }
-    match picked[..] {
-        [] => Err("paths must name at least one photo".into()),
-        [at] => Ok(Action::Show(at)),
-        _ => Err(SELECTION_REFUSAL.into()),
-    }
+    let at = *picked.first().ok_or("paths must name at least one photo")?;
+    let paths = picked
+        .iter()
+        .map(|&at| view.files[at].to_string_lossy().into_owned())
+        .collect();
+    Ok(Action::Select { at, paths })
 }
 
 fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
@@ -195,7 +372,7 @@ fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
         .filter(|mode| ["normal", "zoom", "compare"].contains(mode))
         .ok_or("mode must be one of normal, zoom, compare")?;
     if mode != "normal" && view.files.is_empty() {
-        return Err("no photo is shown in Handpic".into());
+        return Err(NOTHING_SHOWN.into());
     }
     if mode == "compare" {
         return Err(COMPARE_REFUSAL.into());
@@ -263,7 +440,8 @@ fn given(args: &Value) -> Result<Given, String> {
 }
 
 /// `companion.ts`'s `setJudgment`: the given fields over each photo's own
-/// state, on the given paths or else the current file. Only the photos it
+/// state, on the given paths or else the selection's targets, as a
+/// judgment key's. Only the photos it
 /// changes go into `changes`, each with its label known as a key's store
 /// has it.
 fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
@@ -272,13 +450,13 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
     }
     let given = given(args)?;
     let paths = match args.get("paths") {
-        None | Some(Value::Null) => vec![
-            view.files
-                .get(view.index)
-                .ok_or("no photo is shown in Handpic")?
-                .to_string_lossy()
-                .into_owned(),
-        ],
+        None | Some(Value::Null) => {
+            let targets = targets(view);
+            if targets.is_empty() {
+                return Err(NOTHING_SHOWN.into());
+            }
+            targets
+        }
         Some(paths) => {
             let paths = paths
                 .as_array()
@@ -327,8 +505,14 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Change, View, answer, get_view};
-    use crate::{burst::BurstMember, filter::Facts, judgment::State};
+    use super::{Action, Busy, Change, Key, View, answer, get_view};
+    use crate::{
+        burst::BurstMember,
+        filter::Facts,
+        history::Top,
+        judgment::State,
+        selection::{Selection, selection_of},
+    };
     use riffle_backend::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
@@ -349,6 +533,7 @@ mod tests {
     static NONE_SEEN: LazyLock<HashSet<String>> = LazyLock::new(HashSet::new);
     static NO_BURSTS: LazyLock<HashMap<String, BurstMember>> = LazyLock::new(HashMap::new);
     static NO_FACTS: LazyLock<HashMap<String, Facts>> = LazyLock::new(HashMap::new);
+    static NO_SELECTION: LazyLock<Selection> = LazyLock::new(Selection::default);
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -364,6 +549,11 @@ mod tests {
             seen: &NONE_SEEN,
             bursts: &NO_BURSTS,
             facts: &NO_FACTS,
+            selection: &NO_SELECTION,
+            busy: None,
+            undo: Top::Empty,
+            redo: Top::Empty,
+            trash_stepping: false,
         }
     }
 
@@ -645,29 +835,250 @@ mod tests {
     }
 
     #[test]
-    fn select_photos_shows_one_path_given_once_or_repeated() {
+    fn select_photos_selects_one_path_given_once_or_repeated() {
         let files = paths(&["/d/a", "/d/b", "/d/c"]);
         for given in [json!(["/d/c"]), json!(["/d/c", "/d/c"])] {
             assert_eq!(
                 ask("select_photos", json!({ "paths": given }), &view(&files)),
-                Ok(Some(Action::Show(2)))
+                Ok(Some(Action::Select {
+                    at: 2,
+                    paths: vec!["/d/c".into()]
+                }))
             );
         }
     }
 
     #[test]
-    fn select_photos_refuses_several_photos_until_the_view_has_a_selection() {
-        let files = paths(&["/d/a", "/d/b"]);
+    fn select_photos_selects_several_photos_the_first_current() {
+        let files = paths(&["/d/a", "/d/b", "/d/c"]);
         assert_eq!(
             ask(
                 "select_photos",
-                json!({ "paths": ["/d/a", "/d/b"] }),
+                json!({ "paths": ["/d/c", "/d/a", "/d/c"] }),
                 &view(&files)
             ),
-            Err(
-                "selecting more than one photo is not supported by Handpic's native app yet".into()
-            )
+            Ok(Some(Action::Select {
+                at: 2,
+                paths: vec!["/d/c".into(), "/d/a".into()]
+            }))
         );
+    }
+
+    #[test]
+    fn reports_the_selections_targets_in_strip_order() {
+        let files = paths(&["/d/a", "/d/b", "/d/c"]);
+        let selection = selection_of(&["/d/c".into(), "/d/a".into()]);
+        let view = View {
+            index: 2,
+            selection: &selection,
+            ..view(&files)
+        };
+        assert_eq!(get_view(&view)["selected"], json!(["/d/a", "/d/c"]));
+    }
+
+    #[test]
+    fn navigate_answers_each_direction_with_its_key() {
+        let files = paths(&["/d/a", "/d/b"]);
+        let view = view(&files);
+        for (to, key) in [
+            ("previous", Key::Previous),
+            ("next", Key::Next),
+            ("first", Key::First),
+            ("last", Key::Last),
+            ("burst_previous", Key::BurstPrevious),
+            ("burst_next", Key::BurstNext),
+            ("burst_frame_previous", Key::BurstFramePrevious),
+            ("burst_frame_next", Key::BurstFrameNext),
+        ] {
+            assert_eq!(
+                ask("navigate", json!({ "to": to }), &view),
+                Ok(Some(Action::Key(key)))
+            );
+        }
+    }
+
+    #[test]
+    fn navigate_refuses_an_unknown_direction_and_an_empty_view() {
+        let files = paths(&["/d/a"]);
+        assert!(
+            ask("navigate", json!({ "to": "up" }), &view(&files))
+                .unwrap_err()
+                .starts_with("to must be one of previous, next")
+        );
+        assert_eq!(
+            ask("navigate", json!({ "to": "next" }), &view(&[])),
+            Err("no photo is shown in Handpic".into())
+        );
+    }
+
+    #[test]
+    fn select_all_selects_unless_nothing_is_shown() {
+        let files = paths(&["/d/a"]);
+        assert_eq!(
+            ask("select_all", json!({}), &view(&files)),
+            Ok(Some(Action::Key(Key::SelectAll)))
+        );
+        assert_eq!(
+            ask("select_all", json!({}), &view(&[])),
+            Err("no photo is shown in Handpic".into())
+        );
+    }
+
+    #[test]
+    fn reject_rest_needs_a_burst_and_a_raw_folder() {
+        let files = paths(&["/d/a", "/d/b", "/d/x"]);
+        let bursts = bursts(&[("/d/a", 0, 0, 2), ("/d/b", 0, 1, 2), ("/d/x", 1, 0, 1)]);
+        let in_burst = View {
+            bursts: &bursts,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("reject_rest", json!({}), &in_burst),
+            Ok(Some(Action::Key(Key::RejectRest)))
+        );
+        let alone = View {
+            index: 2,
+            bursts: &bursts,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("reject_rest", json!({}), &alone),
+            Err("the current photo is not part of a burst".into())
+        );
+        let view_only = View {
+            view_only: true,
+            bursts: &bursts,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("reject_rest", json!({}), &view_only),
+            Err("culling does not apply to a JPEG folder".into())
+        );
+        assert_eq!(
+            ask("reject_rest", json!({}), &view(&[])),
+            Err("no photo is shown in Handpic".into())
+        );
+    }
+
+    #[test]
+    fn undo_and_redo_step_a_judgment_batch() {
+        let view = View {
+            undo: Top::Judgments,
+            redo: Top::Judgments,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("undo", json!({}), &view),
+            Ok(Some(Action::Key(Key::Undo)))
+        );
+        assert_eq!(
+            ask("redo", json!({}), &view),
+            Ok(Some(Action::Key(Key::Redo)))
+        );
+    }
+
+    #[test]
+    fn undo_and_redo_refuse_a_trash_run_an_empty_history_and_a_view_only_folder() {
+        let trash = View {
+            undo: Top::Trash,
+            redo: Top::Trash,
+            ..view(&[])
+        };
+        for verb in ["undo", "redo"] {
+            assert_eq!(
+                ask(verb, json!({}), &trash),
+                Err(format!(
+                    "the next {verb} is of a move to the Trash, which is not available over MCP yet"
+                ))
+            );
+            assert_eq!(
+                ask(verb, json!({}), &view(&[])),
+                Err(format!("nothing to {verb}"))
+            );
+        }
+        let view_only = View {
+            view_only: true,
+            undo: Top::Judgments,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("undo", json!({}), &view_only),
+            Err("culling does not apply to a JPEG folder".into())
+        );
+        let stepping = View {
+            trash_stepping: true,
+            undo: Top::Judgments,
+            ..view(&[])
+        };
+        assert!(
+            ask("undo", json!({}), &stepping)
+                .unwrap_err()
+                .starts_with("an undo or redo of a move to the Trash is under way")
+        );
+    }
+
+    #[test]
+    fn a_busy_view_refuses_every_request_but_get_view() {
+        let files = paths(&["/d/a"]);
+        for (busy, message) in [
+            (
+                Busy::Settings,
+                "Handpic's settings are open; try again once the user closes them",
+            ),
+            (
+                Busy::Trash,
+                "a Move to Trash or Delete Permanently is under way in Handpic; try again once it ends",
+            ),
+            (
+                Busy::FolderDialog,
+                "a folder operation's dialog is open in Handpic; try again once the user closes it",
+            ),
+            (
+                Busy::Rename,
+                "a folder name is being edited in Handpic; try again once the user is done",
+            ),
+        ] {
+            let view = View {
+                busy: Some(busy),
+                undo: Top::Judgments,
+                ..view(&files)
+            };
+            assert_eq!(ask("get_view", json!({}), &view), Ok(None));
+            for (kind, args) in [
+                ("show_photo", json!({ "path": "/d/a" })),
+                ("select_photos", json!({ "paths": ["/d/a"] })),
+                ("set_view", json!({ "mode": "zoom" })),
+                ("set_judgment", json!({ "rating": 1 })),
+                ("navigate", json!({ "to": "next" })),
+                ("select_all", json!({})),
+                ("reject_rest", json!({})),
+                ("undo", json!({})),
+                ("redo", json!({})),
+            ] {
+                assert_eq!(ask(kind, args, &view), Err(message.into()), "{kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn key_of_action_names_the_keymap_actions_a_tool_shares() {
+        for (action, key) in [
+            ("previous", Key::Previous),
+            ("next", Key::Next),
+            ("burstPrevious", Key::BurstPrevious),
+            ("burstNext", Key::BurstNext),
+            ("burstFramePrevious", Key::BurstFramePrevious),
+            ("burstFrameNext", Key::BurstFrameNext),
+            ("selectAll", Key::SelectAll),
+            ("rejectRest", Key::RejectRest),
+            ("undo", Key::Undo),
+            ("redo", Key::Redo),
+        ] {
+            assert_eq!(Key::of_action(action), Some(key));
+        }
+        for action in ["rate1", "zoom", "extendNext", "first"] {
+            assert_eq!(Key::of_action(action), None);
+        }
     }
 
     #[test]
@@ -900,5 +1311,25 @@ mod tests {
                 "culling does not apply to a JPEG folder"
             );
         }
+    }
+
+    #[test]
+    fn set_judgment_without_paths_judges_the_selections_targets() {
+        let files = paths(&["/d/a", "/d/b", "/d/c"]);
+        let selection = selection_of(&["/d/c".into(), "/d/a".into()]);
+        let view = View {
+            index: 2,
+            selection: &selection,
+            ..view(&files)
+        };
+        let (changes, judged) = judge(json!({ "flag": "pick" }), &view).unwrap();
+        assert_eq!(
+            judged,
+            json!([
+                { "path": "/d/a", "rating": null, "flag": "pick", "label": null },
+                { "path": "/d/c", "rating": null, "flag": "pick", "label": null },
+            ])
+        );
+        assert_eq!(changes.len(), 2);
     }
 }

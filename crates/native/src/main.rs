@@ -2935,8 +2935,8 @@ impl Riffle {
             return;
         }
         match (name.as_str(), action) {
-            ("home", _) => self.go(Move::First, cx),
-            ("end", _) => self.go(Move::Last, cx),
+            ("home", _) => self.perform(companion::Key::First, cx),
+            ("end", _) => self.perform(companion::Key::Last, cx),
             ("q", _) => self.quit(cx),
             // Not while a folder flow is under way, as in the Tauri app: the
             // dialog would open over the settings and the run would read a
@@ -2954,12 +2954,6 @@ impl Riffle {
                 self.menus.close();
                 cx.notify();
             }
-            (_, Some("previous")) => self.go(Move::Previous, cx),
-            (_, Some("next")) => self.go(Move::Next, cx),
-            (_, Some("burstPrevious")) => self.move_burst(burst::burst_step, -1, cx),
-            (_, Some("burstNext")) => self.move_burst(burst::burst_step, 1, cx),
-            (_, Some("burstFramePrevious")) => self.move_burst(burst::burst_frame_step, -1, cx),
-            (_, Some("burstFrameNext")) => self.move_burst(burst::burst_frame_step, 1, cx),
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
@@ -2980,15 +2974,35 @@ impl Riffle {
             (_, Some("toggleSides")) => self.change_panels(self.panels.toggle_sides(), cx),
             (_, Some("extendPrevious")) => self.extend(-1, cx),
             (_, Some("extendNext")) => self.extend(1, cx),
-            (_, Some("selectAll")) => self.select_all(cx),
-            (_, Some("undo")) => self.step(false, cx),
-            (_, Some("redo")) => self.step(true, cx),
-            (_, Some("rejectRest")) => self.reject_rest(cx),
-            (_, Some(action)) => match Command::from_action(action) {
-                Some(cmd) => self.judge(cmd, cx),
-                None => log::debug!("key: {action} is not handled yet"),
-            },
+            (_, Some(action)) => {
+                if let Some(key) = companion::Key::of_action(action) {
+                    self.perform(key, cx);
+                } else if let Some(cmd) = Command::from_action(action) {
+                    self.judge(cmd, cx);
+                } else {
+                    log::debug!("key: {action} is not handled yet");
+                }
+            }
             (_, None) => {}
+        }
+    }
+
+    /// What a key and its MCP tool both run, so the two cannot differ.
+    fn perform(&mut self, key: companion::Key, cx: &mut Context<Self>) {
+        use companion::Key;
+        match key {
+            Key::Previous => self.go(Move::Previous, cx),
+            Key::Next => self.go(Move::Next, cx),
+            Key::First => self.go(Move::First, cx),
+            Key::Last => self.go(Move::Last, cx),
+            Key::BurstPrevious => self.move_burst(burst::burst_step, -1, cx),
+            Key::BurstNext => self.move_burst(burst::burst_step, 1, cx),
+            Key::BurstFramePrevious => self.move_burst(burst::burst_frame_step, -1, cx),
+            Key::BurstFrameNext => self.move_burst(burst::burst_frame_step, 1, cx),
+            Key::SelectAll => self.select_all(cx),
+            Key::RejectRest => self.reject_rest(cx),
+            Key::Undo => self.step(false, cx),
+            Key::Redo => self.step(true, cx),
         }
     }
 
@@ -4528,8 +4542,20 @@ impl Riffle {
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
     fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
-        fn view(this: &Riffle) -> companion::View<'_> {
+        fn view<'a>(this: &'a Riffle, cx: &App) -> companion::View<'a> {
             let current = this.current_path();
+            // The states in which `key_down` drops a key.
+            let busy = if this.settings_view.read(cx).is_open() {
+                Some(companion::Busy::Settings)
+            } else if this.trash.busy() {
+                Some(companion::Busy::Trash)
+            } else if this.folderops.dialog_open() {
+                Some(companion::Busy::FolderDialog)
+            } else if this.folderops.editing() {
+                Some(companion::Busy::Rename)
+            } else {
+                None
+            };
             companion::View {
                 folder: this.dir.as_deref(),
                 files: &this.files,
@@ -4543,9 +4569,14 @@ impl Riffle {
                 seen: &this.seen,
                 bursts: &this.bursts,
                 facts: &this.facts,
+                selection: &this.selection,
+                busy,
+                undo: this.undo.top(false),
+                redo: this.undo.top(true),
+                trash_stepping: this.trash_step.is_some(),
             }
         }
-        let action = companion::answer(request.kind, &request.args, &view(self));
+        let action = companion::answer(request.kind, &request.args, &view(self, cx));
         let reply = match action {
             Ok(Some(companion::Action::Judge { changes, judged })) => {
                 self.judge_paths(changes, cx);
@@ -4557,10 +4588,15 @@ impl Riffle {
                         self.focus_on(Move::To(at), cx);
                         self.select_current();
                     }
+                    Some(companion::Action::Select { at, paths }) => {
+                        self.focus_on(Move::To(at), cx);
+                        self.set_selection(selection::selection_of(&paths));
+                    }
                     Some(companion::Action::ToggleZoom) => self.toggle_zoom(cx),
+                    Some(companion::Action::Key(key)) => self.perform(key, cx),
                     _ => {}
                 }
-                Ok(companion::get_view(&view(self)))
+                Ok(companion::get_view(&view(self, cx)))
             }
             Err(e) => Err(e),
         };

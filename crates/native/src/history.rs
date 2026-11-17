@@ -174,6 +174,15 @@ pub fn step(
     })
 }
 
+/// The kind of entry an undo or a redo would step next.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Top {
+    #[default]
+    Empty,
+    Judgments,
+    Trash,
+}
+
 /// The undo and redo histories: the open folder's judgments and the runs to
 /// the Trash, which outlive a folder switch.
 pub struct Undo {
@@ -236,6 +245,16 @@ impl Undo {
         match history.peek() {
             Some(Entry::Trash(entry)) => Some(entry.clone()),
             _ => None,
+        }
+    }
+
+    /// What is on top of the redo history (`redo`) or the undo one.
+    pub fn top(&self, redo: bool) -> Top {
+        let history = if redo { &self.redo } else { &self.undo };
+        match history.peek() {
+            None => Top::Empty,
+            Some(Entry::Judgments(_)) => Top::Judgments,
+            Some(Entry::Trash(_)) => Top::Trash,
         }
     }
 
@@ -339,7 +358,7 @@ fn is_empty_batch(entry: &Entry) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Batch, Change, Entry, History, Judged, TrashEntry, Undo, step, undone_trash};
+    use super::{Batch, Change, Entry, History, Judged, Top, TrashEntry, Undo, step, undone_trash};
     use crate::judgment::State;
     use crate::trash::What;
     use riffle_backend::trash::{Failure, Restored};
@@ -778,5 +797,17 @@ mod tests {
         undo.remove_trash(top.id);
         let left = undo.undo(|_| true, |_| State::default()).unwrap();
         assert_eq!(left.changes[0].path, "/a/1.ARW");
+    }
+
+    #[test]
+    fn top_names_the_entry_each_history_steps_next() {
+        let mut undo = Undo::new();
+        assert_eq!((undo.top(false), undo.top(true)), (Top::Empty, Top::Empty));
+        undo.record(vec![judged("/a/1.ARW", stars(1))]);
+        assert_eq!(undo.top(false), Top::Judgments);
+        undo.record_trash(1, 2, What::Files, vec!["/a".to_owned()]);
+        assert_eq!(undo.top(false), Top::Trash);
+        undo.redo.push(Entry::Trash(run()));
+        assert_eq!(undo.top(true), Top::Trash);
     }
 }

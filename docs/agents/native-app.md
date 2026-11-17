@@ -791,7 +791,7 @@ process exits with the scan running, as before.
 
 With `mcpEnabled` true in the settings store, `mcp.rs` builds a tokio
 current-thread runtime on one named `mcp` thread, which runs the backend's
-`Mcp::switch(true)` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
+`Mcp::switch(true)` on an `Mcp` built `with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
 quit handler's signal and runs `Mcp::stop` (logged as `quit: MCP server
 stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). With it off or missing there
 is no runtime, no thread and no server. A bind failure is logged with the
@@ -799,8 +799,35 @@ is no runtime, no thread and no server. A bind failure is logged with the
 only puts the request into the view's channel as `scan::Event::Mcp`; the
 view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
 returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
-with the file selected alone,
-`toggle_zoom`, or `judge_paths`) and replies through `Mcp::reply`.
+with the file selected alone for `show_photo` or with
+`selection::selection_of` over the given paths for `select_photos`,
+`toggle_zoom`, `judge_paths`, or `perform` with a `companion::Key`) and
+replies through `Mcp::reply`.
+
+The tool list is the host's. `Mcp::new` lists the seven companion tools with
+the Tauri `INSTRUCTIONS`, which is what the Tauri app keeps (`crates/app` is
+not touched); `Mcp::with_all_tools` adds the `native_router` tools
+(`navigate`, `select_all`, `reject_rest`, `undo`, `redo`) and the native
+instructions, through a `ToolRouter` field the `#[tool_handler(router =
+self.tools)]` handler reads. A tool only the native app answers is a second
+`#[tool_router(router = native_router)]` block, so the Tauri server never
+lists it.
+
+The native tools run what their keys run: `key_down` and `mcp_request` both
+call `perform` with a `companion::Key` (`Key::of_action` names the keymap
+actions; Home and End are `First` and `Last`), so a key and its tool cannot
+drift. `navigate` and `select_all` need a shown photo, `reject_rest` a current
+photo in a burst of two or more outside a view-only folder, and `undo` /
+`redo` a judgment batch on top of their history (`history::Top`); a trash run
+on top, or an undo or redo of one in flight, is refused, since its restore is
+not exposed yet. Each replies with the new `get_view`.
+
+Every request but `get_view` is refused while `key_down` drops keys
+(`companion::Busy`): the settings modal open, a Move to Trash or Delete
+Permanently flow under way (`trash.busy()`), a folder operation's dialog open,
+or an inline rename live (`FolderOps::editing`, not `rename_owns_keys`, which
+also disarms the slow click). `get_view` still answers, so `get_photo` and
+`get_preview`, which resolve their path through it, keep working.
 `get_photo` and `get_preview` never reach the view: the backend reads them on
 tokio's blocking pool against the index's read-only connection, outside
 `ReadSlots`, as in the Tauri app.
@@ -818,9 +845,10 @@ color names are what `judgment::State.label` holds, so no mapping is needed.
 A `curl` check on test copies found the stars, the pick and the label in each
 `.xmp` and the `ratings` row after `--auto` quit.
 
-Not supported yet, each refused with a message naming the native app: compare
-and a `select_photos` with several paths. `selected` is the current file
-alone, and `current.eyes` is present only once the `f` overlay has judged the
+Not supported yet, refused with a message naming the native app: compare.
+`selected` is the selection's targets in strip order (`selection::targets`:
+the current file alone when one or none is selected), which a `set_judgment`
+without `paths` judges, as a judgment key does, and `current.eyes` is present only once the `f` overlay has judged the
 file. `burst` is the Tauri `burstOf` over the view's `bursts` (empty for a
 burst of one, else every member in position order, a hidden one with
 `visible: false`); each frame's `sharpness` is `Facts.sharpness`, set from the

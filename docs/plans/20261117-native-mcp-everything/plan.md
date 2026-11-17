@@ -103,7 +103,7 @@ Made with the user on 2026-11-17.
 
 ## Steps
 
-- [ ] Step 1: Toolset plumbing, the real selection, navigation and judgment undo
+- [x] Step 1: Toolset plumbing, the real selection, navigation and judgment undo
   - Done when:
     - `select_photos` with several paths sets the view's selection (the first
       path current), `get_view.selected` reports the selection's targets, and
