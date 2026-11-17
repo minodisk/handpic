@@ -41,6 +41,7 @@ use riffle_backend::{
     trash::Summary as TrashSummary,
 };
 
+use crate::companion::{FolderOp, Op};
 use crate::datefolder::{self, DateFolderFlow};
 use crate::dialog::{self, Button, Content, Dialog, Row, Style};
 use crate::import::{self, ImportFlow};
@@ -68,6 +69,7 @@ pub struct FolderOps {
     sequence_cancel: Option<Arc<AtomicBool>>,
     sequence_quit: Option<Subscription>,
     sequencing: Option<String>,
+    sequence_progress: Option<(usize, usize)>,
     import: ImportFlow,
     /// The plan the import dialog shows, which its run copies.
     import_plan: Option<ImportPlan>,
@@ -129,6 +131,37 @@ impl FolderOps {
     /// The pane's note of a sequencing run under way.
     pub fn note(&self) -> Option<String> {
         self.sequencing.clone()
+    }
+
+    /// The folder dialog shown.
+    pub fn dialog(&self) -> Option<&Dialog> {
+        self.dialog.as_ref()
+    }
+
+    /// The sidecar flow's folder and operation, while one is under way.
+    pub fn sidecar_target(&self) -> Option<&Target> {
+        self.sidecars.target()
+    }
+
+    /// The sidecar or sequencing flow under way: its name, and whether its
+    /// preview is still being read.
+    pub fn flow(&self) -> Option<(&'static str, bool)> {
+        if let Some(target) = self.sidecars.target() {
+            return Some((target.kind.label(), !self.sidecars.is_open()));
+        }
+        self.sequence
+            .busy()
+            .then(|| (sequence::LABEL, !self.sequence.is_open()))
+    }
+
+    /// A sequencing run is under way, which its Cancel stops.
+    pub fn sequence_running(&self) -> bool {
+        self.sequence_cancel.is_some()
+    }
+
+    /// How far the sequencing run got, `(done, total)`.
+    pub fn sequence_progress(&self) -> Option<(usize, usize)> {
+        self.sequence_progress
     }
 
     /// The pane's import line: the run's note, else its result. It is drawn
@@ -194,6 +227,7 @@ impl Riffle {
         path: String,
         cx: &mut Context<Self>,
     ) {
+        self.mcp_folder = None;
         let kind = match action {
             context::Action::RewriteSidecars => Kind::Rewrite,
             context::Action::DeleteSidecars => Kind::Delete,
@@ -304,18 +338,80 @@ impl Riffle {
                         Style::Destructive,
                     ),
                 };
-                self.menus.close();
-                self.context = None;
-                self.folderops.dialog = Some(Dialog::new(content, run, style, true));
-                self.follow_folder_dialog(cx);
+                let dialog = Dialog::new(content, run, style, true);
+                let op = self
+                    .folderops
+                    .sidecars
+                    .target()
+                    .cloned()
+                    .map(FolderOp::Sidecars);
+                if op.is_some() && self.mcp_folder == op {
+                    self.folderops.sidecars.end();
+                    self.mcp_previewed(op, dialog);
+                } else {
+                    self.show_folder_dialog(dialog, cx);
+                }
             }
             Ok(_) => {}
             Err(e) => {
+                if let Some(target) = self.folderops.sidecars.target() {
+                    self.record_failed(target.kind.label(), e.clone());
+                }
                 self.folderops.sidecars.end();
                 self.step_note = Some(e);
             }
         }
         cx.notify();
+    }
+
+    /// Open the folder dialog on `dialog`, the menus closed.
+    fn show_folder_dialog(&mut self, dialog: Dialog, cx: &mut Context<Self>) {
+        self.menus.close();
+        self.context = None;
+        self.folderops.dialog = Some(dialog);
+        self.follow_folder_dialog(cx);
+    }
+
+    /// The preview of the folder operation an MCP client started came back:
+    /// its dialog's content becomes the `Pending` a confirming call runs.
+    fn mcp_previewed(&mut self, op: Option<FolderOp>, dialog: Dialog) {
+        self.mcp_folder = None;
+        if let Some(op) = op {
+            log::info!("{}: {} previewed over MCP", op.label(), op.dir());
+            self.keep_pending(Op::Folder(op, Some(dialog)));
+        }
+    }
+
+    /// Run the folder operation an MCP client confirmed, as its dialog's run
+    /// button does, with no dialog: the flow taken to its previewed state,
+    /// then run with its own rules (a sidecar run refused with the scan
+    /// message while a listing or scan is under way).
+    pub(crate) fn run_confirmed(
+        &mut self,
+        op: FolderOp,
+        cx: &mut Context<Self>,
+    ) -> Result<(), String> {
+        log::info!("{}: {} confirmed over MCP", op.label(), op.dir());
+        match op {
+            FolderOp::Sidecars(target) => {
+                if !self.folderops.sidecars.start(target) {
+                    return Err("another folder operation is under way in Handpic".to_owned());
+                }
+                self.folderops.sidecars.previewed();
+                self.run_sidecars(cx);
+                if !self.folderops.sidecars.busy() {
+                    return Err(SCAN_RUNNING.to_owned());
+                }
+            }
+            FolderOp::Sequence(dir) => {
+                if !self.folderops.sequence.start(dir) {
+                    return Err("another folder operation is under way in Handpic".to_owned());
+                }
+                self.folderops.sequence.previewed();
+                self.run_sequence(cx);
+            }
+        }
+        Ok(())
     }
 
     /// The run button: refused with the scan message if a listing or scan
@@ -330,12 +426,14 @@ impl Riffle {
             self.folderops.dialog = None;
             self.follow_folder_dialog(cx);
             self.step_note = Some(SCAN_RUNNING.to_owned());
+            self.record_failed(kind.label(), SCAN_RUNNING.to_owned());
             cx.notify();
             return;
         }
         if let Some(dialog) = &mut self.folderops.dialog {
             dialog.set_running();
         }
+        self.running_op = Some(kind.label());
         self.gate.enter_in_flight();
         if self.dir.is_some() {
             self.resync.hold();
@@ -414,6 +512,7 @@ impl Riffle {
             Ran::Rewrote(result) => result,
         };
         self.gate.leave_in_flight();
+        let ok = result.is_ok();
         self.step_note = Some(match result {
             Ok(summary) => {
                 log::info!("sidecars: rewrote {dir}: {summary:?}");
@@ -424,6 +523,9 @@ impl Riffle {
                 e
             }
         });
+        if let Some(name) = self.running_op.take() {
+            self.record_op(name, ok);
+        }
         if let Some(folder) = self.deferred_open.take() {
             self.open(folder, None, None, cx).detach();
         } else if self.resync.finished() {
@@ -493,7 +595,7 @@ impl Riffle {
                 ];
                 lines.extend(sequence::rebuild_notice(&preview).map(str::to_owned));
                 let content = Content {
-                    title: "Sequence JPEG Timestamps".to_owned(),
+                    title: sequence::LABEL.to_owned(),
                     lines,
                     rows: preview
                         .rows
@@ -515,19 +617,19 @@ impl Riffle {
                     running_note: sequence::RUNNING_NOTE.to_owned(),
                     ..Content::default()
                 };
-                self.menus.close();
-                self.context = None;
-                self.folderops.dialog = Some(Dialog::new(
-                    content,
-                    "Run",
-                    Style::Primary,
-                    !preview.rows.is_empty(),
-                ));
-                self.follow_folder_dialog(cx);
+                let dialog = Dialog::new(content, "Run", Style::Primary, !preview.rows.is_empty());
+                let op = Some(FolderOp::Sequence(dir));
+                if self.mcp_folder == op {
+                    self.folderops.sequence.fail();
+                    self.mcp_previewed(op, dialog);
+                } else {
+                    self.show_folder_dialog(dialog, cx);
+                }
             }
             Ok(_) => {}
             Err(e) => {
                 self.folderops.sequence.fail();
+                self.record_failed(sequence::LABEL, e.clone());
                 self.write_failed(dir, e);
             }
         }
@@ -546,6 +648,11 @@ impl Riffle {
             dialog.set_running_cancelable();
         }
         self.folderops.sequencing = Some(sequence::progress_status(0, 0));
+        self.folderops.sequence_progress = Some((0, 0));
+        // A trash run an MCP client confirmed keeps its own label.
+        if self.running_op.is_none() {
+            self.running_op = Some(sequence::LABEL);
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         self.folderops.sequence_cancel = Some(cancel.clone());
         self.folderops.sequence_quit = Some({
@@ -605,12 +712,23 @@ impl Riffle {
         self.folderops.dialog = None;
         self.follow_folder_dialog(cx);
         self.folderops.sequencing = None;
+        self.folderops.sequence_progress = None;
         self.folderops.sequence_cancel = None;
         self.folderops.sequence_quit = None;
         for failure in &ran.failed {
             self.write_failed(failure.path.clone(), failure.message.clone());
         }
         self.step_note = sequence::done_status(&ran);
+        // The slot may name a trash run that overlapped; that run's end owns it.
+        if self.running_op == Some(sequence::LABEL) {
+            self.running_op = None;
+        }
+        match sequence::folder_error(&ran) {
+            Some(failure) => {
+                self.record_failed(sequence::LABEL, sequence::failure_text(failure));
+            }
+            None => self.record_op(sequence::LABEL, true),
+        }
         if let Some(out) = sequence::reveal_after(&ran) {
             cx.reveal_path(Path::new(out));
         }
@@ -1203,6 +1321,7 @@ impl Riffle {
             Message::SequenceProgress { run, done, total } => {
                 if self.folderops.sequence.accepts(run) {
                     self.folderops.sequencing = Some(sequence::progress_status(done, total));
+                    self.folderops.sequence_progress = Some((done, total));
                     cx.notify();
                 }
             }
@@ -1216,7 +1335,7 @@ impl Riffle {
     }
 
     /// The dialog's Cancel, or Escape when `key`.
-    fn dismiss_folder_dialog(&mut self, key: bool, cx: &mut Context<Self>) {
+    pub(crate) fn dismiss_folder_dialog(&mut self, key: bool, cx: &mut Context<Self>) {
         if self.folderops.import.is_open() {
             match self.folderops.import.dismiss(key) {
                 import::Dismiss::Close => {
@@ -1732,7 +1851,7 @@ impl Riffle {
         busy: bool,
     ) -> Option<HeldOp> {
         if let Some(old) = self.gate.discard() {
-            if let Some(name) = Self::trash_label(&old) {
+            if let Some(name) = Self::held_name(&old) {
                 self.record_dropped(name, "a later request replaced it");
             }
             let by = match &op {

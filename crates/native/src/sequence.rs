@@ -5,6 +5,9 @@
 
 use riffle_backend::sequence::{Failure, Preview, Ran, Row};
 
+/// The operation's name, the dialog's title.
+pub const LABEL: &str = "Sequence JPEG Timestamps";
+
 pub const RUNNING_NOTE: &str = "Cancel stops before the next file; the files written so far stay in the output folder, and the next run rebuilds it.";
 
 fn base_name(path: &str) -> &str {
