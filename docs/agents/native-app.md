@@ -2482,9 +2482,10 @@ they overflow.
   `Strip::max_offset`; `viewport_bounds` is not read. That `div` is the
   cells' height plus `stripheight::GUTTER` (9 px, `SCROLLBAR_TRACK` less the
   7 px `STRIP_PADDING`) high, so the bar's track, its last 16 px, starts at
-  the cells' bottom edge: no cell, name band or burst band lies under it,
-  and the hovered thumb's top meets the burst band's bottom (3 + 9 = 12 px
-  above the pane's bottom). The canvas and the tooltip regions are placed
+  the cells' bottom edge: no cell or name band lies under it, and the burst
+  band's bottom 4 px reach into the track's top but stay clear of the thumb,
+  at rest, hovered or dragged (the hovered thumb's top meets the band's
+  bottom, 3 + 9 = 12 px above the pane's bottom). The canvas and the tooltip regions are placed
   from the `div`'s top, so the gutter is an empty band under the cells.
 - Rule: a drag or a track click reaches the strip only through the handle.
   The bar writes the offset (`set_offset`, kept as a positive request) and
