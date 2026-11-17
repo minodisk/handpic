@@ -288,6 +288,10 @@ jobs:
           deb="$PWD/crates/native/target/release/handpic_${VERSION}_amd64.deb"
           dpkg-deb --info "$deb"
           dpkg-deb --contents "$deb"
+          depends="$(dpkg-deb --field "$deb" Depends)"
+          for package in libc6 libvulkan1 libwayland-client0; do
+            grep -qE "(^|, )$package( |,|$)" <<<"$depends"
+          done
           sudo apt-get install -y "$deb"
           dpkg -s handpic
           test -x /usr/lib/handpic/riffle-native

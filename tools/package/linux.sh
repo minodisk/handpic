@@ -65,10 +65,14 @@ mkdir -p "${shlibs}/debian"
 printf 'Source: handpic\n\nPackage: handpic\nArchitecture: amd64\n' >"${shlibs}/debian/control"
 depends="$(cd "${shlibs}" && dpkg-shlibdeps -O "-e${debroot}/usr/lib/handpic/${binary}")"
 depends="${depends#shlibs:Depends=}"
-# GPUI opens libvulkan.so.1 at run time, so it is not among the binary's NEEDED.
-if [[ ! "${depends}" =~ (^|, )libvulkan1([ ,]|$) ]]; then
-	depends="${depends}, libvulkan1"
-fi
+# GPUI opens these at run time, so they are not among the binary's NEEDED:
+# wgpu's Vulkan loader (libvulkan.so.1) and the Wayland client library
+# (wayland-backend's dlopen). wgpu's GL fallback (libEGL) is left out.
+for package in libvulkan1 libwayland-client0; do
+	if [[ ! "${depends}" =~ (^|, )${package}([ ,]|$) ]]; then
+		depends="${depends}, ${package}"
+	fi
+done
 
 installed_size="$(du -sk "${debroot}/usr" | cut -f1)"
 mkdir -p "${debroot}/DEBIAN"
