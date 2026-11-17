@@ -70,6 +70,9 @@ const ALLOW_DESTRUCTIVE_REFUSAL: &str = "mcp_allow_destructive is the user's to 
 /// run reads the format and the import settings.
 const FOLDER_OP_REFUSAL: &str =
     "a folder operation is under way in Handpic; try again once it ends";
+/// A client's confirmed run or undo would replace the user's held one.
+const HELD_REFUSAL: &str =
+    "an operation is held in Handpic for the scan's end; try again once it has run";
 const NO_FOLDER: &str = "no folder is open in Handpic";
 /// A run to the Trash, a delete or a redo out, with no dialog to refuse by.
 const TRASH_RUNNING: &str =
@@ -146,6 +149,9 @@ pub struct View<'a> {
     pub folder_op: bool,
     /// A run to the Trash, a delete or a redo of a run is out.
     pub trashing: bool,
+    /// The idle gate holds a confirmed operation for the scan's end, which a
+    /// later request would replace.
+    pub held: bool,
     /// The destructive operation a preview returned the id of.
     pub pending: Option<&'a Pending>,
 }
@@ -585,6 +591,7 @@ fn step(view: &View, redo: bool) -> Result<Action, String> {
     let key = if redo { Key::Redo } else { Key::Undo };
     match top {
         Top::Trash if redo && !view.settings.mcp_allow_destructive => Err(REDO_TRASH_OFF.into()),
+        Top::Trash if view.held => Err(HELD_REFUSAL.into()),
         Top::Trash => Ok(Action::StepTrash(key)),
         _ if view.view_only => Err(VIEW_ONLY_REFUSAL.into()),
         Top::Empty => Err(format!("nothing to {verb}")),
@@ -643,6 +650,9 @@ fn trash_photos(view: &View, args: &Value) -> Result<Action, String> {
     }
     if view.folder_op {
         return Err(FOLDER_OP_REFUSAL.into());
+    }
+    if confirm && view.held {
+        return Err(HELD_REFUSAL.into());
     }
     let folder = view.folder.ok_or(NO_FOLDER)?;
     if !confirm {
@@ -1703,6 +1713,7 @@ mod tests {
             settings: &DEFAULT_SETTINGS,
             folder_op: false,
             trashing: false,
+            held: false,
             pending: None,
         }
     }
@@ -3104,6 +3115,31 @@ mod tests {
             ask("trash_photos", json!({}), &folder_op),
             Err("a folder operation is under way in Handpic; try again once it ends".into())
         );
+    }
+
+    #[test]
+    fn a_held_operation_is_not_replaced_by_a_confirmed_run_or_a_trash_step() {
+        let files = paths(&["/d/a"]);
+        let held = View {
+            held: true,
+            ..view(&files)
+        };
+        let refusal = Err(super::HELD_REFUSAL.to_owned());
+        assert_eq!(
+            ask("trash_photos", json!({"confirm": true, "id": 1}), &held),
+            refusal
+        );
+        // A preview or a dialog replaces nothing.
+        assert!(ask("trash_photos", json!({}), &held).is_ok());
+        let trash_top = View {
+            held: true,
+            undo: Top::Trash,
+            redo: Top::Trash,
+            settings: &ALLOW_DESTRUCTIVE,
+            ..view(&files)
+        };
+        assert_eq!(ask("undo", json!({}), &trash_top), refusal);
+        assert_eq!(ask("redo", json!({}), &trash_top), refusal);
     }
 
     #[test]

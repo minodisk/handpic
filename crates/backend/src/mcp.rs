@@ -813,7 +813,6 @@ fn settings(args: SettingsArgs) -> Reply {
     )
 }
 
-/// How long `wait_for_idle` waits for `timeout_ms`.
 /// `trash_photos`' request: the fields given.
 fn trash(args: TrashArgs) -> Value {
     let mut request = serde_json::Map::new();
@@ -832,6 +831,7 @@ fn trash(args: TrashArgs) -> Value {
     Value::Object(request)
 }
 
+/// How long `wait_for_idle` waits for `timeout_ms`.
 fn idle_wait(timeout_ms: Option<u64>) -> Duration {
     timeout_ms
         .map_or(IDLE_WAIT, Duration::from_millis)

@@ -1732,6 +1732,9 @@ impl Riffle {
         busy: bool,
     ) -> Option<HeldOp> {
         if let Some(old) = self.gate.discard() {
+            if let Some(name) = Self::trash_label(&old) {
+                self.record_dropped(name, "a later request replaced it");
+            }
             let by = match &op {
                 HeldOp::Rename(held) => Some(held.path.as_str()),
                 _ => None,

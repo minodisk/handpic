@@ -996,9 +996,13 @@ impl Riffle {
         }
         let dropped = self.gate.discard().and_then(|held| {
             log::info!("trash: {} dropped by an open", held_label(&held));
+            if let Some(name) = Self::trash_label(&held) {
+                self.record_dropped(name, "another folder was opened");
+            }
             self.held_dropped(held, None)
         });
         self.opens.fetch_add(1, Ordering::SeqCst);
+        self.mcp_pending = None;
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
         self.reveal(shown.to_string_lossy().into_owned(), cx);
@@ -1730,6 +1734,27 @@ impl Riffle {
         });
     }
 
+    /// The label of a held run, undo or redo, else none.
+    fn trash_label(op: &HeldOp) -> Option<&'static str> {
+        match op {
+            HeldOp::Run(target) => Some(target.mode.label()),
+            HeldOp::Undo(entry) => Some(entry.what.step_labels().0),
+            HeldOp::Redo(entry) => Some(entry.what.step_labels().1),
+            HeldOp::Sidecars(_) | HeldOp::Rename(_) => None,
+        }
+    }
+
+    /// A held run, undo or redo was dropped before it ran, for `why`:
+    /// `get_status` reports it failed instead of the operation before it.
+    fn record_dropped(&mut self, name: &'static str, why: &str) {
+        self.last_op = Some(companion::Operation {
+            name,
+            state: companion::OpState::Failed,
+            progress: None,
+            message: Some(format!("dropped: {why}")),
+        });
+    }
+
     /// An undo or a redo with the run `entry` on top: through the gate,
     /// waiting for a listing or scan under way without canceling it.
     fn step_trash(&mut self, entry: TrashEntry, redo: bool, cx: &mut Context<Self>) {
@@ -2329,19 +2354,26 @@ impl Riffle {
             Some(HeldOp::Run(target)) if !self.trash.busy() => {
                 return self.run_trash(target, false, cx);
             }
-            Some(HeldOp::Run(target)) => log::info!(
-                "trash: held run in {} dropped by an open dialog",
-                target.dir
-            ),
+            Some(held @ HeldOp::Run(_)) => {
+                log::info!("trash: {} dropped by an open dialog", held_label(&held));
+                self.record_dropped(
+                    Self::trash_label(&held).unwrap_or_default(),
+                    "a dialog was open when the scan ended",
+                );
+            }
             Some(HeldOp::Undo(entry)) => {
+                let name = entry.what.step_labels().0;
                 if self.undo_trash(entry, cx) {
                     return;
                 }
+                self.record_dropped(name, "the run was no longer on top of the history");
             }
             Some(HeldOp::Redo(entry)) => {
+                let name = entry.what.step_labels().1;
                 if self.redo_trash(entry, cx) {
                     return;
                 }
+                self.record_dropped(name, "the run was no longer on top of the history");
             }
             Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
             Some(HeldOp::Rename(held)) => {
@@ -2409,6 +2441,10 @@ impl Riffle {
             Change::McpAllowDestructive(on) => {
                 log::info!("mcp: allow destructive operations={on}");
                 self.settings.mcp_allow_destructive = on;
+                if !on {
+                    // A preview made under the grant is not confirmable under a later one.
+                    self.mcp_pending = None;
+                }
                 self.settings.writes.set("mcpAllowDestructive", on.into());
             }
             Change::ClearCache | Change::Closed => {}
@@ -5059,6 +5095,7 @@ impl Riffle {
                 settings: &this.settings,
                 folder_op: this.folderops.busy(),
                 trashing: this.trashing.is_some(),
+                held: this.gate.waiting().is_some(),
                 pending: this.mcp_pending.as_ref(),
             }
         }
