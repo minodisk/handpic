@@ -1432,7 +1432,7 @@ impl Riffle {
     ) {
         match target {
             context::Target::Folder { path, .. } if action == context::Action::RenameFolder => {
-                self.start_rename(path, window, cx);
+                self.start_rename(path, None, window, cx);
             }
             context::Target::Folder { path, name } => {
                 self.folder_action(action, path, name, cx);
@@ -1749,7 +1749,7 @@ impl Riffle {
             HeldOp::Undo(entry) => Some(entry.what.step_labels().0),
             HeldOp::Redo(entry) => Some(entry.what.step_labels().1),
             HeldOp::Sidecars(target) => Some(target.kind.label()),
-            HeldOp::Rename(_) => None,
+            HeldOp::Rename(_) => Some(rename::LABEL),
         }
     }
 
@@ -1757,6 +1757,18 @@ impl Riffle {
     /// reports it failed instead of the operation before it.
     fn record_dropped(&mut self, name: &'static str, why: &str) {
         self.record_failed(name, format!("dropped: {why}"));
+    }
+
+    /// `name` came back done, for `message`, which `get_status` reports
+    /// until another ends.
+    fn record_finished(&mut self, name: &'static str, message: String) {
+        self.last_op = Some(companion::Operation {
+            name,
+            state: companion::OpState::Finished,
+            progress: None,
+            message: Some(message),
+            dialog: None,
+        });
     }
 
     /// `name` ended without running, for `message`, which `get_status`
@@ -2459,10 +2471,17 @@ impl Riffle {
                 self.settings.keymap = keymap.clone();
             }
             Change::ImportRoot(ref root) => {
+                // An import preview planned into the destination before.
+                if *root != self.settings.import_root {
+                    self.drop_import_pending();
+                }
                 self.settings.writes.set("importRoot", root.as_str().into());
                 self.settings.import_root = root.clone();
             }
             Change::ImportPattern(ref pattern) => {
+                if *pattern != self.settings.import_pattern {
+                    self.drop_import_pending();
+                }
                 self.settings
                     .writes
                     .set("importPattern", pattern.as_str().into());
@@ -4710,6 +4729,17 @@ impl Riffle {
                 dialog: Some(companion::dialog_content(dialog)),
             });
         }
+        if self.folderops.editing() {
+            return Some(Operation {
+                name: rename::LABEL,
+                state: OpState::Awaiting,
+                progress: None,
+                message: Some(
+                    "the folder tree's rename field waits for Enter or Escape".to_owned(),
+                ),
+                dialog: None,
+            });
+        }
         if let Some(name) = self.gate.waiting() {
             return Some(Operation {
                 name,
@@ -4726,17 +4756,28 @@ impl Riffle {
                 progress: self
                     .trashing
                     .map(|(_, done, total)| (done, total))
-                    .or(self.folderops.sequence_progress()),
+                    .or(self.folderops.sequence_progress())
+                    .or(self.folderops.import_progress()),
                 message: None,
                 dialog: None,
             });
         }
-        // A sequencing run the shared slot lost to an overlapping trash run.
+        // A sequencing or import run the shared slot lost to an overlapping
+        // trash run.
         if self.folderops.sequence_running() {
             return Some(Operation {
                 name: sequence::LABEL,
                 state: OpState::Running,
                 progress: self.folderops.sequence_progress(),
+                message: None,
+                dialog: None,
+            });
+        }
+        if self.folderops.import_running() {
+            return Some(Operation {
+                name: import::LABEL,
+                state: OpState::Running,
+                progress: self.folderops.import_progress(),
                 message: None,
                 dialog: None,
             });
@@ -4754,13 +4795,14 @@ impl Riffle {
     }
 
     /// What `cancel_operation` would cancel: the trash dialog asking, the
-    /// folder dialog asking or a sequencing run, else the operation under
-    /// way that cannot be canceled.
+    /// folder dialog asking or a sequencing or import run (its dialog shown
+    /// or aside), else the operation under way that cannot be canceled.
     fn cancel_of(&self) -> Option<Result<companion::Cancel, &'static str>> {
         if self.trash.busy() && !self.trash.running() {
             return Some(Ok(companion::Cancel::TrashDialog));
         }
         if self.folderops.sequence_running()
+            || self.folderops.import_running()
             || self
                 .folderops
                 .dialog()
@@ -4776,6 +4818,17 @@ impl Riffle {
         self.folderops
             .busy()
             .then_some(Err("the folder operation under way"))
+    }
+
+    /// Forget an import's `Pending`, whose plan is of the import settings
+    /// before.
+    fn drop_import_pending(&mut self) {
+        self.mcp_pending.take_if(|pending| {
+            matches!(
+                pending.op,
+                companion::Op::Folder(companion::FolderOp::Import { .. }, _)
+            )
+        });
     }
 
     /// Keep `op` as the `Pending` the next id names, replacing any other.
@@ -5204,6 +5257,7 @@ impl Riffle {
                 held: this.gate.waiting().is_some(),
                 pending: this.mcp_pending.as_ref(),
                 cancel: this.cancel_of(),
+                importing: this.folderops.import_busy(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -5229,6 +5283,14 @@ impl Riffle {
                     }
                 }
                 companion::Op::Folder(..) => Err("a folder operation asks through its flow".into()),
+                companion::Op::Rename { path, name } => {
+                    if self.refuse_renaming(path, cx) {
+                        Err(rename::RENAMING.to_owned())
+                    } else {
+                        self.ask_rename(path.clone(), name.clone(), cx);
+                        Ok(companion::awaiting(&op))
+                    }
+                }
             },
             Ok(Some(companion::Action::Preview(op))) => {
                 Ok(companion::previewed(self.keep_pending(op)))
@@ -5245,7 +5307,16 @@ impl Riffle {
                         self.request_run(target, false, cx);
                         Ok(companion::get_status(&self.status_of()))
                     }
-                    companion::Op::Folder(op, _) => match self.run_confirmed(op, cx) {
+                    companion::Op::Rename { path, name } => {
+                        if self.refuse_renaming(&path, cx) {
+                            Err(rename::RENAMING.to_owned())
+                        } else {
+                            log::info!("rename: {path} to {name} confirmed over MCP");
+                            self.request_rename(path, name, cx);
+                            Ok(companion::get_status(&self.status_of()))
+                        }
+                    }
+                    companion::Op::Folder(op, dialog) => match self.run_confirmed(op, dialog, cx) {
                         Ok(()) => Ok(companion::get_status(&self.status_of())),
                         Err(refusal) if refusal == text::SCAN_RUNNING => {
                             // The preview survives: confirm the same id after wait_for_idle.
@@ -5267,6 +5338,14 @@ impl Riffle {
                         self.mcp_folder = Some(op);
                     }
                     Ok(companion::started(&self.status_of(), dialog))
+                } else if matches!(op, companion::FolderOp::Date(_))
+                    && (self.resync.busy() || self.gate.in_flight())
+                {
+                    // `Rename by Capture Date…` is refused, not held, meanwhile.
+                    Err(format!(
+                        "{}; wait_for_idle, then try again",
+                        text::SCAN_RUNNING
+                    ))
                 } else {
                     Err(format!("Handpic could not start {label}; try again"))
                 }

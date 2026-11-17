@@ -32,6 +32,7 @@ use crate::exif::{read_metadata, Metadata};
 use crate::folders;
 use crate::index::{self, Focus, Index};
 use crate::ondemand::read_preview;
+use crate::rename;
 
 /// The fixed loopback port, outside the ranges development servers commonly
 /// take, so the connection examples stay the same from launch to launch.
@@ -76,12 +77,13 @@ filter, the panes shown and the overlays, browse the folders, open one, expand o
 folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
 scan, a move to the trash, a folder operation) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
 undo and sidecar files stay consistent. `trash_photos` moves photos to the trash or deletes \
-them, and `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` run the folder \
-tree menu's operations on a folder, each only with the user's confirmation: unless the user \
+them, `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps`, `import_folder` and \
+`rename_by_capture_date` run the folder tree menu's operations on a folder, and \
+`rename_folder` renames a folder, each only with the user's confirmation: unless the user \
 has allowed MCP clients to run destructive operations in Handpic's settings, it opens \
-Handpic's own dialog and the user confirms there; a permanent delete always waits for the \
-user's click in that dialog. `cancel_operation` cancels what the user's Cancel would. Run \
-them only when the user asks. \
+Handpic's own dialog (for a rename, the tree's rename field) and the user confirms there; a \
+permanent delete always waits for the user's click in that dialog. `cancel_operation` \
+cancels what the user's Cancel would. Run them only when the user asks. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
 them only when the user asks you to.";
@@ -652,6 +654,20 @@ pub struct FolderOpArgs {
 #[derive(Debug, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 #[serde(deny_unknown_fields)]
+pub struct RenameArgs {
+    /// The folder's absolute path, for the call that starts the rename.
+    path: Option<String>,
+    /// The folder's new name, with `path`.
+    name: Option<String>,
+    /// The `id` a preview returned, with `confirm: true`.
+    id: Option<u64>,
+    /// True to run the preview `id` names.
+    confirm: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct WaitArgs {
     /// How long to wait in milliseconds, at most 55000; 30000 when omitted.
     timeout_ms: Option<u64>,
@@ -852,6 +868,29 @@ fn folder_op(args: FolderOpArgs) -> Reply {
     if let Some(path) = args.path {
         folder(&path)?;
         request.insert("path".into(), json!(path));
+    }
+    if let Some(id) = args.id {
+        request.insert("id".into(), json!(id));
+    }
+    if let Some(confirm) = args.confirm {
+        request.insert("confirm".into(), json!(confirm));
+    }
+    Ok(Value::Object(request))
+}
+
+/// A folder rename's request: the fields given, the path checked to be an
+/// absolute folder and the name to be one the folder can take there, as
+/// the tree's inline rename checks it (`rename::folder_target`).
+fn rename_request(args: RenameArgs) -> Reply {
+    let mut request = serde_json::Map::new();
+    match (args.path, args.name) {
+        (Some(path), Some(name)) => {
+            rename::folder_target(folder(&path)?, name.trim())?;
+            request.insert("path".into(), json!(path));
+            request.insert("name".into(), json!(name));
+        }
+        (None, None) => {}
+        _ => return Err("path and name go together".into()),
     }
     if let Some(id) = args.id {
         request.insert("id".into(), json!(id));
@@ -1242,9 +1281,9 @@ impl Companion {
         or a `scan` pass (`scanning` or `analyzing`, with done / total) is under way, whether a \
         run on the open folder's files is `running`, the status line's text, the pane's \
         `notes` and `errors`, the `operation` under way, else the last one to end (its \
-        `name`, such as `Move to Trash`, `Undo Move to Trash` or `Delete Sidecars`, its \
-        `state`: `previewing`, `awaiting_confirmation` in Handpic's dialog (whose content is \
-        in `dialog`), `held_for_scan`, `running` with `done` / `total`, `finished` or `failed`, \
+        `name`, such as `Move to Trash`, `Undo Move to Trash`, `Delete Sidecars`, `Import` or \
+        `Rename…`, its `state`: `previewing`, `awaiting_confirmation` in Handpic's dialog \
+        (whose content is in `dialog`) or rename field, `held_for_scan`, `running` with `done` / `total`, `finished` or `failed`, \
         and the `message` it ended with), and the `pending` preview a call with its `id` and \
         `confirm: true` runs. A held operation dropped before it ran (by a folder open, a later \
         request or a dialog open at the scan's end) is `failed` with a `dropped: ...` message \
@@ -1313,10 +1352,54 @@ impl Companion {
     }
 
     #[tool(
+        description = "Copy a folder's photos (RAW and JPEG, with their sidecars, subfolders \
+        included) into dated folders under the import destination, as the folder tree's \
+        Import does, with the destination and folder pattern of `get_settings`' `import_root` \
+        and `import_pattern` (`set_settings` sets them). Confirmed like a folder operation: \
+        see `delete_sidecars`; the confirmed `id` names the plan its preview read, which the \
+        run copies. The run opens the first destination folder and goes on while the user \
+        culls; `get_status` reports its progress and result, and `cancel_operation` stops it. \
+        Use only when the user asks."
+    )]
+    async fn import_folder(&self, Parameters(args): Parameters<FolderOpArgs>) -> CallToolResult {
+        self.checked_call("import_folder", move || folder_op(args))
+            .await
+    }
+
+    #[tool(
+        description = "Rename a folder to its photos' one capture date (`YYYY-MM-DD`), or split \
+        it into one sibling folder per date, as the folder tree's Rename by Capture Date does. \
+        Confirmed like a folder operation: see `delete_sidecars`. Refused while a listing or \
+        scan is under way (`wait_for_idle` first); a run cannot be canceled. Use only when the \
+        user asks."
+    )]
+    async fn rename_by_capture_date(
+        &self,
+        Parameters(args): Parameters<FolderOpArgs>,
+    ) -> CallToolResult {
+        self.checked_call("rename_by_capture_date", move || folder_op(args))
+            .await
+    }
+
+    #[tool(
+        description = "Rename a folder to `name`, as the folder tree's Rename does, the open \
+        folder following it. While the user allows MCP clients to run destructive operations \
+        (`get_settings`' `mcp_allow_destructive`), the call with `path` and `name` returns a \
+        preview with an `id`, which a second call with that `id` and `confirm: true` runs; \
+        otherwise the tree's rename field opens on the folder (which the tree must show) with \
+        `name` filled in, and the user confirms with Enter. Waits for a scan under way; \
+        refused while an import runs. Use only when the user asks."
+    )]
+    async fn rename_folder(&self, Parameters(args): Parameters<RenameArgs>) -> CallToolResult {
+        self.checked_call("rename_folder", move || rename_request(args))
+            .await
+    }
+
+    #[tool(
         description = "Cancel what the user's Cancel would: close Handpic's dialog asking about \
-        a move to the trash or a folder operation, or stop a Sequence JPEG Timestamps run; \
-        else forget the preview in `get_status`' `pending`. Refused, naming it, when the \
-        operation under way cannot be canceled. Returns `get_status`."
+        a move to the trash or a folder operation, or stop a Sequence JPEG Timestamps or \
+        Import run; else forget the preview in `get_status`' `pending`. Refused, naming it, \
+        when the operation under way cannot be canceled. Returns `get_status`."
     )]
     async fn cancel_operation(&self) -> CallToolResult {
         self.view_call("cancel_operation").await
@@ -1812,11 +1895,14 @@ mod tests {
                 "get_settings",
                 "get_status",
                 "get_view",
+                "import_folder",
                 "list_folders",
                 "navigate",
                 "open_folder",
                 "redo",
                 "reject_rest",
+                "rename_by_capture_date",
+                "rename_folder",
                 "reveal",
                 "rewrite_sidecars",
                 "select_all",
@@ -2086,6 +2172,42 @@ mod tests {
             Err("relative is not an absolute path".into())
         );
         assert!(serde_json::from_value::<FolderOpArgs>(json!({ "force": true })).is_err());
+    }
+
+    #[test]
+    fn rename_request_checks_the_folder_and_the_name() {
+        let dir = temp_dir("rename");
+        let folder = dir.join("a");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::create_dir(dir.join("taken")).unwrap();
+        let path = folder.to_string_lossy().into_owned();
+        let args = |value: Value| serde_json::from_value::<RenameArgs>(value).unwrap();
+        assert_eq!(
+            rename_request(args(json!({ "path": path, "name": "b" }))),
+            Ok(json!({ "path": path, "name": "b" }))
+        );
+        assert_eq!(
+            rename_request(args(json!({ "id": 3, "confirm": true }))),
+            Ok(json!({ "id": 3, "confirm": true }))
+        );
+        assert_eq!(
+            rename_request(args(json!({ "path": path, "name": "taken" }))),
+            Err("taken already exists".into())
+        );
+        assert_eq!(
+            rename_request(args(json!({ "path": path, "name": "a:b" }))),
+            Err("a:b: a name cannot contain ':'".into())
+        );
+        assert_eq!(
+            rename_request(args(json!({ "path": path }))),
+            Err("path and name go together".into())
+        );
+        assert_eq!(
+            rename_request(args(json!({ "path": "relative", "name": "b" }))),
+            Err("relative is not an absolute path".into())
+        );
+        assert!(serde_json::from_value::<RenameArgs>(json!({ "force": true })).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

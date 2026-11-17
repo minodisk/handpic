@@ -341,7 +341,7 @@ Made with the user on 2026-11-17.
       `Window`; verify that a flow started from `mcp_request` (no `Window`)
       can open or skip its dialog.
 
-- [ ] Step 7: Folder operations II: Import, Rename by Capture Date, folder rename
+- [x] Step 7: Folder operations II: Import, Rename by Capture Date, folder rename
   - Done when:
     - `import_folder` previews and runs the tree menu's `Import…` (the plan's
       summary available to the client, the run cancelable through

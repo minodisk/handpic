@@ -17,7 +17,12 @@
 //! with the app's dialog while `mcpAllowDestructive` is off, else reading
 //! the dialog's content into a `Pending` (`Status::pending`) that a
 //! confirming call runs; `cancel_operation` presses a dialog's Cancel, stops
-//! a sequencing run or forgets the `Pending`. The
+//! a sequencing or import run or forgets the `Pending`. `import_folder` and
+//! `rename_by_capture_date` start their flows the same way, the import's
+//! `Pending` naming the plan its run copies. `rename_folder` previews a
+//! folder rename into a `Pending` while `mcpAllowDestructive` is on, else
+//! opens the tree's inline rename on the folder with the new name filled in,
+//! which the user confirms with Enter. The
 //! selection is the strip's (`selection::targets`). The native view has no
 //! compare and no ranking, so compare and the `recommended` sort are refused,
 //! and so is every request but the reads (`READS`) while the view drops keys
@@ -33,6 +38,7 @@ use std::{
 use gpui_kit::component::ThemeMode;
 use riffle_backend::shortcuts::Keymap;
 use riffle_backend::{
+    import::{self as importer, ImportSettings},
     index::{flag_name, parse_flag},
     ondemand::EyesJudgment,
 };
@@ -41,15 +47,17 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     burst::BurstMember,
-    context,
+    context, datefolder,
     dialog::{Button, Dialog},
     exif::{GROUPS, Group, Groups},
     filter::{self, Facts, FilterState, OutputState},
     history::Top,
+    import,
     judgment::State,
     keys,
     menu::{self, Toggle},
     panels::Panels,
+    rename,
     selection::{self, Selection},
     sequence,
     settings::Settings,
@@ -93,6 +101,9 @@ const DESTRUCTIVE_OFF: &str = "mcp_allow_destructive is off, so only the user co
      Handpic's dialog: call without confirm to open it";
 const DELETE_NEEDS_CLICK: &str = "Delete Permanently runs only on the user's click in Handpic's \
      dialog: call without confirm to open it";
+/// Why a folder rename will not run on a client's word alone.
+const RENAME_OFF: &str = "mcp_allow_destructive is off, so only the user confirms this, in the \
+     folder tree: call without confirm to fill in its rename field";
 const REDO_TRASH_OFF: &str = "the next redo moves files to the Trash again without a dialog, \
      which needs mcp_allow_destructive, on the MCP page of Handpic's settings; only the user \
      can turn it on";
@@ -166,18 +177,28 @@ pub struct View<'a> {
     /// The destructive operation a preview returned the id of.
     pub pending: Option<&'a Pending>,
     /// What `cancel_operation` cancels under way (a dialog asking, a
-    /// sequencing run), else the name of the operation under way that
-    /// cannot be canceled.
+    /// sequencing or import run), else the name of the operation under way
+    /// that cannot be canceled.
     pub cancel: Option<Result<Cancel, &'static str>>,
+    /// An import is under way, which refuses a folder rename.
+    pub importing: bool,
 }
 
 /// A destructive operation a tool previews, then runs on a confirming call
 /// or through the app's dialog.
+// One `Op` at a time is kept or passed by value, so its size does not matter.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
     Trash(Target),
     /// A folder operation, with its dialog once its preview is read.
     Folder(FolderOp, Option<Dialog>),
+    /// The tree's `Rename…` of the folder `path` (the tree's spelling when
+    /// it draws it) to `name`.
+    Rename {
+        path: String,
+        name: String,
+    },
 }
 
 /// A folder operation of the tree's menu, on a folder by the caller's
@@ -186,6 +207,13 @@ pub enum Op {
 pub enum FolderOp {
     Sidecars(sidecars::Target),
     Sequence(String),
+    /// `Import…` of `dir`, with the id of the plan its preview read, which
+    /// its run copies.
+    Import {
+        dir: String,
+        plan: Option<u64>,
+    },
+    Date(String),
 }
 
 impl FolderOp {
@@ -200,6 +228,8 @@ impl FolderOp {
                 kind: Kind::Delete,
                 dir,
             }),
+            "import_folder" => FolderOp::Import { dir, plan: None },
+            "rename_by_capture_date" => FolderOp::Date(dir),
             _ => FolderOp::Sequence(dir),
         }
     }
@@ -209,13 +239,15 @@ impl FolderOp {
         match self {
             FolderOp::Sidecars(target) => target.kind.label(),
             FolderOp::Sequence(_) => sequence::LABEL,
+            FolderOp::Import { .. } => import::LABEL,
+            FolderOp::Date(_) => datefolder::LABEL,
         }
     }
 
     pub fn dir(&self) -> &str {
         match self {
             FolderOp::Sidecars(target) => &target.dir,
-            FolderOp::Sequence(dir) => dir,
+            FolderOp::Sequence(dir) | FolderOp::Import { dir, .. } | FolderOp::Date(dir) => dir,
         }
     }
 
@@ -227,6 +259,8 @@ impl FolderOp {
             }
             FolderOp::Sidecars(_) => context::Action::DeleteSidecars,
             FolderOp::Sequence(_) => context::Action::SequenceTimestamps,
+            FolderOp::Import { .. } => context::Action::ImportFolder,
+            FolderOp::Date(_) => context::Action::RenameByDate,
         }
     }
 
@@ -235,6 +269,8 @@ impl FolderOp {
             FolderOp::Sidecars(target) if target.kind == Kind::Rewrite => "rewrite_sidecars",
             FolderOp::Sidecars(_) => "delete_sidecars",
             FolderOp::Sequence(_) => "sequence_timestamps",
+            FolderOp::Import { .. } => "import_folder",
+            FolderOp::Date(_) => "rename_by_capture_date",
         }
     }
 }
@@ -280,8 +316,8 @@ pub fn dialog_content(dialog: &Dialog) -> Map<String, Value> {
 pub enum Cancel {
     /// The trash dialog's Cancel.
     TrashDialog,
-    /// The folder dialog's Cancel, or the Cancel of a sequencing run, with
-    /// its dialog or without one.
+    /// The folder dialog's Cancel, or the Cancel of a sequencing or import
+    /// run, with its dialog or without one.
     Folder,
     /// Forget the `Pending`.
     Pending,
@@ -293,6 +329,7 @@ impl Op {
         match self {
             Op::Trash(_) => "trash_photos",
             Op::Folder(op, _) => op.tool(),
+            Op::Rename { .. } => "rename_folder",
         }
     }
 
@@ -314,6 +351,13 @@ impl Op {
                 let mut content = dialog.as_ref().map(dialog_content).unwrap_or_default();
                 content.insert("operation".into(), json!(op.label()));
                 content.insert("folder".into(), json!(op.dir()));
+                content
+            }
+            Op::Rename { path, name } => {
+                let mut content = Map::new();
+                content.insert("operation".into(), json!(rename::LABEL));
+                content.insert("folder".into(), json!(path));
+                content.insert("name".into(), json!(name));
                 content
             }
         }
@@ -348,10 +392,13 @@ pub fn awaiting(op: &Op) -> Value {
     reply.insert("awaiting_confirmation".into(), json!(true));
     reply.insert(
         "next".into(),
-        json!(
+        json!(if matches!(op, Op::Rename { .. }) {
+            "the folder tree's rename field holds the new name: the user confirms it with Enter \
+             or cancels with Escape; follow it with get_status or wait_for_idle"
+        } else {
             "the user confirms or cancels in Handpic's dialog; follow it with get_status or \
              wait_for_idle"
-        ),
+        }),
     );
     Value::Object(reply)
 }
@@ -683,6 +730,8 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "rewrite_sidecars" | "delete_sidecars" | "sequence_timestamps" => {
             folder_operation(view, args, kind).map(Some)
         }
+        "import_folder" | "rename_by_capture_date" => folder_operation(view, args, kind).map(Some),
+        "rename_folder" => rename_folder(view, args).map(Some),
         CANCEL => cancel_operation(view).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
@@ -901,7 +950,27 @@ fn folder_operation(view: &View, args: &Value, tool: &str) -> Result<Action, Str
             return Err("an id goes with confirm: true".into());
         }
         let path = given_field(args, "path").ok_or("path must be the folder's absolute path")?;
-        let op = FolderOp::of(tool, folder_path(path)?);
+        let mut op = FolderOp::of(tool, folder_path(path)?);
+        match &mut op {
+            // Its rename renames the tree's row, by the tree's spelling.
+            FolderOp::Date(dir) => {
+                if let Some(row) = tree_row(view, dir) {
+                    *dir = row.path.clone();
+                }
+            }
+            FolderOp::Import { .. } => {
+                let settings = ImportSettings {
+                    root: view.settings.import_root.clone(),
+                    pattern: view.settings.import_pattern.clone(),
+                };
+                if let Some(reason) = importer::refusal(&settings) {
+                    return Err(format!(
+                        "{reason}; set_settings' import_root and import_pattern set them"
+                    ));
+                }
+            }
+            _ => {}
+        }
         // A sidecar start goes through the gate, which drops what it holds.
         if view.held && matches!(op, FolderOp::Sidecars(_)) {
             return Err(HELD_REFUSAL.into());
@@ -932,9 +1001,87 @@ fn folder_operation(view: &View, args: &Value, tool: &str) -> Result<Action, Str
             .content
             .reason
             .clone()
+            .or_else(|| dialog.content.notes.first().cloned())
             .unwrap_or_else(|| "its preview has nothing to run".into()));
     }
     Ok(Action::Run(Op::Folder(op.clone(), Some(dialog.clone()))))
+}
+
+/// `rename_folder`, the tree's `Rename…` of the folder `path` to `name`,
+/// whose name the backend checked (`rename::folder_target`), refused while
+/// an import runs. Without `confirm`, it previews while
+/// `mcpAllowDestructive` is on, else opens the tree's inline rename on the
+/// folder's row with `name` filled in; with it, the rename a preview's `id`
+/// names goes through the gate as a confirmed edit does.
+fn rename_folder(view: &View, args: &Value) -> Result<Action, String> {
+    let confirm = switch(args, "confirm")?.unwrap_or(false);
+    let id = given_field(args, "id")
+        .map(|id| {
+            id.as_u64()
+                .ok_or("id must be the number a preview returned")
+        })
+        .transpose()?;
+    if view.importing {
+        return Err(rename::RENAME_REFUSED.into());
+    }
+    if !confirm {
+        if id.is_some() {
+            return Err("an id goes with confirm: true".into());
+        }
+        let path = folder_path(
+            given_field(args, "path").ok_or("path must be the folder's absolute path")?,
+        )?;
+        let typed = given_field(args, "name")
+            .and_then(Value::as_str)
+            .ok_or("name must be the folder's new name")?;
+        let row = tree_row(view, &path);
+        let current = row.map_or_else(
+            || {
+                std::path::Path::new(&path)
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            },
+            |row| row.name.clone(),
+        );
+        let name = rename::confirm_name(&current, typed)
+            .ok_or_else(|| format!("{path} is already named {}", typed.trim()))?;
+        if !view.settings.mcp_allow_destructive && row.is_none() {
+            return Err(format!(
+                "{path} is not a folder the tree shows, where Handpic asks the user; expand its \
+                 parent first"
+            ));
+        }
+        let op = Op::Rename {
+            path: row.map_or(path, |row| row.path.clone()),
+            name,
+        };
+        return Ok(if view.settings.mcp_allow_destructive {
+            Action::Preview(op)
+        } else {
+            Action::Ask(op)
+        });
+    }
+    if !view.settings.mcp_allow_destructive {
+        return Err(RENAME_OFF.into());
+    }
+    // A rename goes through the gate, which drops what it holds.
+    if view.held {
+        return Err(HELD_REFUSAL.into());
+    }
+    if given_field(args, "path").is_some() || given_field(args, "name").is_some() {
+        return Err("confirm renames the folder its preview named; give only the id".into());
+    }
+    let id = id.ok_or("confirm: true needs the id a preview returned")?;
+    match view.pending {
+        Some(Pending {
+            id: pending,
+            op: op @ Op::Rename { .. },
+        }) if *pending == id => Ok(Action::Run(op.clone())),
+        _ => Err(format!(
+            "no preview of rename_folder has id {id}; preview again"
+        )),
+    }
 }
 
 /// `cancel_operation`: what the user's Cancel would cancel now, else the
@@ -1966,6 +2113,7 @@ mod tests {
             held: false,
             pending: None,
             cancel: None,
+            importing: false,
         }
     }
 
@@ -4336,6 +4484,268 @@ mod tests {
         assert_eq!(
             ask("cancel_operation", json!({}), &view(&[])),
             Err("nothing to cancel in Handpic".into())
+        );
+    }
+
+    static IMPORTING: LazyLock<Settings> = LazyLock::new(|| Settings {
+        import_root: "/photos".into(),
+        ..settings::defaults()
+    });
+    static IMPORTING_ALLOWED: LazyLock<Settings> = LazyLock::new(|| Settings {
+        import_root: "/photos".into(),
+        mcp_allow_destructive: true,
+        ..settings::defaults()
+    });
+
+    fn import(plan: Option<u64>) -> FolderOp {
+        FolderOp::Import {
+            dir: "/e".into(),
+            plan,
+        }
+    }
+
+    #[test]
+    fn an_import_starts_its_flow_and_is_refused_without_a_destination() {
+        let set = View {
+            settings: &IMPORTING,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("import_folder", json!({ "path": "/e" }), &set),
+            Ok(Some(Action::Folder {
+                op: import(None),
+                dialog: true,
+            }))
+        );
+        let allowed = View {
+            settings: &IMPORTING_ALLOWED,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("import_folder", json!({ "path": "/e" }), &allowed),
+            Ok(Some(Action::Folder {
+                op: import(None),
+                dialog: false,
+            }))
+        );
+        assert_eq!(
+            ask("import_folder", json!({ "path": "/e" }), &view(&[])),
+            Err(
+                "the destination folder is not set (Settings > Import); set_settings' \
+                 import_root and import_pattern set them"
+                    .into()
+            )
+        );
+        assert_eq!(import(None).action(), context::Action::ImportFolder);
+        assert_eq!(import(None).label(), "Import");
+    }
+
+    #[test]
+    fn a_confirmed_import_runs_the_plan_its_preview_named() {
+        let pending = Pending {
+            id: 3,
+            op: Op::Folder(import(Some(7)), Some(folder_dialog(true))),
+        };
+        let allowed = View {
+            settings: &IMPORTING_ALLOWED,
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "import_folder",
+                json!({ "id": 3, "confirm": true }),
+                &allowed
+            ),
+            Ok(Some(Action::Run(pending.op.clone())))
+        );
+        assert_eq!(
+            ask(
+                "rename_by_capture_date",
+                json!({ "id": 3, "confirm": true }),
+                &allowed
+            ),
+            Err("no preview of rename_by_capture_date has id 3; preview again".into())
+        );
+        let nothing = Pending {
+            id: 3,
+            op: Op::Folder(
+                import(None),
+                Some(Dialog::new(
+                    Content {
+                        title: "Import".into(),
+                        notes: vec!["No photos were found under the folder.".into()],
+                        ..Content::default()
+                    },
+                    "Run",
+                    Style::Primary,
+                    false,
+                )),
+            ),
+        };
+        let empty = View {
+            pending: Some(&nothing),
+            ..allowed
+        };
+        assert_eq!(
+            ask("import_folder", json!({ "id": 3, "confirm": true }), &empty),
+            Err("No photos were found under the folder.".into())
+        );
+    }
+
+    #[test]
+    fn rename_by_capture_date_names_the_folder_by_the_trees_spelling() {
+        let rows = [row("/E", 0, true)];
+        let drawn = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        let expected = if crate::tree::IGNORE_CASE { "/E" } else { "/e" };
+        assert_eq!(
+            ask("rename_by_capture_date", json!({ "path": "/e" }), &drawn),
+            Ok(Some(Action::Folder {
+                op: FolderOp::Date(expected.into()),
+                dialog: true,
+            }))
+        );
+        assert_eq!(
+            FolderOp::Date("/e".into()).action(),
+            context::Action::RenameByDate
+        );
+    }
+
+    #[test]
+    fn rename_folder_opens_the_trees_rename_field_unless_destructive_operations_are_allowed() {
+        let rows = [row("/d/a", 1, false)];
+        let drawn = View {
+            tree: &rows,
+            ..view(&[])
+        };
+        let op = Op::Rename {
+            path: "/d/a".into(),
+            name: "b".into(),
+        };
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "path": "/d/a", "name": " b " }),
+                &drawn
+            ),
+            Ok(Some(Action::Ask(op.clone())))
+        );
+        let allowed = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "path": "/d/a", "name": "b" }),
+                &allowed
+            ),
+            Ok(Some(Action::Preview(op.clone())))
+        );
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "path": "/d/a", "name": "b" }),
+                &view(&[])
+            ),
+            Err(
+                "/d/a is not a folder the tree shows, where Handpic asks the user; expand its \
+                 parent first"
+                    .into()
+            )
+        );
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "path": "/d/a", "name": "a" }),
+                &drawn
+            ),
+            Err("/d/a is already named a".into())
+        );
+        assert!(
+            awaiting(&op)["next"]
+                .as_str()
+                .unwrap()
+                .contains("rename field")
+        );
+        assert_eq!(
+            previewed(&Pending { id: 5, op })["next"],
+            "call rename_folder with this id and confirm: true to run it"
+        );
+    }
+
+    #[test]
+    fn a_confirmed_rename_runs_the_rename_its_preview_named() {
+        let pending = Pending {
+            id: 5,
+            op: Op::Rename {
+                path: "/d/a".into(),
+                name: "b".into(),
+            },
+        };
+        let allowed = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "id": 5, "confirm": true }),
+                &allowed
+            ),
+            Ok(Some(Action::Run(pending.op.clone())))
+        );
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "id": 6, "confirm": true }),
+                &allowed
+            ),
+            Err("no preview of rename_folder has id 6; preview again".into())
+        );
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "id": 5, "confirm": true, "name": "c" }),
+                &allowed
+            ),
+            Err("confirm renames the folder its preview named; give only the id".into())
+        );
+        let held = View {
+            held: true,
+            ..allowed
+        };
+        assert_eq!(
+            ask("rename_folder", json!({ "id": 5, "confirm": true }), &held),
+            Err(
+                "an operation is held in Handpic for the scan's end; try again once it has run"
+                    .into()
+            )
+        );
+        let off = View {
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert!(
+            ask("rename_folder", json!({ "id": 5, "confirm": true }), &off)
+                .unwrap_err()
+                .starts_with("mcp_allow_destructive is off")
+        );
+        let importing = View {
+            importing: true,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "rename_folder",
+                json!({ "path": "/d/a", "name": "b" }),
+                &importing
+            ),
+            Err("Rename\u{2026} is unavailable while an import runs".into())
         );
     }
 }

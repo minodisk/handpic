@@ -440,12 +440,17 @@ on the given photos or the targets, a move previewed as an `Op` the view keeps
 as the `Pending` its id names and run on a confirming call while
 `mcpAllowDestructive` is on (through `request_run`, no dialog), else, like
 every delete, the app's dialog opened through `confirm_trash`,
-`rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps`, the tree
-menu's flows started through `folder_op` (`FolderOp`), their dialog opened
-while `mcpAllowDestructive` is off, else their preview's dialog content kept
-as the `Pending` (`mcp_folder` marking the flow, `get_status`'s `pending`)
-and run on a confirming call through `run_confirmed`, `cancel_operation`,
-the dialog's Cancel, a sequencing run's cancel or the `Pending` forgotten,
+`rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps`,
+`import_folder` and `rename_by_capture_date`, the tree menu's flows started
+through `folder_op` (`FolderOp`), their dialog opened while
+`mcpAllowDestructive` is off, else their preview's dialog content kept as the
+`Pending` (`mcp_folder` marking the flow, `get_status`'s `pending`; an
+import's naming the plan its run copies) and run on a confirming call through
+`run_confirmed`, `rename_folder`, the tree's `Rename…` previewed as a
+`Pending` and run through `request_rename` while `mcpAllowDestructive` is on,
+else the tree's inline rename opened with the name filled in (`ask_rename`)
+for the user's Enter, `cancel_operation`, the dialog's Cancel, a sequencing
+or import run's cancel or the `Pending` forgotten,
 answered while the view drops keys, and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
 timeout, `get_settings`, what the settings modal shows, `set_settings`, the
