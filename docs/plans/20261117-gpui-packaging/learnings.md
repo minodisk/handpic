@@ -32,25 +32,27 @@
   `shellcheck` and `local.test.sh` pass, `version.sh` prints `0.0.0` and
   `notices.sh` copies the six files, but `plutil`, `codesign`, `hdiutil` and
   the bundle and package tasks are only exercised by a GitHub run.
+- The `Package` run on the branch: run 43986612196, green on the first
+  attempt (no fix needed). It was triggered by a temporary
+  `push: branches: [gpui-packaging-step-1]` on `package.yml` (a push trigger
+  rather than the plan's `pull_request`, because the PR did not exist yet),
+  removed again in the next commit. The arm64 leg took 11m44s, the
+  `macos-15-intel` leg 27m8s (both cold caches), `checksums` 15s. Both legs'
+  "Check the DMG" step passed: `hdiutil verify` VALID, `codesign --verify
+  --strict` "valid on disk" and "satisfies its Designated Requirement", the
+  six notices listed under `Contents/Resources/licenses`, plus the step's
+  `lipo`, `plutil` version and `/Applications` symlink asserts. Downloaded
+  with `gh run download`: `Handpic-0.0.0-macos-arm64.dmg` (27,338,311
+  bytes), `Handpic-0.0.0-macos-x86_64.dmg` (30,919,229 bytes) and
+  `SHA256SUMS` (193 bytes), which lists both DMGs, and `sha256sum -c` passed
+  for both. The DMG contents were not inspected on Windows (no mount); the
+  runner's check step stands for that. The run annotates that
+  `actions/cache@v4`, `checkout@v4`, `upload-artifact@v4`,
+  `ilammy/setup-nasm@v1` and `jdx/mise-action@v2` target Node.js 20 and are
+  forced onto Node.js 24 (a warning only).
 
 ## Deferred issues (todo candidates)
 
-- Pending check (Step 1, not done by the implementation agent; the PR phase
-  does it): the `Package` run on the PR branch. The committed
-  `.github/workflows/package.yml` is `workflow_dispatch` only, and a dispatch
-  needs the file on the default branch. Steps: push a temporary commit adding
-  `pull_request:` to its `on:`, wait for the `Package` run, check both
-  `macos` legs and the `checksums` job are green, download the two DMGs and
-  `SHA256SUMS` (`gh run download <run-id>`), check `SHA256SUMS` lists both
-  DMGs with matching digests (`sha256sum -c`), then remove the trigger in
-  another commit before the merge. Expected: `Handpic-0.0.0-macos-arm64.dmg`
-  and `Handpic-0.0.0-macos-x86_64.dmg`, each holding an ad hoc signed
-  `Handpic.app` with `0.0.0` in both version fields and
-  `Contents/Resources/licenses/` with the six notices (the workflow's
-  "Check the DMG" step asserts these on the runner). Step 1's checkbox stays
-  unchecked until this is done. Source: plan Step 1, "Done when" (the
-  `Package` run item) and the approach's temporary-trigger item; file
-  `.github/workflows/package.yml`.
 - Pending manual check (Step 1, macOS only, the user's): `mise run
   native:package:macos` on a Mac writes
   `crates/native/target/release/Handpic-0.0.0-macos-<arch>.dmg`; open it, drag
@@ -58,4 +60,5 @@
   hoc signed app's first launch to be allowed under System Settings, Privacy
   & Security). Not runnable on the Windows host. Source: plan Step 1, "Done
   when" (`mise run native:package:macos`); files `mise.toml`,
-  `tools/package/macos.sh`.
+  `tools/package/macos.sh`. Step 1's checkbox was ticked on the automated
+  criteria (the green `Package` run 43986612196 and `mise run ci:local`).
