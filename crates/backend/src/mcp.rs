@@ -5,8 +5,8 @@
 //! through the `Bridge`'s send callback; the server's tasks run on the
 //! caller's tokio runtime, so `Mcp::switch` and `Mcp::stop` must run inside
 //! one. The tools a server lists are its host's: the seven companion tools by
-//! default (the Tauri app), all of them after `Mcp::with_all_tools` (the
-//! native app).
+//! default (what the removed Tauri app listed), all of them after
+//! `Mcp::with_all_tools` (the native app).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -1579,7 +1579,7 @@ impl Mcp {
     }
 
     /// The server listing every tool, with the instructions over them: the
-    /// native app's. The Tauri app keeps the seven.
+    /// native app's. The removed Tauri app listed the seven.
     pub fn with_all_tools(self) -> Self {
         let companion = Companion {
             tools: Companion::tool_router() + Companion::native_router(),

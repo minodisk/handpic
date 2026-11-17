@@ -111,10 +111,6 @@ function classify() {
 		echo "decides what a release is (versions, changelog, which packages are bumped); a shipped release is not undone by a revert"
 		return 0
 		;;
-	crates/app/tauri.conf.json)
-		echo "carries the updater public key and endpoint; a wrong key shipped in a release leaves every installed copy unable to verify later updates, and a revert on main does not reach them"
-		return 0
-		;;
 	# Markdown is safe whatever the directory (paths under .claude / .agents /
 	# .codex / .github never reach this line: the patterns above are evaluated
 	# first and make them approval required).
@@ -134,15 +130,6 @@ function classify() {
 	# supply chain attack.
 	.cargo/*)
 		echo "decides the registry crates are fetched from (a rewrite is an entry point for a supply chain attack)"
-		return 0
-		;;
-	# The npm side of the same thing. A package's install scripts (preinstall /
-	# install / postinstall / prepare) run during `pnpm install`, which both the
-	# developer and CI run, so a new package is third-party code executing
-	# unreviewed. The manifest is included because it is what can add the
-	# package and what carries this project's own `scripts` block.
-	package.json | pnpm-lock.yaml | pnpm-workspace.yaml | .npmrc)
-		echo "a new npm package's install scripts run during pnpm install, on developer machines and CI alike"
 		return 0
 		;;
 	# The toolchain versions the CI and local builds resolve. A rewrite silently

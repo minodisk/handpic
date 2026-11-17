@@ -51,12 +51,16 @@ says so (the binary's name in Step 2, the data folders in Step 3).
 - (2026-11-18) The native updater and release flow, when their sub-milestones
   come, follow gpui-kit's official guide (https://gpui-kit.com/docs/auto-update/)
   as closely as possible. Not part of this plan.
+- (2026-11-18) The user asked that every `todo.md` item this work makes
+  obsolete be deleted: each step deletes the items its own change closes or
+  makes moot (an item about a removed file, task or tool), and Step 4 sweeps
+  the rest.
 - Step 2's binary name and Step 3's index option are asked of the user before
   each of those steps starts.
 
 ## Steps
 
-- [ ] Step 1: Remove `crates/app`, the frontend and the JS tooling; move the icons; fix CI, mise, release-please and the agent tooling
+- [x] Step 1: Remove `crates/app`, the frontend and the JS tooling; move the icons; fix CI, mise, release-please and the agent tooling
   - Done when:
     - `crates/app` (the crate, `ui/`, `icons/`, `nsis/`, `capabilities/`,
       `tauri.conf.json`), `package.json`, `pnpm-lock.yaml`, `tsconfig.json`

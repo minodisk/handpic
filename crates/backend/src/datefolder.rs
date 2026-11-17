@@ -361,11 +361,11 @@ pub enum Ran {
     Split(Split),
 }
 
-/// Split the canonical `dir` (spelled `caller` by the caller's frontend)
-/// along `plan`. Does not check for a scan: the caller refuses a running
-/// scan and holds that refusal across the call (the Tauri app keeps the
-/// `Scans` lock, the native app its idle gate), and drains the sidecar
-/// writer first, so a sidecar a pending judgment has just written moves too.
+/// Split the canonical `dir` (spelled `caller` by the caller) along `plan`.
+/// Does not check for a scan: the caller refuses a running scan and holds
+/// that refusal across the call (the native app's idle gate), and drains the
+/// sidecar writer first, so a sidecar a pending judgment has just written
+/// moves too.
 /// The open folder's watcher and the tree watches on `dir` and under it are
 /// released before the moves (Windows refuses to remove a watched folder);
 /// the open folder's watcher is put back when `dir` remains, and the tree

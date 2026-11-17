@@ -662,15 +662,13 @@ What "full CI" there means has since narrowed. The gate in `commit-push.sh`
 (and every agent's local check) is now `mise run ci:local`, not `mise run ci`:
 it selects from the branch's changed paths (`tools/ci/local.sh`), runs only the
 link check for a Markdown-only change and clippy and the tests of only the
-changed crates for a Rust one, and never builds the Tauri crate or runs the
-frontend tests. Three reasons: the full `mise run ci` in a fresh worktree is a
-cold build of the whole root workspace, close to 10 minutes, and was killed
-twice by the host running out of memory after lint and the frontend tests had
-passed; the Tauri crate is being retired in favour of the GPUI app; and the
-PR's GitHub checks (`lint`, `test` on three platforms, `native`) run all of it
-anyway, on free runners. What only those checks find now (a dependent crate's
-test, the Tauri crate, the frontend tests, a platform-only failure) costs a fix
-push, which `pr-check-fixer` confirms with the narrowest failing command
+changed crates for a Rust one, on this platform only. Two reasons: the full
+`mise run ci` in a fresh worktree was a cold build of the whole root
+workspace, then with the since-removed Tauri crate, close to 10 minutes, and
+was killed twice by the host running out of memory; and the PR's GitHub checks
+(`lint`, `test` on three platforms, `native`) run all of it anyway, on free
+runners. What only those checks find now (a dependent crate's test, a
+platform-only failure) costs a fix push, which `pr-check-fixer` confirms with the narrowest failing command
 rather than the full run. `mise run ci` stays the full run for a human.
 
 The cost is that pushing now happens at PR creation, so **interrupting midway

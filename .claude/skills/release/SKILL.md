@@ -12,6 +12,18 @@ disable-model-invocation: true
 /release 57   → the same, for PR 57
 ```
 
+## Releases are suspended
+
+Releases are suspended until the native app's release flow lands. The Tauri
+app and its release build left the repository, so `.github/workflows/release.yml`
+keeps only the `release-please` job: the release PR and `CHANGELOG.md` keep
+accumulating, but a merged release PR would leave a draft GitHub Release with
+no assets. **`/release` stops here**: tell the user that releases are
+suspended until the native release flow lands, and do not merge the release
+PR. The rest of this skill describes the Tauri release and is stale, as is
+`scripts/verify-release.sh`, which checks the Tauri installers and
+`latest.json`.
+
 The release PR (branch `release-please--branches--main`, title
 `chore(main): release X.Y.Z`) is the human gate described in
 [`../develop/references/pr-merge-lifecycle.md`](../develop/references/pr-merge-lifecycle.md):

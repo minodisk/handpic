@@ -144,8 +144,8 @@ Two things from that contract you will use every time:
   (read-only), then start `merger` with the approved flag whatever it returned —
   except that the release PR (`release-please--branches--main`) is never merged
   by an agent on its own (it ships through the user's `/release`), and an `approval` line for a release-shaping path (`.github/**`,
-  `release-please-config.json`, `.release-please-manifest.json`,
-  `crates/app/tauri.conf.json`) means asking the user first (see the reference).
+  `release-please-config.json`, `.release-please-manifest.json`) means asking
+  the user first (see the reference).
   Put everything it flagged into the step's progress report — merging without
   asking is not merging without looking
 - **Do not create the next branch until `merger` has returned `MERGED`.** Its
@@ -503,7 +503,7 @@ A step PR never stops for approval — § Merge has you pass the approved flag
 every time — but it does get reported. Run the read-only check before starting
 `merger` and put whatever it flagged into that step's progress report, calling
 out any change that lets third-party code run on a machine (a new dependency in
-`Cargo.lock` or `pnpm-lock.yaml`, and friends).
+`Cargo.lock`, and friends).
 
 ## Phase 3: Wrap-up (after every PR is merged)
 

@@ -40,7 +40,6 @@ function expect() {
 
 every="fmt root
 fmt native
-vp-check
 shellcheck-all
 actionlint
 lychee
@@ -78,21 +77,10 @@ clippy riffle-core
 test riffle-core
 clippy native"
 expect none "docs/plans/20260101-x/plan.md
-docs/plans/20260101-x/data.json" "vp-check
-lychee"
+docs/plans/20260101-x/data.json" "lychee"
 expect none ".claude/settings.json" ""
 
-# --- frontend ---------------------------------------------------------------
-expect none "crates/app/ui/src/x.ts" "vp-check"
-expect none "crates/app/ui/index.html" "vp-check"
-expect none "package.json" "vp-check"
-expect none "pnpm-lock.yaml" "vp-check"
-expect none "vite.config.ts" "vp-check"
-expect none "tsconfig.json" "vp-check"
-expect none "crates/app/tauri.conf.json" "vp-check"
-
 # --- Rust -------------------------------------------------------------------
-expect none "crates/app/src/x.rs" "fmt root"
 expect none "crates/core/src/x.rs" "fmt root
 clippy riffle-core
 test riffle-core
@@ -109,8 +97,7 @@ clippy native
 test native"
 expect none "crates/native/Cargo.lock" "clippy native
 test native"
-expect none "crates/core/Cargo.toml" "vp-check
-clippy riffle-core
+expect none "crates/core/Cargo.toml" "clippy riffle-core
 test riffle-core
 clippy native"
 expect none "Cargo.lock" "clippy riffle-core
@@ -142,8 +129,7 @@ tools/package/sub/x.sh
 .claude/skills/x/scripts/sub/y.sh" ""
 expect none "tools/ci/local.sh" "shellcheck tools/ci/local.sh
 bash-test tools/ci/local.test.sh"
-expect none ".github/workflows/ci.yml" "vp-check
-actionlint"
+expect none ".github/workflows/ci.yml" "actionlint"
 expect none "crates/native/packaging/NOTICE-gpui" "clippy native
 test native"
 

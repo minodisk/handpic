@@ -61,17 +61,15 @@ mise run ci:local
 ```
 
 `mise run ci:local` runs only the checks the branch's changed paths select
-(`tools/ci/local.sh`). It never builds the Tauri crate (`riffle-app`), never
-runs the frontend tests (`vp test`) and does not test a crate that depends on
-a changed one, so a failed GitHub check can lie outside it: a dependent
-crate's test (a `riffle-core` change breaking a `riffle-backend` or
-`riffle-native` test), the Tauri crate, a frontend test, or a failure only one
-platform shows. To confirm the fix for such a check, first re-run the narrowest
-failing command where this platform allows it (one test of one crate, e.g.
-`cargo test -p riffle-backend <test name>`, or one Vitest file, e.g.
-`node ./node_modules/vite-plus/bin/vp test <file>`), then `mise run ci:local`.
-Do not fall back to the full `mise run ci` (the full root workspace build,
-the Tauri crate included, has run this host out of memory). A failure only
+(`tools/ci/local.sh`). It runs on this platform only and does not test a
+crate that depends on a changed one, so a failed GitHub check can lie outside
+it: a dependent crate's test (a `riffle-core` change breaking a
+`riffle-backend` or `riffle-native` test), or a failure only one platform
+shows. To confirm the fix for such a check, first re-run the narrowest failing
+command where this platform allows it (one test of one crate, e.g.
+`cargo test -p riffle-backend <test name>`), then `mise run ci:local`.
+Do not fall back to the full `mise run ci` (the full root workspace build has
+run this host out of memory). A failure only
 another platform shows cannot be reproduced here; fix it from the log and let
 the PR's checks confirm it.
 

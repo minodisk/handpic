@@ -4,60 +4,22 @@
 
 Prerequisites:
 
-- **macOS**: Xcode Command Line Tools (`xcode-select --install`). Tauri needs no
-  other system dependency there.
-- **Windows**: MSVC Build Tools, the WebView2 runtime, and `nasm` (`mozjpeg-sys`
-  builds libjpeg-turbo from source and needs it for SIMD on x86).
+- **macOS**: Xcode Command Line Tools (`xcode-select --install`).
+- **Windows**: MSVC Build Tools.
+- **Linux**: the development packages GPUI links against (fontconfig,
+  Wayland, X11 and xkbcommon) and a Vulkan loader; the `native` job of
+  [the CI workflow](./.github/workflows/ci.yml) lists them for Ubuntu.
+- **All**: NASM on x86 and x86_64 (below).
 
-The Rust toolchain, Node and pnpm all come from `mise install`.
+The Rust toolchains come from `mise install`.
 
-```sh
-mise run tauri:dev
-```
-
-That is a debug build of the Rust side: quick to compile, slow at runtime. **Any
-timing measurement has to come from the optimized build instead**, because the
-numbers in [docs/humans/performance.md](./docs/humans/performance.md) are all optimized ones and a debug build is
-not comparable to them:
-
-```sh
-mise run tauri:release:devtools
-```
-
-Both tasks run `pnpm install` first. `tauri:dev` starts the Vite dev server on
-`localhost:1420` through `beforeDevCommand` (the frontend reloads on save). `tauri:release:devtools` also passes
-`--features devtools`: Tauri only wires the webview's devtools up automatically
-in a debug build, so without it there is no console to read the timings from. A
-distributable build leaves the feature off.
-
-`mise run tauri:dev` and `mise run tauri:release:devtools` need no signing key. A
-`pnpm tauri build` does: it creates the updater artifacts, which are signed
-with `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), so
-the build fails without them.
-
-Both tasks also get a **Debug** menu, which a distributable build does not have.
-Its `Timing logs` item turns on the 1:1 view's keypress → invoke → bitmap
-timings, logged to the console; it starts unchecked on every launch.
-
-To try the distributable build itself, bundle it the way the release workflow
-does:
-
-```sh
-mise run tauri:release
-```
-
-The bundles land under `target/release/bundle/`. It skips the updater
-artifacts, which need the release signing key.
-
-### Native app (GPUI)
-
-`crates/native` is the GPUI port of the desktop app. It is a separate Cargo
+`crates/native` is the desktop app, built on GPUI. It is a separate Cargo
 workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
 `mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
-the repository root never sees it. It depends on `crates/backend`, the
-Tauri-free library shared with `crates/app` and a member of the root workspace,
-so a backend change is checked by both `mise run ci` and `mise run native:check`
-(or, as the agents do, by `mise run ci:local` and the PR's checks; see
+the repository root never sees it. It depends on `crates/core` and
+`crates/backend`, the GUI-free libraries of the root workspace, so a backend
+change is checked by both `mise run ci` and `mise run native:check` (or, as
+the agents do, by `mise run ci:local` and the PR's checks; see
 [Checks](#checks)).
 
 NASM is a hard prerequisite on x86 and x86_64: the crate's `build.rs` fails
@@ -81,36 +43,38 @@ mise run native:release            # optimized build; the only one to take timin
 mise run native:check              # clippy and the tests
 ```
 
+**Any timing measurement has to come from the optimized build**
+(`native:release`), because the numbers in
+[docs/humans/performance.md](./docs/humans/performance.md) are all optimized
+ones and a debug build is not comparable to them.
+
 `mise run ci` does not run `native:check` (CI has a `native` job for it); only
 the formatting check of the crate is part of `mise run lint`.
 
 ## Checks
 
-- `mise run fmt` formats both Rust (`cargo fmt`) and the frontend (`vp fmt`).
-- `mise run lint` runs `pnpm exec vp check` (format, lint, types) plus the other
-  OS-independent checks (`cargo fmt --check`, shellcheck, actionlint, and an offline
-  `lychee` check of Markdown links and `#heading` anchors).
-- Frontend tests run with `pnpm exec vp test` (`pnpm exec vp test watch` while
-  developing); `mise run test` runs them once.
-- `mise run ci` runs both, as CI does. Node 24 comes from `mise install`.
+- `mise run fmt` formats both Rust workspaces (`cargo fmt`).
+- `mise run lint` runs the OS-independent checks (`cargo fmt --check`,
+  shellcheck, actionlint, an offline `lychee` check of Markdown links and
+  `#heading` anchors, and the bash tests of the scripts).
+- `mise run test` runs clippy and the tests of the root workspace.
+- `mise run ci` runs both, as CI does.
 - `mise run ci:local` is the light check the agents run before every commit or
   push (`tools/ci/local.sh`). It selects each check from the branch's changed
   paths: the working tree against `git merge-base HEAD origin/main`, committed
   and uncommitted, plus untracked files, with no fetch. A Markdown-only change
   runs only the offline `lychee` check (also run when a file was deleted or
-  renamed); a frontend, JSON, YAML or TOML change runs `vp check`; a changed
-  shell script is shellchecked, a workflow change runs `actionlint`, and a bash
-  test runs when its script changed. A Rust change runs the `cargo fmt` check
+  renamed); a changed shell script is shellchecked, a workflow change runs
+  `actionlint`, and a bash test runs when its script changed. A Rust change runs the `cargo fmt` check
   of its workspace and `cargo clippy -p` / `cargo test -p` of only the changed
   root packages (`riffle-core`, `riffle-backend`, `riffle-cli`; the root
   `Cargo.toml` / `Cargo.lock` count as all three), the native clippy for a
   `crates/native`, `crates/core` or `crates/backend` change, and the native
   tests for a `crates/native` change. A change to `mise.toml` or
   `.shellcheckrc`, or a missing merge base, runs every check. It prints what it
-  selected and what it left out. It never builds the Tauri crate
-  (`riffle-app`) or runs the frontend tests, and does not test the crates that
-  depend on a changed one: the PR's `lint`, `test` (three platforms) and
-  `native` jobs cover those.
+  selected and what it left out. It runs on this platform only and does not
+  test the crates that depend on a changed one: the PR's `lint`, `test` (three
+  platforms) and `native` jobs cover those.
 
 ## Adding a Lightroom label preset language
 
@@ -153,7 +117,7 @@ and a README (no code, no CI). `downloads.csv` has the columns
 (prereleases and drafts included) per day, dated in UTC. The counts are the
 cumulative totals GitHub reports, so the downloads of a period are the
 difference between two dated rows. Every asset keeps its own row, so the
-installers (`.dmg`, `-setup.exe`, `.msi`, `.AppImage`, `.deb`, `.rpm`) can be
+Tauri releases' installers (`.dmg`, `-setup.exe`, `.msi`, `.AppImage`, `.deb`, `.rpm`) can be
 told apart from the updater-only artifacts (`latest.json`, `.app.tar.gz`) and
 the `.sig` files; on Windows the updater fetches the same `-setup.exe` users
 install from, so that count covers both.

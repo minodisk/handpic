@@ -422,8 +422,8 @@ fn canceled(cancel: &AtomicBool) -> bool {
 /// `on_item` must not panic: a panic inside it unwinds out of the worker's
 /// loop, aborts the scan, and propagates out of `extract_all` as a
 /// panic rather than an `Err`, leaving an arbitrary subset of indices
-/// delivered. Callers that share state behind a mutex (as Step 4's Tauri
-/// command does) must keep `on_item` panic-free or wrap it themselves.
+/// delivered. Callers that share state behind a mutex must keep `on_item`
+/// panic-free or wrap it themselves.
 ///
 /// Each worker sets its own OS priority to `priority` once, as it starts. A
 /// worker that cannot runs at normal priority anyway; the first such error is

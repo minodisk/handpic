@@ -25,7 +25,7 @@ version="$(bash "${root}/tools/package/version.sh")"
 tarball="${release}/Handpic-${version}-linux-x64.tar.gz"
 installer="${release}/install.sh"
 deb="${release}/handpic_${version}_amd64.deb"
-icon="${root}/crates/app/icons/128x128@2x.png"
+icon="${root}/crates/native/icons/128x128@2x.png"
 icon_path="share/icons/hicolor/256x256/apps/${identifier}.png"
 desktop_path="share/applications/${identifier}.desktop"
 

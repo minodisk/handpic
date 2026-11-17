@@ -75,7 +75,7 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
-`crates/backend` (`riffle-backend`, the Tauri-free backend both apps depend on,
+`crates/backend` (`riffle-backend`, the GUI-free backend the app depends on,
 a root-workspace member that `crates/native` uses by path and so compiled twice
 like `riffle-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
@@ -177,95 +177,13 @@ run over `riffle_core::sequence` (`preview`, `run`, with a cancel flag and a
 `(done, total)` callback), neither touching the index, `src/text.rs` the
 `SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Riffle.log` under greppable prefixes (see
-`docs/agents/app-log.md`)), `crates/app`
-(the Tauri 2 desktop app, whose `src/ai.rs` is the `aiEnabled` setting
-(persisted in the `aiEnabled` key, set by `set_ai_enabled`) over the
-backend's `ai`, placing the embedding model in the app's local data dir and
-emitting its state as `ai-state`, `src/rank.rs` the personal ranking's
-commands (`ranking_of`, the rank of a folder's files from `Index::rank_rows`
-and the weights in use; `refit_ranking`, the settings' refit on the
-folders `Index::rank_dirs` lists, the picks against the rejects and the
-viewed files left unflagged, also run in the background by
-`refit_in_background` at startup and by `refit_ranking_in_background` when
-the frontend switches to another folder (`viewed.ts`'s `switchesFolder`),
-while `aiEnabled` is on, one at a time with the requests meanwhile
-collapsed into one rerun; the shared weights and the per-genre offsets stored in
-`ranking.json` under the app's local data dir, the prior's when none fits),
-`src/commands.rs` the Tauri commands, including `set_scan_focus`, which hands
-the running scan the current file and the strip's visible range, `preview`,
-which pauses the scan's reads (`ReadSlots`, capped at `READ_SLOTS`) around its
-own, `cancel_scan`, which stops the running scan short of its third pass for a
-held Move to Trash or Delete Permanently, `trash_files`, the move of the
-backend's `trash` module behind the strip's `Move to Trash…`, with
-`trash_rejected_undo` and `trash_rejected_redo`, streaming `trash-progress`
-events, `delete_files`, the strip's
-`Delete Permanently…`, `trash_files`'s guards and grouping with
-`std::fs::remove_file` and no recorded run (`trash::delete_for_good`), `faces_of`, which detects the faces (box, score, five landmarks) the focus mark
-draws on demand through the scan's `detect_around` without touching the index,
-`genres_of`, which gives the folder's genre labels from its stored
-embeddings, and `eyes_of`, which judges with `eyes` whether the eyes of the shown file's
-AF face are closed, also on demand, a newer request superseding an older one,
-and returns the face mesh points it judged on in stored preview coordinates,
-`src/folders.rs` the folder tree's commands (the
-home and volume roots, one folder's subfolders and RAW count, and
-`reveal_folder`, the right-click item that reveals a folder, or from the
-strip's menu a file, in the OS file manager under the per-platform
-`REVEAL_LABEL`), `src/rename.rs` the
-`rename_folder` and `rename_file` commands, wrappers over the backend's
-`rename` that drain the sidecar writer, refuse a running scan under the
-`Scans` lock and stop the embedding pass (the folder's: it checks the new
-name, releases the folder watcher, renames the folder and carries its index
-rows to the new path),
-`src/datefolder.rs` the folder menu's `Rename by Capture Date…` commands,
-wrappers over the backend's `datefolder` with the same guards
-(`date_folder_preview` plans from the capture dates of the photos directly in
-the folder a rename to its one `YYYY-MM-DD` or a split into one sibling folder
-per date, with the undated files and any colliding target; `date_folder_run`
-re-plans and either renames through `rename_folder`'s path or moves each dated
-file with its sidecars and index rows into its date folder, leaving the
-undated ones and removing the original folder only when it ends up empty),
-`src/import.rs` the folder menu's `Import…`, over the backend's `import`:
-the destination root and the
-date-only folder pattern (chrono strftime, `%Y/%F` by default) of the
-settings' `Import` tab, persisted in the `importRoot` and `importPattern`
-keys, `import_preview`, which plans every RAW and JPEG under the folder, each
-RAW with its sidecars, into date folders (copy, skip on the same name and
-size, collision on another size, undated) and keeps the plan for the run, and
-`import_run` / `import_cancel`, which create the folders, copy the plan through
-`riffle_core::copy`, stream `import-progress` / `import-done` and log one
-`import:` line per run,
-`src/watch.rs`
-the backend's watcher emitting `folder-changed` and `src/treewatch.rs` the folder tree's watchers on
-its expanded folders (`set_tree_watches`, per-folder `tree-changed` events),
-`src/foldersidecars.rs`
-the folder menu's `Rewrite Sidecars from Index…` and `Delete Sidecars…`
-commands, wrappers over the backend's `foldersidecars` with the writer drain
-and the scan refusal (`rewrite_sidecars_preview` / `rewrite_sidecars_run` mark the
-folder's index rows dirty and push them through the sidecar writer, patching
-only the judgment fields of the current format's sidecars, and
-`delete_sidecars_preview` / `delete_sidecars_run` move those sidecars to the
-OS trash as one `Runs` run and clear the rows' judgments), `src/sequence.rs` the
-`Sequence JPEG Timestamps…` commands over the backend's `sequence` (`sequence_preview`,
-`sequence_run`, `sequence_cancel`) and their `sequence-progress` /
-`sequence-done` events, `src/output.rs` the `outputs_of` command behind the
-strip's `Output` filter, over the backend's `output`, and
-`src/mcp.rs` the MCP
-companion over the backend's `mcp`, turned on by the `mcpEnabled` key: the
-bridge that asks the main window over the `mcp-request` event and the
-`mcp_reply` command, and the `mcp-state` emit, and `src/diagnostics.rs`
-the `log_frontend` command that writes the frontend's `uncaught-js:` and
-`invariant:` lines to `Handpic.log` (see `docs/agents/app-log.md`), `src/migrate.rs` the move of the data of an earlier identifier into the
-current one's folders, run first in `main()`, and `src/perf.rs` the performance overlay's
-`set_perf_sampling`, which starts or stops the backend's `perf::Sampler` and
-emits each sample as `perf-sample`, so nothing samples while the overlay is
-off). `crates/native` (`riffle-native`)
-is the GPUI port of the desktop app, a separate Cargo workspace with its own
+`docs/agents/app-log.md`)), `crates/native` (`riffle-native`)
+is the desktop app, built on GPUI, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `riffle-core` and `riffle-backend`, takes GPUI and
 gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 `gpui_kit::component` gpui-component, started by `gpui_kit::init` and
-`gpui_kit::open_window`) and must not depend on
-`crates/app` (see `docs/agents/native-app.md`); its `build.rs` embeds
-`crates/app/icons/icon.ico` as the exe's icon resource ID 1 on Windows
+`gpui_kit::open_window`, see `docs/agents/native-app.md`); its `build.rs`
+embeds `icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
 `app_id` `IDENTIFIER` under
@@ -298,7 +216,7 @@ its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
-and to a `Handpic.log` in the Tauri app's line format under its own folder (or
+and to a `Handpic.log` in the line format `docs/agents/app-log.md` describes under its own folder (or
 `--log <path>`), starting it anew past 1 MB (this crate's `debug` lines too
 under `RUST_LOG=debug`), `src/theme.rs` sets gpui-component's
 global `Theme`, which `gpui_kit::init` installs at startup, to the mode
@@ -369,7 +287,7 @@ star and the frowning `scan-face`, under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
 `gpui_kit::assets::Assets`, which serves `star` and the icons
 gpui-component's controls draw, with the title bar's
-`crates/app/icons/64x64.png` for `img(..)`),
+`icons/64x64.png` for `img(..)`),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
 rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`, the Keyboard Shortcuts page's groups: `ShortcutGroup`, `SHORTCUT_GROUPS` and `shortcut_group`, an unknown action under `General`) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
@@ -649,75 +567,10 @@ through `on_drop::<ExternalPaths>`, resolving off the UI thread, a later drop
 winning, and opening the folder as a click in the tree does, while
 `drop_outline` draws the Tauri drag outline over the main area.
 
-The frontend lives under `crates/app/ui` (TypeScript built by Vite+, configured
-in the root `vite.config.ts`; `pnpm exec vp {dev,build,check,fmt,test}`) and is
-formatted, linted, type-checked and tested by `mise run ci`; its
-`style.css` holds shadcn/ui's Neutral dark tokens and the shared component
-classes every control uses (see `docs/agents/ui-styling.md`),
-`src/icons.ts` the inlined Lucide icons,
-`src/context.ts` builds the items of the strip's HTML right-click menu
-(including the file's reveal item, `Copy Path` / `Copy File Name`, which
-copy every targeted file, one per line, and `Move to Trash…` / `Delete
-Permanently…`),
-`src/trash.ts` the text and flow of the dialog those two share, a delete's
-keys that do not confirm (`swallowedByDelete`) and their status lines,
-`src/focus.ts` places the `f` focus mark and the face boxes' five landmark
-dots and labels (score, box size and eye distance in stored preview px) and holds the good-photo rule
-(`photoTier`: the AF eyes sharp on the full-size JPEG (`full_eye_sharp`, no
-value meaning not good), the eyes open and the face toward the camera, from the
-values pass 2 stored for the AF face), which colors the
-mark bright green and puts the strip's face icon on a good frame, `afEyeState`
-(Good / Neutral / Low), the one state the mark's color, the strip's icon and the
-filter menu read, `AF_EYE_HELP`, the definitions the `Face focus` section's `?` shows, and the eyes' openness the meta pane shows, and
-`src/meta.ts` groups the meta pane rows by provenance (EXIF, Maker note
-and Analysis, whose rows include the eye sharpness at full size and the
-`Eyes` judgment with its openness and the `Yaw`, `Pitch` and `Roll` of the head pose, from the values pass 2 stored for
-the AF face, else the `eyes_of` judgment, and, while `aiEnabled` is on, the
-personal ranking's place in the burst, reasons and confidence), `src/prefetch.ts` the ring of decoded neighbour previews (which files around the current one to hold, capped by total pixels, what to read next, and what a file list change, rename, delete or folder switch gives up), `src/recommend.ts` decides from a file's
-ranking entry whether the strip marks it with the recommended icon (first
-of two or more scored frames of its burst), `src/sort.ts`
-orders the strip (file name, capture time, rating, or `recommended`: bursts in
-capture order, each by the ranking's score), `src/eyes.ts` caches the `eyes_of` judgments per file with one
-in flight at a time, `src/facemesh.ts` holds MediaPipe's face parts
-outline and iris edges the focus mark draws over the judged face,
-`src/peaking.ts` the focus peaking overlay (`e`): the 3x3 Sobel edges on
-luminance over `PEAKING_THRESHOLD` lit in `PEAKING_COLOR`, which
-`src/peakingworker.ts` computes off the main thread for the fit view and the
-1:1 crop at the drawn size, `src/filter.ts` decides which files the strip's filter menu
-lets through (including its `Face focus` section, whose `Good` item applies the good-photo rule and whose `Low` item is `full_eye_sharp` under `LOW_FULL_EYE_SHARP`, its `Eyes` section on the
-stored eye state, and its `Genre` section on the `genres_of` labels, shown
-while `aiEnabled` is on), `src/companion.ts` answers the MCP bridge's
-requests over the main window's view state, `src/resume.ts` picks the file a
-folder reopens at and coalesces the writes that remember it, `src/viewed.ts`
-batches the `mark_viewed` writes of the files shown in the preview, counting
-a file as viewed once its decoded preview has stayed on screen for
-`VIEW_DWELL_MS` (500 ms, `dwellTimer`), and
-tells a switch to another folder, which refits the ranking,
-`src/idle.ts`
-holds an operation pressed during a scan (Move to Trash, the
-renames) until the scan ends and says which of them cancel it
-(`cancelsScan`), `src/viewonly.ts`
-decides from the listed paths whether a folder is JPEG-only and so opens
-view-only (no judgment, capture-time order), `src/sidecars.ts` holds the
-Rewrite Sidecars from Index / Delete Sidecars dialog's text and its flow,
-`src/datefolder.ts` holds the Rename by Capture Date dialog's text (the title
-line, the per-folder rows, the undated files, the removal note and the reason
-the run is disabled) and its flow,
-`src/import.ts` holds the Import dialog's text and `ImportFlow`, from the
-folder tree's right-click through the preview to the run's end, the dialog
-stepping aside during the run and coming back on `Import…`,
-`src/importsettings.ts` the settings' `Import` tab's text (the pattern's
-specifiers and examples, the note while no root is set),
-`src/sequence.ts` holds the
-Sequence JPEG Timestamps dialog's text and its flow from the folder tree's right-click
-through the preview to the run's end, `src/uncaught.ts` builds the
-`uncaught-js:` line of an uncaught error or unhandled rejection and the flood
-guard that caps them per session, and `src/perf.ts` holds the performance
-overlay's model (the CPU and disk samples and the per-switch preview
-latencies of the last 60 s, the latency axis maximum and the read throughput
-axis maximum, each with its floor, recording only while the overlay is on)
-and the rule that a latency starts at the keypress, else at the selection
-change.
+The `.ts` files a `crates/native` module is called a port of (`sort.ts`,
+`filter.ts`, `focus.ts` and the rest), and the Tauri commands some are ported
+from, were the removed Tauri app's frontend and commands; they are in git
+history.
 
 ## Language
 

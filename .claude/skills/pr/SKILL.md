@@ -245,8 +245,8 @@ Note the part of that contract that differs from what you might expect: the
 approval check is **run and reported, not used as a gate**. Run it yourself
 (read-only), start `merger` with the approved flag regardless, and tell the user
 what it flagged — especially anything that lets third-party code run on a
-machine, such as a new dependency in `Cargo.lock` or `pnpm-lock.yaml`. The
+machine, such as a new dependency in `Cargo.lock`. The
 exceptions are in the reference: never merge the release PR
 (`release-please--branches--main`; it ships through the user's `/release`), and ask the user before merging when the
 check flags a release-shaping path (`.github/**`, `release-please-config.json`,
-`.release-please-manifest.json`, `crates/app/tauri.conf.json`).
+`.release-please-manifest.json`).

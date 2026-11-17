@@ -198,7 +198,10 @@ touched; its icons are only read.
     - Tarball layout after gpui-kit's guide: one top-level `Handpic/` with
       `bin/<binary>`, `share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`
       (from `crates/app/icons/128x128@2x.png`, 256 px, as
-      `native:install:linux` uses) and `licenses/`.
+      `native:install:linux` uses) and `licenses/`. Note (2026-11-18): the
+      icons moved with the Tauri app's removal
+      (`../20261118-remove-tauri/plan.md`, Step 1); the Linux icon now comes
+      from `crates/native/icons/128x128@2x.png`.
     - `crates/native/packaging/linux/install.sh` is adapted from gpui-kit's
       guide (its code examples are Apache-2.0; say so in the file's header):
       `install.sh ARCHIVE EXPECTED_SHA256`, the whole archive verified before
