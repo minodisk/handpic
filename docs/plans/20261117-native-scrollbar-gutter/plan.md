@@ -241,3 +241,5 @@ scope.
    `learnings.md`.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
