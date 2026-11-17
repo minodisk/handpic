@@ -41,7 +41,7 @@ fn rename_present(from: &[PathBuf; 3], to: &[PathBuf; 3]) -> std::io::Result<()>
 /// into the `<IDENTIFIER>` folder `index_path` names, with its `-wal` and
 /// `-shm`. An index already there (a Tauri build's) is renamed aside to the
 /// first free `index-aside-<n>.sqlite`, never deleted. The emptied `.native`
-/// folder is removed.
+/// folder is removed when empty (on Windows it still holds the old log).
 pub fn move_native_index(cache: &Path) -> std::io::Result<IndexMove> {
     let from = cache.join(format!("{IDENTIFIER}.native"));
     if !from.join(INDEX_FILE).is_file() {

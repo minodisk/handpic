@@ -137,7 +137,9 @@
   launch the native app without `--index`. Expect `Handpic.log` (now under
   `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`) to show
   `index: moved in from the .native folder` (with the aside name when a
-  Tauri index was there), the `.native` folder gone, the Tauri index kept as
+  Tauri index was there), `index.sqlite` (and its `-wal` / `-shm`) gone from
+  `.native` with the folder kept because the old `logs\` is still in it, the
+  Tauri index kept as
   `index-aside-1.sqlite`, and the open folder's thumbnails shown without a
   cold pass 1. The step was ticked on the unit tests over temp folders.
   Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs`

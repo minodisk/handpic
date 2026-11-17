@@ -2090,7 +2090,9 @@ While the Tauri app still existed, the native app kept its index apart under
 `dev.minodisk.handpic.native` moves into the plain folder with its `-wal` and
 `-shm`, and an index already there (a Tauri build's from `main`) is renamed
 aside to the first free `index-aside-<n>.sqlite` rather than deleted; the
-emptied `.native` folder goes. A failed move is logged and the app opens
+emptied `.native` folder goes (on Windows it stays, still holding the old
+`logs\Handpic.log`, as the cache and data-local directories are both
+`%LOCALAPPDATA%`). A failed move is logged and the app opens
 whatever the plain folder then holds. Nothing is migrated from the earlier
 `com.minodisk.riffle.native` or `com.minodisk.handpic.native`: the native app
 never shipped, so an old developer cache is simply rebuilt by pass 1. An index
