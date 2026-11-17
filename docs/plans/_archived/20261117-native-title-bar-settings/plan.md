@@ -19,7 +19,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 ## Purpose
 
 The GPUI app's (`crates/native`) title bar, gpui-component's `TitleBar`
-added by [the title bar plan](../_archived/20261116-native-title-bar/plan.md),
+added by [the title bar plan](../20261116-native-title-bar/plan.md),
 holds only the app icon and "Handpic", and the settings modal can only be
 opened with `ctrl+,` (`meta+,` on macOS). This adds a gear button at the right
 end of the bar that opens the settings, so the settings have an on-screen
@@ -50,7 +50,7 @@ revert was considered and abandoned in PR #1112).
       platform), and `icons/settings.svg` loads an SVG through `Icons`.
     - `CLAUDE.md` (the `crates/native` sentence on gpui-component's
       `TitleBar`) and the title bar section of
-      [native-app.md](../../agents/native-app.md) describe the button, the
+      [native-app.md](../../../agents/native-app.md) describe the button, the
       drag rule and the reworded focus rule.
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
     - By hand on Windows (a debug build): the gear shows at the bar's right
