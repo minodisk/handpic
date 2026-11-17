@@ -3778,3 +3778,36 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, press `toggleStrip`. Expect the header to hide with the strip and an open menu to close. Expect the status row to keep its height (no jump when the progress circle appears or goes) and to show `n / shown (all)` while a filter is active.
 - [ ] On Windows, re-measure the preview canvas in the default 1600 x 1000 window (expected 1160 x 810, 32 px shorter than the old 842), the status row's height and the header's height. Replace the "inferred / not re-measured" notes in `docs/agents/native-app.md` (the preview canvas "inferred 32 px shorter", the pre-header 1160 x 842 measurements, the status row height "inferred from the sources") with the measured values.
 - [ ] On macOS and Linux, repeat the header, popover, handle, drag and `toggleStrip` checks above. CI only builds these platforms.
+
+### Native: real-device checks of the packages the Package workflow builds (gpui-packaging)
+
+The `gpui-packaging` feature added the manual `Package` workflow and `tools/package/` scripts. CI covers building, `hdiutil verify` and `codesign --verify` of the DMGs, the silent install, upgrade and uninstall of the setup `.exe` on an elevated runner, `install.sh` under a throwaway `HOME` (including the wrong-digest refusal), and `apt` installing and removing the `.deb`. Never exercised: the local mise package tasks on a real machine, a launch from any package, Gatekeeper's first-launch prompt, the absence of a UAC prompt for a standard Windows user (the hosted runner is elevated), the Start menu entry, the desktop menu entry and window icon matching on Wayland and X11, and the Vulkan-less GL fallback. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`.
+
+Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools/package/linux.sh`, `crates/native/packaging/windows/handpic.iss`, `crates/native/packaging/linux/install.sh`, `crates/native/packaging/linux/control`.
+
+#### TODO
+
+- [ ] On macOS, run `mise run native:package:macos`. Expect `crates/native/target/release/Handpic-0.0.0-macos-<arch>.dmg`. Open it, drag `Handpic.app` to `Applications` and start it. Gatekeeper asks for the ad hoc signed app's first launch to be allowed under System Settings, Privacy & Security. Expect the app to start.
+- [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run native:package:windows`. Expect `crates/native/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
+- [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run native:package:linux`. Expect `crates/native/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
+
+### Native: `hdiutil create` in the Package workflow sometimes fails with "No space left on device"
+
+Run 44081604694 (the arm64 leg on `macos-latest`) failed in `tools/package/macos.sh` with `hdiutil: create failed - No space left on device` while copying the binary into the image. The same code passed in the run before and after, and re-running the job went green. `macos.sh` lets `hdiutil` size the image from `-srcfolder`. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`.
+
+Files: `tools/package/macos.sh`, `.github/workflows/package.yml`.
+
+#### TODO
+
+- [ ] Give `hdiutil create` headroom (for example `-size` from `du` plus a margin) or retry the call once, so a `Package` run is less flaky. Done when the DMG step no longer depends on `hdiutil`'s own sizing.
+
+### Native: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
+
+The native deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the native deb does not upgrade it in place. `main`'s `tauri.conf.json` has `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
+
+Files: `crates/native/packaging/linux/control`, `tools/package/linux.sh`.
+
+#### TODO
+
+- [ ] Decide whether `control` gets `Conflicts` / `Replaces: riffle`, after the real-device deb check above. Done when the choice is in the template or `native-app.md` records why not.
+- [ ] Decide whether `Depends` gets `libegl1`, or `libvulkan1 | libegl1`, after the Vulkan-less machine check. Done when `linux.sh` reflects the choice or the guide records why not.
