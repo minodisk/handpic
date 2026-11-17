@@ -81,12 +81,13 @@ for it to end, read and change the settings, and record stars, picks / rejects a
 labels and undo or redo them the same way the user's keys do, so the app's undo and sidecar \
 files stay consistent. These need the user's confirmation: `trash_photos` (move to the trash \
 or delete), `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps`, `import_folder`, \
-`rename_by_capture_date`, `rename_folder`, `clear_cache` and a `redo` that moves files to the \
-trash again. Unless the user has allowed MCP clients to run destructive operations in \
+`rename_by_capture_date`, `rename_folder` and `clear_cache`. Unless the user has allowed MCP clients to run destructive operations in \
 Handpic's settings (`get_settings`' `mcp_allow_destructive`, which only the user can change), \
 each opens Handpic's own dialog (for a rename, the tree's rename field) and the user confirms \
 there; while it is allowed, a first call returns a preview with an `id` and a second call with \
 that `id` and `confirm: true` runs it. A permanent delete always waits for the user's click. \
+A `redo` that moves files to the trash again runs only while the user allows destructive \
+operations, and is refused otherwise. \
 `cancel_operation` cancels what the user's Cancel would. Run them only when the user asks. A \
 call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Compare, the recommended sort, the Genre \
