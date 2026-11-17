@@ -1214,7 +1214,7 @@ test compares with `Keymap::defaults()`; `context_coverage`,
 without its entry; and `OTHER`, the rest. A test asks the companion for every
 tool the table names and fails on `unknown request`.
 
-The features of the Tauri app the native app does not have yet keep
+The features the Tauri app had and the native app does not have yet keep
 their tools (D6), refused with one message, `not_in_native`'s "`<feature>` is
 not implemented in Handpic's native app yet", which a test checks for each:
 compare (`set_view`'s `compare`), the recommended sort (`set_sort`'s
@@ -1269,7 +1269,7 @@ file. `burst` is the Tauri `burstOf` over the view's `bursts` (empty for a
 burst of one, else every member in position order, a hidden one with
 `visible: false`); each frame's `sharpness` is `Facts.sharpness`, set from the
 entries read and patched by pass 2's `ready` files (`apply_face_ready`), as
-the Tauri `sharpness` map is filled from `folder_entries` and patched by
+the Tauri `sharpness` map was filled from `folder_entries` and patched by
 `faces-progress` (`applySharpnessReady`).
 
 - Rule: a test run with MCP on passes `--mcp-port` with a free port other
@@ -1545,7 +1545,7 @@ dimmed, shows capture order and keeps the stored key.
 - Rule: every filter section starts with a `Row::Heading` right after its
   separator (no hover, no click handler, no check slot); `Reset` sits above
   the first separator without one. Four headings are the native menu's own,
-  as the Tauri `#filter-menu` has none there: `Flag`, `Rating`,
+  as the Tauri `#filter-menu` had none there: `Flag`, `Rating`,
   `Color label` and `Orientation`. The sort menu has no heading.
 - Rule: the leads are drawn per kind in `main.rs`'s `menu_row`: the flags
   keep their 7 px dots; a rating row is five 12 px Lucide stars, the `on`
@@ -2557,9 +2557,9 @@ cell. The run's font comes from `window.text_style().to_run(len)`.
 ### Text has no stroke; a label's halo is dark copies (Inferred)
 
 GPUI shapes and paints glyphs filled only; there is no text stroke like the
-canvas `strokeText` the Tauri face labels use for their 3 px dark halo. A
+canvas `strokeText` the Tauri face labels used for their 3 px dark halo. A
 dark quad behind the label was the other option; it hides more of the face
-than the Tauri halo does. `overlay.rs`'s `paint_label` instead paints the
+than the Tauri halo did. `overlay.rs`'s `paint_label` instead paints the
 label in `rgba(0, 0, 0, 0.8)` at the eight 1 px offsets and then in the
 label color on top, a ring about as wide as the Tauri stroke's outer
 1.5 px, which keeps the look close to the Tauri app's. That it reads on a
@@ -3198,7 +3198,7 @@ neither a directory nor a file opens nothing and puts the Tauri
   the trash dialog and the folder dialogs are `occlude()`d layers, so
   a drop over an open dialog or the settings does not reach the root and is
   ignored (as a
-  click in the tree is blocked by the same layers), where Tauri's drop is
+  click in the tree is blocked by the same layers), where Tauri's drop was
   window-wide except under its format gate.
 - Rule: while an OS file drag is over the window, the main area (the tree,
   the preview and the meta pane, the Tauri `#main`) shows the Tauri
@@ -3888,7 +3888,7 @@ recorded a run pushes it and clears the redo history (`record_trash`); a
 redo's new run is pushed without clearing it (`redone_trash`), as a redone
 batch is. `step` and `Undo::forget` see only batches: the view's `step`
 looks at the top first (`top_trash`) and hands a run to `step_trash`, as the
-Tauri `step` does, so `history::step` returns `None` with a run on top and
+Tauri `step` did, so `history::step` returns `None` with a run on top and
 leaves it there.
 
 - Rule: an undo or a redo of a run goes through `idle::IdleGate` as the run

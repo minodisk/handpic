@@ -1213,11 +1213,11 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 
 ### Native: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
 
-The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/native` has no ICU collator. Tauri uses `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/native/src/exif.rs` (`compare`).
+The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/native` has no ICU collator. Tauri used `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/native/src/exif.rs` (`compare`).
 
 #### TODO
 
-- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
+- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names, against the reference Tauri build named under "Native: real-device checks of the f focus mark, face boxes and face mesh" (an installed Riffle 1.10.0, or a build of the commit before #1150) or against `Intl.Collator` / `localeCompare` results for the same names, and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
 
 ### Native: real-device checks of the settings store and the settings modal (sort / filter persistence, Culling, Sidecar, Keyboard Shortcuts, label names, Import)
 
