@@ -791,7 +791,7 @@ barrier gives the drain for free.
 `scan::list` lists with `read_listing(dir, Some(format))`, and
 `Scan::prepare` runs `stat_sidecars` and `sidecar::reconcile_of` right after
 `reconcile`, on the open's background task and before the scan thread starts,
-as the Tauri `scan_folder` orders them, logging `scan sidecars: dir=…
+as the Tauri `scan_folder` ordered them, logging `scan sidecars: dir=…
 dirty=N changed=N in …ms`; a view-only folder skips it. The sidecars it could
 not read go to the pane's notes as `<name>: <message>`. On a copied folder of
 8 DNGs with XMP and `.dop` sidecars and a fresh index, the first open logged
@@ -842,7 +842,7 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
   still goes out when it changes nothing (`forceLabel`), so `judgment.rs` has
   `writes` next to `changed`; do not fold the two into one test. A failed
   undo / redo store also drops its file from the entry it pushed onto the
-  other history (the Tauri `step` passes no `onFail` for that entry).
+  other history (the Tauri `step` passed no `onFail` for that entry).
 - Rule: `rejectRest` is not a `judgment::Command`: the selection neither
   widens nor narrows it. `burst::reject_rest` builds its changes, every other
   member of the current file's burst over `all` (a member the filter hides
@@ -1426,7 +1426,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   A menu change, and only a menu change, anchors on it while no file is
   current, so `Reset` or unchecking the item lands on the file shown before
   the list emptied, else on its `anchor_after_filter` neighbour, else on the
-  first file. This is a native improvement: the Tauri `refilter` lands on the
+  first file. This is a native improvement: the Tauri `refilter` landed on the
   first file there.
 
 ### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
@@ -1454,7 +1454,7 @@ time a burst of its own. The view keeps the open folder's grouping in
   have set `all` first, and another folder's open replaces the grouping
   there, which stands in for the Tauri reset. `refilter`, a page, a judgment
   and a trash undo's `all.extend` do not regroup: as in the Tauri app the
-  grouping is stale until the next entries read, a file not grouped yet being
+  grouping was stale until the next entries read, a file not grouped yet being
   its own burst for the moves.
 - Rule: the strip's per-cell marks (`burst_marks` over `files`) are set in
   `mark_strip` next to the judgments, so the open, every rebuilding
@@ -1484,7 +1484,7 @@ time a burst of its own. The view keeps the open folder's grouping in
   paints the 8% tint over `--muted` (`isolation: isolate`).
 - Deliberate difference: `burst.ts` builds the time with `Date.UTC`, which
   rolls a month 00, a day 32 or an all-zero timestamp over into a finite
-  time, so such files can share a burst in the Tauri app. `capture_ms` parses
+  time, so such files could share a burst in the Tauri app. `capture_ms` parses
   strictly (month, the month's days, 23:59:59), and such a file has no
   capture time, a burst of its own.
 
@@ -1499,7 +1499,7 @@ is gpui-component's `StatusBar` with its defaults"): the status text in its
 center region, then, in its right region, the strip position and the
 progress circle while an operation runs. The status text is a transient note (an error, the drop
 refusal, the empty-folder and filtered texts) that `present` clears on every
-presented preview, as the Tauri `present`'s `setStatus()`, followed by
+presented preview, as the Tauri `present`'s `setStatus()` did, followed by
 `status()`'s suffixes with no leading separator when the note is empty; the
 current file's name and shooting settings live in the meta pane only, which
 holds only the shown photo's details. The position (`pager::position`) is
@@ -1608,8 +1608,8 @@ dimmed, shows capture order and keeps the stored key.
   bubble-phase `on_mouse_down`) on the popover closes it on any press outside,
   including one on its own button, whose bubble-phase `on_mouse_down` then
   runs for the same press. `Menus` keeps the closed menu and the press's
-  position, so that button press does not reopen it (the Tauri toggle sits
-  inside `#sort` / `#filter`, which its `mousedown` listener spares). The
+  position, so that button press does not reopen it (the Tauri toggle sat
+  inside `#sort` / `#filter`, which its `mousedown` listener spared). The
   buttons toggle on `on_mouse_down`, not `on_click`, for that reason; items
   use `on_click`.
 - Rule: `escape` closes an open menu, taken in the key handler before the
@@ -1999,16 +1999,16 @@ once, so the next judgment, from a key or the MCP companion's
 executor and under the view's `format_switch` lock (one switch at a time), it first checks
 its format against `format_latest`, the one last asked for, written on the main
 thread, and does nothing when a later click superseded it, so back-to-back
-switches end persisted as the radio shows (the Tauri `AppSwitchLock` gets the
+switches end persisted as the radio shows (the Tauri `AppSwitchLock` got the
 same by re-checking the current format inside the lock). Otherwise it drains the judgment stores
 (`judgment::Queue::drain`: a store queued before the switch carries the old
 format and must reach the writer before its flush) and runs the backend's
 `sidecar::switch_to`: the writer's flush (`sidecar::DRAIN_TIMEOUT`),
 `sidecarFormat` persisted through `Settings::writes`, `Index::reset_sidecars`.
-The Tauri `switch_format` calls the same `switch_to` after its own state
-write, so the two apps share one copy of that order. Back on the main thread
+The Tauri `switch_format` called the same `switch_to` after its own state
+write, in the same order. Back on the main thread
 it clears `touched`, the undo histories and the step note, as the Tauri
-reopen (`openDirectory`) clears `touched` and the judgment entries of its
+reopen (`openDirectory`) cleared `touched` and the judgment entries of its
 histories, and re-lists the open folder with `relist`, whose
 `sidecar::reconcile_of` runs only after the reset. A failure goes to the
 modal's status line (`SettingsView::failed`) and, as in the Tauri app, the
@@ -2023,7 +2023,7 @@ folder is not re-listed.
   writes XMP the Sidecar page shows the five name fields
   (`Input`) and a `Select` of `i18n::presets()` languages; a
   field's commit (Enter or blur; Escape commits and closes, as the Tauri
-  field's `change` fires when the closing dialog takes its focus) or a
+  field's `change` fired when the closing dialog takes its focus) or a
   language's choice normalizes the five with `sidecar::label_names_setting`, shows them back
   and emits `Change::LabelNames` only when they differ. The window then
   writes `labelNames` and puts the names in force on the main thread (a
@@ -2256,7 +2256,7 @@ prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
 
 `Scan::start`'s thread runs `index::run_faces_scan` over `faces_todo` right
 after `run_scan`, with the same `ScanFocus` and cancel flag, as the Tauri
-app's `run_faces_pass` does on its one task, but on `faces_threads()` (an
+app's `run_faces_pass` did on its one task, but on `faces_threads()` (an
 eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
 cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
 still +13 ms on RAF
@@ -2273,7 +2273,7 @@ or `faces_todo` failed, so the view always learns the scan is over. The first
 non-empty batch's file names go to the log as `scan faces first:`.
 
 - Rule: the deferred resync (`finished`) runs at `FacesDone`, not at pass 1's
-  `Done`, as the Tauri frontend drains its deferred rescan at `faces-done`. A
+  `Done`, as the Tauri frontend drained its deferred rescan at `faces-done`. A
   re-listing during pass 2 would be harmless (a canceled file keeps its old
   `faces_extractor`, so the next scan resumes it) but would restart the pass;
   waiting for its end keeps a burst of changes from restarting it over and
@@ -2631,7 +2631,7 @@ Read from `gpui_windows` at the pinned rev, not yet seen in the running app
   one, but a user override such as `shift+1` would not match.
 - With Ctrl or Alt held, a digit is `MapVirtualKeyW`'s unshifted character,
   `1` on a US or JIS layout (`ctrl+alt+1`), but `&` on AZERTY, where the
-  Tauri app's `event.code` still says `1`. Windows reports AltGr as Ctrl+Alt,
+  Tauri app's `event.code` said `1`. Windows reports AltGr as Ctrl+Alt,
   so on a layout with AltGr `ctrl+alt+<digit>` is also what AltGr+digit
   sends; the default color keys were the Tauri app's, so AltGr+digit behaved
   the same there.
@@ -2684,7 +2684,7 @@ load, not measured apart.
 `peaking.rs`'s job (resize to the drawn size, then the Sobel) takes 25-60 ms on
 a fit view, several frames, so it runs on `cx.background_spawn`, reading the
 shown `RenderImage`'s bytes through its `Arc` without a copy. One job is in
-flight, as the Tauri worker holds one request: under a held key each page
+flight, as the Tauri worker held one request: under a held key each page
 would otherwise queue a job on the executor the next preview decode runs on.
 A layer replaced while a job is out is never computed; the reply takes the
 newest unsent layer next. The fit view's drawn size is known only in the paint
@@ -2699,7 +2699,7 @@ deferred.
 
 ### The fit view's overlay is resized bilinearly (Measured)
 
-The overlay is computed at the drawn device size, as the Tauri app rasterises
+The overlay is computed at the drawn device size, as the Tauri app rasterised
 the bitmap at that size first. `image::imageops::resize` with
 `FilterType::Triangle`, the nearest to a canvas `drawImage`, was kept: at
 scale 1.0 it takes about 22-25 ms for a 1616x1080 ARW to 1275x852 and 47-67 ms
@@ -2742,7 +2742,7 @@ auto-repeated press calls no `cx.notify()`.
 it starts recording in `perf.rs`'s `Perf`, the backend's `perf::Sampler`,
 whose thread only sends `Event::Perf` into the view's one channel (the
 sample is stamped with `Instant::now()` when the view takes it, as the Tauri
-listener stamps `performance.now()`), and a 500 ms `cx.notify()` loop held as
+listener stamped `performance.now()`), and a 500 ms `cx.notify()` loop held as
 an `Option<Task<()>>`; hiding it stops all three and drops what was
 recorded. `Sampler::stop` only signals, so one late sample can still arrive
 and the model drops it. The graph is painted by the preview canvas's closure
@@ -3191,18 +3191,18 @@ neither a directory nor a file opens nothing and puts the Tauri
 - Rule: drops are ordered among themselves by the view's `drops` counter, the
   port of `dropCounter`: a drop whose resolve finishes after a later drop
   opens nothing. Unlike `pick_folder`, a drop is not dropped because `opens`
-  moved on while it resolved; Tauri mints its folder token only after the
+  moved on while it resolved; Tauri minted its folder token only after the
   path has resolved. `open` defers under a running trash or delete as for
   any open, so the drop has no gate of its own.
 - Rule: GPUI fires `on_drop` only on a hovered hitbox, and the settings,
   the trash dialog and the folder dialogs are `occlude()`d layers, so
   a drop over an open dialog or the settings does not reach the root and is
   ignored (as a
-  click in the tree is blocked by the same layers), where Tauri's drop was
+  click in the tree is blocked by the same layers), where Tauri's drop had been
   window-wide except under its format gate.
 - Rule: while an OS file drag is over the window, the main area (the tree,
-  the preview and the meta pane, the Tauri `#main`) shows the Tauri
-  `body.dragging #main` outline, 3px in `--ring`: `drop_outline`, an
+  the preview and the meta pane, the Tauri `#main`) shows the outline of
+  the Tauri `body.dragging #main`, 3px in `--ring`: `drop_outline`, an
   absolute child laid over that area, so the outline covers its content as
   the CSS `outline-offset: -3px` does instead of shrinking it. GPUI applies
   a drag-over style only to an element with a hitbox, and only while its own
@@ -3729,7 +3729,7 @@ mouse listeners were the smaller change.
   keyboard; a press of any button outside it (`on_mouse_down_out`, the
   capture phase, so the press still reaches its target) hands it back; a
   right press in the pane does neither. A press on the right-click menu hands
-  it back too, as a Tauri menu button takes the focus: the menu may be drawn
+  it back too, as a Tauri menu button took the focus: the menu may be drawn
   over the pane, which `on_mouse_down_out` (a bounds test, not occlusion)
   does not count as outside, so a `canvas` over the menu's wrapper registers
   a capture-phase `on_mouse_event` that tests the press against its bounds
@@ -3869,7 +3869,7 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   `Resync::open` first, so `Resync::busy` covers the listing it starts and a
   trash or delete waits for it.
 - Rule: a folder open discards a held run; a held run that drains while a
-  dialog is asking is dropped, as the Tauri closure checks `trashFlow.busy`.
+  dialog is asking is dropped, as the Tauri closure checked `trashFlow.busy`.
 - Rule: the run's result goes to the pane: `trashed_status` in the
   `step_note` line (the Tauri `note`), each failure through `write_failed`
   (`<name>: could not move to the Trash: <message>`), and after a delete the
@@ -4008,7 +4008,7 @@ the backdrop's condition and the gate's `Held` variant.
   dialog steps aside (`FolderOps::aside`) once the folders exist, `Import…`
   brings it back, Escape on it steps aside again and Cancel cancels. While
   the flow is busy, `FolderOps::busy` keeps the settings, the trash dialog
-  and the other folder flows shut, as `importFlow.busy` does in the Tauri
+  and the other folder flows shut, as `importFlow.busy` did in the Tauri
   app; `import_busy` is the flag the folder rename refuses on.
 - Rule: a quit mid-import sets the flag and waits for nothing: the copy
   removes the temp file of the file in flight when it sees the flag, but a
@@ -4102,13 +4102,13 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   nothing. A confirm (`PressEnter` or `Blur`) while the window is inactive is ignored: GPUI blurs the
   focused element when the window deactivates (the focus path of an inactive
   frame is empty), and the edit waits for the window to come back as the
-  Tauri blur checks `document.hasFocus()`. Any press outside the input
+  Tauri blur checked `document.hasFocus()`. Any press outside the input
   focuses the window's root (`track_focus` on any button) and so confirms.
   After Enter or Escape the root is focused again and the tree has the
   keyboard.
 - Inferred: a row scrolled out of the `uniform_list`'s range is not laid
   out, so a live edit scrolled away loses the focus and confirms; the Tauri
-  input stays in the DOM. A confirm on a folder the tree no longer has does
+  input stayed in the DOM. A confirm on a folder the tree no longer has does
   nothing.
 - Rule: a confirmed name goes through the gate as `HeldOp::Rename` under
   `Rename…` (`gate_request`): run at once with no listing, scan or run under
@@ -4182,7 +4182,7 @@ The `page` line uses the Tauri line's `wait` / `read` / `decode` meanings,
 collapses `ipc + post + worker` into `hop` (the time from the background result
 to the update on the main thread), and splits `draw` into
 `frameWait + paint + present`. `keypressToPixels` includes `present`; Tauri's
-stops at `drawImage`. It starts at the latest press of the file that ended up
+stopped at `drawImage`. It starts at the latest press of the file that ended up
 shown. `source=read|prefetch` says whether the image came from its own read or
 the prefetch ring; a hit's `read`, `decode`, `orient` and `hop` are 0, and
 its `wait` is the time `go` took before the hit.
