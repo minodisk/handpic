@@ -134,6 +134,49 @@
   and an undrawn row; `reveal` opened Explorer on a folder and a strip file
   (`\\?\` path) and refused a file outside the open folder and a missing path.
 
+## Step 4: Settings, and the `mcpAllowDestructive` switch
+
+- **One `apply_setting` for the modal and the tool.** The `settingsview::Change`
+  match moved out of the `subscribe_in` callback into `Riffle::apply_setting`
+  (taking the `WindowAppearance` the theme applies under); the callback keeps
+  only `ClearCache` and `Closed`, which need the window or are not settings.
+  `set_settings` answers `Action::Settings(Vec<Change>)`, so a tool's change
+  and the modal's are the same values through the same method. `Change` now
+  derives `Debug, PartialEq` for the companion's tests.
+- **The theme over MCP has no `Window`.** `mcp_request` reads the appearance
+  through the stored `AnyWindowHandle` (`self.window.update(..)`), falling
+  back to `cx.window_appearance()` should the window be borrowed. The modal's
+  path still passes `window.appearance()`, unchanged on Linux, where the two
+  can differ.
+- **Rules the modal never needed.** The modal's keys come from a real
+  keystroke, so it never sees a malformed key; a client can send `Ctrl+K` or
+  `alt+ctrl+k`, which the backend's `Keymap::add` accepts and which would
+  never fire. `companion::named_key` requires the `keys::key_name` round trip
+  and one key after the modifiers. The label names are refused while the
+  format (after the call's own switch) writes no XMP, as the modal hides them.
+  A call is atomic: one refused field refuses all of it.
+- **`mcp_allow_destructive` is refused twice**: `SettingsArgs` is
+  `deny_unknown_fields` (rmcp reports "unknown field" as the tool error) and
+  the companion refuses the key should it ever arrive. `get_settings` is a
+  read (`READS`), answered while the modal is open; `set_settings` is refused
+  then (Busy) and while a folder operation runs (`FolderOps::busy`).
+- `mcpEnabled` has no tool (read only at startup; a client would cut its own
+  connection): Step 8's exclusion list takes it. The Cache page's `Clear
+  Cache` (landed in #1128 after the plan's D6 listed it as missing) is an
+  action, not a setting, so Step 4 left it alone; Step 8 decides its tool.
+- **End to end** (`--mcp-port 41970`, a fresh `--settings` seeded with
+  `mcpEnabled`, no folder open): `get_settings` gave the defaults; one
+  `set_settings` with a light theme, auto-advance off, `k` added to `pick`,
+  the pattern `%Y/%m`, a root and the `ja` preset answered the new values and
+  logged the label names switch; repeating part of it changed nothing; `dop`
+  with label names, `q`, `Ctrl+K`, `%H`, a relative root,
+  `mcp_allow_destructive` and an empty call were refused with their messages;
+  the store then held `labelNames`, `autoAdvance`, `shortcuts`
+  (`{"pick":["p","k"]}`), `importRoot`, `importPattern`, `theme` and
+  `sidecarFormat` `both`.
+- Python run with `-I` ignores `PYTHONIOENCODING`; `-I -X utf8` prints the
+  Japanese preset names on a cp932 console.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: `open_folder` deferred by a run and refused during
@@ -169,3 +212,18 @@
   check whether the backend's `exif` reader should give `None` for an empty
   string, or the key skip it, and whether the Tauri `exif.ts` behaves the
   same.
+- **Pending manual check: the MCP settings page and a live theme over MCP.**
+  The switch's rule and store key are unit-tested (`settings.rs`,
+  `settingsmodal.rs`'s tab order) and the `set_settings` writes were checked
+  end to end, but the page and the repaint need eyes. On Windows, run the
+  native app with MCP on a test port as `docs/agents/native-app.md`
+  prescribes: (1) open the settings (`ctrl+,`), pick the MCP page between
+  Import and Appearance, flip "Let MCP clients run destructive operations
+  without asking" on, close, and call `get_settings`: expect
+  `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store;
+  reopen the page: the switch shows on; (2) with the settings closed, call
+  `set_settings {"theme":{"mode":"light","light":"Ayu Light"}}`: expect the
+  window to repaint in Ayu Light at once; (3) open the settings and call
+  `set_settings {"auto_advance":false}`: expect `Handpic's settings are open;
+  try again once the user closes them`, while `get_settings` still answers.
+  Step 4's checkbox was ticked on the automated criteria.

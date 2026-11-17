@@ -306,7 +306,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -353,7 +353,7 @@ rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
-holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, and the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`,
+holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpAllowDestructive` switch, which only the user flips, and the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`,
 `src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
@@ -426,7 +426,10 @@ path, `reveal` through `folder_action` / `files_action`, `Status`, the
 `get_status` answer of the status line, the scan pass, a listing or run under
 way and the pane's notes (`pane_notes`, `pane_errors`), and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
-timeout, and `Busy`, which refuses every request but the reads (`READS`) while
+timeout, `get_settings`, what the settings modal shows, `set_settings`, the
+modal's own `settingsview::Change`s by its rules, which the view's
+`apply_setting` applies as it does the modal's (never `mcpAllowDestructive`,
+refused while a folder operation runs), and `Busy`, which refuses every request but the reads (`READS`) while
 `key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`

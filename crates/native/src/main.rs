@@ -110,7 +110,7 @@ use gpui_kit::{
     ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions,
     Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy, SharedString,
     Subscription, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored,
+    WeakEntity, Window, WindowAppearance, WindowBounds, WindowDecorations, WindowOptions, anchored,
     base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline, point, prelude::*, px, rgb,
     rgba, size, svg, uniform_list,
 };
@@ -769,33 +769,7 @@ impl Riffle {
         cx.subscribe_in(
             &settings_view,
             window,
-            |this, _, change, window, cx| match *change {
-                Change::AutoAdvance(on) => {
-                    this.settings.auto_advance = on;
-                    this.settings.writes.set("autoAdvance", on.into());
-                }
-                Change::SidecarFormat(format) => this.switch_format(format, cx),
-                Change::LabelNames(ref names) => this.switch_names(names.clone(), cx),
-                Change::Keymap(ref keymap) => {
-                    this.bindings = Bindings::new(keymap);
-                    this.settings.writes.shortcuts(keymap);
-                    this.settings.keymap = keymap.clone();
-                }
-                Change::ImportRoot(ref root) => {
-                    this.settings.writes.set("importRoot", root.as_str().into());
-                    this.settings.import_root = root.clone();
-                }
-                Change::ImportPattern(ref pattern) => {
-                    this.settings
-                        .writes
-                        .set("importPattern", pattern.as_str().into());
-                    this.settings.import_pattern = pattern.clone();
-                }
-                Change::Theme(setting) => {
-                    theme::apply(setting, window.appearance(), cx);
-                    this.settings.writes.set("theme", setting.setting());
-                    this.settings.theme = setting;
-                }
+            |this, _, change, window, cx| match change {
                 Change::ClearCache => this.press_clear(cx),
                 Change::Closed => {
                     this.clear.discard();
@@ -803,6 +777,7 @@ impl Riffle {
                     window.focus(&this.focus, cx);
                     cx.notify();
                 }
+                change => this.apply_setting(change, window.appearance(), cx),
             },
         )
         .detach();
@@ -2346,6 +2321,51 @@ impl Riffle {
         }
         log::info!("resync: dir={dir}");
         self.list(PathBuf::from(dir), true, cx).detach();
+    }
+
+    /// A setting changed in the settings modal or by `set_settings`: in force
+    /// at once and written to the store. The theme is applied under the
+    /// window's `appearance`.
+    fn apply_setting(
+        &mut self,
+        change: &Change,
+        appearance: WindowAppearance,
+        cx: &mut Context<Self>,
+    ) {
+        match *change {
+            Change::AutoAdvance(on) => {
+                self.settings.auto_advance = on;
+                self.settings.writes.set("autoAdvance", on.into());
+            }
+            Change::SidecarFormat(format) => self.switch_format(format, cx),
+            Change::LabelNames(ref names) => self.switch_names(names.clone(), cx),
+            Change::Keymap(ref keymap) => {
+                self.bindings = Bindings::new(keymap);
+                self.settings.writes.shortcuts(keymap);
+                self.settings.keymap = keymap.clone();
+            }
+            Change::ImportRoot(ref root) => {
+                self.settings.writes.set("importRoot", root.as_str().into());
+                self.settings.import_root = root.clone();
+            }
+            Change::ImportPattern(ref pattern) => {
+                self.settings
+                    .writes
+                    .set("importPattern", pattern.as_str().into());
+                self.settings.import_pattern = pattern.clone();
+            }
+            Change::Theme(setting) => {
+                theme::apply(setting, appearance, cx);
+                self.settings.writes.set("theme", setting.setting());
+                self.settings.theme = setting;
+            }
+            Change::McpAllowDestructive(on) => {
+                log::info!("mcp: allow destructive operations={on}");
+                self.settings.mcp_allow_destructive = on;
+                self.settings.writes.set("mcpAllowDestructive", on.into());
+            }
+            Change::ClearCache | Change::Closed => {}
+        }
     }
 
     /// The settings' sidecar format switch: the next judgment is queued in
@@ -4954,6 +4974,8 @@ impl Riffle {
                 tree: &this.tree_rows,
                 tree_open: this.tree_open.as_deref(),
                 idle: this.status_of().idle(),
+                settings: &this.settings,
+                folder_op: this.folderops.busy(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -5007,6 +5029,17 @@ impl Riffle {
                         }
                     }
                     Some(companion::Action::Key(key)) => self.perform(key, cx),
+                    Some(companion::Action::Settings(changes)) => {
+                        // The window is free here unless a window update
+                        // delivered the request; then the app's appearance.
+                        let appearance = self
+                            .window
+                            .update(cx, |_, window, _| window.appearance())
+                            .unwrap_or_else(|_| cx.window_appearance());
+                        for change in &changes {
+                            self.apply_setting(change, appearance, cx);
+                        }
+                    }
                     Some(companion::Action::Open(path)) => self.open_from_tree(path, cx).detach(),
                     Some(companion::Action::Tree { path, op }) => {
                         // The menu's items through the menu's own path.
@@ -5027,6 +5060,7 @@ impl Riffle {
                     "get_status" | "open_folder" | "wait_for_idle" => {
                         Ok(companion::get_status(&self.status_of()))
                     }
+                    "get_settings" | "set_settings" => Ok(companion::get_settings(&self.settings)),
                     "tree_folder" => Ok(companion::tree_reply(
                         &view(self, cx),
                         &request.args["path"],

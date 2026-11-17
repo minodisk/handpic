@@ -65,6 +65,7 @@ type Languages = SelectState<SearchableVec<SharedString>>;
 type Themes = SelectState<SearchableVec<SharedString>>;
 
 /// What the main view applies.
+#[derive(Debug, PartialEq)]
 pub enum Change {
     AutoAdvance(bool),
     SidecarFormat(SidecarFormat),
@@ -78,6 +79,8 @@ pub enum Change {
     ImportPattern(String),
     /// The theme setting after a choice that changed it.
     Theme(theme::Setting),
+    /// The MCP page's switch, which only the user flips.
+    McpAllowDestructive(bool),
     /// `Clear Cache` pressed.
     ClearCache,
     /// The main view takes the focus back.
@@ -108,6 +111,7 @@ pub struct SettingsView {
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
     theme: theme::Setting,
+    mcp_allow_destructive: bool,
     /// The light and the dark theme's pickers.
     light_themes: Entity<Themes>,
     dark_themes: Entity<Themes>,
@@ -188,6 +192,7 @@ impl SettingsView {
             pattern_field,
             example: Ok(String::new()),
             theme: theme::Setting::default(),
+            mcp_allow_destructive: false,
             light_themes,
             dark_themes,
             index_size: cache::UNKNOWN_SIZE.into(),
@@ -220,6 +225,7 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.theme = settings.theme;
+        self.mcp_allow_destructive = settings.mcp_allow_destructive;
         for (themes, name) in [
             (&self.light_themes, self.theme.light),
             (&self.dark_themes, self.theme.dark),
@@ -456,6 +462,12 @@ impl SettingsView {
         cx.notify();
     }
 
+    fn flip_allow_destructive(&mut self, cx: &mut Context<Self>) {
+        self.mcp_allow_destructive = !self.mcp_allow_destructive;
+        cx.emit(Change::McpAllowDestructive(self.mcp_allow_destructive));
+        cx.notify();
+    }
+
     fn choose_format(&mut self, chosen: SidecarFormat, cx: &mut Context<Self>) {
         let Some(format) = settingsmodal::format_change(self.format, chosen) else {
             return;
@@ -525,6 +537,7 @@ impl SettingsView {
                 Tab::Shortcuts => self.shortcuts(page, &view),
                 Tab::Cache => self.cache(page, &view),
                 Tab::Import => self.import(page, &view),
+                Tab::Mcp => self.mcp(page, &view),
                 Tab::Appearance => self.appearance(page, &view),
             }
         }))
@@ -743,6 +756,25 @@ impl SettingsView {
                     )
                 })
                 .keywords(["Reset all"]),
+            ),
+        )
+    }
+
+    /// The switch that lets MCP clients run the destructive operations
+    /// without the app's dialog, as `culling`'s.
+    fn mcp(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let checked = self.mcp_allow_destructive;
+        let view = view.clone();
+        page.group(
+            SettingGroup::new().item(
+                SettingItem::new(
+                    settingsmodal::ALLOW_DESTRUCTIVE_LABEL,
+                    SettingField::switch(
+                        move |_| checked,
+                        move |_, cx| view.update(cx, |this, cx| this.flip_allow_destructive(cx)),
+                    ),
+                )
+                .description(settingsmodal::ALLOW_DESTRUCTIVE_NOTE),
             ),
         )
     }

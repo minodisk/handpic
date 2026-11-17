@@ -236,7 +236,7 @@ Made with the user on 2026-11-17.
       `BRIDGE_TIMEOUT` (capped, e.g. at 55 s, under typical client limits);
       the view answers it when it becomes idle rather than by polling.
 
-- [ ] Step 4: Settings, and the `mcpAllowDestructive` switch
+- [x] Step 4: Settings, and the `mcpAllowDestructive` switch
   - Done when:
     - `get_settings` answers every setting the native settings modal shows:
       the sidecar format, the label names (and the Lightroom language preset
@@ -427,3 +427,4 @@ Made with the user on 2026-11-17.
 - (2026-11-17) Step 1 complete
 - (2026-11-17) Step 2 complete
 - (2026-11-17) Step 3 complete
+- (2026-11-17) Step 4 complete

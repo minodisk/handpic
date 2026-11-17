@@ -803,15 +803,16 @@ with the file selected alone for `show_photo` or with
 `selection::selection_of` over the given paths for `select_photos`,
 `toggle_zoom`, `judge_paths`, `perform` with a `companion::Key`,
 `apply_menu`, `change_panels`, the overlays' toggles, `open_from_tree`,
-`tree_toggle` or `folder_action`, or `files_action`'s reveal) and replies
-through `Mcp::reply`.
+`tree_toggle` or `folder_action`, `files_action`'s reveal, or
+`apply_setting`) and replies through `Mcp::reply`.
 
 The tool list is the host's. `Mcp::new` lists the seven companion tools with
 the Tauri `INSTRUCTIONS`, which is what the Tauri app keeps (`crates/app` is
 not touched); `Mcp::with_all_tools` adds the `native_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
-`tree_folder`, `reveal`, `get_status`, `wait_for_idle`) and the native
+`tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
+`set_settings`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -881,8 +882,35 @@ waiter once `Status::idle`, or from a timer at `timeout_ms` with the status as
 it is. The backend caps the wait at 55 s (`IDLE_WAIT_MAX`, 30 s by default)
 and waits `BRIDGE_TIMEOUT` longer than that through `Bridge::call_within`.
 
-Every request but the reads (`get_view`, `get_status`, `wait_for_idle`) is
-refused while `key_down` drops keys (`companion::Busy`): the settings modal
+The settings tools answer from `Settings` and change it the settings
+modal's way. `get_settings` reports what the modal shows: the sidecar format,
+the label names per color with the Lightroom language whose preset they are
+(`settingsmodal::preset_of`, null for edited names) and the presets, auto-advance,
+every keymap action with its `shortcut_label` and keys, the import root (null
+while unset) and pattern, the theme with the names `theme::names` offers per
+mode, and `mcpAllowDestructive`. `set_settings` turns a call into the modal's
+own `settingsview::Change` values through its rules (`format_change`,
+`label_names_of` / `label_change`, `settingsmodal::edit`, `pattern_change`,
+`mode_change`, `theme_change`), and the view applies them with
+`apply_setting`, the method the modal's `subscribe_in` callback calls too, so
+a format switch drains, persists and re-lists as `switch_format` does, and a
+theme applies at once (under the window's appearance, read through the stored
+`AnyWindowHandle`, the app's when the window is borrowed). A field left out is
+kept, a value in force changes nothing (no action, and the reply is still
+`get_settings`), and one refused field refuses the whole call: label names
+while the format, after the call's own switch, writes no XMP (the modal hides
+them), `label_names` with `label_language`, a key the keymap does not spell
+as `keys::key_name` names a keystroke (one key after the modifiers in their
+order), and an import root that is not an absolute folder (checked in the
+backend). `set_settings` is refused while a folder operation runs
+(`FolderOps::busy`), as `key_down` keeps the modal shut then.
+`mcpAllowDestructive` is never set over MCP: `SettingsArgs` has no such field
+(`deny_unknown_fields`), and the companion refuses it should it arrive.
+`mcpEnabled` has no tool either: the native app reads it only at startup, and
+a client would be switching off its own connection.
+
+Every request but the reads (`get_view`, `get_status`, `wait_for_idle`,
+`get_settings`) is refused while `key_down` drops keys (`companion::Busy`): the settings modal
 open, a Move to Trash or Delete Permanently flow under way (`trash.busy()`), a
 folder operation's dialog open, or an inline rename live
 (`FolderOps::editing`, not `rename_owns_keys`, which also disarms the slow
@@ -1314,15 +1342,20 @@ takes the pending page and releases the scan pause (`hold.rs`'s
 file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
-with six `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache and
-Import (no MCP or Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
+with seven `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
+Import and MCP (no Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
 
 A change is emitted as a `settingsview::Change`; the window applies it in its
-`subscribe_in` callback (the main view stays the owner of the values):
+`subscribe_in` callback, the setting changes through `apply_setting`, which
+`set_settings` runs too (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`McpAllowDestructive` (the MCP page's one switch, off by default, which lets
+an MCP client run the recoverable destructive operations without the app's
+dialog) sets `settings.mcp_allow_destructive` and writes
+`mcpAllowDestructive`,
 `Theme` (the Appearance page's System / Light / Dark radios and its light
 and dark theme pickers) applies the setting under the window's appearance and writes `theme` (read and written
 under `--auto` too, as the other settings of the modal),

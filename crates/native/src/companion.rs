@@ -4,7 +4,10 @@
 //! action runs, and the sort, the filter, the panes and the overlays, each
 //! set to a given state rather than toggled, and the folder tree's opens,
 //! expansions and reveals. `get_status` reports what the status row and the
-//! pane's notes tell the user (`Status`), which `wait_for_idle` waits on. The
+//! pane's notes tell the user (`Status`), which `wait_for_idle` waits on.
+//! `get_settings` reports what the settings modal shows, and `set_settings`
+//! turns a call into the modal's own `settingsview::Change`s, by its rules,
+//! never `mcpAllowDestructive`, which only the user grants. The
 //! selection is the strip's (`selection::targets`). The native view has no
 //! compare and no ranking, so compare and the `recommended` sort are refused,
 //! and so is every request but the reads (`READS`) while the view drops keys
@@ -17,11 +20,13 @@ use std::{
     sync::Arc,
 };
 
+use gpui_kit::component::ThemeMode;
+use riffle_backend::shortcuts::Keymap;
 use riffle_backend::{
     index::{flag_name, parse_flag},
     ondemand::EyesJudgment,
 };
-use riffle_core::Flag;
+use riffle_core::{Flag, i18n, xmp::LabelNames};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -31,10 +36,15 @@ use crate::{
     filter::{self, Facts, FilterState, OutputState},
     history::Top,
     judgment::State,
+    keys,
     menu::{self, Toggle},
     panels::Panels,
     selection::{self, Selection},
+    settings::Settings,
+    settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, MODES},
+    settingsview::Change as SettingChange,
     sort::SortKey,
+    theme,
     tree::{self, IGNORE_CASE, Relation, Row},
     viewonly,
 };
@@ -47,7 +57,13 @@ const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
 /// The requests that change nothing, answered while the view drops keys.
-const READS: [&str; 3] = ["get_view", "get_status", "wait_for_idle"];
+const READS: [&str; 4] = ["get_view", "get_status", "wait_for_idle", "get_settings"];
+const ALLOW_DESTRUCTIVE_REFUSAL: &str = "mcp_allow_destructive is the user's to change, on the \
+     MCP page of Handpic's settings; a client cannot set it";
+/// `key_down`'s refusal of the settings while a folder operation runs, whose
+/// run reads the format and the import settings.
+const FOLDER_OP_REFUSAL: &str =
+    "a folder operation is under way in Handpic; try again once it ends";
 /// The color labels the judgment keys set, as `State.label` holds them.
 const LABELS: [&str; 7] = ["Red", "Orange", "Yellow", "Green", "Blue", "Pink", "Purple"];
 /// The `Output` items' names.
@@ -106,6 +122,10 @@ pub struct View<'a> {
     pub tree_open: Option<&'a str>,
     /// Nothing is under way (`Status::idle`).
     pub idle: bool,
+    pub settings: &'a Settings,
+    /// A folder operation is under way (`FolderOps::busy`), which keeps the
+    /// settings modal from opening.
+    pub folder_op: bool,
 }
 
 /// What `get_status` reads of the view: what the status row and the pane's
@@ -269,6 +289,9 @@ pub enum Action {
     /// Reply with `get_status` once the view is idle, or after this many
     /// milliseconds.
     Wait(u64),
+    /// Apply these settings changes in order, as the settings modal's, and
+    /// reply with `get_settings`.
+    Settings(Vec<SettingChange>),
 }
 
 /// What `tree_folder` does: the expander, `Space` on a row, and the tree
@@ -319,6 +342,8 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "open_folder" => open_folder(view, &args["path"]),
         "tree_folder" => tree_folder(view, args),
         "reveal" => reveal(view, args).map(Some),
+        "get_settings" => Ok(None),
+        "set_settings" => set_settings(view, args),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -961,6 +986,253 @@ fn reveal(view: &View, args: &Value) -> Result<Action, String> {
     Ok(Action::Reveal { path, folder })
 }
 
+/// What the settings modal shows: the sidecar format, the label names with
+/// the Lightroom language whose preset they are, auto-advance, the keymap,
+/// the import root and pattern, the theme and the themes to choose from, and
+/// `mcpAllowDestructive`.
+pub fn get_settings(settings: &Settings) -> Value {
+    let names: Map<String, Value> = LABEL_COLORS
+        .iter()
+        .zip(settingsmodal::label_texts(&settings.names))
+        .map(|(color, name)| (color.to_lowercase(), name.into()))
+        .collect();
+    let theme = settings.theme;
+    json!({
+        "sidecar_format": settings.format.setting(),
+        "sidecar_formats": FORMATS.iter().map(|(format, _)| format.setting()).collect::<Vec<_>>(),
+        "label_names": names,
+        "label_language": settingsmodal::preset_of(&settings.names)
+            .map(|at| i18n::presets()[at].code.clone()),
+        "label_languages": i18n::presets()
+            .iter()
+            .map(|preset| json!({ "code": preset.code, "name": preset.name }))
+            .collect::<Vec<_>>(),
+        "auto_advance": settings.auto_advance,
+        "shortcuts": settings
+            .keymap
+            .bindings()
+            .iter()
+            .map(|b| json!({
+                "action": b.action,
+                "label": settingsmodal::shortcut_label(b.action),
+                "keys": b.keys,
+            }))
+            .collect::<Vec<_>>(),
+        "import_root": (!settings.import_root.is_empty()).then_some(&settings.import_root),
+        "import_pattern": settings.import_pattern,
+        "theme": {
+            "mode": theme.mode.setting(),
+            "light": theme.light,
+            "dark": theme.dark,
+        },
+        "themes": {
+            "light": theme::names(ThemeMode::Light).collect::<Vec<_>>(),
+            "dark": theme::names(ThemeMode::Dark).collect::<Vec<_>>(),
+        },
+        "mcp_allow_destructive": settings.mcp_allow_destructive,
+    })
+}
+
+/// A string field `args` gives, `None` when left out.
+fn text<'v>(args: &'v Value, name: &str) -> Result<Option<&'v str>, String> {
+    given_field(args, name)
+        .map(|v| v.as_str().ok_or_else(|| format!("{name} must be a string")))
+        .transpose()
+}
+
+/// The label names `label_names` or `label_language` asks for, the colors
+/// left out keeping theirs, normalized as a commit of the fields is.
+fn wanted_names(settings: &Settings, args: &Value) -> Result<Option<LabelNames>, String> {
+    let language = text(args, "label_language")?;
+    let Some(names) = given_field(args, "label_names") else {
+        return language
+            .map(|code| {
+                i18n::presets()
+                    .iter()
+                    .find(|preset| preset.code == code)
+                    .map(|preset| preset.names.clone())
+                    .ok_or_else(|| format!("{code:?} is not one of get_settings' label_languages"))
+            })
+            .transpose();
+    };
+    if language.is_some() {
+        return Err("set label_names or label_language, not both".into());
+    }
+    let names = names
+        .as_object()
+        .ok_or("label_names must be an object of color names")?;
+    let colors: Vec<String> = LABEL_COLORS.iter().map(|c| c.to_lowercase()).collect();
+    if let Some(other) = names.keys().find(|key| !colors.contains(key)) {
+        return Err(format!(
+            "{other:?} is not one of the label colors: red, yellow, green, blue, purple"
+        ));
+    }
+    let current = settingsmodal::label_texts(&settings.names);
+    let texts = colors
+        .iter()
+        .zip(current)
+        .map(|(color, current)| match names.get(color) {
+            None => Ok(current),
+            Some(name) => name
+                .as_str()
+                .ok_or_else(|| format!("label_names.{color} must be a string")),
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    Ok(Some(settingsmodal::label_names_of(std::array::from_fn(
+        |at| texts[at],
+    ))))
+}
+
+/// `key` is spelled as `keys::key_name` names a keystroke: the modifiers in
+/// their order, then one key, which a key press can match.
+fn named_key(key: &str) -> bool {
+    let stroke = keys::keystroke_of(key);
+    keys::key_name(&stroke).as_deref() == Some(key)
+        && !stroke.key.is_empty()
+        && (stroke.key == "+" || !stroke.key.contains('+'))
+}
+
+/// The keymap after `shortcuts`' edits in order, each refused as the
+/// Keyboard Shortcuts page refuses it.
+fn edited_keymap(settings: &Settings, shortcuts: &Value) -> Result<Keymap, String> {
+    let edits = shortcuts
+        .as_array()
+        .ok_or("shortcuts must be a list of edits")?;
+    let mut keymap = settings.keymap.clone();
+    let bindings = keymap.bindings();
+    for edit in edits {
+        let op = text(edit, "op")?.ok_or("each shortcut edit needs its op")?;
+        let action = text(edit, "action")?
+            .map(|action| {
+                bindings
+                    .iter()
+                    .find(|b| b.action == action)
+                    .map(|b| b.action)
+                    .ok_or_else(|| format!("unknown action {action:?}"))
+            })
+            .transpose()?;
+        let key = text(edit, "key")?;
+        let edit = match (op, action, key) {
+            ("reset_all", None, None) => Edit::ResetAll,
+            ("reset", Some(action), None) => Edit::Reset(action),
+            ("remove", Some(action), Some(key)) => Edit::Remove(action, key.to_owned()),
+            ("add", Some(action), Some(key)) => {
+                if !named_key(key) {
+                    return Err(format!(
+                        "{key:?} is not a key as Handpic names it, such as k, shift+x, ctrl+z \
+                         or arrowright"
+                    ));
+                }
+                Edit::Add(action, key.to_owned())
+            }
+            ("add" | "remove", ..) => {
+                return Err(format!("a shortcut {op} needs an action and a key"));
+            }
+            ("reset", ..) => return Err("a shortcut reset needs an action and no key".into()),
+            ("reset_all", ..) => return Err("a shortcut reset_all takes no action or key".into()),
+            _ => {
+                return Err(format!(
+                    "{op:?} is not a shortcut op: add, remove, reset or reset_all"
+                ));
+            }
+        };
+        settingsmodal::edit(&mut keymap, edit)?;
+    }
+    Ok(keymap)
+}
+
+/// The theme setting `theme`'s fields ask for over `current`, each through
+/// the Appearance page's rule.
+fn wanted_theme(current: theme::Setting, args: &Value) -> Result<theme::Setting, String> {
+    if !args.is_object() {
+        return Err("theme must be an object of mode, light and dark".into());
+    }
+    let mut setting = current;
+    if let Some(mode) = text(args, "mode")? {
+        let (chosen, _) = MODES
+            .iter()
+            .find(|(m, _)| m.setting() == mode)
+            .ok_or_else(|| format!("{mode:?} is not a theme mode: system, light or dark"))?;
+        setting = settingsmodal::mode_change(setting, *chosen).unwrap_or(setting);
+    }
+    for (field, mode) in [("light", ThemeMode::Light), ("dark", ThemeMode::Dark)] {
+        let Some(name) = text(args, field)? else {
+            continue;
+        };
+        if !theme::names(mode).any(|n| n == name) {
+            return Err(format!(
+                "{name:?} is not one of get_settings' themes.{field}"
+            ));
+        }
+        setting = settingsmodal::theme_change(setting, mode, name).unwrap_or(setting);
+    }
+    Ok(setting)
+}
+
+/// The settings modal's changes a `set_settings` call asks for, by the
+/// modal's rules; the whole call is refused when one field is. A call that
+/// changes nothing answers no action.
+fn set_settings(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    if args.get("mcp_allow_destructive").is_some() {
+        return Err(ALLOW_DESTRUCTIVE_REFUSAL.into());
+    }
+    if view.folder_op {
+        return Err(FOLDER_OP_REFUSAL.into());
+    }
+    let settings = view.settings;
+    let mut changes = Vec::new();
+    let mut format = settings.format;
+    if let Some(name) = text(args, "sidecar_format")? {
+        let (chosen, _) = FORMATS
+            .iter()
+            .find(|(f, _)| f.setting() == name)
+            .ok_or_else(|| format!("{name:?} is not a sidecar format: xmp, dop or both"))?;
+        if let Some(chosen) = settingsmodal::format_change(format, *chosen) {
+            format = chosen;
+            changes.push(SettingChange::SidecarFormat(chosen));
+        }
+    }
+    if let Some(names) = wanted_names(settings, args)? {
+        if !settingsmodal::writes_xmp(format) {
+            return Err(
+                "the label names apply only while the sidecar format writes XMP (xmp or both)"
+                    .into(),
+            );
+        }
+        if let Some(names) = settingsmodal::label_change(&settings.names, names) {
+            changes.push(SettingChange::LabelNames(names));
+        }
+    }
+    if let Some(on) = switch(args, "auto_advance")?
+        && on != settings.auto_advance
+    {
+        changes.push(SettingChange::AutoAdvance(on));
+    }
+    if let Some(shortcuts) = given_field(args, "shortcuts") {
+        let keymap = edited_keymap(settings, shortcuts)?;
+        if keymap != settings.keymap {
+            changes.push(SettingChange::Keymap(keymap));
+        }
+    }
+    if let Some(root) = text(args, "import_root")?
+        && root != settings.import_root
+    {
+        changes.push(SettingChange::ImportRoot(root.to_owned()));
+    }
+    if let Some(pattern) = text(args, "import_pattern")?
+        && let Some(pattern) = settingsmodal::pattern_change(&settings.import_pattern, pattern)?
+    {
+        changes.push(SettingChange::ImportPattern(pattern));
+    }
+    if let Some(wanted) = given_field(args, "theme") {
+        let setting = wanted_theme(settings.theme, wanted)?;
+        if setting != settings.theme {
+            changes.push(SettingChange::Theme(setting));
+        }
+    }
+    Ok((!changes.is_empty()).then_some(Action::Settings(changes)))
+}
+
 /// The fields `set_judgment` gives, `None` where it keeps each photo's own.
 struct Given {
     /// `Some(None)` clears the stars.
@@ -1087,8 +1359,8 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, Busy, Change, Key, Overlays, Status, TreeOp, View, answer, get_status, get_view,
-        tree_reply,
+        Action, Busy, Change, Key, Overlays, Status, TreeOp, View, answer, get_settings,
+        get_status, get_view, tree_reply,
     };
     use crate::{
         burst::BurstMember,
@@ -1099,14 +1371,19 @@ mod tests {
         menu::{self, Toggle},
         panels::Panels,
         selection::{Selection, selection_of},
+        settings::{self, Settings},
+        settingsmodal::{Edit, edit},
+        settingsview::Change as SettingChange,
         sort::SortKey,
+        theme::{self, Mode, NEUTRAL},
         tree::Row,
     };
     use riffle_backend::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
     };
-    use riffle_core::Flag;
+    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use riffle_core::{Flag, i18n, xmp::LabelNames};
     use serde_json::{Value, json};
     use std::{
         collections::{HashMap, HashSet},
@@ -1125,6 +1402,7 @@ mod tests {
     static NO_SELECTION: LazyLock<Selection> = LazyLock::new(Selection::default);
     static NO_FILTER: LazyLock<FilterState> = LazyLock::new(FilterState::default);
     static NO_GROUPS: LazyLock<Groups> = LazyLock::new(Groups::default);
+    static DEFAULT_SETTINGS: LazyLock<Settings> = LazyLock::new(settings::defaults);
 
     fn view(files: &[PathBuf]) -> View<'_> {
         View {
@@ -1152,6 +1430,8 @@ mod tests {
             tree: &[],
             tree_open: None,
             idle: true,
+            settings: &DEFAULT_SETTINGS,
+            folder_op: false,
         }
     }
 
@@ -2592,6 +2872,316 @@ mod tests {
                 "/d/b.ARW is not shown in Handpic: not in the open folder, or hidden by the filter"
                     .into()
             )
+        );
+    }
+
+    fn set(args: Value, settings: &Settings) -> Result<Option<Action>, String> {
+        let files = paths(&["/d/a.ARW"]);
+        let view = View {
+            settings,
+            ..view(&files)
+        };
+        answer("set_settings", &args, &view)
+    }
+
+    fn changes(args: Value, settings: &Settings) -> Vec<SettingChange> {
+        match set(args, settings) {
+            Ok(Some(Action::Settings(changes))) => changes,
+            other => panic!("not a settings change: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn get_settings_reports_what_the_settings_modal_shows() {
+        let settings = Settings {
+            import_pattern: "%Y/%m".into(),
+            mcp_allow_destructive: true,
+            ..settings::defaults()
+        };
+        let reply = get_settings(&settings);
+        assert_eq!(reply["sidecar_format"], "xmp");
+        assert_eq!(reply["sidecar_formats"], json!(["xmp", "dop", "both"]));
+        assert_eq!(
+            reply["label_names"],
+            json!({
+                "red": "Red", "yellow": "Yellow", "green": "Green", "blue": "Blue",
+                "purple": "Purple"
+            })
+        );
+        assert_eq!(reply["label_language"], "en");
+        assert_eq!(
+            reply["label_languages"][0],
+            json!({ "code": "en", "name": i18n::presets()[0].name })
+        );
+        assert_eq!(reply["auto_advance"], true);
+        let pick = reply["shortcuts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|s| s["action"] == "pick")
+            .unwrap();
+        assert_eq!(
+            pick,
+            &json!({ "action": "pick", "label": "Pick", "keys": ["p"] })
+        );
+        assert_eq!(reply["import_root"], Value::Null);
+        assert_eq!(reply["import_pattern"], "%Y/%m");
+        assert_eq!(
+            reply["theme"],
+            json!({ "mode": "dark", "light": NEUTRAL, "dark": NEUTRAL })
+        );
+        assert_eq!(reply["themes"]["light"][0], NEUTRAL);
+        assert!(
+            reply["themes"]["dark"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("Ayu Dark"))
+        );
+        assert_eq!(reply["mcp_allow_destructive"], true);
+    }
+
+    #[test]
+    fn get_settings_names_no_language_for_edited_names() {
+        let settings = Settings {
+            names: LabelNames {
+                red: "Custom".into(),
+                ..LabelNames::default()
+            },
+            import_root: "/photos".into(),
+            ..settings::defaults()
+        };
+        let reply = get_settings(&settings);
+        assert_eq!(reply["label_language"], Value::Null);
+        assert_eq!(reply["label_names"]["red"], "Custom");
+        assert_eq!(reply["import_root"], "/photos");
+    }
+
+    #[test]
+    fn get_settings_is_answered_while_the_settings_are_open_and_set_settings_is_not() {
+        let files = paths(&["/d/a.ARW"]);
+        let open = View {
+            busy: Some(Busy::Settings),
+            ..view(&files)
+        };
+        assert_eq!(ask("get_settings", json!({}), &open), Ok(None));
+        assert_eq!(
+            ask("set_settings", json!({ "auto_advance": false }), &open),
+            Err("Handpic's settings are open; try again once the user closes them".into())
+        );
+    }
+
+    #[test]
+    fn set_settings_refuses_the_destructive_switch_and_a_running_folder_operation() {
+        let defaults = settings::defaults();
+        assert!(
+            set(json!({ "mcp_allow_destructive": true }), &defaults)
+                .unwrap_err()
+                .contains("the user's to change")
+        );
+        let files = paths(&["/d/a.ARW"]);
+        let running = View {
+            folder_op: true,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("set_settings", json!({ "auto_advance": false }), &running),
+            Err("a folder operation is under way in Handpic; try again once it ends".into())
+        );
+    }
+
+    #[test]
+    fn set_settings_gives_the_modals_changes_in_order_and_none_for_the_values_in_force() {
+        let defaults = settings::defaults();
+        assert_eq!(
+            set(
+                json!({
+                    "sidecar_format": "xmp",
+                    "auto_advance": true,
+                    "import_pattern": "%Y/%F",
+                    "import_root": "",
+                    "theme": { "mode": "dark", "light": NEUTRAL },
+                    "label_language": "en",
+                    "shortcuts": [{ "op": "reset", "action": "pick" }]
+                }),
+                &defaults
+            ),
+            Ok(None)
+        );
+        let theme = theme::Setting {
+            mode: Mode::System,
+            dark: "Ayu Dark",
+            ..theme::Setting::default()
+        };
+        assert_eq!(
+            changes(
+                json!({
+                    "theme": { "mode": "system", "dark": "Ayu Dark" },
+                    "import_pattern": "%Y/%m",
+                    "import_root": "/photos",
+                    "auto_advance": false,
+                    "label_names": { "red": " Rot " },
+                    "sidecar_format": "both"
+                }),
+                &defaults
+            ),
+            [
+                SettingChange::SidecarFormat(SidecarFormat::Both),
+                SettingChange::LabelNames(LabelNames {
+                    red: "Rot".into(),
+                    ..LabelNames::default()
+                }),
+                SettingChange::AutoAdvance(false),
+                SettingChange::ImportRoot("/photos".into()),
+                SettingChange::ImportPattern("%Y/%m".into()),
+                SettingChange::Theme(theme),
+            ]
+        );
+    }
+
+    #[test]
+    fn set_settings_takes_a_languages_preset_or_names_and_only_while_writing_xmp() {
+        let defaults = settings::defaults();
+        let ja = i18n::preset("ja").unwrap();
+        assert_eq!(
+            changes(json!({ "label_language": "ja" }), &defaults),
+            [SettingChange::LabelNames(ja.names.clone())]
+        );
+        assert!(
+            set(json!({ "label_language": "xx" }), &defaults)
+                .unwrap_err()
+                .contains("label_languages")
+        );
+        assert_eq!(
+            set(
+                json!({ "label_language": "ja", "label_names": { "red": "Rot" } }),
+                &defaults
+            ),
+            Err("set label_names or label_language, not both".into())
+        );
+        assert!(
+            set(json!({ "label_names": { "orange": "Orange" } }), &defaults)
+                .unwrap_err()
+                .contains("is not one of the label colors")
+        );
+        assert_eq!(
+            set(
+                json!({ "sidecar_format": "dop", "label_names": { "red": "Rot" } }),
+                &defaults
+            ),
+            Err(
+                "the label names apply only while the sidecar format writes XMP (xmp or both)"
+                    .into()
+            )
+        );
+        let dop = Settings {
+            format: SidecarFormat::Dop,
+            ..settings::defaults()
+        };
+        assert!(set(json!({ "label_language": "ja" }), &dop).is_err());
+        assert_eq!(
+            changes(
+                json!({ "sidecar_format": "xmp", "label_language": "ja" }),
+                &dop
+            ),
+            [
+                SettingChange::SidecarFormat(SidecarFormat::Xmp),
+                SettingChange::LabelNames(ja.names.clone()),
+            ]
+        );
+    }
+
+    #[test]
+    fn set_settings_edits_the_keymap_as_the_shortcuts_page_does() {
+        let defaults = settings::defaults();
+        let mut expected = Keymap::defaults();
+        edit(&mut expected, Edit::Add("pick", "k".into())).unwrap();
+        edit(&mut expected, Edit::Remove("pick", "p".into())).unwrap();
+        assert_eq!(
+            changes(
+                json!({ "shortcuts": [
+                    { "op": "add", "action": "pick", "key": "k" },
+                    { "op": "remove", "action": "pick", "key": "p" }
+                ] }),
+                &defaults
+            ),
+            [SettingChange::Keymap(expected.clone())]
+        );
+        let edited = Settings {
+            keymap: expected,
+            ..settings::defaults()
+        };
+        assert_eq!(
+            changes(json!({ "shortcuts": [{ "op": "reset_all" }] }), &edited),
+            [SettingChange::Keymap(Keymap::defaults())]
+        );
+        for (edits, refusal) in [
+            (
+                json!([{ "op": "add", "action": "pick", "key": "q" }]),
+                "\"q\" is taken by this app",
+            ),
+            (
+                json!([{ "op": "add", "action": "pick", "key": "x" }]),
+                "\"x\" is bound to reject",
+            ),
+            (
+                json!([{ "op": "remove", "action": "pick", "key": "p" }]),
+                "\"p\" is the only key for pick; use Reset",
+            ),
+            (
+                json!([{ "op": "add", "action": "nothing", "key": "k" }]),
+                "unknown action \"nothing\"",
+            ),
+            (
+                json!([{ "op": "add", "action": "pick" }]),
+                "a shortcut add needs an action and a key",
+            ),
+            (
+                json!([{ "op": "reset_all", "action": "pick" }]),
+                "a shortcut reset_all takes no action or key",
+            ),
+        ] {
+            assert_eq!(
+                set(json!({ "shortcuts": edits }), &defaults),
+                Err(refusal.to_owned()),
+                "{edits}"
+            );
+        }
+        for key in ["K", "Ctrl+K", "shift", "alt+ctrl+k", "", "ctrl+"] {
+            assert!(
+                set(
+                    json!({ "shortcuts": [{ "op": "add", "action": "pick", "key": key }] }),
+                    &defaults
+                )
+                .unwrap_err()
+                .contains("is not a key as Handpic names it"),
+                "{key}"
+            );
+        }
+        assert!(
+            set(
+                json!({ "auto_advance": false, "shortcuts": [
+                    { "op": "add", "action": "pick", "key": "k" },
+                    { "op": "add", "action": "pick", "key": "x" }
+                ] }),
+                &defaults
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn set_settings_refuses_an_invalid_pattern_and_a_theme_not_of_its_mode() {
+        let defaults = settings::defaults();
+        assert!(set(json!({ "import_pattern": "%H" }), &defaults).is_err());
+        assert_eq!(
+            set(json!({ "theme": { "light": "Ayu Dark" } }), &defaults),
+            Err("\"Ayu Dark\" is not one of get_settings' themes.light".into())
+        );
+        assert!(set(json!({ "theme": { "mode": "dim" } }), &defaults).is_err());
+        assert!(set(json!({ "sidecar_format": "tiff" }), &defaults).is_err());
+        assert_eq!(
+            set(json!({ "auto_advance": "no" }), &defaults),
+            Err("auto_advance must be true or false".into())
         );
     }
 }
