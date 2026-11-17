@@ -1222,8 +1222,8 @@ takes the pending page and releases the scan pause (`hold.rs`'s
 file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
-with five `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts and Import
-(no Cache, MCP or Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
+with six `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache and
+Import (no MCP or Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
@@ -1235,6 +1235,8 @@ A change is emitted as a `settingsview::Change`; the window applies it in its
 and dark theme pickers) applies the setting under the window's appearance and writes `theme` (read and written
 under `--auto` too, as the other settings of the modal),
 `Keymap` replaces the keymap (next section),
+`ClearCache` (the Cache page's button) hands the press to the window's
+`cache::ClearFlow` (see the rule on the Cache page below),
 `Closed` focuses the window's handle and redraws, dropping the layer; the
 tree's keyboard is a flag the settings do not set (but see the pointer rule
 below).
@@ -1251,8 +1253,9 @@ not open.
   or their tooltips. The deferred layers the main view may still draw paint
   after it: the sort and filter menus are closed on open and the right-click
   menu on any key, the `ctrl+,` included; a trash or folder dialog held by
-  the idle gate opens in `Root`'s layer above the settings, with its
-  `backdrop`. The tree pane's `on_mouse_down_out` is a capture-phase
+  the idle gate, and the Cache page's `Clear the index cache?`
+  confirmation, open in `Root`'s layer above the settings, with their
+  `backdrop` (deferred, so it paints over the settings layer too). The tree pane's `on_mouse_down_out` is a capture-phase
   listener that ignores occlusion, so a press inside the settings hands the
   tree's keyboard back to the photo, as a press inside the old dialog did.
 - Rule: the key routing. The layer is a sibling of the `Handpic` `div`,
@@ -1272,6 +1275,35 @@ not open.
   after `home` / `end` / `q`, closes an open sort or filter menu, and opens
   the modal, not while a folder flow or the trash flow is busy; the keymap
   refuses to bind it.
+- Rule: the Cache page (Inferred, not yet observed in the running app; a
+  port of the Tauri `#cache` panel and `clear_index`). It shows
+  `Index cache: <size>`, the index file plus its `-wal` and `-shm` on disk
+  (`cache::on_disk_bytes`, a missing file zero, `format_bytes` /
+  `SIZE_BASE`), read on `background_spawn` from the path `open_index` opened
+  (`--index` honored) on every open of the modal, at every `finished` while
+  it is open and after a clear; `0 B` without an index. `Clear Cache` emits
+  `Change::ClearCache`; the window's `ClearFlow` (one slot of its own, not
+  the idle gate, whose request would replace a held trash or rename) asks at
+  once, or, while `resync.busy() || gate.in_flight()`, holds the press with
+  the page's `WAITING_NOTE` and drains it in `finished` once nothing else
+  started (nor a trash or folder dialog is up). The confirmation is a
+  component `Dialog` through `modal.rs`, the first one opened from inside
+  the settings: its keys reach `clear_key_down` in the footer's capture
+  phase, so Escape cancels the dialog, not the settings, and the component
+  hands the focus back into the settings box when it closes. `Clear`
+  re-checks the busy rule (a confirmed press then waits and runs without
+  asking again). The run takes the gate's in-flight count and
+  `resync.hold()`, so no listing or scan starts under it, then on
+  `background_spawn`, under the `format_switch` mutex the sidecar switches
+  take: the judgment stores' drain, the sidecar writer's flush and
+  `Index::clear` on the writer connection (waiting for the launch's
+  eviction on the same mutex), its `EvictSummary` logged as
+  `index cleared: …`. Its end drops the touched paths and the judgment undo
+  history, re-lists the open folder with carry (`relist`), re-reads the
+  tree's cached counts and the size; a failure goes to the settings' status
+  line and re-lists nothing. Closing the settings drops a held or asked
+  clear, not a running one. Nothing here reads or writes a setting, so
+  `--auto` needs no special case.
 - Rule: Tab and Shift+Tab are `Root`'s. Its `Tab` / `TabPrev` actions run
   before the box's listener and walk the box's focus trap with
   `focus_next` / `focus_prev`, which wrap; the trap holds only the modal's
@@ -2750,7 +2782,13 @@ strip needed one because `uniform_list` is vertical only.
   succeeded. The zero deletes the original's row even when undated files keep
   the folder, so its count comes back from its next listing. `Index::clear`
   counts the deleted `folder_counts` rows in `EvictSummary.rows`; `evict` and
-  `evict_folder` leave the table alone. A test asserting row order must sort
+  `evict_folder` leave the table alone. After the settings' `Clear Cache` the
+  window re-reads the emptied table (`read_folder_counts`, bumping
+  `count_reads` so a read from before the clear is dropped), which replaces
+  the tree's cached counts whole; the listed counts of this session are not
+  pushed back, so the table holds only what is learned afterwards (the open
+  folder's re-listing first). A `CountWrites` write still in flight when the
+  clear runs lands after it and re-adds a true row. A test asserting row order must sort
   the expected paths at run time, since `MAIN_SEPARATOR` sorts on opposite
   sides of `2` on Windows and elsewhere.
 - Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x

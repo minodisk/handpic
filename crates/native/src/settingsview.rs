@@ -5,7 +5,7 @@
 //! owns the values, to apply.
 
 use gpui_kit::component::{
-    ActiveTheme, FocusTrapElement, IndexPath, Sizable, ThemeMode,
+    ActiveTheme, Disableable, FocusTrapElement, IndexPath, Sizable, ThemeMode,
     button::{Button, ButtonVariants},
     input::{
         Input, InputEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment, InputGroupButton,
@@ -30,7 +30,7 @@ use riffle_backend::{
 use riffle_core::{i18n, xmp::LabelNames};
 
 use crate::{
-    keys,
+    cache, keys,
     settings::Settings as Stored,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, MODES, ModalKey, SettingsModal, TABS, Tab},
     theme::{self, Mode},
@@ -78,6 +78,8 @@ pub enum Change {
     ImportPattern(String),
     /// The theme setting after a choice that changed it.
     Theme(theme::Setting),
+    /// `Clear Cache` pressed.
+    ClearCache,
     /// The main view takes the focus back.
     Closed,
 }
@@ -109,6 +111,11 @@ pub struct SettingsView {
     /// The light and the dark theme's pickers.
     light_themes: Entity<Themes>,
     dark_themes: Entity<Themes>,
+    /// The Cache page's size, the press waiting for the running scan and the
+    /// clear under way, set by the main view, which runs the clear.
+    index_size: SharedString,
+    clear_waiting: bool,
+    clear_running: bool,
     status: Option<SharedString>,
 }
 
@@ -183,6 +190,9 @@ impl SettingsView {
             theme: theme::Setting::default(),
             light_themes,
             dark_themes,
+            index_size: cache::UNKNOWN_SIZE.into(),
+            clear_waiting: false,
+            clear_running: false,
             status: None,
         }
     }
@@ -476,6 +486,26 @@ impl SettingsView {
         cx.notify();
     }
 
+    /// `Clear Cache`: the main view holds, asks and runs it.
+    fn clear_cache(&mut self, cx: &mut Context<Self>) {
+        self.status = None;
+        cx.emit(Change::ClearCache);
+        cx.notify();
+    }
+
+    /// The index's size on disk, formatted.
+    pub fn show_index_size(&mut self, size: String, cx: &mut Context<Self>) {
+        self.index_size = size.into();
+        cx.notify();
+    }
+
+    /// Whether a press waits for the running scan and whether a clear runs.
+    pub fn show_clear(&mut self, waiting: bool, running: bool, cx: &mut Context<Self>) {
+        self.clear_waiting = waiting;
+        self.clear_running = running;
+        cx.notify();
+    }
+
     /// A switch failed: its message goes to the status line.
     pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
         self.status = Some(message.into());
@@ -493,6 +523,7 @@ impl SettingsView {
                 Tab::Sidecar => self.sidecar(page, &view),
                 Tab::Culling => self.culling(page, &view),
                 Tab::Shortcuts => self.shortcuts(page, &view),
+                Tab::Cache => self.cache(page, &view),
                 Tab::Import => self.import(page, &view),
                 Tab::Appearance => self.appearance(page, &view),
             }
@@ -714,6 +745,32 @@ impl SettingsView {
                 .keywords(["Reset all"]),
             ),
         )
+    }
+
+    /// The size line with `Clear Cache`, the Tauri paragraph as the page's
+    /// description and, while a press waits for the scan, its note.
+    fn cache(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let running = self.clear_running;
+        let view = view.clone();
+        let mut item = SettingItem::new(
+            cache::size_line(&self.index_size),
+            SettingField::render(move |_, window, _| {
+                small_button("clear-cache", cache::CLEAR_LABEL)
+                    .disabled(running)
+                    .on_click(
+                        window.listener_for(&view, |this, _: &ClickEvent, window, cx| {
+                            this.leave_field(window, cx);
+                            this.clear_cache(cx);
+                        }),
+                    )
+            }),
+        )
+        .keywords(["Clear Cache", "Index"]);
+        if self.clear_waiting {
+            item = item.description(cache::WAITING_NOTE);
+        }
+        page.description(cache::NOTE)
+            .group(SettingGroup::new().item(item))
     }
 
     /// The Tauri paragraph as the page's description, the read-only root

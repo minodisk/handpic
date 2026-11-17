@@ -1,5 +1,6 @@
 mod args;
 mod burst;
+mod cache;
 mod companion;
 mod context;
 mod datadir;
@@ -132,6 +133,7 @@ use riffle_backend::{
     index::{self, Index},
     listing::canonicalize,
     sidecar::{self, SidecarFormat, Writer},
+    text::{SIZE_BASE, format_bytes},
     treewatch::TreeWatch,
     watch::{self, Watch},
 };
@@ -395,6 +397,8 @@ struct Riffle {
     /// The index's read-only connection the strip's thumbnails come through,
     /// so they never wait behind a scan's write transaction.
     reader: Option<Arc<Mutex<Index>>>,
+    /// The index's file, `None` without an index.
+    index_path: Option<PathBuf>,
     strip: Strip,
     /// The strip's scrollbar handle, synced from `strip` on every render.
     strip_bar: StripBar,
@@ -474,6 +478,13 @@ struct Riffle {
     folder_modal: modal::Modal,
     /// The focus of its run and Cancel buttons.
     folder_buttons: [FocusHandle; 2],
+    /// The settings' `Clear Cache`, its confirmation in `Root`'s layer and
+    /// that dialog's run and Cancel buttons.
+    clear: cache::ClearFlow,
+    cache_modal: modal::Modal,
+    cache_buttons: [FocusHandle; 2],
+    /// Bumped by every read of the index's size: an older answer is dropped.
+    size_reads: u64,
     /// The main window, which an import's end checks and notifies from.
     window: AnyWindowHandle,
     /// A confirmed run, or a run's undo or redo, held for the listing or
@@ -615,9 +626,9 @@ impl Riffle {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let (index, reader) = match index {
-            Ok((writer, reader)) => (Ok(writer), Some(reader)),
-            Err(e) => (Err(e), None),
+        let (index, reader, index_path) = match index {
+            Ok((writer, reader, path)) => (Ok(writer), Some(reader), Some(path)),
+            Err(e) => (Err(e), None, None),
         };
         // Held by the quit handler, not the view, as the writer's drain is.
         let geometry: Arc<Mutex<Option<session::Geometry>>> = Arc::default();
@@ -776,7 +787,10 @@ impl Riffle {
                     this.settings.writes.set("theme", setting.setting());
                     this.settings.theme = setting;
                 }
+                Change::ClearCache => this.press_clear(cx),
                 Change::Closed => {
+                    this.clear.discard();
+                    this.follow_clear(cx);
                     window.focus(&this.focus, cx);
                     cx.notify();
                 }
@@ -823,6 +837,7 @@ impl Riffle {
                     stripheight::DEFAULT
                 }),
             ),
+            index_path,
             strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
             strip_width: content_width(window),
@@ -862,6 +877,10 @@ impl Riffle {
             folderops: folderops::FolderOps::default(),
             folder_modal: modal::Modal::new(window.window_handle()),
             folder_buttons: [cx.focus_handle(), cx.focus_handle()],
+            clear: cache::ClearFlow::default(),
+            cache_modal: modal::Modal::new(window.window_handle()),
+            cache_buttons: [cx.focus_handle(), cx.focus_handle()],
+            size_reads: 0,
             window: window.window_handle(),
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
@@ -2303,6 +2322,10 @@ impl Riffle {
         if self.resync.finished() {
             self.relist(cx);
         }
+        self.drain_clear(cx);
+        if self.settings_view.read(cx).is_open() {
+            self.refresh_index_size(cx);
+        }
     }
 
     fn relist(&mut self, cx: &mut Context<Self>) {
@@ -2413,6 +2436,187 @@ impl Riffle {
                 this.resync.open();
                 this.relist(cx);
                 cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The settings' `Clear Cache` waits while the open folder is listed or
+    /// scanned, or a run holding it is in flight.
+    fn clear_busy(&self) -> bool {
+        self.resync.busy() || self.gate.in_flight()
+    }
+
+    /// `Clear Cache` pressed: asked now, or held for the view's next idle
+    /// point.
+    fn press_clear(&mut self, cx: &mut Context<Self>) {
+        if self.clear.press(self.clear_busy()) == cache::Next::Wait && self.clear.waiting() {
+            log::info!("cache: Clear Cache held for the scan's end");
+        }
+        self.follow_clear(cx);
+    }
+
+    /// The view is idle: a held clear goes on, unless another dialog is up,
+    /// in which case it waits for the next idle point.
+    fn drain_clear(&mut self, cx: &mut Context<Self>) {
+        if !self.clear.waiting()
+            || self.clear_busy()
+            || self.trash.busy()
+            || self.folderops.dialog_open()
+        {
+            return;
+        }
+        if self.clear.drain() == cache::Next::Run {
+            self.run_clear(cx);
+        }
+        self.follow_clear(cx);
+    }
+
+    /// The dialog's `Clear`, checking the busy rule again.
+    fn confirm_clear(&mut self, cx: &mut Context<Self>) {
+        if self.clear.confirm(self.clear_busy()) == cache::Next::Run {
+            self.run_clear(cx);
+        }
+        self.follow_clear(cx);
+    }
+
+    fn cancel_clear(&mut self, cx: &mut Context<Self>) {
+        self.clear.cancel();
+        self.follow_clear(cx);
+    }
+
+    /// A key pressed in the dialog; true when it goes on to the focused
+    /// button. Escape cancels and every other key stops in the dialog.
+    fn clear_key_down(&mut self, name: Option<&str>, cx: &mut Context<Self>) -> bool {
+        match cache::dialog().key(name) {
+            dialog::Key::Dismiss => {
+                self.cancel_clear(cx);
+                false
+            }
+            dialog::Key::Press => true,
+            dialog::Key::Swallow => false,
+        }
+    }
+
+    /// Open the confirmation while the flow asks and close it otherwise, and
+    /// show the flow's state on the Cache page.
+    fn follow_clear(&mut self, cx: &mut Context<Self>) {
+        let (waiting, running) = (self.clear.waiting(), self.clear.running());
+        self.settings_view
+            .update(cx, |view, cx| view.show_clear(waiting, running, cx));
+        if !self.clear.asking() {
+            self.cache_modal.close(cx);
+            cx.notify();
+            return;
+        }
+        let this = cx.weak_entity();
+        let buttons = self.cache_buttons.clone();
+        let first = Cell::new(true);
+        self.cache_modal.open(cx, move |shell, window, cx| {
+            if first.replace(false) {
+                buttons[0].focus(window, cx);
+            }
+            cache_dialog(shell, &this, &buttons)
+        });
+        cx.notify();
+    }
+
+    /// Empty the index on a background task, one at a time with the sidecar
+    /// switches: the judgment stores still queued, then the sidecar writer,
+    /// are flushed first. No listing or scan starts until it comes back
+    /// (`gate`, `resync`). Without an index nothing is cleared.
+    fn run_clear(&mut self, cx: &mut Context<Self>) {
+        let Ok(index) = self.index.clone() else {
+            self.clear.done();
+            self.refresh_index_size(cx);
+            return;
+        };
+        self.gate.enter_in_flight();
+        self.resync.hold();
+        let (stores, writer, lock) = (
+            self.stores.clone(),
+            self.writer.clone(),
+            self.format_switch.clone(),
+        );
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let result = cx
+                .background_spawn(async move {
+                    let _guard = index::lock(&lock);
+                    stores.drain(sidecar::DRAIN_TIMEOUT);
+                    if let Some(writer) = &writer {
+                        writer.flush(sidecar::DRAIN_TIMEOUT);
+                    }
+                    index::lock(&index).clear()
+                })
+                .await;
+            log::info!("cache: cleared in {}ms", started.elapsed().as_millis());
+            this.update(cx, |this, cx| this.cleared(result, cx)).ok();
+        })
+        .detach();
+    }
+
+    /// The clear came back: the open folder is listed again so the scan
+    /// refills its rows, its histories cleared as a format switch clears
+    /// them, and the tree's cached counts and the size are read again. A
+    /// failure goes to the settings' status line, with no re-listing.
+    fn cleared(&mut self, result: Result<index::EvictSummary, String>, cx: &mut Context<Self>) {
+        self.gate.leave_in_flight();
+        self.clear.done();
+        self.follow_clear(cx);
+        let cleared = match result {
+            Ok(summary) => {
+                log::info!("index cleared: {summary:?}");
+                self.touched.clear();
+                self.undo.drop_judgments();
+                self.step_note = None;
+                self.read_folder_counts(cx);
+                true
+            }
+            Err(e) => {
+                log::error!("failed to clear the index: {e}");
+                self.settings_view.update(cx, |view, cx| view.failed(e, cx));
+                false
+            }
+        };
+        self.refresh_index_size(cx);
+        if let Some(folder) = self.deferred_open.take() {
+            self.open(folder, None, None, cx).detach();
+        } else if cleared && self.dir.is_some() {
+            self.resync.open();
+            self.relist(cx);
+        } else if self.resync.finished() {
+            self.relist(cx);
+        }
+        cx.notify();
+    }
+
+    /// Read the index's size on disk off the UI thread and show it on the
+    /// Cache page; `0 B` without an index. Not while a clear runs, whose end
+    /// reads it.
+    fn refresh_index_size(&mut self, cx: &mut Context<Self>) {
+        if self.clear.running() {
+            return;
+        }
+        self.size_reads += 1;
+        let read = self.size_reads;
+        let path = self.index_path.clone().filter(|_| self.index.is_ok());
+        cx.spawn(async move |this, cx| {
+            let bytes = match path {
+                Some(path) => {
+                    cx.background_spawn(async move { cache::on_disk_bytes(&path) })
+                        .await
+                }
+                None => 0,
+            };
+            this.update(cx, |this, cx| {
+                if read != this.size_reads || this.clear.running() {
+                    return;
+                }
+                let size = format_bytes(bytes, SIZE_BASE);
+                this.settings_view
+                    .update(cx, |view, cx| view.show_index_size(size, cx));
             })
             .ok();
         })
@@ -3019,6 +3223,7 @@ impl Riffle {
                 self.settings_view.update(cx, |view, cx| {
                     view.open(settings, window, cx);
                 });
+                self.refresh_index_size(cx);
                 cx.notify();
             }
             ("escape", _) if self.menus.is_open() => {
@@ -4919,7 +5124,8 @@ impl Render for Riffle {
             .child(self.status_row(menu_max, cx))
             .children(self.context_layer(cx))
             .children(
-                (self.trash.busy() || self.folderops.dialog_open()).then(|| modal::backdrop(cx)),
+                (self.trash.busy() || self.folderops.dialog_open() || self.clear.asking())
+                    .then(|| modal::backdrop(cx)),
             );
         // The settings are a sibling of the app's view, outside its key
         // context and dispatch path, drawn over it while it keeps painting.
@@ -5028,6 +5234,61 @@ fn trash_dialog(
                     DialogFooter::new()
                         .child(button("trash-run", text.run, trash::Button::Run).danger())
                         .child(button("trash-cancel", "Cancel", trash::Button::Cancel)),
+                ),
+        )
+}
+
+/// The settings' `Clear Cache` confirmation, inside `modal`'s shell: the
+/// title, the Tauri message, and `Clear` and Cancel on the focus handles
+/// `buttons` holds. Its keys reach `clear_key_down` before the focused
+/// button sees them, so Escape cancels it and not the settings under it.
+fn cache_dialog(dialog: Dialog, this: &WeakEntity<Riffle>, buttons: &[FocusHandle; 2]) -> Dialog {
+    let model = cache::dialog();
+    let lines: Vec<SharedString> = model.content.lines.into_iter().map(Into::into).collect();
+    let button = |id: &'static str, label: String, at: usize| {
+        let this = this.clone();
+        Button::new(id)
+            .track_focus(&buttons[at])
+            .px(px(12.))
+            .child(
+                div()
+                    .text_size(px(13.6))
+                    .font_weight(FontWeight::MEDIUM)
+                    .child(label),
+            )
+            .on_click(move |_: &ClickEvent, _, cx| {
+                this.update(cx, |this, cx| {
+                    if at == 0 {
+                        this.confirm_clear(cx);
+                    } else {
+                        this.cancel_clear(cx);
+                    }
+                })
+                .ok();
+            })
+    };
+    let view = this.clone();
+    dialog
+        .title(model.content.title)
+        .content(move |content, _, _| {
+            content.children(lines.iter().map(|line| div().child(line.clone())))
+        })
+        .footer(
+            div()
+                .capture_key_down(move |e: &KeyDownEvent, window, cx| {
+                    let name = keys::key_name(&e.keystroke);
+                    let press = view
+                        .update(cx, |this, cx| this.clear_key_down(name.as_deref(), cx))
+                        .unwrap_or(false);
+                    if !press {
+                        window.prevent_default();
+                        cx.stop_propagation();
+                    }
+                })
+                .child(
+                    DialogFooter::new()
+                        .child(button("cache-clear-run", model.run_label, 0).danger())
+                        .child(button("cache-clear-cancel", "Cancel".to_owned(), 1)),
                 ),
         )
 }
@@ -5771,9 +6032,9 @@ fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
     Bounds::new(origin, fit)
 }
 
-/// The writer and the read-only connection; the writer stands in for a
-/// reader that does not open, as in the Tauri app.
-type Indexes = (Arc<Mutex<Index>>, Arc<Mutex<Index>>);
+/// The writer and the read-only connection, and the file they opened; the
+/// writer stands in for a reader that does not open, as in the Tauri app.
+type Indexes = (Arc<Mutex<Index>>, Arc<Mutex<Index>>, PathBuf);
 
 fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
     let path = datadir::index_path(flag, dirs::cache_dir().as_deref())
@@ -5788,7 +6049,7 @@ fn open_index(flag: Option<PathBuf>) -> Result<Indexes, String> {
             index.clone()
         }
     };
-    Ok((index, reader))
+    Ok((index, reader, path))
 }
 
 fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
