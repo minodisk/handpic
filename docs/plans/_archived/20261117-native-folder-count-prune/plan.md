@@ -195,3 +195,5 @@ What the investigation found (the facts the step relies on):
   tree stay.
 
 ## Progress
+
+(2026-11-17) Step 1 complete

@@ -3326,7 +3326,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, launch with `--auto`. Expect the panes to start at 220 whatever is stored and a drag to write nothing to `panelWidths`.
 - [ ] On macOS and Linux, repeat the hover, drag, narrow-window, restart and hide / show checks above. CI only builds these platforms.
 
-### Native app: real-device check of the folder tree's file counts on collapsed rows (native-tree-index-counts, native-folder-count-cache)
+### Native app: real-device check of the folder tree's file counts on collapsed rows (native-tree-index-counts, native-folder-count-cache, native-folder-count-prune)
 
 #### Background
 
