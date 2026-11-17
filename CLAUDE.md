@@ -320,7 +320,9 @@ no token (the window's surface and text, the strip's names, failures, burst
 band and reject dim; today's values for Neutral dark, else derived from the
 tokens by `Roles::of`), which the panes, the strip, the status row, the
 menus and the dialogs read with the theme (`cx.theme()`, `roles`), the
-judgment, label band and over-the-photo colors staying fixed, `src/settings.rs`
+judgment, label band and over-the-photo colors staying fixed, and
+`SCROLLBAR_TRACK`, the scrollbar track's 16 px the tree's rows and the meta
+pane's body keep clear, `src/settings.rs`
 reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a

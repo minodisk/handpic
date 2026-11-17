@@ -2454,10 +2454,20 @@ they overflow.
 
 - The tree: its `uniform_list` sits in a `relative()`, `size_full()` wrapper
   inside the pane's padding that carries `vertical_scrollbar(&tree_scroll)`,
-  so the bar's viewport is the list's and its range the list's own.
+  so the bar's viewport is the list's and its range the list's own. The
+  list's 4 px `px_1()` and each row's 12 px right padding keep a row's
+  content (icon, name, rename field, count badge) out of the bar's track.
 - The meta pane: the body ends in `overflow_y_scrollbar()` (`Scrollable`,
-  which moves `flex_1` / `min_h_0` onto its wrapper), so the bar covers the
-  body only and the notes under it do not scroll.
+  which moves `flex_1` / `min_h_0` onto its wrapper and keeps the padding on
+  the scrolled content), so the bar covers the body only and the notes under
+  it do not scroll. The pane has no right padding (`pl_3()` and `py_3()`), so
+  the bar lies at the pane's edge; the body's right padding of
+  `SCROLLBAR_TRACK` keeps its rows out of the track, and each note and error
+  under it carries its own `pr_3()`, the 12 px it had from the pane.
+- The dialog bodies: gpui-component 0.9.1's `Dialog` scrolls its body in a
+  `Scrollable` padded by the dialog's own horizontal padding, which
+  `modal.rs`'s `shell` sets to `px_4()`, 16 px at the 16 px rem, so the
+  body's text already ends where the track begins.
 - The strip: `stripbar.rs`'s `StripBar`, a `ScrollbarHandle` over an
   `Rc<Cell<..>>` the view holds, as the preview canvas's size cell is. On
   every render the view `sync`s it from `Strip` (the offset, reported
@@ -2483,15 +2493,19 @@ they overflow.
   content fitting, no bar is drawn, no listener is registered and the press
   goes where it went before.
   The wheel is not stopped: the strip's `on_scroll` still runs under it.
-- Every bar stays an overlay (no gutter; track 16 px). The strip's bar lies
-  over its bottom edge (the 7 px `STRIP_PADDING` and possibly the bottom of
-  the name band) whenever the cells overflow, the tree's over the right
-  16 px of its rows and the meta pane's over the right edge of its values;
-  the strip's height (`stripheight.rs`) and the layout are unchanged by it.
-  The user accepted these covered edges on 2026-11-17.
+- Every bar is an overlay whose track, the last 16 px of its parent, takes
+  every press on it; `theme.rs`'s `SCROLLBAR_TRACK` is that width, with a
+  test against the pinned `Scrollbar::width()`. The tree's rows, the meta
+  pane's body and the dialog bodies keep their content out of the whole
+  track, always, not only while the bar is drawn: the user reversed the
+  covered edges accepted on 2026-11-17 after a look on a real screen. The
+  strip's bar still lies over its bottom edge (the 7 px `STRIP_PADDING` and
+  possibly the bottom of the name band) whenever the cells overflow; the
+  strip's height (`stripheight.rs`) and the layout are unchanged by it.
 - Not verified by hand yet; the checks are pending in
-  `../plans/_archived/20261115-native-scrollbars/learnings.md` and
-  `../plans/_archived/20261117-native-scrollbars-always/learnings.md`.
+  `../plans/_archived/20261115-native-scrollbars/learnings.md`,
+  `../plans/_archived/20261117-native-scrollbars-always/learnings.md` and
+  `../plans/20261117-native-scrollbar-gutter/learnings.md`.
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 
@@ -3254,7 +3268,9 @@ strip needed one because `uniform_list` is vertical only.
   the list clips the row at the pane edge. A margin next to `w_full()`
   overflows, since the percentage resolves against the whole available
   width. The padding is on the list, not the pane, so the scrollbar stays at
-  the pane's edge. Inferred from the gpui-pre 0.3.12 and taffy sources, not
+  the pane's edge. The row's right padding is `SCROLLBAR_TRACK` less that
+  inset (12 px), so its content ends clear of the bar's track; its hover and
+  selected fill still runs to 4 px from the edge, under the thumb. Inferred from the gpui-pre 0.3.12 and taffy sources, not
   yet observed in the running app.
 - Rule: a row shows its file count, expanded or collapsed, whenever it is
   above zero, from one of two sources drawn the same. The listed count
