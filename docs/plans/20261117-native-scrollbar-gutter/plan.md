@@ -140,7 +140,7 @@ scope.
       theme. These replace the "tree rows' right 16 px" half of check 4 in
       the `native-scrollbars-always` learnings and its `todo.md` item
       ("Native: real-device checks of the always-visible scrollbars").
-- [ ] Step 2: Give the strip a gutter under its cells for the horizontal bar
+- [x] Step 2: Give the strip a gutter under its cells for the horizontal bar
   - Done when:
     - The strip's pane is taller than its cells' height by a fixed gutter, so
       the bar's 16 px track lies below the cells' name band: no cell, name or

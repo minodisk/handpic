@@ -2479,7 +2479,13 @@ they overflow.
   `horizontal_scrollbar(&strip_bar)` after the canvas and the tooltip region
   `div`s, so the bar's hitbox is the topmost. Its viewport is the strip
   `div`, which spans the window, so the bar's range equals
-  `Strip::max_offset`; `viewport_bounds` is not read.
+  `Strip::max_offset`; `viewport_bounds` is not read. That `div` is the
+  cells' height plus `stripheight::GUTTER` (9 px, `SCROLLBAR_TRACK` less the
+  7 px `STRIP_PADDING`) high, so the bar's track, its last 16 px, starts at
+  the cells' bottom edge: no cell, name band or burst band lies under it,
+  and the hovered thumb's top meets the burst band's bottom (3 + 9 = 12 px
+  above the pane's bottom). The canvas and the tooltip regions are placed
+  from the `div`'s top, so the gutter is an empty band under the cells.
 - Rule: a drag or a track click reaches the strip only through the handle.
   The bar writes the offset (`set_offset`, kept as a positive request) and
   notifies the current view, the `Riffle` entity under `Root`; the top of
@@ -2498,12 +2504,13 @@ they overflow.
 - Every bar is an overlay whose track, the last 16 px of its parent, takes
   every press on it; `theme.rs`'s `SCROLLBAR_TRACK` is that width, with a
   test against the pinned `Scrollbar::width()`. The tree's rows, the meta
-  pane's body and the dialog bodies keep their content out of the whole
-  track, always, not only while the bar is drawn: the user reversed the
-  covered edges accepted on 2026-11-17 after a look on a real screen. The
-  strip's bar still lies over its bottom edge (the 7 px `STRIP_PADDING` and
-  possibly the bottom of the name band) whenever the cells overflow; the
-  strip's height (`stripheight.rs`) and the layout are unchanged by it.
+  pane's body, the dialog bodies and the strip's cells keep their content
+  out of the whole track, always, not only while the bar is drawn: the user
+  reversed the covered edges accepted on 2026-11-17 after a look on a real
+  screen. The strip grows its pane by the gutter rather than shrinking its
+  cells, so a stored `stripHeight` keeps its meaning; with the cells
+  fitting, the gutter is an empty 9 px band whose press reaches the strip's
+  `on_mouse_down`, which selects by `x` only.
 - Not verified by hand yet; the checks are pending in
   `../plans/_archived/20261115-native-scrollbars/learnings.md`,
   `../plans/_archived/20261117-native-scrollbars-always/learnings.md` and
@@ -3506,8 +3513,12 @@ gives it its last width with no code.
 `DEFAULT` 128 (the Tauri strip's, the former fixed `STRIP_HEIGHT`), `MIN` 96,
 `MAX` 302 (a 270 px high image box, the stored thumbnail's height) and
 `PREVIEW_MIN` 240 for the preview. The drawn strip pane is `HEADER` (32 px)
-taller, the header row holding `Sort ▾` / `Filter ▾` over the cells; the
-stored value still means the cells' height, so it needed no migration. `Strip` holds the cells' `strip::Geometry`, which
+taller, the header row holding `Sort ▾` / `Filter ▾` over the cells, and
+`GUTTER` (9 px) taller again, the room under the cells for the horizontal
+scrollbar's track (see "The strip, the tree and the meta pane draw the
+theme's scrollbar"); the cells' `div` is `GUTTER` taller than the cells, and
+the room the header's menus are capped at counts it. The stored value still
+means the cells' height, so it needed no migration. `Strip` holds the cells' `strip::Geometry`, which
 `Geometry::of(height)` derives: the image box takes the height less the
 7 px `STRIP_PADDING` above and below, the 16 px `NAME_HEIGHT` and the box's
 1 px border each side, at 3:2 with its width rounded to whole px; the cell is
@@ -3535,9 +3546,9 @@ face icon keep their sizes.
   bottom edge and its height what the preview and the strip share, with no
   assumption about the status row's height or the Linux frame's padding
   below. The wanted pane height is that bottom less the pointer's `y`;
-  `dragged` takes the header off it, rounds the cells' height to whole px,
-  clamps it to `MIN`..`MAX` and to what leaves the preview `PREVIEW_MIN` with
-  the header counted, never under `MIN`.
+  `dragged` takes the header and the gutter off it, rounds the cells' height
+  to whole px, clamps it to `MIN`..`MAX` and to what leaves the preview
+  `PREVIEW_MIN` with the header and the gutter counted, never under `MIN`.
 - Rule: a move that changes the height calls `Strip::set_geometry`, which
   keeps the cells in view: the current cell's center stays where it is on
   screen when that cell overlaps the viewport, else the cell at the

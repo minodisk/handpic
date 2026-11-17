@@ -1122,10 +1122,10 @@ impl Riffle {
         }
     }
 
-    /// The strip pane's top edge dragged to make it, header included, `wanted`
-    /// px high, the preview and the pane sharing `shared` px: the cells are
-    /// resized around the cells in view, and a 1:1 crop is re-cut for the new
-    /// canvas.
+    /// The strip pane's top edge dragged to make it, header and gutter
+    /// included, `wanted` px high, the preview and the pane sharing `shared`
+    /// px: the cells are resized around the cells in view, and a 1:1 crop is
+    /// re-cut for the new canvas.
     fn drag_strip(&mut self, wanted: f32, shared: f32, cx: &mut Context<Self>) {
         self.strip_dragged = true;
         let height = stripheight::dragged(wanted, shared);
@@ -5627,8 +5627,9 @@ impl Render for Riffle {
         let roles = theme::roles(cx);
         // The room above the strip header's buttons: the status row's own
         // room less the strip pane over it.
-        let menu_max =
-            (menu_max_height(window) - px(stripheight::HEADER + strip_geometry.height)).max(px(0.));
+        let menu_max = (menu_max_height(window)
+            - px(stripheight::HEADER + strip_geometry.height + stripheight::GUTTER))
+        .max(px(0.));
         let main = div()
             .size_full()
             .flex()
@@ -5813,7 +5814,7 @@ impl Render for Riffle {
                         let cells = div()
                             .relative()
                             .w_full()
-                            .h(px(strip_geometry.height))
+                            .h(px(strip_geometry.height + stripheight::GUTTER))
                             .on_mouse_down(
                                 MouseButton::Right,
                                 cx.listener(|this, e: &MouseDownEvent, window, cx| {

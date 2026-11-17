@@ -633,10 +633,11 @@ them), which the window sets from gpui-component's standalone
 `resize_handle` on the preview's edges and writes at the drag's end (neither
 read nor written under `--auto`), and `src/stripheight.rs` the strip's
 height, its cells' (`DEFAULT` 128 px within `MIN` and `MAX`, the preview kept
-`PREVIEW_MIN`; `HEADER`, the header row over the cells, which the drawn
-pane adds; `from_setting` and `setting`, the `stripHeight` value;
+`PREVIEW_MIN`; `HEADER`, the header row over the cells, and `GUTTER`, the
+9 px band under them holding the horizontal scrollbar's track, which the
+drawn pane adds; `from_setting` and `setting`, the `stripHeight` value;
 `dragged`, the cells' height a drag of the pane's top edge gives, the header
-counted), which the window sets from a vertical `resize_handle` on the
+and the gutter counted), which the window sets from a vertical `resize_handle` on the
 header's top edge, the cells
 resized around those in view (`Strip::set_geometry`), and writes at the
 drag's end (neither read nor written under `--auto`), next to
