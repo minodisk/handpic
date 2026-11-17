@@ -46,6 +46,7 @@ lychee
 bash-test .claude/skills/merge/scripts/check-merge-approval.test.sh
 bash-test .claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 bash-test .claude/skills/merge-settings/scripts/merge.test.sh
+bash-test .claude/skills/pr/scripts/wait-pr-actionable.test.sh
 bash-test tools/ci/local.test.sh
 clippy riffle-core
 clippy riffle-backend
@@ -139,6 +140,12 @@ bash-test .claude/skills/merge/scripts/check-merge-approval.test.sh"
 expect none ".claude/skills/merge/scripts/wait-post-merge-runs.test.sh" "shellcheck .claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 bash-test .claude/skills/merge/scripts/wait-post-merge-runs.test.sh"
 expect none ".claude/skills/merge-settings/scripts/merge.js" "bash-test .claude/skills/merge-settings/scripts/merge.test.sh"
+expect none ".claude/skills/pr/scripts/wait-pr-actionable.sh" "shellcheck .claude/skills/pr/scripts/wait-pr-actionable.sh
+bash-test .claude/skills/pr/scripts/wait-pr-actionable.test.sh"
+expect none ".claude/skills/pr/scripts/pr-status.sh" "shellcheck .claude/skills/pr/scripts/pr-status.sh
+bash-test .claude/skills/pr/scripts/wait-pr-actionable.test.sh"
+expect none ".claude/skills/pr/scripts/wait-pr-actionable.test.sh" "shellcheck .claude/skills/pr/scripts/wait-pr-actionable.test.sh
+bash-test .claude/skills/pr/scripts/wait-pr-actionable.test.sh"
 
 # --- everything -------------------------------------------------------------
 expect all "" "${every}"

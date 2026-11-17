@@ -45,6 +45,7 @@ lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.re
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh
 bash .claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 bash .claude/skills/merge-settings/scripts/merge.test.sh
+bash .claude/skills/pr/scripts/wait-pr-actionable.test.sh
 bash tools/ci/local.test.sh
 """
 

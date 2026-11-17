@@ -36,6 +36,7 @@ bash_tests=(
 	.claude/skills/merge/scripts/check-merge-approval.test.sh
 	.claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 	.claude/skills/merge-settings/scripts/merge.test.sh
+	.claude/skills/pr/scripts/wait-pr-actionable.test.sh
 	tools/ci/local.test.sh
 )
 
@@ -108,6 +109,9 @@ function select_checks() {
 			;;
 		.claude/skills/merge-settings/scripts/merge.js | .claude/skills/merge-settings/scripts/merge.test.sh)
 			tests+=".claude/skills/merge-settings/scripts/merge.test.sh "
+			;;
+		.claude/skills/pr/scripts/wait-pr-actionable.sh | .claude/skills/pr/scripts/pr-status.sh | .claude/skills/pr/scripts/wait-pr-actionable.test.sh)
+			tests+=".claude/skills/pr/scripts/wait-pr-actionable.test.sh "
 			;;
 		tools/ci/*) tests+="tools/ci/local.test.sh " ;;
 		esac

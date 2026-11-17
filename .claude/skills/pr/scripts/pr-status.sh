@@ -134,7 +134,7 @@ normalize='
     )
 '
 failed_selector='. == "FAILURE" or . == "TIMED_OUT" or . == "CANCELLED" or . == "ACTION_REQUIRED" or . == "ERROR" or . == "STARTUP_FAILURE" or . == "STALE"'
-pending_selector='. == "QUEUED" or . == "IN_PROGRESS" or . == "PENDING" or . == "WAITING" or . == "EXPECTED"'
+pending_selector='. == "QUEUED" or . == "IN_PROGRESS" or . == "PENDING" or . == "WAITING" or . == "REQUESTED" or . == "EXPECTED"'
 failed_count=$(jq -r "$normalize | map(select($failed_selector)) | length" <<<"$view_json")
 pending_count=$(jq -r "$normalize | map(select($pending_selector)) | length" <<<"$view_json")
 
