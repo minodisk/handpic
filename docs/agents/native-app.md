@@ -331,6 +331,8 @@ as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
 Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
 driver at run time. The `native` CI job's Linux leg installs exactly these.
+At run time wgpu falls back to GL through `libEGL.so.1` when no Vulkan
+adapter is found (see the deb's `Depends` rule under "Packaging").
 Since the switch to `gpui-kit` the X11 and Wayland backends are compiled (its
 `x11` and `wayland` features); before, neither was.
 macOS needs the Xcode CLT (Metal), Windows only MSVC.
@@ -418,7 +420,9 @@ toplevel's `app_id` to the `.desktop` file's base name, so the file is
 `gpui-pre-linux`'s `set_app_id` writes `WM_CLASS` as `IDENTIFIER` for both the
 instance and the class, so `StartupWMClass` is `IDENTIFIER` too. The default
 `set_app_id` is a no-op on Windows and macOS. `Exec=riffle-native` is static,
-so `~/.local/bin` must be on the session's `PATH`.
+so `~/.local/bin` must be on the session's `PATH` for the install task's copy;
+the packaged copies' `Exec` is absolute (see "The `Package` workflow builds
+the distributables").
 
 `mise run native:install:linux` builds the release binary and installs it to
 `~/.local/bin/riffle-native`, the `.desktop` file to
@@ -502,6 +506,36 @@ packages the built `target/release` binary with a script under
   `iscc` on `PATH` (Chocolatey's shim), so the workflow installs nothing.
   `mise run native:package:windows` is the release build plus `windows.sh`
   locally.
+- `linux.sh` (x86_64 only, needs `dpkg-dev`) writes three files under
+  `crates/native/target/release`:
+  - `Handpic-<version>-linux-x64.tar.gz`, one `Handpic/` folder with
+    `bin/riffle-native`, the checked-in desktop entry under
+    `share/applications/`, `crates/app/icons/128x128@2x.png` as
+    `share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`, and
+    `licenses/`;
+  - `install.sh`, a copy of `crates/native/packaging/linux/install.sh`
+    (adapted from gpui-kit's guide, Apache-2.0, said in its header): `sh
+    install.sh ARCHIVE EXPECTED_SHA256` reads the whole archive against the
+    digest before anything changes, refuses an entry outside `Handpic/`, a
+    link or a duplicate, and installs per user (Python 3, no root) into
+    `native:install:linux`'s layout, the desktop entry's `Exec` rewritten to
+    the quoted absolute `~/.local/bin/riffle-native`;
+  - `handpic_<version>_amd64.deb` (`Package: handpic`), built by `dpkg-deb
+    --root-owner-group --build` from `usr/lib/handpic/riffle-native`, the
+    desktop entry with `Exec=/usr/lib/handpic/riffle-native`, the icon, and
+    the notices under `usr/share/doc/handpic/`, its `DEBIAN/control` from the
+    `crates/native/packaging/linux/control` template (version, installed
+    size, `Depends`).
+
+  The workflow's `linux` leg runs it on `ubuntu-latest` after the `native`
+  CI job's apt list, prints the binary's `NEEDED` entries, the sonames it
+  names and the image's glibc, runs `install.sh` under a throwaway `HOME`
+  and checks the binary, the desktop entry (absolute `Exec`, `Icon`,
+  `StartupWMClass`) and the icon, checks that a wrong digest installs
+  nothing, prints `dpkg-deb --info` / `--contents`, checks the `Depends`,
+  and installs and removes the deb with `apt-get`. Nothing is launched: the
+  runner has no display and no GPU. `mise run native:package:linux` is the
+  release build plus `linux.sh` locally.
 
 - Rule: the setup's `AppId` is `dev.minodisk.handpic` (`IDENTIFIER`), for
   good: Inno Setup finds the earlier install, its folder and its uninstall
@@ -512,6 +546,31 @@ packages the built `target/release` binary with a script under
 - Rule: the setup has no close-applications handling or relaunch yet; the
   updater (sub-milestone 3 of the gpui-port plan's Step 10) adds what it
   needs.
+- Rule: the deb's `Depends` is `dpkg-shlibdeps`'s over the built binary plus
+  what GPUI opens at run time, never a copied list. Measured on
+  `ubuntu-latest` (Ubuntu 24.04.5, glibc 2.39; `Package` runs 44096260804 and
+  44099086987):
+  `NEEDED` holds only `libxcb.so.1`, `libxkbcommon.so.0`,
+  `libxkbcommon-x11.so.0`, `libgcc_s.so.1`, `libm.so.6`, `libc.so.6` and
+  `ld-linux-x86-64.so.2`, and the newest symbol version is `GLIBC_2.39`, so
+  `dpkg-shlibdeps` gives `libc6 (>= 2.39), libgcc-s1 (>= 4.2), libxcb1 (>=
+  1.12), libxkbcommon-x11-0 (>= 0.5.0), libxkbcommon0 (>= 0.5.0)`. Neither
+  Vulkan nor Wayland is linked: wgpu (Vulkan and GL backends,
+  `gpui-pre-wgpu`) loads `libvulkan.so.1`, or `libEGL.so.1` for GL, and
+  GPUI's `wayland-backend` (`client_system`, `dlopen`) loads
+  `libwayland-client.so.0`. `linux.sh` therefore adds `libvulkan1` and
+  `libwayland-client0` by hand; the GL fallback's `libegl1` is left out.
+  The deb and the tarball need glibc 2.39 or later (Ubuntu 24.04, Debian
+  13); an older distribution needs an older build image.
+- Rule: the deb's `Package` is `handpic`. The Tauri v1.10.0 deb was
+  `Package: riffle` (read from `Riffle_1.10.0_amd64.deb`), so the native deb
+  does not upgrade it in place; `Conflicts` / `Replaces` against `riffle` is
+  left to sub-milestone 4's real-device check.
+- Rule: the one desktop entry is the checked-in
+  `dev.minodisk.handpic.desktop` with the bare `Exec=riffle-native`
+  (`datadir.rs` tests it, and `native:install:linux` installs it as is); the
+  packaged copies get an absolute `Exec`, `linux.sh` writing the deb's and
+  `install.sh` the tarball install's.
 
 - Rule: `native:bundle:macos` stays the one place that lays out
   `Handpic.app`; `macos.sh` only signs and packages it.

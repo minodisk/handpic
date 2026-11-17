@@ -286,7 +286,13 @@ the license notices every package ships into one `licenses/` folder;
 `mise run native:package:macos`; `windows.sh`, the per-user Inno Setup
 `Handpic-<version>-windows-x64-setup.exe` from `packaging/windows/handpic.iss`
 (`AppId` `dev.minodisk.handpic`, for good) and the portable
-`Handpic-<version>-windows-x64.zip`, also `mise run native:package:windows`), uploading each package and one
+`Handpic-<version>-windows-x64.zip`, also `mise run native:package:windows`;
+`linux.sh`, the `Handpic-<version>-linux-x64.tar.gz`, beside it
+`packaging/linux/install.sh` (the per-user install of that tarball under
+`~/.local` after a SHA-256 check, adapted from gpui-kit's guide) and
+`handpic_<version>_amd64.deb` from the `packaging/linux/control` template
+(`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
+`mise run native:package:linux`), uploading each package and one
 `SHA256SUMS` as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`

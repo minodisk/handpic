@@ -132,6 +132,9 @@ clippy native"
 expect none "tools/git/x.sh" "shellcheck tools/git/x.sh"
 expect none "tools/stats/x.sh" "shellcheck tools/stats/x.sh"
 expect none "tools/package/x.sh" "shellcheck tools/package/x.sh"
+expect none "crates/native/packaging/linux/install.sh" "shellcheck crates/native/packaging/linux/install.sh
+clippy native
+test native"
 expect none ".claude/skills/develop/scripts/commit-push.sh" "shellcheck .claude/skills/develop/scripts/commit-push.sh"
 expect none "scripts/x.sh
 tools/git/sub/x.sh

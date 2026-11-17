@@ -1,0 +1,12 @@
+Package: handpic
+Version: @VERSION@
+Section: graphics
+Priority: optional
+Architecture: amd64
+Installed-Size: @INSTALLED_SIZE@
+Maintainer: minodisk
+Homepage: https://github.com/minodisk/handpic
+Depends: @DEPENDS@
+Description: A culling app for RAW photos
+ Handpic culls Sony ARW, Canon CR3, Nikon NEF, Fujifilm RAF,
+ OM System / Olympus ORF and DNG files.

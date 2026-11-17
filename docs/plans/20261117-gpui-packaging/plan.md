@@ -168,7 +168,7 @@ touched; its icons are only read.
       proves the per-user location, the `HKCU` entry and the silent run, not
       the absence of a UAC prompt for a standard user. Leave that part
       Unverified in the record for a real machine.
-- [ ] Step 3: The Linux `.tar.gz` with `install.sh`, the `.deb`, and the records
+- [x] Step 3: The Linux `.tar.gz` with `install.sh`, the `.deb`, and the records
   - Done when:
     - The `Package` run also builds on `ubuntu-latest` and uploads
       `Handpic-<version>-linux-x64.tar.gz`, `install.sh` and
@@ -289,3 +289,4 @@ touched; its icons are only read.
 
 - (2026-11-17) Step 1 complete
 - (2026-11-17) Step 2 complete
+- (2026-11-17) Step 3 complete

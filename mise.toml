@@ -71,7 +71,7 @@ pnpm install --frozen-lockfile
 pnpm exec vp check
 cargo fmt --all -- --check
 cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
-shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh
+shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/native/packaging/linux/*.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh
@@ -181,6 +181,17 @@ run = """
 set -euo pipefail
 cargo build --release --locked
 bash ../../tools/package/windows.sh
+"""
+
+[tasks."native:package:linux"]
+description = "Build the release GPUI app and package it as a tarball with its install.sh and a .deb under crates/native/target/release (x86_64 Linux, dpkg-dev installed)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo build --release --locked
+bash ../../tools/package/linux.sh
 """
 
 [tasks."native:install:linux"]
