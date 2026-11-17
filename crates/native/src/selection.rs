@@ -30,7 +30,6 @@ pub fn single(path: Option<&str>) -> Selection {
 }
 
 /// `paths` selected, the first one the anchor.
-#[allow(dead_code, reason = "the MCP companion's select_photos")]
 pub fn selection_of(paths: &[String]) -> Selection {
     Selection {
         selected: paths.iter().cloned().collect(),

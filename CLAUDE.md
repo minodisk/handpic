@@ -148,7 +148,8 @@ the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
 handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
-loopback Streamable HTTP endpoint on `MCP_PORT` with its seven tools, started,
+loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
+tools, or every tool after `with_all_tools` (the native app's), started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
 callback and waits for its `reply`; the `get_photo` / `get_preview` reads;
@@ -401,14 +402,19 @@ file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
 an open or a re-listing and narrowed by `retain` on a `refilter`; off under
 `--no-prefetch`), `src/mcp.rs` the MCP
-companion's server (the backend's `Mcp` on a tokio runtime of its own on one
+companion's server (the backend's `Mcp` with all its tools on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
-over a snapshot of the view: the current file as the selection, its burst
-(`burstOf`, each frame's sharpness from the `Facts`), compare and several
-photos refused, and `set_judgment`'s changes, one undo
-entry through the judgment keys' view, row and writer path), and `src/viewed.rs` the
+over a snapshot of the view: the strip's selection, its targets as
+`selected`, its burst
+(`burstOf`, each frame's sharpness from the `Facts`), compare refused,
+`set_judgment`'s changes, one undo
+entry through the judgment keys' view, row and writer path, the `Key` a
+keymap action and its tool both run through the view's `perform` (the moves,
+`select_all`, `reject_rest`, `undo` and `redo`, an undo of a trash run
+refused), and `Busy`, which refuses every request but `get_view` while
+`key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview

@@ -121,6 +121,11 @@ impl FolderOps {
         self.dialog.is_some()
     }
 
+    /// An inline rename is live.
+    pub fn editing(&self) -> bool {
+        self.editing.is_some()
+    }
+
     /// The pane's note of a sequencing run under way.
     pub fn note(&self) -> Option<String> {
         self.sequencing.clone()

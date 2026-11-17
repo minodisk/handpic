@@ -1,4 +1,5 @@
-//! The MCP companion's server, the backend's `mcp::Mcp`, on a tokio runtime
+//! The MCP companion's server, the backend's `mcp::Mcp` with every tool
+//! (`with_all_tools`), on a tokio runtime
 //! of its own on one named thread, started only when `mcpEnabled` is on. A
 //! tool call reaches the view as `Event::Mcp` through the view's channel,
 //! and the view answers through `Server::reply`.
@@ -56,7 +57,11 @@ pub fn start(
             .unbounded_send(Event::Mcp(request))
             .map_err(|_| "Handpic's main window is not open".to_string())
     });
-    let mcp = Arc::new(Mcp::new(bridge, index).with_port(port.unwrap_or(MCP_PORT)));
+    let mcp = Arc::new(
+        Mcp::new(bridge, index)
+            .with_all_tools()
+            .with_port(port.unwrap_or(MCP_PORT)),
+    );
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
