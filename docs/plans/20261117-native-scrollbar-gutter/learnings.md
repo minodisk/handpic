@@ -20,6 +20,21 @@
   `tree_row` / `meta_pane`, which bind a local `theme`: a `::` path looks its
   first segment up in the type namespace.
 
+## Step 2
+
+- `feature/native-strip-header` (PR #1140) had merged before this step, so
+  `stripheight::GUTTER` joins `HEADER` in `dragged` (both off `wanted` and
+  off the room left by `PREVIEW_MIN`) and in the header menus' `menu_max`
+  (`HEADER + strip_geometry.height + GUTTER`).
+- `GUTTER` is `theme::SCROLLBAR_TRACK - strip::STRIP_PADDING`, so a gpui-kit
+  bump that changes the track's width moves the gutter with it (the theme
+  test catches the change; `stripheight`'s test pins 9 px).
+- Only the cells' `div` grew. The canvas inside it is `size_full()`, but
+  `paint_strip` and `paint_burst_band` place everything from the top
+  (`STRIP_PADDING` down) and the tooltip regions too, so they needed no
+  change. The other readers of `strip.geometry().height` in `main.rs`
+  (`drag_strip`'s compare, `end_pane_drag`'s write) mean the cells.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Windows first, then macOS and Linux; Neutral dark,
@@ -42,6 +57,27 @@
      body have not moved (still 12 px from the right edge).
   5. A long `Import…` or Move to Trash dialog body has no text under its bar.
   These replace the "tree rows' right 16 px" half of check 4 in
+  `docs/plans/_archived/20261117-native-scrollbars-always/learnings.md` and
+  that half of its `todo.md` item ("Native: real-device checks of the
+  always-visible scrollbars").
+- Pending manual check (Windows first, then macOS and Linux), Step 2 of this
+  plan, from `stripheight::GUTTER` in `crates/native/src/stripheight.rs` and
+  the strip `div`'s height and `menu_max` in `Riffle::render` in
+  `crates/native/src/main.rs`. Step 2's checkbox was ticked on the automated
+  criteria only. Verify:
+  1. With a folder long enough to overflow the strip, the bar sits below the
+     names with nothing under the thumb at rest, hovered and dragged, a
+     burst's band included.
+  2. A press on a name band selects the cell, and a right press opens its
+     menu.
+  3. A short folder shows an empty 9 px band under the cells, and the
+     preview's height does not jump when the folder changes.
+  4. Dragging the strip's top edge follows the pointer and stops at `MIN`,
+     `MAX` and the preview's minimum; a 1:1 crop is re-cut after a drag as
+     before.
+  5. The `Sort ▾` / `Filter ▾` menus still fit above the strip header in a
+     short window.
+  These replace the "strip's bottom edge" half of check 4 in
   `docs/plans/_archived/20261117-native-scrollbars-always/learnings.md` and
   that half of its `todo.md` item ("Native: real-device checks of the
   always-visible scrollbars").
