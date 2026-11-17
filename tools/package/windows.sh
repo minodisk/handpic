@@ -48,6 +48,7 @@ function find_iscc() {
 }
 
 iscc="$(find_iscc)"
+echo "windows.sh: ${iscc}" >&2
 
 stage="$(mktemp -d)"
 trap 'rm -rf "${stage}"' EXIT
@@ -56,7 +57,7 @@ cp "${release}/${binary}" "${stage}/Handpic/${binary}"
 bash "${root}/tools/package/notices.sh" "${stage}/Handpic/licenses"
 
 # MSYS would rewrite ISCC's /-options as paths.
-MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" /Q \
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
 	"/DAppVersion=${version}" \
 	"/DBinary=${binary}" \
 	"/DReleaseDir=$(cygpath -w "${release}")" \
