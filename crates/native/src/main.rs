@@ -510,6 +510,10 @@ struct Riffle {
     /// next id.
     mcp_pending: Option<companion::Pending>,
     mcp_next_id: u64,
+    /// The folder operation an MCP client started while
+    /// `mcpAllowDestructive` is on, whose preview becomes the `Pending`
+    /// instead of opening the dialog; the tree menu's item clears it.
+    mcp_folder: Option<companion::FolderOp>,
     /// A folder the tree opened while a run was in flight, opened whole at
     /// its end (only the launch's open has `--size` / `--max`).
     deferred_open: Option<PathBuf>,
@@ -884,6 +888,7 @@ impl Riffle {
             last_op: None,
             mcp_pending: None,
             mcp_next_id: 1,
+            mcp_folder: None,
             deferred_open: None,
             // `--auto` starts with every pane shown and leaves the stored
             // panes alone.
@@ -996,13 +1001,15 @@ impl Riffle {
         }
         let dropped = self.gate.discard().and_then(|held| {
             log::info!("trash: {} dropped by an open", held_label(&held));
-            if let Some(name) = Self::trash_label(&held) {
+            if let Some(name) = Self::held_name(&held) {
                 self.record_dropped(name, "another folder was opened");
             }
             self.held_dropped(held, None)
         });
         self.opens.fetch_add(1, Ordering::SeqCst);
-        self.mcp_pending = None;
+        // A folder operation's preview is of its own folder, not the open one.
+        self.mcp_pending
+            .take_if(|pending| matches!(pending.op, companion::Op::Trash(_)));
         self.tree_note = None;
         let shown = std::path::absolute(&folder).unwrap_or_else(|_| folder.clone());
         self.reveal(shown.to_string_lossy().into_owned(), cx);
@@ -1731,27 +1738,36 @@ impl Riffle {
             },
             progress: None,
             message: self.step_note.clone(),
+            dialog: None,
         });
     }
 
-    /// The label of a held run, undo or redo, else none.
-    fn trash_label(op: &HeldOp) -> Option<&'static str> {
+    /// The label of a held run, undo, redo or sidecar operation, else none.
+    fn held_name(op: &HeldOp) -> Option<&'static str> {
         match op {
             HeldOp::Run(target) => Some(target.mode.label()),
             HeldOp::Undo(entry) => Some(entry.what.step_labels().0),
             HeldOp::Redo(entry) => Some(entry.what.step_labels().1),
-            HeldOp::Sidecars(_) | HeldOp::Rename(_) => None,
+            HeldOp::Sidecars(target) => Some(target.kind.label()),
+            HeldOp::Rename(_) => None,
         }
     }
 
-    /// A held run, undo or redo was dropped before it ran, for `why`:
-    /// `get_status` reports it failed instead of the operation before it.
+    /// A held operation was dropped before it ran, for `why`: `get_status`
+    /// reports it failed instead of the operation before it.
     fn record_dropped(&mut self, name: &'static str, why: &str) {
+        self.record_failed(name, format!("dropped: {why}"));
+    }
+
+    /// `name` ended without running, for `message`, which `get_status`
+    /// reports until another ends.
+    fn record_failed(&mut self, name: &'static str, message: String) {
         self.last_op = Some(companion::Operation {
             name,
             state: companion::OpState::Failed,
             progress: None,
-            message: Some(format!("dropped: {why}")),
+            message: Some(message),
+            dialog: None,
         });
     }
 
@@ -2357,7 +2373,7 @@ impl Riffle {
             Some(held @ HeldOp::Run(_)) => {
                 log::info!("trash: {} dropped by an open dialog", held_label(&held));
                 self.record_dropped(
-                    Self::trash_label(&held).unwrap_or_default(),
+                    Self::held_name(&held).unwrap_or_default(),
                     "a dialog was open when the scan ended",
                 );
             }
@@ -2375,7 +2391,15 @@ impl Riffle {
                 }
                 self.record_dropped(name, "it could not run (another step or run was out, or the run was no longer on top of the history)");
             }
-            Some(HeldOp::Sidecars(target)) => self.start_sidecars(target, cx),
+            Some(HeldOp::Sidecars(target)) => {
+                self.start_sidecars(target.clone(), cx);
+                if self.folderops.sidecar_target() != Some(&target) {
+                    self.record_dropped(
+                        target.kind.label(),
+                        "a dialog or another operation was open when the scan ended",
+                    );
+                }
+            }
             Some(HeldOp::Rename(held)) => {
                 if self.run_rename(held, cx) {
                     return;
@@ -2416,7 +2440,18 @@ impl Riffle {
                 self.settings.auto_advance = on;
                 self.settings.writes.set("autoAdvance", on.into());
             }
-            Change::SidecarFormat(format) => self.switch_format(format, cx),
+            Change::SidecarFormat(format) => {
+                // A sidecar preview counted the sidecars of the format before.
+                if format != self.settings.format {
+                    self.mcp_pending.take_if(|pending| {
+                        matches!(
+                            pending.op,
+                            companion::Op::Folder(companion::FolderOp::Sidecars(_), _)
+                        )
+                    });
+                }
+                self.switch_format(format, cx);
+            }
             Change::LabelNames(ref names) => self.switch_names(names.clone(), cx),
             Change::Keymap(ref keymap) => {
                 self.bindings = Bindings::new(keymap);
@@ -2444,6 +2479,7 @@ impl Riffle {
                 if !on {
                     // A preview made under the grant is not confirmable under a later one.
                     self.mcp_pending = None;
+                    self.mcp_folder = None;
                 }
                 self.settings.writes.set("mcpAllowDestructive", on.into());
             }
@@ -4650,6 +4686,7 @@ impl Riffle {
             notes: self.pane_notes(),
             errors: self.pane_errors(),
             operation: self.operation_of(),
+            pending: self.mcp_pending.as_ref().map(companion::previewed),
         }
     }
 
@@ -4666,6 +4703,19 @@ impl Riffle {
                 state: OpState::Awaiting,
                 progress: None,
                 message: Some(trash::dialog_text(target.mode, target.paths.len()).line),
+                dialog: None,
+            });
+        }
+        let flow = self.folderops.flow();
+        if let (Some((name, _)), Some(dialog)) = (flow, self.folderops.dialog())
+            && !dialog.running()
+        {
+            return Some(Operation {
+                name,
+                state: OpState::Awaiting,
+                progress: None,
+                message: dialog.content.notes.first().cloned(),
+                dialog: Some(companion::dialog_content(dialog)),
             });
         }
         if let Some(name) = self.gate.waiting() {
@@ -4674,17 +4724,63 @@ impl Riffle {
                 state: OpState::Held,
                 progress: None,
                 message: None,
+                dialog: None,
             });
         }
         if let Some(name) = self.running_op {
             return Some(Operation {
                 name,
                 state: OpState::Running,
-                progress: self.trashing.map(|(_, done, total)| (done, total)),
+                progress: self
+                    .trashing
+                    .map(|(_, done, total)| (done, total))
+                    .or(self.folderops.sequence_progress()),
                 message: None,
+                dialog: None,
+            });
+        }
+        if let Some((name, true)) = flow {
+            return Some(Operation {
+                name,
+                state: OpState::Previewing,
+                progress: None,
+                message: None,
+                dialog: None,
             });
         }
         self.last_op.clone()
+    }
+
+    /// What `cancel_operation` would cancel: the trash dialog asking, the
+    /// folder dialog asking or a sequencing run, else the operation under
+    /// way that cannot be canceled.
+    fn cancel_of(&self) -> Option<Result<companion::Cancel, &'static str>> {
+        if self.trash.busy() && !self.trash.running() {
+            return Some(Ok(companion::Cancel::TrashDialog));
+        }
+        if self.folderops.sequence_running()
+            || self
+                .folderops
+                .dialog()
+                .is_some_and(|dialog| !dialog.running())
+        {
+            return Some(Ok(companion::Cancel::Folder));
+        }
+        if let Some(op) = self.operation_of()
+            && op.state.under_way()
+        {
+            return Some(Err(op.name));
+        }
+        self.folderops
+            .busy()
+            .then_some(Err("the folder operation under way"))
+    }
+
+    /// Keep `op` as the `Pending` the next id names, replacing any other.
+    fn keep_pending(&mut self, op: companion::Op) -> &companion::Pending {
+        let id = self.mcp_next_id;
+        self.mcp_next_id += 1;
+        self.mcp_pending.insert(companion::Pending { id, op })
     }
 
     /// Hold the `wait_for_idle` call `id` until the view is idle, or reply
@@ -5097,6 +5193,7 @@ impl Riffle {
                 trashing: this.trashing.is_some(),
                 held: this.gate.waiting().is_some(),
                 pending: this.mcp_pending.as_ref(),
+                cancel: this.cancel_of(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -5112,34 +5209,56 @@ impl Riffle {
             Ok(Some(companion::Action::Open(path))) if self.refuse_renaming(&path, cx) => {
                 Err(rename::RENAMING.to_owned())
             }
-            Ok(Some(companion::Action::Ask(op))) => {
-                let companion::Op::Trash(target) = &op;
-                self.confirm_trash(&target.paths, target.mode, cx);
-                if self.trash.busy() {
-                    Ok(companion::awaiting(&op))
-                } else {
-                    Err("Handpic could not open its dialog; try again".to_owned())
+            Ok(Some(companion::Action::Ask(op))) => match &op {
+                companion::Op::Trash(target) => {
+                    self.confirm_trash(&target.paths, target.mode, cx);
+                    if self.trash.busy() {
+                        Ok(companion::awaiting(&op))
+                    } else {
+                        Err("Handpic could not open its dialog; try again".to_owned())
+                    }
                 }
-            }
+                companion::Op::Folder(..) => Err("a folder operation asks through its flow".into()),
+            },
             Ok(Some(companion::Action::Preview(op))) => {
-                let pending = companion::Pending {
-                    id: self.mcp_next_id,
-                    op,
-                };
-                self.mcp_next_id += 1;
-                let reply = companion::previewed(&pending);
-                self.mcp_pending = Some(pending);
-                Ok(reply)
+                Ok(companion::previewed(self.keep_pending(op)))
             }
             Ok(Some(companion::Action::Run(op))) => {
                 self.mcp_pending = None;
-                let companion::Op::Trash(target) = op;
-                log::info!(
-                    "trash: {} of {} files confirmed over MCP",
-                    target.mode.label(),
-                    target.paths.len()
-                );
-                self.request_run(target, false, cx);
+                match op {
+                    companion::Op::Trash(target) => {
+                        log::info!(
+                            "trash: {} of {} files confirmed over MCP",
+                            target.mode.label(),
+                            target.paths.len()
+                        );
+                        self.request_run(target, false, cx);
+                        Ok(companion::get_status(&self.status_of()))
+                    }
+                    companion::Op::Folder(op, _) => self
+                        .run_confirmed(op, cx)
+                        .map(|()| companion::get_status(&self.status_of())),
+                }
+            }
+            Ok(Some(companion::Action::Folder { op, dialog })) => {
+                let label = op.label();
+                // The tree menu's item, which forgets an earlier client's start.
+                self.folder_op(op.action(), op.dir().to_owned(), cx);
+                if self.folderops.busy() || self.gate.waiting() == Some(label) {
+                    if !dialog {
+                        self.mcp_folder = Some(op);
+                    }
+                    Ok(companion::started(&self.status_of(), dialog))
+                } else {
+                    Err(format!("Handpic could not start {label}; try again"))
+                }
+            }
+            Ok(Some(companion::Action::Cancel(cancel))) => {
+                match cancel {
+                    companion::Cancel::TrashDialog => self.dismiss_trash(cx),
+                    companion::Cancel::Folder => self.dismiss_folder_dialog(false, cx),
+                    companion::Cancel::Pending => self.mcp_pending = None,
+                }
                 Ok(companion::get_status(&self.status_of()))
             }
             Ok(Some(companion::Action::StepTrash(key))) => {

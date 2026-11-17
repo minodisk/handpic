@@ -430,7 +430,14 @@ failed), `trash_photos`, the strip menu's Move to Trash / Delete Permanently
 on the given photos or the targets, a move previewed as an `Op` the view keeps
 as the `Pending` its id names and run on a confirming call while
 `mcpAllowDestructive` is on (through `request_run`, no dialog), else, like
-every delete, the app's dialog opened through `confirm_trash`, and `wait_for_idle`,
+every delete, the app's dialog opened through `confirm_trash`,
+`rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps`, the tree
+menu's flows started through `folder_op` (`FolderOp`), their dialog opened
+while `mcpAllowDestructive` is off, else their preview's dialog content kept
+as the `Pending` (`mcp_folder` marking the flow, `get_status`'s `pending`)
+and run on a confirming call through `run_confirmed`, `cancel_operation`,
+the dialog's Cancel, a sequencing run's cancel or the `Pending` forgotten,
+answered while the view drops keys, and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
 timeout, `get_settings`, what the settings modal shows, `set_settings`, the
 modal's own `settingsview::Change`s by its rules, which the view's

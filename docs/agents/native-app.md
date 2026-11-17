@@ -812,7 +812,8 @@ not touched); `Mcp::with_all_tools` adds the `native_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
-`set_settings`, `trash_photos`) and the native
+`set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
+`sequence_timestamps`, `cancel_operation`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the Tauri server never
@@ -908,8 +909,51 @@ changed; it forgets the `Pending` and calls `request_run`, the tail of
 recorded run and the undo entry) with `own` false, so no dialog opens and
 the flow stays idle, as for a held run drained later: the backdrop and the
 key lock of a running dialog are not drawn for a run the user never saw ask.
-It replies with `get_status` at once. Steps 6 and 7 add their operations to
-`Op`, whose `tool` and `content` name the tool and the dialog's text. `wait_for_idle` replies
+It replies with `get_status` at once. Step 7 adds its operations to
+`Op`, whose `tool` and `content` name the tool and the dialog's text.
+
+`rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` are the
+folder tree menu's `Rewrite Sidecars from Index…`, `Delete Sidecars…` and
+`Sequence JPEG Timestamps…` on an absolute folder (checked in the backend),
+`Op::Folder(FolderOp, Option<Dialog>)`. They are refused while another
+folder flow (`FolderOps::busy`) or an MCP-confirmed trash run is under way.
+Without `confirm` the call is `Action::Folder`: the view calls `folder_op`,
+the menu item's own entry, so the sidecar request goes through the gate
+(held for the scan's end without canceling it) and the preview is read as
+for a click; the reply is `get_status` at once (`companion::started`, the
+operation `previewing` or `held_for_scan`), since a sequencing preview of a
+large folder outlasts `BRIDGE_TIMEOUT`. While `mcpAllowDestructive` is off
+the dialog opens on the preview (`show_folder_dialog`), and `get_status`'s
+`operation` is `awaiting_confirmation` with the dialog's content in
+`dialog` (`companion::dialog_content`: the title, lines, rows, lists, notes,
+errors, reason, run label and whether the run is enabled). While it is on,
+the view marks the flow `mcp_folder` (cleared by `folder_op`, so the menu's
+next click opens a dialog again, and by switching the grant off); when its
+preview comes back, `mcp_previewed` ends the flow and keeps the same
+`Dialog` as the `Pending` (`keep_pending`), which `get_status`'s `pending`
+reports with its id once `wait_for_idle` returns. A call with that `id` and
+`confirm: true` is `Action::Run`, refused when the dialog's run would be
+disabled (its `reason`), and runs through `run_confirmed`: the flow taken to
+its previewed state with no dialog, then `run_sidecars` / `run_sequence`, so
+a sidecar run started while a listing or scan is under way is refused with
+`SCAN_RUNNING`, and a Delete Sidecars run is recorded for `undo` as the
+menu's is. A sidecar `Pending` goes when the sidecar format switches (its
+counts are of the old format); a folder operation's `Pending` survives a
+folder open, a trash one does not. `get_status` reports the flows:
+`previewing` while a preview is read with no dialog, `running` with the
+sequencing run's done / total (`running_op` set in `run_sidecars` /
+`run_sequence`), then `finished` with the status line or `failed`
+(`record_failed`: a failed preview, the `SCAN_RUNNING` refusal, a held
+sidecar request dropped).
+
+`cancel_operation` passes the busy guard (`companion::CANCEL`): it cancels
+what the user's Cancel would (`cancel_of`): the trash dialog asking
+(`dismiss_trash`), a folder dialog asking or a sequencing run, with its
+dialog or without one (`dismiss_folder_dialog`, whose sequence arm sets the
+run's cancel flag); else it forgets the `Pending`; else it is refused naming
+the operation under way that cannot be canceled (a run to the Trash, a
+sidecar run, a held request, a preview being read), or with nothing to
+cancel. `wait_for_idle` replies
 at once when idle; otherwise the view keeps the call's id in `idle_waiters`
 and answers it from an `observe_self` callback (registered from a task, once
 the entity exists), which runs after every `cx.notify()` and replies to every

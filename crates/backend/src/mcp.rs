@@ -74,12 +74,14 @@ settings and the current stars, pick / reject flag and color label), look at a s
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
 filter, the panes shown and the overlays, browse the folders, open one, expand or collapse the \
 folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
-scan, a move to the trash) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+scan, a move to the trash, a folder operation) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
 undo and sidecar files stay consistent. `trash_photos` moves photos to the trash or deletes \
-them, and only with the user's confirmation: unless the user has allowed MCP clients to run \
-destructive operations in Handpic's settings, it opens Handpic's own dialog and the user \
-confirms there; a permanent delete always waits for the user's click in that dialog. Move \
-photos to the trash only when the user asks. \
+them, and `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` run the folder \
+tree menu's operations on a folder, each only with the user's confirmation: unless the user \
+has allowed MCP clients to run destructive operations in Handpic's settings, it opens \
+Handpic's own dialog and the user confirms there; a permanent delete always waits for the \
+user's click in that dialog. `cancel_operation` cancels what the user's Cancel would. Run \
+them only when the user asks. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
 them only when the user asks you to.";
@@ -638,6 +640,18 @@ pub struct TrashArgs {
 #[derive(Debug, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 #[serde(deny_unknown_fields)]
+pub struct FolderOpArgs {
+    /// The folder's absolute path, for the call that starts the operation.
+    path: Option<String>,
+    /// The `id` of the preview in `get_status`' `pending`, with `confirm: true`.
+    id: Option<u64>,
+    /// True to run the preview `id` names.
+    confirm: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
 pub struct WaitArgs {
     /// How long to wait in milliseconds, at most 55000; 30000 when omitted.
     timeout_ms: Option<u64>,
@@ -829,6 +843,23 @@ fn trash(args: TrashArgs) -> Value {
         request.insert("confirm".into(), json!(confirm));
     }
     Value::Object(request)
+}
+
+/// A folder operation's request: the fields given, the path checked to be
+/// an absolute folder.
+fn folder_op(args: FolderOpArgs) -> Reply {
+    let mut request = serde_json::Map::new();
+    if let Some(path) = args.path {
+        folder(&path)?;
+        request.insert("path".into(), json!(path));
+    }
+    if let Some(id) = args.id {
+        request.insert("id".into(), json!(id));
+    }
+    if let Some(confirm) = args.confirm {
+        request.insert("confirm".into(), json!(confirm));
+    }
+    Ok(Value::Object(request))
 }
 
 /// How long `wait_for_idle` waits for `timeout_ms`.
@@ -1210,12 +1241,14 @@ impl Companion {
         under way), the open `folder`, a folder `opening` once a run ends, whether a `listing` \
         or a `scan` pass (`scanning` or `analyzing`, with done / total) is under way, whether a \
         run on the open folder's files is `running`, the status line's text, the pane's \
-        `notes` and `errors`, and the `operation` under way, else the last one to end (its \
-        `name`, such as `Move to Trash` or `Undo Move to Trash`, its `state`: \
-        `awaiting_confirmation` in Handpic's dialog, `held_for_scan`, `running` with `done` / \
-        `total`, `finished` or `failed`, and the `message` it ended with). A held operation dropped \
-        before it ran (by a folder open, a later request or a dialog open at the scan's end) \
-        is `failed` with a `dropped: ...` message and moved nothing."
+        `notes` and `errors`, the `operation` under way, else the last one to end (its \
+        `name`, such as `Move to Trash`, `Undo Move to Trash` or `Delete Sidecars`, its \
+        `state`: `previewing`, `awaiting_confirmation` in Handpic's dialog (whose content is \
+        in `dialog`), `held_for_scan`, `running` with `done` / `total`, `finished` or `failed`, \
+        and the `message` it ended with), and the `pending` preview a call with its `id` and \
+        `confirm: true` runs. A held operation dropped before it ran (by a folder open, a later \
+        request or a dialog open at the scan's end) is `failed` with a `dropped: ...` message \
+        and did nothing."
     )]
     async fn get_status(&self) -> CallToolResult {
         self.view_call("get_status").await
@@ -1235,6 +1268,57 @@ impl Companion {
     )]
     async fn trash_photos(&self, Parameters(args): Parameters<TrashArgs>) -> CallToolResult {
         tool_result(self.bridge.call("trash_photos", trash(args)).await)
+    }
+
+    #[tool(
+        description = "Rewrite a folder's sidecars of the current format from Handpic's index, \
+        as the folder tree's Rewrite Sidecars from Index does. Confirmed like a folder \
+        operation: see `delete_sidecars`. Use only when the user asks."
+    )]
+    async fn rewrite_sidecars(&self, Parameters(args): Parameters<FolderOpArgs>) -> CallToolResult {
+        self.checked_call("rewrite_sidecars", move || folder_op(args))
+            .await
+    }
+
+    #[tool(
+        description = "Move a folder's sidecars of the current format to the trash, as the \
+        folder tree's Delete Sidecars does (`undo` restores them). Called with `path`, it \
+        starts the operation and replies at once with `get_status`: while the user allows MCP \
+        clients to run destructive operations (`get_settings`' `mcp_allow_destructive`), \
+        Handpic reads the preview its dialog would show, and once `wait_for_idle` returns \
+        `get_status`' `pending` holds it with an `id`, which a second call with that `id` and \
+        `confirm: true` runs; otherwise Handpic's dialog asks the user, its content in \
+        `get_status`' `operation.dialog`. Waits for a scan under way before it reads the \
+        preview; a run is refused while a listing or scan is under way. Use only when the user \
+        asks."
+    )]
+    async fn delete_sidecars(&self, Parameters(args): Parameters<FolderOpArgs>) -> CallToolResult {
+        self.checked_call("delete_sidecars", move || folder_op(args))
+            .await
+    }
+
+    #[tool(
+        description = "Write copies of a folder's JPEGs with unique capture-time seconds into \
+        its `-sequenced` sibling folder, as the folder tree's Sequence JPEG Timestamps does, \
+        rebuilding that folder. Confirmed like a folder operation: see `delete_sidecars`; \
+        `cancel_operation` stops the run. Use only when the user asks."
+    )]
+    async fn sequence_timestamps(
+        &self,
+        Parameters(args): Parameters<FolderOpArgs>,
+    ) -> CallToolResult {
+        self.checked_call("sequence_timestamps", move || folder_op(args))
+            .await
+    }
+
+    #[tool(
+        description = "Cancel what the user's Cancel would: close Handpic's dialog asking about \
+        a move to the trash or a folder operation, or stop a Sequence JPEG Timestamps run; \
+        else forget the preview in `get_status`' `pending`. Refused, naming it, when the \
+        operation under way cannot be canceled. Returns `get_status`."
+    )]
+    async fn cancel_operation(&self) -> CallToolResult {
+        self.view_call("cancel_operation").await
     }
 
     #[tool(
@@ -1720,6 +1804,8 @@ mod tests {
         assert_eq!(
             names(&mcp.companion),
             [
+                "cancel_operation",
+                "delete_sidecars",
                 "get_photo",
                 "get_preview",
                 "get_settings",
@@ -1731,8 +1817,10 @@ mod tests {
                 "redo",
                 "reject_rest",
                 "reveal",
+                "rewrite_sidecars",
                 "select_all",
                 "select_photos",
+                "sequence_timestamps",
                 "set_filter",
                 "set_judgment",
                 "set_overlays",
@@ -1980,6 +2068,23 @@ mod tests {
         assert_eq!(trash(args), json!({ "id": 3, "confirm": true }));
         assert!(serde_json::from_value::<TrashArgs>(json!({ "mode": "shred" })).is_err());
         assert!(serde_json::from_value::<TrashArgs>(json!({ "force": true })).is_err());
+    }
+
+    #[test]
+    fn folder_op_forwards_the_given_fields_and_refuses_a_path_that_is_no_folder() {
+        let args: FolderOpArgs =
+            serde_json::from_value(json!({ "id": 2, "confirm": true })).unwrap();
+        assert_eq!(folder_op(args), Ok(json!({ "id": 2, "confirm": true })));
+        let dir = std::env::temp_dir();
+        let path = dir.to_string_lossy().into_owned();
+        let args: FolderOpArgs = serde_json::from_value(json!({ "path": path })).unwrap();
+        assert_eq!(folder_op(args), Ok(json!({ "path": path })));
+        let args: FolderOpArgs = serde_json::from_value(json!({ "path": "relative" })).unwrap();
+        assert_eq!(
+            folder_op(args),
+            Err("relative is not an absolute path".into())
+        );
+        assert!(serde_json::from_value::<FolderOpArgs>(json!({ "force": true })).is_err());
     }
 
     #[test]

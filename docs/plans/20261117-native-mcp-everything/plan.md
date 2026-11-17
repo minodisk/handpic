@@ -310,7 +310,7 @@ Made with the user on 2026-11-17.
     - Test only on copies; the checks in `docs/agents/native-app.md` for the
       trash flow name the log lines to look for.
 
-- [ ] Step 6: Folder operations I: Rewrite Sidecars, Delete Sidecars, Sequence JPEG Timestamps
+- [x] Step 6: Folder operations I: Rewrite Sidecars, Delete Sidecars, Sequence JPEG Timestamps
   - Done when:
     - `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` run
       the tree menu's flows on a folder, with the preview each dialog shows

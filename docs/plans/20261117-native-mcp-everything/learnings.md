@@ -227,6 +227,71 @@
   paths again; the test client substituted a `%P%` placeholder with the
   JSON-escaped folder prefix instead.
 
+## Step 6: Folder operations I: Rewrite Sidecars, Delete Sidecars, Sequence JPEG Timestamps
+
+- **A folder operation's preview is asynchronous, so the call replies at
+  once (D2).** Unlike the trash dialog's text, the sidecar and sequencing
+  previews are background reads (a sequencing preview of a large folder can
+  outlast `BRIDGE_TIMEOUT`), and the sidecar request may be held by the gate
+  for the scan. The preview call is `Action::Folder`, which runs `folder_op`
+  (the menu item's own entry, gate and all) and replies with `get_status`
+  (`previewing` / `held_for_scan`); the content reaches the client through
+  `get_status`: `operation.dialog` while the app's dialog asks (grant off),
+  or the new top-level `pending` (grant on), which `wait_for_idle` then
+  returns with.
+- **The flow does the preview in both modes; a marker reroutes it.**
+  `mcp_folder: Option<FolderOp>` is set after `folder_op` only while
+  `mcpAllowDestructive` is on; `sidecars_previewed` / `sequence_previewed`
+  build the same `Dialog` as always and, when the flow's op equals the
+  marker, end the flow and keep the `Dialog` as `Op::Folder(op,
+  Some(dialog))` in the `Pending` instead of opening it. So the preview a
+  client confirms is byte for byte the dialog's content, and no dialog-less
+  flow stays busy waiting for a confirm that may never come. `folder_op`
+  clears the marker (a menu click always gets its dialog), as does switching
+  the grant off.
+- **The confirm restarts the flow with no dialog** (`run_confirmed`:
+  `start` → `previewed` → `run_sidecars` / `run_sequence`), so the UI's run
+  rules hold: a sidecar run with a listing or scan under way is refused with
+  `SCAN_RUNNING` (detected as the flow ending inside `run_sidecars`), Delete
+  Sidecars goes through `trashed` and is recorded for undo. The trash
+  confirm's `HELD_REFUSAL` is not applied: these runs never enter the gate.
+- `trash_label` became `held_name` with the sidecar arm, so a held sidecar
+  request dropped by an open, a later request or the drain is reported
+  `failed` too. `record_dropped` now goes through a new `record_failed`.
+- A sidecar `Pending` is dropped on a sidecar format switch (its counts and
+  the files a Delete Sidecars run would move are of the old format); a
+  folder open now drops only a trash `Pending`, since a folder operation's
+  folder need not be the open one.
+- **`cancel_operation` passes the busy guard** (the dialog it closes is what
+  makes the view drop keys). `cancel_of` in the view decides: the trash
+  dialog asking, a folder dialog asking or a sequencing run (dialog or none:
+  `dismiss_folder_dialog`'s sequence arm sets the cancel flag without a
+  dialog), else the `Pending`, else a refusal naming the operation under way.
+  An import run (Step 7) is today reported as "the folder operation under
+  way" cannot be canceled when its dialog is aside.
+- **End to end** (`--mcp-port 41972`, fresh `--settings` seeded with
+  `mcpEnabled` (and `mcpAllowDestructive` for the first run), three ARW
+  copies and JPEGs extracted from them with `exiftool -b -PreviewImage`, one
+  `DateTimeOriginal` stamped on all, under `D:\handpic-mcp-e2e\step6`):
+  grant on: `rewrite_sidecars` replied `previewing`, `wait_for_idle` gave
+  the `pending` rows and id, the confirm `running` then `finished` "Rewrote
+  the sidecars of 2 files in photos", reusing the id was refused;
+  `delete_sidecars` previewed, confirmed, moved both `.xmp` ("Moved 2
+  sidecars to the Trash") and `undo` restored them; `sequence_timestamps`
+  previewed the three rows, `cancel_operation` forgot the pending, a second
+  `cancel_operation` answered "nothing to cancel"; the confirmed run wrote
+  `jpegs-sequenced` with :58 / :59 / :00; with 403 JPEGs a
+  `cancel_operation` mid-run reported `running 152/403` and the run ended
+  "canceled, 176 of 403 written"; `delete_sidecars` right after an open
+  (files touched to force a re-scan) answered `held_for_scan` during
+  `analyzing`, and the preview landed as `pending` id 6 after the scan.
+  Grant off: `delete_sidecars` opened the dialog (screenshot), `get_status`
+  gave `awaiting_confirmation` with the dialog's rows and notes, a confirm
+  and `navigate` were refused as busy, `cancel_operation` closed it with
+  nothing moved; `sequence_timestamps` opened its dialog likewise.
+- Git Bash mangles `\\` in a JSON argument even inside single quotes; the
+  test client took `%photos%` / `%jpegs%` placeholders it expanded itself.
+
 ## Deferred issues (todo candidates)
 
 - **Pending manual check: `open_folder` deferred by a run and refused during
@@ -292,3 +357,15 @@
   `Delete Permanently` `finished`; open it again and press Cancel:
   `wait_for_idle` returns idle with nothing deleted. Step 5's checkbox was
   ticked on the automated criteria.
+- **Pending manual check: a folder operation confirmed in the app's dialog
+  after an MCP call.** The dialog path was opened and canceled over MCP end
+  to end, but a click on its run button needs the user. On Windows, run the
+  native app with MCP on a test port as `docs/agents/native-app.md`
+  prescribes, `mcpAllowDestructive` off, with a folder of test copies holding
+  judged photos and their `.xmp`: call `delete_sidecars {"path": <folder>}`,
+  wait for the Delete Sidecars dialog, click Move to Trash: expect
+  `wait_for_idle` to return `finished` "Moved N sidecars to the Trash" and the
+  `.xmp` files gone; repeat with `rewrite_sidecars` (click Rewrite: `finished`
+  "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps`
+  (click Run: the `-sequenced` folder written and revealed). Step 6's
+  checkbox was ticked on the automated criteria.

@@ -12,7 +12,12 @@
 //! on a preview (`Op`, kept by the view as the `Pending` its id names) and a
 //! confirming call while `mcpAllowDestructive` is on, else opens the app's
 //! own dialog, and Delete Permanently always opens it; `Status::operation`
-//! reports it until it ends. The
+//! reports it until it ends. `rewrite_sidecars`, `delete_sidecars` and
+//! `sequence_timestamps` start the folder tree menu's flows (`FolderOp`):
+//! with the app's dialog while `mcpAllowDestructive` is off, else reading
+//! the dialog's content into a `Pending` (`Status::pending`) that a
+//! confirming call runs; `cancel_operation` presses a dialog's Cancel, stops
+//! a sequencing run or forgets the `Pending`. The
 //! selection is the strip's (`selection::targets`). The native view has no
 //! compare and no ranking, so compare and the `recommended` sort are refused,
 //! and so is every request but the reads (`READS`) while the view drops keys
@@ -37,6 +42,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     burst::BurstMember,
     context,
+    dialog::{Button, Dialog},
     exif::{GROUPS, Group, Groups},
     filter::{self, Facts, FilterState, OutputState},
     history::Top,
@@ -45,9 +51,11 @@ use crate::{
     menu::{self, Toggle},
     panels::Panels,
     selection::{self, Selection},
+    sequence,
     settings::Settings,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, MODES},
     settingsview::Change as SettingChange,
+    sidecars::{self, Kind},
     sort::SortKey,
     theme,
     trash::{self, Mode, Target},
@@ -64,6 +72,9 @@ const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
 /// The requests that change nothing, answered while the view drops keys.
 const READS: [&str; 4] = ["get_view", "get_status", "wait_for_idle", "get_settings"];
+/// Answered while the view drops keys too: it closes the dialog that makes
+/// it drop them.
+const CANCEL: &str = "cancel_operation";
 const ALLOW_DESTRUCTIVE_REFUSAL: &str = "mcp_allow_destructive is the user's to change, on the \
      MCP page of Handpic's settings; a client cannot set it";
 /// `key_down`'s refusal of the settings while a folder operation runs, whose
@@ -154,6 +165,10 @@ pub struct View<'a> {
     pub held: bool,
     /// The destructive operation a preview returned the id of.
     pub pending: Option<&'a Pending>,
+    /// What `cancel_operation` cancels under way (a dialog asking, a
+    /// sequencing run), else the name of the operation under way that
+    /// cannot be canceled.
+    pub cancel: Option<Result<Cancel, &'static str>>,
 }
 
 /// A destructive operation a tool previews, then runs on a confirming call
@@ -161,6 +176,115 @@ pub struct View<'a> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Op {
     Trash(Target),
+    /// A folder operation, with its dialog once its preview is read.
+    Folder(FolderOp, Option<Dialog>),
+}
+
+/// A folder operation of the tree's menu, on a folder by the caller's
+/// spelling.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FolderOp {
+    Sidecars(sidecars::Target),
+    Sequence(String),
+}
+
+impl FolderOp {
+    /// The operation `tool` runs on `dir`.
+    fn of(tool: &str, dir: String) -> Self {
+        match tool {
+            "rewrite_sidecars" => FolderOp::Sidecars(sidecars::Target {
+                kind: Kind::Rewrite,
+                dir,
+            }),
+            "delete_sidecars" => FolderOp::Sidecars(sidecars::Target {
+                kind: Kind::Delete,
+                dir,
+            }),
+            _ => FolderOp::Sequence(dir),
+        }
+    }
+
+    /// Its name, as the gate, the dialog and `get_status` give it.
+    pub fn label(&self) -> &'static str {
+        match self {
+            FolderOp::Sidecars(target) => target.kind.label(),
+            FolderOp::Sequence(_) => sequence::LABEL,
+        }
+    }
+
+    pub fn dir(&self) -> &str {
+        match self {
+            FolderOp::Sidecars(target) => &target.dir,
+            FolderOp::Sequence(dir) => dir,
+        }
+    }
+
+    /// The tree menu's item that starts it.
+    pub fn action(&self) -> context::Action {
+        match self {
+            FolderOp::Sidecars(target) if target.kind == Kind::Rewrite => {
+                context::Action::RewriteSidecars
+            }
+            FolderOp::Sidecars(_) => context::Action::DeleteSidecars,
+            FolderOp::Sequence(_) => context::Action::SequenceTimestamps,
+        }
+    }
+
+    fn tool(&self) -> &'static str {
+        match self {
+            FolderOp::Sidecars(target) if target.kind == Kind::Rewrite => "rewrite_sidecars",
+            FolderOp::Sidecars(_) => "delete_sidecars",
+            FolderOp::Sequence(_) => "sequence_timestamps",
+        }
+    }
+}
+
+/// What a folder operation's dialog shows, top to bottom, with its run
+/// button's label and whether it is enabled.
+pub fn dialog_content(dialog: &Dialog) -> Map<String, Value> {
+    let content = &dialog.content;
+    let mut shown = Map::new();
+    shown.insert("title".into(), json!(content.title));
+    shown.insert("lines".into(), json!(content.lines));
+    shown.insert(
+        "rows".into(),
+        json!(
+            content
+                .rows
+                .iter()
+                .map(|row| format!("{}{}", row.text, row.accent))
+                .collect::<Vec<_>>()
+        ),
+    );
+    shown.insert(
+        "lists".into(),
+        json!(
+            content
+                .lists
+                .iter()
+                .filter(|(_, items)| !items.is_empty())
+                .map(|(heading, items)| json!({ "heading": heading, "items": items }))
+                .collect::<Vec<_>>()
+        ),
+    );
+    shown.insert("notes".into(), json!(content.notes));
+    shown.insert("errors".into(), json!(content.errors));
+    shown.insert("reason".into(), json!(content.reason));
+    shown.insert("run".into(), json!(dialog.run_label));
+    shown.insert("run_enabled".into(), json!(dialog.enabled(Button::Run)));
+    shown
+}
+
+/// What `cancel_operation` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cancel {
+    /// The trash dialog's Cancel.
+    TrashDialog,
+    /// The folder dialog's Cancel, or the Cancel of a sequencing run, with
+    /// its dialog or without one.
+    Folder,
+    /// Forget the `Pending`.
+    Pending,
 }
 
 impl Op {
@@ -168,6 +292,7 @@ impl Op {
     fn tool(&self) -> &'static str {
         match self {
             Op::Trash(_) => "trash_photos",
+            Op::Folder(op, _) => op.tool(),
         }
     }
 
@@ -183,6 +308,12 @@ impl Op {
                 content.insert("run".into(), json!(text.run));
                 content.insert("folder".into(), json!(target.dir));
                 content.insert("paths".into(), json!(target.paths));
+                content
+            }
+            Op::Folder(op, dialog) => {
+                let mut content = dialog.as_ref().map(dialog_content).unwrap_or_default();
+                content.insert("operation".into(), json!(op.label()));
+                content.insert("folder".into(), json!(op.dir()));
                 content
             }
         }
@@ -225,9 +356,26 @@ pub fn awaiting(op: &Op) -> Value {
     Value::Object(reply)
 }
 
+/// The reply once a folder operation's flow started, `dialog` when the
+/// app's dialog asks the user, else its preview is read into a `Pending`.
+pub fn started(status: &Status, dialog: bool) -> Value {
+    let mut reply = get_status(status);
+    reply["next"] = json!(if dialog {
+        "Handpic reads the preview, then its dialog asks the user, who confirms or cancels \
+         there; get_status shows the dialog in operation.dialog, and wait_for_idle returns \
+         once the user answers"
+    } else {
+        "Handpic reads the preview; once wait_for_idle returns, get_status's pending holds it \
+         and the id to confirm it with"
+    });
+    reply
+}
+
 /// Where an operation `get_status` reports stands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpState {
+    /// Its preview is being read.
+    Previewing,
     /// Its dialog asks the user.
     Awaiting,
     /// Confirmed, held by the idle gate for the listing or scan under way.
@@ -242,6 +390,7 @@ pub enum OpState {
 impl OpState {
     fn name(self) -> &'static str {
         match self {
+            OpState::Previewing => "previewing",
             OpState::Awaiting => "awaiting_confirmation",
             OpState::Held => "held_for_scan",
             OpState::Running => "running",
@@ -250,8 +399,11 @@ impl OpState {
         }
     }
 
-    fn under_way(self) -> bool {
-        matches!(self, OpState::Awaiting | OpState::Held | OpState::Running)
+    pub fn under_way(self) -> bool {
+        matches!(
+            self,
+            OpState::Previewing | OpState::Awaiting | OpState::Held | OpState::Running
+        )
     }
 }
 
@@ -265,6 +417,8 @@ pub struct Operation {
     /// `(done, total)` while a run reports its progress.
     pub progress: Option<(usize, usize)>,
     pub message: Option<String>,
+    /// The folder dialog asking the user (`dialog_content`).
+    pub dialog: Option<Map<String, Value>>,
 }
 
 /// What `get_status` reads of the view: what the status row and the pane's
@@ -290,6 +444,8 @@ pub struct Status {
     pub errors: Vec<String>,
     /// The operation under way, else the last one to come back.
     pub operation: Option<Operation>,
+    /// The preview a confirming call runs (`previewed`).
+    pub pending: Option<Value>,
 }
 
 impl Status {
@@ -326,7 +482,9 @@ pub fn get_status(status: &Status) -> Value {
             "done": op.progress.map(|(done, _)| done),
             "total": op.progress.map(|(_, total)| total),
             "message": op.message,
+            "dialog": op.dialog,
         })),
+        "pending": status.pending,
     })
 }
 
@@ -459,6 +617,15 @@ pub enum Action {
     /// Undo (or redo) the run to the Trash on top of the history, as the
     /// key does, and reply with `get_status`.
     StepTrash(Key),
+    /// Start this folder operation's flow as the tree menu's item does, with
+    /// the app's dialog when `dialog`, else reading its preview into a
+    /// `Pending`, and reply with `started`.
+    Folder {
+        op: FolderOp,
+        dialog: bool,
+    },
+    /// Cancel this, and reply with `get_status`.
+    Cancel(Cancel),
 }
 
 /// What `tree_folder` does: the expander, `Space` on a row, and the tree
@@ -485,6 +652,7 @@ pub struct Change {
 /// before it replies with `get_view`, or the refusal's message.
 pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, String> {
     if !READS.contains(&kind)
+        && kind != CANCEL
         && let Some(busy) = view.busy
     {
         return Err(busy.refusal().into());
@@ -512,6 +680,10 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         "get_settings" => Ok(None),
         "set_settings" => set_settings(view, args),
         "trash_photos" => trash_photos(view, args).map(Some),
+        "rewrite_sidecars" | "delete_sidecars" | "sequence_timestamps" => {
+            folder_operation(view, args, kind).map(Some)
+        }
+        CANCEL => cancel_operation(view).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
 }
@@ -702,6 +874,76 @@ fn trash_photos(view: &View, args: &Value) -> Result<Action, String> {
         );
     }
     Ok(Action::Run(Op::Trash(target.clone())))
+}
+
+/// `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps`, the
+/// folder tree menu's items on the folder `path`, one folder flow at a
+/// time. Without `confirm`, the flow starts: with the app's dialog while
+/// `mcpAllowDestructive` is off, else reading the dialog's content into a
+/// `Pending`; with it, the operation a preview's `id` names runs, refused
+/// when its dialog would have nothing to run.
+fn folder_operation(view: &View, args: &Value, tool: &str) -> Result<Action, String> {
+    let confirm = switch(args, "confirm")?.unwrap_or(false);
+    let id = given_field(args, "id")
+        .map(|id| {
+            id.as_u64()
+                .ok_or("id must be the number a preview returned")
+        })
+        .transpose()?;
+    if view.trashing {
+        return Err(TRASH_RUNNING.into());
+    }
+    if view.folder_op {
+        return Err(FOLDER_OP_REFUSAL.into());
+    }
+    if !confirm {
+        if id.is_some() {
+            return Err("an id goes with confirm: true".into());
+        }
+        let path = given_field(args, "path").ok_or("path must be the folder's absolute path")?;
+        return Ok(Action::Folder {
+            op: FolderOp::of(tool, folder_path(path)?),
+            dialog: !view.settings.mcp_allow_destructive,
+        });
+    }
+    if !view.settings.mcp_allow_destructive {
+        return Err(DESTRUCTIVE_OFF.into());
+    }
+    if given_field(args, "path").is_some() {
+        return Err("confirm runs the folder its preview named; give only the id".into());
+    }
+    let id = id.ok_or("confirm: true needs the id a preview returned")?;
+    let Some(Pending {
+        op: Op::Folder(op, Some(dialog)),
+        ..
+    }) = view
+        .pending
+        .filter(|pending| pending.id == id && pending.op.tool() == tool)
+    else {
+        return Err(format!("no preview of {tool} has id {id}; preview again"));
+    };
+    if !dialog.enabled(Button::Run) {
+        return Err(dialog
+            .content
+            .reason
+            .clone()
+            .unwrap_or_else(|| "its preview has nothing to run".into()));
+    }
+    Ok(Action::Run(Op::Folder(op.clone(), Some(dialog.clone()))))
+}
+
+/// `cancel_operation`: what the user's Cancel would cancel now, else the
+/// `Pending`; refused naming an operation under way that cannot be
+/// canceled, or with nothing to cancel.
+fn cancel_operation(view: &View) -> Result<Action, String> {
+    match view.cancel {
+        Some(Ok(cancel)) => Ok(Action::Cancel(cancel)),
+        _ if view.pending.is_some() => Ok(Action::Cancel(Cancel::Pending)),
+        Some(Err(name)) => Err(format!(
+            "{name} is under way and cannot be canceled; wait_for_idle waits for its end"
+        )),
+        None => Err("nothing to cancel in Handpic".into()),
+    }
 }
 
 /// `companion.ts`'s `burstOf`: the current file's burst in capture order,
@@ -1634,11 +1876,14 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Action, Busy, Change, Key, Op, OpState, Operation, Overlays, Pending, Status, TreeOp, View,
-        answer, awaiting, get_settings, get_status, get_view, previewed, tree_reply,
+        Action, Busy, Cancel, Change, FolderOp, Key, Op, OpState, Operation, Overlays, Pending,
+        Status, TreeOp, View, answer, awaiting, get_settings, get_status, get_view, previewed,
+        started, tree_reply,
     };
     use crate::{
         burst::BurstMember,
+        context,
+        dialog::{Content, Dialog, Style},
         exif::{Group, Groups},
         filter::{EyesItem, Facts, FilterFlag, FilterState, OutputState},
         history::Top,
@@ -1715,6 +1960,7 @@ mod tests {
             trashing: false,
             held: false,
             pending: None,
+            cancel: None,
         }
     }
 
@@ -2924,6 +3170,7 @@ mod tests {
                 "notes": ["Move to Trash: waiting for the scan to finish"],
                 "errors": ["a.ARW: denied"],
                 "operation": null,
+                "pending": null,
             })
         );
     }
@@ -2936,6 +3183,7 @@ mod tests {
                 state,
                 progress,
                 message: message.map(str::to_owned),
+                dialog: None,
             }),
             ..Status::default()
         };
@@ -2948,10 +3196,12 @@ mod tests {
                 "done": 2,
                 "total": 5,
                 "message": null,
+                "dialog": null,
             })
         );
         assert!(!running.idle());
         for (state, name) in [
+            (OpState::Previewing, "previewing"),
             (OpState::Awaiting, "awaiting_confirmation"),
             (OpState::Held, "held_for_scan"),
         ] {
@@ -3822,6 +4072,259 @@ mod tests {
         assert_eq!(
             set(json!({ "auto_advance": "no" }), &defaults),
             Err("auto_advance must be true or false".into())
+        );
+    }
+
+    fn rewrite(dir: &str) -> FolderOp {
+        FolderOp::Sidecars(crate::sidecars::Target {
+            kind: crate::sidecars::Kind::Rewrite,
+            dir: dir.into(),
+        })
+    }
+
+    fn folder_dialog(run_enabled: bool) -> Dialog {
+        Dialog::new(
+            Content {
+                title: "Rewrite Sidecars from Index".into(),
+                rows: vec!["2 files with a judgment".to_owned().into()],
+                notes: vec!["Rewrite the XMP sidecars of 2 files in d?".into()],
+                reason: (!run_enabled).then(|| "nothing to write".into()),
+                ..Content::default()
+            },
+            "Rewrite",
+            Style::Primary,
+            run_enabled,
+        )
+    }
+
+    #[test]
+    fn a_folder_operation_opens_the_dialog_unless_destructive_operations_are_allowed() {
+        let asking = view(&[]);
+        for (tool, op) in [
+            ("rewrite_sidecars", rewrite("/e")),
+            (
+                "delete_sidecars",
+                FolderOp::Sidecars(crate::sidecars::Target {
+                    kind: crate::sidecars::Kind::Delete,
+                    dir: "/e".into(),
+                }),
+            ),
+            ("sequence_timestamps", FolderOp::Sequence("/e".into())),
+        ] {
+            assert_eq!(
+                ask(tool, json!({ "path": "/e" }), &asking),
+                Ok(Some(Action::Folder {
+                    op: op.clone(),
+                    dialog: true,
+                }))
+            );
+            let allowed = View {
+                settings: &ALLOW_DESTRUCTIVE,
+                ..view(&[])
+            };
+            assert_eq!(
+                ask(tool, json!({ "path": "/e" }), &allowed),
+                Ok(Some(Action::Folder { op, dialog: false }))
+            );
+        }
+        assert_eq!(rewrite("/e").action(), context::Action::RewriteSidecars);
+        assert_eq!(
+            FolderOp::Sequence("/e".into()).label(),
+            "Sequence JPEG Timestamps"
+        );
+    }
+
+    #[test]
+    fn a_folder_operation_is_refused_while_another_or_a_trash_run_is_under_way() {
+        let busy = View {
+            folder_op: true,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("rewrite_sidecars", json!({ "path": "/e" }), &busy),
+            Err("a folder operation is under way in Handpic; try again once it ends".into())
+        );
+        let trashing = View {
+            trashing: true,
+            ..view(&[])
+        };
+        assert!(
+            ask("sequence_timestamps", json!({ "path": "/e" }), &trashing)
+                .unwrap_err()
+                .starts_with("a Move to Trash or Delete Permanently is under way")
+        );
+        assert_eq!(
+            ask("delete_sidecars", json!({}), &view(&[])),
+            Err("path must be the folder's absolute path".into())
+        );
+        assert_eq!(
+            ask(
+                "delete_sidecars",
+                json!({ "path": "/e", "id": 1 }),
+                &view(&[])
+            ),
+            Err("an id goes with confirm: true".into())
+        );
+    }
+
+    #[test]
+    fn a_confirm_runs_the_folder_operation_its_preview_named() {
+        let pending = Pending {
+            id: 4,
+            op: Op::Folder(rewrite("/e"), Some(folder_dialog(true))),
+        };
+        let allowed = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "rewrite_sidecars",
+                json!({ "id": 4, "confirm": true }),
+                &allowed
+            ),
+            Ok(Some(Action::Run(pending.op.clone())))
+        );
+        assert_eq!(
+            ask(
+                "delete_sidecars",
+                json!({ "id": 4, "confirm": true }),
+                &allowed
+            ),
+            Err("no preview of delete_sidecars has id 4; preview again".into())
+        );
+        assert_eq!(
+            ask(
+                "rewrite_sidecars",
+                json!({ "id": 5, "confirm": true }),
+                &allowed
+            ),
+            Err("no preview of rewrite_sidecars has id 5; preview again".into())
+        );
+        assert_eq!(
+            ask(
+                "rewrite_sidecars",
+                json!({ "path": "/e", "id": 4, "confirm": true }),
+                &allowed
+            ),
+            Err("confirm runs the folder its preview named; give only the id".into())
+        );
+        assert_eq!(
+            ask("rewrite_sidecars", json!({ "confirm": true }), &allowed),
+            Err("confirm: true needs the id a preview returned".into())
+        );
+        let off = View {
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert!(
+            ask(
+                "rewrite_sidecars",
+                json!({ "id": 4, "confirm": true }),
+                &off
+            )
+            .unwrap_err()
+            .starts_with("mcp_allow_destructive is off")
+        );
+        let nothing = Pending {
+            id: 4,
+            op: Op::Folder(rewrite("/e"), Some(folder_dialog(false))),
+        };
+        let empty = View {
+            settings: &ALLOW_DESTRUCTIVE,
+            pending: Some(&nothing),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask(
+                "rewrite_sidecars",
+                json!({ "id": 4, "confirm": true }),
+                &empty
+            ),
+            Err("nothing to write".into())
+        );
+    }
+
+    #[test]
+    fn a_folder_preview_reports_the_dialogs_content_and_its_id() {
+        let pending = Pending {
+            id: 2,
+            op: Op::Folder(rewrite("/e"), Some(folder_dialog(true))),
+        };
+        assert_eq!(
+            previewed(&pending),
+            json!({
+                "operation": "Rewrite Sidecars from Index",
+                "folder": "/e",
+                "title": "Rewrite Sidecars from Index",
+                "lines": [],
+                "rows": ["2 files with a judgment"],
+                "lists": [],
+                "notes": ["Rewrite the XMP sidecars of 2 files in d?"],
+                "errors": [],
+                "reason": null,
+                "run": "Rewrite",
+                "run_enabled": true,
+                "id": 2,
+                "next": "call rewrite_sidecars with this id and confirm: true to run it",
+            })
+        );
+        let status = Status {
+            pending: Some(previewed(&pending)),
+            ..Status::default()
+        };
+        assert!(status.idle());
+        assert_eq!(started(&status, false)["pending"]["id"], json!(2));
+        assert!(
+            started(&status, true)["next"]
+                .as_str()
+                .unwrap()
+                .contains("its dialog asks the user")
+        );
+    }
+
+    #[test]
+    fn cancel_operation_cancels_a_dialog_or_a_run_else_the_pending_and_says_what_it_cannot() {
+        for cancel in [Cancel::TrashDialog, Cancel::Folder] {
+            let view = View {
+                busy: Some(Busy::FolderDialog),
+                cancel: Some(Ok(cancel)),
+                ..view(&[])
+            };
+            assert_eq!(
+                ask("cancel_operation", json!({}), &view),
+                Ok(Some(Action::Cancel(cancel)))
+            );
+        }
+        let pending = Pending {
+            id: 1,
+            op: Op::Folder(rewrite("/e"), Some(folder_dialog(true))),
+        };
+        let previewed = View {
+            pending: Some(&pending),
+            cancel: Some(Err("Delete Sidecars")),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("cancel_operation", json!({}), &previewed),
+            Ok(Some(Action::Cancel(Cancel::Pending)))
+        );
+        let running = View {
+            cancel: Some(Err("Rewrite Sidecars from Index")),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("cancel_operation", json!({}), &running),
+            Err(
+                "Rewrite Sidecars from Index is under way and cannot be canceled; \
+                 wait_for_idle waits for its end"
+                    .into()
+            )
+        );
+        assert_eq!(
+            ask("cancel_operation", json!({}), &view(&[])),
+            Err("nothing to cancel in Handpic".into())
         );
     }
 }

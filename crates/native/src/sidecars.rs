@@ -153,6 +153,11 @@ impl SidecarFlow {
         self.phase != Phase::Idle
     }
 
+    /// The folder and the operation under way.
+    pub fn target(&self) -> Option<&Target> {
+        self.target.as_ref()
+    }
+
     pub fn start(&mut self, target: Target) -> bool {
         if self.busy() {
             return false;
