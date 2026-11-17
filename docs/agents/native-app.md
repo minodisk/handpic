@@ -2907,7 +2907,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   row and the controls. Read from the source, not yet seen running (a
   manual check is pending in the plan); the fallback is a third `TitleBar`
   child, centered only between the left group and the gear. Source:
-  [the plan](../plans/20261118-native-title-bar-folder-name/plan.md).
+  [the plan](../plans/_archived/20261118-native-title-bar-folder-name/plan.md).
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
 - A press on the bar still reaches the root `div`'s `track_focus`, so a click
