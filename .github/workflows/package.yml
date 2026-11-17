@@ -6,6 +6,8 @@ name: Package
 # chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.
 on:
   workflow_dispatch:
+  push:
+    branches: [gpui-packaging-step-1]
 
 permissions:
   contents: read
