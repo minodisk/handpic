@@ -63,6 +63,7 @@ shellcheck_patterns=(
 	'^tools/git/[^/]+\.sh$'
 	'^tools/stats/[^/]+\.sh$'
 	'^tools/ci/[^/]+\.sh$'
+	'^tools/package/[^/]+\.sh$'
 )
 
 # select_checks <none|moved|all>
@@ -254,7 +255,7 @@ function run_check() {
 		pnpm install --frozen-lockfile
 		pnpm exec vp check
 		;;
-	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh ;;
+	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh ;;
 	"shellcheck "*)
 		local script="${check#shellcheck }"
 		if [[ -f "${script}" ]]; then

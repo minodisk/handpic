@@ -1,0 +1,121 @@
+name: Package
+
+# Builds the native app's (crates/native) distributables and uploads them as
+# this run's artifacts. Manual only, and it touches no release: attaching them
+# to one is release.yml's business. A dispatch runs the workflow file of the
+# chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # The two macOS runners differ in architecture, so each builds its own DMG:
+  # macos-latest is arm64, macos-15-intel x86_64.
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    # A cold release build of the GPUI app takes longer than CI's debug one.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      # The crate's build.rs refuses to build without NASM on x86_64, because
+      # mozjpeg would otherwise lose SIMD silently.
+      - uses: ilammy/setup-nasm@v1
+
+      # Keyed by the runner, not runner.os: the two macOS runners would
+      # otherwise share a target folder of the other architecture.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            crates/native/target
+          key: cargo-native-release-${{ matrix.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
+          restore-keys: cargo-native-release-${{ matrix.os }}-
+
+      - name: Read the version
+        id: version
+        shell: bash
+        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+
+      # Through `mise exec`, as ci.yml's `native` job builds, so every
+      # platform's leg has the one command path.
+      - name: Build the release binary
+        shell: bash
+        working-directory: crates/native
+        run: mise exec rust@1.98.1 -- cargo build --release --locked
+
+      # The bundle task's own cargo build finds the binary above up to date.
+      - name: Lay out Handpic.app
+        shell: bash
+        run: mise run native:bundle:macos
+
+      - name: Package the DMG
+        shell: bash
+        run: bash tools/package/macos.sh
+
+      - name: Check the DMG
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          dmg="crates/native/target/release/Handpic-$VERSION-macos-$ARCH.dmg"
+          hdiutil verify "$dmg"
+          mount="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+          app="$mount/Handpic.app"
+          codesign --verify --strict --verbose=2 "$app"
+          test -x "$app/Contents/MacOS/riffle-native"
+          lipo -archs "$app/Contents/MacOS/riffle-native" | grep -qx "$ARCH"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$VERSION"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$VERSION"
+          ls "$app/Contents/Resources/licenses"
+          test -s "$app/Contents/Resources/licenses/NOTICE-gpui"
+          test -L "$mount/Applications"
+          hdiutil detach "$mount"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+  # One SHA256SUMS over every artifact the run built.
+  checksums:
+    needs: [macos]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Compute the checksums
+        shell: bash
+        working-directory: dist
+        run: |
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SHA256SUMS
+          path: dist/SHA256SUMS
+          if-no-files-found: error
