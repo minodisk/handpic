@@ -1065,6 +1065,13 @@ way (at the start as at the confirm, the `Pending` kept for the same id),
 cannot be canceled while it runs, and reports `finished` with the split's
 status line or the new path.
 
+`wait_for_idle` after a confirmed import can return idle with the destination
+folder open but not yet showing the copies (`no RAW files in ...`): the
+watcher's re-list shows them about a second later, and a menu import has the
+same race (`import_ran` re-lists only on `resync.changed()`). A client that
+needs the copies reads `get_view` again, or calls `wait_for_idle` once more,
+before trusting the listing.
+
 `rename_folder` is the tree's inline `Rename…` with the name given: the
 backend checks the folder and the name with `rename::folder_target`
 (`check_name`, a root, a name already taken), the companion refuses an
@@ -1231,6 +1238,15 @@ the Tauri `sharpness` map is filled from `folder_entries` and patched by
   reaches the server mangled. The session id is the `Mcp-Session-Id` header of
   the `initialize` reply, and `set_judgment` paths are matched as the index
   keys them (`\\?\`-prefixed on Windows), not canonicalized.
+- Rule: Git Bash also mangles `\\` in a JSON argument built in Python (even
+  inside single quotes), and a large Python script in a heredoc fails with
+  "unexpected EOF". Write the test client with the Write tool, run the file,
+  and have it expand placeholders (`%S%` for the JSON-escaped test folder)
+  itself. Python run with `-I` ignores `PYTHONIOENCODING`; add `-X utf8` to
+  print Japanese preset names on a cp932 console.
+- Rule: stop a test instance of `riffle-native.exe` by the PID whose command
+  line names the scratch folder. `taskkill /IM riffle-native.exe` is refused by
+  the permission classifier because it could kill the user's own instance.
 
 ### A folder change re-lists, never mid-scan (Measured)
 

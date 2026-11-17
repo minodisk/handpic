@@ -2197,7 +2197,7 @@ Files: `crates/app/src/datefolder.rs` (`move_plan`), `crates/app/src/rename.rs`.
 
 #### Background
 
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. The import-from-card feature (plan: `docs/plans/_archived/20261106-import-from-card/plan.md`) saw the same on PRs 894, 898, 902, 906 and 908: `ACTION=blocked` with `checksOverall=success` and `pendingCount=0` right after a push while the PR's checks were still `IN_PROGRESS`; #898's `pr-runner` aborted on it. So the script is not counting in-progress checks as pending. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
+The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. The import-from-card feature (plan: `docs/plans/_archived/20261106-import-from-card/plan.md`) saw the same on PRs 894, 898, 902, 906 and 908: `ACTION=blocked` with `checksOverall=success` and `pendingCount=0` right after a push while the PR's checks were still `IN_PROGRESS`; #898's `pr-runner` aborted on it. So the script is not counting in-progress checks as pending. The `native-mcp-everything` feature (plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`) saw it on every one of its PRs: all 7 checks were still pending with an empty conclusion while `mergeStateStatus=BLOCKED`, and the first `pr-runner` runs aborted as `blocked` until told to keep waiting. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
 
 #### TODO
 
@@ -2696,13 +2696,97 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 - [ ] On Windows, Move to Trash… and Delete Permanently… (Step 7). Ten or so ARWs, some with `.xmp` and `.dop`, in `...\trash\`; a few hundred in `...\trash-large\`. On `...\trash` after the scan, `Move to Trash…` on a RAW with both sidecars: dialog `Move to Trash` / `Move 1 file to the Trash?`, `tab` moves the outline between `Move to Trash` and `Cancel`, `enter` confirms; the three files are in the Recycle Bin, the strip moves to the neighbour, the pane says `Moved 1 file to the Trash`, the log has `trash: moved=1 failed=0 run_id=Some(..)`. Three selected: `Move 3 files to the Trash?`, `escape` / `Cancel` move nothing. `Delete Permanently…`: `Cancel` outlined; `tab` to the delete button, then `enter` and `space` and a double-click do nothing, one click deletes (files and sidecars gone, not in the Recycle Bin, pane `Deleted 1 file`, an earlier judgment on it no longer undoable). With the dialog open `q`, judgment keys, `ctrl+,` and clicks on the tree, strip and status menus do nothing. On `...\trash-large` with a fresh `--index`, during pass 1 pick `Move to Trash…` and confirm: the dialog closes at once, the pane says `Move to Trash: waiting for the scan to finish`, the scan ends early, `moving to Trash 0 / 1` shows briefly, the file goes, the folder re-lists and the scan resumes. Repeat but open another test folder from the tree before the scan ends: nothing is moved and the waiting note goes.
 - [ ] On Windows, Trash undo and redo (Step 8). One ARW with `.xmp` and `.dop` in `...\undo\a\`, a few in `...\undo\b\`. Rate it three stars, trash it, `Ctrl+Z`: `Restored 1 file from the Trash`, the RAW and both sidecars are back (gone from the Recycle Bin), the strip shows it with three stars, current file and selection unmoved. `Ctrl+Shift+Z`: `moving to Trash 0 / 1` briefly, the files are in the Recycle Bin again, `Moved 1 file to the Trash`; `Ctrl+Z` brings them back again. Rate, trash, `Ctrl+Z` twice: file back, then the rating undone (`Undid <name>`). Trash in `a`, open `b`, `Ctrl+Z`: the file is back in `a` in Explorer, `b`'s strip unchanged, reopening `a` lists it. During a scan trash a file then `Ctrl+Z` while the re-listing's scan runs: `Undo Move to Trash: waiting for the scan to finish`, the scan is not canceled, the restore runs at its end. `Ctrl+Z` twice quickly: one `trash: undo of run` log line. `Delete Permanently…` then `Ctrl+Z`: nothing comes back. Empty the file from the Recycle Bin by hand, then `Ctrl+Z`: `Restored 0 files from the Trash, 1 failed`, the notes say `could not restore from the Trash: not in the Trash (emptied or restored by hand)`, nothing left to redo.
 
-### Native: the MCP companion reports and accepts only the current file, though the view now has a multi-selection
+### Native: real-device check of `open_folder` deferred by a run and refused during a rename over MCP
 
-`gpui-tree-trash` Step 5 ported `selection.ts`, so the GPUI view has a multi-selection, but the MCP companion still treats the selection as the current file: `selected` reports the current file alone and `select_photos` with several paths is refused. `selection::selection_of` is ported and unused (`allow(dead_code)`) for this. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. Files: `crates/native/src/companion.rs`, `crates/native/src/selection.rs`, `crates/native/src/main.rs` (`mcp_request`).
+#### Background
+
+`native-mcp-everything` Step 3 added the `open_folder` tool, which goes through the UI's own code (`open_from_tree` → `open`'s `deferred_open`, and `refuse_renaming`). Unit tests cover the rules. Neither state was reached end to end, because each needs the user's input. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/main.rs` (`mcp_request`, `open_from_tree`), `crates/native/src/companion.rs`.
 
 #### TODO
 
-- [ ] Report the whole selection from `selected` and accept several paths in `select_photos`, as the Tauri `selectPhotos` does; remove the `allow(dead_code)` on `selection_of`.
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes, with a folder of test copies open. (1) Start a Move to Trash of a few files and, while its run is in flight, call `open_folder` on another folder: expect `opening` set to it and `idle: false` in the reply, then `wait_for_idle` returning with that folder open. (2) Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
+
+### Native: real-device check of the MCP busy guard's wiring (settings, trash dialog, folder dialog, inline rename)
+
+#### Background
+
+`native-mcp-everything` Step 1 made every MCP request but the reads refuse while the settings modal, the trash dialog or a folder dialog is open or an inline rename is under way. The refusal rules are unit-tested (`a_busy_view_refuses_every_request_but_get_view` in `crates/native/src/companion.rs`). The `busy` value that `mcp_request` builds was never exercised end to end, since opening those states needs the user's input. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/main.rs` (`mcp_request`, `key_down`), `crates/native/src/companion.rs`.
+
+#### TODO
+
+- [ ] On Windows (or any platform), run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes. Open the settings (`ctrl+,`) and call `navigate {"to":"next"}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_view` still answers. Repeat with the strip's `Move to Trash…` dialog open, a folder menu dialog (e.g. `Delete Sidecars…`) open, and a folder's inline rename open, each expecting its own message.
+
+### Native: real-device checks of the MCP settings page and a live theme change over MCP
+
+#### Background
+
+`native-mcp-everything` Step 4 added the MCP page with the `mcpAllowDestructive` switch to the settings modal and the `get_settings` / `set_settings` tools. The switch's rule and store key are unit-tested (`settings.rs`, `settingsmodal.rs`'s tab order) and the `set_settings` writes were checked end to end. The page itself and the repaint of a live theme change were never seen on screen. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/settings.rs`, `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) With the settings closed, call `set_settings {"theme":{"mode":"light","light":"Ayu Light"}}`: expect the window to repaint in Ayu Light at once. (3) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
+
+### Native: real-device check of Move to Trash over MCP with `mcpAllowDestructive` off, and the redo refusal
+
+#### Background
+
+`native-mcp-everything` Step 5 added `trash_photos`, `undo` and `redo` for trash runs over MCP. The request rules are unit-tested in `crates/native/src/companion.rs`, and the dialog path was seen end to end for a delete only. A click on the Move to Trash dialog, the undo and the redo refusal were not exercised. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/companion.rs`, `crates/native/src/main.rs` (`confirm_trash`, `run_trash`, `step_trash`), `crates/native/src/trash.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes, with `mcpAllowDestructive` off and a folder of test copies open. (1) Call `trash_photos` on one photo: expect `awaiting_confirmation` and the Move to Trash dialog with its run button focused; click Move to Trash: `wait_for_idle` returns `finished` "Moved 1 file to the Trash". (2) Call `undo`: the file comes back; call `redo`: expect the refusal starting "the next redo moves files to the Trash again without a dialog". (3) Open the delete dialog over MCP, click Delete Permanently once: the file is deleted and `get_status` reports `Delete Permanently` `finished`; open it again and press Cancel: `wait_for_idle` returns idle with nothing deleted.
+
+### Native: real-device check of a folder operation confirmed in the app's dialog after an MCP call (Rewrite Sidecars, Delete Sidecars, Sequence)
+
+#### Background
+
+`native-mcp-everything` Step 6 added `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps` and `cancel_operation`. The dialog path was opened and canceled over MCP end to end, but a click on a dialog's run button needs the user. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/folderops.rs`, `crates/native/src/sidecars.rs`, `crates/native/src/sequence.rs`, `crates/native/src/companion.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes, `mcpAllowDestructive` off, with a folder of test copies holding judged photos and their `.xmp`. Call `delete_sidecars {"path": <folder>}`, wait for the Delete Sidecars dialog, click Move to Trash: expect `wait_for_idle` to return `finished` "Moved N sidecars to the Trash" and the `.xmp` files gone. Repeat with `rewrite_sidecars` (click Rewrite: `finished` "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps` (click Run: the `-sequenced` folder written and revealed).
+
+### Native: real-device check of Import, Rename by Capture Date and the folder rename confirmed in the app after an MCP call
+
+#### Background
+
+`native-mcp-everything` Step 7 added `import_folder`, `rename_by_capture_date` and `rename_folder`. The grant-off paths were opened and canceled over MCP end to end (`get_status` reported each dialog's content and the rename field awaiting). The dialogs, the prefilled rename field and a confirm need the user. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/folderops.rs`, `crates/native/src/import.rs`, `crates/native/src/datefolder.rs`, `crates/native/src/rename.rs`, `crates/native/src/companion.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes, `mcpAllowDestructive` off, `importRoot` set to a scratch folder, the test folder outside any hidden folder. (1) `import_folder` on a folder of test copies: the Import dialog shows; click Run: `wait_for_idle` returns `finished` "Imported N files ...". (2) `rename_by_capture_date` on a folder of one date: click Run, the folder becomes `YYYY-MM-DD`. (3) `rename_folder {"path": <a drawn folder>, "name": "x"}`: the tree's row turns into a field holding `x`, selected; press Enter: `wait_for_idle` returns `Rename…` `finished` and the row (and the open folder, when it was that one) follows; repeat and press Escape: nothing renamed, `idle` true.
+- [ ] On Windows, with `mcpAllowDestructive` on, confirm an `import_folder` preview and, while it runs, right-click the source folder's `Import…`: the dialog comes back running with Cancel enabled.
+
+### Native: real-device check of the Clear Cache dialog opened over MCP, and the grayscale latch on screen
+
+#### Background
+
+`native-mcp-everything` Step 8 added `clear_cache` (opening the Clear Cache dialog) and `set_overlays`' `grayscale`. Both were checked over MCP end to end (`get_status` reported the dialog awaiting, the busy refusals held, and `get_view` the grayscale), but no window capture was taken. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/companion.rs`, `crates/native/src/cache.rs`, `crates/native/src/grayscale.rs`, `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes, `mcpAllowDestructive` off, a folder of test copies open, the settings closed. (1) Call `clear_cache`: expect the "Clear the index cache?" dialog over the dimmed main window with Clear focused; click Clear: `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache" and the folder is scanned again; call it again and press Escape: idle, nothing cleared, and the main window takes keys again. (2) Call `set_overlays {"grayscale": true}`: the photo turns gray and stays gray after clicking the tree and switching to another window and back; press and release `g`: it turns back to color.
+
+### Native: an empty lens string lists a blank `Lens` item in the filter's EXIF groups
+
+#### Background
+
+Found by `native-mcp-everything` Step 2's end-to-end check: `get_view.filter_offers.exif.lens` listed `""` for a folder where a compact camera's ARW (`DSC-HX95` / `DSC-HX99`) reports an empty lens string, so the Filter menu presumably draws a blank `Lens` item too. `exif::exif_key` takes `Exif.lens` as is. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/native/src/exif.rs` (`exif_key`).
+
+#### TODO
+
+- [ ] Check whether the backend's `exif` reader should give `None` for an empty string, or `exif_key` should skip it, and whether the Tauri `exif.ts` behaves the same. Done when an empty lens string produces no `Lens` item in the filter menu and in `get_view`'s `filter_offers`.
+
+### Agents: `local-review-runner` returns before its reviewer finishes, and `pr-runner` aborts on a transient `api.github.com` outage
+
+#### Background
+
+Seen by the orchestrating session of `native-mcp-everything` (plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`). (1) In Step 5, `local-review-runner` returned before its reviewer finished: the Agent tool launched the reviewer in the background despite a foreground request. (2) In Step 7, `pr-runner` aborted with `pr_status_failure` on a transient `api.github.com` outage. Files: `.claude/agents/local-review-runner.md`, `.claude/agents/pr-runner.md`, `.claude/skills/pr/scripts`.
+
+#### TODO
+
+- [ ] Make `local-review-runner` wait for the reviewer's result or detect a background launch. Done when a run never returns before the reviewer has.
+- [ ] Make `pr-runner` retry network errors for longer before counting a `pr_status_failure`. Done when a short `api.github.com` outage does not abort a run.
 
 ### Native: the status line omits the Tauri ` · N selected` suffix for a multi-selection
 
@@ -2868,6 +2952,10 @@ this. `.claude/agents/implementer.md` (step 7) and
 the foreground so the exit code is observable, and say nothing about the run
 being backgrounded anyway.
 Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
+`native-mcp-everything` saw the same with the PR wait scripts: the harness
+moved every foreground wait script to the background after about 180 s, so
+each runner had to `TaskStop` and re-run repeatedly (plan:
+`docs/plans/_archived/20261117-native-mcp-everything/plan.md`).
 
 #### TODO
 
@@ -2876,6 +2964,10 @@ Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
       is acceptable and is waited for, not retried, and that the rule is only
       about not choosing `run_in_background` yourself. Done when both
       definitions say what to do when the Bash tool backgrounds the run.
+- [ ] Give the PR wait scripts an internal timeout under 180 s that returns a
+      "still waiting" status, or document the re-run loop in
+      `.claude/agents/pr-runner.md`. Done when a PR run needs no manual
+      re-dispatch or `TaskStop`.
 
 ### Native: real-device checks of the empty state in the preview area
 

@@ -549,3 +549,23 @@
   after clicking the tree and switching to another window and back; press
   and release `g`: it turns back to color. Step 8's checkbox was ticked on
   the automated criteria.
+- **Develop tooling: `wait-pr-actionable.sh` returns `ACTION=blocked` right
+  after PR creation.** On every PR of this feature, all 7 checks were still
+  pending with an empty conclusion while `mergeStateStatus=BLOCKED`, and the
+  first `pr-runner` runs aborted as `blocked` until told to keep waiting.
+  Change: treat pending or empty checks plus BLOCKED as "wait", not
+  "blocked" (`.claude/skills/pr/scripts`, `.claude/agents/pr-runner.md`).
+  Done when a fresh PR reaches `ready` or `actionable` with no manual
+  re-dispatch. Merge with the existing `todo.md` entries on pr-runner waits.
+- **Develop tooling: three runner problems seen by the orchestrating
+  session.** (1) `local-review-runner` returned before its reviewer finished
+  (Step 5): the Agent tool launched the reviewer in the background despite a
+  foreground request; make the runner wait for the reviewer's result or
+  detect a background launch. (2) `pr-runner` aborted with
+  `pr_status_failure` on a transient `api.github.com` outage (Step 7); retry
+  network errors longer before counting a failure. (3) The harness moves
+  foreground wait scripts to the background after about 180 s, so every
+  runner had to `TaskStop` and re-run repeatedly; give the wait scripts an
+  internal timeout under 180 s that returns a "still waiting" status, or
+  document the re-run loop in `pr-runner.md`. Done when the next PR run needs
+  no manual re-dispatch or `TaskStop`.
