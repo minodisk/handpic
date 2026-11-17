@@ -278,27 +278,27 @@ fn names<T: PartialEq>(items: &[(T, &'static str)], kept: &[T]) -> Vec<&'static 
 }
 
 /// Each section's items in the menu's order, with their stored names.
-const FLAGS: [(FilterFlag, &str); 3] = [
+pub const FLAGS: [(FilterFlag, &str); 3] = [
     (FilterFlag::Picked, "picked"),
     (FilterFlag::Untagged, "untagged"),
     (FilterFlag::Rejected, "rejected"),
 ];
-const ORIENTATIONS: [(Orientation, &str); 2] = [
+pub const ORIENTATIONS: [(Orientation, &str); 2] = [
     (Orientation::Portrait, "portrait"),
     (Orientation::Landscape, "landscape"),
 ];
-const CANDIDATES: [(AfEye, &str); 3] = [
+pub const CANDIDATES: [(AfEye, &str); 3] = [
     (MarkState::Good, "good"),
     (MarkState::Neutral, "neutral"),
     (MarkState::Low, "low"),
 ];
-const EYES: [(EyesItem, &str); 3] = [
+pub const EYES: [(EyesItem, &str); 3] = [
     (EyesItem::Open, "open"),
     (EyesItem::Closed, "closed"),
     (EyesItem::Unknown, "unknown"),
 ];
 
-const LABELS: &[&str] = &[
+pub const LABELS: &[&str] = &[
     "red", "orange", "yellow", "green", "blue", "pink", "purple", "none",
 ];
 

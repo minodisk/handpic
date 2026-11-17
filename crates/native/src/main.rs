@@ -3238,11 +3238,7 @@ impl Riffle {
                     cx.notify();
                 }
             }
-            (_, Some("performance")) => {
-                let events = self.events.clone();
-                self.perf
-                    .toggle(move |sample| events.unbounded_send(Event::Perf(sample)), cx);
-            }
+            (_, Some("performance")) => self.toggle_perf(cx),
             (_, Some("open")) => self.pick_folder(cx),
             (_, Some("toggleLeft")) => self.change_panels(self.panels.toggle(Panel::Left), cx),
             (_, Some("toggleRight")) => self.change_panels(self.panels.toggle(Panel::Right), cx),
@@ -4319,6 +4315,12 @@ impl Riffle {
         })
     }
 
+    fn toggle_perf(&mut self, cx: &mut Context<Self>) {
+        let events = self.events.clone();
+        self.perf
+            .toggle(move |sample| events.unbounded_send(Event::Perf(sample)), cx);
+    }
+
     fn toggle_peaking(&mut self, cx: &mut Context<Self>) {
         let old = self.peaking.toggle();
         self.retire(old);
@@ -4634,13 +4636,21 @@ impl Riffle {
         cx.notify();
     }
 
-    /// A click on a menu item: the sort or the filter changes, the changed
-    /// `sortOrder` or remembered `filter` sections are written to the settings
-    /// store, and the strip is rebuilt on the current file.
+    /// A click on a menu item.
     fn menu_action(&mut self, action: menu::Action, cx: &mut Context<Self>) {
         self.menus.acted(&action);
+        self.apply_menu(vec![action], cx);
+    }
+
+    /// Menu clicks, from the menu or an MCP tool: the sort or the filter
+    /// changes, the changed `sortOrder` or remembered `filter` sections are
+    /// written to the settings store, and the strip is rebuilt on the current
+    /// file.
+    fn apply_menu(&mut self, actions: Vec<menu::Action>, cx: &mut Context<Self>) {
         let (sort, stored) = (self.sort, self.filter.stored());
-        menu::apply(&mut self.filter, &mut self.sort, action);
+        for action in actions {
+            menu::apply(&mut self.filter, &mut self.sort, action);
+        }
         if self.sort != sort {
             self.settings
                 .writes
@@ -4838,8 +4848,16 @@ impl Riffle {
                 files: &this.files,
                 index: this.pager.current(),
                 zoomed: this.zoom.is_on(),
-                sort: this.sort.setting(),
-                filtered: this.filter.is_active(),
+                sort: this.sort,
+                filter: &this.filter,
+                output_known: this.outputs.is_some(),
+                groups: &this.exif_groups,
+                panes: this.panels,
+                overlays: companion::Overlays {
+                    focus: this.marks.is_on(),
+                    peaking: this.peaking.is_on(),
+                    performance: this.perf.on(),
+                },
                 eyes: current.and_then(|path| this.marks.eyes(&path)),
                 view_only: this.view_only,
                 judgments: &this.judgments,
@@ -4870,6 +4888,19 @@ impl Riffle {
                         self.set_selection(selection::selection_of(&paths));
                     }
                     Some(companion::Action::ToggleZoom) => self.toggle_zoom(cx),
+                    Some(companion::Action::Menu(actions)) => self.apply_menu(actions, cx),
+                    Some(companion::Action::Panes(panels)) => self.change_panels(panels, cx),
+                    Some(companion::Action::Overlays(flips)) => {
+                        if flips.focus {
+                            self.toggle_marks(cx);
+                        }
+                        if flips.peaking {
+                            self.toggle_peaking(cx);
+                        }
+                        if flips.performance {
+                            self.toggle_perf(cx);
+                        }
+                    }
                     Some(companion::Action::Key(key)) => self.perform(key, cx),
                     _ => {}
                 }
