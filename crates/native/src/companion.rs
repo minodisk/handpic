@@ -42,13 +42,13 @@ use std::{
 };
 
 use gpui_kit::component::ThemeMode;
-use riffle_backend::shortcuts::Keymap;
-use riffle_backend::{
+use handpic_backend::shortcuts::Keymap;
+use handpic_backend::{
     import::{self as importer, ImportSettings},
     index::{flag_name, parse_flag},
     ondemand::EyesJudgment,
 };
-use riffle_core::{Flag, i18n, xmp::LabelNames};
+use handpic_core::{Flag, i18n, xmp::LabelNames};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -2382,12 +2382,12 @@ mod tests {
         trash::{self, Target},
         tree::Row,
     };
-    use riffle_backend::{
+    use handpic_backend::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
     };
-    use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
-    use riffle_core::{Flag, i18n, xmp::LabelNames};
+    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use handpic_core::{Flag, i18n, xmp::LabelNames};
     use serde_json::{Value, json};
     use std::{
         collections::{HashMap, HashSet},

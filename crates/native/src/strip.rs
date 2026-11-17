@@ -3,7 +3,7 @@ use std::{
     ops::RangeInclusive,
 };
 
-use riffle_core::Flag;
+use handpic_core::Flag;
 
 use crate::{burst::BurstMark, judgment::State, stripheight};
 
@@ -500,7 +500,7 @@ pub fn carried_indices(
 mod tests {
     use std::collections::HashMap;
 
-    use riffle_core::Flag;
+    use handpic_core::Flag;
 
     use super::{
         Answer, Geometry, Marks, NAME_HEIGHT, Strip, Tint, Tip, TipRegion, carried_indices,

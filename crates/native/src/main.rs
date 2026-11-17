@@ -114,6 +114,23 @@ use gpui_kit::{
     base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline, point, prelude::*, px, rgb,
     rgba, size, svg, uniform_list,
 };
+use handpic_backend::{
+    exif::Metadata,
+    folders::{self, Folder},
+    index::{self, Index},
+    listing::canonicalize,
+    sidecar::{self, SidecarFormat, Writer},
+    text::{self, SIZE_BASE, format_bytes},
+    treewatch::TreeWatch,
+    watch::{self, Watch},
+};
+use handpic_core::{
+    Flag,
+    arw::FocusLocation,
+    reader,
+    scan::{Paused, ReadSlots, ScanFocus},
+    xmp::LabelNames,
+};
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
 use image::{Frame, RgbaImage};
@@ -127,23 +144,6 @@ use panewidths::PaneWidths;
 use peaking::{Peaking, View};
 use prefetch::{Heading, Ring};
 use resync::Resync;
-use riffle_backend::{
-    exif::Metadata,
-    folders::{self, Folder},
-    index::{self, Index},
-    listing::canonicalize,
-    sidecar::{self, SidecarFormat, Writer},
-    text::{self, SIZE_BASE, format_bytes},
-    treewatch::TreeWatch,
-    watch::{self, Watch},
-};
-use riffle_core::{
-    Flag,
-    arw::FocusLocation,
-    reader,
-    scan::{Paused, ReadSlots, ScanFocus},
-    xmp::LabelNames,
-};
 use scan::{Event, Listed, Outputs, Prepared, Running, Scan};
 use selection::Selection;
 use settings::Settings;
@@ -183,7 +183,7 @@ impl prefetch::Pixels for Held {
 }
 
 /// The image on screen's facts beside the image and its `Metadata` (in
-/// `Riffle::shown`), to hand it back to the prefetch ring.
+/// `Handpic::shown`), to hand it back to the prefetch ring.
 struct OnScreen {
     path: String,
     jpeg_kb: usize,
@@ -220,7 +220,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let preview = reader::read_preview(path);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
-    let meta = riffle_backend::exif::metadata(file_name(path), &arw.shot);
+    let meta = handpic_backend::exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -352,7 +352,7 @@ fn entries_of(reader: &Mutex<Index>, dir: &str) -> Option<Entries> {
     Some((judgments, facts, groups))
 }
 
-struct Riffle {
+struct Handpic {
     focus: FocusHandle,
     /// The listing in natural order, narrowed by `--size` / `--max`: the
     /// Tauri `allFiles`.
@@ -368,7 +368,7 @@ struct Riffle {
     bursts: HashMap<String, BurstMember>,
     /// Pass 2 files reported since the last read of the index, laid over a
     /// snapshot read before they were written.
-    pending_faces: Vec<riffle_backend::index::FaceReady>,
+    pending_faces: Vec<handpic_backend::index::FaceReady>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
@@ -492,7 +492,7 @@ struct Riffle {
     /// starts under.
     gate: idle::IdleGate<HeldOp>,
     /// The recorded runs to the Trash, for undo.
-    runs: Arc<riffle_backend::trash::Runs>,
+    runs: Arc<handpic_backend::trash::Runs>,
     /// The undo entry whose restore or redo is out, so a second undo or
     /// redo does nothing until it comes back.
     trash_step: Option<u64>,
@@ -628,7 +628,7 @@ struct Riffle {
     screen: Option<OnScreen>,
 }
 
-impl Riffle {
+impl Handpic {
     #[allow(clippy::too_many_arguments)]
     fn new(
         focus: FocusHandle,
@@ -1628,10 +1628,10 @@ impl Riffle {
                     };
                     match mode {
                         trash::Mode::Trash => {
-                            riffle_backend::trash::trash_listed(&ran, &paths, &runs, progress)
+                            handpic_backend::trash::trash_listed(&ran, &paths, &runs, progress)
                         }
                         trash::Mode::Delete => {
-                            riffle_backend::trash::delete_listed(&ran, &paths, progress)
+                            handpic_backend::trash::delete_listed(&ran, &paths, progress)
                         }
                     }
                 })
@@ -1665,7 +1665,7 @@ impl Riffle {
         what: trash::What,
         own: bool,
         redo: bool,
-        result: Result<riffle_backend::trash::Summary, String>,
+        result: Result<handpic_backend::trash::Summary, String>,
         cx: &mut Context<Self>,
     ) {
         self.gate.leave_in_flight();
@@ -1830,7 +1830,7 @@ impl Riffle {
         let started = Instant::now();
         cx.spawn(async move |this, cx| {
             let result = cx
-                .background_spawn(async move { riffle_backend::trash::undo_run(&runs, run_id) })
+                .background_spawn(async move { handpic_backend::trash::undo_run(&runs, run_id) })
                 .await;
             log::info!(
                 "trash: undo of run {run_id} in {}ms: {:?}",
@@ -1852,7 +1852,7 @@ impl Riffle {
     fn restored(
         &mut self,
         entry: TrashEntry,
-        result: Result<riffle_backend::trash::Restored, String>,
+        result: Result<handpic_backend::trash::Restored, String>,
         cx: &mut Context<Self>,
     ) {
         self.trash_step = None;
@@ -1951,7 +1951,7 @@ impl Riffle {
                     if let Some(writer) = &writer {
                         writer.flush(sidecar::DRAIN_TIMEOUT);
                     }
-                    riffle_backend::trash::redo_run(&runs, run_id, |done, total| {
+                    handpic_backend::trash::redo_run(&runs, run_id, |done, total| {
                         let _ = events.unbounded_send(Event::TrashProgress {
                             mode: trash::Mode::Trash,
                             done,
@@ -5312,8 +5312,8 @@ impl Riffle {
 
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
-    fn mcp_request(&mut self, request: riffle_backend::mcp::Request, cx: &mut Context<Self>) {
-        fn view<'a>(this: &'a Riffle, cx: &App) -> companion::View<'a> {
+    fn mcp_request(&mut self, request: handpic_backend::mcp::Request, cx: &mut Context<Self>) {
+        fn view<'a>(this: &'a Handpic, cx: &App) -> companion::View<'a> {
             let current = this.current_path();
             // The states in which `key_down` drops a key.
             let busy = if this.settings_view.read(cx).is_open() {
@@ -5584,7 +5584,7 @@ impl Riffle {
     }
 }
 
-impl Render for Riffle {
+impl Render for Handpic {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // A drag or a track click on the strip's scrollbar, which reports it
         // only by writing the handle and notifying this view.
@@ -5936,7 +5936,7 @@ fn keymap_keys() -> [KeyBinding; 4] {
 /// `trash_key_down` before the focused button sees them.
 fn trash_dialog(
     dialog: Dialog,
-    this: &WeakEntity<Riffle>,
+    this: &WeakEntity<Handpic>,
     buttons: &[FocusHandle; 2],
     cx: &mut App,
 ) -> Dialog {
@@ -6007,7 +6007,7 @@ fn trash_dialog(
 /// title, the Tauri message, and `Clear` and Cancel on the focus handles
 /// `buttons` holds. Its keys reach `clear_key_down` before the focused
 /// button sees them, so Escape cancels it and not the settings under it.
-fn cache_dialog(dialog: Dialog, this: &WeakEntity<Riffle>, buttons: &[FocusHandle; 2]) -> Dialog {
+fn cache_dialog(dialog: Dialog, this: &WeakEntity<Handpic>, buttons: &[FocusHandle; 2]) -> Dialog {
     let model = cache::dialog();
     let lines: Vec<SharedString> = model.content.lines.into_iter().map(Into::into).collect();
     let button = |id: &'static str, label: String, at: usize| {
@@ -6128,7 +6128,7 @@ fn menu_surface(
     rows: Vec<AnyElement>,
     max_height: Pixels,
     scroll: &ScrollHandle,
-    cx: &Context<Riffle>,
+    cx: &Context<Handpic>,
 ) -> gpui_kit::Div {
     let theme = cx.theme();
     div()
@@ -6160,7 +6160,7 @@ fn menu_surface(
 }
 
 /// `PopupMenu`'s separator: the theme's border, across the list's padding.
-fn menu_separator(cx: &Context<Riffle>) -> AnyElement {
+fn menu_separator(cx: &Context<Handpic>) -> AnyElement {
     div()
         .my(px(2.))
         .mx(px(-4.))
@@ -6176,7 +6176,7 @@ fn menu_item(
     id: impl Into<gpui_kit::ElementId>,
     checked: bool,
     disabled: bool,
-    cx: &Context<Riffle>,
+    cx: &Context<Handpic>,
 ) -> gpui_kit::Stateful<gpui_kit::Div> {
     let theme = cx.theme();
     let (accent, accent_foreground) = (theme.accent, theme.accent_foreground);
@@ -6207,7 +6207,7 @@ fn menu_item(
 
 /// One row of an open menu: an item's check mark, swatch and text, a color
 /// label item's Tag in place of both, or a section's separator or heading.
-fn menu_row(at: usize, row: Row, cx: &mut Context<Riffle>) -> AnyElement {
+fn menu_row(at: usize, row: Row, cx: &mut Context<Handpic>) -> AnyElement {
     let item = match row {
         Row::Separator => return menu_separator(cx),
         Row::Heading(text) => {
@@ -6314,7 +6314,7 @@ struct ContextOpen {
 fn context_item(
     item: context::Item,
     target: &context::Target,
-    view: &WeakEntity<Riffle>,
+    view: &WeakEntity<Handpic>,
 ) -> PopupMenuItem {
     let label = item.label;
     let tag = item.tag;
@@ -6903,7 +6903,7 @@ fn main() {
         }
     };
     logger::install(args.log.take());
-    riffle_backend::diagnostics::install_panic_hook();
+    handpic_backend::diagnostics::install_panic_hook();
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take(), args.import_settings.take().as_deref());
     log::info!(
@@ -6956,8 +6956,8 @@ fn main() {
                     cx.new(|cx| {
                         let focus = cx.focus_handle();
                         window.focus(&focus, cx);
-                        Riffle::start(args, cx);
-                        Riffle::new(
+                        Handpic::start(args, cx);
+                        Handpic::new(
                             focus, index, settings, mcp_port, prefetch, remember, window, cx,
                         )
                     })

@@ -22,12 +22,12 @@ use gpui_kit::{
     SharedString, Window, div, prelude::*, px, transparent_black,
 };
 
-use riffle_backend::{
+use handpic_backend::{
     import,
     shortcuts::{Binding, Keymap},
     sidecar::SidecarFormat,
 };
-use riffle_core::{i18n, xmp::LabelNames};
+use handpic_core::{i18n, xmp::LabelNames};
 
 use crate::{
     cache, keys,

@@ -1,6 +1,6 @@
 mod common;
 
-use riffle_core::sequence::{self, output_dir, run, Summary};
+use handpic_core::sequence::{self, output_dir, run, Summary};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Cursor;

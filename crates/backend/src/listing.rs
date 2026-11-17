@@ -29,9 +29,9 @@ impl<T> Default for Media<T> {
 impl<T> Media<T> {
     /// Keep `item` if `path` names a RAW or a JPEG file; whether it did.
     pub fn add(&mut self, path: &Path, item: T) -> bool {
-        if riffle_core::scan::is_raw_file(path) {
+        if handpic_core::scan::is_raw_file(path) {
             self.raws.push(item);
-        } else if riffle_core::scan::is_jpeg_file(path) {
+        } else if handpic_core::scan::is_jpeg_file(path) {
             self.jpegs.push(item);
         } else {
             return false;

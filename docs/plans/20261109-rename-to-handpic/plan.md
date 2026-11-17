@@ -118,6 +118,7 @@ and what is kept.
     - Assumes Step 2 is merged (so one diff is "the product", the other "the crates").
     - `mise.toml` has no crate name in it; check `tools/**` and `.claude/skills/**` scripts for `riffle-cli` / `target/release/riffle-cli`.
     - Does not change `identifier`, `productName` or anything from Step 2.
+  - Note (2026-11-18): done by [the remove-tauri plan](../20261118-remove-tauri/plan.md), Step 2, after `crates/app` and `package.json` were removed in its Step 1. The packages are `handpic-core`, `handpic-backend`, `handpic-cli` and `handpic-native`; the native app's binary is `handpic` and the CLI's `handpic-cli`.
 
 - [ ] Step 4: Landing page and its Pages deployment
   - Done when: `site/` holds the static page in English (`/`) and Japanese (`/ja/`), a new `.github/workflows/pages.yml` deploys it to GitHub Pages on a push to `main` that touches `site/**` (and on `workflow_dispatch`), the page shows a demo-media placeholder, the three selling points, the supported cameras (linking `docs/humans/cameras.md`), per-OS download buttons that resolve to the current release's files, and the first-launch steps per OS from Step 2's text; `https://handpic.minodisk.dev` serves it over HTTPS; `mise run ci` passes.

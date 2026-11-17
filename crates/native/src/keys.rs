@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use gpui_kit::{Keystroke, Modifiers};
-use riffle_backend::shortcuts::Keymap;
+use handpic_backend::shortcuts::Keymap;
 
 /// The modifiers held in `ctrl+alt+shift+meta+` order, then the key
 /// lower-cased, GPUI's arrow names given the keymap's; `None` for a lone
@@ -117,7 +117,7 @@ impl Bindings {
 mod tests {
     use super::{Bindings, key_name, keystroke_of, typed_char};
     use gpui_kit::{Keystroke, Modifiers};
-    use riffle_backend::shortcuts::Keymap;
+    use handpic_backend::shortcuts::Keymap;
 
     fn stroke(key: &str, control: bool, alt: bool, shift: bool) -> Keystroke {
         Keystroke {

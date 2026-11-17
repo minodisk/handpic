@@ -7,10 +7,10 @@ use std::{
 use gpui_kit::{
     AppContext, Bounds, Context, Corners, Pixels, RenderImage, Window, point, px, size,
 };
+use handpic_core::{arw::FocusLocation, partial, reader};
 use image::{Frame, RgbaImage};
-use riffle_core::{arw::FocusLocation, partial, reader};
 
-use crate::{Riffle, guarded, orient, peaking};
+use crate::{Handpic, guarded, orient, peaking};
 
 /// The largest crop per axis, in JPEG pixels, as the Tauri app's.
 pub const CROP_MAX: usize = 1024;
@@ -386,7 +386,7 @@ pub fn read(path: &Path, viewport: (u32, u32)) -> Result<Crop, String> {
 
 /// Read the crop `request` asks for on the background executor, then hand
 /// it to the view.
-pub fn send(request: Request, path: PathBuf, cx: &mut Context<Riffle>) {
+pub fn send(request: Request, path: PathBuf, cx: &mut Context<Handpic>) {
     let Request {
         seq,
         viewport,
@@ -492,7 +492,7 @@ impl Paint {
 mod tests {
     use std::time::Instant;
 
-    use riffle_core::arw::FocusLocation;
+    use handpic_core::arw::FocusLocation;
 
     use super::{
         Arrived, CROP_MAX, Rect, Request, Zoom, canvas_center, crop_origin, crop_size, placeholder,

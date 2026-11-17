@@ -268,7 +268,7 @@ pub fn groups_of(
         }
         groups.push(Group {
             raw: PathBuf::from(path),
-            sidecars: if riffle_core::scan::is_raw_file(Path::new(path)) {
+            sidecars: if handpic_core::scan::is_raw_file(Path::new(path)) {
                 sidecars_of(SidecarFormat::Both, path, sidecars)
                     .iter()
                     .map(|stat| stat.0.clone())
@@ -377,7 +377,7 @@ pub fn delete_for_good(
     let kept_stems: std::collections::HashSet<String> = files
         .iter()
         .filter(|file| {
-            riffle_core::scan::is_raw_file(Path::new(file.as_str()))
+            handpic_core::scan::is_raw_file(Path::new(file.as_str()))
                 && name_of(file).is_some_and(|name| !chosen.contains(&name))
         })
         .filter_map(|file| stem_of(file))
@@ -580,8 +580,8 @@ pub fn restore<I>(
     let mut restored = Restored::default();
     let mut raw_back = true;
     for trashed in &run.moved {
-        let is_media = riffle_core::scan::is_raw_file(&trashed.path)
-            || riffle_core::scan::is_jpeg_file(&trashed.path);
+        let is_media = handpic_core::scan::is_raw_file(&trashed.path)
+            || handpic_core::scan::is_jpeg_file(&trashed.path);
         let destination = trashed.destination();
         let path = destination.to_string_lossy().into_owned();
         let result = if !is_media && !raw_back {
@@ -654,8 +654,8 @@ fn redo_groups(paths: Vec<PathBuf>) -> Vec<Group> {
     for path in paths {
         match groups.last_mut() {
             Some(group)
-                if !riffle_core::scan::is_raw_file(&path)
-                    && riffle_core::scan::is_raw_file(&group.raw) =>
+                if !handpic_core::scan::is_raw_file(&path)
+                    && handpic_core::scan::is_raw_file(&group.raw) =>
             {
                 group.sidecars.push(path)
             }
@@ -997,7 +997,7 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-trash-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("handpic-trash-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

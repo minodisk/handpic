@@ -3,7 +3,7 @@
 //! (`photoTier`, `afEyeState`, `focusMark`, `uprightPoint`, `faceMarks`,
 //! `faceLabel`, `faceLabelAt`); its comments say where each cut comes from.
 
-use riffle_backend::{index::Focus, ondemand::FaceBox};
+use handpic_backend::{index::Focus, ondemand::FaceBox};
 
 use crate::icons;
 
@@ -252,8 +252,8 @@ pub fn face_label_at(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riffle_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
-    use riffle_backend::ondemand::FacePoint;
+    use handpic_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
+    use handpic_backend::ondemand::FacePoint;
 
     const AT: FocusPoint = FocusPoint {
         sensor_w: 7008,
@@ -671,8 +671,8 @@ mod tests {
 
     #[test]
     fn the_full_size_thresholds_are_fullsharp_s() {
-        assert_eq!(GOOD_FULL_EYE_SHARP, riffle_core::fullsharp::SOFT_BELOW);
-        assert_eq!(LOW_FULL_EYE_SHARP, riffle_core::fullsharp::LOW_BELOW);
+        assert_eq!(GOOD_FULL_EYE_SHARP, handpic_core::fullsharp::SOFT_BELOW);
+        assert_eq!(LOW_FULL_EYE_SHARP, handpic_core::fullsharp::LOW_BELOW);
     }
 
     #[test]

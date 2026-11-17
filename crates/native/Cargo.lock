@@ -2850,6 +2850,71 @@ dependencies = [
 ]
 
 [[package]]
+name = "handpic-backend"
+version = "1.10.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "handpic-core",
+ "log",
+ "notify",
+ "objc2-foundation 0.3.2",
+ "percent-encoding",
+ "reqwest",
+ "rmcp",
+ "rusqlite",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sysinfo 0.39.6",
+ "tokio",
+ "tokio-util",
+ "trash",
+ "windows 0.62.2",
+]
+
+[[package]]
+name = "handpic-core"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hpvcd",
+ "libc",
+ "mozjpeg",
+ "mozjpeg-sys",
+ "natord",
+ "quick-xml 0.42.0",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thread-priority",
+ "tract-onnx",
+]
+
+[[package]]
+name = "handpic-native"
+version = "0.0.0"
+dependencies = [
+ "dirs 6.0.0",
+ "futures",
+ "gpui-kit",
+ "handpic-backend",
+ "handpic-core",
+ "image",
+ "log",
+ "mozjpeg",
+ "natord",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "winresource",
+]
+
+[[package]]
 name = "harfrust"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5802,71 +5867,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 dependencies = [
  "bytemuck",
-]
-
-[[package]]
-name = "riffle-backend"
-version = "1.10.0"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "chrono",
- "log",
- "notify",
- "objc2-foundation 0.3.2",
- "percent-encoding",
- "reqwest",
- "riffle-core",
- "rmcp",
- "rusqlite",
- "rustls",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sysinfo 0.39.6",
- "tokio",
- "tokio-util",
- "trash",
- "windows 0.62.2",
-]
-
-[[package]]
-name = "riffle-core"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hpvcd",
- "libc",
- "mozjpeg",
- "mozjpeg-sys",
- "natord",
- "quick-xml 0.42.0",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thread-priority",
- "tract-onnx",
-]
-
-[[package]]
-name = "riffle-native"
-version = "0.0.0"
-dependencies = [
- "dirs 6.0.0",
- "futures",
- "gpui-kit",
- "image",
- "log",
- "mozjpeg",
- "natord",
- "riffle-backend",
- "riffle-core",
- "serde_json",
- "tempfile",
- "tokio",
- "winresource",
 ]
 
 [[package]]

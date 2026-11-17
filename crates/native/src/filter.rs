@@ -14,11 +14,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use riffle_backend::{
+use handpic_backend::{
     exif::Exif,
     index::{FaceReady, Focus, IndexedFile},
 };
-use riffle_core::{Flag, eyes::EyeState};
+use handpic_core::{Flag, eyes::EyeState};
 use serde_json::{Value, json};
 
 use crate::{
@@ -482,7 +482,7 @@ mod tests {
 
     use super::*;
     use crate::mark::{GOOD_FULL_EYE_SHARP, LOW_FULL_EYE_SHARP, af_eye_state};
-    use riffle_backend::index::{FocusPoint, StoredEyes};
+    use handpic_backend::index::{FocusPoint, StoredEyes};
     use serde_json::json;
 
     const NEUTRAL: AfEye = MarkState::Neutral;
@@ -889,7 +889,7 @@ mod tests {
                 eyes_ear: Some(0.35),
                 eyes: Some(EyeState::Open),
                 eyes_closed: Some(0.001),
-                pose: Some(riffle_backend::index::EyesPose {
+                pose: Some(handpic_backend::index::EyesPose {
                     yaw: 10.,
                     pitch: -5.,
                     roll: 3.,
@@ -1422,7 +1422,7 @@ mod tests {
         Facts {
             exif: Some(Exif {
                 camera: Some("ILCE-7RM5".into()),
-                iso: Some(riffle_backend::exif::Labeled {
+                iso: Some(handpic_backend::exif::Labeled {
                     value: 100.,
                     label: "ISO 100".into(),
                 }),

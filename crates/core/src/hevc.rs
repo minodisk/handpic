@@ -367,12 +367,12 @@ mod tests {
         assert!(b > r && b > g, "Cb toward blue: {r} {g} {b}");
     }
 
-    /// Set `RIFFLE_HEVC_CR3` to a CR3 shot with HDR PQ on, then run with
+    /// Set `HANDPIC_HEVC_CR3` to a CR3 shot with HDR PQ on, then run with
     /// `--ignored`.
     #[test]
     #[ignore]
     fn decodes_the_preview_of_a_real_file() {
-        let path = std::env::var("RIFFLE_HEVC_CR3").expect("RIFFLE_HEVC_CR3");
+        let path = std::env::var("HANDPIC_HEVC_CR3").expect("HANDPIC_HEVC_CR3");
         let buf = std::fs::read(path).unwrap();
         let a = crate::cr3::parse(&buf).unwrap();
         let e = a.preview.unwrap();

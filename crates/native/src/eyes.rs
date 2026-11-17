@@ -10,7 +10,7 @@ use std::{
     },
 };
 
-use riffle_backend::ondemand::EyesJudgment;
+use handpic_backend::ondemand::EyesJudgment;
 
 /// What `request` hands out: the id the backend's `current` check
 /// supersedes older requests by, and the generation the answer is settled
@@ -98,7 +98,7 @@ impl EyesCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riffle_backend::ondemand::EyesMesh;
+    use handpic_backend::ondemand::EyesMesh;
 
     fn judgment(state: &'static str) -> EyesJudgment {
         EyesJudgment {

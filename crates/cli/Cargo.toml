@@ -1,10 +1,10 @@
 [package]
-name = "riffle-cli"
+name = "handpic-cli"
 version = "1.10.0"
 edition = "2021"
 
 [dependencies]
-riffle-core = { path = "../core" }
+handpic-core = { path = "../core" }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 anyhow = "1"
 rayon = "1"

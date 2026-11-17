@@ -2,14 +2,14 @@
 //! expanded, the path spelling its nodes are keyed by, and where its keyboard
 //! moves the cursor. A port of the Tauri app's `tree.ts` less the
 //! multi-folder selection; the window draws `rows` and fills the tree from
-//! `riffle_backend::folders`.
+//! `handpic_backend::folders`.
 
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
 
-use riffle_backend::folders::FolderNode;
+use handpic_backend::folders::FolderNode;
 
 /// Whether paths compare ignoring case, as the file systems of Windows and
 /// macOS do by default.

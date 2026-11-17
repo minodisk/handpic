@@ -7,8 +7,8 @@
 //! Unflag, Reject and the rating from 5 stars down to the unrated, and the
 //! rating rows draw its stars.
 
-use riffle_backend::shortcuts::Binding;
-use riffle_core::Flag;
+use handpic_backend::shortcuts::Binding;
+use handpic_core::Flag;
 
 use crate::strip::Tint;
 use crate::{judgment::State, menu::Label};

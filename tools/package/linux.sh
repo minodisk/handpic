@@ -15,8 +15,8 @@ set -o nounset
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# The executable's name; the rename-to-handpic plan changes it.
-binary="riffle-native"
+# The executable's name.
+binary="handpic"
 identifier="dev.minodisk.handpic"
 
 packaging="${root}/crates/native/packaging/linux"

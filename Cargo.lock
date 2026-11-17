@@ -688,6 +688,66 @@ dependencies = [
 ]
 
 [[package]]
+name = "handpic-backend"
+version = "1.10.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "handpic-core",
+ "log",
+ "mozjpeg",
+ "notify",
+ "objc2-foundation",
+ "percent-encoding",
+ "reqwest",
+ "rmcp",
+ "rusqlite",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sysinfo",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "trash",
+ "windows",
+]
+
+[[package]]
+name = "handpic-cli"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "handpic-core",
+ "image",
+ "rayon",
+]
+
+[[package]]
+name = "handpic-core"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hpvcd",
+ "image",
+ "kamadak-exif",
+ "libc",
+ "mozjpeg",
+ "mozjpeg-sys",
+ "natord",
+ "quick-xml",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thread-priority",
+ "tract-onnx",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1810,66 +1870,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b34b781b31e5d73e9fbc8689c70551fd1ade9a19e3e28cfec8580a79290cc4"
 dependencies = [
  "bytemuck",
-]
-
-[[package]]
-name = "riffle-backend"
-version = "1.10.0"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "chrono",
- "log",
- "mozjpeg",
- "notify",
- "objc2-foundation",
- "percent-encoding",
- "reqwest",
- "riffle-core",
- "rmcp",
- "rusqlite",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "sysinfo",
- "tokio",
- "tokio-util",
- "tower",
- "trash",
- "windows",
-]
-
-[[package]]
-name = "riffle-cli"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "image",
- "rayon",
- "riffle-core",
-]
-
-[[package]]
-name = "riffle-core"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hpvcd",
- "image",
- "kamadak-exif",
- "libc",
- "mozjpeg",
- "mozjpeg-sys",
- "natord",
- "quick-xml",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thread-priority",
- "tract-onnx",
 ]
 
 [[package]]

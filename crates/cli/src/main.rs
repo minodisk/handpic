@@ -1,17 +1,17 @@
 use anyhow::{anyhow, bail, Result};
-use riffle_core::candidate;
-use riffle_core::copy;
-use riffle_core::decode::{apply_orientation, decode_rgb, decode_upright_near};
-use riffle_core::embed;
-use riffle_core::eyes;
-use riffle_core::faces;
-use riffle_core::partial;
-use riffle_core::pose;
-use riffle_core::reader;
-use riffle_core::scan;
-use riffle_core::sharpness;
-use riffle_core::xmp;
-use riffle_core::Flag;
+use handpic_core::candidate;
+use handpic_core::copy;
+use handpic_core::decode::{apply_orientation, decode_rgb, decode_upright_near};
+use handpic_core::embed;
+use handpic_core::eyes;
+use handpic_core::faces;
+use handpic_core::partial;
+use handpic_core::pose;
+use handpic_core::reader;
+use handpic_core::scan;
+use handpic_core::sharpness;
+use handpic_core::xmp;
+use handpic_core::Flag;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
@@ -42,14 +42,14 @@ fn main() -> Result<()> {
                 _ => None,
             };
             if inputs.is_empty() {
-                bail!("usage: riffle-cli detect <dir|file>... [threads]");
+                bail!("usage: handpic-cli detect <dir|file>... [threads]");
             }
             detect(&inputs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
         }
         Some("eyecrops") => {
             let (out, inputs) = match args[1..].split_last() {
                 Some((out, inputs)) if !inputs.is_empty() => (out, inputs),
-                _ => bail!("usage: riffle-cli eyecrops <dir|file>... <out-dir>"),
+                _ => bail!("usage: handpic-cli eyecrops <dir|file>... <out-dir>"),
             };
             eyecrops(
                 &inputs.iter().map(PathBuf::from).collect::<Vec<_>>(),
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
         }
         Some("eyes") => {
             if args.len() < 2 {
-                bail!("usage: riffle-cli eyes <dir|file>...");
+                bail!("usage: handpic-cli eyes <dir|file>...");
             }
             eyes_cmd(&args[1..].iter().map(PathBuf::from).collect::<Vec<_>>())
         }
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
                 _ => None,
             };
             if dirs.is_empty() {
-                bail!("usage: riffle-cli features <dir>... [threads]");
+                bail!("usage: handpic-cli features <dir>... [threads]");
             }
             features(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
         }
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
                 _ => None,
             };
             if dirs.is_empty() {
-                bail!("usage: riffle-cli check <dir>... [threads]");
+                bail!("usage: handpic-cli check <dir>... [threads]");
             }
             check(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
         }
@@ -107,7 +107,7 @@ fn main() -> Result<()> {
             _ => bail!("usage: {EMBED_COMPARE_USAGE}"),
         },
         _ => bail!(
-            "usage: riffle-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       riffle-cli crop <file.ARW> <out.png> [size]\n       riffle-cli scan <dir> [threads]\n       riffle-cli detect <dir|file>... [threads]\n       riffle-cli eyecrops <dir|file>... <out-dir>\n       riffle-cli eyes <dir|file>...\n       riffle-cli features <dir>... [threads]\n       riffle-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
+            "usage: handpic-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       handpic-cli crop <file.ARW> <out.png> [size]\n       handpic-cli scan <dir> [threads]\n       handpic-cli detect <dir|file>... [threads]\n       handpic-cli eyecrops <dir|file>... <out-dir>\n       handpic-cli eyes <dir|file>...\n       handpic-cli features <dir>... [threads]\n       handpic-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
        {COPYBENCH_USAGE}",
             facechoice::USAGE
         ),
@@ -372,7 +372,7 @@ fn bench(paths: &[String]) -> Result<()> {
     Ok(())
 }
 
-const COPYBENCH_USAGE: &str = "riffle-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]";
+const COPYBENCH_USAGE: &str = "handpic-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]";
 
 /// Copy every RAW / JPEG under `src` flat into `dst` through the import's
 /// copy pipeline and print the throughput.
@@ -435,7 +435,7 @@ fn scan_dir(dir: &Path, threads: Option<usize>) -> Result<()> {
     }
     let mut paths: Vec<PathBuf> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok().map(|e| e.path()))
-        .filter(|p| riffle_core::scan::is_raw_file(p))
+        .filter(|p| handpic_core::scan::is_raw_file(p))
         .collect();
     paths.sort();
     if paths.is_empty() {
@@ -564,8 +564,8 @@ fn features(dirs: &[PathBuf], threads: Option<usize>) -> Result<()> {
                     &name,
                     &flag_column(&xmp::sidecar_path(p), xmp::read_flag),
                     &flag_column(
-                        &riffle_core::dop::sidecar_path(p),
-                        riffle_core::dop::read_flag,
+                        &handpic_core::dop::sidecar_path(p),
+                        handpic_core::dop::read_flag,
                     ),
                     &analysis,
                     analysis_ms,
@@ -592,8 +592,8 @@ fn features(dirs: &[PathBuf], threads: Option<usize>) -> Result<()> {
     Ok(())
 }
 
-const EMBED_USAGE: &str = "riffle-cli embed <model.onnx> <siglip2|openclip|tinyclip|mobileclip> <dir|file>... [threads] [--thumb | --near <px>] [--out <out.tsv>] [--previews <dir>]";
-const EMBED_COMPARE_USAGE: &str = "riffle-cli embed-compare <a.tsv> <b.tsv>";
+const EMBED_USAGE: &str = "handpic-cli embed <model.onnx> <siglip2|openclip|tinyclip|mobileclip> <dir|file>... [threads] [--thumb | --near <px>] [--out <out.tsv>] [--previews <dir>]";
+const EMBED_COMPARE_USAGE: &str = "handpic-cli embed-compare <a.tsv> <b.tsv>";
 /// The neighbors `embed-compare` checks for retrieval agreement.
 const EMBED_TOP_K: usize = 5;
 
@@ -807,7 +807,7 @@ fn embed_cmd(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-const PREVIEWS_USAGE: &str = "riffle-cli previews <out-dir> <dir|file>... --near <px> [threads]";
+const PREVIEWS_USAGE: &str = "handpic-cli previews <out-dir> <dir|file>... --near <px> [threads]";
 /// The JPEG quality `previews` re-encodes at.
 const PREVIEWS_QUALITY: u8 = 92;
 

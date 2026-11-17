@@ -12,17 +12,17 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-use riffle_core::arw::{Rational, Shot};
-use riffle_core::embed::{Model, EMBED_VERSION};
-use riffle_core::eyes::{EyeState, Eyes};
-use riffle_core::pose::Pose;
-use riffle_core::rank;
-use riffle_core::scan::{
+use handpic_core::arw::{Rational, Shot};
+use handpic_core::embed::{Model, EMBED_VERSION};
+use handpic_core::eyes::{EyeState, Eyes};
+use handpic_core::pose::Pose;
+use handpic_core::rank;
+use handpic_core::scan::{
     embed_all, extract_all, extract_analysis_all, is_raw_file, Analysis, Entry, Failure, Priority,
     ScanFocus,
 };
-use riffle_core::sharpness::manual_focus;
-use riffle_core::Flag;
+use handpic_core::sharpness::manual_focus;
+use handpic_core::Flag;
 
 use crate::exif::{exif, Exif};
 
@@ -103,7 +103,7 @@ use crate::exif::{exif, Exif};
 /// the empty table and keeps the rest.
 const SCHEMA_VERSION: i64 = 26;
 
-/// The version of what `riffle_core::scan::extract` produces, stored on every
+/// The version of what `handpic_core::scan::extract` produces, stored on every
 /// `files` row. Bump it on any change to that output: ARW/DNG/NEF/CR3/RAF/ORF parsing
 /// or embedded JPEG tier selection (`crates/core/src/arw.rs`, `nef.rs`,
 /// `cr3.rs`, `raf.rs`, `orf.rs`, the shared Exif fields in `exif.rs`), which preview
@@ -133,7 +133,7 @@ const SCHEMA_VERSION: i64 = 26;
 /// failed in its error row, so existing error rows are re-extracted.
 const EXTRACTOR_VERSION: i64 = 13;
 
-/// The version of what the second pass, `riffle_core::scan::extract_analysis`,
+/// The version of what the second pass, `handpic_core::scan::extract_analysis`,
 /// produces, stored on every `files` row as `faces_extractor` next to its
 /// values: the face cue's (the EAR, the pose, the eye offset, the edge gap),
 /// the full-size eye sharpness and the sharpness score. Bump it on any change
@@ -1191,7 +1191,7 @@ impl Index {
     /// The files of `dir` the second pass still has to run on, in file-name
     /// order like `entries`. Rows it has nothing to compute for (a failed
     /// extraction, or a JPEG file, told by the extension as
-    /// `riffle_core::scan::is_jpeg_file` does; SQLite's `LIKE` ignores ASCII
+    /// `handpic_core::scan::is_jpeg_file` does; SQLite's `LIKE` ignores ASCII
     /// case) are marked done at `FACES_VERSION` with no second-pass values
     /// first, in the same transaction. A RAW without a trusted AF
     /// point is listed: its cue judges the largest confident face of the whole
@@ -2573,12 +2573,12 @@ where
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use riffle_core::arw::{FocusFrame, FocusLocation, Shot};
-    use riffle_core::eyes::{closed_probability, EYES_CLOSED_EAR};
+    use handpic_core::arw::{FocusFrame, FocusLocation, Shot};
+    use handpic_core::eyes::{closed_probability, EYES_CLOSED_EAR};
     use std::collections::HashSet;
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-index-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("handpic-index-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -5889,7 +5889,7 @@ pub(crate) mod tests {
                 .all(|e| e.sharpness.is_none()),
             "the first pass does not score"
         );
-        let score = riffle_core::scan::extract_analysis(Path::new(&paths[0]))
+        let score = handpic_core::scan::extract_analysis(Path::new(&paths[0]))
             .unwrap()
             .sharpness;
         assert!(score.is_some());
@@ -6004,7 +6004,7 @@ pub(crate) mod tests {
         assert_eq!(score(old), Some(42.0), "the old row keeps its score");
         assert_eq!(
             score(new),
-            riffle_core::scan::extract_analysis(Path::new(new))
+            handpic_core::scan::extract_analysis(Path::new(new))
                 .unwrap()
                 .sharpness
         );
@@ -6926,7 +6926,7 @@ pub(crate) mod tests {
     }
 
     /// `VACUUM` time after evicting half of a ~100 MB index. Run with
-    /// `cargo test -p riffle-app --release -- --ignored --nocapture vacuum_cost`.
+    /// `cargo test -p handpic-backend --release -- --ignored --nocapture vacuum_cost`.
     #[test]
     #[ignore]
     fn vacuum_cost_on_a_100_mb_index() {
@@ -6961,7 +6961,7 @@ pub(crate) mod tests {
     }
 
     /// Commit cost per chunk size. Run with
-    /// `cargo test -p riffle-app --release -- --ignored --nocapture write_batch_cost`.
+    /// `cargo test -p handpic-backend --release -- --ignored --nocapture write_batch_cost`.
     #[test]
     #[ignore]
     fn write_batch_cost_per_chunk_size() {

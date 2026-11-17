@@ -1,6 +1,6 @@
 use std::{cell::RefCell, rc::Rc};
 
-use riffle_core::scan::Paused;
+use handpic_core::scan::Paused;
 
 /// The scan's pause a preview holds from its read until its image is
 /// painted, so pass 2's workers leave the cores to the decode, the orient and
@@ -27,7 +27,7 @@ impl PaintHold {
 #[cfg(test)]
 mod tests {
     use super::PaintHold;
-    use riffle_core::scan::ReadSlots;
+    use handpic_core::scan::ReadSlots;
     use std::{
         sync::atomic::{AtomicBool, Ordering},
         thread,

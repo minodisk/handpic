@@ -33,7 +33,7 @@ instead of 46 ms.
   `C:\Program Files\NASM`, and does not add itself to `PATH`. Add that
   directory yourself. `mozjpeg-sys` only looks for `nasm` on `PATH`, so the build
   fails unless `nasm` is on `PATH`, whatever the `NASM` variable holds.
-- `RIFFLE_NATIVE_ALLOW_NO_SIMD=1` turns the failure into a warning, for builds
+- `HANDPIC_NATIVE_ALLOW_NO_SIMD=1` turns the failure into a warning, for builds
   whose timings do not matter.
 
 ```sh
@@ -67,7 +67,7 @@ the formatting check of the crate is part of `mise run lint`.
   renamed); a changed shell script is shellchecked, a workflow change runs
   `actionlint`, and a bash test runs when its script changed. A Rust change runs the `cargo fmt` check
   of its workspace and `cargo clippy -p` / `cargo test -p` of only the changed
-  root packages (`riffle-core`, `riffle-backend`, `riffle-cli`; the root
+  root packages (`handpic-core`, `handpic-backend`, `handpic-cli`; the root
   `Cargo.toml` / `Cargo.lock` count as all three), the native clippy for a
   `crates/native`, `crates/core` or `crates/backend` change, and the native
   tests for a `crates/native` change. A change to `mise.toml` or
@@ -96,16 +96,16 @@ behind and the file does not shrink.
 
 ## The benchmark CLI
 
-`crates/cli` builds `riffle-cli`, used to inspect files and measure decode
+`crates/cli` builds `handpic-cli`, used to inspect files and measure decode
 and scan speed:
 
 ```sh
 cargo build --release
-./target/release/riffle-cli info     <file.ARW|file.DNG>            # where the embedded JPEGs are
-./target/release/riffle-cli focusbox <file.ARW|file.DNG> <out.png>  # draw the focus box on the preview
-./target/release/riffle-cli crop     <file.ARW|file.DNG> <out.png> [size]  # partially decode the focus point at 1:1
-./target/release/riffle-cli bench    <file.ARW|file.DNG>...         # measure decode speed
-./target/release/riffle-cli scan     <dir> [threads]                # extract a whole folder in parallel
+./target/release/handpic-cli info     <file.ARW|file.DNG>            # where the embedded JPEGs are
+./target/release/handpic-cli focusbox <file.ARW|file.DNG> <out.png>  # draw the focus box on the preview
+./target/release/handpic-cli crop     <file.ARW|file.DNG> <out.png> [size]  # partially decode the focus point at 1:1
+./target/release/handpic-cli bench    <file.ARW|file.DNG>...         # measure decode speed
+./target/release/handpic-cli scan     <dir> [threads]                # extract a whole folder in parallel
 ```
 
 ## Promotion stats

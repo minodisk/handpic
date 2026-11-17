@@ -1,19 +1,19 @@
 [package]
-name = "riffle-native"
+name = "handpic-native"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [[bin]]
-name = "riffle-native"
+name = "handpic"
 path = "src/main.rs"
 
 [workspace]
 
 [dependencies]
 gpui-kit = "=0.9.1"
-riffle-core = { path = "../core" }
-riffle-backend = { path = "../backend" }
+handpic-core = { path = "../core" }
+handpic-backend = { path = "../backend" }
 mozjpeg = "0.10"
 natord = "1"
 dirs = "6"

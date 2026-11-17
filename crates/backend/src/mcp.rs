@@ -1023,7 +1023,7 @@ impl Companion {
         let name = path.to_string_lossy().into_owned();
         let (jpeg, width, height) = tokio::task::spawn_blocking(move || {
             let (orientation, preview) = read_preview(&path)?;
-            riffle_core::decode::preview_jpeg(&preview, orientation, long_edge, PREVIEW_QUALITY)
+            handpic_core::decode::preview_jpeg(&preview, orientation, long_edge, PREVIEW_QUALITY)
                 .map_err(|e| format!("{}: {e}", path.display()))
         })
         .await
@@ -2413,7 +2413,7 @@ mod tests {
     }
 
     fn temp_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("riffle-mcp-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("handpic-mcp-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

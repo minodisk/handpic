@@ -1,5 +1,5 @@
 [package]
-name = "riffle-core"
+name = "handpic-core"
 version = "1.10.0"
 edition = "2021"
 

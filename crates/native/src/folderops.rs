@@ -29,7 +29,7 @@ use gpui_kit::{
     HighlightStyle, KeyDownEvent, MouseButton, ScrollStrategy, SharedString, StyledText,
     Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
-use riffle_backend::{
+use handpic_backend::{
     datefolder::{self as datefolders, Kind as DateKind, Split},
     foldersidecars::{self, DeletePreview, Preview, Summary},
     import::{self as importer, ImportSettings, Plan, Ran as Imported},
@@ -55,7 +55,7 @@ use crate::scan::Event;
 use crate::sequence::{self, SequenceFlow};
 use crate::sidecars::{self, Kind, SidecarFlow, Target};
 use crate::tree::{self, IGNORE_CASE};
-use crate::{HeldOp, PICK_COLOR, Riffle, TREE_ROW_HEIGHT, context, keys, trash};
+use crate::{Handpic, HeldOp, PICK_COLOR, TREE_ROW_HEIGHT, context, keys, trash};
 
 /// The folder operations' view state: the flows, the one dialog, laid out
 /// only while open, and the sequencing run under way.
@@ -236,7 +236,7 @@ fn name_of(dir: &str) -> String {
     )
 }
 
-impl Riffle {
+impl Handpic {
     /// An item of the folder tree's menu that `folder_action` does not handle
     /// itself.
     pub(crate) fn folder_op(
@@ -1522,7 +1522,7 @@ impl Riffle {
 /// button sees them.
 fn folder_dialog(
     shell: component::Dialog,
-    this: &WeakEntity<Riffle>,
+    this: &WeakEntity<Handpic>,
     buttons: &[FocusHandle; 2],
     cx: &mut App,
 ) -> component::Dialog {
@@ -1645,7 +1645,7 @@ fn folder_dialog(
 
 /// The tree's inline rename, a port of `folders.ts`'s editor and
 /// `main.ts`'s `renameFolder` / `holdRename`.
-impl Riffle {
+impl Handpic {
     /// The name of the tree's row `at`: the text input while it is being
     /// renamed, else its name, or the held rename's name in the pending
     /// style. A click on the open folder's name arms the slow click instead

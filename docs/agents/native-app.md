@@ -195,7 +195,7 @@ nor the Wayland backend.
 except the inspector's, and none is a multi-keystroke sequence, so none adds
 a pending-key delay. GPUI dispatches a matching binding's action before any
 key-down listener, so a binding that matches takes the key from
-`Riffle::key_down`:
+`Handpic::key_down`:
 
 | Context | Keys | Action |
 | --- | --- | --- |
@@ -205,7 +205,7 @@ key-down listener, so a binding that matches takes the key from
 | `Dialog` (only with `.keyboard(true)`) | `escape`, `enter` | `dialog::Cancel`, `dialog::Confirm` |
 | `Select` (the settings' language and theme pickers, while focused) | `space` (`Select && !Input`), `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down`, `escape` | `Confirm` (opens the menu, or picks the highlighted row), `SelectUp` / `SelectDown`, `Cancel`, which closes an open menu and stops there, and propagates while it is closed |
 | `List` (an open picker's menu, which takes the focus) | `escape`, `enter`, `ctrl-enter` (`cmd-enter` on macOS), `up`, `down` | the list's own; its `Cancel` propagates to the `Select`'s, which closes the menu only |
-| `PopupMenu` (an open right-click menu, which takes the focus) | `enter`, `escape`, `up`, `down`, `left`, `right` | `Confirm` (runs the highlighted item, then dismisses), `Cancel` (dismisses), `SelectUp` / `SelectDown`; `SelectLeft` / `SelectRight` propagate in a menu without submenus, so they reach `Riffle::key_down` |
+| `PopupMenu` (an open right-click menu, which takes the focus) | `enter`, `escape`, `up`, `down`, `left`, `right` | `Confirm` (runs the highlighted item, then dismisses), `Cancel` (dismisses), `SelectUp` / `SelectDown`; `SelectLeft` / `SelectRight` propagate in a menu without submenus, so they reach `Handpic::key_down` |
 | `Popover`, `Tree`, `TextView`, ... | their own | inert until such an element is drawn |
 
 - Rule: the inspector binding is left in place. In a debug build
@@ -232,7 +232,7 @@ key-down listener, so a binding that matches takes the key from
 ### `Root` wraps the window's content (Measured)
 
 `main` opens the window with `gpui_kit::open_window`, whose build closure
-returns the app's `Riffle` entity (it takes the focus and starts as before);
+returns the app's `Handpic` entity (it takes the focus and starts as before);
 `open_window` wraps it in `gpui_base::Root` (the type `gpui_component::Root`
 re-exports) as the window's root view and hands back the window and the
 view. The `WindowOptions` pass through untouched. Nothing reads the window's root by its type:
@@ -419,13 +419,13 @@ toplevel's `app_id` to the `.desktop` file's base name, so the file is
 `crates/native/packaging/linux/dev.minodisk.handpic.desktop`. On X11,
 `gpui-pre-linux`'s `set_app_id` writes `WM_CLASS` as `IDENTIFIER` for both the
 instance and the class, so `StartupWMClass` is `IDENTIFIER` too. The default
-`set_app_id` is a no-op on Windows and macOS. `Exec=riffle-native` is static,
+`set_app_id` is a no-op on Windows and macOS. `Exec=handpic` is static,
 so `~/.local/bin` must be on the session's `PATH` for the install task's copy;
 the packaged copies' `Exec` is absolute (see "The `Package` workflow builds
 the distributables").
 
 `mise run native:install:linux` builds the release binary and installs it to
-`~/.local/bin/riffle-native`, the `.desktop` file to
+`~/.local/bin/handpic`, the `.desktop` file to
 `~/.local/share/applications/` and `crates/app/icons/128x128@2x.png` (256 x
 256 px) to `~/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`.
 
@@ -439,7 +439,7 @@ the distributables").
 
 `mise run native:bundle:macos [profile]` (release by default) builds and lays
 out `crates/native/target/<profile>/Handpic.app` with the checked-in
-`crates/native/packaging/macos/Info.plist`, `Contents/MacOS/riffle-native` and
+`crates/native/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
 `crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
 version `tools/package/version.sh` prints into the copied `Info.plist`'s
 `CFBundleShortVersionString` and `CFBundleVersion` (`plutil -replace`; the
@@ -511,7 +511,7 @@ packages the built `target/release` binary with a script under
 - `linux.sh` (x86_64 only, needs `dpkg-dev`) writes three files under
   `crates/native/target/release`:
   - `Handpic-<version>-linux-x64.tar.gz`, one `Handpic/` folder with
-    `bin/riffle-native`, the checked-in desktop entry under
+    `bin/handpic`, the checked-in desktop entry under
     `share/applications/`, `crates/app/icons/128x128@2x.png` as
     `share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`, and
     `licenses/`;
@@ -521,10 +521,10 @@ packages the built `target/release` binary with a script under
     digest before anything changes, refuses an entry outside `Handpic/`, a
     link or a duplicate, and installs per user (Python 3, no root) into
     `native:install:linux`'s layout, the desktop entry's `Exec` rewritten to
-    the quoted absolute `~/.local/bin/riffle-native`;
+    the quoted absolute `~/.local/bin/handpic`;
   - `handpic_<version>_amd64.deb` (`Package: handpic`), built by `dpkg-deb
-    --root-owner-group --build` from `usr/lib/handpic/riffle-native`, the
-    desktop entry with `Exec=/usr/lib/handpic/riffle-native`, the icon, and
+    --root-owner-group --build` from `usr/lib/handpic/handpic`, the
+    desktop entry with `Exec=/usr/lib/handpic/handpic`, the icon, and
     the notices under `usr/share/doc/handpic/`, its `DEBIAN/control` from the
     `crates/native/packaging/linux/control` template (version, installed
     size, `Depends`).
@@ -569,7 +569,7 @@ packages the built `target/release` binary with a script under
   does not upgrade it in place; `Conflicts` / `Replaces` against `riffle` is
   left to sub-milestone 4's real-device check.
 - Rule: the one desktop entry is the checked-in
-  `dev.minodisk.handpic.desktop` with the bare `Exec=riffle-native`
+  `dev.minodisk.handpic.desktop` with the bare `Exec=handpic`
   (`datadir.rs` tests it, and `native:install:linux` installs it as is); the
   packaged copies get an absolute `Exec`, `linux.sh` writing the deb's and
   `install.sh` the tarball install's.
@@ -577,7 +577,7 @@ packages the built `target/release` binary with a script under
 - Rule: `native:bundle:macos` stays the one place that lays out
   `Handpic.app`; `macos.sh` only signs and packages it.
 - Rule: the executable's name is one `binary` variable per script
-  (`riffle-native` until the rename-to-handpic plan changes it).
+  (`handpic`).
 - Rule: the workflow's cargo cache is keyed by `matrix.os`, not `runner.os`:
   both macOS runners report `macOS` but build for different architectures.
 
@@ -598,9 +598,9 @@ every CI job) stays without it. An edit under `crates/native`, `crates/core` or
   spaces) reaches the app as one argument. A shell wrapper would re-split it.
 - Rule: on Windows the restart relinks cleanly (no `os error 5`) because
   watchexec's job termination takes the app down together with `cargo`.
-  `taskkill /F` on `watchexec.exe` leaves `cargo` and `riffle-native.exe`
+  `taskkill /F` on `watchexec.exe` leaves `cargo` and `handpic.exe`
   running. Pick processes by `Path` before killing them: the main checkout's own
-  `riffle-native.exe` may be running.
+  `handpic.exe` may be running.
 - Pending manual check: Ctrl+C in the terminal stops watchexec, `cargo` and
   the app, and the window repaints after a restart.
 
@@ -608,7 +608,7 @@ every CI job) stays without it. An edit under `crates/native`, `crates/core` or
 
 ### The backend names no event and no `AppHandle` (Inferred)
 
-`riffle-backend` serves both apps, so it reports through callbacks:
+`handpic-backend` serves both apps, so it reports through callbacks:
 `watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
 take the `&Watch`. Each app's own thin module owns the event name and payload;
 in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
@@ -643,14 +643,14 @@ The CPU and disk sampler and the AI model's state follow the same seam.
 `impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
 (stopping needs no callback); the callback returns a `Result` so the warn-once
 on a failed report stays in the backend (`perf sample report failed: ...`,
-target `riffle_backend::perf`), and the Tauri wrapper is only
+target `handpic_backend::perf`), and the Tauri wrapper is only
 `app.emit("perf-sample", sample)`. `ai::Ai` is a cloneable `Arc` over the
 status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
 `Ai::new`, so the download thread holds a clone of the `Ai` itself and
 reports progress and the final state through that callback; `switch` also
 returns the state. The `on_state` callback returns nothing because the Tauri
 app always ignored `ai-state` emit errors. The download's and the server's
-`log` lines now sit under `riffle_backend::ai` / `riffle_backend::mcp`, not
+`log` lines now sit under `handpic_backend::ai` / `handpic_backend::mcp`, not
 `riffle_app::*`, so grep for the backend target. A native consumer takes these
 as they are rather than copying the Tauri wrapper. Source:
 `docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
@@ -665,7 +665,7 @@ as they are rather than copying the Tauri wrapper. Source:
 
 `crates/backend` is a member of the root workspace, and `crates/native`, a
 separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
-as it does `riffle-core`. A dependency added to the backend also lands in
+as it does `handpic-core`. A dependency added to the backend also lands in
 `crates/native/Cargo.lock`, and clippy lints the backend only from the root.
 
 - Rule: a backend change needs both workspaces checked. `mise run ci` runs
@@ -679,7 +679,7 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   the rest: the root workspace's other crates and the native tests a backend
   change can break. Neither full task is run locally as a gate.
 - Rule: `ci:local` never compiles `riffle-app` or its tests, so a change to a
-  public `riffle-core` / `riffle-backend` type (removing or renaming a field of
+  public `handpic-core` / `handpic-backend` type (removing or renaming a field of
   `rank::Frame`, `Cue`, an index row) can leave the Tauri crate broken while it
   passes. Also run `mise exec -- cargo check -p riffle-app --tests`. Removing
   `rank::Frame::eye_focus` broke `rank_dump_of_real_folders` in
@@ -688,8 +688,8 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   edit. Source:
   `docs/plans/_archived/20261115-full-eye-sharp-only/learnings.md`, Step 4.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
-  workspace to be safe. `cargo clippy -p` / `cargo test -p` of `riffle-core`,
-  `riffle-backend` or `riffle-cli` never compiles `tauri` or `riffle-app` (their
+  workspace to be safe. `cargo clippy -p` / `cargo test -p` of `handpic-core`,
+  `handpic-backend` or `handpic-cli` never compiles `tauri` or `riffle-app` (their
   graphs are 161 / 317 / 169 crates against 537 for `riffle-app`). The
   largest check's process-tree peak was 5.5 GB (the native test) and a cold
   `crates/core` change peaked at 3.3 GB, so the earlier out-of-memory kills
@@ -704,10 +704,10 @@ as it does `riffle-core`. A dependency added to the backend also lands in
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
 - Rule: `mise run native:check` runs clippy and tests but does not build
-  `riffle-native.exe`. Run `cargo build` before launching the exe, or you run a
-  stale binary. A still-running older `riffle-native.exe` locks
-  `target/debug/riffle-native.exe` and `cargo build` fails with `os error 5`;
-  rename the running exe aside (for example `riffle-native.stale-<pid>.exe`)
+  `handpic.exe`. Run `cargo build` before launching the exe, or you run a
+  stale binary. A still-running older `handpic.exe` locks
+  `target/debug/handpic.exe` and `cargo build` fails with `os error 5`;
+  rename the running exe aside (for example `handpic.stale-<pid>.exe`)
   instead of killing it, or ask the user to close it.
 - Rule: `cargo` is not on the Git Bash `PATH` in a worktree session. Prepend
   `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
@@ -744,7 +744,7 @@ keeps the opener plugin, the native app has GPUI's `App::reveal_path`.
 ### The settings live in the native app's own store, seeded once (Inferred)
 
 `settings.rs` reads the native app's settings store
-(`riffle_backend::store`): one SQLite file, one `settings` table of
+(`handpic_backend::store`): one SQLite file, one `settings` table of
 `key TEXT PRIMARY KEY` / `value TEXT NOT NULL` (JSON), WAL, the schema
 version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
@@ -832,7 +832,7 @@ writer connection, then `Writer::set`, the Tauri `set_rating`'s order, so a
 crash between the two leaves the row dirty. A failure of either puts the
 file's previous state back (while the folder is still open) and goes to the
 pane's notes, as does the writer's `on_error` through `Event::SidecarError`,
-one line per path. The writer is spawned in `Riffle::new` when the index
+one line per path. The writer is spawned in `Handpic::new` when the index
 opened; `Scan::prepare` hands `reconcile_of`'s dirty rows to `Writer::set_now`,
 so a judgment lost to a crash inside the 300 ms debounce is written on the
 next open (checked on the real exe by seeding a dirty row into a test index:
@@ -903,7 +903,7 @@ fill and a `--ring` border), so nothing maps paths per frame.
 
 ### The writer drains in `App::on_app_quit` (Measured)
 
-`Riffle::new` registers `App::on_app_quit` (the app-level one, holding an
+`Handpic::new` registers `App::on_app_quit` (the app-level one, holding an
 `Arc<Writer>`, not the entity-level `Context::on_app_quit`: closing the window
 can release the view before the quit handlers run) and calls
 `writer.flush(DRAIN_TIMEOUT)` inside the handler itself, returning a ready
@@ -1305,8 +1305,8 @@ the Tauri `sharpness` map is filled from `folder_entries` and patched by
   and have it expand placeholders (`%S%` for the JSON-escaped test folder)
   itself. Python run with `-I` ignores `PYTHONIOENCODING`; add `-X utf8` to
   print Japanese preset names on a cp932 console.
-- Rule: stop a test instance of `riffle-native.exe` by the PID whose command
-  line names the scratch folder. `taskkill /IM riffle-native.exe` is refused by
+- Rule: stop a test instance of `handpic.exe` by the PID whose command
+  line names the scratch folder. `taskkill /IM handpic.exe` is refused by
   the permission classifier because it could kill the user's own instance.
 
 ### A folder change re-lists, never mid-scan (Measured)
@@ -1703,7 +1703,7 @@ and the tree's `folder` and `folder-open`, a path in none of them with
 holds; `settingsmodal.rs` is its pure model (the open state, the shortcut
 row capturing a key, `modal.ts`'s key rule, the pages' order and titles in
 `TABS`). It is shown over the whole window, not in a dialog
-(the user's choice, 2026-11-15): `Riffle::render` wraps its root `div` (the
+(the user's choice, 2026-11-15): `Handpic::render` wraps its root `div` (the
 one with the `Handpic` key context, the focus, the key listener and
 `on_drop`) in an outer full-size `div` and, while the modal is open, adds
 the view entity as a second child, in an `absolute` full-size `div`. The
@@ -2313,7 +2313,7 @@ file open for append cannot be truncated by `set_len` and a remove while the
 handle is open can leave the name pending deletion. The timestamp is a
 hand-written civil-from-days, not `chrono` / `time`, so the native lock does not
 grow (turning on the features a direct dependency needs could pull further
-crates in). `Riffle::start` destructures `Args` exhaustively, so a new flag
+crates in). `Handpic::start` destructures `Args` exhaustively, so a new flag
 needs a `name: _` there too. `main` installs it once the arguments
 are parsed and the backend's panic hook right after it. The `page` / `zoom`
 timing lines stay `println!` to stdout.
@@ -2489,8 +2489,8 @@ they overflow.
   from the `div`'s top, so the gutter is an empty band under the cells.
 - Rule: a drag or a track click reaches the strip only through the handle.
   The bar writes the offset (`set_offset`, kept as a positive request) and
-  notifies the current view, the `Riffle` entity under `Root`; the top of
-  `Riffle::render` `take`s it, once, and when `Strip::scroll_to` moves runs
+  notifies the current view, the `Handpic` entity under `Root`; the top of
+  `Handpic::render` `take`s it, once, and when `Strip::scroll_to` moves runs
   `strip_moved` as a wheel scroll does (the range's thumbnails released and
   requested, the scan's hot list, a `cx.notify()` that draws one more frame
   with nothing left to take). A `sync` is never a request.
@@ -2611,7 +2611,7 @@ Injecting keys with `keybd_event` needs the app window in the foreground for
 every key; in a long injected sequence most keys went missing once focus moved
 away. Re-assert and check the foreground before each key (skip the key
 otherwise), and pick the process by its path in this worktree, since another
-worktree's `riffle-native.exe` may be running or exiting. Report a skipped key
+worktree's `handpic.exe` may be running or exiting. Report a skipped key
 rather than counting it as a page. Held-key measurements also need an idle
 machine: another session's `cargo` build fails the gate, so redo the slot.
 
@@ -2784,7 +2784,7 @@ the `page` line and goes into `Summary`. A stale preview drawn on the way
 `progress.ts`'s `progressWidth` (0 while `total` is 0, never above 1), and
 `shown`, which picks the `(done, total)` the indicator shows when several
 operations run: a Move to Trash, Delete Permanently or trash redo run first
-(`Riffle.trashing`, the counts the pane's note is formatted from with
+(`Handpic.trashing`, the counts the pane's note is formatted from with
 `trash::progress_status`), then a folder operation's run, then the scan's
 running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
@@ -2891,7 +2891,7 @@ The window draws no OS title bar. `main()` opens it with
 `titlebar: Some(TitlebarOptions { title: Some("Handpic".into()),
 ..TitleBar::title_bar_options() })`, so the client area covers the caption
 (`appears_transparent`) and the macOS traffic lights sit at (9, 9).
-`impl Render for Riffle` puts `TitleBar::new()` first in the root's
+`impl Render for Handpic` puts `TitleBar::new()` first in the root's
 `flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
 every platform, so the main area below it shrinks by itself. Its first child
 is an `h_flex().gap_2().text_sm()` of `img(icons::APP)` at 16 px and the
@@ -2903,7 +2903,7 @@ margin and the tooltip. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
 window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
-- Rule: the open folder's name (`context::folder_title` of `Riffle::dir`:
+- Rule: the open folder's name (`context::folder_title` of `Handpic::dir`:
   the path's last component, else, for a root such as `C:\` or `/`, its
   `shown_path`) is centered across the whole window, not only `TitleBar`'s
   inner row, which starts after the left padding and ends before the window
@@ -2943,7 +2943,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   in place, a drag on the rest of the bar moves it, the click opens the
   settings and the tooltip shows on hover. Source:
   [the plan](../plans/_archived/20261117-native-title-bar-settings/plan.md), Step 1.
-- Rule: the gear opens the settings through `Riffle::open_settings`, the one
+- Rule: the gear opens the settings through `Handpic::open_settings`, the one
   method `key_down`'s `settingsmodal::OPEN_KEY` arm calls too; it applies the
   refusals itself (the settings already open, a trash or folder-operation
   dialog open, a folder flow under way), since a click does not pass through
@@ -3288,7 +3288,7 @@ strip needed one because `uniform_list` is vertical only.
   open is never overwritten by the first's late listing, nor left with the
   first folder's watcher.
 - Rule: listings settle in order. Each one's background task first awaits the
-  previous listing's `settled` signal (a oneshot kept on `Riffle`), then stops
+  previous listing's `settled` signal (a oneshot kept on `Handpic`), then stops
   the previous scan and joins the launch's eviction, then signals its own, so a
   second open never reconciles or scans while an earlier listing is still
   stopping the old scan or the eviction is still deleting rows.
@@ -3463,8 +3463,8 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   non-boolean entry, or a value that is not an object, means shown.
 - Rule: under `--auto` every pane starts shown whatever the store holds, and
   nothing is written to `panels` (`remember_panels` off, set in `main` on the
-  value `Riffle::new` returns, inside the `cx.new` closure). It is not a
-  parameter because `Riffle::new` already takes seven arguments, and an eighth
+  value `Handpic::new` returns, inside the `cx.new` closure). It is not a
+  parameter because `Handpic::new` already takes seven arguments, and an eighth
   trips `clippy::too_many_arguments` (`-D warnings` in CI). Another
   launch-only suppression flag has the same choice: set a field after `new`, or
   add `#[allow]` as `tauri-app.md` does for `Writer::set`.
@@ -3597,7 +3597,7 @@ face icon keep their sizes.
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
-The view holds one `riffle_backend::treewatch::TreeWatch` whose callback sends
+The view holds one `handpic_backend::treewatch::TreeWatch` whose callback sends
 `Event::TreeChanged(path)` (the tree's spelling) into the scan's channel.
 `tree_changed`, which every change of the tree runs, computes
 `Tree::watched_folders` and, when it differs from the set last handed over,
@@ -3975,7 +3975,7 @@ reason and running note sit in the footer above the `primary()` or
   focus trap over the enabled buttons.
 
 `folderops.rs` is a child module of `main.rs` holding `FolderOps` (the flow
-under way and the open dialog) and an `impl Riffle` block: a child module
+under way and the open dialog) and an `impl Handpic` block: a child module
 reaches the view's private fields, methods and constants, so the
 operations need no entity of their own and `main.rs` gains only the fields
 (the flows, the `Modal`, the buttons' focus), the menu arm, the key guard,
@@ -4073,7 +4073,7 @@ the watcher back when the rename fails or the split leaves the folder.
   everything under it with their state, the tree's open row and cursor
   follow (`tree::rebase` over the tree's spelling), the trash runs of both
   histories follow (`Undo::map_trash_dirs` over the canonical paths, which is
-  how a run's `dirs` and `Riffle::dir` are spelled; the backend's
+  how a run's `dirs` and `Handpic::dir` are spelled; the backend's
   `Runs::rename_dir` already moved the recorded runs), and the tree's watched
   set is handed over afresh. When the open folder is the renamed one or under
   it, it is reopened under the new path as a tree click opens it; the
@@ -4316,13 +4316,13 @@ See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md
   WM_KEYDOWN / WM_CHAR / WM_KEYUP for `F` to the process's `MainWindowHandle`.
   `AppActivate` + `SendKeys` does not reach the app and may type into whatever
   window has focus, so never use it. Close a run by PID with
-  `CloseMainWindow`; never for every `riffle-native` process, because other
-  sessions run their own. `Get-Process riffle-native` returns every leftover
+  `CloseMainWindow`; never for every `handpic` process, because other
+  sessions run their own. `Get-Process handpic` returns every leftover
   instance, so take the one you started by PID (`Select-Object -First 1` only
   when you know it is the only one), or the `IntPtr` argument becomes an
   array. `.ps1` files are blocked by the execution policy here, so pass the
   script with `-Command`.
-- Rule: other sessions' `mise run ci`, `cargo` and `riffle-native` processes
+- Rule: other sessions' `mise run ci`, `cargo` and `handpic` processes
   spoil runs (17 of 25 B attempts and 1 of 11 A attempts were discarded in the
   Step 6 session of
   `docs/plans/_archived/20261110-gpui-focus-marks/learnings.md`). Wait for two

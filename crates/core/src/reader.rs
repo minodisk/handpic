@@ -207,7 +207,7 @@ mod tests {
 
     fn temp_file(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let path =
-            std::env::temp_dir().join(format!("riffle-reader-{}-{name}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-reader-{}-{name}", std::process::id()));
         std::fs::write(&path, bytes).unwrap();
         path
     }
@@ -780,12 +780,12 @@ mod tests {
     }
 
     /// The HEVC of a CR3 shot with HDR PQ on, decoded to a JPEG, holds to the
-    /// same. No HEVC stream is synthesized here, so set `RIFFLE_HEVC_CR3` to
+    /// same. No HEVC stream is synthesized here, so set `HANDPIC_HEVC_CR3` to
     /// such a file, then run with `--ignored`.
     #[test]
     #[ignore]
     fn an_hdr_pq_cr3_hands_out_jpegs_without_an_exif_rotation() {
-        let path = std::env::var("RIFFLE_HEVC_CR3").expect("RIFFLE_HEVC_CR3");
+        let path = std::env::var("HANDPIC_HEVC_CR3").expect("HANDPIC_HEVC_CR3");
         let path = Path::new(&path);
         let a = read_metadata(path).unwrap();
         assert!(a.hevc);

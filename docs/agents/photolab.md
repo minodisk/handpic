@@ -39,7 +39,7 @@ EXIF Orientation (IFD0 tag 0x0112) as `Orientation = n,` between `Name` and
 `Rating`: in the fresh template, and, for an item lacking the key, at the
 start of the `Rating` line (before the item's closing brace without one). The
 sidecar writer takes the value from the index's `files.orientation` row, or
-from `riffle_core::reader::read_metadata` when the file has no row yet, with
+from `handpic_core::reader::read_metadata` when the file has no row yet, with
 the index lock released before the file I/O; when neither yields one it
 writes no line at all. An existing `Orientation` is never touched.
 

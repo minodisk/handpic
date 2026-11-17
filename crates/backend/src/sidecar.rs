@@ -19,9 +19,9 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
-use riffle_core::copy::TEMP_SUFFIX;
-use riffle_core::xmp::LabelNames;
-use riffle_core::{dop, xmp, Flag};
+use handpic_core::copy::TEMP_SUFFIX;
+use handpic_core::xmp::LabelNames;
+use handpic_core::{dop, xmp, Flag};
 use serde_json::Value;
 
 use crate::index::{self, lock, DirtyRow, Index, ParsedSidecar, SidecarStat};
@@ -172,7 +172,7 @@ impl SidecarFormat {
             Self::Xmp => Path::new(&name).extension().is_some_and(|x| x == "xmp"),
             Self::Dop => name
                 .strip_suffix(".dop")
-                .is_some_and(|raw| riffle_core::scan::is_raw_file(Path::new(raw))),
+                .is_some_and(|raw| handpic_core::scan::is_raw_file(Path::new(raw))),
             Self::Both => Self::Xmp.matches(&name) || Self::Dop.matches(&name),
         }
     }
@@ -359,7 +359,7 @@ fn raw_name(arw: &Path) -> String {
 fn raw_orientation(index: &Arc<Mutex<Index>>, arw: &Path) -> Option<u16> {
     match lock(index).orientation(&arw.to_string_lossy()) {
         Ok(Some(Some(orientation))) => Some(orientation),
-        Ok(Some(None)) | Ok(None) | Err(_) => riffle_core::reader::read_metadata(arw)
+        Ok(Some(None)) | Ok(None) | Err(_) => handpic_core::reader::read_metadata(arw)
             .ok()
             .map(|m| m.orientation),
     }
@@ -891,12 +891,12 @@ mod tests {
 
     /// The names of Lightroom's Japanese default color label set.
     fn japanese() -> LabelNames {
-        riffle_core::i18n::preset("ja").unwrap().names.clone()
+        handpic_core::i18n::preset("ja").unwrap().names.clone()
     }
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir =
-            std::env::temp_dir().join(format!("riffle-sidecar-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-sidecar-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir

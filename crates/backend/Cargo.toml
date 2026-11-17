@@ -1,10 +1,10 @@
 [package]
-name = "riffle-backend"
+name = "handpic-backend"
 version = "1.10.0"
 edition = "2021"
 
 [dependencies]
-riffle-core = { path = "../core" }
+handpic-core = { path = "../core" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

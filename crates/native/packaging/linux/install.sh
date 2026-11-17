@@ -30,8 +30,8 @@ import sys
 import tarfile
 import tempfile
 
-# The executable's name; the rename-to-handpic plan changes it.
-binary_name = "riffle-native"
+# The executable's name.
+binary_name = "handpic"
 identifier = "dev.minodisk.handpic"
 top = "Handpic"
 

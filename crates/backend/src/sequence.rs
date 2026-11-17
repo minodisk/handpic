@@ -1,5 +1,5 @@
 //! `Sequence JPEG Timestamps…`: the preview and the run of
-//! `riffle_core::sequence` on a folder of exported JPEGs.
+//! `handpic_core::sequence` on a folder of exported JPEGs.
 //!
 //! JPEGs are not indexed, so nothing here touches the index. The output is
 //! written to a sibling of the folder.
@@ -44,8 +44,8 @@ fn failure(path: &Path, message: &str) -> Failure {
 
 /// The times a run on `dir` would write, without touching the disk.
 pub fn preview(dir: &Path) -> Result<Preview, String> {
-    let out = riffle_core::sequence::output_dir(dir)?;
-    let summary = riffle_core::sequence::run(dir, true, &AtomicBool::new(false), |_, _, _, _| {})?;
+    let out = handpic_core::sequence::output_dir(dir)?;
+    let summary = handpic_core::sequence::run(dir, true, &AtomicBool::new(false), |_, _, _, _| {})?;
     let mut rows = Vec::new();
     let mut failed = Vec::new();
     for (path, result) in &summary.results {
@@ -84,10 +84,10 @@ pub struct Ran {
 /// JPEGs, an output folder that cannot be rebuilt) is the one failure, keyed
 /// by `dir`.
 pub fn run(dir: &Path, cancel: &AtomicBool, progress: impl Fn(usize, usize) + Sync) -> Ran {
-    let output_dir = riffle_core::sequence::output_dir(dir)
+    let output_dir = handpic_core::sequence::output_dir(dir)
         .map(|out| out.to_string_lossy().into_owned())
         .unwrap_or_default();
-    match riffle_core::sequence::run(dir, false, cancel, |done, total, _, _| {
+    match handpic_core::sequence::run(dir, false, cancel, |done, total, _, _| {
         progress(done, total)
     }) {
         Ok(summary) => {
@@ -123,7 +123,7 @@ mod tests {
 
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir()
-            .join(format!("riffle-sequence-{name}-{}", std::process::id()))
+            .join(format!("handpic-sequence-{name}-{}", std::process::id()))
             .join("export");
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
         std::fs::create_dir_all(&dir).unwrap();

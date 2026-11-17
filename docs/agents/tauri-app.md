@@ -333,7 +333,7 @@ process, and `catch_unwind` could not stop it.
   `catch_unwind`. `decode_focus_crop` / `decode_crop` now return `Err` with the
   text (e.g. `libjpeg fatal error: Not a JPEG file: starts with 0x3c 0x44`), so
   the app's `focus_crop` command reports the error instead of exiting, and
-  callers no longer need the `decode_rgb` pre-check `riffle-cli check` used to
+  callers no longer need the `decode_rgb` pre-check `handpic-cli check` used to
   run.
 - Unwinding through libjpeg's C frames needs `mozjpeg-sys`'s `unwinding`
   feature; `crates/core/Cargo.toml` names it explicitly.
@@ -1056,7 +1056,7 @@ that already have the column, and the `ALTER TABLE` fails.
 retried.
 
 - Bump `EXTRACTOR_VERSION` (`crates/backend/src/index.rs`) on any change to what
-  `riffle_core::scan::extract` produces: ARW/DNG parsing or embedded JPEG tier
+  `handpic_core::scan::extract` produces: ARW/DNG parsing or embedded JPEG tier
   selection (`crates/core/src/arw.rs`), which preview bytes are read
   (`crates/core/src/reader.rs`), thumbnail generation (`crates/core/src/decode.rs`,
   `crates/core/src/scan.rs`). The first pass computes the thumbnail and the
@@ -1077,7 +1077,7 @@ retried.
   until the rescan the bump forces.
 - The second pass has its own version, `FACES_VERSION`, stored as
   `files.faces_extractor`: bump it, not `EXTRACTOR_VERSION`, on a change to
-  what `riffle_core::scan::extract_analysis` produces, the face cue (the face
+  what `handpic_core::scan::extract_analysis` produces, the face cue (the face
   choice, the face mesh, the detector: `crates/core/src/candidate.rs`,
   `eyes.rs`, `faces.rs`) or the sharpness
   score (`sharpness::score_preview`, `crates/core/src/sharpness.rs`, or what
@@ -1094,7 +1094,7 @@ retried.
   whole preview (`eyes::judged_face`); `9` added the latter, so a frame with
   no trusted AF point now fills every one of those columns too. That branch
   costs one extra full-size RGB decode, the luma and the mesh per faced
-  file, about +28 ms in release (`riffle-cli features`, `analysis_ms`); a
+  file, about +28 ms in release (`handpic-cli features`, `analysis_ms`); a
   file with no face pays nothing, because `whole_image_cue` returns
   `Cue::unknown()` before any decode. The face-free frame itself stays
   Neutral: the sharpness score did not separate picks from non-picks
@@ -1377,7 +1377,7 @@ every press of `Clear Cache` after the first folder open.
 
 ### The scan pool's priority levels, and `set_scan_focus` drops what it cannot apply (Inferred)
 
-`riffle_core::scan::for_each_path` builds its rayon pool with a
+`handpic_core::scan::for_each_path` builds its rayon pool with a
 `spawn_handler` that lowers each worker's OS priority once, before rayon's
 `run`. `run_scan` passes `Priority::BelowNormal` (Windows
 `THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice of at
@@ -1433,7 +1433,7 @@ least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
 
 ### The scan's reads are capped and yield to the preview's at the disk (Measured)
 
-Every scan read goes through one process-wide `riffle_core::scan::ReadSlots`
+Every scan read goes through one process-wide `handpic_core::scan::ReadSlots`
 (`AppReadSlots`, app state): at most `READ_SLOTS` (2) workers are inside a
 file read at once, on any of the three passes, while decoding and the models
 stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`,
@@ -1494,7 +1494,7 @@ so `docs/humans/performance.md`'s numbers stay comparable.
 
 `start_scan`'s task runs a third pass, `run_embed_pass`, after `faces-done`.
 It embeds each RAW file's preview with the SigLIP 2 model
-(`riffle_core::embed`) into the `embeddings` table and reports
+(`handpic_core::embed`) into the `embeddings` table and reports
 `embed-progress` (`done`, `total`), then `embed-done`. It shares the scan's
 cancel flag and `ScanFocus`, at `Priority::Lowest`, on `embed_threads()`. It
 is skipped, with `embed-done` emitted at once, when `aiEnabled` is off, the
@@ -1545,7 +1545,7 @@ JPEG-only (view-only) folder never lists anything.
   on the whole 378 MB.
 - **Genres are derived, not stored.** `genres_of(dir)` reads the folder's
   valid embeddings (`Index::embeddings`) and scores each with
-  `riffle_core::genre::genres_of` on every call, so a new genre data file
+  `handpic_core::genre::genres_of` on every call, so a new genre data file
   never needs a rescan; files without a valid embedding are absent and the
   frontend counts them as `Unknown`. The main window calls it after each
   `folder_entries` refresh, on `embed-done`, and on `embed-progress` while
@@ -1570,7 +1570,7 @@ JPEG-only (view-only) folder never lists anything.
   `ranking_of(dir)` reads `Index::rank_rows` (every `files` row of the
   folder with its flag, capture time, the pass-2 values when the row is at
   `FACES_VERSION`, and the valid embedding) and ranks each burst with
-  `riffle_core::rank::rank` on every call. `rank.rs` forms the bursts as
+  `handpic_core::rank::rank` on every call. `rank.rs` forms the bursts as
   `burst.ts` `groupBursts` does (capture order, 1000 ms gap), so the
   frontend's burst ids and the backend's bursts agree; the `recommended`
   sort orders by the frontend's burst id, then the score. The shared
@@ -1654,14 +1654,14 @@ JPEG-only (view-only) folder never lists anything.
   pass), 22 ms on 11 (56 s) and 15 ms on 6 (70 s). Memory does not set the
   count: the model's load sets the process peak (745-812 MB in that run),
   and the workers' buffers add about 220 MB from 1 to 24 threads
-  (`riffle-cli embed`). The harness is the ignored test
+  (`handpic-cli embed`). The harness is the ignored test
   `embed_pass_on_a_real_folder` in `commands.rs`.
 - Source: [image-embeddings learnings](../plans/_archived/20261012-image-embeddings/learnings.md),
   Step 3.
 
 ### `focus_crop`'s header carries the full JPEG size (Hit)
 
-`riffle_core::partial::Crop` carries the full JPEG's `image_width`/
+`handpic_core::partial::Crop` carries the full JPEG's `image_width`/
 `image_height`. The `focus_crop` header encodes them as two `u16`s at offsets
 28/30 under kind tag 5 (`CROP_KIND_RGBA_V3`); the next header change takes tag
 6. The zoom placeholder (`crates/app/ui/src/zoom.ts`) falls back to the sensor
@@ -2115,9 +2115,9 @@ folder changed" event has to pick the right one.
 
 ### The backend reports through callbacks; the app owns the events (Inferred)
 
-`riffle-backend` also serves `crates/native`, so it never names a Tauri event or
+`handpic-backend` also serves `crates/native`, so it never names a Tauri event or
 an `AppHandle`. A module of the app wraps it: `crates/app/src/watch.rs` hands
-`riffle_backend::watch::Watch::spawn` a closure that emits `folder-changed`
+`handpic_backend::watch::Watch::spawn` a closure that emits `folder-changed`
 `{dir}`, and its `set` / `release_under` read `app.state::<Watch>()` so the call
 sites keep passing the handle.
 
@@ -2133,7 +2133,7 @@ is still `openDir`. Two things keep the app's own sidecar writes from feeding
 back into it:
 
 - `triggers()` drops an event whose paths are *all* sidecars (`*.xmp`,
-  `*.arw.dop`, either format, case-insensitive) or `riffle_core::copy::TEMP_SUFFIX`
+  `*.arw.dop`, either format, case-insensitive) or `handpic_core::copy::TEMP_SUFFIX`
   temporaries, which is exactly what `sidecar::write` produces and what the
   import's copies produce (`<name>.handpic-tmp` in the date folder, renamed to
   `<name>` when complete). So a rating
@@ -2600,7 +2600,7 @@ casts `self` to it. Keep one `tsconfig.json` for both threads this way.
 ### The preview payload's JPEG is orientation-neutral by construction (Hit)
 
 The orientation in the `preview` payload header is the only rotation the
-frontend applies (`draw()` in `main.ts`). Every JPEG `riffle_core::reader`
+frontend applies (`draw()` in `main.ts`). Every JPEG `handpic_core::reader`
 hands out (`read_preview`, `read_full`) leaves through one exit that rewrites
 its Exif IFD0 Orientation to 1 in place (`jpeg::neutralize_orientation`), so
 no container can add a second rotation, and a parser added later is covered

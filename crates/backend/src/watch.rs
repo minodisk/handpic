@@ -16,8 +16,8 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use handpic_core::copy::TEMP_SUFFIX;
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
-use riffle_core::copy::TEMP_SUFFIX;
 
 use crate::sidecar::SidecarFormat;
 
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn release_drops_a_watch_on_the_folder_or_under_it_and_keeps_a_sibling() {
         let root =
-            std::env::temp_dir().join(format!("riffle-watch-release-{}", std::process::id()));
+            std::env::temp_dir().join(format!("handpic-watch-release-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("photos");
         std::fs::create_dir_all(&dir).unwrap();
@@ -285,8 +285,10 @@ mod tests {
 
     #[test]
     fn release_returns_the_watched_dir_and_owner() {
-        let root =
-            std::env::temp_dir().join(format!("riffle-watch-release-owner-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!(
+            "handpic-watch-release-owner-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("photos");
         std::fs::create_dir_all(&dir).unwrap();

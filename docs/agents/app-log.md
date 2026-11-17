@@ -51,7 +51,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 - The time is UTC (the plugin's default `TimezoneStrategy::UseUtc`), not the
   user's local time.
 - `target` is the Rust module path that logged the line: `riffle_app::commands`,
-  `riffle_backend::index`, `riffle_backend::diagnostics`, `riffle_app::diagnostics`, `riffle_app` (the
+  `handpic_backend::index`, `handpic_backend::diagnostics`, `riffle_app::diagnostics`, `riffle_app` (the
   frontend's timing lines), or a dependency such as
   `tauri_plugin_updater::updater`.
 - One record is one line, except a `panic:` record when a backtrace was
@@ -62,7 +62,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 - Release builds log `INFO` and above.
 - Debug builds (`mise run dev`) log `DEBUG` and above, which includes a lot
   of dependency noise (`tract_core::optim` writes thousands of lines while
-  the face model loads). Filter by target (`grep -E '\]\[riffle_(app|backend)'`) to read
+  the face model loads). Filter by target (`grep -E '\]\[(riffle_app|handpic_backend)'`) to read
   the app's own lines.
 
 ## Timing lines
@@ -70,7 +70,7 @@ happened before the deletion cannot be recovered; ask for a reproduction.
 Most `INFO` lines are timing lines, `<label>: key=value ... in <N>ms`: from
 the backend `open list`, `open entries`, `scan list`, `scan prepare`,
 `scan sidecars`, `scan reconcile` (`riffle_app::commands`) and `scan extract`,
-`scan faces` (`riffle_backend::index`), `import` (`riffle_app::import`, one line per run with its throughput), and from the frontend, through the
+`scan faces` (`handpic_backend::index`), `import` (`riffle_app::import`, one line per run with its throughput), and from the frontend, through the
 `log_timing` command, its timing lines (`page wait= read= ipc= post= worker= decode= draw= total= keypressToPixels= jpegKB= px=WxH scan=idle|1|2|3 source=read|prefetch`, the per-page preview timings by stage, with `wait` and `keypressToPixels` omitted for a switch no key timed and `source=prefetch` for a preview drawn from the decoded neighbours, whose stages other than `wait` and `draw` are 0.0ms; `zoom keypress`, `eyes` (the shown file's closed-eyes judgment: read, decode, detect, model, ipc) and the like) under target `riffle_app`.
 The frontend ones appear only while the settings modal's `Timing logs` item
 (development builds only) is on. They describe performance, not failures.
@@ -88,7 +88,7 @@ survived and reported in its own words (settings falling back to defaults,
 `sidecar write failed: path=<path> <message>`, an index cache that would not
 open). The three prefixed kinds follow.
 
-### `panic:` (`ERROR`, target `riffle_backend::diagnostics`)
+### `panic:` (`ERROR`, target `handpic_backend::diagnostics`)
 
 ```text
 panic: thread=<name or unnamed> location=<file>:<line>:<col> payload=<text>
@@ -157,7 +157,7 @@ broken assumption. A normal session produces none. The checks:
 | `data migration` | `setup` in `crates/app/src/main.rs`, reporting what `migrate::run` did before the logger existed | `pair=<old>→<new> <path>: <error>`, or `<path>: <error>` for a macOS leftover that could not be removed | a folder of an earlier identifier could not be moved whole; it stays, the app shows an error and exits without starting (so this line reaches only stderr), and the next launch resumes, an existing destination file winning. A macOS leftover failure is logged and does not stop the app |
 
 The two backend checks log under `riffle_app::commands` (the GPUI app's under
-`riffle_native::scan`); the frontend one comes through `log_frontend` under
+`handpic::scan`); the frontend one comes through `log_frontend` under
 `riffle_app::diagnostics`.
 
 The checks are not exhaustive, so no `invariant:` line proves nothing broke.
@@ -185,12 +185,12 @@ one file.
 - The line format, the UTC time and the 1 MB cap are the Tauri app's: the
   file starts anew when the next line would pass 1 MB, leaving no rotated
   copy. The size is tracked in memory from the file's length at startup.
-- Targets: `riffle_native` and its modules (`riffle_native::scan`,
-  `riffle_native::settings`, ...), `riffle_backend::*` (`scan extract`,
-  `scan faces`, `panic:` under `riffle_backend::diagnostics`), and GPUI's own
+- Targets: `handpic` and its modules (`handpic::scan`,
+  `handpic::settings`, ...), `handpic_backend::*` (`scan extract`,
+  `scan faces`, `panic:` under `handpic_backend::diagnostics`), and GPUI's own
   `INFO` lines (`gpui_windows::*`: the UI font, the GPU).
 - Levels: `INFO` and above in every build. `RUST_LOG=debug` (or `trace`) adds
-  `riffle_native`'s lines of that level only, not the backend's or GPUI's.
+  `handpic`'s lines of that level only, not the backend's or GPUI's.
 - `panic:` comes from the backend's hook, installed in `main` right after the
   logger and before the window opens, so a startup panic is logged too.
   `invariant:` comes from `invariant!` as in the Tauri app. There is no

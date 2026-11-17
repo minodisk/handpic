@@ -3733,15 +3733,15 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 - [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run native:package:windows`. Expect `crates/native/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
 - [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run native:package:linux`. Expect `crates/native/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
 
-### Native: `hdiutil create` in the Package workflow sometimes fails with "No space left on device"
+### Package: the macOS DMG step fails with `hdiutil: create failed - No space left on device`
 
-Run 44081604694 (the arm64 leg on `macos-latest`) failed in `tools/package/macos.sh` with `hdiutil: create failed - No space left on device` while copying the binary into the image. The same code passed in the run before and after, and re-running the job went green. `macos.sh` lets `hdiutil` size the image from `-srcfolder`. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`.
+Run 44081604694 (the arm64 leg on `macos-latest`) failed in `tools/package/macos.sh` with `hdiutil: create failed - No space left on device` while copying the binary into the image; re-running the job went green. It is not only a flake: Package run https://github.com/minodisk/handpic/actions/runs/44126142482 (dispatched for the remove-tauri plan's Step 1) failed the same way on both macOS jobs, twice, on a cached-build run of about 4 minutes, while the cold-build run 44121201413 on equivalent packaging files succeeded. `macos.sh` (around line 39) runs `hdiutil create -volname Handpic -srcfolder "${stage}" -ov -format UDZO "${dmg}"` with no `-size`, so `hdiutil` sizes the image from `-srcfolder` and the auto-sized image is too small. Plans: `docs/plans/_archived/20261117-gpui-packaging/plan.md`, `docs/plans/20261118-remove-tauri/plan.md` (Step 1).
 
 Files: `tools/package/macos.sh`, `.github/workflows/package.yml`.
 
 #### TODO
 
-- [ ] Give `hdiutil create` headroom (for example `-size` from `du` plus a margin) or retry the call once, so a `Package` run is less flaky. Done when the DMG step no longer depends on `hdiutil`'s own sizing.
+- [ ] Give `hdiutil create` an explicit `-size` with headroom (from `du` of the stage plus a margin), or create a read-write image and `hdiutil convert` it to UDZO. Done when a `Package` run with a warm cache produces both DMGs.
 
 ### Native: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
 

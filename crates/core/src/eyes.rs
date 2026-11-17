@@ -16,7 +16,7 @@
 //! faces of `docs/plans/20261007-closed-eyes-detection/eyes-truth.md`
 //! (2026-10-07, 253 faces with an open or closed label, 57 closed): face AUC
 //! 0.974. A change to the crop, the resize or the points is a new model:
-//! re-validate it with `riffle-cli eyes` on those faces.
+//! re-validate it with `handpic-cli eyes` on those faces.
 
 use std::io::Cursor;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -692,12 +692,12 @@ mod tests {
         assert_eq!(v[v.len() - 3..], [1.0, 0.2, 0.0]);
     }
 
-    /// Set `RIFFLE_FACE_JPEG` to an upright JPEG with one clear face, then
+    /// Set `HANDPIC_FACE_JPEG` to an upright JPEG with one clear face, then
     /// run with `--ignored`.
     #[test]
     #[ignore]
     fn judges_a_face_in_a_real_image() {
-        let path = std::env::var("RIFFLE_FACE_JPEG").expect("RIFFLE_FACE_JPEG");
+        let path = std::env::var("HANDPIC_FACE_JPEG").expect("HANDPIC_FACE_JPEG");
         let jpeg = std::fs::read(path).unwrap();
         let (rgb, w, h) = crate::decode::decode_rgb(&jpeg).unwrap();
         let face = crate::faces::detect(&rgb, w, h).unwrap()[0];

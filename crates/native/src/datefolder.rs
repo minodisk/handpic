@@ -3,7 +3,7 @@
 //! port of the Tauri app's `datefolder.ts`; the window runs the backend's
 //! `datefolder` and `rename`.
 
-use riffle_backend::datefolder::{Preview, Split};
+use handpic_backend::datefolder::{Preview, Split};
 
 /// The operation's name, the dialog's title.
 pub const LABEL: &str = "Rename by Capture Date";
@@ -212,8 +212,8 @@ impl DateFolderFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use riffle_backend::datefolder::{Moved, Target};
-    use riffle_backend::trash::Failure;
+    use handpic_backend::datefolder::{Moved, Target};
+    use handpic_backend::trash::Failure;
 
     fn target(name: &str, count: usize) -> Target {
         Target {
@@ -468,11 +468,11 @@ mod watch_release {
     use std::sync::mpsc;
     use std::time::Duration;
 
-    use riffle_backend::datefolder::{plan, split_folder};
-    use riffle_backend::rename::{Context, rename_folder};
-    use riffle_backend::trash::Runs;
-    use riffle_backend::treewatch::TreeWatch;
-    use riffle_backend::watch::{self, Watch};
+    use handpic_backend::datefolder::{plan, split_folder};
+    use handpic_backend::rename::{Context, rename_folder};
+    use handpic_backend::trash::Runs;
+    use handpic_backend::treewatch::TreeWatch;
+    use handpic_backend::watch::{self, Watch};
 
     fn s(path: &Path) -> String {
         path.to_string_lossy().into_owned()

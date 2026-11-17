@@ -1,6 +1,6 @@
 use std::{ffi::OsString, path::PathBuf};
 
-pub const USAGE: &str = "usage: riffle-native [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>] [--mcp-port N] [--no-prefetch]";
+pub const USAGE: &str = "usage: handpic [<folder>] [--auto N] [--size WxH] [--max N] [--index <path>] [--settings <path>] [--import-settings <path>] [--log <path>] [--mcp-port N] [--no-prefetch]";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {

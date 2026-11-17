@@ -898,12 +898,12 @@ mod tests {
         assert!(d.faces.is_empty() && d.point.is_none());
     }
 
-    /// Set `RIFFLE_FACE_JPEG` to a JPEG with one clear face, then run with
+    /// Set `HANDPIC_FACE_JPEG` to a JPEG with one clear face, then run with
     /// `--ignored`.
     #[test]
     #[ignore]
     fn detects_a_face_in_a_real_image() {
-        let path = std::env::var("RIFFLE_FACE_JPEG").expect("RIFFLE_FACE_JPEG");
+        let path = std::env::var("HANDPIC_FACE_JPEG").expect("HANDPIC_FACE_JPEG");
         let jpeg = std::fs::read(path).unwrap();
         let (rgb, w, h) = crate::decode::decode_rgb(&jpeg).unwrap();
         let faces = detect(&rgb, w, h).unwrap();

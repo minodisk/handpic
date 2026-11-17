@@ -38,6 +38,38 @@
   trigger, which now dispatches no job (the `release-please` job runs only on
   a push).
 
+## Step 2
+
+- The native crate is bin-only, so its crate name, and with it its `log`
+  target and `CARGO_CRATE_NAME` (the logger's own-lines filter), comes from
+  `[[bin]].name`, not from the package: with the package `handpic-native`
+  and the binary `handpic`, the target is `handpic::scan`, not
+  `handpic_native::scan`. `logger.rs`'s test line and `app-log.md` say
+  `handpic`.
+- The new crate name `handpic` is a string prefix of `handpic_backend` and
+  `handpic_core`, so the old `starts_with(CARGO_CRATE_NAME)` filter let the
+  backend's debug lines through under `RUST_LOG=debug` (review round 1).
+  `logger.rs`'s `is_own` now matches the target exactly or as a `handpic::`
+  module path, and a unit test keeps `handpic::scan` and drops
+  `handpic_backend::photolab`.
+- `datadir.rs`'s packaging tests compare `Info.plist` and the `.desktop`
+  file against `env!("CARGO_BIN_NAME")`, so they needed no edit; only the two
+  packaging files did.
+- `cargo metadata --offline` in the root and in `crates/native` was enough to
+  rewrite both `Cargo.lock`s for the renamed path packages; no dependency
+  version moved.
+- Kept on purpose beyond the plan's list: the `riffle_app` / `riffle-app`
+  names in `docs/agents/app-log.md`, `native-app.md`, `tauri-app.md` and
+  `tract-onnx-inference.md`. They name the removed Tauri crate as history or
+  in Tauri-only rules that Step 4 rewrites or deletes; renaming them would
+  invent a `handpic-app` that never existed. Also `native-app.md`'s
+  `com.minodisk.riffle.native` and the v1.10.0 deb's `Package: riffle`
+  (history).
+- `todo.md` had an item on the same `hdiutil` failure ("sometimes fails",
+  run 44081604694); it was rewritten in place with the warm-cache evidence of
+  run 44126142482 and the new Done-when rather than added as a duplicate. No
+  `todo.md` item was closed by this step alone.
+
 ## Deferred issues (todo candidates)
 
 - **Pending check: a `Package` run dispatched on the branch.** Step 1's
@@ -57,3 +89,20 @@
   and friends; the PR's `test (ubuntu-latest)` check confirms that
   `riffle-core`, `riffle-backend` and `riffle-cli` build without them. Basis:
   the plan's `ci.yml` approach. File: `.github/workflows/ci.yml`.
+- **`todo.md` still names the old binary, CLI and env vars in its
+  actionable steps.** Step 2 renamed the native binary to `handpic`
+  (`handpic.exe`), the CLI to `handpic-cli`, the view type to `Handpic` and
+  the `RIFFLE_*` env vars to `HANDPIC_*`, but `todo.md` is outside Step 2's
+  grep and was left alone: its TODO lines still say `riffle-native.exe`,
+  `target\debug\riffle-native.exe`, `riffle-cli`, `[riffle_native][DEBUG]`
+  (now `[handpic][DEBUG]`), `RIFFLE_DETECTOR_*` and `Riffle::`. Step 4's
+  `todo.md` sweep should rename them in the steps a reader would run, keeping
+  history lines. Basis: Step 2's rename. File: `todo.md`.
+- **Pending check: a `Package` run dispatched on the Step 2 branch.** Step
+  2's Done-when asks for it to be green with the binary renamed to `handpic`
+  (`Contents/MacOS/handpic`, `handpic.exe` in the setup and the ZIP,
+  `bin/handpic` and `/usr/lib/handpic/handpic` on Linux). The macOS legs may
+  hit the `hdiutil` no-space failure the rewritten `todo.md` item tracks,
+  which is not caused by the rename. The step's checkbox was ticked on the
+  locally checkable criteria. Files: `.github/workflows/package.yml`,
+  `tools/package/*.sh`, `crates/native/packaging/**`, `mise.toml`.
