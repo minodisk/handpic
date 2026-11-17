@@ -1213,7 +1213,9 @@ impl Companion {
         `notes` and `errors`, and the `operation` under way, else the last one to end (its \
         `name`, such as `Move to Trash` or `Undo Move to Trash`, its `state`: \
         `awaiting_confirmation` in Handpic's dialog, `held_for_scan`, `running` with `done` / \
-        `total`, `finished` or `failed`, and the `message` it ended with). A held operation dropped \n        before it ran (by a folder open, a later request or a dialog open at the scan's end) \n        is `failed` with a `dropped: ...` message and moved nothing."
+        `total`, `finished` or `failed`, and the `message` it ended with). A held operation dropped \
+        before it ran (by a folder open, a later request or a dialog open at the scan's end) \
+        is `failed` with a `dropped: ...` message and moved nothing."
     )]
     async fn get_status(&self) -> CallToolResult {
         self.view_call("get_status").await

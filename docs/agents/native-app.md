@@ -885,9 +885,9 @@ the gate holds (`held_for_scan`, by its label), the run, undo or redo out
 else the last one to come back (`last_op`, `finished` or `failed` with the
 step note `record_op` copies; a held run, undo or redo dropped before it ran is
 recorded `failed` by `record_dropped` with a `dropped: <reason>` message and
-moved nothing, from its three drop sites: a folder open's `gate.discard`, a
-dialog open when `finished` drains the gate, and an undo or redo `finished`
-could not run). `idle` is none of them under way; a finished
+moved nothing, from its four drop sites: a folder open's `gate.discard`, a
+dialog open when `finished` drains the gate, an undo or redo `finished` could
+not run, and `gate_request`'s replacement of a held one by a later request). `idle` is none of them under way; a finished
 or failed operation stays reported and does not hold `idle` off.
 
 `trash_photos` is the strip menu's `Move to Trash…` / `Delete Permanently…`
