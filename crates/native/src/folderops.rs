@@ -1780,7 +1780,8 @@ impl Riffle {
     /// `Rename…`, or a slow click: the row's name turns into a text input
     /// holding its name (the pending one while a rename of it is held), or
     /// `filled` (an MCP client's name), selected whole and focused. A live
-    /// edit of another row is confirmed first.
+    /// edit is ended by its `implicit` decision first (confirmed when it is
+    /// the user's own, dropped when it holds a client's name).
     pub(crate) fn start_rename(
         &mut self,
         path: String,
@@ -1836,10 +1837,10 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The input's Enter or lost focus confirms, its Escape cancels. A focus
-    /// lost to another app does not: the edit waits for the window to come
-    /// back, as the Tauri editor's blur checks `document.hasFocus()`. After
-    /// Enter or Escape the tree has the keyboard again.
+    /// A lost focus ends the edit by `InlineRename::implicit` (`commit`), but
+    /// does nothing while the window is inactive: the edit waits for the
+    /// window to come back, as the Tauri editor's blur checks
+    /// `document.hasFocus()`.
     fn rename_event_blur(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
         if !window.is_window_active() {
             return;
@@ -1847,6 +1848,8 @@ impl Riffle {
         self.rename_event(commit, window, cx);
     }
 
+    /// The input's Enter confirms, its Escape cancels. After either the tree
+    /// has the keyboard again.
     fn rename_event(&mut self, commit: bool, window: &mut Window, cx: &mut Context<Self>) {
         if commit && !window.is_window_active() {
             return;
