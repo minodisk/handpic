@@ -1289,7 +1289,8 @@ impl Companion {
         `get_status`' `pending` holds it with an `id`, which a second call with that `id` and \
         `confirm: true` runs; otherwise Handpic's dialog asks the user, its content in \
         `get_status`' `operation.dialog`. Waits for a scan under way before it reads the \
-        preview; a run is refused while a listing or scan is under way. Use only when the user \
+        preview; a run is refused while a listing or scan is under way, its `pending` kept: \
+        confirm the same `id` again once `wait_for_idle` returns. Use only when the user \
         asks."
     )]
     async fn delete_sidecars(&self, Parameters(args): Parameters<FolderOpArgs>) -> CallToolResult {
