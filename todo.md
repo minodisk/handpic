@@ -3665,3 +3665,24 @@ Files: `crates/native/src/theme.rs` (`finish`, `apply`), `crates/native/src/main
 - [ ] On Windows, press on the strip's bar over its bottom edge and on the tree's bar over the rows' right 16 px. Expect the press to hit the bar, not a cell or row (the accepted trade-off). Note whether padding under the bars is wanted.
 - [ ] On Windows, look at the bar in Neutral dark, Neutral light and one vendored theme (e.g. Catppuccin Mocha), switching on the Appearance page and, in System mode, on an OS appearance change. Expect the bar's look to be acceptable in each.
 - [ ] On macOS and Linux, repeat the checks above.
+
+### Native: real-device checks of the strip's header row with Sort and Filter (native-strip-header)
+
+#### Background
+
+`native-strip-header` moved `Sort ▾` and `Filter ▾` of the GPUI app (`crates/native`) from the status row to a new 32 px header row on the strip's top edge. The resize handle now sits on the header's top edge. The status row is pinned to 30 px (`STATUS_ROW_HEIGHT`), and the popover's height cap is `menu_max_height` less the strip pane's height. `stripheight::dragged` takes the pane's wanted height and takes `HEADER` off itself. `stripHeight` still means the cells' area height. CI, the `stripheight.rs` unit tests, the unchanged `companion.rs` / `pager.rs` tests and `mise run ci:local` cover the arithmetic and the build. The layout, the popover's placement and the drag were never seen in the running window. The step was ticked on the automated criteria only. macOS and Linux are covered by the CI build only. Plan: `docs/plans/_archived/20261117-native-strip-header/plan.md`.
+
+Files: `crates/native/src/main.rs` (`strip_header`, `status_row`, `menu_button`, `change_panels`), `crates/native/src/stripheight.rs` (`HEADER`, `dragged`), `docs/agents/native-app.md`.
+
+Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` on a folder. Expect the header on the strip's top edge with `Sort ▾` and `Filter ▾` at its right end. Each opens its menu upward from its button, a second press closes it, a press outside dismisses it and `escape` closes it. The filter button is lit while a filter is active, and the sort button is dimmed in a view-only (JPEG-only) folder.
+- [ ] On Windows, with a long filter menu (EXIF sections), the strip at its tallest and a short window, expect the menu to stay inside the window, to scroll, and its button to still toggle it (the popover is not snapped over the button). Expect the popover not to be clipped by the header.
+- [ ] On Windows, check the handle on the header's top edge: the resize cursor, the 1 px line, a drag down to `MIN` and up to `MAX`, and the preview stopping at `PREVIEW_MIN`. Expect a press on a button not to be taken by the handle's top 5 px band.
+- [ ] On Windows, at a stored `stripHeight` of 128, expect the cell box to be still 144 x 96.
+- [ ] On Windows, press, right-click and wheel-scroll on the header. Expect it neither to select a cell, open the strip's context menu nor scroll the strip.
+- [ ] On Windows, press `toggleStrip`. Expect the header to hide with the strip and an open menu to close. Expect the status row to keep its height (no jump when the progress circle appears or goes) and to show `n / shown (all)` while a filter is active.
+- [ ] On Windows, re-measure the preview canvas in the default 1600 x 1000 window (expected 1160 x 810, 32 px shorter than the old 842), the status row's height and the header's height. Replace the "inferred / not re-measured" notes in `docs/agents/native-app.md` (the preview canvas "inferred 32 px shorter", the pre-header 1160 x 842 measurements, the status row height "inferred from the sources") with the measured values.
+- [ ] On macOS and Linux, repeat the header, popover, handle, drag and `toggleStrip` checks above. CI only builds these platforms.

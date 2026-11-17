@@ -47,3 +47,8 @@
   - Re-measure the preview canvas in the default 1600 x 1000 window (expected
     1160 x 810, 32 px shorter than the old 842) and update the "not
     re-measured" notes in `docs/agents/native-app.md`.
+  - Done when: the checks are run and any failure fixed; the "inferred /
+    not re-measured" notes in `docs/agents/native-app.md` (the preview
+    canvas "inferred 32 px shorter", the pre-header 1160 x 842 measurements,
+    the status row height "inferred from the sources") are replaced with the
+    measured values; this item is closed.
