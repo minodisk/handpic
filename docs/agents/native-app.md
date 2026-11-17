@@ -137,7 +137,7 @@ gpui-component's `Input`"), `Button`, `Switch` (auto-advance, through
 `SettingField::switch`), `Radio`, `Select` (the label names' language and
 the Appearance page's light and dark themes, with its menu's `List`), `Kbd` (the Keyboard Shortcuts page's keys) and
 `InputGroup` (the read-only Destination root with `Choose…`) (see "The
-settings modal is its own entity"), the status row's `Sort ▾` / `Filter ▾`
+settings modal is its own entity"), the strip header's `Sort ▾` / `Filter ▾`
 `Button`s (see "The sort and filter menus are deferred popovers over the
 window"), the right-click menu (`PopupMenu`, its shortcuts as `Kbd` text;
 see "The right-click menu is gpui-component's `PopupMenu` at the
@@ -1431,10 +1431,14 @@ time a burst of its own. The view keeps the open folder's grouping in
 
 ### The sort and filter menus are deferred popovers over the window (Inferred)
 
-The status row is gpui-component's `StatusBar` (see "The status row is
-gpui-component's `StatusBar` with its defaults"): the status text in its
-center region, then, in its right region, the strip position, the progress
-circle while an operation runs and `Sort ▾` and `Filter ▾`. The status text is a transient note (an error, the drop
+`Sort ▾` and `Filter ▾` sit at the right end of the strip's header row
+(`main.rs`'s `strip_header`, `stripheight::HEADER` high, on the strip's top
+edge; see "The strip's height is one number, stored under `stripHeight`"),
+so the strip pane owns the controls over which files are listed and in what
+order. The status row is gpui-component's `StatusBar` (see "The status row
+is gpui-component's `StatusBar` with its defaults"): the status text in its
+center region, then, in its right region, the strip position and the
+progress circle while an operation runs. The status text is a transient note (an error, the drop
 refusal, the empty-folder and filtered texts) that `present` clears on every
 presented preview, as the Tauri `present`'s `setStatus()`, followed by
 `status()`'s suffixes with no leading separator when the note is empty; the
@@ -1445,7 +1449,9 @@ holds only the shown photo's details. The position (`pager::position`) is
 when the filter hides nothing), mirroring the lit `Filter ▾`. It shows
 whenever `files` is non-empty, from the listing on, not only once a preview
 has arrived, and not at all with no shown file (the pager's index is 0 on an
-empty list, so a bare format would print `1 / 0`). `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
+empty list, so a bare format would print `1 / 0`). The position stays in the
+status row while the strip is hidden (`toggleStrip`), so the filter-active
+count still shows when the header and its lit `Filter ▾` are gone. `menu.rs` holds the menus' rows, the clicks' `apply` and `Menus`;
 `main.rs` only maps rows to `div`s. The filter button is lit while
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open.
@@ -1454,8 +1460,7 @@ view-only folder, whose open closes a sort menu left open.
   `menu_button`): the default variant at `.xsmall()` with
   `.tab_stop(false)` (the main view routes every key through its own
   handle), its height pinned to `MENU_BUTTON_HEIGHT` (21 px, the bordered
-  `div`'s they replaced, so the status row and the preview canvas keep their
-  size), `px(6.)`, `rounded_sm` and the text `Sort ▾` / `Filter ▾` as a
+  `div`'s they replaced), `px(6.)`, `rounded_sm` and the text `Sort ▾` / `Filter ▾` as a
   12 px child, not `dropdown_caret`. The variant paints the mapped `button`
   fill, `input` border and `button_hover`. Lit, the border and the label
   child are `primary`, without `.selected(true)`, which would change the
@@ -1553,12 +1558,23 @@ dimmed, shows capture order and keeps the stored key.
   so a user binding on `escape` still works otherwise (no default binding
   uses it). Every other key goes through the window's handler as before, so
   paging, `e`, `z`, `f` and the burst keys work with a menu open.
-- Measured: the preview canvas is 1160 x 842 logical px in the default
-  1600 x 1000 window with the tree shown and the status row a `StatusBar`
-  (a debug build at scale 1, the canvas's paint bounds logged), the same
-  with the progress circle shown and hidden. Inferred: 1380 x 842 with the
-  tree hidden. Before the `StatusBar` (a plain flex `div`, no padding or
-  border) it was 852 tall, so the row grew 10 px.
+- Measured before the buttons moved to the strip header: the preview canvas
+  was 1160 x 842 logical px in the default 1600 x 1000 window with the tree
+  shown and the status row a `StatusBar` (a debug build at scale 1, the
+  canvas's paint bounds logged), the same with the progress circle shown and
+  hidden. Before the `StatusBar` (a plain flex `div`, no padding or border)
+  it was 852 tall, so the row grew 10 px. Inferred, not re-measured: with
+  the header the canvas is `stripheight::HEADER` (32 px) shorter while the
+  strip shows, as the status row keeps its height.
+- Rule: the header is a fixed-height row outside the cells' `div`, in a
+  `relative()` `flex_col` wrapper with it and the resize handle, all under
+  the one `panels.strip` check, so it hides with the strip and the cells'
+  press, right-press and scroll handlers never see a press or a wheel on
+  it. The buttons start 6 px down, below the handle's 5 px band. The
+  popover's height cap is `menu_max_height` less the strip pane's height
+  (header and cells), the room above the header, so `snap_to_window` has no
+  reason to push it over its own button. `change_panels` closes an open menu
+  when the strip goes, as a view-only open closes a sort menu.
 - Not verified headless (mouse clicks cannot be driven by `--auto`): that a
   press on an item reaches its `on_click` and not the strip, and that
   `on_mouse_down_out` fires for a press in the strip or the preview. Both are
@@ -2669,7 +2685,7 @@ running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
 gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
 size), colored `primary`, its value `fraction * 100`, in the
-`StatusBar`'s right region right of the position and left of `Sort ▾`, and
+`StatusBar`'s right region right of the position, and
 only while `shown` yields a count, so the position shifts by the circle's
 width when it appears or goes. The Tauri app draws a bar along the row's top edge
 (`#scan-progress`); the circle is the user's decision.
@@ -2687,9 +2703,10 @@ is drawn as the ring emptying from full to 0. The user accepted both by
 choosing the circle.
 
 - Rule: the circle is in the row's flow inside the right region, never in
-  `left` (see the `StatusBar` section). At 12 px it is shorter than the
-  buttons, so showing or hiding it changes neither the row's height nor the
-  canvas (measured: 1160 x 842 either way), and the status text,
+  `left` (see the `StatusBar` section). The row is pinned to
+  `STATUS_ROW_HEIGHT`, so showing or hiding it changes neither the row's
+  height nor the canvas (measured before the strip header: 1160 x 842 either
+  way), and the status text,
   start-aligned in the center region, does not move; only the center region
   is 20 px narrower (the circle and the region's 8 px gap) while it shows.
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
@@ -2733,35 +2750,33 @@ text was 16 px white, the row transparent over the root's black).
   to `Default Dark`'s `#171717` and a solid `#262626` border. Seen on screen
   in a debug build: a filled row with a thin top border.
 - Rule: the status text is the center `child`, with no `left`; the position
-  (while a file is shown), the circle (while shown), `Sort ▾` and `Filter ▾`
-  are each their own `.right(..)`, in
-  that order, 8 px apart (the region's `gap_2`, 4 px before). With only
+  (while a file is shown) and the circle (while shown) are each their own
+  `.right(..)`, in that order, 8 px apart (the region's `gap_2`). With only
   `right`, the center is `flex_1` and start-aligned. Never put anything in
-  `left` while the right region holds the buttons: with both ends pinned the
+  `left` while the right region holds something: with both ends pinned the
   center is `justify_center`, so the status text would jump to the middle of
   the row.
 - Rule: no wrapper around the status text. Seen on screen with a text far
   longer than the row: it stays on one line, clipped by the center region's
-  `overflow_hidden`, and the circle and the buttons keep their place.
+  `overflow_hidden`, and the position and the circle keep their place.
 - Unaffected: `StatusBar` has no id, focus, key context or listener, so the
-  keymap and the presses (the popover's `on_mouse_down_out`, the buttons'
-  `on_mouse_down` toggle) are unchanged. `Deferred` in `gpui-pre` 0.3.12
-  calls `window.defer_draw` with no content mask (`elements/deferred.rs`), so
-  the regions' `overflow_hidden` does not clip the Sort / Filter popovers and
+  keymap is unchanged. `Deferred` in `gpui-pre` 0.3.12 calls
+  `window.defer_draw` with no content mask (`elements/deferred.rs`), so no
+  ancestor of the strip header clips the Sort / Filter popovers and
   `anchored` still opens them from the button's top-right; read from the
   sources, the hand check is pending in
-  `../plans/20261115-native-status-bar/learnings.md`. The popover's height
-  cap is the window's less 40 px and the title bar's height.
+  `../plans/20261117-native-strip-header/learnings.md`.
 - Rule: on a gpui-component bump, re-check the root's padding, border, text
   size and color and the regions' gap and alignment rules in
   `status_bar.rs`, and `ProgressCircle`'s sizes, track and animation, and
   re-measure the preview canvas, which the row's height sets.
-- Rule: the row's height is the `Sort ▾` / `Filter ▾` buttons' 21 px
-  (`MENU_BUTTON_HEIGHT`) plus the padding and the border; the status text's
-  line is 19 px (12 px at GPUI's default line height, rounded by
-  `line_height_in_pixels`). `Button` at `.xsmall()` alone is 20 px, which
-  would have grown the canvas by a pixel, so the height is pinned to the
-  replaced `div`'s. Inferred from the sources, not re-measured on screen.
+- Rule: the row's height is pinned to `STATUS_ROW_HEIGHT` (30 px), what it
+  was while it held the `Sort ▾` / `Filter ▾` buttons: their 21 px
+  (`MENU_BUTTON_HEIGHT`) plus `py_1` above and below and the 1 px border.
+  Its own content is shorter (the status text's line is 19 px, 12 px at
+  GPUI's default line height rounded by `line_height_in_pixels`, the circle
+  12 px), so without the pin the row would shrink and the canvas grow when
+  the buttons left. Inferred from the sources, not re-measured on screen.
 
 ### The title bar is gpui-component's `TitleBar` with the icon, "Handpic" and the settings gear (Inferred)
 
@@ -3240,11 +3255,12 @@ strip needed one because `uniform_list` is vertical only.
   clear runs lands after it and re-adds a true row. A test asserting row order must sort
   the expected paths at run time, since `MAIN_SEPARATOR` sorts on opposite
   sides of `2` on Windows and elsewhere.
-- Measured: the preview canvas is 1160 x 842 logical px in the default 1600 x
-  1000 window with the tree shown at its default width (see "The sort and
-  filter menus are deferred popovers over the window"). Inferred: 1380 x 842
-  with it hidden by `toggleLeft` (1160 plus the pane's 220), not measured. A pane
-  change re-cuts a 1:1 crop through `zoom_resized`.
+- Measured before the strip header: the preview canvas was 1160 x 842
+  logical px in the default 1600 x 1000 window with the tree shown at its
+  default width (see "The sort and filter menus are deferred popovers over
+  the window"); with the header it is inferred 32 px shorter, not
+  re-measured. Inferred: 220 px wider with the tree hidden by `toggleLeft`,
+  not measured. A pane change re-cuts a 1:1 crop through `zoom_resized`.
 
 ### The folder tree is not gpui-component's `Tree` (Inferred)
 
@@ -3326,10 +3342,11 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   trips `clippy::too_many_arguments` (`-D warnings` in CI). Another
   launch-only suppression flag has the same choice: set a field after `new`, or
   add `#[allow]` as `tauri-app.md` does for `Writer::set`.
-- Rule: hiding the strip removes only its own `div`; the status row (the
-  status line and `Sort` / `Filter`) stays, unlike the Tauri app, where the
-  menus sit in the strip's header. The strip's bookkeeping (range, thumbnails)
-  keeps running while it is hidden.
+- Rule: hiding the strip removes its pane, the header with `Sort` / `Filter`
+  included, as in the Tauri app, where the menus sit in the strip's header,
+  and closes an open menu; the status row (the status line, the position and
+  the circle) stays. The strip's bookkeeping (range, thumbnails) keeps
+  running while it is hidden.
 - Not measured: the toggles on macOS and Linux are covered by the CI build
   and the unit tests only.
 
@@ -3392,10 +3409,12 @@ gives it its last width with no code.
 
 ### The strip's height is one number, stored under `stripHeight` (Inferred)
 
-`stripheight.rs` holds the strip's height in logical px: `DEFAULT` 128 (the
-Tauri strip's, the former fixed `STRIP_HEIGHT`), `MIN` 96, `MAX` 302 (a
-270 px high image box, the stored thumbnail's height) and `PREVIEW_MIN` 240
-for the preview. `Strip` holds the cells' `strip::Geometry`, which
+`stripheight.rs` holds the strip's height in logical px, its cells' area:
+`DEFAULT` 128 (the Tauri strip's, the former fixed `STRIP_HEIGHT`), `MIN` 96,
+`MAX` 302 (a 270 px high image box, the stored thumbnail's height) and
+`PREVIEW_MIN` 240 for the preview. The drawn strip pane is `HEADER` (32 px)
+taller, the header row holding `Sort ▾` / `Filter ▾` over the cells; the
+stored value still means the cells' height, so it needed no migration. `Strip` holds the cells' `strip::Geometry`, which
 `Geometry::of(height)` derives: the image box takes the height less the
 7 px `STRIP_PADDING` above and below, the 16 px `NAME_HEIGHT` and the box's
 1 px border each side, at 3:2 with its width rounded to whole px; the cell is
@@ -3411,19 +3430,21 @@ face icon keep their sizes.
   `paint_burst_band` take it as a parameter.
 - Rule: the handle is a standalone `resize_handle` with `Axis::Vertical` and
   `HandleEdge::Leading` (`strip_handle` in `main.rs`, payload and dragged
-  item `StripDrag`, drawn as nothing), the last child of the strip's
-  `relative()` `div`: it spans the window, goes with the strip when it is
-  hidden, takes the strip's top 5 px (its padding) above the scrollbar's
-  hitbox and draws a 1 px line on its top edge.
+  item `StripDrag`, drawn as nothing), the last child of the strip pane's
+  `relative()` wrapper (the header, then the cells' `div`): it spans the
+  window, goes with the strip when it is hidden, takes the header's top 5 px
+  (its padding, the buttons starting 6 px down) and draws a 1 px line on the
+  pane's top edge, its boundary with the preview.
 - Rule: the middle row and the strip sit in one wrapper `div` (a `flex_col`
   with `flex_1`), whose `on_drag_move::<StripDrag>` follows the drag (capture
   phase, every move while the drag is active, wherever the pointer is). Its
   `DragMoveEvent::bounds` are the wrapper's, so its bottom is the strip's
   bottom edge and its height what the preview and the strip share, with no
   assumption about the status row's height or the Linux frame's padding
-  below. The wanted height is that bottom less the pointer's `y`; `dragged`
-  rounds it to whole px, clamps it to `MIN`..`MAX` and to what leaves the
-  preview `PREVIEW_MIN`, never under `MIN`.
+  below. The wanted pane height is that bottom less the pointer's `y`;
+  `dragged` takes the header off it, rounds the cells' height to whole px,
+  clamps it to `MIN`..`MAX` and to what leaves the preview `PREVIEW_MIN` with
+  the header counted, never under `MIN`.
 - Rule: a move that changes the height calls `Strip::set_geometry`, which
   keeps the cells in view: the current cell's center stays where it is on
   screen when that cell overlaps the viewport, else the cell at the

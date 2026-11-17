@@ -346,13 +346,14 @@ orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
 `setting`); `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
 `FILTERED_TEXT`), which the same `refilter` applies after the sort,
-`src/menu.rs` the status row's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
+`src/menu.rs` the strip header's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
 `filter_rows`, after `index.html`'s `#sort-menu` and `#filter-menu`
 without the `Face focus` help, the filter menu heading every section, its
 rating rows from 5 stars down and each kind its own lead; `apply`, what a
 click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
-`deferred` / `anchored` popovers above their gpui-component `Button`s, the
+`deferred` / `anchored` popovers above their gpui-component `Button`s at
+the right end of the header row on the strip's top edge, the
 color label rows gpui-component `Tag`s, the other leads Lucide icons
 from `src/icons.rs` (served by `Icons`, the application's one
 `AssetSource`, to `svg().path(..)`: the two own derivatives, the filled
@@ -608,7 +609,7 @@ and the 1:1 crop alike), `src/progress.rs` the window's one progress indicator
 (`fraction`, a port of `progress.ts`'s `progressWidth`, and `shown`, a Move to
 Trash / Delete Permanently run before a folder operation's run before the
 scan's running pass), which the window draws as a gpui-component
-`ProgressCircle` in the status row's `StatusBar`, left of `Sort ▾`,
+`ProgressCircle` in the status row's `StatusBar`, right of the position,
 and `src/panels.rs` the panes shown (`Panels`, a
 port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
 `from_setting` and `setting`, the `panels` value of the settings store, a
@@ -623,10 +624,12 @@ boundary gives; `drawn`, the panes narrowed while the window cannot hold
 them), which the window sets from gpui-component's standalone
 `resize_handle` on the preview's edges and writes at the drag's end (neither
 read nor written under `--auto`), and `src/stripheight.rs` the strip's
-height (`DEFAULT` 128 px within `MIN` and `MAX`, the preview kept
-`PREVIEW_MIN`; `from_setting` and `setting`, the `stripHeight` value;
-`dragged`, the height a drag of the strip's top edge gives), which the window
-sets from a vertical `resize_handle` on the strip's top edge, the cells
+height, its cells' (`DEFAULT` 128 px within `MIN` and `MAX`, the preview kept
+`PREVIEW_MIN`; `HEADER`, the header row over the cells, which the drawn
+pane adds; `from_setting` and `setting`, the `stripHeight` value;
+`dragged`, the cells' height a drag of the pane's top edge gives, the header
+counted), which the window sets from a vertical `resize_handle` on the
+header's top edge, the cells
 resized around those in view (`Strip::set_geometry`), and writes at the
 drag's end (neither read nor written under `--auto`), next to
 `open`, the OS folder picker whose folder opens as a click in the tree does

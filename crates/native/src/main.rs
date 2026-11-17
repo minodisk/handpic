@@ -379,7 +379,7 @@ struct Riffle {
     exif_groups: exif::Groups,
     /// The anchor a menu change lands on while the filter hides every file.
     kept_anchor: filter::KeptAnchor,
-    /// The status row's sort or filter menu, while one is open.
+    /// The strip header's sort or filter menu, while one is open.
     menus: Menus,
     /// The open sort or filter menu's scroll, new on every press of a menu's
     /// button so a menu opens at its top.
@@ -1122,9 +1122,10 @@ impl Riffle {
         }
     }
 
-    /// The strip's top edge dragged to make it `wanted` px high, the preview
-    /// and the strip sharing `shared` px: the cells are resized around the
-    /// cells in view, and a 1:1 crop is re-cut for the new canvas.
+    /// The strip pane's top edge dragged to make it, header included, `wanted`
+    /// px high, the preview and the pane sharing `shared` px: the cells are
+    /// resized around the cells in view, and a 1:1 crop is re-cut for the new
+    /// canvas.
     fn drag_strip(&mut self, wanted: f32, shared: f32, cx: &mut Context<Self>) {
         self.strip_dragged = true;
         let height = stripheight::dragged(wanted, shared);
@@ -1157,11 +1158,15 @@ impl Riffle {
     }
 
     /// Show the panes `panels`: a hidden left pane gives up the keyboard, a
-    /// 1:1 crop is re-cut for the new canvas, and the panes are remembered.
+    /// hidden strip closes the menu its header's button anchored, a 1:1 crop
+    /// is re-cut for the new canvas, and the panes are remembered.
     fn change_panels(&mut self, panels: Panels, cx: &mut Context<Self>) {
         self.panels = panels;
         if !panels.left {
             self.set_tree_keys(false, cx);
+        }
+        if !panels.strip {
+            self.menus.close();
         }
         self.zoom_resized(cx);
         if self.remember_panels {
@@ -1314,7 +1319,7 @@ impl Riffle {
         .detach();
     }
 
-    /// A right-click on a tree row: its menu at the pointer, the status row's
+    /// A right-click on a tree row: its menu at the pointer, the strip header's
     /// menus closed.
     fn tree_context(
         &mut self,
@@ -5090,11 +5095,12 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The status line, then the strip position (while a file is shown), the
-    /// progress circle while an operation with a count runs, and the sort and
-    /// filter buttons at its right end.
-    fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
-        let mut row = StatusBar::new().child(self.status());
+    /// The status line, then the strip position (while a file is shown) and
+    /// the progress circle while an operation with a count runs, at its right
+    /// end; the row is pinned to `STATUS_ROW_HEIGHT`, so it does not follow
+    /// the circle.
+    fn status_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let mut row = StatusBar::new().h(STATUS_ROW_HEIGHT).child(self.status());
         if let Some(position) = pager::position(
             self.pager.current(),
             self.files.len(),
@@ -5105,22 +5111,39 @@ impl Riffle {
         if let Some(circle) = self.progress_circle(cx) {
             row = row.right(circle);
         }
-        row.right(self.menu_button(
-            Which::Sort,
-            "Sort \u{25be}",
-            false,
-            !self.view_only,
-            max_menu_height,
-            cx,
-        ))
-        .right(self.menu_button(
-            Which::Filter,
-            "Filter \u{25be}",
-            self.filter.is_active(),
-            true,
-            max_menu_height,
-            cx,
-        ))
+        row
+    }
+
+    /// The strip's header row: the sort and filter buttons at its right end,
+    /// below the resize handle's band, their menus capped at `max_menu_height`.
+    fn strip_header(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .w_full()
+            .h(px(stripheight::HEADER))
+            .flex_none()
+            .flex()
+            .justify_end()
+            .items_start()
+            .gap_2()
+            .pt(px(6.))
+            .px_2()
+            .bg(theme::roles(cx).surface)
+            .child(self.menu_button(
+                Which::Sort,
+                "Sort \u{25be}",
+                false,
+                !self.view_only,
+                max_menu_height,
+                cx,
+            ))
+            .child(self.menu_button(
+                Which::Filter,
+                "Filter \u{25be}",
+                self.filter.is_active(),
+                true,
+                max_menu_height,
+                cx,
+            ))
     }
 
     /// The status row's progress circle while an operation with a count runs
@@ -5600,7 +5623,10 @@ impl Render for Riffle {
         let window_width = f32::from(window.viewport_size().width);
         let drawn = self.pane_widths.drawn(window_width, self.panels);
         let roles = theme::roles(cx);
-        let menu_max = menu_max_height(window);
+        // The room above the strip header's buttons: the status row's own
+        // room less the strip pane over it.
+        let menu_max =
+            (menu_max_height(window) - px(stripheight::HEADER + strip_geometry.height)).max(px(0.));
         let main = div()
             .size_full()
             .flex()
@@ -5782,7 +5808,7 @@ impl Render for Riffle {
                             .child(drop_outline(cx.theme().ring)),
                     )
                     .children(self.panels.strip.then(|| {
-                        div()
+                        let cells = div()
                             .relative()
                             .w_full()
                             .h(px(strip_geometry.height))
@@ -5825,11 +5851,18 @@ impl Render for Riffle {
                                 .size_full(),
                             )
                             .children(strip_tips)
-                            .horizontal_scrollbar(&self.strip_bar)
+                            .horizontal_scrollbar(&self.strip_bar);
+                        div()
+                            .relative()
+                            .w_full()
+                            .flex()
+                            .flex_col()
+                            .child(self.strip_header(menu_max, cx))
+                            .child(cells)
                             .child(strip_handle())
                     })),
             )
-            .child(self.status_row(menu_max, cx))
+            .child(self.status_row(cx))
             .children(self.context_layer(cx))
             .children(
                 (self.trash.busy() || self.folderops.dialog_open() || self.clear.asking())
@@ -6035,8 +6068,8 @@ impl Render for StripDrag {
     }
 }
 
-/// The grab band over the strip's top padding, which the `on_drag_move` of
-/// the wrapper around the middle row and the strip follows.
+/// The grab band over the strip header's top padding, which the
+/// `on_drag_move` of the wrapper around the middle row and the strip follows.
 fn strip_handle() -> impl IntoElement {
     resize_handle::<StripDrag, StripDrag>("strip-edge", Axis::Vertical)
         .inside(HandleEdge::Leading)
@@ -6378,11 +6411,13 @@ const MARK_SIZE: f32 = 11.;
 /// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
-/// The `Sort ▾` / `Filter ▾` buttons' height, the bordered `div`s' they
-/// replaced (a 12 px line at GPUI's default line height, rounded to 19 px,
-/// and the border), which keeps the status row's height and the preview
-/// canvas's 842 px.
+/// The strip header's `Sort ▾` / `Filter ▾` buttons' height, the bordered
+/// `div`s' they replaced (a 12 px line at GPUI's default line height, rounded
+/// to 19 px, and the border).
 const MENU_BUTTON_HEIGHT: Pixels = px(21.);
+/// The status row's height from when it held the buttons: their 21 px,
+/// `StatusBar`'s `py_1` above and below and its 1 px top border.
+const STATUS_ROW_HEIGHT: Pixels = px(30.);
 /// `PopupMenu`'s row height at its default size (1.625 rem at the window's
 /// 16 px rem) and its horizontal padding (0.5 rem).
 const MENU_ROW: f32 = 26.;
