@@ -3584,3 +3584,31 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, press `z` for 1:1, then drag the edge. Expect the crop to be re-cut once the drag settles. Press `toggleStrip` to hide the strip and its handle, and again to bring both back at the dragged height.
 - [ ] On Windows, launch with `--auto`. Expect the strip to start at 128 whatever is stored and a drag to write nothing to `stripHeight`.
 - [ ] On macOS and Linux, repeat the hover, drag, scaling, restart, 1:1 and hide / show checks above. CI only builds these platforms.
+
+### Native: real-device checks of the Cache page and Clear Cache (native-clear-cache)
+
+#### Background
+
+The `native-clear-cache` feature ported the Tauri settings modal's `Cache` tab to the native settings modal: the index size line, a `Clear Cache` button with a confirmation `Dialog`, a clear held until a running scan finishes, and the refresh of the open folder, the tree's cached counts and the size afterwards. `mise run ci:local` and the unit tests (`cache.rs` flow, texts and on-disk size, the `TABS` order) cover the pure parts. The dialog opened over the settings layer (Escape and focus routing), the held clear, the refresh and the size shrinking were never exercised: `--auto` cannot drive the GUI, and the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
+
+Files: `crates/native/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, `run_clear`, `cleared`, `refresh_index_size`), `crates/native/src/settingsview.rs` (`cache`), `crates/native/src/cache.rs`.
+
+#### TODO
+
+- [ ] On Windows, run `mise run native:dev` with a test `--settings` / `--index` and check each of these. Expected: all as described.
+  1. Open a scanned folder, open the settings (`ctrl+,`) and pick `Cache`: `Index cache: <size>` with a non-zero size, the explanation paragraph and `Clear Cache`.
+  2. Press `Clear Cache`: `Clear the index cache?` opens over the settings with the dimmed backdrop, focus on `Clear`. Press Escape: only the dialog closes, the settings stay open, nothing is cleared (size unchanged), and Tab still walks the settings' controls.
+  3. Press `Clear Cache` again and confirm with Enter: the log has `index cleared: EvictSummary { … }`; the size shrinks; the open folder is listed again and pass 1 / pass 2 refill thumbnails, the meta pane and the filter facts, the current file staying put; the tree's cached counts of unlisted folders disappear.
+  4. Open a large unscanned folder and, while `scanning` runs, press `Clear Cache`: the note `The cache is cleared as soon as the running scan finishes.` shows, then the dialog opens by itself when the scan ends. Repeat and close the settings while waiting: no dialog at the scan's end.
+
+### Native: a held Clear Cache misses idle points that do not pass through `finished`
+
+#### Background
+
+The `native-clear-cache` feature drains a held Clear Cache only in `Riffle::finished` (`crates/native/src/main.rs`). A view that goes idle without a listing ending, for example after a trash undo into another folder (`restored`) or a failed rename (`settle_folder_run`), leaves the clear held while the Cache page still says it clears when the scan finishes. It stays held until the user presses `Clear Cache` again (the local review's round 1 fix made that second press ask at once). Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
+
+Files: `crates/native/src/main.rs`.
+
+#### TODO
+
+- [ ] Drain the held clear at those idle points too. Done when a held clear asks by itself after a trash undo into another folder and after a failed rename, with a test of the pure part where possible.

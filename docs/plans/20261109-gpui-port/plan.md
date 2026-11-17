@@ -371,9 +371,10 @@ them; their contents are deliberately coarse.
   - The settings modal slice (the native settings store, the persisted
     filter and sort, the Sidecar tab's format and label names, the Culling
     tab's auto-advance, the Keyboard Shortcuts tab and the Import tab) was
-    done by `../20261113-gpui-settings/plan.md`. Still open of Step 9's
-    settings: the Cache tab, the first-launch format dialog and a macOS app
-    menu with `Settings…`. The AI features are not ported (below).
+    done by `../20261113-gpui-settings/plan.md`, the Cache tab by
+    `../20261117-native-clear-cache/plan.md`. Still open of Step 9's
+    settings: the first-launch format dialog and a macOS app menu with
+    `Settings…`. The AI features are not ported (below).
   - Not ported, by the user's decision (2026-11-14): the AI features, that
     is `aiEnabled` with the model download, pass 3 embeddings, genres and
     the filter's `Genre` section, the personal ranking with its refits, the
