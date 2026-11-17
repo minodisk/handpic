@@ -286,3 +286,5 @@ touched; its icons are only read.
   file with a different name.
 
 ## Progress
+
+- (2026-11-17) Step 1 complete
