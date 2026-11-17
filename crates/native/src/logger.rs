@@ -28,8 +28,7 @@ struct Logger {
 impl Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         metadata.level() <= log::max_level()
-            && (metadata.level() <= LevelFilter::Info
-                || metadata.target().starts_with(env!("CARGO_CRATE_NAME")))
+            && (metadata.level() <= LevelFilter::Info || is_own(metadata.target()))
     }
 
     fn log(&self, record: &Record) {
@@ -55,6 +54,16 @@ impl Log for Logger {
     fn flush(&self) {
         let _ = io::stderr().flush();
     }
+}
+
+/// Whether `target` is this crate's or one of its modules: not a crate whose
+/// name merely starts with it (`handpic_backend`, `handpic_core`).
+fn is_own(target: &str) -> bool {
+    const CRATE: &str = env!("CARGO_CRATE_NAME");
+    target == CRATE
+        || target
+            .strip_prefix(CRATE)
+            .is_some_and(|rest| rest.starts_with("::"))
 }
 
 static LOGGER: OnceLock<Logger> = OnceLock::new();
@@ -176,7 +185,7 @@ impl Sink {
 
 #[cfg(test)]
 mod tests {
-    use super::{LOG_FILE, Sink, line, log_path};
+    use super::{LOG_FILE, Sink, is_own, line, log_path};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -198,6 +207,14 @@ mod tests {
             line(1_794_618_123, "t", log::Level::Error, &format_args!("m")),
             "[2026-11-14][01:02:03][t][ERROR] m\n"
         );
+    }
+
+    #[test]
+    fn the_debug_filter_keeps_this_crate_and_drops_the_backend() {
+        assert!(is_own("handpic"));
+        assert!(is_own("handpic::scan"));
+        assert!(!is_own("handpic_backend::photolab"));
+        assert!(!is_own("handpic_core::scan"));
     }
 
     #[test]

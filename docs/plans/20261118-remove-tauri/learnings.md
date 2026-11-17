@@ -46,6 +46,12 @@
   and the binary `handpic`, the target is `handpic::scan`, not
   `handpic_native::scan`. `logger.rs`'s test line and `app-log.md` say
   `handpic`.
+- The new crate name `handpic` is a string prefix of `handpic_backend` and
+  `handpic_core`, so the old `starts_with(CARGO_CRATE_NAME)` filter let the
+  backend's debug lines through under `RUST_LOG=debug` (review round 1).
+  `logger.rs`'s `is_own` now matches the target exactly or as a `handpic::`
+  module path, and a unit test keeps `handpic::scan` and drops
+  `handpic_backend::photolab`.
 - `datadir.rs`'s packaging tests compare `Info.plist` and the `.desktop`
   file against `env!("CARGO_BIN_NAME")`, so they needed no edit; only the two
   packaging files did.
