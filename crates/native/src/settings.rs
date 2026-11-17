@@ -44,6 +44,10 @@ pub struct Settings {
     /// The MCP companion's server is on (`mcpEnabled`, by the backend's
     /// rule).
     pub mcp_enabled: bool,
+    /// MCP clients may run the recoverable destructive operations without
+    /// the app's dialog (`mcpAllowDestructive`, off unless a stored true);
+    /// only the settings modal's MCP page writes it.
+    pub mcp_allow_destructive: bool,
     /// The Import tab's destination root, empty while not set, and folder
     /// pattern, an invalid stored one read as the default.
     pub import_root: String,
@@ -261,6 +265,10 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
         mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
+        mcp_allow_destructive: values
+            .get("mcpAllowDestructive")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         import_root: import::root_setting(values.get("importRoot")),
         import_pattern: import::pattern_setting(values.get("importPattern")),
         last_folder: values
@@ -274,6 +282,12 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         theme: theme::Setting::from_setting(values.get("theme")),
         writes: Writes::spawn(None),
     }
+}
+
+/// The settings of an empty store, for a test's view.
+#[cfg(test)]
+pub fn defaults() -> Settings {
+    from_values(&Map::new())
 }
 
 #[cfg(test)]
@@ -383,6 +397,23 @@ mod tests {
         .enumerate()
         {
             assert_eq!(seeded(dir.path(), &i.to_string(), stored).mcp_enabled, on);
+        }
+    }
+
+    #[test]
+    fn mcp_allows_destructive_operations_only_for_a_stored_true() {
+        let dir = tempfile::tempdir().unwrap();
+        for (i, (stored, on)) in [
+            (r#"{"mcpAllowDestructive":true}"#, true),
+            (r#"{"mcpAllowDestructive":false}"#, false),
+            (r#"{"mcpAllowDestructive":"true"}"#, false),
+            (r#"{}"#, false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let settings = seeded(dir.path(), &format!("allow{i}"), stored);
+            assert_eq!(settings.mcp_allow_destructive, on);
         }
     }
 

@@ -74,7 +74,7 @@ settings and the current stars, pick / reject flag and color label), look at a s
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
 filter, the panes shown and the overlays, browse the folders, open one, expand or collapse the \
 folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
-scan) and wait for it to end, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
+scan) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
 undo and sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
 A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Suggest judgments and explain them; write \
@@ -654,6 +654,136 @@ fn reveal(path: String) -> Reply {
     Ok(json!({ "path": path, "folder": kind.is_dir() }))
 }
 
+/// A sidecar format `set_settings` takes.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum FormatName {
+    Xmp,
+    Dop,
+    Both,
+}
+
+/// The `xmp:Label` names `set_settings` sets, a color left out keeping its
+/// own.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct LabelNamesArgs {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    red: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    yellow: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    green: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    purple: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum ShortcutOp {
+    Add,
+    Remove,
+    Reset,
+    ResetAll,
+}
+
+/// One Keyboard Shortcuts page edit.
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct ShortcutEdit {
+    /// `add` a key to an action, `remove` one of its keys, `reset` an
+    /// action to its default keys, or `reset_all`.
+    op: ShortcutOp,
+    /// The action, as `get_settings`' `shortcuts` names it; not for
+    /// `reset_all`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    action: Option<String>,
+    /// The key for `add` and `remove`, as the keymap names it: lower-case,
+    /// modifiers first in `ctrl+alt+shift+meta+` order, such as `k`,
+    /// `shift+x`, `ctrl+z` or `arrowright`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(crate = "rmcp::schemars")]
+pub enum ThemeModeName {
+    System,
+    Light,
+    Dark,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct ThemeArgs {
+    /// `system` (following the OS), `light` or `dark`; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<ThemeModeName>,
+    /// The light theme, one of `get_settings`' `themes.light`; kept when
+    /// omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    light: Option<String>,
+    /// The dark theme, one of `get_settings`' `themes.dark`; kept when
+    /// omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    dark: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct SettingsArgs {
+    /// The sidecar files judgments are written to: `xmp` (Lightroom), `dop`
+    /// (PhotoLab) or `both`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sidecar_format: Option<FormatName>,
+    /// The `xmp:Label` written for each color, only while the format writes
+    /// XMP; a blank name is the English default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label_names: Option<LabelNamesArgs>,
+    /// A Lightroom language's code from `get_settings`' `label_languages`,
+    /// whose preset names are put in force, instead of `label_names`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label_language: Option<String>,
+    /// Move to the next photo after a star, reject or pick.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    auto_advance: Option<bool>,
+    /// Keyboard shortcut edits, applied in order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shortcuts: Option<Vec<ShortcutEdit>>,
+    /// The absolute folder imports are copied into.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    import_root: Option<String>,
+    /// The import's date folder pattern (chrono strftime date specifiers
+    /// and `/`), such as `%Y/%F`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    import_pattern: Option<String>,
+    /// The theme's mode and the light and dark themes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    theme: Option<ThemeArgs>,
+}
+
+/// The `set_settings` request: at least one setting, the import root an
+/// absolute folder.
+fn settings(args: SettingsArgs) -> Reply {
+    if let Some(root) = &args.import_root {
+        folder(root)?;
+    }
+    switches(
+        args,
+        "sidecar_format, label_names, label_language, auto_advance, shortcuts, import_root, \
+        import_pattern, theme",
+    )
+}
+
 /// How long `wait_for_idle` waits for `timeout_ms`.
 fn idle_wait(timeout_ms: Option<u64>) -> Duration {
     timeout_ms
@@ -1052,6 +1182,34 @@ impl Companion {
                 )
                 .await,
         )
+    }
+
+    #[tool(
+        description = "What Handpic's settings show: the `sidecar_format` (with the \
+        `sidecar_formats`), the `label_names` written as `xmp:Label` per color and the \
+        `label_language` whose Lightroom preset they are (null when none; the presets in \
+        `label_languages`), `auto_advance`, the keyboard `shortcuts` (each action, its label \
+        and its keys), the `import_root` (null while not set) and `import_pattern`, the \
+        `theme` (mode, light and dark theme; the choices in `themes`), and \
+        `mcp_allow_destructive`, which only the user can change."
+    )]
+    async fn get_settings(&self) -> CallToolResult {
+        self.view_call("get_settings").await
+    }
+
+    #[tool(
+        description = "Change Handpic's settings as its settings window does, with its rules: \
+        a field left out is kept, and the whole call is refused when one field is. A sidecar \
+        format switch writes the pending judgments and re-reads the open folder; the label \
+        names apply only while the format writes XMP; a shortcut edit refuses a key bound to \
+        another action, one of the app's own keys or an action's last key; an invalid import \
+        pattern is refused; the theme applies at once. Remembered for the next launch. \
+        `mcp_allow_destructive` cannot be set here. Refused while a folder operation runs. \
+        Returns the settings, as `get_settings` does."
+    )]
+    async fn set_settings(&self, Parameters(args): Parameters<SettingsArgs>) -> CallToolResult {
+        self.checked_call("set_settings", move || settings(args))
+            .await
     }
 }
 
@@ -1493,6 +1651,7 @@ mod tests {
             [
                 "get_photo",
                 "get_preview",
+                "get_settings",
                 "get_status",
                 "get_view",
                 "list_folders",
@@ -1507,6 +1666,7 @@ mod tests {
                 "set_judgment",
                 "set_overlays",
                 "set_panes",
+                "set_settings",
                 "set_sort",
                 "set_view",
                 "show_photo",
@@ -1658,6 +1818,66 @@ mod tests {
             Err(format!("{missing} is neither a folder nor a file"))
         );
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn settings_args(value: Value) -> Result<Value, String> {
+        serde_json::from_value::<SettingsArgs>(value)
+            .map_err(|e| e.to_string())
+            .and_then(settings)
+    }
+
+    #[test]
+    fn settings_forwards_only_the_given_fields() {
+        let dir = temp_dir("settings-root");
+        let root = dir.to_string_lossy().into_owned();
+        assert_eq!(
+            settings_args(json!({
+                "sidecar_format": "both",
+                "label_names": { "red": "Rot" },
+                "shortcuts": [
+                    { "op": "add", "action": "pick", "key": "k" },
+                    { "op": "reset_all" }
+                ],
+                "import_root": root,
+                "theme": { "mode": "system", "dark": "Ayu Dark" }
+            })),
+            Ok(json!({
+                "sidecar_format": "both",
+                "label_names": { "red": "Rot" },
+                "shortcuts": [
+                    { "op": "add", "action": "pick", "key": "k" },
+                    { "op": "reset_all" }
+                ],
+                "import_root": root,
+                "theme": { "mode": "system", "dark": "Ayu Dark" }
+            }))
+        );
+        assert_eq!(
+            settings_args(json!({ "auto_advance": false })),
+            Ok(json!({ "auto_advance": false }))
+        );
+    }
+
+    #[test]
+    fn settings_refuses_an_empty_call_a_bad_root_and_the_destructive_switch() {
+        assert!(settings_args(json!({}))
+            .unwrap_err()
+            .starts_with("set at least one of"));
+        assert!(settings_args(json!({ "import_root": "relative" }))
+            .unwrap_err()
+            .contains("is not an absolute path"));
+        let file = temp_dir("settings-file").join("a.txt");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(
+            settings_args(json!({ "import_root": file.to_string_lossy() }))
+                .unwrap_err()
+                .contains("is not a folder")
+        );
+        assert!(settings_args(json!({ "mcp_allow_destructive": true }))
+            .unwrap_err()
+            .contains("unknown field"));
+        assert!(settings_args(json!({ "sidecar_format": "tiff" })).is_err());
+        assert!(settings_args(json!({ "theme": { "mode": "dim" } })).is_err());
     }
 
     #[test]

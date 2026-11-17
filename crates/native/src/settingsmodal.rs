@@ -168,6 +168,11 @@ pub fn stops(key: &ModalKey, editing: bool) -> bool {
 /// The modal's status line while the settings store did not open.
 pub const NOT_SAVED: &str = "The settings store did not open, so changes last until the app quits.";
 
+/// The MCP page's switch and its note.
+pub const ALLOW_DESTRUCTIVE_LABEL: &str =
+    "Let MCP clients run destructive operations without asking";
+pub const ALLOW_DESTRUCTIVE_NOTE: &str = "When on, an MCP client can move photos to the Trash,      redo a move to the Trash and run the folder operations (rewriting or deleting sidecars,      sequencing, importing, renaming) once it has shown you the preview, without the app's      dialog. When off, those calls open the app's dialog for you to confirm. Delete Permanently      always asks you. MCP clients cannot change this setting.";
+
 /// The native app's own keys, which `key_down` takes before the keymap, so a
 /// binding to one would never fire. `escape` cannot be captured (it cancels)
 /// and `ctrl+,` / `meta+,` the keymap refuses as a menu accelerator.
@@ -317,17 +322,19 @@ pub enum Tab {
     Shortcuts,
     Cache,
     Import,
+    Mcp,
     Appearance,
 }
 
-/// The pages in the Tauri order, less the MCP and Debug ones, then the
-/// native app's own Appearance.
-pub const TABS: [Tab; 6] = [
+/// The pages in the Tauri order, less the Debug one, then the native app's
+/// own Appearance.
+pub const TABS: [Tab; 7] = [
     Tab::Sidecar,
     Tab::Culling,
     Tab::Shortcuts,
     Tab::Cache,
     Tab::Import,
+    Tab::Mcp,
     Tab::Appearance,
 ];
 
@@ -339,6 +346,7 @@ impl Tab {
             Tab::Shortcuts => "Keyboard Shortcuts",
             Tab::Cache => "Cache",
             Tab::Import => "Import",
+            Tab::Mcp => "MCP",
             Tab::Appearance => "Appearance",
         }
     }
@@ -734,6 +742,7 @@ mod tests {
                 "Keyboard Shortcuts",
                 "Cache",
                 "Import",
+                "MCP",
                 "Appearance"
             ]
         );
