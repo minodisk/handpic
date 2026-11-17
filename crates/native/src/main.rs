@@ -14,6 +14,7 @@ mod faces;
 mod filter;
 mod focus;
 mod folderops;
+mod grayscale;
 mod history;
 mod hold;
 mod icons;
@@ -103,12 +104,13 @@ use gpui_kit::component::{
 use gpui_kit::{
     Anchor, AnyElement, AnyWindowHandle, App, Axis, Bounds, ClickEvent, ClipboardItem, ContentMask,
     Context, Corners, DismissEvent, DispatchPhase, Div, DragMoveEvent, Entity, ExternalPaths,
-    FocusHandle, Focusable, FontWeight, Hsla, KeyBinding, KeyDownEvent, Keystroke, MouseButton,
-    MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions, Pixels, Point, RenderImage,
-    ScrollEvent, ScrollHandle, ScrollStrategy, SharedString, Subscription, Task, TextAlign,
-    TitlebarOptions, TransformationMatrix, UniformListScrollHandle, WeakEntity, Window,
-    WindowBounds, WindowDecorations, WindowOptions, anchored, base::POPUP_PRIORITY, canvas,
-    deferred, div, fill, img, outline, point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
+    FocusHandle, Focusable, FontWeight, Hsla, KeyBinding, KeyDownEvent, KeyUpEvent, Keystroke,
+    ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions,
+    Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy, SharedString,
+    Subscription, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
+    WeakEntity, Window, WindowBounds, WindowDecorations, WindowOptions, anchored,
+    base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline, point, prelude::*, px, rgb,
+    rgba, size, svg, uniform_list,
 };
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -582,6 +584,8 @@ struct Riffle {
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
+    /// The photo grayed while the `grayscale` key is held.
+    grayscale: grayscale::Hold,
     /// The performance overlay on `d`.
     perf: perfgraph::Overlay,
     /// The MCP companion's server, `None` while `mcpEnabled` is off.
@@ -703,6 +707,17 @@ impl Riffle {
         cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() && this.roots_loaded {
                 Self::read_roots(cx);
+            }
+            if !window.is_window_active() && this.grayscale.release() {
+                cx.notify();
+            }
+        })
+        .detach();
+        // Key-up and modifiers-changed reach only the focus path, so the hold
+        // ends when the settings, a dialog, a menu or an input takes the focus.
+        cx.on_blur(&focus, window, |this, _, cx| {
+            if this.grayscale.release() {
+                cx.notify();
             }
         })
         .detach();
@@ -899,6 +914,7 @@ impl Riffle {
             viewport: Rc::default(),
             zoom_pending: Rc::default(),
             peaking: Peaking::default(),
+            grayscale: grayscale::Hold::default(),
             prefetch: prefetch.then(Ring::default),
             heading: Heading::default(),
             screen: None,
@@ -2947,6 +2963,11 @@ impl Riffle {
             (_, Some("focus")) => self.toggle_marks(cx),
             (_, Some("zoom")) => self.toggle_zoom(cx),
             (_, Some("peaking")) => self.toggle_peaking(cx),
+            (_, Some("grayscale")) => {
+                if self.grayscale.press(&keystroke.key, keystroke.modifiers) {
+                    cx.notify();
+                }
+            }
             (_, Some("performance")) => {
                 let events = self.events.clone();
                 self.perf
@@ -4003,6 +4024,7 @@ impl Riffle {
             placeholder,
             crop: crop.map(|c| (c.image.clone(), c.point)),
             peaking: self.peaking.paint(View::Crop),
+            grayscale: self.grayscale.is_on(),
         })
     }
 
@@ -4578,6 +4600,7 @@ impl Render for Riffle {
         let viewport = self.viewport.clone();
         let zoom_pending = self.zoom_pending.clone();
         let fit_peaking = self.peaking.paint(View::Fit);
+        let grayscale = self.grayscale.is_on();
         let this = cx.entity().downgrade();
         let preview_failed = matches!(
             &self.shown,
@@ -4624,6 +4647,16 @@ impl Render for Riffle {
             )
             .on_key_down(cx.listener(|this, e: &KeyDownEvent, window, cx| {
                 this.key_down(&e.keystroke, window, cx);
+            }))
+            .on_key_up(cx.listener(|this, e: &KeyUpEvent, _, cx| {
+                if this.grayscale.key_up(&e.keystroke.key) {
+                    cx.notify();
+                }
+            }))
+            .on_modifiers_changed(cx.listener(|this, e: &ModifiersChangedEvent, _, cx| {
+                if this.grayscale.modifiers_changed(e.modifiers) {
+                    cx.notify();
+                }
             }))
             .child(
                 TitleBar::new().child(
@@ -4673,7 +4706,7 @@ impl Render for Riffle {
                                                 Corners::default(),
                                                 image.clone(),
                                                 0,
-                                                false,
+                                                grayscale,
                                             ) {
                                                 println!("error paint: {e}");
                                             }

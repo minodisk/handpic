@@ -522,6 +522,11 @@ the focus peaking overlay on `e` (`PEAKING_THRESHOLD`, `PEAKING_COLOR` and the
 Sobel of `peaking.ts`; one layer per view, the fit view and the 1:1 crop,
 keyed by the source image and its drawn device size, one job in flight on the
 background executor, the fit view's image resized to its drawn size first),
+`src/grayscale.rs` the momentary grayscale preview on a held `g` (`Hold`:
+`press`, `key_up` of the held key, `modifiers_changed`, a modifier going up
+ending it, and `release`, on the window's deactivation and the view's blur;
+only the photo, the fit view and the 1:1 placeholder and crop, is drawn with
+the image sprite's grayscale flag, the overlays keeping their colors),
 `src/perf.rs` the performance overlay's data (`Perf`, a port of `perf.ts`:
 the backend's `perf::Sample`s stamped on arrival and the per-switch
 `timing::Stages` of the last `WINDOW`, recording only while on, the latency
