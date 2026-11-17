@@ -96,9 +96,112 @@ jobs:
           path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg
           if-no-files-found: error
 
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      - uses: ilammy/setup-nasm@v1
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            crates/native/target
+          key: cargo-native-release-windows-latest-${{ hashFiles('crates/native/Cargo.lock') }}
+          restore-keys: cargo-native-release-windows-latest-
+
+      - name: Read the version
+        id: version
+        shell: bash
+        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+
+      # As ci.yml's `native` job: setup-nasm's folder is put on PATH by hand
+      # for the build script behind `mise exec`.
+      - name: Build the release binary
+        shell: bash
+        working-directory: crates/native
+        run: |
+          nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
+          export PATH="$PATH:$nasm_dir"
+          mise exec rust@1.98.1 -- nasm -v
+          mise exec rust@1.98.1 -- cargo build --release --locked
+
+      # The runner image ships Inno Setup 6; windows.sh finds its ISCC.exe.
+      - name: Package the setup and the ZIP
+        shell: bash
+        run: bash tools/package/windows.sh
+
+      # The runner is elevated, so this proves the per-user location, the HKCU
+      # entry and the silent runs, not the absence of a UAC prompt.
+      - name: Check the setup and the ZIP
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'crates/native/target/release'
+          $setup = Resolve-Path "$release/Handpic-$env:VERSION-windows-x64-setup.exe"
+          $zip = Resolve-Path "$release/Handpic-$env:VERSION-windows-x64.zip"
+          $silent = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          function Invoke-Silent($exe, $what) {
+            $p = Start-Process -FilePath $exe -ArgumentList $silent -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "$what exited with $($p.ExitCode)" }
+          }
+          $app = Join-Path $env:LOCALAPPDATA 'Programs\Handpic'
+          $exe = Join-Path $app 'riffle-native.exe'
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1'
+          $machineKeys = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1',
+            'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1'
+          $shortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Handpic.lnk'
+          function Assert-Installed {
+            if (-not (Test-Path $exe)) { throw "no $exe" }
+            if (-not (Test-Path (Join-Path $app 'licenses\NOTICE-gpui'))) { throw 'no licenses' }
+            $entry = Get-ItemProperty $key
+            $entry | Format-List DisplayName, DisplayVersion, InstallLocation, UninstallString
+            if ($entry.DisplayVersion -ne $env:VERSION) { throw "DisplayVersion $($entry.DisplayVersion)" }
+            foreach ($k in $machineKeys) { if (Test-Path $k) { throw "machine-wide entry $k" } }
+            if (-not (Test-Path $shortcut)) { throw "no $shortcut" }
+          }
+          Invoke-Silent $setup 'the install'
+          Assert-Installed
+          Invoke-Silent $setup 'the upgrade'
+          Assert-Installed
+          Get-ChildItem $app
+          Invoke-Silent (Join-Path $app 'unins000.exe') 'the uninstall'
+          # The uninstaller hands over to a copy of itself in %TEMP%.
+          for ($i = 0; $i -lt 60 -and ((Test-Path $exe) -or (Test-Path $key)); $i++) { Start-Sleep -Seconds 1 }
+          if (Test-Path $exe) { throw "$exe left after the uninstall" }
+          if (Test-Path $key) { throw "$key left after the uninstall" }
+          if (Test-Path $shortcut) { throw "$shortcut left after the uninstall" }
+          $out = Join-Path $env:RUNNER_TEMP 'zip'
+          Expand-Archive -Path $zip -DestinationPath $out
+          Get-ChildItem -Recurse $out | Select-Object -ExpandProperty FullName
+          if (-not (Test-Path (Join-Path $out 'Handpic\riffle-native.exe'))) { throw 'no exe in the ZIP' }
+          if (-not (Test-Path (Join-Path $out 'Handpic\licenses\NOTICE-gpui'))) { throw 'no licenses in the ZIP' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-windows-x64-setup.exe
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-windows-x64-setup.exe
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-windows-x64.zip
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-windows-x64.zip
+          if-no-files-found: error
+
   # One SHA256SUMS over every artifact the run built.
   checksums:
-    needs: [macos]
+    needs: [macos, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
