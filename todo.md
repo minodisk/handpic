@@ -2155,15 +2155,17 @@ Files: `crates/app/src/datefolder.rs` (`move_plan`), `crates/app/src/rename.rs`.
 
 - [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
 
-### Agents: `wait-pr-actionable.sh` returns `ACTION=blocked` while checks are still pending
+### Agents: `pr-runner.md` and `merger.md` say only `wait` / `review_required` are seen on an exit 2
 
 #### Background
 
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) saw `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `ACTION=blocked` with `pendingCount=0` right after a PR was created, while `statusCheckRollup` still showed pending checks (PRs 887, 888, 899, 901, 903, 904). The cause is unverified. Likely candidates are a BLOCKED `mergeStateStatus`, or an empty check list read before the checks register. The import-from-card feature (plan: `docs/plans/_archived/20261106-import-from-card/plan.md`) saw the same on PRs 894, 898, 902, 906 and 908: `ACTION=blocked` with `checksOverall=success` and `pendingCount=0` right after a push while the PR's checks were still `IN_PROGRESS`; #898's `pr-runner` aborted on it. So the script is not counting in-progress checks as pending. The `native-mcp-everything` feature (plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`) saw it on every one of its PRs: all 7 checks were still pending with an empty conclusion while `mergeStateStatus=BLOCKED`, and the first `pr-runner` runs aborted as `blocked` until told to keep waiting. Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`.
+The `pr-wait-blocked-grace` plan (`docs/plans/_archived/20261118-pr-wait-blocked-grace/plan.md`) made `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `blocked` only after it has persisted for a grace period (`BLOCKED_GRACE`, 60 s). A timeout that lands inside the grace now exits 2 with `ACTION=blocked` as the last output. `.claude/agents/pr-runner.md` (around the "Waiting on `wait` / `review_required`" sentence in §4) and `.claude/agents/merger.md` (the sentence on `wait` / `review_required` and the exit-2 handling) still name only those two ACTIONs as the ones observed on a timeout. The handling is already right: pr-runner's "Otherwise increment `wait_timeouts` and re-run" and merger's "increment `pr_wait_timeouts` and re-run" treat it as ordinary waiting. Only the sentence is stale. The plan left it out of scope.
+
+Files: `.claude/agents/pr-runner.md`, `.claude/agents/merger.md`.
 
 #### TODO
 
-- [ ] Read the script and reproduce on a fresh PR. Treat an empty or pending rollup as "keep waiting", and make `pendingCount` count the rollup's pending entries. Count `IN_PROGRESS` checks as pending, and return `blocked` only once no check is in progress. Done when a PR polled right after creation never returns `blocked` while any check is pending, shown by a test or a recorded transcript. Merge into an existing pr-runner polling item if one covers it.
+- [ ] Reword the sentence in both files to say that `blocked` can also be the last ACTION of an exit 2 (a timeout inside the grace) and is handled as ordinary waiting. Do not change the call lines or the handling.
 
 ### Agents: `test (ubuntu-latest)` hangs on docs-only commits
 

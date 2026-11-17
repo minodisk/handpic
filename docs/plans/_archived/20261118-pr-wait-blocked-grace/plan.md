@@ -158,3 +158,5 @@ it stands with every check concluded.
   falsely in the second window.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
