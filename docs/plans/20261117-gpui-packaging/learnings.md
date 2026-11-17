@@ -6,12 +6,13 @@
   `gpui-component-macros`, `gpui-base`, `gpui-kit` and `gpui-kit-assets`
   0.9.1 are Longbridge's (`Copyright 2024 - 2026 Longbridge`), while the
   `gpui-pre-*` 0.3.12 crates' `LICENSE-APACHE` reads `Copyright 2022 - 2025 Zed
-  Industries, Inc.`. `crates/native/packaging/NOTICE-gpui` names both lines
+  Industries, Inc.`. `crates/native/packaging/NOTICE-gpui` names these lines
   and then carries the Apache-2.0 text of `gpui-component`'s
   `LICENSE-APACHE` (from "Apache License, Version 2.0, January 2004" on).
   `gpui-kit` itself ships no `LICENSE-APACHE` file in its crate, only the
-  `license` field. `gpui-pre-reqwest` is `MIT OR Apache-2.0`; it is covered by
-  the Apache text.
+  `license` field. `gpui-pre-reqwest` 0.12.15 is a fork of reqwest, `MIT OR Apache-2.0`, with
+  `Copyright 2016 Sean McArthur`; it has its own entry in `NOTICE-gpui`, and
+  the Apache text covers it.
 - `crates/core/models/LICENSE` is YuNet's MIT license; `notices.sh` ships it
   as `LICENSE-yunet` so the names in `licenses/` do not collide with the
   themes' `LICENSE` (shipped as `LICENSE-themes`).

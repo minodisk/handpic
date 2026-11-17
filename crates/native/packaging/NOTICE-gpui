@@ -6,10 +6,15 @@ gpui-kit, gpui-component, gpui-component-macros, gpui-base and gpui-kit-assets
 
 Copyright 2024 - 2026 Longbridge <https://longbridge.com>
 
-The gpui-pre-* crates 0.3.12, a snapshot of Zed's GPUI
+The gpui-pre-* crates 0.3.12 (except gpui-pre-reqwest), a snapshot of Zed's GPUI
 (https://github.com/zed-industries/zed):
 
 Copyright 2022 - 2025 Zed Industries, Inc.
+
+gpui-pre-reqwest 0.12.15, a fork of reqwest
+(https://github.com/seanmonstar/reqwest):
+
+Copyright 2016 Sean McArthur
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

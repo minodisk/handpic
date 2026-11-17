@@ -310,7 +310,8 @@ Apache-2.0; their `LICENSE` names that source, each file's own `author` and
 
 `tools/package/notices.sh <dir>` copies the set every package ships into one
 `licenses/` folder: `crates/native/packaging/NOTICE-gpui` (the GPUI crates'
-copyright lines, Longbridge's and Zed Industries', and the Apache-2.0 text of
+copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
+`gpui-pre-reqwest`), and the Apache-2.0 text of
 their `LICENSE-APACHE`), `crates/native/LICENSE-lucide`, the themes' `LICENSE`
 as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
 `LICENSE-mediapipe` and `LICENSE-siglip2`. The repository has no project
