@@ -2,7 +2,6 @@
 actionlint = "1.7.12"
 lychee = "0.24.2"
 node = "24.21.0"
-pnpm = "10.17.1"
 rust = { version = "1.97", components = "rustfmt,clippy,rust-analyzer" }
 shellcheck = "0.11.0"
 
@@ -31,35 +30,6 @@ run = """
 set -euo pipefail
 cargo fmt --all
 cargo fmt --manifest-path crates/native/Cargo.toml --all
-# Direct node entry point, not `pnpm exec`: see the comment in [tasks.test].
-node ./node_modules/vite-plus/bin/vp fmt
-"""
-
-[tasks."tauri:dev"]
-description = "Run the desktop app (debug build; fast to compile, slow at runtime)"
-shell = "bash -c"
-run = """
-set -euo pipefail
-pnpm install --frozen-lockfile
-pnpm tauri dev
-"""
-
-[tasks."tauri:release:devtools"]
-description = "Run the desktop app with an optimized Rust build (use this for any timing measurement)"
-shell = "bash -c"
-run = """
-set -euo pipefail
-pnpm install --frozen-lockfile
-pnpm tauri dev --release --features devtools
-"""
-
-[tasks."tauri:release"]
-description = "Bundle the desktop app as CI does, minus the updater artifacts that need the signing key"
-shell = "bash -c"
-run = """
-set -euo pipefail
-pnpm install --frozen-lockfile
-pnpm tauri build --config '{"bundle":{"createUpdaterArtifacts":false}}'
 """
 
 [tasks.lint]
@@ -67,8 +37,6 @@ description = "Run the OS-independent checks"
 shell = "bash -c"
 run = """
 set -euo pipefail
-pnpm install --frozen-lockfile
-pnpm exec vp check
 cargo fmt --all -- --check
 cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
 shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/native/packaging/linux/*.sh
@@ -85,12 +53,6 @@ description = "Build and test the workspace, per platform"
 shell = "bash -c"
 run = """
 set -euo pipefail
-pnpm install --frozen-lockfile
-# Invoke vp's node entry point directly rather than through `pnpm exec`:
-# on Windows the mise task shell is bash, and `pnpm exec vp` resolves to
-# the `.cmd` shim, which fails to find `node` because it runs under
-# cmd.exe with bash's POSIX-style PATH.
-node ./node_modules/vite-plus/bin/vp test
 cargo clippy --all-targets -- -D warnings
 cargo test
 """
@@ -155,7 +117,7 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp packaging/macos/Info.plist "$app/Contents/Info.plist"
 cp "target/$profile/riffle-native" "$app/Contents/MacOS/riffle-native"
-cp ../app/icons/icon.icns "$app/Contents/Resources/icon.icns"
+cp icons/icon.icns "$app/Contents/Resources/icon.icns"
 version="$(bash ../../tools/package/version.sh)"
 plutil -replace CFBundleShortVersionString -string "$version" "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$version" "$app/Contents/Info.plist"
@@ -204,7 +166,7 @@ set -euo pipefail
 cargo build --release
 install -Dm755 target/release/riffle-native "$HOME/.local/bin/riffle-native"
 install -Dm644 packaging/linux/dev.minodisk.handpic.desktop "$HOME/.local/share/applications/dev.minodisk.handpic.desktop"
-install -Dm644 ../app/icons/128x128@2x.png "$HOME/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png"
+install -Dm644 icons/128x128@2x.png "$HOME/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png"
 """
 
 [tasks.ci]
@@ -217,7 +179,7 @@ mise run test
 """
 
 [tasks."ci:local"]
-description = "Run only the checks the branch's changed paths call for (never the Tauri crate or the frontend tests); GitHub Actions runs the rest"
+description = "Run only the checks the branch's changed paths call for, on this platform; GitHub Actions runs the rest"
 shell = "bash -c"
 run = """
 set -euo pipefail

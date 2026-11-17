@@ -1,9 +1,5 @@
 /target
 crates/native/target
 /out
-node_modules
 
-crates/app/ui/dist
-crates/app/gen/
 /tmp
-crates/app/ui/src/**/*.js

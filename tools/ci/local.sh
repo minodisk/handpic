@@ -6,11 +6,10 @@ set -o nounset
 
 # local.sh — the light local check behind `mise run ci:local`.
 #
-# Selects each check from the branch's changed paths and runs only those. The
-# Tauri crate (riffle-app) is never built and the frontend tests never run; a
-# crate that depends on a changed one is not tested. GitHub Actions runs all of
-# it on the PR (`lint`, `test` on three platforms, `native`), and
-# `mise run ci` stays the full local run.
+# Selects each check from the branch's changed paths and runs only those, on
+# this platform; a crate that depends on a changed one is not tested. GitHub
+# Actions runs all of it on the PR (`lint`, `test` on three platforms,
+# `native`), and `mise run ci` stays the full local run.
 #
 # Changed paths: the working tree against `git merge-base HEAD origin/main`
 # (committed and uncommitted, renames as both paths) plus the untracked,
@@ -29,7 +28,7 @@ set -o nounset
 native_rust="rust@1.98.1"
 
 # The root packages checked one by one (crates/core, crates/backend,
-# crates/cli); riffle-app, the Tauri crate, is never built.
+# crates/cli).
 root_packages=(riffle-core riffle-backend riffle-cli)
 
 # Each bash test and the paths whose change runs it.
@@ -38,23 +37,6 @@ bash_tests=(
 	.claude/skills/merge/scripts/wait-post-merge-runs.test.sh
 	.claude/skills/merge-settings/scripts/merge.test.sh
 	tools/ci/local.test.sh
-)
-
-# The extensions vp's formatter handles: the main extensions of each language
-# oxfmt 0.68.0 (the one vite-plus 0.3.3 ships) formats, probed by running it
-# over one file of each, except `xhtml` and `pcss`, which come from its
-# linguist table. `.md` is left out (vite.config.ts ignores it); the
-# formatter's other ignored paths still select `vp check`, harmlessly.
-vp_extensions=(
-	js jsx mjs cjs ts tsx mts cts
-	json jsonc json5
-	yaml yml
-	toml
-	html htm xhtml vue
-	css scss less pcss
-	graphql gql
-	hbs handlebars
-	mdx markdown
 )
 
 # The globs `[tasks.lint]` passes to shellcheck, as regular expressions.
@@ -83,9 +65,9 @@ function select_checks() {
 		;;
 	esac
 
-	local fmt_root=0 fmt_native=0 vp=0 actionlint=0 lychee=0 native=0
+	local fmt_root=0 fmt_native=0 actionlint=0 lychee=0 native=0
 	local packages=' ' tests=' ' scripts=''
-	local path ext pattern any=0
+	local path pattern any=0
 	while IFS= read -r path; do
 		[[ -n "${path}" ]] || continue
 		any=1
@@ -94,7 +76,7 @@ function select_checks() {
 		esac
 		if [[ "${path}" == *.rs ]]; then
 			case "${path}" in
-			crates/app/* | crates/backend/* | crates/cli/* | crates/core/*) fmt_root=1 ;;
+			crates/backend/* | crates/cli/* | crates/core/*) fmt_root=1 ;;
 			crates/native/*) fmt_native=1 ;;
 			esac
 		fi
@@ -108,16 +90,6 @@ function select_checks() {
 		crates/backend/*) packages+="riffle-backend " ;;
 		crates/cli/*) packages+="riffle-cli " ;;
 		crates/native/*) native=1 ;;
-		esac
-		case "${path}" in
-		crates/app/ui/* | package.json | pnpm-lock.yaml | vite.config.ts | tsconfig.json) vp=1 ;;
-		.claude/* | *.md) ;;
-		*.*)
-			ext="${path##*.}"
-			if [[ "${ext}" != */* && " ${vp_extensions[*]} " == *" ${ext} "* ]]; then
-				vp=1
-			fi
-			;;
 		esac
 		for pattern in "${shellcheck_patterns[@]}"; do
 			if [[ "${path}" =~ ${pattern} ]]; then
@@ -153,7 +125,7 @@ function select_checks() {
 
 	local package test
 	if [[ "${all}" -eq 1 ]]; then
-		fmt_root=1 fmt_native=1 vp=1 actionlint=1 lychee=1 native=1
+		fmt_root=1 fmt_native=1 actionlint=1 lychee=1 native=1
 		for package in "${root_packages[@]}"; do
 			packages+="${package} "
 		done
@@ -168,7 +140,6 @@ function select_checks() {
 
 	[[ "${fmt_root}" -eq 0 ]] || echo "fmt root"
 	[[ "${fmt_native}" -eq 0 ]] || echo "fmt native"
-	[[ "${vp}" -eq 0 ]] || echo "vp-check"
 	if [[ "${all}" -eq 1 ]]; then
 		echo "shellcheck-all"
 	elif [[ -n "${scripts}" ]]; then
@@ -193,7 +164,6 @@ function select_checks() {
 function every_check() {
 	echo "fmt root"
 	echo "fmt native"
-	echo "vp-check"
 	echo "shellcheck"
 	echo "actionlint"
 	echo "lychee"
@@ -252,10 +222,6 @@ function run_check() {
 	case "${check}" in
 	"fmt root") cargo fmt --all -- --check ;;
 	"fmt native") cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check ;;
-	vp-check)
-		pnpm install --frozen-lockfile
-		pnpm exec vp check
-		;;
 	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/native/packaging/linux/*.sh ;;
 	"shellcheck "*)
 		local script="${check#shellcheck }"
@@ -337,12 +303,15 @@ function main() {
 	if grep -q '^shellcheck ' <<<"$(printf '%s\n' "${selected[@]}")"; then
 		skipped+=("shellcheck of the unchanged scripts")
 	fi
-	skipped+=("riffle-app (never built locally)" "the frontend tests (vp test, never run locally)")
 
 	echo "ci:local selected:"
 	printf '  %s\n' "${selected[@]}"
 	echo "ci:local skipped (left to GitHub Actions):"
-	printf '  %s\n' "${skipped[@]}"
+	if [[ "${#skipped[@]}" -eq 0 ]]; then
+		echo "  (none)"
+	else
+		printf '  %s\n' "${skipped[@]}"
+	fi
 
 	# The root packages' clippy runs and test runs go to cargo as one call each,
 	# so a run over several packages builds them in one parallel graph.

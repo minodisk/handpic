@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  # The checks that cannot differ between platforms — formatting, the UI types,
+  # The checks that cannot differ between platforms — formatting, the links,
   # the workflow and shell linters. Running them once keeps the matrix below to
   # what it is actually there for.
   lint:
@@ -31,18 +31,6 @@ jobs:
       - uses: jdx/mise-action@v2
         with:
           version: 2026.9.0
-
-      # pnpm's store lives in a different place per OS, so ask pnpm rather than
-      # hard-coding a path that would silently cache nothing.
-      - name: Resolve the pnpm store path
-        id: pnpm-store
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
 
       - name: Run the lints
         run: mise run lint
@@ -60,20 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Tauri links against the system WebView, which on Linux means webkit2gtk
-      # and its companions. Without these the app crate does not even compile,
-      # so this has to come before the toolchain does any building.
-      - name: Install the Linux WebView dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libxdo-dev \
-            patchelf
-
       - uses: jdx/mise-action@v2
         with:
           version: 2026.9.0
@@ -87,19 +61,6 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-
-
-      # pnpm's store lives in a different place per OS, so ask pnpm rather than
-      # hard-coding a path that would silently cache nothing.
-      - name: Resolve the pnpm store path
-        id: pnpm-store
-        shell: bash
-        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
-
-      - uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
 
       - name: Build and test
         run: mise run test

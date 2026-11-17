@@ -36,7 +36,7 @@ fn main() {
 // what `set_icon` writes.
 #[cfg(windows)]
 fn embed_icon() {
-    let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/icons/icon.ico");
+    let icon = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("icons/icon.ico");
     let icon = icon.to_str().expect("the manifest dir is UTF-8");
     println!("cargo:rerun-if-changed={icon}");
     let mut res = winresource::WindowsResource::new();

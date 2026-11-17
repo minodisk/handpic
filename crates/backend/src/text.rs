@@ -1,5 +1,5 @@
-//! Display text both apps share: the message of an operation refused while a
-//! scan runs and the byte sizes the dialogs show.
+//! Display text: the message of an operation refused while a scan runs and
+//! the byte sizes the dialogs show.
 
 /// The base the size figure is divided by. The label mirrors what the user's
 /// file manager shows next to the same file: Finder counts 1 GB as 1000^3,

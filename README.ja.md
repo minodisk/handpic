@@ -1,4 +1,4 @@
-<p align="center"><img src="./crates/app/icons/128x128@2x.png" alt="Handpic" width="128"></p>
+<p align="center"><img src="./crates/native/icons/128x128@2x.png" alt="Handpic" width="128"></p>
 
 <p align="center"><a href="./README.md">English</a> | 日本語</p>
 

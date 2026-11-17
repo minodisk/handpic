@@ -212,16 +212,6 @@ A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to p
 
 - [ ] Retake the deep-row measurement post-fix, then decide between crop prefetch and a DCT-scaled placeholder.
 
-### App: the silent update path is unverified end-to-end
-
-The Updating paragraph in `docs/humans/usage.md` describes a background download and install on launch and the "Check for Updates…" menu item, but nothing has confirmed on a real build that an installed copy detects a newer release, installs it silently, and launches as the new version next time. The background flow is verified on Windows 11 (2026-09-22): 0.1.10 downloaded 0.2.0, installed it on quit, and launched as 0.2.0.
-
-#### TODO
-
-- [x] Background update flow on Windows (Windows 11, 0.1.10 -> 0.2.0, 2026-09-22): downloaded, installed on quit, launched as 0.2.0.
-- [ ] Verify the **Check for Updates…** menu item reports the up-to-date / installed / already-installed outcomes correctly on macOS, Windows, and Linux AppImage.
-- [ ] Verify the background flow on macOS and Linux AppImage: install the current release, publish the next one, then launch the installed build. Done when the newer release is installed after the signature check and used on the next launch.
-
 ### Docs: consider a guide for verifying Pillow pixel edits
 
 `app-icon-enlarge-marks` hit two Pillow pitfalls while verifying an in-place
@@ -293,34 +283,6 @@ Files: `crates/app/ui/src/main.ts` (`confirmTrashFiles`, `trashFilesIn`), `crate
 - [ ] On Windows, `Ctrl+Z` brings the moved files back with their judgments, and `Ctrl+Shift+Z` moves them to the Trash again.
 - [ ] On Windows, confirm the dialog while a scan is running. Expect the status line to say it is waiting for the scan, and the files to move when the scan ends.
 - [ ] On Windows, in a JPEG-only folder the menu is `Select All` + `Move to Trash…`. A JPEG should move alone without sidecars, and undo should restore it (`Restored 1 file from the Trash`).
-
-### App: the muda template-icon fork is a temporary bridge
-
-Custom menu-item icons now tint with the menu appearance (white in dark mode,
-black in light mode) via a `[patch.crates-io]` fork of muda 0.19.3
-(`minodisk/muda`, `rev = "ef4fbfda53416382a2eeca7da683a64a8fe0e8ed"`) that
-calls `nsimage.setTemplate(true)` unconditionally in `menuitem_set_icon`. This
-is a temporary bridge, not the permanent fix: upstream PR
-https://github.com/tauri-apps/muda/pull/413 carries the same change behind an
-opt-in `set_icon_as_template` API; it merged on 2026-09-29 and shipped in
-muda v0.21.0 (2026-09-30).
-
-As of 2026-10-05: Tauri v2.12.1, the latest v2 release, depends on
-`muda = "0.20"`, so it does not resolve muda 0.21; Tauri's menu-item API still
-has no template flag (only tray icons have one); the workspace is still on
-tauri 2.11.6 with the fork's muda 0.19.3.
-
-#### TODO
-
-- [ ] Once a Tauri v2 release depends on muda >= 0.21 (where muda#413's
-      `set_icon_as_template` lives) **and** Tauri exposes the template flag
-      for menu items, drop the `[patch.crates-io]` entry from the workspace
-      `Cargo.toml` and switch to the upstream opt-in API.
-- [ ] Re-verify in the running app that all bundled menu PNGs still tint
-      correctly with the menu appearance after the switch.
-
-Related: `Cargo.toml`, `docs/agents/tauri-app.md`,
-`tools/macos/export-menu-icons.swift`.
 
 ### App: real-device checks for the View menu
 
@@ -2915,31 +2877,6 @@ Run each check with `--settings <fresh test store>` and `--log <test file>`, nev
 #### TODO
 
 - [ ] Read the build time of each leg of the `native` CI job (Windows, Linux, macOS) on the `gpui-component-dep` PR. Done when every leg finishes inside `timeout-minutes: 30` with margin. Otherwise raise the timeout and record it in the "gpui-pre snapshot" entry of `docs/agents/native-app.md`.
-
-### Tooling: format JSON and YAML without node once the Tauri app is gone
-
-#### Background
-
-`mise run lint` and `mise run ci:local` (`tools/ci/local.sh`) run `vp check`,
-which formats JSON, YAML and TOML through oxfmt from `vite-plus`, so both need
-node and `pnpm install` even for a change that touches no frontend code (a
-plan's `.json`, a workflow `.yml`, a `Cargo.toml`). Once the Tauri app and
-`crates/app/ui` are removed, the only reason left for node in those checks is
-that formatting. A standalone Rust formatter installed through mise, such as
-dprint (its JSON, YAML and TOML plugins), would do the same without node.
-Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
-Files: `mise.toml` (`[tasks.lint]`, `[tasks.fmt]`), `vite.config.ts`
-(`fmt.ignorePatterns`), `tools/ci/local.sh` (`vp_extensions`, the
-`vp-check` check), `.github/workflows/ci.yml` (the `lint` job's node setup).
-
-#### TODO
-
-- [ ] When the Tauri app and `crates/app/ui` are removed, move the JSON / YAML
-      (and TOML) formatting from vp (oxfmt through pnpm) to a standalone
-      formatter installed through mise, such as dprint, carrying over
-      `vite.config.ts`'s ignore patterns, and drop node and pnpm from
-      `[tasks.lint]`, `[tasks.fmt]` and `tools/ci/local.sh`. Done when
-      `mise run lint` and `mise run ci:local` run with no node installed.
 
 ### Agents: a cold Rust `ci:local` is moved to the background by the Bash tool after 180 s
 

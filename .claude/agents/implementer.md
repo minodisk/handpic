@@ -62,10 +62,9 @@ You are given:
    - Formatting: `mise run fmt`
    - The checks: `mise run ci:local`. It runs only what the branch's changed
      paths call for (`tools/ci/local.sh`): the link check for Markdown,
-     `vp check` for the frontend, clippy and the tests of the changed crates. It
-     never builds the Tauri crate or runs the frontend tests, and it does not
-     test the crates that depend on a changed one; the PR's GitHub checks run
-     all of that
+     clippy and the tests of the changed crates. It runs on this platform only
+     and does not test the crates that depend on a changed one; the PR's
+     GitHub checks run the other platforms and those tests
    - A plan's Done-when that names `mise run ci` or `mise run native:check`
      is met by `mise run ci:local` passing here and the PR's GitHub checks
      passing. Run neither full task locally as a gate (the full root

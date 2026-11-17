@@ -1,17 +1,7 @@
 [workspace]
-members = ["crates/app", "crates/backend", "crates/cli", "crates/core"]
+members = ["crates/backend", "crates/cli", "crates/core"]
 exclude = ["crates/native"]
 resolver = "2"
 
 [profile.release]
 opt-level = 3
-
-# `minodisk/muda` is muda 0.19.3 (the version `tauri` resolves for `muda = "^0.19"`)
-# plus an unconditional `nsimage.setTemplate(true)` in `menuitem_set_icon`. Without
-# it macOS draws our custom menu icons in their own colors, so they do not tint
-# with the menu appearance like the OS-provided items next to them. This pulls
-# third-party code from a personal GitHub fork at build time. Drop it once
-# muda#413 (https://github.com/tauri-apps/muda/pull/413) ships in a muda release
-# Tauri resolves AND Tauri exposes the template flag for menu items.
-[patch.crates-io]
-muda = { git = "https://github.com/minodisk/muda", rev = "ef4fbfda53416382a2eeca7da683a64a8fe0e8ed" }

@@ -18,11 +18,8 @@ approval for merges on that basis, with two exceptions:
   the user types `/release` ([`../../release/SKILL.md`](../../release/SKILL.md)),
   whose invocation is the approval.
 - **Paths that change what a release is or how it is built are not covered.**
-  `.github/**`, `release-please-config.json`, `.release-please-manifest.json`
-  and `crates/app/tauri.conf.json` (it carries the updater public key and
-  endpoint; a wrong key shipped in a release leaves every installed copy unable
-  to verify later updates, and a revert on `main` does not reach them). When the
-  check prints an `approval` line for one of these, stop and ask the user before
+  `.github/**`, `release-please-config.json` and
+  `.release-please-manifest.json`. When the check prints an `approval` line for one of these, stop and ask the user before
   starting `merger` with the approved flag.
 
 Everything else keeps the report-only behavior below.
@@ -56,10 +53,9 @@ without looking, and the user keeps visibility through that report.
 
 Call out prominently — still without stopping — anything in the class that can
 make **code we did not write execute on a developer machine or in CI**:
-`Cargo.lock`, `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`,
-`.cargo/**`, `mise.toml`, `mise.lock`, and the toolchain files. Those are the
-only findings whose risk does not wait for a release: a new dependency's build
-script or install script runs the moment someone builds. Name the new dependency
+`Cargo.lock`, `.cargo/**`, `mise.toml`, `mise.lock`, and the toolchain files.
+Those are the only findings whose risk does not wait for a release: a new
+dependency's build script runs the moment someone builds. Name the new dependency
 in the report when the check flags one.
 
 `build.rs`, `.claude/**` and `tools/**` stay approval-required in the check
