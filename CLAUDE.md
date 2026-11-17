@@ -303,7 +303,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -376,7 +376,8 @@ the view through one channel and the status line's `Status` (cleared whenever
 a re-listing stops the scan), the scan held in the `Running` the app's quit
 handler shares, which stops it within `STOP_TIMEOUT` on every quit,
 `src/strip.rs` is the thumbnail strip's pure
-model (the cell pitch, the scroll offset, the range kept with `RANGE_MARGIN`,
+model (the cells' `Geometry`, the image box, cell and pitch `Geometry::of`
+derives from the strip's height, the scroll offset, the range kept with `RANGE_MARGIN`,
 hit testing and which cell to ask for next, with `strip.ts`'s `missing` /
 `ready` / `failed` bookkeeping, and each cell's judgment `Marks`: the stars,
 the flag dot, the dimmed reject and the label's `Tint`, and its hover texts'
@@ -558,7 +559,13 @@ within `MIN` and `MAX`, the preview kept `PREVIEW_MIN`; `from_setting` and
 boundary gives; `drawn`, the panes narrowed while the window cannot hold
 them), which the window sets from gpui-component's standalone
 `resize_handle` on the preview's edges and writes at the drag's end (neither
-read nor written under `--auto`), next to
+read nor written under `--auto`), and `src/stripheight.rs` the strip's
+height (`DEFAULT` 128 px within `MIN` and `MAX`, the preview kept
+`PREVIEW_MIN`; `from_setting` and `setting`, the `stripHeight` value;
+`dragged`, the height a drag of the strip's top edge gives), which the window
+sets from a vertical `resize_handle` on the strip's top edge, the cells
+resized around those in view (`Strip::set_geometry`), and writes at the
+drag's end (neither read nor written under `--auto`), next to
 `open`, the OS folder picker whose folder opens as a click in the tree does
 unless another open came first, and `src/dropped.rs` the rules of a drop onto
 the window (a port of the Tauri `dropped_dir`: `single`, the one path a drop

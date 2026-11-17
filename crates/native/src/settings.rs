@@ -28,7 +28,7 @@ use crate::{
     panewidths::PaneWidths,
     session::Geometry,
     sort::SortKey,
-    theme,
+    stripheight, theme,
 };
 
 pub struct Settings {
@@ -57,6 +57,9 @@ pub struct Settings {
     pub panels: Panels,
     /// The side panes' widths at startup; the end of a drag writes them back.
     pub pane_widths: PaneWidths,
+    /// The strip's height at startup (`stripHeight`); the end of a drag
+    /// writes it back.
+    pub strip_height: f32,
     /// The theme and its mode (`theme`); the Appearance tab writes it back.
     pub theme: theme::Setting,
     /// The writes to the store the values came from; a no-op when it did not
@@ -267,6 +270,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         window: Geometry::from_setting(values.get("windowBounds")),
         panels: Panels::from_setting(values.get("panels")),
         pane_widths: PaneWidths::from_setting(values.get("panelWidths")),
+        strip_height: stripheight::from_setting(values.get("stripHeight")),
         theme: theme::Setting::from_setting(values.get("theme")),
         writes: Writes::spawn(None),
     }
@@ -282,6 +286,7 @@ mod tests {
         panewidths::{self, PaneWidths},
         session::{Geometry, Rect},
         sort::SortKey,
+        stripheight,
         theme::{self, Mode},
     };
     use riffle_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
@@ -486,6 +491,27 @@ mod tests {
         assert_eq!(
             seeded(dir.path(), "none", "{}").pane_widths,
             PaneWidths::default()
+        );
+    }
+
+    #[test]
+    fn the_strip_height_is_read_with_its_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            seeded(dir.path(), "set", r#"{"stripHeight":200}"#).strip_height,
+            200.
+        );
+        assert_eq!(
+            seeded(dir.path(), "high", r#"{"stripHeight":1000}"#).strip_height,
+            stripheight::MAX
+        );
+        assert_eq!(
+            seeded(dir.path(), "odd", r#"{"stripHeight":"tall"}"#).strip_height,
+            stripheight::DEFAULT
+        );
+        assert_eq!(
+            seeded(dir.path(), "none", "{}").strip_height,
+            stripheight::DEFAULT
         );
     }
 

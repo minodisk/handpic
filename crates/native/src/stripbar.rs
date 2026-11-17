@@ -63,13 +63,14 @@ mod tests {
     use gpui_kit::{point, px};
 
     use super::StripBar;
-    use crate::strip::{CELL_PITCH, Strip};
+    use crate::strip::{Geometry, Strip};
 
-    fn strip(len: usize) -> Strip {
+    fn strip(len: usize, geometry: Geometry) -> Strip {
         Strip::new(
             &(0..len)
                 .map(|i| format!("D:/a/{i}.ARW"))
                 .collect::<Vec<_>>(),
+            geometry,
         )
     }
 
@@ -82,10 +83,13 @@ mod tests {
 
     #[test]
     fn content_is_the_cells_times_the_pitch() {
-        let strip = strip(10);
         let bar = StripBar::default();
-        bar.sync(strip.offset(), strip.content_width());
-        assert_eq!(bar.content_size().width, px(10. * CELL_PITCH));
+        let default = strip(10, Geometry::default());
+        bar.sync(default.offset(), default.content_width());
+        assert_eq!(bar.content_size().width, px(10. * 154.));
+        let tall = strip(10, Geometry::of(176.));
+        bar.sync(tall.offset(), tall.content_width());
+        assert_eq!(bar.content_size().width, px(10. * 226.));
     }
 
     #[test]

@@ -1018,8 +1018,9 @@ time a burst of its own. The view keeps the open folder's grouping in
   neighbour's outline. The band is `.cell.burst::before`: `rgba(255, 255,
   255, 0.08)` from the cell's padding box 5 px above and below and 1 px
   right, on a member after another left across the 8 px gap, 2 px out with
-  a 6 px radius at the band's first and last cell. `STRIP_PADDING` is 7 px,
-  the Tauri strip's, room for the band. The `position/size` badge is shaped
+  a 6 px radius at the band's first and last cell, the gap and the cell
+  being the current `strip::Geometry`'s. `STRIP_PADDING` is 7 px at every
+  strip height, the Tauri strip's, room for the band. The `position/size` badge is shaped
   text at the image box's bottom-right, 2 px in, in the fixed `BADGE_COLOR` (`#fafafa`, the same in every theme as it sits over the photo on the halo) over the
   eight dark copies of `overlay::HALO`, painted before the rejected dim so a
   rejected member's badge dims with its cell, and a rejected member's band
@@ -1928,7 +1929,8 @@ is drawn.
 - The strip: `stripbar.rs`'s `StripBar`, a `ScrollbarHandle` over an
   `Rc<Cell<..>>` the view holds, as the preview canvas's size cell is. On
   every render the view `sync`s it from `Strip` (the offset, reported
-  negated, and `Strip::content_width`, the cell count times `CELL_PITCH`);
+  negated, and `Strip::content_width`, the cell count times the current
+  geometry's pitch);
   the strip's `div` (already `relative()`) gets
   `horizontal_scrollbar(&strip_bar)` after the canvas and the tooltip region
   `div`s, so the bar's hitbox is the topmost. Its viewport is the strip
@@ -1949,8 +1951,8 @@ is drawn.
   shown, no listener is registered and the press goes where it went before.
   The wheel is not stopped: the strip's `on_scroll` still runs under it.
 - The strip's bar is drawn over its bottom edge (the 7 px `STRIP_PADDING`
-  and possibly the bottom of the name band) while shown; `STRIP_HEIGHT` and
-  the layout are unchanged.
+  and possibly the bottom of the name band) while shown; the strip's height
+  (`stripheight.rs`) and the layout are unchanged by it.
 - Not verified by hand yet; the check is pending in
   `../plans/20261115-native-scrollbars/learnings.md`.
 
@@ -2900,6 +2902,60 @@ gives it its last width with no code.
   at 160 px, and a release outside the window (whether Windows delivers it;
   if not, the write waits for the next release inside). The `todo.md` hand
   checks hold them.
+
+### The strip's height is one number, stored under `stripHeight` (Inferred)
+
+`stripheight.rs` holds the strip's height in logical px: `DEFAULT` 128 (the
+Tauri strip's, the former fixed `STRIP_HEIGHT`), `MIN` 96, `MAX` 302 (a
+270 px high image box, the stored thumbnail's height) and `PREVIEW_MIN` 240
+for the preview. `Strip` holds the cells' `strip::Geometry`, which
+`Geometry::of(height)` derives: the image box takes the height less the
+7 px `STRIP_PADDING` above and below, the 16 px `NAME_HEIGHT` and the box's
+1 px border each side, at 3:2 with its width rounded to whole px; the cell is
+the box plus the border, the pitch the cell plus the 8 px gap. At 128 that is
+the Tauri strip's 144 x 96 box, 146 x 114 cell and 154 px pitch. Only the
+image box scales; the name, the stars, the flag dot, the burst badge and the
+face icon keep their sizes.
+
+- Rule: every reader of the strip's layout takes the current geometry:
+  `Strip`'s offset, range, hit test, request order and content width read
+  its own, `Strip::new` is handed `self.strip.geometry()` on every rebuild,
+  and `carried_offset` (the pitch), `tip_regions`, `paint_strip` and
+  `paint_burst_band` take it as a parameter.
+- Rule: the handle is a standalone `resize_handle` with `Axis::Vertical` and
+  `HandleEdge::Leading` (`strip_handle` in `main.rs`, payload and dragged
+  item `StripDrag`, drawn as nothing), the last child of the strip's
+  `relative()` `div`: it spans the window, goes with the strip when it is
+  hidden, takes the strip's top 5 px (its padding) above the scrollbar's
+  hitbox and draws a 1 px line on its top edge.
+- Rule: the middle row and the strip sit in one wrapper `div` (a `flex_col`
+  with `flex_1`), whose `on_drag_move::<StripDrag>` follows the drag (capture
+  phase, every move while the drag is active, wherever the pointer is). Its
+  `DragMoveEvent::bounds` are the wrapper's, so its bottom is the strip's
+  bottom edge and its height what the preview and the strip share, with no
+  assumption about the status row's height or the Linux frame's padding
+  below. The wanted height is that bottom less the pointer's `y`; `dragged`
+  rounds it to whole px, clamps it to `MIN`..`MAX` and to what leaves the
+  preview `PREVIEW_MIN`, never under `MIN`.
+- Rule: a move that changes the height calls `Strip::set_geometry`, which
+  keeps the cells in view: the current cell's center stays where it is on
+  screen when that cell overlaps the viewport, else the cell at the
+  viewport's left edge stays there, then the offset is clamped to the new
+  content. Then `strip_moved` (the range's thumbnails released and
+  requested, the scan's hot list) and `zoom_resized` (the 1:1 crop re-cut)
+  run and the view repaints.
+- Rule: the height is written at the drag's end, once, through the same
+  release listeners as the side panes' widths (`end_pane_drag`, which also
+  takes `strip_dragged`), as one number under `stripHeight`. A missing,
+  non-number or non-finite value means 128; a number out of range is
+  clamped. Under `--auto` the strip starts at 128 and nothing is written
+  (`remember_panels` off).
+- Rule: no `drawn` rule as the side panes have. The preview's minimum holds
+  during a drag only; a window made shorter afterwards takes the space from
+  the preview, as the fixed strip did.
+- Not observed in the running app: the drag itself, the handle's line and
+  cursor, the marks on the smallest cells, the sharpness of the largest, and
+  a release outside the window. The `todo.md` hand checks hold them.
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
