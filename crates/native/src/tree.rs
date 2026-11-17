@@ -63,37 +63,57 @@ struct Cached {
     ignore_case: bool,
 }
 
-/// Serializes the writes of the counts the tree learns to `folder_counts`:
-/// one in flight at a time, and the counts pushed meanwhile collected, per
-/// folder with the latest winning, into the next write, so two listings of
-/// one folder cannot land out of order. Like `viewed.rs`'s `Batches`, but the
+/// One entry of a `folder_counts` write.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CountWrite {
+    /// A folder's count, a zero deleting its row.
+    Count(String, usize),
+    /// The rows under `parent` not under one of `keep`
+    /// (`Index::prune_folder_counts`).
+    Prune { parent: String, keep: Vec<String> },
+}
+
+/// Serializes the writes of the counts the tree learns, and the prunes of
+/// its listings, to `folder_counts`: one write in flight at a time, and the
+/// entries pushed meanwhile collected in push order into the next write, a
+/// folder's later count replacing its pending one and moving to the end, so
+/// two listings of one folder cannot land out of order and a count lands
+/// after a prune pushed before it. Like `viewed.rs`'s `Batches`, but the
 /// whole pending set goes out as one write.
 #[derive(Default)]
 pub struct CountWrites {
-    /// In the order the folders were first pushed, each folder once.
-    pending: Vec<(String, usize)>,
+    pending: Vec<CountWrite>,
     in_flight: bool,
 }
 
 impl CountWrites {
-    /// The counts to write now, `None` while a write is out.
-    pub fn push(&mut self, path: &str, count: usize) -> Option<Vec<(String, usize)>> {
-        match self.pending.iter_mut().find(|(p, _)| p == path) {
-            Some(pending) => pending.1 = count,
-            None => self.pending.push((path.to_owned(), count)),
-        }
+    /// The entries to write now, `None` while a write is out.
+    pub fn push(&mut self, path: &str, count: usize) -> Option<Vec<CountWrite>> {
+        self.pending
+            .retain(|w| !matches!(w, CountWrite::Count(p, _) if p == path));
+        self.pending.push(CountWrite::Count(path.to_owned(), count));
         if self.in_flight { None } else { self.next() }
     }
 
-    /// The write out has ended, failed or not. The counts to write next.
-    pub fn settled(&mut self) -> Option<Vec<(String, usize)>> {
+    /// Queues a prune of `parent`'s rows outside `keep`; the entries to write
+    /// now, `None` while a write is out.
+    pub fn prune(&mut self, parent: &str, keep: Vec<String>) -> Option<Vec<CountWrite>> {
+        self.pending.push(CountWrite::Prune {
+            parent: parent.to_owned(),
+            keep,
+        });
+        if self.in_flight { None } else { self.next() }
+    }
+
+    /// The write out has ended, failed or not. The entries to write next.
+    pub fn settled(&mut self) -> Option<Vec<CountWrite>> {
         self.next()
     }
 
-    fn next(&mut self) -> Option<Vec<(String, usize)>> {
-        let counts = (!self.pending.is_empty()).then(|| std::mem::take(&mut self.pending));
-        self.in_flight = counts.is_some();
-        counts
+    fn next(&mut self) -> Option<Vec<CountWrite>> {
+        let writes = (!self.pending.is_empty()).then(|| std::mem::take(&mut self.pending));
+        self.in_flight = writes.is_some();
+        writes
     }
 }
 
@@ -133,6 +153,26 @@ impl Tree {
             .and_then(|node| self.drawn_children(node))
             .map(|children| children.into_iter().cloned().collect())
             .unwrap_or_default()
+    }
+
+    /// The child paths a prune of the listed `dir` keeps: the listed
+    /// `children`, and for each root under `dir` the child of `dir` leading
+    /// to it, so a root's rows survive a listing that does not hold it.
+    pub fn prune_keep(&self, dir: &str, children: &[Child], ignore_case: bool) -> Vec<String> {
+        let depth = segments(dir).len();
+        let mut keep: Vec<String> = children.iter().map(|c| c.path.clone()).collect();
+        for root in self.roots() {
+            if relation(root, dir, ignore_case) != Some(Relation::Under) {
+                continue;
+            }
+            if let Some(name) = segments(root).get(depth) {
+                let path = join(dir, name);
+                if !keep.contains(&path) {
+                    keep.push(path);
+                }
+            }
+        }
+        keep
     }
 
     fn known(&mut self, folders: &[Child]) {
@@ -1810,19 +1850,89 @@ mod tests {
         assert_eq!(count(&tree, "/media/me/card"), Some(3));
     }
 
+    fn counted(path: &str, n: usize) -> CountWrite {
+        CountWrite::Count(path.to_owned(), n)
+    }
+
+    fn pruned(parent: &str, keep: &[&str]) -> CountWrite {
+        CountWrite::Prune {
+            parent: parent.to_owned(),
+            keep: strings(keep),
+        }
+    }
+
     #[test]
     fn count_writes_go_one_at_a_time_the_latest_count_of_a_folder_winning() {
         let mut writes = CountWrites::default();
-        assert_eq!(writes.push("/a", 1), Some(vec![("/a".to_owned(), 1)]));
+        assert_eq!(writes.push("/a", 1), Some(vec![counted("/a", 1)]));
         assert_eq!(writes.push("/b", 2), None);
         assert_eq!(writes.push("/a", 3), None);
         assert_eq!(writes.push("/b", 0), None);
         assert_eq!(
             writes.settled(),
-            Some(vec![("/b".to_owned(), 0), ("/a".to_owned(), 3)])
+            Some(vec![counted("/a", 3), counted("/b", 0)])
         );
         assert_eq!(writes.settled(), None);
-        assert_eq!(writes.push("/c", 4), Some(vec![("/c".to_owned(), 4)]));
+        assert_eq!(writes.push("/c", 4), Some(vec![counted("/c", 4)]));
+    }
+
+    #[test]
+    fn count_writes_hand_out_counts_and_prunes_in_push_order() {
+        let mut writes = CountWrites::default();
+        assert_eq!(
+            writes.prune("/p", strings(&["/p/a"])),
+            Some(vec![pruned("/p", &["/p/a"])])
+        );
+        assert_eq!(writes.push("/p/a", 1), None);
+        assert_eq!(writes.prune("/p", strings(&[])), None);
+        assert_eq!(writes.push("/p", 2), None);
+        assert_eq!(writes.prune("/q", strings(&["/q/x"])), None);
+        assert_eq!(
+            writes.settled(),
+            Some(vec![
+                counted("/p/a", 1),
+                pruned("/p", &[]),
+                counted("/p", 2),
+                pruned("/q", &["/q/x"]),
+            ])
+        );
+        assert_eq!(writes.settled(), None);
+    }
+
+    #[test]
+    fn a_later_count_moves_behind_a_prune_pushed_after_the_earlier_one() {
+        let mut writes = CountWrites::default();
+        assert_eq!(writes.push("/x", 9), Some(vec![counted("/x", 9)]));
+        assert_eq!(writes.push("/p/a", 1), None);
+        assert_eq!(writes.prune("/p", strings(&[])), None);
+        assert_eq!(writes.push("/p/a", 3), None);
+        assert_eq!(
+            writes.settled(),
+            Some(vec![pruned("/p", &[]), counted("/p/a", 3)])
+        );
+    }
+
+    #[test]
+    fn the_prune_keeps_the_listed_children_and_the_way_to_a_root_under_the_folder() {
+        let tree = with_roots(&[
+            child("me", "/home/me"),
+            child("deep", "/media/.hidden/deep"),
+            child("card", "/media/card"),
+            child("other", "/mnt/other"),
+        ]);
+        let listed = [child("card", "/media/card"), child("usb", "/media/usb")];
+        assert_eq!(
+            tree.prune_keep("/media", &listed, false),
+            strings(&["/media/card", "/media/usb", "/media/.hidden"])
+        );
+        assert_eq!(
+            tree.prune_keep("/", &[child("home", "/home")], false),
+            strings(&["/home", "/media", "/mnt"])
+        );
+        assert_eq!(
+            tree.prune_keep("/home/me", &[], false),
+            Vec::<String>::new()
+        );
     }
 
     #[test]

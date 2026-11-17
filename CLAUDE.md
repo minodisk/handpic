@@ -90,8 +90,9 @@ eviction, dropped by Clear Cache), which gives the ranking its negatives
 a reject from the 30-day eviction, not from the size cap or Clear Cache,
 and in the separate `folder_counts` table each folder's file count as the
 native app's tree last listed it, keyed by the tree's spelling of the path
-(`set_folder_counts`, `folder_counts`, `rename_folder_counts`; kept by the
-eviction, emptied by Clear Cache),
+(`set_folder_counts`, `folder_counts`, `rename_folder_counts`,
+`prune_folder_counts`, which drops the rows under a listed folder outside
+the child folders it keeps; kept by the eviction, emptied by Clear Cache),
 re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in three
 passes on the one scan task: `run_scan` (thumbnail, metadata), then
 `run_faces_scan`, which runs the face cue (YuNet, then the face mesh on the face nearest the AF point) and fills the `sharpness` /
@@ -464,7 +465,9 @@ each folder's listed children, expansion, RAW count and failed listing, the
 cached counts of the index's `folder_counts` table (`set_cached_counts`,
 keyed by the tree's own spelling, which an unlisted row shows until a listing
 or an open's `set_listed_count` gives its own; `CountWrites`, the coalescing
-of the counts the tree learns on their way to that table), the
+of the counts the tree learns, and of the prunes of the child folders a
+listing no longer holds (`prune_keep`), on their way to that table in push
+order), the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
 draws as a `uniform_list`, fills from the backend's `folders`, expands

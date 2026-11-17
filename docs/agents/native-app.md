@@ -2709,6 +2709,25 @@ strip needed one because `uniform_list` is vertical only.
   the latest winning; nothing is written without an index. A write still
   queued at quit is lost, not drained: it is a cache, and the folder's next
   listing writes it again. Inferred, not yet observed in the running app.
+- Rule: every successful tree listing (`tree_listed`'s `Ok` branch: an
+  expand, `Refresh`, a tree watcher change, `Expand All`, a reveal's chain)
+  also queues one prune of the listed folder (`Index::prune_folder_counts`):
+  the rows under it whose first segment below it is not kept are deleted, the
+  absent child's own row and every row under it. The keep set
+  (`Tree::prune_keep`) is the listed children's paths plus, for each tree
+  root `relation` puts under the folder, the folder's child leading to it, so
+  a hidden root's rows survive. The paths are compared as spelled, byte for
+  byte, against a parent prefix with exactly one separator (none added to
+  `C:\` or `/`); the rows are selected under the prefix and the absent ones
+  deleted by exact `dir`, so no SQL parameter is bound per child. A failed
+  listing and an open's count prune nothing, and the prune reads nothing from
+  disk. `CountWrites` keeps counts and prunes in one ordered batch, a
+  folder's later count replacing its pending one and moving to the end, and
+  `write_folder_counts` applies the batch in order under one `index::lock`
+  guard, consecutive counts as one `set_folder_counts`; a failure stops that
+  batch and is logged, and the next batch still goes out. The tree's
+  in-memory cached map is not pruned; it is replaced at its next read.
+  Inferred, not yet observed in the running app.
 - Rule: the cached counts are read whole (`Index::folder_counts`, the
   `folder_counts` table alone, never `files`) on `background_spawn` under
   `index::lock` of the reader, never touching a folder on disk, and replace
