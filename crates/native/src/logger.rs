@@ -13,7 +13,7 @@ use crate::datadir::IDENTIFIER;
 pub const LOG_FILE: &str = "Handpic.log";
 
 /// The Tauri app's `max_file_size`: the next write that would pass it starts
-/// the file anew, as its `RotationStrategy::KeepOne` does.
+/// the file anew, as its `RotationStrategy::KeepOne` did.
 pub const MAX_FILE_SIZE: u64 = 1_000_000;
 
 /// Writes `[target][LEVEL] message` lines to stderr, so the backend's
@@ -101,7 +101,7 @@ pub fn install(flag: Option<PathBuf>) {
 }
 
 /// The log file: `flag` when given, else `Handpic.log` in the
-/// `<IDENTIFIER>` folder in the shape of Tauri's `app_log_dir`
+/// `<IDENTIFIER>` folder in the shape of the `app_log_dir` the Tauri app used
 /// (`<base>/<id>` on macOS, `base` being `~/Library/Logs`; `<base>/<id>/logs`
 /// elsewhere, `base` being the local data dir); `None` when neither is known.
 pub fn log_path(flag: Option<PathBuf>, base: Option<&Path>) -> Option<PathBuf> {

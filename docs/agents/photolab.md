@@ -5,7 +5,7 @@ Read this before touching `crates/core/src/dop.rs`,
 `crates/backend/src/sidecar.rs`. It lists what PhotoLab's sidecar format and
 database have already broken here, each with the reason.
 
-The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something
+The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
 or docs only.
 

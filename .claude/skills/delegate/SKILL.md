@@ -92,7 +92,7 @@ EOF
 
 On Windows the Bash tool still halves every `\\` in the text, heredoc or not
 (see "On Windows, the Bash tool halves doubled backslashes" in
-`docs/agents/tauri-app.md`); keep doubled backslashes out of the description.
+`docs/agents/shared-crates.md`); keep doubled backslashes out of the description.
 
 Do **not** pass `--wait`: `/develop` runs for a long time.
 

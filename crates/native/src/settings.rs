@@ -1,9 +1,9 @@
 //! The native app's settings, kept in its own store
 //! (`handpic_backend::store`) and read with the backend's rules, so a native
 //! judgment writes the same sidecars with the same label names and keys as
-//! the Tauri app. A new store is seeded once from the Tauri app's
-//! `settings.json`, which is only ever read; after that the two apps'
-//! settings diverge.
+//! the Tauri app did. A new store is seeded once from an earlier install's
+//! Tauri `settings.json`, which is only ever read and never again once the
+//! store exists.
 
 use std::{
     path::{Path, PathBuf},

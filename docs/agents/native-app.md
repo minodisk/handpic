@@ -3,7 +3,7 @@
 Read this before touching the GPUI app in `crates/native`. It lists what the
 port has met so far, each with the reason.
 
-The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something here,
+The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something here,
 **Measured** steered a design decision, **Inferred** comes from sources or docs
 only.
 
@@ -62,9 +62,11 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
 `Cargo.lock`. Zed's other patches (`cpal`, `notify`, `calloop`,
 `khronos-egl`, ...) are not needed by `gpui-pre` / `gpui-pre-platform`.
 
-- Rule: do not copy the others. Do not move these two to the root workspace
-  while the Tauri app lives there: both crates are in its lock, so a workspace
-  patch would swap them for Zed's forks in the shipped app.
+- Rule: do not copy the others. These two stayed out of the root workspace
+  while the Tauri app lived there (both crates were in its lock, so a
+  workspace patch would have swapped them for Zed's forks in the shipped
+  app); moving them belongs to the workspace merge, which re-checks the root
+  lock's users of both crates first.
 
 ### gpui-component is initialized; the settings modal and the tree's inline rename draw from it (Inferred)
 
@@ -396,11 +398,10 @@ Source: [the native-app-icon plan](../plans/_archived/20261114-native-app-icon/p
 `gpui-pre-windows` 0.3.12's `load_icon` loads `LoadImageW(module, PCWSTR(1),
 IMAGE_ICON, ..)` into the window class's `hIcon`, and a failed load silently
 leaves the generic icon. `crates/native/build.rs` therefore embeds
-`crates/app/icons/icon.ico` with `winresource`'s `set_icon`, which writes ID
-`1`, on a Windows target only (`CARGO_CFG_TARGET_OS`; the crate is a
+`crates/native/icons/icon.ico` with `winresource`'s `set_icon`, which writes
+ID `1`, on a Windows target only (`CARGO_CFG_TARGET_OS`; the crate is a
 `cfg(windows)` build-dependency), before the NASM check's early returns. The
-icon is referenced by path from `CARGO_MANIFEST_DIR`, not a Cargo dependency
-on `crates/app`. Explorer shows the exe's first icon group, so the one
+icon is referenced by path from `CARGO_MANIFEST_DIR`. Explorer shows the exe's first icon group, so the one
 resource serves the taskbar, the title bar and Explorer. In the built debug
 exe, `FindResourceW` finds `RT_GROUP_ICON` 1, one `RT_MANIFEST` 1 and
 `winresource`'s `RT_VERSION` 1, and `LoadImageW(.., 1, IMAGE_ICON, ..)`
@@ -409,8 +410,8 @@ succeeds.
 - Rule: never set a manifest in the app's resource. `gpui-pre-platform` turns
   on `gpui-pre`'s `windows-manifest` feature, whose build script already
   embeds `1 RT_MANIFEST`; a second one is a duplicate resource at link time.
-- Rule: a change to `crates/app/icons/icon.ico` alone does not select the
-  native checks in `mise run ci:local`; the PR's `native` job still builds it.
+- Rule: the icons live in `crates/native/icons/`, so a change to one selects
+  the native checks in `mise run ci:local` like any change in the crate.
 
 ### Linux matches the window to its `.desktop` file by `IDENTIFIER` (Inferred)
 
@@ -426,7 +427,7 @@ the distributables").
 
 `mise run native:install:linux` builds the release binary and installs it to
 `~/.local/bin/handpic`, the `.desktop` file to
-`~/.local/share/applications/` and `crates/app/icons/128x128@2x.png` (256 x
+`~/.local/share/applications/` and `crates/native/icons/128x128@2x.png` (256 x
 256 px) to `~/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`.
 
 - Rule: in a `mise.toml` `run = """..."""` (a TOML basic string), a `\` at the
@@ -440,7 +441,7 @@ the distributables").
 `mise run native:bundle:macos [profile]` (release by default) builds and lays
 out `crates/native/target/<profile>/Handpic.app` with the checked-in
 `crates/native/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
-`crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
+`crates/native/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
 version `tools/package/version.sh` prints into the copied `Info.plist`'s
 `CFBundleShortVersionString` and `CFBundleVersion` (`plutil -replace`; the
 checked-in file keeps `0.0.0`) and copies the notices into
@@ -448,8 +449,8 @@ checked-in file keeps `0.0.0`) and copies the notices into
 CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
 executable and the `.icns` present).
 
-- Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`,
-  shared with the Tauri app, which the native app replaces. `datadir.rs`'s
+- Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`, the
+  one the Tauri app had, which the native app replaced. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
 - Rule: the `native` CI job's macOS leg runs `mise run native:bundle:macos
@@ -498,7 +499,7 @@ packages the built `target/release` binary with a script under
   none). The setup installs per user (`PrivilegesRequired=lowest`,
   `{autopf}\Handpic`, which is `%LOCALAPPDATA%\Programs\Handpic`), adds a
   Start menu shortcut (`{autoprograms}`) and takes its icon from
-  `crates/app/icons/icon.ico`, read in place. The workflow's `windows` leg
+  `crates/native/icons/icon.ico`, read in place. The workflow's `windows` leg
   runs it on `windows-latest`, then installs the setup silently
   (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), checks the exe under
   `%LOCALAPPDATA%\Programs\Handpic`, the `HKCU` uninstall entry and its
@@ -512,7 +513,7 @@ packages the built `target/release` binary with a script under
   `crates/native/target/release`:
   - `Handpic-<version>-linux-x64.tar.gz`, one `Handpic/` folder with
     `bin/handpic`, the checked-in desktop entry under
-    `share/applications/`, `crates/app/icons/128x128@2x.png` as
+    `share/applications/`, `crates/native/icons/128x128@2x.png` as
     `share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`, and
     `licenses/`;
   - `install.sh`, a copy of `crates/native/packaging/linux/install.sh`
@@ -608,32 +609,28 @@ every CI job) stays without it. An edit under `crates/native`, `crates/core` or
 
 ### The backend names no event and no `AppHandle` (Inferred)
 
-`handpic-backend` serves both apps, so it reports through callbacks:
+`handpic-backend` knows no GUI, so it reports through callbacks (it served the
+Tauri app and the native app alike until the Tauri app was removed):
 `watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
-take the `&Watch`. Each app's own thin module owns the event name and payload;
-in the Tauri app that is `crates/app/src/watch.rs` with `folder-changed`, and
-`crates/app/src/treewatch.rs` with `tree-changed` over
+take the `&Watch`; the tree's watcher is
 `treewatch::TreeWatch::spawn(on_changed)`, `TreeWatch::set(dirs)` and
-`treewatch::with_released(&TreeWatch, ..)`. The trash commands' bodies
-(`trash::trash_listed`, `delete_listed`, `undo_run`, `redo_run`) take the
-`&Runs` and a `progress(done, total)` callback; the Tauri commands keep the
-writer flush, the `Scans` lock and its `SCAN_RUNNING` refusal, the
-`trash-progress` emit and the log line around them.
+`treewatch::with_released(&TreeWatch, ..)`. The app owns what a report
+becomes (the native app sends it into the view's event channel). The trash
+bodies (`trash::trash_listed`, `delete_listed`, `undo_run`, `redo_run`) take
+the `&Runs` and a `progress(done, total)` callback; the app keeps the writer
+flush, the scan guard, the progress report and the log line around them.
 The folder operations' bodies take their state the same way:
 `rename::rename_folder` and `datefolder::split_folder` take a
 `rename::Context` (the `&Watch`, the `&TreeWatch`, the optional index and the
 `&Runs`), `datefolder::plan_of` the optional index, and
 `foldersidecars::delete_run` the index and the `&Runs`. None of them checks
-for a scan or drains the sidecar writer: the Tauri wrappers flush the writer,
-take the `Scans` lock, refuse with `text::SCAN_RUNNING` and hold the lock
-across the call, and the native app has to guard the call with its own gate.
+for a scan or drains the sidecar writer: the Tauri app's wrappers flushed the
+writer and held a `Scans` lock across the call, and the native app guards the
+call with its own gate.
 The MCP companion's server (`mcp::Mcp`) takes a `Bridge` built over a send
-callback and returns each switch's `McpState`; the Tauri app's `mcp.rs` owns
-`mcp-request`, the main-window check and the `mcp-state` emit. The server
+callback and returns each switch's `McpState`. The server
 spawns its tasks with a bare `tokio::spawn`, so `Mcp::switch` and `Mcp::stop`
-must run inside a tokio runtime: the Tauri app calls them from async commands,
-a task on `tauri::async_runtime` and `tauri::async_runtime::block_on`, which
-all enter Tauri's runtime; the native app's `mcp.rs` owns a current-thread
+must run inside a tokio runtime: the native app's `mcp.rs` owns a current-thread
 runtime on its one `mcp` thread, which runs the switch, waits for the quit's
 signal and runs the stop. `Mcp::with_port` binds another port than
 `MCP_PORT`, for the native `--mcp-port`.
@@ -643,20 +640,18 @@ The CPU and disk sampler and the AI model's state follow the same seam.
 `impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
 (stopping needs no callback); the callback returns a `Result` so the warn-once
 on a failed report stays in the backend (`perf sample report failed: ...`,
-target `handpic_backend::perf`), and the Tauri wrapper is only
-`app.emit("perf-sample", sample)`. `ai::Ai` is a cloneable `Arc` over the
+target `handpic_backend::perf`). `ai::Ai` is a cloneable `Arc` over the
 status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
 `Ai::new`, so the download thread holds a clone of the `Ai` itself and
 reports progress and the final state through that callback; `switch` also
 returns the state. The `on_state` callback returns nothing because the Tauri
-app always ignored `ai-state` emit errors. The download's and the server's
-`log` lines now sit under `handpic_backend::ai` / `handpic_backend::mcp`, not
-`riffle_app::*`, so grep for the backend target. A native consumer takes these
-as they are rather than copying the Tauri wrapper. Source:
+app always ignored its report errors. The download's and the server's
+`log` lines sit under `handpic_backend::ai` / `handpic_backend::mcp`, so grep
+for the backend target. Source:
 `docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
 
-- Rule: never add `tauri`, an event name or an `AppHandle` to `crates/backend`;
-  take a callback or the state itself.
+- Rule: never add a GUI crate, an event name or an app handle to
+  `crates/backend`; take a callback or the state itself.
 - Rule: a backend body that changes a folder on disk leaves the scan check to
   its caller and says so in its doc comment; call it only with the caller's
   refusal of a running scan held across the call.
@@ -678,26 +673,17 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   and tests. The PR's `test` and `native` jobs, on all three platforms, run
   the rest: the root workspace's other crates and the native tests a backend
   change can break. Neither full task is run locally as a gate.
-- Rule: `ci:local` never compiles `riffle-app` or its tests, so a change to a
-  public `handpic-core` / `handpic-backend` type (removing or renaming a field of
-  `rank::Frame`, `Cue`, an index row) can leave the Tauri crate broken while it
-  passes. Also run `mise exec -- cargo check -p riffle-app --tests`. Removing
-  `rank::Frame::eye_focus` broke `rank_dump_of_real_folders` in
-  `crates/app/src/commands.rs` (E0609) this way, and only the review caught
-  it. The Tauri app is frozen, so the fix there is the minimal compile-only
-  edit. Source:
-  `docs/plans/_archived/20261115-full-eye-sharp-only/learnings.md`, Step 4.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
   workspace to be safe. `cargo clippy -p` / `cargo test -p` of `handpic-core`,
-  `handpic-backend` or `handpic-cli` never compiles `tauri` or `riffle-app` (their
-  graphs are 161 / 317 / 169 crates against 537 for `riffle-app`). The
+  `handpic-backend` or `handpic-cli` compiled 161 / 317 / 169 crates against
+  537 for the Tauri app's package, measured while it was in the workspace. The
   largest check's process-tree peak was 5.5 GB (the native test) and a cold
   `crates/core` change peaked at 3.3 GB, so the earlier out-of-memory kills
   came from the full root workspace, not from `ci:local`. The selected root
   packages go to one `cargo clippy` and one `cargo test` call (a `--package`
   each), because three separate cold calls for every check at once took 594 s,
   at the Bash tool's 600 s limit, against 382 s in one call. Cold wall times:
-  Markdown or frontend only under 10 s, `crates/cli` 66 s,
+  Markdown only under 10 s, `crates/cli` 66 s,
   `crates/native` 154 s, `crates/backend` 199 s, `crates/core` 265 s. Source:
   `docs/plans/_archived/20261114-light-local-ci/learnings.md`, Step 1.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
@@ -721,25 +707,20 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   folder rename's release path (see "A folder rename releases the watches,
   then follows in the tree and reopens").
 
-### The judgments' Tauri-free pieces live in the backend (Inferred)
+### The pieces both apps needed live in the backend (Inferred)
 
 The folder-open sidecar pass (`sidecar::reconcile_of`, with `SidecarError`
 and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
 `exif::metadata(name, &shot)`), the stored `labelNames` value
 (`sidecar::label_names_setting` / `label_names_value`), the metadata and
 preview reads (`exif::read_metadata`, `ondemand::read_preview`) and the stored
-`mcpEnabled` value (`mcp::mcp_enabled_setting`) moved out of
-`crates/app/src/commands.rs` so the native app can call them; the Tauri
-commands call them from there. `raw_only` stayed in `crates/app`: the native
-app's view-only rule is the frontend's `viewonly.ts`, ported on its own.
-The folder tree's listing (`folders::roots(home)`, `list(dir)`,
-`REVEAL_LABEL`, `is_hidden`) moved the same way out of
-`crates/app/src/folders.rs`; the home directory is the caller's (Tauri's
-path resolver there), and the reveal itself is not shared: the Tauri app
-keeps the opener plugin, the native app has GPUI's `App::reveal_path`.
-
-- Rule: a Tauri-free helper the native app needs moves into the backend, it is
-  not copied, so the two apps cannot drift in what they read and show.
+`mcpEnabled` value (`mcp::mcp_enabled_setting`) moved out of the Tauri
+app's commands into the backend so the native app could call them. The
+native app's view-only rule is `viewonly.rs`, a port of the Tauri
+frontend's `viewonly.ts`. The folder tree's listing (`folders::roots(home)`,
+`list(dir)`, `REVEAL_LABEL`, `is_hidden`) moved the same way; the home
+directory is the caller's, and the reveal itself is the app's (GPUI's
+`App::reveal_path`).
 
 ### The settings live in the native app's own store, seeded once (Inferred)
 
@@ -748,7 +729,8 @@ keeps the opener plugin, the native app has GPUI's `App::reveal_path`.
 `key TEXT PRIMARY KEY` / `value TEXT NOT NULL` (JSON), WAL, the schema
 version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
-(`datadir::settings_path`), next to the Tauri app's `settings.json`. The
+(`datadir::settings_path`), next to where the Tauri app kept its
+`settings.json`. The
 values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
 `sortOrder`, `filter`, `lastFolder`, `windowBounds`) go through the one `from_values` with the backend's
 rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
@@ -951,8 +933,8 @@ with the file selected alone for `show_photo` or with
 `apply_setting`) and replies through `Mcp::reply`.
 
 The tool list is the host's. `Mcp::new` lists the seven companion tools with
-the Tauri `INSTRUCTIONS`, which is what the Tauri app keeps (`crates/app` is
-not touched); `Mcp::with_all_tools` adds the `native_router` tools
+the Tauri `INSTRUCTIONS`, which is what the Tauri app served;
+`Mcp::with_all_tools` (the native app's) adds the `native_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
@@ -962,8 +944,8 @@ not touched); `Mcp::with_all_tools` adds the `native_router` tools
 `refit_ranking`) and the native
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the native app answers is a second
-`#[tool_router(router = native_router)]` block, so the Tauri server never
-lists it.
+`#[tool_router(router = native_router)]` block, so the seven-tool server
+never lists it.
 
 The native tools run what their keys run: `key_down` and `mcp_request` both
 call `perform` with a `companion::Key` (`Key::of_action` names the keymap
@@ -1232,7 +1214,7 @@ test compares with `Keymap::defaults()`; `context_coverage`,
 without its entry; and `OTHER`, the rest. A test asks the companion for every
 tool the table names and fails on `unknown request`.
 
-The features of the Tauri app the native app does not have yet still have
+The features of the Tauri app the native app does not have yet keep
 their tools (D6), refused with one message, `not_in_native`'s "`<feature>` is
 not implemented in Handpic's native app yet", which a test checks for each:
 compare (`set_view`'s `compare`), the recommended sort (`set_sort`'s
@@ -1291,7 +1273,7 @@ the Tauri `sharpness` map is filled from `folder_entries` and patched by
 `faces-progress` (`applySharpnessReady`).
 
 - Rule: a test run with MCP on passes `--mcp-port` with a free port other
-  than 41917 (the user's Tauri app may hold it), seeds `"mcpEnabled": true`
+  than 41917 (an installed Handpic or an earlier Tauri build may hold it), seeds `"mcpEnabled": true`
   through `--import-settings` into a fresh `--settings` store, and passes
   `--log` with a file in the test folder, next to `--index`.
 - Rule: on Git Bash, give `curl` the JSON body on stdin
@@ -1437,8 +1419,8 @@ last, and a JPEG folder under `"name"` paged in capture order.
   `(x + 0.5).floor()`, so `-5.5` gives `-5` and `-0.5` gives `0`.
 - Rule: the meta pane's `Analysis` group names the full-size eye score
   `Eye focus`, the one eye-focus measure since the full-eye-sharp-only plan
-  (`docs/plans/20261115-full-eye-sharp-only/plan.md`). The frozen Tauri pane
-  keeps it as `Eyes at full size`.
+  (`docs/plans/20261115-full-eye-sharp-only/plan.md`). The Tauri pane named
+  it `Eyes at full size`.
 - Rule: a `refilter` that empties `files` keeps its anchor
   (`filter::KeptAnchor`), a non-empty one or another folder's open drops it.
   A menu change, and only a menu change, anchors on it while no file is
@@ -1679,11 +1661,10 @@ and the tree's `folder` and `folder-open`, a path in none of them with
   `Assets` already holds needs only the path constant. Only a derivative (a
   filled shape, the `scan-face` frown) is copied in as an own SVG: copy its
   base from `lucide-static` at the version the header names (v1.48.0, as
-  `crates/app/ui/src/icons.ts`), add its SVG and path constants and its
+  the Tauri frontend's `icons.ts` did), add its SVG and path constants and its
   entry in `SVGS`, and name it in the header comment, with any
   Feather-derived base (the list in `LICENSE-lucide`). The full notice is
-  `crates/native/LICENSE-lucide`, a copy of the Tauri app's, not a reference
-  into `crates/app`.
+  `crates/native/LICENSE-lucide`, first copied from the Tauri app's.
 - Rule: GPUI keeps one `AssetSource` per application. Other sources (here
   `Catalog` and `gpui_kit::assets::Assets`) are composed with `Icons`, in the
   order own derivatives, then the catalog selection, then `Assets`, never
@@ -2348,7 +2329,7 @@ A large downscale (a RAF fit to a 1600 px window) may alias. Not settled: one
 captured 1:1 crop of a 4416x2944 RAF fit view, a clapboard wall without fine
 repeating texture, shows no moire, but no comparison with the Tauri app or a
 hard-case image has been made. Three native-side RAF frames showed no moire;
-the comparison with the Tauri app is pending (see the pending manual check in
+the comparison with the Tauri app was left pending (see the pending manual check in
 the gpui-port plan's `learnings.md`).
 
 ### The image sprite cannot rotate (Inferred)
@@ -2964,7 +2945,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   bar must keep presses off the empty preview's "click here" message,
   which opens the folder picker. Source:
   [learnings](../plans/_archived/20261117-native-title-bar-settings/learnings.md), Step 1.
-- Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
+- Rule: the icon is `crates/native/icons/64x64.png`, served by `Icons` under
   `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
   PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
   string from the `AssetSource` and sniffs the format; no dependency is
@@ -3198,8 +3179,8 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
 The root `div` of the window's `render` takes the drop
 (`on_drop::<ExternalPaths>`, `drop_paths`), a port of the Tauri
 `tauri://drag-drop` listener and `dropped_dir`, whose pure rules are in
-`dropped.rs` (copied, since the native crate must not depend on
-`crates/app`). One dropped folder opens through `open(path, None, None)`, as
+`dropped.rs` (copied, since the native crate did not depend on the Tauri
+crate). One dropped folder opens through `open(path, None, None)`, as
 a click in the tree does; one dropped file, of any kind, opens its parent
 folder, the file not selected; no path, several paths, or a path that is
 neither a directory nor a file opens nothing and puts the Tauri
@@ -3472,7 +3453,7 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   parameter because `Handpic::new` already takes seven arguments, and an eighth
   trips `clippy::too_many_arguments` (`-D warnings` in CI). Another
   launch-only suppression flag has the same choice: set a field after `new`, or
-  add `#[allow]` as `tauri-app.md` does for `Writer::set`.
+  add `#[allow]` as `shared-crates.md` does for `Writer::set`.
 - Rule: hiding the strip removes its pane, the header with `Sort` / `Filter`
   included, as in the Tauri app, where the menus sit in the strip's header,
   and closes an open menu; the status row (the status line, the position and
@@ -3625,7 +3606,7 @@ answered); `add_roots` skips the roots already shown.
   stopped and resumed the events (none for a change while collapsed, one
   ~500 ms after a change once expanded again), and renaming the folder's
   parent after the last collapse succeeded, so the handle was released. The
-  `configure` that queued behind `Unwatch` (`tauri-app.md`) does not stall
+  `configure` that queued behind `Unwatch` (`shared-crates.md`) does not stall
   here. `TreeWatch` is a backend test, which cannot run from the native
   workspace (a path dependency with dev-dependencies is not testable there),
   hence the throwaway.

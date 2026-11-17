@@ -33,7 +33,7 @@ Agreed spec (settled with the user; do not reopen):
 1. Display: a confirmed inline rename that `IdleGate` holds shows the new
    name in the cell immediately in a pending style: `--muted-foreground` +
    italic (shadcn Neutral dark tokens, see
-   [ui-styling](../../../agents/ui-styling.md)) plus a small Lucide `clock`
+   `ui-styling.md`, removed since) plus a small Lucide `clock`
    icon with `title="Renames when the scan finishes"`. When the held rename
    runs and succeeds, the existing real-rename path takes over and the cell
    shows the normal style.

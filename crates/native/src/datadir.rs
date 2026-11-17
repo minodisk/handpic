@@ -66,7 +66,7 @@ pub fn move_native_index(cache: &Path) -> std::io::Result<IndexMove> {
 }
 
 /// The settings store: `flag` when given, else `settings.sqlite` in the
-/// `<IDENTIFIER>` folder under `config`, next to the Tauri app's
+/// `<IDENTIFIER>` folder under `config`, next to where the Tauri app kept its
 /// `settings.json`; `None` when neither is known.
 pub fn settings_path(flag: Option<PathBuf>, config: Option<&Path>) -> Option<PathBuf> {
     flag.or_else(|| config.map(|config| config.join(IDENTIFIER).join("settings.sqlite")))

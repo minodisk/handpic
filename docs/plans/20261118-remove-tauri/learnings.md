@@ -88,6 +88,53 @@
   app. `docs/agents/app-log.md`'s native section now points at the top table
   instead of keeping a second one; Step 4 rewrites the rest of that file.
 
+## Step 4
+
+- `tauri-app.md`'s kept sections now live in `docs/agents/shared-crates.md`
+  ("Working on the shared crates and the tooling"), with the tag definitions.
+  The Done-when asks for no "Tauri" in the new guide's text, so it calls the
+  removed app "the earlier app" / "the earlier webview app" where a section
+  needs it as the place a lesson was learned. The Sony MakerNote section
+  moved into `raw-metadata-parsing.md` itself (same heading, so its anchor is
+  unchanged and the link there is now an in-page one).
+- Several kept sections described Tauri-only machinery around a still-true
+  backend rule (`Scans`, `ScansState`, `spawn_eviction`, `set_scan_focus`,
+  `AppReadSlots`, `AppListing`, the `ranking.json` store, the
+  `preview_during_pass_1_on_a_real_folder` and `embed_pass_on_a_real_folder`
+  harnesses). None of those exists in the repository any more (checked with
+  `git grep`); the sections now state the backend rule and point at the
+  native counterpart (`idle::IdleGate`, `cache::ClearFlow`, `native-app.md`)
+  or say the harness left with the Tauri crate.
+- `objc2-exception-helper` (the reason `cargo check --target
+  aarch64-apple-darwin` failed here) is in neither `Cargo.lock` now; whether
+  the backend alone checks for that target here was not tried, and the guide
+  says so rather than repeating the old claim.
+- `todo.md`: 236 items before, 161 after. 77 deleted as Tauri-only (checks of
+  the Tauri UI, menus, updater, webview, `migrate.rs`, Tauri commands and
+  frontend modules; the native app has its own check items for the same
+  features). 29 kept items were retitled from `App:` to `Core:`, `Backend:`
+  or `Native:` and re-pointed at the backend / native files, four of them
+  rewritten (the macOS / Linux trash checks, the closed-eyes label review
+  split from its Tauri GUI checks, the scan priority's macOS branch, the
+  NVMe read cap). Two items were added: the backend code only the Tauri app
+  reached, and the icon that still reads RIFFLE.
+- Per Step 2's deferred note, the stale binary, CLI and code names were
+  renamed in `todo.md`'s actionable lines only (unchecked TODO lines and the
+  "Build in ..." instructions: `riffle-native.exe` -> `handpic.exe`,
+  `riffle-cli` -> `handpic-cli`, `[riffle_native][DEBUG]` ->
+  `[handpic][DEBUG]`), plus `RIFFLE_DETECTOR_*` and `Riffle::` everywhere
+  (current env and type names). History lines keep `riffle-cli`.
+- The plan's Step 1 note that archived plans link to neither removed guide
+  was wrong: `docs/plans/_archived/20261001-photolab-guide/plan.md` linked
+  `tauri-app.md` and `docs/plans/_archived/20261006-pending-rename-display/plan.md`
+  `ui-styling.md`, and the first `ci:local` run's lychee failed on both. The
+  links became plain names marked "removed since". `git grep` for
+  `](...tauri-app.md` under `docs/plans` before deleting a guide finds them.
+- The bulk edits went through Python scripts written with the Write tool and
+  JSON replacement pairs that each had to match exactly once; a pair that
+  matched zero or several times stopped the run, which caught nothing here
+  but would have caught a stale anchor text.
+
 ## Deferred issues (todo candidates)
 
 - **Pending check: a `Package` run dispatched on the branch.** Step 1's
@@ -144,3 +191,12 @@
   cold pass 1. The step was ticked on the unit tests over temp folders.
   Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs`
   (`open_index`).
+- `todo.md`'s "Backend: re-check that notify 8.2.2 still queues `configure`
+  behind `Unwatch` when the native app starts using `watch`" may already be
+  met: `docs/agents/native-app.md` (the `crates/native/Cargo.lock` rule under
+  "The backend is compiled twice", and the tree-watch section) records that
+  the tree watcher's `unwatch` + `settle` and the folder rename's release
+  path return promptly on 8.2.2. Step 4 only re-pointed the item at
+  `shared-crates.md`, since it is not made moot by the Tauri removal. Check
+  the item against those measurements and close it or narrow it. Files:
+  `todo.md`, `docs/agents/native-app.md`, `docs/agents/shared-crates.md`.
