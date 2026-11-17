@@ -100,14 +100,14 @@ pub fn install(flag: Option<PathBuf>) {
     }
 }
 
-/// The log file: `flag` when given, else `Handpic.log` in the native app's
-/// own `<IDENTIFIER>.native` folder in the shape of Tauri's `app_log_dir`
+/// The log file: `flag` when given, else `Handpic.log` in the
+/// `<IDENTIFIER>` folder in the shape of Tauri's `app_log_dir`
 /// (`<base>/<id>` on macOS, `base` being `~/Library/Logs`; `<base>/<id>/logs`
 /// elsewhere, `base` being the local data dir); `None` when neither is known.
 pub fn log_path(flag: Option<PathBuf>, base: Option<&Path>) -> Option<PathBuf> {
     flag.or_else(|| {
         base.map(|base| {
-            let dir = base.join(format!("{IDENTIFIER}.native"));
+            let dir = base.join(IDENTIFIER);
             let dir = if cfg!(target_os = "macos") {
                 dir
             } else {
@@ -227,8 +227,8 @@ mod tests {
     }
 
     #[test]
-    fn the_default_is_the_native_folder_in_the_tauri_log_dir_shape() {
-        let dir = Path::new("C:/d").join("dev.minodisk.handpic.native");
+    fn the_default_is_the_identifier_folder_in_the_tauri_log_dir_shape() {
+        let dir = Path::new("C:/d").join("dev.minodisk.handpic");
         let dir = if cfg!(target_os = "macos") {
             dir
         } else {

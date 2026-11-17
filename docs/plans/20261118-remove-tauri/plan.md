@@ -59,6 +59,8 @@ says so (the binary's name in Step 2, the data folders in Step 3).
   (`[[bin]].name`); the package stays `handpic-native`.
 - Step 2's binary name and Step 3's index option are asked of the user before
   each of those steps starts.
+- (2026-11-18) The user chose Option 3 for Step 3: the `.native` index is
+  moved into the plain folder and an index already there is renamed aside.
 
 ## Steps
 
@@ -261,7 +263,7 @@ says so (the binary's name in Step 2, the data folders in Step 3).
     - A developer's `~/.local/bin/riffle-native` from an earlier
       `native:install:linux` and a test install's `riffle-native.exe` are
       left behind by the rename; nothing was released under either name.
-- [ ] Step 3: Put the native app's index and log under `dev.minodisk.handpic`
+- [x] Step 3: Put the native app's index and log under `dev.minodisk.handpic`
   - Done when:
     - The default index is `<cache dir>/dev.minodisk.handpic/index.sqlite`
       and the default log `Handpic.log` under `dev.minodisk.handpic`
@@ -473,3 +475,4 @@ says so (the binary's name in Step 2, the data folders in Step 3).
 
 - (2026-11-18) Step 1 complete
 - (2026-11-18) Step 2 complete
+- (2026-11-18) Step 3 complete

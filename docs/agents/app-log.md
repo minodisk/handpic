@@ -170,14 +170,9 @@ does not hold `scan_id`; that is normal, not a violation.
 ## The GPUI app's log
 
 `crates/native/src/logger.rs` writes every `log` line it prints to stderr also
-to a `Handpic.log` of the native app's own, so the two apps never append to
-one file.
-
-| OS      | Path                                                              |
-| ------- | ----------------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\dev.minodisk.handpic.native\logs\Handpic.log`     |
-| macOS   | `~/Library/Logs/dev.minodisk.handpic.native/Handpic.log`          |
-| Linux   | `~/.local/share/dev.minodisk.handpic.native/logs/Handpic.log`     |
+to the `Handpic.log` of [Where the file is](#where-the-file-is): the same
+folders, `dev.minodisk.handpic`. An earlier build's log under
+`dev.minodisk.handpic.native` stays where it was; nothing moves it.
 
 - `--log <path>` names the file instead; every debug or hand-check run passes
   it (see `native-app.md`). A file that cannot be opened is reported once on

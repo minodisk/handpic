@@ -70,6 +70,24 @@
   run 44126142482 and the new Done-when rather than added as a duplicate. No
   `todo.md` item was closed by this step alone.
 
+## Step 3
+
+- The index move (`datadir::move_native_index`, run by `open_index` only
+  without `--index`) renames the plain folder's `-wal` / `-shm` aside with its
+  `index.sqlite`. Leaving a stale `-wal` beside the moved-in file would let
+  SQLite replay another database's pages into it.
+- A Tauri-built index the native app opens as is (no `.native` index on the
+  machine) is read through the same `Index::open` both apps used: its
+  `PRAGMA user_version` migrations run, and rows whose `files.extractor` is
+  not the current `EXTRACTOR_VERSION` are re-extracted by `reconcile`, not
+  dropped (`crates/backend/src/index.rs`). Checked by reading the code and its
+  migration tests, not by opening a real Tauri file.
+- `CONTRIBUTING.md`'s "The index" paths (macOS `~/Library/Caches/...`,
+  Windows `%LOCALAPPDATA%\...`) and `.github/ISSUE_TEMPLATE/os.yml`'s log
+  paths already named `dev.minodisk.handpic` and are now true of the native
+  app. `docs/agents/app-log.md`'s native section now points at the top table
+  instead of keeping a second one; Step 4 rewrites the rest of that file.
+
 ## Deferred issues (todo candidates)
 
 - **Pending check: a `Package` run dispatched on the branch.** Step 1's
@@ -106,3 +124,23 @@
   which is not caused by the rename. The step's checkbox was ticked on the
   locally checkable criteria. Files: `.github/workflows/package.yml`,
   `tools/package/*.sh`, `crates/native/packaging/**`, `mise.toml`.
+- `.github/ISSUE_TEMPLATE/os.yml` tells the reporter that `Help > Open Log
+  Folder` opens the log folder, but the native app has no such menu item
+  (nothing under `crates/native/src` names it; only the Tauri app had it).
+  Found while checking the template's log paths in Step 3, which are
+  correct. Either add an equivalent to the native app or drop the sentence.
+  Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md` (its "Where
+  the file is" bullets say the same).
+- Pending manual check (Step 3): on Windows, with an index under
+  `%LOCALAPPDATA%\dev.minodisk.handpic.native\` (from a `main` build) and
+  optionally a Tauri build's under `%LOCALAPPDATA%\dev.minodisk.handpic\`,
+  launch the native app without `--index`. Expect `Handpic.log` (now under
+  `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`) to show
+  `index: moved in from the .native folder` (with the aside name when a
+  Tauri index was there), `index.sqlite` (and its `-wal` / `-shm`) gone from
+  `.native` with the folder kept because the old `logs\` is still in it, the
+  Tauri index kept as
+  `index-aside-1.sqlite`, and the open folder's thumbnails shown without a
+  cold pass 1. The step was ticked on the unit tests over temp folders.
+  Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs`
+  (`open_index`).
