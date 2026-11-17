@@ -12,6 +12,14 @@
 #   ready / merged / closed / conflict / check_failed / changes_requested /
 #   draft / behind / blocked
 #
+# `blocked` ends the wait only once it has been observed continuously for
+# BLOCKED_GRACE seconds (default 60). A required check that has not reported
+# yet makes the PR BLOCKED with nothing pending: right after the PR is created,
+# before any check run is registered, and between the last job finishing and
+# an aggregate check (`needs:`) appearing. Any other ACTION observed meanwhile
+# resets the grace. The grace's sleeps count toward max_wait_sec, and a timeout
+# during it exits 2 with the last output (ACTION=blocked), as for `wait`.
+#
 # The default max_wait_sec is 240 (4 minutes). The Bash tool's default
 # foreground timeout can be as low as 120 s, so callers must pass the Bash
 # tool's `timeout: 600000` (ms) explicitly; 600 s is the maximum. Keep the wait
@@ -33,20 +41,33 @@ set -euo pipefail
 PR="${1:?usage: wait-pr-actionable.sh <PR_number_or_url> [interval_sec] [max_wait_sec]}"
 INTERVAL="${2:-30}"
 MAX_WAIT="${3:-240}"
+GRACE="${BLOCKED_GRACE:-60}"
 
 if ! [[ "$INTERVAL" =~ ^[1-9][0-9]*$ ]] || ! [[ "$MAX_WAIT" =~ ^[0-9]+$ ]]; then
 	echo "wait-pr-actionable.sh: interval_sec must be a positive integer and max_wait_sec a non-negative integer (got '$INTERVAL' / '$MAX_WAIT')" >&2
+	exit 1
+fi
+if ! [[ "$GRACE" =~ ^[0-9]+$ ]]; then
+	echo "wait-pr-actionable.sh: BLOCKED_GRACE must be a non-negative integer (got '$GRACE')" >&2
 	exit 1
 fi
 
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 elapsed=0
+blocked_since=""
 while true; do
 	out=$(bash "$script_dir/pr-status.sh" "$PR") || exit 1
 	action=$(grep -E '^ACTION=' <<<"$out" | cut -d= -f2)
 	case "$action" in
-	wait | review_required) ;;
+	wait | review_required) blocked_since="" ;;
+	blocked)
+		blocked_since="${blocked_since:-$elapsed}"
+		if ((elapsed - blocked_since >= GRACE)); then
+			printf '%s\n' "$out"
+			exit 0
+		fi
+		;;
 	*)
 		printf '%s\n' "$out"
 		exit 0
