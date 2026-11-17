@@ -784,6 +784,9 @@ impl Riffle {
             |this, _, change, window, cx| match change {
                 Change::ClearCache => this.press_clear(cx),
                 Change::Closed => {
+                    if this.clear.waiting() {
+                        this.record_dropped(cache::CLEAR_LABEL, "the settings closed");
+                    }
                     this.clear.discard();
                     this.follow_clear(cx);
                     window.focus(&this.focus, cx);
@@ -2641,6 +2644,17 @@ impl Riffle {
         self.follow_clear(cx);
     }
 
+    /// An MCP client's confirmed clear: run now or at the next idle point,
+    /// with no dialog.
+    fn confirmed_clear(&mut self, cx: &mut Context<Self>) {
+        if self.clear.confirmed(self.clear_busy()) == cache::Next::Run {
+            self.run_clear(cx);
+        } else if self.clear.waiting() {
+            log::info!("cache: Clear Cache held for the scan's end");
+        }
+        self.follow_clear(cx);
+    }
+
     /// The dialog's `Clear`, checking the busy rule again.
     fn confirm_clear(&mut self, cx: &mut Context<Self>) {
         if self.clear.confirm(self.clear_busy()) == cache::Next::Run {
@@ -2740,10 +2754,12 @@ impl Riffle {
                 self.undo.drop_judgments();
                 self.step_note = None;
                 self.read_folder_counts(cx);
+                self.record_finished(cache::CLEAR_LABEL, "Cleared the index cache".to_owned());
                 true
             }
             Err(e) => {
                 log::error!("failed to clear the index: {e}");
+                self.record_failed(cache::CLEAR_LABEL, e.clone());
                 self.settings_view.update(cx, |view, cx| view.failed(e, cx));
                 false
             }
@@ -3350,7 +3366,7 @@ impl Riffle {
             return;
         }
         // The dialog in `Root`'s layer has the keys while one is open.
-        if self.trash.busy() || self.folderops.dialog_open() {
+        if self.trash.busy() || self.folderops.dialog_open() || self.clear.asking() {
             return;
         }
         let name = keys::key_name(keystroke);
@@ -4740,6 +4756,28 @@ impl Riffle {
                 dialog: None,
             });
         }
+        if self.clear.asking() {
+            return Some(Operation {
+                name: cache::CLEAR_LABEL,
+                state: OpState::Awaiting,
+                progress: None,
+                message: None,
+                dialog: Some(companion::dialog_content(&cache::dialog())),
+            });
+        }
+        if self.clear.busy() {
+            return Some(Operation {
+                name: cache::CLEAR_LABEL,
+                state: if self.clear.running() {
+                    OpState::Running
+                } else {
+                    OpState::Held
+                },
+                progress: None,
+                message: None,
+                dialog: None,
+            });
+        }
         if let Some(name) = self.gate.waiting() {
             return Some(Operation {
                 name,
@@ -4800,6 +4838,9 @@ impl Riffle {
     fn cancel_of(&self) -> Option<Result<companion::Cancel, &'static str>> {
         if self.trash.busy() && !self.trash.running() {
             return Some(Ok(companion::Cancel::TrashDialog));
+        }
+        if self.clear.asking() || self.clear.waiting() {
+            return Some(Ok(companion::Cancel::Clear));
         }
         if self.folderops.sequence_running()
             || self.folderops.import_running()
@@ -5219,6 +5260,8 @@ impl Riffle {
                 Some(companion::Busy::FolderDialog)
             } else if this.folderops.editing() {
                 Some(companion::Busy::Rename)
+            } else if this.clear.asking() {
+                Some(companion::Busy::CacheDialog)
             } else {
                 None
             };
@@ -5236,6 +5279,7 @@ impl Riffle {
                     focus: this.marks.is_on(),
                     peaking: this.peaking.is_on(),
                     performance: this.perf.on(),
+                    grayscale: this.grayscale.is_on(),
                 },
                 eyes: current.and_then(|path| this.marks.eyes(&path)),
                 view_only: this.view_only,
@@ -5258,6 +5302,7 @@ impl Riffle {
                 pending: this.mcp_pending.as_ref(),
                 cancel: this.cancel_of(),
                 importing: this.folderops.import_busy(),
+                clearing: this.clear.busy(),
             }
         }
         let action = companion::answer(request.kind, &request.args, &view(self, cx));
@@ -5291,6 +5336,14 @@ impl Riffle {
                         Ok(companion::awaiting(&op))
                     }
                 }
+                companion::Op::ClearCache => {
+                    self.press_clear(cx);
+                    if self.clear.busy() {
+                        Ok(companion::awaiting(&op))
+                    } else {
+                        Err("Handpic could not open its dialog; try again".to_owned())
+                    }
+                }
             },
             Ok(Some(companion::Action::Preview(op))) => {
                 Ok(companion::previewed(self.keep_pending(op)))
@@ -5315,6 +5368,11 @@ impl Riffle {
                             self.request_rename(path, name, cx);
                             Ok(companion::get_status(&self.status_of()))
                         }
+                    }
+                    companion::Op::ClearCache => {
+                        log::info!("cache: Clear Cache confirmed over MCP");
+                        self.confirmed_clear(cx);
+                        Ok(companion::get_status(&self.status_of()))
                     }
                     companion::Op::Folder(op, dialog) => match self.run_confirmed(op, dialog, cx) {
                         Ok(()) => Ok(companion::get_status(&self.status_of())),
@@ -5355,6 +5413,12 @@ impl Riffle {
                     companion::Cancel::TrashDialog => self.dismiss_trash(cx),
                     companion::Cancel::Folder => self.dismiss_folder_dialog(false, cx),
                     companion::Cancel::Pending => self.mcp_pending = None,
+                    companion::Cancel::Clear if self.clear.asking() => self.cancel_clear(cx),
+                    companion::Cancel::Clear => {
+                        self.record_dropped(cache::CLEAR_LABEL, "canceled over MCP");
+                        self.clear.discard();
+                        self.follow_clear(cx);
+                    }
                 }
                 Ok(companion::get_status(&self.status_of()))
             }
@@ -5397,6 +5461,9 @@ impl Riffle {
                         }
                         if flips.performance {
                             self.toggle_perf(cx);
+                        }
+                        if flips.grayscale && self.grayscale.set(!self.grayscale.is_on()) {
+                            cx.notify();
                         }
                     }
                     Some(companion::Action::Key(key)) => self.perform(key, cx),

@@ -69,23 +69,29 @@ Suggest judgments and explain them; write them only when the user asks you to.";
 /// The native app's instructions, over the whole tool set.
 const NATIVE_INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (Sony \
 ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. This server \
-connects you to the running app so you can assist while they cull: read what Handpic is showing \
-(the current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
+connects you to the running app, and every action the user takes in it has a tool here, so you \
+can assist while they cull or drive it on their behalf: read what Handpic is showing (the \
+current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
 settings and the current stars, pick / reject flag and color label), look at a small copy of a \
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
-filter, the panes shown and the overlays, browse the folders, open one, expand or collapse the \
-folder tree, reveal a folder or photo in the file manager, read what is under way (a listing, a \
-scan, a move to the trash, a folder operation) and wait for it to end, read and change the settings, and record stars, picks / rejects and color labels and undo or redo them the same way the user's keys do, so the app's \
-undo and sidecar files stay consistent. `trash_photos` moves photos to the trash or deletes \
-them, `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps`, `import_folder` and \
-`rename_by_capture_date` run the folder tree menu's operations on a folder, and \
-`rename_folder` renames a folder, each only with the user's confirmation: unless the user \
-has allowed MCP clients to run destructive operations in Handpic's settings, it opens \
-Handpic's own dialog (for a rename, the tree's rename field) and the user confirms there; a \
-permanent delete always waits for the user's click in that dialog. `cancel_operation` \
-cancels what the user's Cancel would. Run them only when the user asks. \
-A call that changes anything is refused while the user has Handpic's settings, a dialog or a \
-folder rename open; try again once they are done. Suggest judgments and explain them; write \
+filter, the panes shown and the overlays (grayscale included), browse the folders, open one, \
+expand or collapse the folder tree, reveal a folder or photo in the file manager, read what is \
+under way (a listing, a scan, a move to the trash, a folder operation, a cache clear) and wait \
+for it to end, read and change the settings, and record stars, picks / rejects and color \
+labels and undo or redo them the same way the user's keys do, so the app's undo and sidecar \
+files stay consistent. These need the user's confirmation: `trash_photos` (move to the trash \
+or delete), `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps`, `import_folder`, \
+`rename_by_capture_date`, `rename_folder`, `clear_cache` and a `redo` that moves files to the \
+trash again. Unless the user has allowed MCP clients to run destructive operations in \
+Handpic's settings (`get_settings`' `mcp_allow_destructive`, which only the user can change), \
+each opens Handpic's own dialog (for a rename, the tree's rename field) and the user confirms \
+there; while it is allowed, a first call returns a preview with an `id` and a second call with \
+that `id` and `confirm: true` runs it. A permanent delete always waits for the user's click. \
+`cancel_operation` cancels what the user's Cancel would. Run them only when the user asks. A \
+call that changes anything is refused while the user has Handpic's settings, a dialog or a \
+folder rename open; try again once they are done. Compare, the recommended sort, the Genre \
+filter, file rename, the personal ranking and the AI switch have their tools or values but \
+are refused: the native app does not have them yet. Suggest judgments and explain them; write \
 them only when the user asks you to.";
 
 type Reply = Result<Value, String>;
@@ -502,6 +508,9 @@ pub struct FilterArgs {
     /// The EXIF sections to set; a section left out keeps its checks.
     #[serde(skip_serializing_if = "Option::is_none")]
     exif: Option<ExifArgs>,
+    /// The `Genre` items; not in the native app yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    genres: Option<Vec<String>>,
 }
 
 /// The `set_filter` request for the main window, with only the sections
@@ -518,7 +527,7 @@ fn filter(args: FilterArgs) -> Result<Value, String> {
     if request.as_object().is_none_or(|o| o.is_empty()) {
         return Err(
             "set reset or at least one of flags, stars, labels, orientations, face_focus, \
-            eyes, output, exif"
+            eyes, output, exif, genres"
                 .into(),
         );
     }
@@ -555,6 +564,10 @@ pub struct OverlaysArgs {
     /// The `d` performance graph; kept when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     performance: Option<bool>,
+    /// The photo in grayscale, as while the `g` key is held, until set off
+    /// or the user's own press of the key ends; kept when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    grayscale: Option<bool>,
 }
 
 /// The request of a tool whose fields are all optional switches, refused
@@ -663,6 +676,28 @@ pub struct RenameArgs {
     id: Option<u64>,
     /// True to run the preview `id` names.
     confirm: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct ConfirmArgs {
+    /// The `id` a preview returned, with `confirm: true`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<u64>,
+    /// True to run the preview `id` names.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confirm: Option<bool>,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct RenameFileArgs {
+    /// The photo's path as `get_view` reports it.
+    path: String,
+    /// Its new file name, the extension kept.
+    name: String,
 }
 
 #[derive(Debug, serde::Deserialize, JsonSchema)]
@@ -828,6 +863,9 @@ pub struct SettingsArgs {
     /// The theme's mode and the light and dark themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     theme: Option<ThemeArgs>,
+    /// The AI features' switch; not in the native app yet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ai_enabled: Option<bool>,
 }
 
 /// The `set_settings` request: at least one setting, the import root an
@@ -839,7 +877,7 @@ fn settings(args: SettingsArgs) -> Reply {
     switches(
         args,
         "sidecar_format, label_names, label_language, auto_advance, shortcuts, import_root, \
-        import_pattern, theme",
+        import_pattern, theme, ai_enabled",
     )
 }
 
@@ -1168,8 +1206,9 @@ impl Companion {
 
     #[tool(
         description = "Set the filmstrip's order, as the Sort menu does, keeping the current \
-        photo: `name`, `capture` or `rating`. Remembered for the next launch. A JPEG-only \
-        folder stays in capture order and refuses it. Returns the new view, as `get_view` \
+        photo: `name`, `capture` or `rating` (`recommended` is refused: the native app does \
+        not have it yet). Remembered for the next launch. A JPEG-only folder stays in capture \
+        order and refuses it. Returns the new view, as `get_view` \
         does (its `sort`)."
     )]
     async fn set_sort(&self, Parameters(args): Parameters<SortArgs>) -> CallToolResult {
@@ -1181,8 +1220,9 @@ impl Companion {
         replaces its checks (an empty list unchecks it), a section left out keeps them, and \
         `reset` unchecks everything first. Within a section any checked item passes; across \
         sections all must. The output and EXIF sections take only what `get_view`'s \
-        `filter_offers` lists for the open folder. The current photo stays when the filter \
-        still shows it, else the nearest shown one becomes current. Returns the new view, as \
+        `filter_offers` lists for the open folder; `genres` is refused (the native app does \
+        not have the Genre section yet). The current photo stays when the filter still shows \
+        it, else the nearest shown one becomes current. Returns the new view, as \
         `get_view` does (its `filter`)."
     )]
     async fn set_filter(&self, Parameters(args): Parameters<FilterArgs>) -> CallToolResult {
@@ -1207,12 +1247,14 @@ impl Companion {
 
     #[tool(
         description = "Turn Handpic's overlays on or off, as their keys do: `focus` (the AF \
-        point, face boxes and eye judgment over the photo), `peaking` (focus peaking) and \
-        `performance` (the CPU, disk and latency graph); an omitted one is kept. Returns the \
-        new view, as `get_view` does (its `overlays`)."
+        point, face boxes and eye judgment over the photo), `peaking` (focus peaking), \
+        `performance` (the CPU, disk and latency graph) and `grayscale` (the photo in gray, \
+        as while the user holds its key; on until set off or the user's own press of the key \
+        ends); an omitted one is kept. Returns the new view, as `get_view` does (its \
+        `overlays`)."
     )]
     async fn set_overlays(&self, Parameters(args): Parameters<OverlaysArgs>) -> CallToolResult {
-        match switches(args, "focus, peaking, performance") {
+        match switches(args, "focus, peaking, performance, grayscale") {
             Ok(request) => tool_result(self.bridge.call("set_overlays", request).await),
             Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
         }
@@ -1430,7 +1472,8 @@ impl Companion {
         `label_languages`), `auto_advance`, the keyboard `shortcuts` (each action, its label \
         and its keys), the `import_root` (null while not set) and `import_pattern`, the \
         `theme` (mode, light and dark theme; the choices in `themes`), and \
-        `mcp_allow_destructive`, which only the user can change."
+        `mcp_allow_destructive`, which only the user can change. `mcp_enabled` is not here: \
+        Handpic reads it at startup, and this connection depends on it."
     )]
     async fn get_settings(&self) -> CallToolResult {
         self.view_call("get_settings").await
@@ -1443,12 +1486,48 @@ impl Companion {
         names apply only while the format writes XMP; a shortcut edit refuses a key bound to \
         another action, one of the app's own keys or an action's last key; an invalid import \
         pattern is refused; the theme applies at once. Remembered for the next launch. \
-        `mcp_allow_destructive` cannot be set here. Refused while a folder operation runs. \
+        `mcp_allow_destructive` cannot be set here, and `ai_enabled` is refused (the native \
+        app does not have the AI features yet). Refused while a folder operation runs. \
         Returns the settings, as `get_settings` does."
     )]
     async fn set_settings(&self, Parameters(args): Parameters<SettingsArgs>) -> CallToolResult {
         self.checked_call("set_settings", move || settings(args))
             .await
+    }
+
+    #[tool(
+        description = "Empty Handpic's index cache, as the Cache page's Clear Cache does: every \
+        cached thumbnail and the cached metadata of every folder go, the judgments stay (they \
+        live in the sidecars), and the open folder is scanned again. Confirmed like \
+        `trash_photos`: a preview with an `id` and a second call with that `id` and `confirm: \
+        true` while the user allows MCP clients to run destructive operations, else Handpic's \
+        dialog. Waits for a listing or scan under way; `get_status` reports it. Use only when \
+        the user asks."
+    )]
+    async fn clear_cache(&self, Parameters(args): Parameters<ConfirmArgs>) -> CallToolResult {
+        match serde_json::to_value(args) {
+            Ok(request) => tool_result(self.bridge.call("clear_cache", request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e.to_string())]),
+        }
+    }
+
+    #[tool(
+        description = "Rename a photo of the open folder with its sidecars. Refused: Handpic's \
+        native app does not have file rename yet."
+    )]
+    async fn rename_file(&self, Parameters(args): Parameters<RenameFileArgs>) -> CallToolResult {
+        match serde_json::to_value(args) {
+            Ok(request) => tool_result(self.bridge.call("rename_file", request).await),
+            Err(e) => CallToolResult::error(vec![ContentBlock::text(e.to_string())]),
+        }
+    }
+
+    #[tool(
+        description = "Refit the personal best-shot ranking on the user's judgments. Refused: \
+        Handpic's native app does not have the ranking yet."
+    )]
+    async fn refit_ranking(&self) -> CallToolResult {
+        self.view_call("refit_ranking").await
     }
 }
 
@@ -1889,6 +1968,7 @@ mod tests {
             names(&mcp.companion),
             [
                 "cancel_operation",
+                "clear_cache",
                 "delete_sidecars",
                 "get_photo",
                 "get_preview",
@@ -1900,8 +1980,10 @@ mod tests {
                 "navigate",
                 "open_folder",
                 "redo",
+                "refit_ranking",
                 "reject_rest",
                 "rename_by_capture_date",
+                "rename_file",
                 "rename_folder",
                 "reveal",
                 "rewrite_sidecars",
@@ -1997,6 +2079,38 @@ mod tests {
             switches(none, "focus, peaking, performance"),
             Err("set at least one of focus, peaking, performance".into())
         );
+        let gray: OverlaysArgs = serde_json::from_value(json!({ "grayscale": true })).unwrap();
+        assert_eq!(
+            switches(gray, "focus, peaking, performance, grayscale"),
+            Ok(json!({ "grayscale": true }))
+        );
+    }
+
+    #[test]
+    fn the_unported_features_reach_the_view_to_be_refused() {
+        assert_eq!(
+            filter_args(json!({ "genres": ["Landscape"] })),
+            Ok(json!({ "genres": ["Landscape"] }))
+        );
+        assert_eq!(
+            settings_args(json!({ "ai_enabled": true })),
+            Ok(json!({ "ai_enabled": true }))
+        );
+        let args: RenameFileArgs =
+            serde_json::from_value(json!({ "path": "/d/a.ARW", "name": "b.ARW" })).unwrap();
+        assert_eq!(
+            serde_json::to_value(args).unwrap(),
+            json!({ "path": "/d/a.ARW", "name": "b.ARW" })
+        );
+        let confirm: ConfirmArgs =
+            serde_json::from_value(json!({ "id": 3, "confirm": true })).unwrap();
+        assert_eq!(
+            serde_json::to_value(confirm).unwrap(),
+            json!({ "id": 3, "confirm": true })
+        );
+        let none: ConfirmArgs = serde_json::from_value(json!({})).unwrap();
+        assert_eq!(serde_json::to_value(none).unwrap(), json!({}));
+        assert!(serde_json::from_value::<ConfirmArgs>(json!({ "path": "/d" })).is_err());
     }
 
     #[test]

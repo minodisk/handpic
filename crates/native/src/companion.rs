@@ -22,11 +22,17 @@
 //! `Pending` naming the plan its run copies. `rename_folder` previews a
 //! folder rename into a `Pending` while `mcpAllowDestructive` is on, else
 //! opens the tree's inline rename on the folder with the new name filled in,
-//! which the user confirms with Enter. The
-//! selection is the strip's (`selection::targets`). The native view has no
-//! compare and no ranking, so compare and the `recommended` sort are refused,
-//! and so is every request but the reads (`READS`) while the view drops keys
-//! (`Busy`).
+//! which the user confirms with Enter. `clear_cache` is the settings' Cache
+//! page's `Clear Cache`, confirmed the same way. The
+//! selection is the strip's (`selection::targets`). Every request but the
+//! reads (`READS`) is refused while the view drops keys (`Busy`). The
+//! coverage table (`coverage`, compiled for its tests: `KEYMAP`,
+//! `context_coverage`, `menu_coverage`, `folder_op_coverage`,
+//! `page_coverage` and `OTHER`) maps
+//! every user-facing action to its tool, to a tool refused until the native
+//! app has the feature (`not_in_native`: compare, the recommended sort, the
+//! Genre filter, file rename, the ranking and the AI switch), or to the
+//! reason it has none.
 
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
@@ -47,7 +53,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     burst::BurstMember,
-    context, datefolder,
+    cache, context, datefolder,
     dialog::{Button, Dialog},
     exif::{GROUPS, Group, Groups},
     filter::{self, Facts, FilterState, OutputState},
@@ -71,12 +77,259 @@ use crate::{
     viewonly,
 };
 
-const COMPARE_REFUSAL: &str = "compare is not supported by Handpic's native app yet";
-const RECOMMENDED_REFUSAL: &str =
-    "the recommended sort is not implemented in Handpic's native app yet";
+/// The features of the Tauri app the native app does not have yet, each
+/// with its tool, which refuses with `not_in_native` (D6).
+const COMPARE: &str = "compare";
+const RECOMMENDED: &str = "the recommended sort";
+const GENRE: &str = "the Genre filter";
+const FILE_RENAME: &str = "file rename";
+const RANKING: &str = "the personal ranking";
+const AI_SWITCH: &str = "the AI switch";
+/// The tools whose whole call is a feature not in the native app yet.
+const UNPORTED_TOOLS: [(&str, &str); 2] =
+    [("rename_file", FILE_RENAME), ("refit_ranking", RANKING)];
+const CLEAR_RUNNING: &str = "a Clear Cache is under way in Handpic; try again once it ends";
 const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
+
+/// The one refusal of a feature the native app does not have yet.
+pub fn not_in_native(feature: &str) -> String {
+    format!("{feature} is not implemented in Handpic's native app yet")
+}
+
+/// The coverage table: how an MCP client reaches every user-facing action
+/// of the native app. Only its tests read it, which keep it complete.
+#[cfg(test)]
+pub mod coverage {
+    use super::{AI_SWITCH, COMPARE, FILE_RENAME, FolderOp, GENRE, RANKING, RECOMMENDED};
+    use crate::{
+        context,
+        menu::{self, Toggle},
+        settingsmodal::Tab,
+    };
+
+    /// How an MCP client reaches one user-facing action of the native app.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum Coverage {
+        /// The tool that performs it.
+        Tool(&'static str),
+        /// The tool that refuses it with `not_in_native(feature)` until the
+        /// native app has the feature (D6), then performs it.
+        NotImplemented {
+            tool: &'static str,
+            feature: &'static str,
+        },
+        /// No tool, for this reason.
+        Excluded(&'static str),
+    }
+
+    const CLIPBOARD: &str = "a client has the paths already, and a tool would write the user's \
+         clipboard unseen";
+    const MCP_GRANT: &str = "the user's to grant, on the MCP page of the settings";
+
+    /// Every keymap action (`shortcuts.rs`'s `DEFAULTS`), in its order.
+    pub const KEYMAP: &[(&str, Coverage)] = &[
+        ("previous", Coverage::Tool("navigate")),
+        ("next", Coverage::Tool("navigate")),
+        ("burstPrevious", Coverage::Tool("navigate")),
+        ("burstNext", Coverage::Tool("navigate")),
+        ("burstFramePrevious", Coverage::Tool("navigate")),
+        ("burstFrameNext", Coverage::Tool("navigate")),
+        ("extendPrevious", Coverage::Tool("select_photos")),
+        ("extendNext", Coverage::Tool("select_photos")),
+        ("selectAll", Coverage::Tool("select_all")),
+        ("open", Coverage::Tool("open_folder")),
+        ("undo", Coverage::Tool("undo")),
+        ("redo", Coverage::Tool("redo")),
+        ("toggleLeft", Coverage::Tool("set_panes")),
+        ("toggleRight", Coverage::Tool("set_panes")),
+        ("toggleStrip", Coverage::Tool("set_panes")),
+        ("toggleSides", Coverage::Tool("set_panes")),
+        ("focus", Coverage::Tool("set_overlays")),
+        ("zoom", Coverage::Tool("set_view")),
+        ("grayscale", Coverage::Tool("set_overlays")),
+        (
+            "compare",
+            Coverage::NotImplemented {
+                tool: "set_view",
+                feature: COMPARE,
+            },
+        ),
+        ("performance", Coverage::Tool("set_overlays")),
+        ("peaking", Coverage::Tool("set_overlays")),
+        ("rate1", Coverage::Tool("set_judgment")),
+        ("rate2", Coverage::Tool("set_judgment")),
+        ("rate3", Coverage::Tool("set_judgment")),
+        ("rate4", Coverage::Tool("set_judgment")),
+        ("rate5", Coverage::Tool("set_judgment")),
+        ("reject", Coverage::Tool("set_judgment")),
+        ("rejectRest", Coverage::Tool("reject_rest")),
+        ("pick", Coverage::Tool("set_judgment")),
+        ("unflag", Coverage::Tool("set_judgment")),
+        ("clear", Coverage::Tool("set_judgment")),
+        ("red", Coverage::Tool("set_judgment")),
+        ("orange", Coverage::Tool("set_judgment")),
+        ("yellow", Coverage::Tool("set_judgment")),
+        ("green", Coverage::Tool("set_judgment")),
+        ("blue", Coverage::Tool("set_judgment")),
+        ("pink", Coverage::Tool("set_judgment")),
+        ("purple", Coverage::Tool("set_judgment")),
+        ("clearlabel", Coverage::Tool("set_judgment")),
+        ("clearall", Coverage::Tool("set_judgment")),
+    ];
+
+    /// Each right-click menu item.
+    pub fn context_coverage(action: context::Action) -> Coverage {
+        use context::Action as A;
+        match action {
+            A::RevealFolder | A::RevealFile => Coverage::Tool("reveal"),
+            A::CopyPath | A::CopyFolderName | A::CopyFileName => Coverage::Excluded(CLIPBOARD),
+            A::RefreshFolder | A::ExpandAll | A::CollapseAll => Coverage::Tool("tree_folder"),
+            A::RenameFolder => Coverage::Tool("rename_folder"),
+            A::RenameByDate => Coverage::Tool("rename_by_capture_date"),
+            A::RewriteSidecars => Coverage::Tool("rewrite_sidecars"),
+            A::DeleteSidecars => Coverage::Tool("delete_sidecars"),
+            A::SequenceTimestamps => Coverage::Tool("sequence_timestamps"),
+            A::ImportFolder => Coverage::Tool("import_folder"),
+            A::SelectAll => Coverage::Tool("select_all"),
+            A::Judge(_) => Coverage::Tool("set_judgment"),
+            A::TrashFiles | A::DeleteFiles => Coverage::Tool("trash_photos"),
+        }
+    }
+
+    /// Each Sort and Filter menu item.
+    pub fn menu_coverage(action: &menu::Action) -> Coverage {
+        match action {
+            menu::Action::Toggle(
+                Toggle::Flag(_)
+                | Toggle::Stars(_)
+                | Toggle::Label(_)
+                | Toggle::Orientation(_)
+                | Toggle::Candidate(_)
+                | Toggle::Eyes(_)
+                | Toggle::Output(_)
+                | Toggle::Exif(..),
+            )
+            | menu::Action::Reset => Coverage::Tool("set_filter"),
+            menu::Action::Sort(_) => Coverage::Tool("set_sort"),
+        }
+    }
+
+    /// Each folder operation of the tree's menu.
+    pub fn folder_op_coverage(op: &FolderOp) -> Coverage {
+        Coverage::Tool(op.tool())
+    }
+
+    /// Each page of the settings modal.
+    pub fn page_coverage(tab: Tab) -> Coverage {
+        match tab {
+            Tab::Sidecar | Tab::Culling | Tab::Shortcuts | Tab::Import | Tab::Appearance => {
+                Coverage::Tool("set_settings")
+            }
+            Tab::Cache => Coverage::Tool("clear_cache"),
+            Tab::Mcp => Coverage::Excluded(MCP_GRANT),
+        }
+    }
+
+    /// The actions outside the keymap, the menus and the settings pages, and
+    /// the features the native app does not have yet.
+    pub const OTHER: &[(&str, Coverage)] = &[
+        ("a click on a strip cell", Coverage::Tool("show_photo")),
+        (
+            "a Ctrl / Shift click on a strip cell",
+            Coverage::Tool("select_photos"),
+        ),
+        ("Home / End", Coverage::Tool("navigate")),
+        (
+            "a click on a tree row or its expander",
+            Coverage::Tool("open_folder"),
+        ),
+        (
+            "the tree's Rename\u{2026} field",
+            Coverage::Tool("rename_folder"),
+        ),
+        ("a dialog's Cancel", Coverage::Tool("cancel_operation")),
+        (
+            "the recommended sort",
+            Coverage::NotImplemented {
+                tool: "set_sort",
+                feature: RECOMMENDED,
+            },
+        ),
+        (
+            "the Genre filter",
+            Coverage::NotImplemented {
+                tool: "set_filter",
+                feature: GENRE,
+            },
+        ),
+        (
+            "a photo's rename",
+            Coverage::NotImplemented {
+                tool: "rename_file",
+                feature: FILE_RENAME,
+            },
+        ),
+        (
+            "the ranking's refit",
+            Coverage::NotImplemented {
+                tool: "refit_ranking",
+                feature: RANKING,
+            },
+        ),
+        (
+            "the AI switch",
+            Coverage::NotImplemented {
+                tool: "set_settings",
+                feature: AI_SWITCH,
+            },
+        ),
+        (
+            "quit (q)",
+            Coverage::Excluded(
+                "a client would end the app the user is working in, and its own connection",
+            ),
+        ),
+        (
+            "opening the Sort, Filter and right-click menus",
+            Coverage::Excluded("a menu is a way to an action, and each item has its tool"),
+        ),
+        (
+            "opening the settings modal",
+            Coverage::Excluded("get_settings and set_settings read and change what it shows"),
+        ),
+        (
+            "the tree's keyboard cursor and type-ahead",
+            Coverage::Excluded("a way to a row, which the folder tools name by path"),
+        ),
+        (
+            "strip scrolling",
+            Coverage::Excluded("pointer-only geometry: show_photo brings a photo into view"),
+        ),
+        (
+            "the pane widths and the strip height",
+            Coverage::Excluded("pointer-only geometry, set by a drag"),
+        ),
+        (
+            "window geometry",
+            Coverage::Excluded("pointer-only geometry, the window manager's"),
+        ),
+        (
+            "the OS folder pickers",
+            Coverage::Excluded("replaced by the path arguments of open_folder and set_settings"),
+        ),
+        (
+            "drag and drop",
+            Coverage::Excluded("replaced by open_folder's path"),
+        ),
+        (
+            "mcpEnabled",
+            Coverage::Excluded("read only at startup, and a client would cut its own connection"),
+        ),
+        ("mcpAllowDestructive", Coverage::Excluded(MCP_GRANT)),
+    ];
+}
 const FLAGS: [&str; 3] = ["none", "pick", "reject"];
 /// The requests that change nothing, answered while the view drops keys.
 const READS: [&str; 4] = ["get_view", "get_status", "wait_for_idle", "get_settings"];
@@ -182,6 +435,8 @@ pub struct View<'a> {
     pub cancel: Option<Result<Cancel, &'static str>>,
     /// An import is under way, which refuses a folder rename.
     pub importing: bool,
+    /// A Clear Cache is held, asked or running (`ClearFlow::busy`).
+    pub clearing: bool,
 }
 
 /// A destructive operation a tool previews, then runs on a confirming call
@@ -199,6 +454,8 @@ pub enum Op {
         path: String,
         name: String,
     },
+    /// The settings' `Clear Cache`.
+    ClearCache,
 }
 
 /// A folder operation of the tree's menu, on a folder by the caller's
@@ -321,6 +578,8 @@ pub enum Cancel {
     Folder,
     /// Forget the `Pending`.
     Pending,
+    /// The Clear Cache dialog's Cancel, or the drop of a held clear.
+    Clear,
 }
 
 impl Op {
@@ -330,6 +589,7 @@ impl Op {
             Op::Trash(_) => "trash_photos",
             Op::Folder(op, _) => op.tool(),
             Op::Rename { .. } => "rename_folder",
+            Op::ClearCache => "clear_cache",
         }
     }
 
@@ -358,6 +618,11 @@ impl Op {
                 content.insert("operation".into(), json!(rename::LABEL));
                 content.insert("folder".into(), json!(path));
                 content.insert("name".into(), json!(name));
+                content
+            }
+            Op::ClearCache => {
+                let mut content = dialog_content(&cache::dialog());
+                content.insert("operation".into(), json!(cache::CLEAR_LABEL));
                 content
             }
         }
@@ -535,12 +800,13 @@ pub fn get_status(status: &Status) -> Value {
     })
 }
 
-/// Which of the `f`, `e` and `d` overlays are on.
+/// Which of the `f`, `e` and `d` overlays and the `g` grayscale are on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Overlays {
     pub focus: bool,
     pub peaking: bool,
     pub performance: bool,
+    pub grayscale: bool,
 }
 
 /// The states in which `key_down` drops a key, which refuse every request
@@ -551,6 +817,7 @@ pub enum Busy {
     Trash,
     FolderDialog,
     Rename,
+    CacheDialog,
 }
 
 impl Busy {
@@ -565,6 +832,9 @@ impl Busy {
             }
             Busy::Rename => {
                 "a folder name is being edited in Handpic; try again once the user is done"
+            }
+            Busy::CacheDialog => {
+                "Handpic's Clear Cache dialog is open; try again once the user answers it"
             }
         }
     }
@@ -698,6 +968,9 @@ pub struct Change {
 /// The answer to `kind` over `view`: what the view has to do, if anything,
 /// before it replies with `get_view`, or the refusal's message.
 pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, String> {
+    if let Some((_, feature)) = UNPORTED_TOOLS.iter().find(|(tool, _)| *tool == kind) {
+        return Err(not_in_native(feature));
+    }
     if !READS.contains(&kind)
         && kind != CANCEL
         && let Some(busy) = view.busy
@@ -732,6 +1005,7 @@ pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, S
         }
         "import_folder" | "rename_by_capture_date" => folder_operation(view, args, kind).map(Some),
         "rename_folder" => rename_folder(view, args).map(Some),
+        "clear_cache" => clear_cache(view, args).map(Some),
         CANCEL => cancel_operation(view).map(Some),
         _ => Err(format!("unknown request: {kind}")),
     }
@@ -1084,6 +1358,50 @@ fn rename_folder(view: &View, args: &Value) -> Result<Action, String> {
     }
 }
 
+/// `clear_cache`, the settings' `Clear Cache`, one at a time and not while
+/// a folder operation runs, whose flow keeps the settings shut. Without
+/// `confirm`, it previews while `mcpAllowDestructive` is on and otherwise
+/// opens the app's confirmation; with it, the clear a preview's `id` names
+/// runs, or waits for the listing or scan under way, without a dialog.
+fn clear_cache(view: &View, args: &Value) -> Result<Action, String> {
+    let confirm = switch(args, "confirm")?.unwrap_or(false);
+    let id = given_field(args, "id")
+        .map(|id| {
+            id.as_u64()
+                .ok_or("id must be the number a preview returned")
+        })
+        .transpose()?;
+    if view.clearing {
+        return Err(CLEAR_RUNNING.into());
+    }
+    if view.folder_op {
+        return Err(FOLDER_OP_REFUSAL.into());
+    }
+    if !confirm {
+        if id.is_some() {
+            return Err("an id goes with confirm: true".into());
+        }
+        return Ok(if view.settings.mcp_allow_destructive {
+            Action::Preview(Op::ClearCache)
+        } else {
+            Action::Ask(Op::ClearCache)
+        });
+    }
+    if !view.settings.mcp_allow_destructive {
+        return Err(DESTRUCTIVE_OFF.into());
+    }
+    let id = id.ok_or("confirm: true needs the id a preview returned")?;
+    match view.pending {
+        Some(Pending {
+            id: pending,
+            op: Op::ClearCache,
+        }) if *pending == id => Ok(Action::Run(Op::ClearCache)),
+        _ => Err(format!(
+            "no preview of clear_cache has id {id}; preview again"
+        )),
+    }
+}
+
 /// `cancel_operation`: what the user's Cancel would cancel now, else the
 /// `Pending`; refused naming an operation under way that cannot be
 /// canceled, or with nothing to cancel.
@@ -1174,6 +1492,7 @@ pub fn get_view(view: &View) -> Value {
             "focus": view.overlays.focus,
             "peaking": view.overlays.peaking,
             "performance": view.overlays.performance,
+            "grayscale": view.overlays.grayscale,
         },
     })
 }
@@ -1266,7 +1585,7 @@ fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
         return Err(NOTHING_SHOWN.into());
     }
     if mode == "compare" {
-        return Err(COMPARE_REFUSAL.into());
+        return Err(not_in_native(COMPARE));
     }
     Ok(((mode == "zoom") != view.zoomed).then_some(Action::ToggleZoom))
 }
@@ -1278,7 +1597,7 @@ fn set_sort(view: &View, by: &Value) -> Result<Option<Action>, String> {
         Some("name") => SortKey::Name,
         Some("capture") => SortKey::Capture,
         Some("rating") => SortKey::Rating,
-        Some("recommended") => return Err(RECOMMENDED_REFUSAL.into()),
+        Some("recommended") => return Err(not_in_native(RECOMMENDED)),
         _ => return Err("by must be one of name, capture, rating".into()),
     };
     if view.view_only {
@@ -1500,6 +1819,9 @@ fn toggles(from: &FilterState, to: &FilterState) -> Vec<menu::Action> {
 /// The menu clicks that check what `args` asks for, the menu's `Reset`
 /// first when it asks for one.
 fn set_filter(view: &View, args: &Value) -> Result<Option<Action>, String> {
+    if given_field(args, "genres").is_some() {
+        return Err(not_in_native(GENRE));
+    }
     let wanted = wanted_filter(view, args)?;
     if wanted == *view.filter {
         return Ok(None);
@@ -1543,19 +1865,21 @@ fn set_panes(view: &View, args: &Value) -> Result<Option<Action>, String> {
 
 /// The overlays to flip, those given that differ from the ones on.
 fn set_overlays(view: &View, args: &Value) -> Result<Option<Action>, String> {
-    let (focus, peaking, performance) = (
+    let (focus, peaking, performance, grayscale) = (
         switch(args, "focus")?,
         switch(args, "peaking")?,
         switch(args, "performance")?,
+        switch(args, "grayscale")?,
     );
-    if focus.is_none() && peaking.is_none() && performance.is_none() {
-        return Err("set at least one of focus, peaking, performance".into());
+    if focus.is_none() && peaking.is_none() && performance.is_none() && grayscale.is_none() {
+        return Err("set at least one of focus, peaking, performance, grayscale".into());
     }
     let on = view.overlays;
     let flips = Overlays {
         focus: focus.is_some_and(|f| f != on.focus),
         peaking: peaking.is_some_and(|p| p != on.peaking),
         performance: performance.is_some_and(|p| p != on.performance),
+        grayscale: grayscale.is_some_and(|g| g != on.grayscale),
     };
     Ok((flips != Overlays::default()).then_some(Action::Overlays(flips)))
 }
@@ -1845,6 +2169,9 @@ fn set_settings(view: &View, args: &Value) -> Result<Option<Action>, String> {
     if args.get("mcp_allow_destructive").is_some() {
         return Err(ALLOW_DESTRUCTIVE_REFUSAL.into());
     }
+    if args.get("ai_enabled").is_some() {
+        return Err(not_in_native(AI_SWITCH));
+    }
     if view.folder_op {
         return Err(FOLDER_OP_REFUSAL.into());
     }
@@ -2029,8 +2356,12 @@ fn set_judgment(view: &View, args: &Value) -> Result<Action, String> {
 mod tests {
     use super::{
         Action, Busy, Cancel, Change, FolderOp, Key, Op, OpState, Operation, Overlays, Pending,
-        Status, TreeOp, View, answer, awaiting, get_settings, get_status, get_view, previewed,
-        started, tree_reply,
+        Status, TreeOp, View, answer, awaiting,
+        coverage::{
+            Coverage, KEYMAP, OTHER, context_coverage, folder_op_coverage, menu_coverage,
+            page_coverage,
+        },
+        get_settings, get_status, get_view, not_in_native, previewed, started, tree_reply,
     };
     use crate::{
         burst::BurstMember,
@@ -2044,7 +2375,7 @@ mod tests {
         panels::Panels,
         selection::{Selection, selection_of},
         settings::{self, Settings},
-        settingsmodal::{Edit, edit},
+        settingsmodal::{Edit, TABS, edit},
         settingsview::Change as SettingChange,
         sort::SortKey,
         theme::{self, Mode, NEUTRAL},
@@ -2114,6 +2445,7 @@ mod tests {
             pending: None,
             cancel: None,
             importing: false,
+            clearing: false,
         }
     }
 
@@ -2151,7 +2483,12 @@ mod tests {
                 },
                 "filter_offers": { "output": false, "exif": {} },
                 "panes": { "left": true, "right": true, "strip": true },
-                "overlays": { "focus": false, "peaking": false, "performance": false },
+                "overlays": {
+                    "focus": false,
+                    "peaking": false,
+                    "performance": false,
+                    "grayscale": false,
+                },
             })
         );
     }
@@ -2633,6 +2970,10 @@ mod tests {
                 Busy::Rename,
                 "a folder name is being edited in Handpic; try again once the user is done",
             ),
+            (
+                Busy::CacheDialog,
+                "Handpic's Clear Cache dialog is open; try again once the user answers it",
+            ),
         ] {
             let view = View {
                 busy: Some(busy),
@@ -2663,6 +3004,7 @@ mod tests {
                 ("tree_folder", json!({ "path": "/d", "action": "refresh" })),
                 ("reveal", json!({ "path": "/d", "folder": true })),
                 ("trash_photos", json!({})),
+                ("clear_cache", json!({})),
             ] {
                 assert_eq!(ask(kind, args, &view), Err(message.into()), "{kind}");
             }
@@ -2737,7 +3079,7 @@ mod tests {
         let files = paths(&["/d/a", "/d/b"]);
         assert_eq!(
             ask("set_view", json!({ "mode": "compare" }), &view(&files)),
-            Err("compare is not supported by Handpic's native app yet".into())
+            Err("compare is not implemented in Handpic's native app yet".into())
         );
     }
 
@@ -3000,7 +3342,7 @@ mod tests {
         );
         assert_eq!(
             got["overlays"],
-            json!({ "focus": false, "peaking": true, "performance": false })
+            json!({ "focus": false, "peaking": true, "performance": false, "grayscale": false })
         );
     }
 
@@ -3284,7 +3626,268 @@ mod tests {
         );
         assert_eq!(
             ask("set_overlays", json!({}), &view),
-            Err("set at least one of focus, peaking, performance".into())
+            Err("set at least one of focus, peaking, performance, grayscale".into())
+        );
+    }
+
+    #[test]
+    fn set_overlays_latches_the_grayscale_only_when_it_differs() {
+        let gray = View {
+            overlays: Overlays {
+                grayscale: true,
+                ..Overlays::default()
+            },
+            ..view(&[])
+        };
+        let flip = Ok(Some(Action::Overlays(Overlays {
+            grayscale: true,
+            ..Overlays::default()
+        })));
+        assert_eq!(
+            ask("set_overlays", json!({ "grayscale": true }), &view(&[])),
+            flip
+        );
+        assert_eq!(
+            ask("set_overlays", json!({ "grayscale": true }), &gray),
+            Ok(None)
+        );
+        assert_eq!(
+            ask("set_overlays", json!({ "grayscale": false }), &gray),
+            flip
+        );
+        assert_eq!(get_view(&gray)["overlays"]["grayscale"], json!(true));
+    }
+
+    /// Every tool a table entry names, and the feature each not-implemented
+    /// one is refused for.
+    fn covered() -> Vec<Coverage> {
+        let mut all: Vec<Coverage> = KEYMAP.iter().chain(OTHER).map(|(_, c)| *c).collect();
+        all.extend(
+            [
+                context::Action::RevealFolder,
+                context::Action::CopyPath,
+                context::Action::CopyFolderName,
+                context::Action::RefreshFolder,
+                context::Action::ExpandAll,
+                context::Action::CollapseAll,
+                context::Action::RenameFolder,
+                context::Action::RenameByDate,
+                context::Action::RewriteSidecars,
+                context::Action::DeleteSidecars,
+                context::Action::SequenceTimestamps,
+                context::Action::ImportFolder,
+                context::Action::SelectAll,
+                context::Action::RevealFile,
+                context::Action::CopyFileName,
+                context::Action::Judge("pick"),
+                context::Action::TrashFiles,
+                context::Action::DeleteFiles,
+            ]
+            .map(context_coverage),
+        );
+        all.extend(
+            [
+                menu::Action::Toggle(Toggle::Stars(5)),
+                menu::Action::Reset,
+                menu::Action::Sort(SortKey::Rating),
+            ]
+            .iter()
+            .map(menu_coverage),
+        );
+        all.extend(
+            [
+                FolderOp::Sequence("/d".into()),
+                FolderOp::Import {
+                    dir: "/d".into(),
+                    plan: None,
+                },
+                FolderOp::Date("/d".into()),
+                FolderOp::Sidecars(crate::sidecars::Target {
+                    kind: crate::sidecars::Kind::Delete,
+                    dir: "/d".into(),
+                }),
+            ]
+            .iter()
+            .map(folder_op_coverage),
+        );
+        all.extend(TABS.map(page_coverage));
+        all
+    }
+
+    #[test]
+    fn the_coverage_table_names_every_keymap_action_once() {
+        let keymap: Vec<&str> = Keymap::defaults()
+            .bindings()
+            .into_iter()
+            .map(|b| b.action)
+            .collect();
+        let table: Vec<&str> = KEYMAP.iter().map(|(action, _)| *action).collect();
+        assert_eq!(table, keymap);
+    }
+
+    #[test]
+    fn every_covered_tool_is_one_the_companion_answers() {
+        let files = paths(&["/d/a"]);
+        let view = view(&files);
+        for coverage in covered() {
+            let tool = match coverage {
+                Coverage::Tool(tool) | Coverage::NotImplemented { tool, .. } => tool,
+                Coverage::Excluded(reason) => {
+                    assert!(!reason.is_empty());
+                    continue;
+                }
+            };
+            if let Err(e) = ask(tool, json!({}), &view) {
+                assert_ne!(e, format!("unknown request: {tool}"));
+            }
+        }
+    }
+
+    #[test]
+    fn every_feature_not_in_the_native_app_is_refused_with_the_shared_message() {
+        let files = paths(&["/d/a", "/d/b"]);
+        let view = view(&files);
+        let calls = [
+            ("compare", "set_view", json!({ "mode": "compare" })),
+            (
+                "the recommended sort",
+                "set_sort",
+                json!({ "by": "recommended" }),
+            ),
+            (
+                "the Genre filter",
+                "set_filter",
+                json!({ "genres": ["Landscape"] }),
+            ),
+            (
+                "file rename",
+                "rename_file",
+                json!({ "path": "/d/a", "name": "b" }),
+            ),
+            ("the personal ranking", "refit_ranking", json!({})),
+            (
+                "the AI switch",
+                "set_settings",
+                json!({ "ai_enabled": true }),
+            ),
+        ];
+        let mut listed: Vec<(&str, &str)> = covered()
+            .into_iter()
+            .filter_map(|c| match c {
+                Coverage::NotImplemented { tool, feature } => Some((feature, tool)),
+                _ => None,
+            })
+            .collect();
+        listed.sort();
+        listed.dedup();
+        let mut called: Vec<(&str, &str)> = calls.iter().map(|(f, t, _)| (*f, *t)).collect();
+        called.sort();
+        assert_eq!(listed, called);
+        for (feature, tool, args) in calls {
+            let refusal = format!("{feature} is not implemented in Handpic's native app yet");
+            assert_eq!(not_in_native(feature), refusal);
+            assert_eq!(ask(tool, args, &view), Err(refusal), "{tool}");
+        }
+        // A whole tool not in the native app is refused even while busy.
+        let busy = View {
+            busy: Some(Busy::Settings),
+            ..view
+        };
+        assert_eq!(
+            ask("refit_ranking", json!({}), &busy),
+            Err(not_in_native("the personal ranking"))
+        );
+    }
+
+    #[test]
+    fn clear_cache_previews_or_asks_by_the_grant_and_runs_on_the_previewed_id() {
+        assert_eq!(
+            ask("clear_cache", json!({}), &view(&[])),
+            Ok(Some(Action::Ask(Op::ClearCache)))
+        );
+        let allowed = View {
+            folder: None,
+            settings: &ALLOW_DESTRUCTIVE,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("clear_cache", json!({}), &allowed),
+            Ok(Some(Action::Preview(Op::ClearCache)))
+        );
+        let pending = Pending {
+            id: 4,
+            op: Op::ClearCache,
+        };
+        let previewed_view = View {
+            pending: Some(&pending),
+            ..allowed
+        };
+        assert_eq!(
+            ask(
+                "clear_cache",
+                json!({ "id": 4, "confirm": true }),
+                &previewed_view
+            ),
+            Ok(Some(Action::Run(Op::ClearCache)))
+        );
+        assert_eq!(
+            ask(
+                "clear_cache",
+                json!({ "id": 5, "confirm": true }),
+                &previewed_view
+            ),
+            Err("no preview of clear_cache has id 5; preview again".into())
+        );
+        assert_eq!(
+            ask("clear_cache", json!({ "id": 4 }), &previewed_view),
+            Err("an id goes with confirm: true".into())
+        );
+        assert_eq!(
+            ask("clear_cache", json!({ "confirm": true }), &previewed_view),
+            Err("confirm: true needs the id a preview returned".into())
+        );
+        let off = View {
+            pending: Some(&pending),
+            ..view(&[])
+        };
+        assert!(
+            ask("clear_cache", json!({ "id": 4, "confirm": true }), &off)
+                .unwrap_err()
+                .starts_with("mcp_allow_destructive is off")
+        );
+        let clearing = View {
+            clearing: true,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("clear_cache", json!({}), &clearing),
+            Err("a Clear Cache is under way in Handpic; try again once it ends".into())
+        );
+        let folder_op = View {
+            folder_op: true,
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("clear_cache", json!({}), &folder_op),
+            Err("a folder operation is under way in Handpic; try again once it ends".into())
+        );
+        let preview = previewed(&pending);
+        assert_eq!(preview["operation"], json!("Clear Cache"));
+        assert_eq!(preview["title"], json!("Clear the index cache?"));
+        assert_eq!(preview["run"], json!("Clear"));
+        assert_eq!(preview["id"], json!(4));
+    }
+
+    #[test]
+    fn cancel_operation_cancels_a_clear() {
+        let view = View {
+            cancel: Some(Ok(Cancel::Clear)),
+            busy: Some(Busy::CacheDialog),
+            ..view(&[])
+        };
+        assert_eq!(
+            ask("cancel_operation", json!({}), &view),
+            Ok(Some(Action::Cancel(Cancel::Clear)))
         );
     }
 

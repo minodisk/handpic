@@ -366,7 +366,7 @@ its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occ
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
 holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpAllowDestructive` switch, which only the user flips, and the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`,
-`src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
+`src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close, or an MCP confirm run or held without asking, `confirmed`), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
 (`keystroke_of`) and resolves it to its action (`Bindings`),
@@ -422,15 +422,20 @@ run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
 over a snapshot of the view: the strip's selection, its targets as
 `selected`, its burst
-(`burstOf`, each frame's sharpness from the `Facts`), compare refused,
+(`burstOf`, each frame's sharpness from the `Facts`), the coverage table
+(`Coverage`: every keymap action, right-click item, menu item, folder
+operation and settings page mapped to its tool, to a tool refused with
+`not_in_native` until the feature lands (compare, the `recommended` sort,
+the Genre filter, `rename_file`, `refit_ranking`, the AI switch) or to the
+reason it has none, tested against the keymap's actions),
 `set_judgment`'s changes, one undo
 entry through the judgment keys' view, row and writer path, the `Key` a
 keymap action and its tool both run through the view's `perform` (the moves,
 `select_all`, `reject_rest`, `undo` and `redo`, a trash run on top stepped
 as `StepTrash`, its redo refused unless `mcpAllowDestructive`), `set_sort` and `set_filter` as the menu clicks the view's
-`apply_menu` applies (the `recommended` sort refused, a view-only folder
+`apply_menu` applies (a view-only folder
 refusing the sort), `set_panes` through `change_panels` and `set_overlays`
-flipping only the `f`, `e` and `d` overlays that differ, each reported back
+flipping only the `f`, `e` and `d` overlays and the grayscale latch that differ, each reported back
 by `get_view` (`filter`, `filter_offers`, `panes`, `overlays`), `open_folder`
 through `open_from_tree` (the open folder not reopened), `tree_folder` through
 `tree_toggle` and the tree menu's `folder_action` on the drawn row of the
@@ -452,7 +457,9 @@ import's naming the plan its run copies) and run on a confirming call through
 `run_confirmed`, `rename_folder`, the tree's `Rename…` previewed as a
 `Pending` and run through `request_rename` while `mcpAllowDestructive` is on,
 else the tree's inline rename opened with the name filled in (`ask_rename`)
-for the user's Enter, `cancel_operation`, the dialog's Cancel, a sequencing
+for the user's Enter, `clear_cache`, the Cache page's `Clear Cache` previewed
+and run through `ClearFlow::confirmed` while `mcpAllowDestructive` is on,
+else its confirmation opened through `press_clear`, `cancel_operation`, the dialog's Cancel, a sequencing
 or import run's cancel or the `Pending` forgotten,
 answered while the view drops keys, and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
@@ -582,6 +589,8 @@ background executor, the fit view's image resized to its drawn size first),
 `src/grayscale.rs` the momentary grayscale preview on a held `g` (`Hold`:
 `press`, `key_up` of the held key, `modifiers_changed`, a modifier going up
 ending it, and `release`, on the window's deactivation and the view's blur;
+`set`, the MCP `set_overlays` latch, which only `set` or the key's own
+release ends;
 only the photo, the fit view and the 1:1 placeholder and crop, is drawn with
 the image sprite's grayscale flag, the overlays keeping their colors),
 `src/perf.rs` the performance overlay's data (`Perf`, a port of `perf.ts`:

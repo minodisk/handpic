@@ -371,7 +371,7 @@ Made with the user on 2026-11-17.
     - An import refused for a missing root should say how to set it
       (`set_settings`, Step 4).
 
-- [ ] Step 8: The coverage table, the final instructions and the exclusions
+- [x] Step 8: The coverage table, the final instructions and the exclusions
   - Done when:
     - A table in `crates/native/src/companion.rs` maps every keymap action
       (the names of `crates/backend/src/shortcuts.rs`'s `DEFAULTS`), every
