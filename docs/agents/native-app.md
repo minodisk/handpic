@@ -1567,7 +1567,7 @@ dimmed, shows capture order and keeps the stored key.
   each a separator, a heading and one item per label, a group the folder
   lacks left out. Numbers sort by value (`f64::total_cmp`), ties by label;
   `Camera` and `Lens` by a case-insensitive compare, ties by the plain one
-  (Tauri uses `localeCompare`; no collator here). The focal length is
+  (Tauri used `localeCompare`; no collator here). The focal length is
   bucketed into `exif::FOCAL_RANGES`, half-open. An item is keyed by its
   group and label (`Toggle::Exif`), not its row, since the groups can be
   rebuilt between the frame that drew the menu and the click, which made
@@ -2103,7 +2103,7 @@ scan joins the launch's eviction thread before it reconciles, so the
 
 `run_scan`'s workers take the first file of the hot list not yet taken, else
 the next in listing order. With the hot list sent right after `Scan::start`
-(as the Tauri frontend does after `start_scan`), the first wave of the 22
+(as the Tauri frontend did after `start_scan`), the first wave of the 22
 workers had already taken files 0-10 of a 373-file folder opened at file 199;
 with `ScanFocus::set` called on the handle before `Scan::start`, the first
 committed batch was the 20 files of the strip's range around 199 plus 0 and 1
@@ -2291,9 +2291,9 @@ as `key: <name> action=…` for every keystroke, and not GPUI's.
 `logger.rs` also writes each line, as
 `[YYYY-MM-DD][HH:MM:SS][target][LEVEL] message` in UTC, to a `Handpic.log`
 under the native app's own folder, or to `--log <path>` (see
-`app-log.md`'s "The GPUI app's log"), with one `write` per line on a
+`app-log.md`'s "Size and rotation"), with one `write` per line on a
 `Mutex<File>` opened for append and the size kept in memory; past 1 MB it
-starts anew as the Tauri app's does: `File::create` (truncate) and a replaced
+starts anew as the Tauri app's did: `File::create` (truncate) and a replaced
 handle, never `set_len` or a remove on the open file, because on Windows a
 file open for append cannot be truncated by `set_len` and a remove while the
 handle is open can leave the name pending deletion. The timestamp is a
@@ -2633,8 +2633,8 @@ Read from `gpui_windows` at the pinned rev, not yet seen in the running app
   `1` on a US or JIS layout (`ctrl+alt+1`), but `&` on AZERTY, where the
   Tauri app's `event.code` still says `1`. Windows reports AltGr as Ctrl+Alt,
   so on a layout with AltGr `ctrl+alt+<digit>` is also what AltGr+digit
-  sends; the default color keys are the Tauri app's, so both apps behave the
-  same there.
+  sends; the default color keys were the Tauri app's, so AltGr+digit behaved
+  the same there.
 
 ### The canvas's size reaches the view through a shared cell (Inferred)
 
@@ -2778,7 +2778,7 @@ gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
 size), colored `primary`, its value `fraction * 100`, in the
 `StatusBar`'s right region right of the position, and
 only while `shown` yields a count, so the position shifts by the circle's
-width when it appears or goes. The Tauri app draws a bar along the row's top edge
+width when it appears or goes. The Tauri app drew a bar along the row's top edge
 (`#scan-progress`); the circle is the user's decision.
 
 The linear `Progress` was ruled out for that bar, and the reasons hold for
@@ -3187,7 +3187,7 @@ neither a directory nor a file opens nothing and puts the Tauri
 `Drop a single folder or RAW file.` (`DROP_TEXT`) on the status line.
 
 - Rule: the directory test is a `stat`, run on `cx.background_executor()`
-  as Tauri runs it in `spawn_blocking`, then `open` in `this.update`.
+  as Tauri ran it in `spawn_blocking`, then `open` in `this.update`.
 - Rule: drops are ordered among themselves by the view's `drops` counter, the
   port of `dropCounter`: a drop whose resolve finishes after a later drop
   opens nothing. Unlike `pick_folder`, a drop is not dropped because `opens`

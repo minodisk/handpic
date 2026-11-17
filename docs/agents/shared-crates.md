@@ -1373,14 +1373,13 @@ dev machine it's silently absent from the run (not a failure, not a skip
 you'll see), so a passing `cargo test <name>` there proves nothing about it.
 Confirm unix-only coverage on CI, not locally on Windows.
 
-### A rating/pick test needs a scan-populated `files` row before `rating_of` reads back (Hit)
+### A rating/pick test needs a scan-populated `files` row before `Index::entries` reads back (Hit)
 
-`rating_of` joins `files`, which only a folder scan fills in. A unit test
-that calls `write_batch` (or a sidecar format switch, `sidecar::switch_to`)
-and then reads the rating back must first
-call `index::stat` to populate that row, the same way
-`a_foreign_sidecar_is_read_on_the_first_open_without_any_files_row` does —
-otherwise the read returns nothing regardless of whether the write
-succeeded.
+`Index::entries` and `Index::entry` (`INDEXED_FILE`, `FROM files LEFT JOIN
+ratings USING (path)`) read judgments through `files`, which only a folder
+scan fills in, as does `rank_rows`. A unit test that calls `write_batch` (or a
+sidecar format switch, `sidecar::switch_to`) and then reads the rating back
+must first call `index::stat` to populate that row, otherwise the read
+returns nothing regardless of whether the write succeeded.
 
 - Source: `docs/plans/_archived/20260920-robustness-cleanup/learnings.md`, Step 4.
