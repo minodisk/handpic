@@ -116,7 +116,7 @@ touched; its icons are only read.
       Record this in `docs/agents/github-actions-workflows.md`.
     - Pushing a workflow change needs the `workflow` scope
       (`docs/agents/github-actions-workflows.md`).
-- [ ] Step 2: The Windows setup `.exe` and portable ZIP
+- [x] Step 2: The Windows setup `.exe` and portable ZIP
   - Done when:
     - The `Package` run also builds on `windows-latest` and uploads
       `Handpic-<version>-windows-x64-setup.exe` (Inno Setup, per user) and
@@ -288,3 +288,4 @@ touched; its icons are only read.
 ## Progress
 
 - (2026-11-17) Step 1 complete
+- (2026-11-17) Step 2 complete

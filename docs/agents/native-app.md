@@ -476,6 +476,38 @@ packages the built `target/release` binary with a script under
   fields and the notices).
 - `mise run native:package:macos` is the same locally on a Mac: the bundle
   task (its release build included), then `macos.sh`.
+- `windows.sh` compiles `crates/native/packaging/windows/handpic.iss` with
+  Inno Setup 6's `ISCC.exe` (found on `PATH`, else in its per-user and
+  machine-wide install folders, else it fails with the `winget install
+  JRSoftware.InnoSetup` hint) into
+  `crates/native/target/release/Handpic-<version>-windows-x64-setup.exe`,
+  passing the version, the executable's name and the folders as `/D`
+  defines, and zips one `Handpic/` folder (the exe and `licenses/`) into
+  `Handpic-<version>-windows-x64.zip` with Windows' own
+  `System32/tar.exe -a` (Git Bash has no `zip` and its GNU `tar` writes
+  none). The setup installs per user (`PrivilegesRequired=lowest`,
+  `{autopf}\Handpic`, which is `%LOCALAPPDATA%\Programs\Handpic`), adds a
+  Start menu shortcut (`{autoprograms}`) and takes its icon from
+  `crates/app/icons/icon.ico`, read in place. The workflow's `windows` leg
+  runs it on `windows-latest`, then installs the setup silently
+  (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), checks the exe under
+  `%LOCALAPPDATA%\Programs\Handpic`, the `HKCU` uninstall entry and its
+  `DisplayVersion`, no `HKLM` entry and the shortcut, runs the setup again
+  over the install, uninstalls silently and checks all of it gone, then
+  checks the ZIP's contents. `windows-latest` ships Inno Setup 6.7.1 with
+  `iscc` on `PATH` (Chocolatey's shim), so the workflow installs nothing.
+  `mise run native:package:windows` is the release build plus `windows.sh`
+  locally.
+
+- Rule: the setup's `AppId` is `dev.minodisk.handpic` (`IDENTIFIER`), for
+  good: Inno Setup finds the earlier install, its folder and its uninstall
+  entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1`)
+  by it, so a changed `AppId` installs a second copy instead of upgrading.
+- Rule: under Git Bash, `ISCC.exe`'s `/`-options need `MSYS_NO_PATHCONV=1`
+  (and `MSYS2_ARG_CONV_EXCL='*'`), or MSYS rewrites them as paths.
+- Rule: the setup has no close-applications handling or relaunch yet; the
+  updater (sub-milestone 3 of the gpui-port plan's Step 10) adds what it
+  needs.
 
 - Rule: `native:bundle:macos` stays the one place that lays out
   `Handpic.app`; `macos.sh` only signs and packages it.

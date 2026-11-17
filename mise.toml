@@ -172,6 +172,17 @@ mise run native:bundle:macos
 bash tools/package/macos.sh
 """
 
+[tasks."native:package:windows"]
+description = "Build the release GPUI app and package it as a per-user Inno Setup setup .exe and a portable ZIP under crates/native/target/release (Windows, Inno Setup 6 installed)"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo build --release --locked
+bash ../../tools/package/windows.sh
+"""
+
 [tasks."native:install:linux"]
 description = "Install the GPUI app for the current user (Linux): the release binary to ~/.local/bin, its .desktop file and icon under ~/.local/share"
 dir = "crates/native"

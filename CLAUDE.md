@@ -282,7 +282,10 @@ release binary per platform and packages it with the scripts of
 `tools/package/` (`version.sh`, the crate's `[package].version`; `notices.sh`,
 the license notices every package ships into one `licenses/` folder;
 `macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg`, also
-`mise run native:package:macos`), uploading each package and one
+`mise run native:package:macos`; `windows.sh`, the per-user Inno Setup
+`Handpic-<version>-windows-x64-setup.exe` from `packaging/windows/handpic.iss`
+(`AppId` `dev.minodisk.handpic`, for good) and the portable
+`Handpic-<version>-windows-x64.zip`, also `mise run native:package:windows`), uploading each package and one
 `SHA256SUMS` as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its own index at `<cache dir>/dev.minodisk.handpic.native/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
