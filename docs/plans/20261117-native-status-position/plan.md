@@ -120,3 +120,8 @@ hides. The position then stays visible when the meta pane is hidden.
   the step.
 
 ## Progress
+
+- 2026-11-17 Step 1: `pager::position` and the status bar placement landed
+  (the strip position moved from the meta pane to the status bar's right
+  region). The manual on-screen check is still pending; `learnings.md`
+  records it under `## Deferred issues (todo candidates)`.

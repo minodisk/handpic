@@ -4633,8 +4633,9 @@ impl Riffle {
         cx.notify();
     }
 
-    /// The status line with the progress circle, while an operation with a
-    /// count runs, and the sort and filter buttons at its right end.
+    /// The status line, then the strip position (while a file is shown), the
+    /// progress circle while an operation with a count runs, and the sort and
+    /// filter buttons at its right end.
     fn status_row(&self, max_menu_height: Pixels, cx: &mut Context<Self>) -> impl IntoElement {
         let mut row = StatusBar::new().child(self.status());
         if let Some(position) = pager::position(
