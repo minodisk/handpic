@@ -1433,7 +1433,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
 
 - Rule: `mark::af_eye_state` is the one place the strip's icon, the filter's
   `Face focus` items and the overlay's mark color read a file's state from,
-  as `afEyeState` is in the Tauri frontend. It reads `full_eye_sharp` alone
+  as `afEyeState` was in the Tauri frontend. It reads `full_eye_sharp` alone
   for the eye focus: `Low` under `LOW_FULL_EYE_SHARP`, `Good` when
   `photo_tier` holds (at or above `GOOD_FULL_EYE_SHARP` with the EAR, pose,
   eye offset and edge gap cuts), else `Neutral`, a missing value included.
@@ -1481,7 +1481,7 @@ time a burst of its own. The view keeps the open folder's grouping in
   `.cell.rejected`'s opacity covers the `::before`.
 - Deliberate difference: a selected member's band is painted before the
   cell's opaque `--muted` fill, so inside the cell the fill covers it; Tauri
-  paints the 8% tint over `--muted` (`isolation: isolate`).
+  painted the 8% tint over `--muted` (`isolation: isolate`).
 - Deliberate difference: `burst.ts` builds the time with `Date.UTC`, which
   rolls a month 00, a day 32 or an all-zero timestamp over into a finite
   time, so such files could share a burst in the Tauri app. `capture_ms` parses
@@ -1966,8 +1966,8 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
   cannot observe it, so in its place any pointer press inside the box
   cancels (`cancel_capture`, a capture-phase `capture_any_mouse_down`, which
   runs before the pressed control's own click: a `+` pressed on another row
-  then captures for that row). This differs from the Tauri app, where only
-  a tab switch or a close cancels.
+  then captures for that row). This differed from the Tauri app, where only
+  a tab switch or a close cancelled.
 - Rule: `tab` and `shift+tab` can be captured. While a row captures, the box
   sets the key context `SettingsCapture` (`settingsview::CAPTURE_CONTEXT`),
   and `main` binds both keys to `NoAction` in it (`capture_keys`, bound with
@@ -1989,7 +1989,7 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
   keymap"); the hand check is pending in
   `../plans/20261113-gpui-settings/learnings.md`.
 
-### A sidecar format switch is the Tauri order, shared (Inferred)
+### A sidecar format switch keeps the Tauri order (Inferred)
 
 The Sidecar page's three radios (`settingsmodal::FORMATS`) emit
 `Change::SidecarFormat` only for a format other than the one shown
@@ -3455,7 +3455,7 @@ else show both), `from_setting` and `setting`. `settings.rs` reads it into
   launch-only suppression flag has the same choice: set a field after `new`, or
   add `#[allow]` as `shared-crates.md` does for `Writer::set`.
 - Rule: hiding the strip removes its pane, the header with `Sort` / `Filter`
-  included, as in the Tauri app, where the menus sit in the strip's header,
+  included, as in the Tauri app, where the menus sat in the strip's header,
   and closes an open menu; the status row (the status line, the position and
   the circle) stays. The strip's bookkeeping (range, thumbnails) keeps
   running while it is hidden.
@@ -3694,7 +3694,7 @@ it inside, as the Tauri `menuPosition`.
   shortcut is its action's first key, carried as the keymap's name and
   spelled by `Kbd::format` (`ctrl+alt+1` as `Ctrl+Alt+1`, `space` as
   `Space`, `⌘A` on macOS), not `keys.ts`'s `displayKey` and not
-  `Keymap::accelerator_for`, which spells keys for the Tauri menu bar.
+  `Keymap::accelerator_for`, which spelled keys for the Tauri menu bar.
 - Rule: the reveal item calls `cx.reveal_path`, which on Windows selects the
   item in its parent through the desktop folder's `ParseDisplayName` (`open_target_in_explorer`)
   and only logs a failure. A root (`D:\`) has no parent, so the folder menu
@@ -3706,7 +3706,7 @@ it inside, as the Tauri `menuPosition`.
   strip's reveal passes `context::shown_path` (`trash.ts`'s `shownPath`).
 - Rule: the copy items write the tree's spelling of the path and the row's
   name, or the strip's targets' listed paths (prefix and all, as the Tauri
-  app writes them) and file names, one per line, through
+  app wrote them) and file names, one per line, through
   `cx.write_to_clipboard(ClipboardItem::new_string(..))`.
 - Not verified headless: the hand checks are pending in
   `../plans/20261113-gpui-tree-trash/learnings.md` and, for the `PopupMenu`
@@ -3749,7 +3749,7 @@ mouse listeners were the smaller change.
   the photo. The cursor row is outlined (`ListItem`'s `secondary_selected`,
   `selection`) only while the tree has the keyboard, which Left / Right paging leaves with the tree.
 - Rule: this departs from the Tauri app on purpose (the user's request).
-  There, Left / Right are the WAI-ARIA tree keys (expand, collapse, first
+  There, Left / Right were the WAI-ARIA tree keys (expand, collapse, first
   child, parent); here they page the strip whatever has the keyboard, the
   cursor reaches a parent or child only through Up / Down, Home / End and
   type-ahead, and plain Space is the expand / collapse toggle, so it is no
