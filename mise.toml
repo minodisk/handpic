@@ -68,6 +68,16 @@ set -euo pipefail
 cargo run -- "$@"
 """
 
+[tasks."native:dev:screenshot"]
+description = "Run the GPUI app (debug build) with the screenshot feature, which adds the MCP companion's screenshot tool"
+dir = "crates/native"
+tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
+shell = "bash -c"
+run = """
+set -euo pipefail
+cargo run --features screenshot -- "$@"
+"""
+
 [tasks."native:watch"]
 description = "Run the GPUI app (debug build) and rebuild and restart it on a source change (a restart, not a hot reload)"
 dir = "crates/native"

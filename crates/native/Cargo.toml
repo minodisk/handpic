@@ -12,6 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 gpui-kit = "=0.9.1"
+# Only for the `screenshot` feature: its `test-support` turns on GPUI's
+# `Window::render_to_image` (gpui-kit's own would pull gpui-fast into the lock).
+gpui-pre-platform = { version = "=0.3.12", optional = true, features = ["test-support"] }
 handpic-core = { path = "../core" }
 handpic-backend = { path = "../backend" }
 mozjpeg = "0.10"
@@ -23,7 +26,11 @@ image = { version = "0.25", default-features = false }
 serde_json = "1"
 tokio = { version = "1", features = ["rt", "sync"] }
 
+[features]
+screenshot = ["dep:gpui-pre-platform", "image/png"]
+
 [dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 
 [target.'cfg(windows)'.build-dependencies]
@@ -38,6 +45,14 @@ gpui-component = { opt-level = 3 }
 gpui-kit = { opt-level = 3 }
 gpui-kit-assets = { opt-level = 3 }
 gpui-pre-platform = { opt-level = 3 }
+# The `screenshot` feature's resize and PNG encode, near the bridge's 5 s
+# wait unoptimized for a 4096 px capture.
+image = { opt-level = 3 }
+png = { opt-level = 3 }
+fdeflate = { opt-level = 3 }
+flate2 = { opt-level = 3 }
+miniz_oxide = { opt-level = 3 }
+crc32fast = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }

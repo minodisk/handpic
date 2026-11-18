@@ -955,6 +955,16 @@ self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the seven-tool server
 never lists it.
 
+`screenshot` is listed only in a build with `crates/native`'s `screenshot`
+cargo feature, where `mcp.rs` calls `with_screenshot` after `with_all_tools`
+(which replaces the router and would drop it). Without the feature nothing of
+it is compiled in and `tools/list` is the native app's 35 tools. `mcp_request` takes
+`screenshot` before `companion::answer`, so `READS`, `Busy` and the coverage
+table never see it and it is answered with the settings, a dialog or a rename
+open; the reply goes through the backend's `screenshot_reply`. Run it with
+`mise run native:dev:screenshot`; a feature build is not the shipped binary,
+so take no timing from it.
+
 The native tools run what their keys run: `key_down` and `mcp_request` both
 call `perform` with a `companion::Key` (`Key::of_action` names the keymap
 actions; Home and End are `First` and `Last`), so a key and its tool cannot
@@ -2348,6 +2358,44 @@ the gpui-port plan's `learnings.md`).
 
 `PolychromeSprite` has no `transformation`; only the monochrome SVG sprite
 does. A rotation has to happen on the pixels before painting.
+
+### `render_to_image` captures the window behind the `screenshot` feature (Measured)
+
+`Window::render_to_image` exists only under gpui-pre's `test-support`. The
+`screenshot` feature turns it on through an optional direct
+`gpui-pre-platform` dependency with `test-support` (which carries it to
+gpui-pre and gpui-pre-windows), not through `gpui-kit/test-support`: that
+one's weak `gpui-fast?/test-support` makes Cargo resolve the optional
+gpui-fast crates, whose `wgpu = "=30.0.1"` conflicts with the locked 30.0.2.
+gpui-base's `test-support` (its `Observed` element wrappers) stays off.
+`Cargo.lock` gains the crates the feature names (proptest, postage,
+futures-concurrency, and criterion and the rest through the bench-metrics
+weak feature), compiled only in the feature build.
+
+It re-renders `rendered_frame`'s scene into the live render target, copies it
+to a staging texture and skips `present`; the next present re-renders the
+whole scene, and no stale or blank frame was seen on screen after captures
+(the window restored, uncovered, re-grabbed from the screen). On Windows it
+is implemented (D3D11), on macOS through Metal (not verified here), on Linux
+it fails with "not implemented", which the tool returns as its error; a lost
+device is an error too.
+
+A next-frame callback runs before that frame's draw, so the view's
+`screenshot` registers one inside another: the inner one captures after the
+frame the outer one let through, and a previous tool call's change is on the
+image (checked with `set_overlays` then `screenshot`). A covered window still
+draws and the capture is current. A minimized one draws no frame, so after
+`SCREENSHOT_FRAME_WAIT` (500 ms) the last drawn frame is taken as it is and a
+change made while minimized is not on it. The image is in device pixels, the
+render target's size.
+
+Measured in a debug build on a 5058x1440 maximized window: the capture about
+300 ms (two frames and the unoptimized BGRA-to-RGBA loop), the whole call
+360-430 ms at the default 1568 and 620-720 ms at 4096, within the bridge's
+5 s. Unoptimized, `imageops::resize` instantiated in `handpic-native` and the
+PNG encode took 4.1 s at 4096; the resize now goes through `DynamicImage`
+(compiled in the optimized `image` crate) and the encoding crates are in
+`[profile.dev.package]`.
 
 ### There is no after-`Present` hook (Measured)
 

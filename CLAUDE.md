@@ -149,7 +149,8 @@ place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
 handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
 loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
-tools, or every tool after `with_all_tools` (the native app's), started,
+tools, or every tool after `with_all_tools` (the native app's), plus
+`screenshot` after `with_screenshot` (its reply built by `screenshot_reply`), started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
 callback and waits for its `reply`, `wait_for_idle`'s call waiting up to
@@ -351,7 +352,15 @@ an open or a re-listing and narrowed by `retain` on a `refilter`; off under
 `--no-prefetch`), `src/mcp.rs` the MCP
 companion's server (the backend's `Mcp` with all its tools and the tree's home directory on a tokio runtime of its own on one
 `mcp` thread, started only while `mcpEnabled` is on, on `--mcp-port` for a test
-run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit),
+run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit;
+`with_screenshot` only in a build with the `screenshot` cargo feature, which
+turns on GPUI's `test-support` through a direct `gpui-pre-platform` dependency,
+`mise run native:dev:screenshot`), `src/screenshot.rs` that feature's capture
+(`capture`, the window's last drawn frame through `Window::render_to_image`,
+which the view's `screenshot` takes after the next drawn frame or as it is
+after `SCREENSHOT_FRAME_WAIT`, ahead of `companion::answer` and so whatever the
+view is doing; `encode`, scaled to the asked long edge, never up, and a PNG,
+off the UI thread; its pure parts also built for the tests),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
 over a snapshot of the view: the strip's selection, its targets as
 `selected`, its burst
