@@ -91,7 +91,7 @@ overrides it:
 
 ## Steps
 
-- [ ] Step 1: Map the version per package format and let a `Package` run take a version
+- [x] Step 1: Map the version per package format and let a `Package` run take a version
   - Done when:
     - `tools/package/version.sh` prints the SemVer string as today and, by
       argument, the three mapped forms below. A version that is not `x.y.z`
