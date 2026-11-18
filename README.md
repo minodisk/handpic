@@ -237,11 +237,11 @@ stars, the flag and the label (develop settings, keywords, ...) is left
 untouched.
 
 Two RAWs of the same stem with different extensions in one folder (`FOO.ARW`
-and `FOO.DNG`) share `FOO.xmp` and are not supported: renaming one of them
-or moving it to the Trash takes the shared `FOO.xmp` with it, and the other's
+and `FOO.DNG`) share `FOO.xmp` and are not supported: moving one of them
+to the Trash takes the shared `FOO.xmp` with it, and the other's
 judgment along. Deleting one permanently keeps the shared `FOO.xmp`. Use the PhotoLab (.dop) format alone from the start, which writes one
 `FOO.ARW.dop` per RAW, with no `FOO.xmp` in the folder (**Both** writes the
-shared `FOO.xmp` too, and Handpic moves an existing `FOO.xmp` along whichever
+shared `FOO.xmp` too, and Handpic moves an existing `FOO.xmp` along with a file moved to the Trash whichever
 format is chosen), or keep such RAWs in separate folders.
 
 ### Lightroom

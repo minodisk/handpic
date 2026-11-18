@@ -735,7 +735,7 @@ focus candidate cue and the sharpness score:
 | Whole-preview face search without a trusted AF point (~17ms at 320x320; ~64ms at 640x448 on Windows, after a 3/8 decode of ~5ms instead of the full-size ~14ms) | first | second |
 | Focus candidate cue (crop detection + face mesh eye regions, eye window fallback) | second | second |
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
-| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face; 80-160ms per call) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) stays for the shown file's overlay |
+| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) stays for the shown file's overlay |
 
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the
 thumbnails appear at the speed of the read and the thumbnail encode, and the
@@ -750,7 +750,7 @@ In the app both passes run below normal OS priority (on Windows
 `THREAD_PRIORITY_BELOW_NORMAL` for the first, `THREAD_PRIORITY_LOWEST` for
 the second; on macOS the `UTILITY` and `BACKGROUND` QoS classes; on Linux a
 nice of at least 5 and 10), and they take the shown file and the strip's visible cells before
-the rest. `handpic-cli scan` and `candidates` run at normal priority and in
+the rest. `handpic-cli scan` runs at normal priority and in
 file-name order, so their numbers stay comparable with the tables above.
 
 Not measured yet: the `scan extract` / `scan faces` wall
@@ -815,7 +815,7 @@ upright (all 0 for `source=prefetch`, a preview read ahead), `hop` the hand
 over to the window, `frameWait` the wait for the next frame, `paint` the
 drawing and `present` the frame's presentation; `keypressToPixels` runs from
 the keypress to the presented frame. A page not asked for by a key (a strip
-click or a folder open) prints nothing. Quitting prints a summary table of
+click or a folder open) prints nothing. Quitting with `q` (or at the end of `--auto N`) prints a summary table of
 the stages, and `--auto N` pages through N files on a timer and quits.
 
 ## The 1:1 focus check path

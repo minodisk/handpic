@@ -164,10 +164,12 @@
   webview page latency table, the 1:1 end-to-end table with `ipc` /
   `bitmap`, the 2677-ARW reopen table with its `open list` / `open entries`
   lines, the `riffle-app` binary sizes, the `scan_id` note). Measurements of
-  Rust code the native app still runs were kept and relabeled as taken
-  through the earlier Tauri app (the 2026-09-21 real-folder scan throughput,
-  the `faces_of` / `eyes_of` timings, now `ondemand::read_faces` /
-  `read_eyes`). "Measuring on your own folder" now names the native log lines
+  Rust code the native app still runs, which only the earlier Tauri app
+  could repeat (the 2026-09-21 real-folder scan throughput, the `faces_of` /
+  `eyes_of` timings), moved at the user's choice to `docs/agents/shared-crates.md`
+  ("Scan, on-demand faces and eyes: timings taken through the earlier app"),
+  so `performance.md` keeps only measurements a reader can repeat.
+  "Measuring on your own folder" now names the native log lines
   (`scan list` / `scan reconcile` / `scan sidecars` / `scan extract` /
   `scan faces`) and the `page` / `zoom` lines the native app prints to
   stdout, with `--auto N` and the quit summary.
