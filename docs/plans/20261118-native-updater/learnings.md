@@ -98,3 +98,76 @@
     device" while writing the DMG (before the new tarball step; the same leg
     of the other run passed), so it was taken for a runner flake and the
     failed job rerun; it passed. No signing step ran.
+
+## Step 3: the update engine in `crates/backend`
+
+- `self_update` resolved to 1.3.3 (edition 2024, `rust-version` 1.88). With
+  the guide's features plus `signatures` it brings `ureq` 3.4 on its `_ring`
+  rustls feature, the same `rustls` 0.23 the backend's `reqwest` uses, and
+  no `aws-lc-sys` on any target (`cargo tree --target all -i aws-lc-sys`
+  prints nothing, in the root workspace and in `crates/native`). So the
+  guide's `ureq` stays; `reqwest_client` was not needed. It does add a
+  second HTTP client (`ureq` next to `reqwest`), about 350 lock entries in
+  `crates/native/Cargo.lock` and 700 lines in the root one.
+- `crates/native/Cargo.lock` must be updated with the backend's new
+  dependencies too (`cargo fetch` in `crates/native`), or `Package`'s
+  `cargo build --release --locked` fails; the plan's file list named only
+  the root lock.
+- 1.3.3 differs from older `self_update` docs: `build()` returns the
+  concrete `github::Update` with inherent `update()` /
+  `get_newer_releases()`, `checksum_from_asset` fails the update
+  (`ChecksumSourceInvalid`, naming the asset) when the release has no such
+  asset, `verify_release_digest` is on by default and also checks GitHub's
+  per-asset `digest` field when present, and `bin_install_path` other than
+  the running exe takes a plain move instead of `self_replace`, which is
+  what lets the tests install into a temp folder. An `asset_matcher`
+  replaces the target substring match entirely, so `target` is irrelevant.
+- The order of checks in `self_update` is: the `SHA256SUMS` entry fetched
+  before the archive download, then digest, release digest, zipsign
+  signature (context: the downloaded file's name, which `self_update` keeps
+  as the asset name), extraction, replace. Every failure case in the tests
+  leaves the exe byte for byte as it was.
+- `get_newer_releases()` already drops releases not newer than the current
+  version and non-SemVer tags; `offered` applies the channel rule on top
+  and takes the SemVer maximum, so the listing's order does not matter.
+- Inno Setup against portable: an `unins000.exe` beside the exe is Inno
+  Setup; else a `licenses/` folder beside it is the portable ZIP (the
+  installer also writes `licenses/`, so the uninstaller is checked first);
+  else unknown. That makes a `cargo run` or `target/release` binary
+  unknown without a debug-build check here. The `HKCU` uninstall entry was
+  not used: it needs the registry and would not tell a moved install
+  apart. `.app` is `<x>.app/Contents/MacOS/<exe>`, the deb
+  `/usr/lib/handpic/<exe>`, the tarball `<…>/.local/bin/<exe>`; these are
+  path rules only, so the tests run on every platform.
+- The binary's name is read from the exe path (`Handpic/<name>` in the
+  ZIP, `Handpic/bin/<name>` in the tarball), so `install` needs no binary
+  name parameter and follows a rename.
+- Deviation from the plan's approach: the engine has no state callback like
+  `ai.rs`. `self_update`'s `update()` downloads, verifies and installs in
+  one blocking call, so the only phases the engine could report are the
+  ones its caller already knows (before and after `check` / `install`).
+  Step 4's pure model sets the phases around the two calls; a
+  `progress_callback` for a download percentage can be added then if the
+  page shows one.
+- Deviation from the guide's snippet beyond the plan's list: none new. The
+  version is a parameter rather than `cargo_crate_version!()` (that would
+  be the backend's), as the plan said. No request timeout is set (the
+  guide sets none); see the deferred issue below.
+- `source()` logs `update: feed <owner>/<repo>, test|production key`;
+  `HANDPIC_UPDATE_TEST_REPO` is read with `option_env!` while compiling
+  the backend, which `Package` does in the same build as the app.
+- The fake GitHub API is a `TcpListener` thread per test serving the
+  listing, `/releases/tags/v<version>` and each asset with
+  `Connection: close`; `ureq` reads plain `http` on loopback without any
+  extra setting. The test key is `SigningKey::from_bytes(&[seed; 32])`
+  through `zipsign-api` 0.2.2's `sign-zip` / `sign-tar` (a dev-dependency,
+  with `zip` 9, `tar` and `flate2` to build the archives).
+
+## Deferred issues (todo candidates)
+
+- No request timeout on the update check or download
+  (`crates/backend/src/update.rs`, `configure`): `self_update`'s `timeout`
+  is unset, as in the gpui-kit guide's snippet, so a stalled connection
+  could keep a check in `Checking`. Step 4 ("never two checks at once")
+  should decide whether to set `.timeout(..)` on the check (and a separate,
+  longer one on the download). Basis: Step 3 implementation.
