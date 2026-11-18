@@ -24,6 +24,7 @@ use gpui_kit::{
 
 use handpic_backend::{
     import,
+    mcp::{MCP_PORT, McpState},
     shortcuts::{Binding, Keymap},
     sidecar::SidecarFormat,
 };
@@ -79,6 +80,8 @@ pub enum Change {
     ImportPattern(String),
     /// The theme setting after a choice that changed it.
     Theme(theme::Setting),
+    /// The MCP page's server switch, which only the user flips.
+    McpEnabled(bool),
     /// The MCP page's switch, which only the user flips.
     McpAllowDestructive(bool),
     /// `Clear Cache` pressed.
@@ -111,6 +114,13 @@ pub struct SettingsView {
     /// refused, recomputed as the field changes.
     example: Result<String, String>,
     theme: theme::Setting,
+    mcp_enabled: bool,
+    /// The port a switch on binds and the server's last state, set by the
+    /// main view, which runs the server.
+    mcp_port: u16,
+    mcp_state: Option<McpState>,
+    /// The server's URL shown read-only, so it can be selected and copied.
+    url_field: Entity<InputState>,
     mcp_allow_destructive: bool,
     /// The light and the dark theme's pickers.
     light_themes: Entity<Themes>,
@@ -175,6 +185,7 @@ impl SettingsView {
         )
         .detach();
         let root_field = cx.new(|cx| InputState::new(window, cx));
+        let url_field = cx.new(|cx| InputState::new(window, cx));
         let light_themes = themes(ThemeMode::Light, window, cx);
         let dark_themes = themes(ThemeMode::Dark, window, cx);
         Self {
@@ -192,6 +203,10 @@ impl SettingsView {
             pattern_field,
             example: Ok(String::new()),
             theme: theme::Setting::default(),
+            mcp_enabled: false,
+            mcp_port: MCP_PORT,
+            mcp_state: None,
+            url_field,
             mcp_allow_destructive: false,
             light_themes,
             dark_themes,
@@ -225,6 +240,7 @@ impl SettingsView {
         show(&self.pattern_field, &pattern, window, cx);
         self.show_example(cx);
         self.theme = settings.theme;
+        self.mcp_enabled = settings.mcp_enabled;
         self.mcp_allow_destructive = settings.mcp_allow_destructive;
         for (themes, name) in [
             (&self.light_themes, self.theme.light),
@@ -462,6 +478,13 @@ impl SettingsView {
         cx.notify();
     }
 
+    pub fn flip_mcp_enabled(&mut self, cx: &mut Context<Self>) {
+        self.mcp_enabled = !self.mcp_enabled;
+        self.mcp_state = None;
+        cx.emit(Change::McpEnabled(self.mcp_enabled));
+        cx.notify();
+    }
+
     fn flip_allow_destructive(&mut self, cx: &mut Context<Self>) {
         self.mcp_allow_destructive = !self.mcp_allow_destructive;
         cx.emit(Change::McpAllowDestructive(self.mcp_allow_destructive));
@@ -508,6 +531,13 @@ impl SettingsView {
     /// The index's size on disk, formatted.
     pub fn show_index_size(&mut self, size: String, cx: &mut Context<Self>) {
         self.index_size = size.into();
+        cx.notify();
+    }
+
+    /// The port a switch on binds and the server's last state.
+    pub fn show_mcp(&mut self, port: u16, state: Option<McpState>, cx: &mut Context<Self>) {
+        self.mcp_port = port;
+        self.mcp_state = state;
         cx.notify();
     }
 
@@ -759,22 +789,59 @@ impl SettingsView {
         )
     }
 
-    /// The switch that lets MCP clients run the destructive operations
-    /// without the app's dialog, as `culling`'s.
+    /// The server switch, the server's URL read-only with its state, and the
+    /// switch that lets MCP clients run the destructive operations without
+    /// the app's dialog, the switches as `culling`'s.
     fn mcp(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let enabled = self.mcp_enabled;
         let checked = self.mcp_allow_destructive;
+        let url_field = self.url_field.clone();
+        let flip_enabled = view.clone();
         let view = view.clone();
         page.group(
-            SettingGroup::new().item(
-                SettingItem::new(
-                    settingsmodal::ALLOW_DESTRUCTIVE_LABEL,
-                    SettingField::switch(
-                        move |_| checked,
-                        move |_, cx| view.update(cx, |this, cx| this.flip_allow_destructive(cx)),
-                    ),
+            SettingGroup::new()
+                .item(
+                    SettingItem::new(
+                        settingsmodal::MCP_ENABLED_LABEL,
+                        SettingField::switch(
+                            move |_| enabled,
+                            move |_, cx| {
+                                flip_enabled.update(cx, |this, cx| this.flip_mcp_enabled(cx))
+                            },
+                        ),
+                    )
+                    .description(settingsmodal::MCP_ENABLED_NOTE),
                 )
-                .description(settingsmodal::ALLOW_DESTRUCTIVE_NOTE),
-            ),
+                .item(
+                    SettingItem::new(
+                        settingsmodal::MCP_URL_LABEL,
+                        SettingField::render(move |_, _, _| {
+                            InputGroup::new("mcp-url")
+                                .readonly(true)
+                                .w(px(360.))
+                                .bg(transparent_black())
+                                .rounded_sm()
+                                .text_size(px(13.))
+                                .input(Input::new(&url_field))
+                        }),
+                    )
+                    .description(settingsmodal::mcp_status(
+                        self.mcp_enabled,
+                        self.mcp_state.as_ref(),
+                    )),
+                )
+                .item(
+                    SettingItem::new(
+                        settingsmodal::ALLOW_DESTRUCTIVE_LABEL,
+                        SettingField::switch(
+                            move |_| checked,
+                            move |_, cx| {
+                                view.update(cx, |this, cx| this.flip_allow_destructive(cx))
+                            },
+                        ),
+                    )
+                    .description(settingsmodal::ALLOW_DESTRUCTIVE_NOTE),
+                ),
         )
     }
 
@@ -1047,10 +1114,12 @@ fn small_button(id: impl Into<ElementId>, label: impl Into<SharedString>) -> But
 }
 
 impl Render for SettingsView {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.model.is_open() {
             return Empty.into_any_element();
         }
+        let port = settingsmodal::mcp_port(self.mcp_port, self.mcp_state.as_ref());
+        show(&self.url_field, &settingsmodal::mcp_url(port), window, cx);
         self.layer(cx).into_any_element()
     }
 }

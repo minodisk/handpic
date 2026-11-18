@@ -296,9 +296,9 @@ format is chosen), or keep such RAWs in separate folders.
 
 Handpic can serve an [MCP](https://modelcontextprotocol.io/) endpoint for an
 MCP client (an AI assistant, say) to sit beside you while you cull. It is off
-by default, and the app has no switch for it yet: it starts when the
-`mcpEnabled` setting is on, which an earlier install's `Let MCP clients
-connect` carries over (see
+by default: turn on `Let MCP clients connect` on the settings' `MCP` page,
+which starts the server at once and at every later launch, and shows its
+address and whether it is running (see
 [docs/humans/usage.md](./docs/humans/usage.md#mcp-companion)). The server
 listens on this computer only, at:
 

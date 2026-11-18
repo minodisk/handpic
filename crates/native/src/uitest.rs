@@ -3,12 +3,14 @@
 
 use std::{
     fs,
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
+use handpic_backend::store::Store;
 use handpic_core::Flag;
 use tempfile::TempDir;
 
@@ -36,6 +38,11 @@ impl Ui {
     /// The main window over a new index and settings store in a temporary
     /// folder, with no folder open.
     pub fn open() -> Self {
+        Self::open_with(Args::default())
+    }
+
+    /// `open`, under the command line's `args`.
+    pub fn open_with(args: Args) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let cx = TestAppContext::single();
         // The view's scan, watchers and writers are threads of their own, so
@@ -44,7 +51,7 @@ impl Ui {
         let index = open_index(Some(dir.path().join("index.sqlite")));
         let settings = settings::load(Some(dir.path().join("settings.sqlite")), None);
         let (window, view) = cx
-            .update(|cx| open_main(Args::default(), index, settings, None, cx))
+            .update(|cx| open_main(args, index, settings, None, cx))
             .unwrap();
         let cx = VisualTestContext::from_window(window, &cx);
         cx.run_until_parked();
@@ -347,4 +354,70 @@ fn the_settings_modal_drops_the_paging_keys_until_escape_closes_it() {
     ui.cx.simulate_keystrokes("right");
     assert_eq!(ui.current(), "b.dng");
     ui.wait_idle("the next file's preview", 2);
+}
+
+/// Flips the MCP page's server switch as a click does.
+fn flip_mcp(ui: &mut Ui) {
+    let settings = ui.read(|view| view.settings_view.clone());
+    settings.update(&mut ui.cx, |view, cx| view.flip_mcp_enabled(cx));
+    ui.cx.run_until_parked();
+}
+
+/// The stored `mcpEnabled`, once the view's writes are in.
+fn stored_mcp_enabled(ui: &Ui) -> Option<serde_json::Value> {
+    assert!(ui.read(|view| view.settings.writes.drain(settings::DRAIN_TIMEOUT)));
+    let store = Store::open(&ui.dir().join("settings.sqlite"), Default::default).unwrap();
+    store.values().unwrap().get("mcpEnabled").cloned()
+}
+
+#[test]
+fn the_mcp_switch_starts_and_stops_the_server_and_is_stored() {
+    let mut ui = Ui::open_with(Args {
+        mcp_port: Some(0),
+        ..Args::default()
+    });
+    assert!(ui.read(|view| view.mcp_state.is_none()));
+    flip_mcp(&mut ui);
+    ui.wait_until("the server's start", |view| {
+        view.mcp_state
+            .as_ref()
+            .is_some_and(|state| state.enabled && state.error.is_none())
+    });
+    let port = ui.read(|view| view.mcp_state.as_ref().unwrap().port);
+    assert_ne!(port, 0);
+    assert!(TcpStream::connect(("127.0.0.1", port)).is_ok());
+    assert_eq!(stored_mcp_enabled(&ui), Some(true.into()));
+    flip_mcp(&mut ui);
+    ui.wait_until("the server's stop", |view| {
+        view.mcp_state.as_ref().is_some_and(|state| !state.enabled)
+    });
+    assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
+    assert_eq!(stored_mcp_enabled(&ui), Some(false.into()));
+}
+
+#[test]
+fn a_port_in_use_leaves_the_switch_on_with_the_bind_error() {
+    let held = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = held.local_addr().unwrap().port();
+    let mut ui = Ui::open_with(Args {
+        mcp_port: Some(port),
+        ..Args::default()
+    });
+    flip_mcp(&mut ui);
+    ui.wait_until("the failed start", |view| {
+        view.mcp_state
+            .as_ref()
+            .is_some_and(|state| state.error.is_some())
+    });
+    ui.read(|view| {
+        assert!(view.settings.mcp_enabled);
+        let state = view.mcp_state.as_ref().unwrap();
+        assert!(state.enabled);
+        assert!(
+            crate::settingsmodal::mcp_status(true, Some(state))
+                .starts_with("The server could not start: could not listen on 127.0.0.1:")
+        );
+    });
+    assert_eq!(stored_mcp_enabled(&ui), Some(true.into()));
+    drop(held);
 }

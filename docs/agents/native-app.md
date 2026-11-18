@@ -1004,13 +1004,26 @@ process exits with the scan running, as before.
 
 ### The MCP companion answers from the view, one channel hop away (Measured)
 
-With `mcpEnabled` true in the settings store, `mcp.rs` builds a tokio
-current-thread runtime on one named `mcp` thread, which runs the backend's
-`Mcp::switch(true)` on an `Mcp` built `with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
-quit handler's signal and runs `Mcp::stop` (logged as `quit: MCP server
-stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). With it off or missing there
-is no runtime, no thread and no server. A bind failure is logged with the
-`mcp: McpState` line and the app runs on. The backend's `Bridge` send callback
+`mcp.rs`'s `Control` switches the server on `mcpEnabled`: at launch when the
+settings store holds it true, and on every flip of the MCP page's
+`Let MCP clients connect` (`Change::McpEnabled`, which `apply_setting` writes
+to the store, clearing `mcp_pending` and `mcp_folder` on an off as the
+destructive switch's off does). The first switch on builds a tokio
+current-thread runtime on one named `mcp` thread over an `Mcp` built
+`with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`; `0` binds a free
+port, which the state reports) and registers the quit handler once; the
+thread stays for the session, runs each switch's `Mcp::switch` in order,
+logs its `mcp: McpState` line and sends the state as `scan::Event::McpState`,
+and on the quit handler's command runs `Mcp::stop` (logged as `quit: MCP
+server stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). Off at launch, there
+is no runtime, no thread and no server until the first switch on. The view
+keeps a state only when its `enabled` is the switch in force (a late answer
+of an earlier flip is dropped) and hands it with the port to the MCP page,
+which shows the URL read-only and the state (`settingsmodal::mcp_status`:
+stopped, starting, running or the bind error). A bind failure keeps the
+switch and the stored value on, as the backend's rule has it, so the next
+launch tries again; the app runs on. A reply to a call whose server stopped
+finds no waiter in the `Bridge` and is dropped. The backend's `Bridge` send callback
 only puts the request into the view's channel as `scan::Event::Mcp`; the
 view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
 returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
@@ -1273,8 +1286,9 @@ backend). `set_settings` is refused while a folder operation runs
 (`FolderOps::busy`), as `key_down` keeps the modal shut then.
 `mcpAllowDestructive` is never set over MCP: `SettingsArgs` has no such field
 (`deny_unknown_fields`), and the companion refuses it should it arrive.
-`mcpEnabled` has no tool either: the native app reads it only at startup, and
-a client would be switching off its own connection.
+`mcpEnabled` has no tool either (`SettingsArgs` has no such field; a test
+pins the refusal): it is the user's switch on the MCP page, and a client
+would be switching off its own connection.
 
 Every request but the reads (`get_view`, `get_status`, `wait_for_idle`,
 `get_settings`) is refused while `key_down` drops keys (`companion::Busy`): the settings modal
@@ -1330,16 +1344,16 @@ Excluded, each with its reason (the table's `Excluded` entries):
 - Opening the Sort, Filter and right-click menus: a menu is a way to an
   action, and each item has its tool.
 - Opening the settings modal: `get_settings` and `set_settings` read and
-  change what it shows. Its MCP page, `mcpAllowDestructive`, is the user's to
-  grant.
+  change what it shows. Its MCP page, `mcpEnabled` and `mcpAllowDestructive`,
+  is the user's.
 - The tree's keyboard cursor and type-ahead: a way to a row, which the folder
   tools name by path.
 - Strip scrolling, the pane widths, the strip height and the window's
   geometry: pointer-only geometry; `show_photo` brings a photo into view.
 - The OS folder pickers (`open`, the Import page's `Choose…`) and drag and
   drop: replaced by the path arguments of `open_folder` and `set_settings`.
-- `mcpEnabled`: read only at startup, and a client would cut its own
-  connection.
+- `mcpEnabled`: the user's switch on the MCP page, and a client would cut
+  its own connection.
 - The clipboard copies (`Copy Path`, `Copy File Name`, `Copy Folder Name`):
   a client has the paths already, and a tool would write the user's
   clipboard unseen.

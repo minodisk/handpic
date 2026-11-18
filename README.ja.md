@@ -88,7 +88,7 @@
 
 ### MCP コンパニオン
 
-Handpic は [MCP](https://modelcontextprotocol.io/) のエンドポイントを提供でき、MCP クライアント（AI アシスタントなど）をカリングの相棒にできます。デフォルトはオフで、アプリにはまだそれを切り替えるスイッチがありません。`mcpEnabled` の設定がオンのときに起動し、この設定は以前のインストールの `Let MCP clients connect` から引き継がれます（[docs/humans/usage.ja.md](./docs/humans/usage.ja.md#mcp-コンパニオン)を参照）。サーバーはこのコンピューター内だけで次の URL を待ち受けます。
+Handpic は [MCP](https://modelcontextprotocol.io/) のエンドポイントを提供でき、MCP クライアント（AI アシスタントなど）をカリングの相棒にできます。デフォルトはオフです。設定の `MCP` ページで `Let MCP clients connect` をオンにすると、サーバーはすぐに起動し、以後の起動時にも起動します。同じページにアドレスと動作中かどうかが表示されます（[docs/humans/usage.ja.md](./docs/humans/usage.ja.md#mcp-コンパニオン)を参照）。サーバーはこのコンピューター内だけで次の URL を待ち受けます。
 
 ```text
 http://127.0.0.1:41917/mcp

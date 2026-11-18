@@ -965,14 +965,18 @@ Handpic can serve an [MCP](https://modelcontextprotocol.io/) (Model Context
 Protocol) endpoint, so an MCP client, such as an AI assistant, can follow
 along while you cull: see what Handpic shows, look at a small preview, move the
 view, record judgments and start the operations of the menus. It is off by
-default, and the app has no switch for it yet: the server starts at launch
-when the settings store's `mcpEnabled` value is on, which a new settings store
-takes over from an earlier install's `Let MCP clients connect` (see
-[Installing](#installing)).
+default: `Let MCP clients connect`, on the settings' `MCP` page, starts the
+server when you turn it on and stops it when you turn it off, without a
+restart, and while it is on the server also starts at every launch. A new
+settings store takes its value over from an earlier install's (see
+[Installing](#installing)). No MCP client can change it.
 
 - **Endpoint**: `http://127.0.0.1:41917/mcp`, served over Streamable HTTP.
-  When the server cannot start (say, another program holds port 41917), the
-  log says why and Handpic itself keeps running.
+  The `MCP` page shows this address, which you can select and copy, and
+  whether the server is running, stopped or could not start. When it cannot
+  start (say, another program holds port 41917), the page says why, the
+  switch stays on so the next launch tries again, and Handpic itself keeps
+  running; turn the switch off and on to try again at once.
 - **Local only**: the server listens on the loopback address, so only programs
   on this computer reach it, and it refuses any request carrying an `Origin`
   header, which is what a web page's request would carry. There is no token:

@@ -1526,7 +1526,8 @@ impl Companion {
         and its keys), the `import_root` (null while not set) and `import_pattern`, the \
         `theme` (mode, light and dark theme; the choices in `themes`), and \
         `mcp_allow_destructive`, which only the user can change. `mcp_enabled` is not here: \
-        Handpic reads it at startup, and this connection depends on it."
+        only the user switches the server, on the MCP page of Handpic's settings, and this \
+        connection depends on it."
     )]
     async fn get_settings(&self) -> CallToolResult {
         self.view_call("get_settings").await
@@ -1691,9 +1692,9 @@ impl Mcp {
 /// Whether the server is on, its port and its last bind error.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct McpState {
-    enabled: bool,
-    port: u16,
-    error: Option<String>,
+    pub enabled: bool,
+    pub port: u16,
+    pub error: Option<String>,
 }
 
 impl Status {
@@ -2304,7 +2305,7 @@ mod tests {
     }
 
     #[test]
-    fn settings_refuses_an_empty_call_a_bad_root_and_the_destructive_switch() {
+    fn settings_refuses_an_empty_call_a_bad_root_and_the_mcp_switches() {
         assert!(settings_args(json!({}))
             .unwrap_err()
             .starts_with("set at least one of"));
@@ -2319,6 +2320,9 @@ mod tests {
                 .contains("is not a folder")
         );
         assert!(settings_args(json!({ "mcp_allow_destructive": true }))
+            .unwrap_err()
+            .contains("unknown field"));
+        assert!(settings_args(json!({ "mcp_enabled": false }))
             .unwrap_err()
             .contains("unknown field"));
         assert!(settings_args(json!({ "sidecar_format": "tiff" })).is_err());
