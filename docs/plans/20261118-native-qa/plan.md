@@ -138,3 +138,5 @@ ways to do that.
 - **Dropped: headless pixel snapshots.** A `HeadlessAppContext` + wgpu spike on the Linux runner was considered and left out; B asserts state and painted quads only, and pixels are A's live screenshot.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
