@@ -38,6 +38,7 @@ instead of 46 ms.
 
 ```sh
 mise run native:dev                # debug build; fast to compile, slow at runtime
+mise run native:dev:screenshot     # debug build with the MCP `screenshot` tool (not for timings)
 mise run native:watch              # debug build, rebuilt and restarted on a source change
 mise run native:release            # optimized build; the only one to take timings from
 mise run native:check              # clippy and the tests

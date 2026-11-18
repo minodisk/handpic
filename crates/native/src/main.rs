@@ -42,6 +42,8 @@ mod progress;
 mod rename;
 mod resync;
 mod scan;
+#[cfg(any(test, feature = "screenshot"))]
+mod screenshot;
 mod selection;
 mod sequence;
 mod session;
@@ -164,6 +166,10 @@ use zoom::{Arrived, Zoom};
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// Out of phase with 60 Hz vsync.
 const AUTO_INTERVAL: Duration = Duration::from_millis(1003);
+/// How long `screenshot` waits for a drawn frame before taking the last one
+/// (a minimized window draws none).
+#[cfg(feature = "screenshot")]
+const SCREENSHOT_FRAME_WAIT: Duration = Duration::from_millis(500);
 
 /// A decoded preview and what showing it needs, on screen or in the
 /// prefetch ring.
@@ -5313,6 +5319,11 @@ impl Handpic {
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
     fn mcp_request(&mut self, request: handpic_backend::mcp::Request, cx: &mut Context<Self>) {
+        // Not a user-facing action: answered whatever the view is doing.
+        #[cfg(feature = "screenshot")]
+        if request.kind == "screenshot" {
+            return self.screenshot(request.id, &request.args, cx);
+        }
         fn view<'a>(this: &'a Handpic, cx: &App) -> companion::View<'a> {
             let current = this.current_path();
             // The states in which `key_down` drops a key.
@@ -5576,6 +5587,92 @@ impl Handpic {
             server.reply(request.id, reply);
         }
         cx.notify();
+    }
+
+    /// Answer the `screenshot` call `id` with the window as a PNG: captured
+    /// once a frame has been drawn after the call, so a previous call's change
+    /// is on it, or as it is after `SCREENSHOT_FRAME_WAIT` when no frame comes,
+    /// then scaled and encoded off the UI thread.
+    #[cfg(feature = "screenshot")]
+    fn screenshot(&mut self, id: u64, args: &serde_json::Value, cx: &mut Context<Self>) {
+        let long_edge = args["long_edge"]
+            .as_u64()
+            .and_then(|edge| u32::try_from(edge).ok())
+            .unwrap_or(u32::MAX);
+        let window = self.window;
+        let started = Instant::now();
+        cx.spawn(async move |this, cx| {
+            let (send, captured) = futures::channel::oneshot::channel();
+            let send = Rc::new(Cell::new(Some(send)));
+            let on_frame = send.clone();
+            // A next-frame callback runs before that frame's draw, so the
+            // second one captures the frame the first one let through.
+            let scheduled = window.update(cx, |_, window, _| {
+                window.on_next_frame(move |window, _| {
+                    window.on_next_frame(move |window, _| {
+                        if let Some(send) = on_frame.take() {
+                            send.send(screenshot::capture(window)).ok();
+                        }
+                    });
+                });
+            });
+            let image = match scheduled {
+                Err(e) => Err(format!("Handpic's window is not open: {e}")),
+                Ok(()) => {
+                    let timer = cx.background_executor().timer(SCREENSHOT_FRAME_WAIT);
+                    match futures::future::select(captured, Box::pin(timer)).await {
+                        futures::future::Either::Left((image, _)) => {
+                            image.unwrap_or_else(|_| Err("the capture was dropped".into()))
+                        }
+                        futures::future::Either::Right((_, captured)) => match send.take() {
+                            Some(_) => {
+                                log::info!("screenshot: no frame in time, the last one taken");
+                                window
+                                    .update(cx, |_, window, _| screenshot::capture(window))
+                                    .unwrap_or_else(|e| {
+                                        Err(format!("Handpic's window is not open: {e}"))
+                                    })
+                            }
+                            None => captured
+                                .await
+                                .unwrap_or_else(|_| Err("the capture was dropped".into())),
+                        },
+                    }
+                }
+            };
+            let captured_in = started.elapsed().as_millis();
+            let encoded = match image {
+                Ok(image) => {
+                    log::info!(
+                        "screenshot: captured {}x{} in {captured_in}ms",
+                        image.width(),
+                        image.height()
+                    );
+                    cx.background_executor()
+                        .spawn(async move { screenshot::encode(image, long_edge) })
+                        .await
+                }
+                Err(e) => Err(e),
+            };
+            let reply = encoded.map(|(png, width, height)| {
+                log::info!(
+                    "screenshot: {width}x{height}, {} bytes in {}ms",
+                    png.len(),
+                    started.elapsed().as_millis()
+                );
+                handpic_backend::mcp::screenshot_reply(&png, width, height)
+            });
+            if let Err(e) = &reply {
+                log::warn!("screenshot: {e}");
+            }
+            this.update(cx, |this, _| {
+                if let Some(server) = &this.mcp {
+                    server.reply(id, reply);
+                }
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn quit(&mut self, cx: &mut Context<Self>) {

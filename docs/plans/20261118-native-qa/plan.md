@@ -50,7 +50,7 @@ ways to do that.
     - The constants sit next to `PREVIEW_LONG_EDGE*`. The cap at the window's own size is the native side's (Step 2); the tool never asks for upscaling.
     - Do not change `NATIVE_INSTRUCTIONS`; the tool's description carries what a client needs (a debugging aid, present only in a build with the feature, an error on Linux).
     - `Bridge::call` waits `BRIDGE_TIMEOUT` (5 s). Step 2 measures whether that is enough; if not, this tool uses `call_within` with a longer wait, as `wait_for_idle` does.
-- [ ] Step 2: Capture the window in `crates/native` behind the `screenshot` feature and answer the tool
+- [x] Step 2: Capture the window in `crates/native` behind the `screenshot` feature and answer the tool
   - Done when:
     - `crates/native/Cargo.toml` has a `screenshot` feature enabling `gpui-kit/test-support` (and what the PNG encode needs). Without the feature nothing new is compiled into the binary, `with_screenshot` is not called, and `tools/list` and every answer are unchanged.
     - With the feature, on Windows, calling `screenshot` against the running app (`mcpEnabled` on) returns a correct PNG of the window: checked by hand or by an agent through the MCP endpoint for the fit view, an overlay on (`set_overlays`), the settings modal open, a confirmation dialog open, and the window fully covered by another window. The image's long edge is at most the requested / default value and never larger than the window's own.
@@ -140,3 +140,4 @@ ways to do that.
 ## Progress
 
 - (2026-11-18) Step 1 complete
+- (2026-11-18) Step 2 complete
