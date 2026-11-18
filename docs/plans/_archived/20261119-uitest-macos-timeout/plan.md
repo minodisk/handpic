@@ -184,3 +184,5 @@ What the investigation established (from the code and the CI logs):
   test failure is readable from CI.
 
 ## Progress
+
+- (2026-11-19) Step 1 complete
