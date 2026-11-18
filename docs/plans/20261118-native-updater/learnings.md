@@ -44,3 +44,41 @@
   - 44194431118 (no input): every asset at `0.0.0`.
   - A cold-ish release build plus the checks took about 75 minutes per run,
     the `macos-15-intel` leg queued longest.
+
+## Step 2: the updater's assets and the signing tooling
+
+- The production key pair is not generated here: the user runs `mise run
+  native:keygen <private-key>` and checks in the
+  `crates/native/packaging/update.pub` it writes, so that Done-when item and
+  the Step 2 checkbox stay open until then. Nothing in this step reads
+  `update.pub` (the test key signs); Step 3's `include_bytes!` will.
+- zipsign 0.2.2 (`mise exec cargo:zipsign@0.2.2`, about 10 s to build here)
+  writes a 64-byte private key (secret and public halves) and a 32-byte raw
+  verifying key. `sign zip` / `sign tar` without `-o` sign in place, the
+  `--context` defaulting to the input's file name: a renamed copy of a
+  signed ZIP fails `verify` with "no matching key/signature pair found".
+  Signing an already signed file again still verifies.
+- Measured locally: Windows PowerShell 5.1's `Expand-Archive` opens a ZIP
+  zipsign prepended its signature to (bsdtar-made, as `windows.sh` makes
+  them), and GNU tar (`tar -tzvf`) and Python's `tarfile` (what `install.sh`
+  uses) read a signed `.tar.gz` without a warning.
+- The key files need `-text` in `.gitattributes`: under `* text=auto
+  eol=lf`, 32 random bytes hold no NUL about 88 % of the time and git would
+  treat them as text.
+- zipsign is a task tool (`tools = { "cargo:zipsign" = "0.2.2" }` on
+  `native:sign` and `native:keygen`), not a `[tools]` entry, so
+  `mise-action` and every developer's `mise install` do not build it; it is
+  built on the first `mise run native:sign` with the `[tools]` Rust.
+  `sign.sh` itself refuses another `zipsign --version`, so the pin holds when
+  it is run outside mise too.
+- `mise run native:sign -- a b` hands `a b` to the task's `"$@"` (the `--`
+  is dropped); a task's relative paths resolve against the repository root.
+- Signing runs in each platform leg right after packaging and before the
+  checks, so the checks and the uploads see the signed bytes; `sign.sh`
+  verifies each file with the given verifying key right after signing, so
+  `zipsign verify` with the test verifying key is proven in every leg. The
+  `checksums` job installs the tarball with `install.sh` and the digest
+  `SHA256SUMS` names.
+- `HANDPIC_UPDATE_TEST_REPO` goes through `$GITHUB_ENV` from a conditional
+  step, so a build without the input does not see the variable at all
+  (rather than an empty one). Nothing reads it before Step 3.

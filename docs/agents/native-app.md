@@ -518,7 +518,12 @@ packages the built `target/release` binary with a script under
   runs it on `macos-latest` (arm64) and `macos-15-intel` (x86_64), after
   `mise run native:bundle:macos`, and checks the DMG (`hdiutil verify`, then
   attached: the signature, the executable's architecture, both version
-  fields numeric and equal to the `numeric` form, and the notices).
+  fields numeric and equal to the `numeric` form, and the notices). It also
+  writes `Handpic-<version>-macos-<arch>.tar.gz`, the staged `Handpic.app`
+  alone, for the updater, with `COPYFILE_DISABLE=1` so bsdtar adds no `._`
+  entries; the workflow checks it holds nothing else and that the extracted
+  bundle passes `codesign --verify --strict` and has the runner's
+  architecture.
 - `mise run native:package:macos` is the same locally on a Mac: the bundle
   task (its release build included), then `macos.sh`.
 - `windows.sh` compiles `crates/native/packaging/windows/handpic.iss` with
@@ -542,7 +547,10 @@ packages the built `target/release` binary with a script under
   `%LOCALAPPDATA%\Programs\Handpic` and its `ProductVersion`, the `HKCU`
   uninstall entry and its `DisplayVersion` (both the SemVer form), no `HKLM` entry and the shortcut, runs the setup again
   over the install, uninstalls silently and checks all of it gone, then
-  checks the ZIP's contents. `windows-latest` ships Inno Setup 6.7.1 with
+  checks the ZIP's contents. It also writes
+  `Handpic-<version>-windows-x64-setup.exe.zip`, the setup alone at the
+  ZIP's root, for the updater; the workflow checks `Expand-Archive` gives that
+  one file with the setup's digest. `windows-latest` ships Inno Setup 6.7.1 with
   `iscc` on `PATH` (Chocolatey's shim), so the workflow installs nothing.
   `mise run native:package:windows` is the release build plus `windows.sh`
   locally.
@@ -578,7 +586,41 @@ packages the built `target/release` binary with a script under
   and installs and removes the deb with `apt-get`. Nothing is launched: the
   runner has no display and no GPU. `mise run native:package:linux` is the
   release build plus `linux.sh` locally.
+- `sign.sh <private-key> <verifying-key> <archive>...` signs the four
+  archives the updater installs (the portable ZIP, the setup ZIP, the Linux
+  and the macOS tarballs) in place with zipsign 0.2.2, then runs `zipsign
+  verify` on each with the verifying key, so a key pair that does not match
+  fails at signing. A `.zip` gets its signature before its data, a `.tar.gz`
+  as a gzip member after it. `mise run native:sign -- <args>` runs it with
+  the pinned zipsign (`cargo:zipsign`, a task tool, so nothing else installs
+  it); the script refuses another zipsign version. The DMG, the setup `.exe`,
+  `install.sh` and the deb are installed by people, not the app, and stay
+  unsigned, covered by `SHA256SUMS` only.
+- The workflow's optional `update_test_repo` input (`owner/name`) makes a
+  test build: each leg sets `HANDPIC_UPDATE_TEST_REPO` for the build (unset
+  otherwise) and signs its archives with the test key pair checked in under
+  `crates/native/packaging/test/` (its README says no released build trusts
+  it), before the checks, so the checks and the uploads see the signed
+  bytes. Without the input nothing is signed; sub-milestone 4's `release.yml`
+  signs with the production key. The `checksums` job computes `SHA256SUMS`
+  over the downloaded artifacts, so after signing, and installs the
+  tarball with `install.sh` and the digest `SHA256SUMS` names.
+- `mise run native:keygen <private-key>` generates the production key pair
+  (`zipsign gen-key`): the private key to the given path, refused inside the
+  repository, and the 32-byte verifying key to
+  `crates/native/packaging/update.pub`, which is checked in. zipsign refuses
+  to overwrite either file.
 
+- Rule: zipsign binds a signature to the file's name (its default
+  `--context`), so a signed archive is never renamed, and `SHA256SUMS` is
+  always computed after signing. A copy under another name fails `zipsign
+  verify` (measured).
+- Rule: Windows' `Expand-Archive` (PowerShell 5.1 locally, and the runner's
+  `pwsh`) opens a ZIP zipsign prepended its signature to, and GNU tar and
+  Python's `tarfile` read a signed `.tar.gz` without a warning (measured
+  locally with zipsign 0.2.2).
+- Rule: the key files are binary (`-text` in `.gitattributes`): 32 random
+  bytes usually hold no NUL, so `text=auto` would take them for text.
 - Rule: the setup's `AppId` is `dev.minodisk.handpic` (`IDENTIFIER`), for
   good: Inno Setup finds the earlier install, its folder and its uninstall
   entry (`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\dev.minodisk.handpic_is1`)

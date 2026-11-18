@@ -198,23 +198,32 @@ kept from the bar's window drag) in place of the OS title bar, and
 `target/<profile>/`, its `Info.plist` given the version and
 `Contents/Resources/licenses/` the notices) and `native:install:linux` (the release binary, the
 `.desktop` file and the icon under `~/.local`) mise tasks use, and
-`NOTICE-gpui`, the GPUI crates' Apache-2.0 notice; the manual
+`NOTICE-gpui`, the GPUI crates' Apache-2.0 notice, `update.pub`, the
+updater's 32-byte zipsign verifying key that `mise run native:keygen` writes
+(its private key kept by the user outside the repository), and `test/`, a
+checked-in test key pair no released build trusts; the manual
 `.github/workflows/package.yml` (`Package`, `workflow_dispatch` only) builds the
 release binary per platform and packages it with the scripts of
 `tools/package/` (`version.sh`, the crate's `[package].version`; `notices.sh`,
 the license notices every package ships into one `licenses/` folder;
-`macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg`, also
+`macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg` and the
+updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 `mise run native:package:macos`; `windows.sh`, the per-user Inno Setup
 `Handpic-<version>-windows-x64-setup.exe` from `packaging/windows/handpic.iss`
 (`AppId` `dev.minodisk.handpic`, for good) and the portable
-`Handpic-<version>-windows-x64.zip`, also `mise run native:package:windows`;
+`Handpic-<version>-windows-x64.zip`, and the updater's
+`Handpic-<version>-windows-x64-setup.exe.zip` holding the setup, also
+`mise run native:package:windows`;
 `linux.sh`, the `Handpic-<version>-linux-x64.tar.gz`, beside it
 `packaging/linux/install.sh` (the per-user install of that tarball under
 `~/.local` after a SHA-256 check, adapted from gpui-kit's guide) and
 `handpic_<version>_amd64.deb` from the `packaging/linux/control` template
 (`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
-`mise run native:package:linux`), uploading each package and one
-`SHA256SUMS` as workflow artifacts; `crates/native`'s `src/datadir.rs` places
+`mise run native:package:linux`; `sign.sh`, the zipsign 0.2.2 signature of
+those four updater archives in place, also `mise run native:sign`, run only
+with the `update_test_repo` input (`owner/name`), which signs with the test
+key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
+and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
 `--index <path>`; without it, an index an earlier build left under
 `<IDENTIFIER>.native` is moved in first, one already there renamed aside,

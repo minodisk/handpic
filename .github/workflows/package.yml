@@ -6,11 +6,20 @@ name: Package
 # chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.
 # `-f version=<x.y.z[-prerelease]>` packages that version instead of
 # crates/native/Cargo.toml's, which set-version.sh writes before the build.
+# `-f update_test_repo=<owner/name>` makes a test build: the build gets
+# HANDPIC_UPDATE_TEST_REPO and the updater's four archives are signed with the
+# checked-in test key (crates/native/packaging/test/). Without it nothing is
+# signed; release.yml signs with the production key.
 on:
   workflow_dispatch:
     inputs:
       version:
         description: The version to package (x.y.z or x.y.z-<prerelease>); empty keeps crates/native/Cargo.toml's
+        required: false
+        default: ""
+        type: string
+      update_test_repo:
+        description: A scratch repository (owner/name) a test build updates from; signs the updater's archives with the test key. Never distribute such a build
         required: false
         default: ""
         type: string
@@ -73,6 +82,19 @@ jobs:
           done
           echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
+      # Read by the updater at build time; left unset for any other build.
+      - name: Make a test build
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          REPO: ${{ inputs.update_test_repo }}
+        run: |
+          if [[ ! "$REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "update_test_repo: $REPO is not owner/name" >&2
+            exit 1
+          fi
+          echo "HANDPIC_UPDATE_TEST_REPO=$REPO" >> "$GITHUB_ENV"
+
       # Through `mise exec`, as ci.yml's `native` job builds, so every
       # platform's leg has the one command path.
       - name: Build the release binary
@@ -85,9 +107,19 @@ jobs:
         shell: bash
         run: mise run native:bundle:macos
 
-      - name: Package the DMG
+      - name: Package the DMG and the tarball
         shell: bash
         run: bash tools/package/macos.sh
+
+      - name: Sign the tarball with the test key
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mise run native:sign -- crates/native/packaging/test/update.key crates/native/packaging/test/update.pub \
+            "crates/native/target/release/Handpic-$VERSION-macos-$ARCH.tar.gz"
 
       - name: Check the DMG
         shell: bash
@@ -116,10 +148,39 @@ jobs:
           test -L "$mount/Applications"
           hdiutil detach "$mount"
 
+      # The updater installs the Handpic.app of this tarball whole, so the
+      # extracted bundle must keep its ad hoc signature.
+      - name: Check the tarball
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          tarball="crates/native/target/release/Handpic-$VERSION-macos-$ARCH.tar.gz"
+          tar -tzf "$tarball" > "$RUNNER_TEMP/entries"
+          if grep -vE '^Handpic\.app(/|$)' "$RUNNER_TEMP/entries"; then
+            echo "an entry outside Handpic.app" >&2
+            exit 1
+          fi
+          if grep -E '(^|/)\._' "$RUNNER_TEMP/entries"; then
+            echo "an AppleDouble entry" >&2
+            exit 1
+          fi
+          out="$(mktemp -d)"
+          tar -xzf "$tarball" -C "$out"
+          codesign --verify --strict --verbose=2 "$out/Handpic.app"
+          lipo -archs "$out/Handpic.app/Contents/MacOS/handpic" | grep -qx "$ARCH"
+
       - uses: actions/upload-artifact@v4
         with:
           name: Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg
           path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.tar.gz
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.tar.gz
           if-no-files-found: error
 
   windows:
@@ -161,6 +222,19 @@ jobs:
           done
           echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
+      # Read by the updater at build time; left unset for any other build.
+      - name: Make a test build
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          REPO: ${{ inputs.update_test_repo }}
+        run: |
+          if [[ ! "$REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "update_test_repo: $REPO is not owner/name" >&2
+            exit 1
+          fi
+          echo "HANDPIC_UPDATE_TEST_REPO=$REPO" >> "$GITHUB_ENV"
+
       # As ci.yml's `native` job: setup-nasm's folder is put on PATH by hand
       # for the build script behind `mise exec`.
       - name: Build the release binary
@@ -173,13 +247,23 @@ jobs:
           mise exec rust@1.98.1 -- cargo build --release --locked
 
       # The runner image ships Inno Setup 6; windows.sh finds its ISCC.exe.
-      - name: Package the setup and the ZIP
+      - name: Package the setup and the ZIPs
         shell: bash
         run: bash tools/package/windows.sh
 
+      - name: Sign the ZIPs with the test key
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          release=crates/native/target/release
+          mise run native:sign -- crates/native/packaging/test/update.key crates/native/packaging/test/update.pub \
+            "$release/Handpic-$VERSION-windows-x64.zip" "$release/Handpic-$VERSION-windows-x64-setup.exe.zip"
+
       # The runner is elevated, so this proves the per-user location, the HKCU
       # entry and the silent runs, not the absence of a UAC prompt.
-      - name: Check the setup and the ZIP
+      - name: Check the setup and the ZIPs
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -233,6 +317,15 @@ jobs:
           Get-ChildItem -Recurse $out | Select-Object -ExpandProperty FullName
           if (-not (Test-Path (Join-Path $out 'Handpic\handpic.exe'))) { throw 'no exe in the ZIP' }
           if (-not (Test-Path (Join-Path $out 'Handpic\licenses\NOTICE-gpui'))) { throw 'no licenses in the ZIP' }
+          # The setup ZIP holds the setup alone, byte for byte.
+          $setupZip = Resolve-Path "$release/Handpic-$env:VERSION-windows-x64-setup.exe.zip"
+          $setupOut = Join-Path $env:RUNNER_TEMP 'setup-zip'
+          Expand-Archive -Path $setupZip -DestinationPath $setupOut
+          $entries = @(Get-ChildItem -Recurse $setupOut)
+          $entries | Select-Object -ExpandProperty FullName
+          if ($entries.Count -ne 1) { throw "the setup ZIP holds $($entries.Count) entries" }
+          $extracted = Join-Path $setupOut "Handpic-$env:VERSION-windows-x64-setup.exe"
+          if ((Get-FileHash $extracted).Hash -ne (Get-FileHash $setup).Hash) { throw 'the setup ZIP holds another setup' }
 
       - uses: actions/upload-artifact@v4
         with:
@@ -244,6 +337,12 @@ jobs:
         with:
           name: Handpic-${{ steps.version.outputs.version }}-windows-x64.zip
           path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-windows-x64.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Handpic-${{ steps.version.outputs.version }}-windows-x64-setup.exe.zip
+          path: crates/native/target/release/Handpic-${{ steps.version.outputs.version }}-windows-x64-setup.exe.zip
           if-no-files-found: error
 
   linux:
@@ -297,6 +396,19 @@ jobs:
           done
           echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
+      # Read by the updater at build time; left unset for any other build.
+      - name: Make a test build
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          REPO: ${{ inputs.update_test_repo }}
+        run: |
+          if [[ ! "$REPO" =~ ^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$ ]]; then
+            echo "update_test_repo: $REPO is not owner/name" >&2
+            exit 1
+          fi
+          echo "HANDPIC_UPDATE_TEST_REPO=$REPO" >> "$GITHUB_ENV"
+
       - name: Build the release binary
         shell: bash
         working-directory: crates/native
@@ -305,6 +417,15 @@ jobs:
       - name: Package the tarball, install.sh and the .deb
         shell: bash
         run: bash tools/package/linux.sh
+
+      - name: Sign the tarball with the test key
+        if: inputs.update_test_repo != ''
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mise run native:sign -- crates/native/packaging/test/update.key crates/native/packaging/test/update.pub \
+            "crates/native/target/release/Handpic-$VERSION-linux-x64.tar.gz"
 
       # What the binary links and what it opens at run time, and the image's
       # glibc, which the deb's Depends follows.
@@ -393,7 +514,8 @@ jobs:
           path: crates/native/target/release/handpic_${{ steps.version.outputs.version }}_amd64.deb
           if-no-files-found: error
 
-  # One SHA256SUMS over every artifact the run built.
+  # One SHA256SUMS over every artifact the run built, the signed archives as
+  # signed.
   checksums:
     needs: [macos, windows, linux]
     runs-on: ubuntu-latest
@@ -410,6 +532,20 @@ jobs:
         run: |
           sha256sum -- * > SHA256SUMS
           cat SHA256SUMS
+
+      # The digest a person copies from SHA256SUMS installs the tarball.
+      - name: Check install.sh against SHA256SUMS
+        shell: bash
+        working-directory: dist
+        run: |
+          tarballs=(Handpic-*-linux-x64.tar.gz)
+          test "${#tarballs[@]}" -eq 1
+          tarball="${tarballs[0]}"
+          digest="$(awk -v name="$tarball" '$2 == name { print $1 }' SHA256SUMS)"
+          test -n "$digest"
+          home="$(mktemp -d)"
+          HOME="$home" sh install.sh "$tarball" "$digest"
+          test -x "$home/.local/bin/handpic"
 
       - uses: actions/upload-artifact@v4
         with:
