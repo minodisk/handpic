@@ -63,6 +63,9 @@ says so (the binary's name in Step 2, the data folders in Step 3).
   moved into the plain folder and an index already there is renamed aside.
 - (2026-11-18) The user chose to delete the Tauri measurements from
   `performance.md` / `.ja.md` (Step 5).
+- (2026-11-18) The user chose to move the three remaining measurements of code
+  the native app still runs from `performance.md` / `.ja.md` into
+  `docs/agents/shared-crates.md`.
 
 ## Steps
 

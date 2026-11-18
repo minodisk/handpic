@@ -18,7 +18,7 @@ read just before). Each DNG embeds a 2112x1408 preview and a 9504x6320 1:1
 JPEG. The M11-P writes no `FocusLocation`, so the 512px crop is taken at the
 image center (row ~3160), the fallback the app uses.
 
-`riffle-cli bench` (two runs, medians):
+`handpic-cli bench` (two runs, medians):
 
 | Step | Target | Measured (median) |
 |------|--------|-------------------|
@@ -29,7 +29,7 @@ image center (row ~3160), the fallback the app uses.
 The center crop sits well inside the 50ms budget on its own; this is the CLI
 decode only, not keypress to pixels.
 
-`riffle-cli scan` over the folder:
+`handpic-cli scan` over the folder:
 
 | Threads | Total | Throughput | Per file on a worker (mean / p95) |
 |---------|-------|------------|-----------------------------------|
@@ -41,7 +41,7 @@ Thumbnails (528x352): 30,231 bytes per file on average (967,419 bytes over
 
 ## Nikon NEF, Canon CR3 and OM System / Olympus ORF (raw.pixls.us samples, Windows)
 
-Measured with `riffle-cli bench` / `scan` on one raw.pixls.us sample per body
+Measured with `handpic-cli bench` / `scan` on one raw.pixls.us sample per body
 (12 NEF bodies, 13 CR3 bodies, 12 ORF bodies, the ones listed in
 [What the camera records](./cameras.md)).
 
@@ -60,7 +60,7 @@ come out 800x600, since the 3200x2400 preview is scaled at the fixed 2/8.
 
 ## Fujifilm RAF (raw.pixls.us samples, Windows)
 
-Measured with `riffle-cli bench` / `scan` on 46 raw.pixls.us samples of the
+Measured with `handpic-cli bench` / `scan` on 46 raw.pixls.us samples of the
 22 Fujifilm bodies listed in [What the camera records](./cameras.md) (a
 compressed and an uncompressed sample per body, plus two crop-mode samples).
 
@@ -83,7 +83,7 @@ scale: the thumbnails come out 404 px on the long edge (19.4KB mean, against
 score decodes the whole JPEG and, with no AF point read, faces are searched on
 the whole image. Those two have since moved to the scan's second pass (see
 "Which pass carries which cost" below), so the `scan` rows above no longer
-match what `riffle-cli scan` measures today.
+match what `handpic-cli scan` measures today.
 
 ## Per-page preview read
 
@@ -202,7 +202,7 @@ conditions are in
 
 ## Folder scan throughput
 
-`riffle-cli scan` runs the folder extraction (bounded read, metadata parse,
+`handpic-cli scan` runs the folder extraction (bounded read, metadata parse,
 404x270 thumbnail) over a folder on a dedicated rayon pool, with no database.
 On a 12-core Apple Silicon Mac:
 
@@ -231,33 +231,12 @@ regardless.
 
 ### Real folders on Windows
 
-Measured on 2026-09-21 with a release build of the earlier Tauri app, whose
-scan is the pass the app runs now, on Windows 11 Home, reading
-real folders of Sony ARWs from a DRAM-less QLC SATA SSD (Crucial BX500 4TB)
-with 22 extraction threads.
-The numbers come from that app's `scan prepare` (the listing, reconcile and
-sidecar lines together) and `scan extract` lines of
-its log (see "Measuring on your own folder" below for today's lines). Each run used a
-different folder:
-
-| Run | files | prepare | extract | total | per file | files/s |
-|-----|-------|---------|---------|-------|----------|---------|
-| Cold first scan, Defender real-time protection on | 2677 | 1427ms | 42509ms | ~43.9s | ~16ms | ~61 |
-| Cold first scan, folder excluded from Defender | 3401 | 639ms | 65605ms | ~66.2s | ~19ms | ~51 |
-| First scan, warm page cache (index cleared, files read moments before) | 2134 | 47ms | 2084ms | ~2.1s | ~1ms | ~1000 |
-
-Both cold runs finished with 0 errors. Excluding the folder from Defender did
-not make the scan faster, so Defender is not the cause; the warm run shows
-the CPU side costs ~1ms per file, so cold IO dominates. Extrapolated to 5000
-files, a cold first scan takes ~82-97s. At a 1MiB bounded read per file and
-~16ms per file, the effective throughput works out to ~63MB/s (derived, not
-measured).
-
-A thread-count sweep pins the cause on the drive. Measured on 2026-09-22 on
-the same Windows 11 machine (i7-13700) with a release `riffle-cli scan`
-cross-built for `x86_64-pc-windows-gnu`; each run used a different real
-folder of Sony ARWs never read since boot, on the same drive, and all runs
-finished with 0 errors:
+A thread-count sweep pins the cost of a cold scan on the drive. Measured on
+2026-09-22 on Windows 11 Home (i7-13700) with a release `handpic-cli scan`
+cross-built for `x86_64-pc-windows-gnu`, reading real folders of Sony ARWs
+from a DRAM-less QLC SATA SSD (Crucial BX500 4TB); each run used a different
+folder never read since boot, on the same drive, and all runs finished with 0
+errors:
 
 | threads | files | total | files/s | per file on a worker (mean / p95) |
 |---------|-------|-------|---------|-----------------------------------|
@@ -272,7 +251,7 @@ queue on one shared resource, the drive. A DRAM-less QLC SATA SSD is slow at
 cold random reads: with no DRAM for the mapping table it needs extra NAND
 reads, QLC read latency is high (worse for data written long ago), and SATA
 has a single command queue. On one thread a file costs ~30ms, of which an
-estimated ~10ms is CPU (from the warm run) and ~20ms is waiting on the drive.
+estimated ~10ms is CPU (from a warm-cache run) and ~20ms is waiting on the drive.
 The cause is the drive, not Handpic's code, and more threads help little.
 
 The boot NVMe drive in the same machine (Crucial P5, TLC with DRAM) was not
@@ -284,7 +263,7 @@ it should be several times faster.
 ### Sharpness scoring cost
 
 Scoring sharpness adds a grayscale decode of the embedded preview to each
-file's extraction. `riffle-cli scan`, release build, over 1000 symlinks to one
+file's extraction. `handpic-cli scan`, release build, over 1000 symlinks to one
 α7 V ARW (1616x1080 preview), warm page cache, on a 12-core Apple Silicon Mac,
 runs alternated before and after:
 
@@ -296,8 +275,8 @@ runs alternated before and after:
 About +3.2ms per file on one thread (~+45%). The symlinks repeat one file, so
 this is CPU cost with no IO variety. The score has since moved out of the first
 pass into the second (see "Which pass carries which cost" below), so
-`riffle-cli scan` is back to the "before" column and the ~3ms lands on
-the second pass (the app's `scan faces`, and `riffle-cli candidates` until
+`handpic-cli scan` is back to the "before" column and the ~3ms lands on
+the second pass (the app's `scan faces`, and `handpic-cli candidates` until
 the full-eye-sharp-only plan removed it) instead.
 
 ### Face detection cost
@@ -309,9 +288,9 @@ preview at a 640x448 input (see "Whole-image recall (Windows 11)" below).
 That detection now runs in the second pass, not the first (see "Which pass
 carries which cost" below). The Linux WSL2 measurements up to
 "Whole-image recall (Windows 11)" predate the move and the larger input (most
-time a 320x320 detection inside `riffle-cli scan`). "Whole-image recall
+time a 320x320 detection inside `handpic-cli scan`). "Whole-image recall
 (Windows 11)" and "DCT-scaled decode for the whole-image search (Windows 11)"
-time the second pass (`riffle-cli detect` and `riffle-cli candidates`). The first measurement ran
+time the second pass (`handpic-cli detect` and `handpic-cli candidates`). The first measurement ran
 on a Linux WSL2 machine (24 threads), release build, with synthetic input:
 the OpenCV sample images `lena.jpg` and `messi5.jpg` upscaled to a 1616 px
 long edge, single thread, 30 runs after one warm-up (the time includes the
@@ -327,17 +306,17 @@ binaries on the same machine:
 
 | Binary | Before | After |
 |--------|--------|-------|
-| `riffle-cli` | 1.7 MB | 31.3 MB |
+| `handpic-cli` | 1.7 MB | 31.3 MB |
 
-A cold `cargo build --release -p riffle-cli` went from 10.8s to 140s.
+A cold `cargo build --release -p handpic-cli` went from 10.8s to 140s.
 
 #### Real files (Linux WSL2)
 
 Measured on 2026-09-22 on the same Linux WSL2 machine (24 hardware threads),
-release `riffle-cli`, files read from a Windows NTFS drive mounted in WSL,
+release `handpic-cli`, files read from a Windows NTFS drive mounted in WSL,
 warm page cache (each folder scanned once before timing).
 
-Detection latency on real previews: `riffle-cli bench <file>` (row
+Detection latency on real previews: `handpic-cli bench <file>` (row
 `4. face detection`, one thread) on about 40 files sampled evenly from each
 folder:
 
@@ -348,7 +327,7 @@ folder:
 
 The first call (model build) took ~42-44ms.
 
-`riffle-cli scan <dir> <threads>` before and after adding detection (before:
+`handpic-cli scan <dir> <threads>` before and after adding detection (before:
 the scan passed no faces), runs alternated, two runs each:
 
 | Folder | Files | Threads | Per file mean before -> after | p95 before -> after | Wall before -> after |
@@ -385,7 +364,7 @@ Files with a trusted AF point but no camera face tracking now search a
 480x480 crop of the upright preview around the AF point instead of the whole
 preview; the scan still runs YuNet at most once per file. Measured on
 2026-09-24 on the same Linux WSL2 machine (24 hardware threads), release
-`riffle-cli scan` on the 2134-ARW α7 V folder (428 files take the crop path)
+`handpic-cli scan` on the 2134-ARW α7 V folder (428 files take the crop path)
 read from the Windows NTFS drive, warm page cache (one scan before timing),
 before (the whole-preview detection) and after, runs alternated, four each:
 
@@ -398,21 +377,8 @@ On one thread the mean did not rise (the first after run, 29.5ms, was an
 outlier the next three did not repeat); on 12 threads the runs overlap and
 the spread is the drive's, not the detector's.
 
-The faces the `f` focus mark draws are detected on demand (now the backend's `ondemand::read_faces`, then the earlier Tauri app's `faces_of`
-command: read the preview + `detect_around`), not at scan time. Measured once
-on 2026-09-25 on the same Linux WSL2 machine, release build, calling the
-command's body directly on two α7 V ARWs read from the Windows NTFS
-drive, warm page cache, 20 calls each after a first one:
-
-| File | First call | Mean | Median | Max |
-|------|--------------------------|------|--------|-----|
-| `_DSC3113.ARW` (1616x1080 preview, 3 faces) | 70.5ms (with the model build) | 29.9ms | 29.9ms | 34.1ms |
-| `_DSC1942.ARW` (1616x1080 preview, 3 faces) | 34.0ms | 30.6ms | 29.7ms | 37.4ms |
-
-The first call of a session also builds the model. A cold read
-from a card or a slow disk adds its own latency on top; that, and the
-redraw in the app, are not measured here. The timing ran from a temporary
-`#[ignore]`d test removed before committing.
+The faces the `f` focus mark draws are detected on demand (the backend's
+`ondemand::read_faces`: read the preview + `detect_around`), not at scan time.
 
 #### Whole-image recall (Windows 11)
 
@@ -422,17 +388,17 @@ input (448x640 for a portrait frame, `faces::WHOLE_INPUT`) instead of the
 320x320 square, so a 2112 px preview shrinks 3.3x instead of 6.6x and the
 3:2 frame fills the input without a padded third. The crop around a trusted
 AF point keeps the 320 px input, so the focus candidate cue does not change:
-`riffle-cli candidates` printed the same per-file lines, AUC, precision and
+`handpic-cli candidates` printed the same per-file lines, AUC, precision and
 coverage on the nine labeled folders and on the 2134-ARW folder before and
 after.
 
 Measured on 2026-10-06 on Windows 11 (Intel Core i7-13700, 24 hardware
-threads, 32 GB), release `riffle-cli`, files read from the local NTFS drive,
+threads, 32 GB), release `handpic-cli`, files read from the local NTFS drive,
 warm page cache, before and after alternated. Recall is against a hand count
 of 36 M11-P DNGs sampled evenly from a 146-DNG folder plus the swing group
 `L1005161.DNG`: 34 of the 36 contain a face, 71 faces in all (faces below
 about 40 px, cut by the frame or too occluded are left out). The faces found
-were checked by eye on the `riffle-cli faces` images: every box sits on a
+were checked by eye on the `handpic-cli faces` images: every box sits on a
 face, and the two files with no countable face get none.
 
 | Model input | Files with a face found (of 34) | Faces found (of 71) | `L1005161` (of 7) | Files / faces at score >= 0.8 |
@@ -453,7 +419,7 @@ low-scoring boxes to the `f` mark; a larger input is what moves faces above
 away, backlit or blurred; in `L1005161.DNG` the one missed is the woman
 half hidden behind the toddler.
 
-Cost per file on the 37 DNGs, `riffle-cli detect` (one thread; "detection"
+Cost per file on the 37 DNGs, `handpic-cli detect` (one thread; "detection"
 includes the upright copy and the downscale into the input), three runs each:
 
 | Model input | Decode mean | Detection mean / median / p95 | Inference alone |
@@ -466,7 +432,7 @@ The inference alone at the other inputs: 480x480 45ms, 576x384 46ms,
 file costs about 78ms instead of 38.5ms; the DCT-scaled decode below brings
 it back to about 65ms.
 
-`riffle-cli candidates <dir>` (pass 2) on the 146-DNG folder, three runs
+`handpic-cli candidates <dir>` (pass 2) on the 146-DNG folder, three runs
 each:
 
 | Threads | Before | After |
@@ -474,7 +440,7 @@ each:
 | 24 | 1.21 / 1.18 / 1.03s | 2.14 / 2.23 / 2.24s |
 | 1 | 7.40 / 7.60 / 7.54s (51.6ms/file) | 13.76 / 14.19 / 15.43s (98.7ms/file) |
 
-`riffle-cli scan` (pass 1) does not detect and did not change (0.17-0.18s on
+`handpic-cli scan` (pass 1) does not detect and did not change (0.17-0.18s on
 24 threads, 1.92-2.01s on one). On the 2134-ARW folder, where every file has
 a trusted AF point, `candidates` on 24 threads took 15.24 / 13.54 / 13.82s
 before and 13.68 / 13.90 / 11.81s after, and its peak working set stayed at
@@ -510,12 +476,12 @@ the input by about 4ms, 17% of the file. Scaled to the previous section's
 day, that is about 65ms per file, 1.7x the 38.5ms of the 320x320 search
 before the larger input.
 
-`riffle-cli candidates` (pass 2), three runs each: on the 146-DNG folder
+`handpic-cli candidates` (pass 2), three runs each: on the 146-DNG folder
 2.35 / 2.69 / 2.43s -> 2.01 / 2.14 / 2.18s on 24 threads and 17.31 / 16.04 /
 16.23s -> 14.98 / 12.14 / 13.03s on one (113 -> 92ms per file); on the
 2134-ARW folder, which takes the crop path only and printed the same
 per-file lines, 15.32 / 14.94 / 14.91s -> 12.54 / 13.38 / 13.75s (no code on
-that path changed, so this is the machine's spread). `riffle-cli scan` does
+that path changed, so this is the machine's spread). `handpic-cli scan` does
 not detect: 0.22-0.26s -> 0.20-0.23s on the DNGs, 2.07-2.32s -> 2.00-2.15s on
 the ARWs. On the nine labeled folders `candidates` printed exactly the lines,
 AUC, precision and coverage of before.
@@ -539,11 +505,11 @@ so pass 1 no longer searches a crop around a trusted AF point: it detects
 faces only without one (for the sharpness score), and pass 2 runs YuNet on
 every trusted-AF file, eye-AF frames included. Measured on 2026-09-25 on a
 Linux WSL2 machine (Intel Core i7-13700, 24 hardware threads, 16 GB),
-release `riffle-cli`, the 2134-ARW α7 V folder `2026-09-19` read from the
+release `handpic-cli`, the 2134-ARW α7 V folder `2026-09-19` read from the
 Windows NTFS drive, warm page cache (one scan before timing, which took
 19.0s cold), 24 threads.
 
-Pass 1, `riffle-cli scan <dir> 24`, before (`962a5de`, crop detection in the
+Pass 1, `handpic-cli scan <dir> 24`, before (`962a5de`, crop detection in the
 scan) and after (face-catch removed), runs alternated, four each:
 
 | Run | Wall before -> after | Per file mean before -> after | p95 before -> after |
@@ -556,7 +522,7 @@ scan) and after (face-catch removed), runs alternated, four each:
 Pass 1 got ~0.8s faster and its p95 dropped by ~45ms: the 428 files that
 used to run the crop detection no longer do.
 
-Pass 2, `riffle-cli candidates <dir> 24` (read the preview, decode it once,
+Pass 2, `handpic-cli candidates <dir> 24` (read the preview, decode it once,
 crop detection, eye window), three runs right after: 9.01 / 9.41 / 9.20s for
 all 2134 files (1650 candidates, 302 not, 182 unknown). The command also runs
 on the files without a trusted AF point, which return at once with no
@@ -566,7 +532,7 @@ therefore appear at pass 1's speed, and the marks fill in over the next ~9s.
 The cue now also takes the mean edge width of the eye window, on the luma it
 already decoded, so pass 2 did not get noticeably slower. Measured on
 2026-09-26 on the same CPU under Windows 11, the same folder read from the
-local NTFS drive, warm page cache, 24 threads, `riffle-cli candidates <dir>
+local NTFS drive, warm page cache, 24 threads, `handpic-cli candidates <dir>
 24` before (`7dfe474`, Laplacian variance only) and after (`90729bc`),
 alternated, four runs each: 9.79 / 10.33 / 10.23 / 10.31s before, 10.21 /
 10.28 / 10.12 / 10.15s after.
@@ -577,7 +543,7 @@ falling back to the eye window when neither eye's region counts (under the 24 px
 `docs/plans/_archived/20261008-mesh-eye-focus/`), and that costs pass 2 about two
 thirds more. Measured on 2026-10-08 on the same CPU under Windows 11, the same
 folder from the local NTFS drive, warm page cache (one run of each before
-timing), 24 threads, `riffle-cli candidates <dir> 24` before (`4b5e0a39`,
+timing), 24 threads, `handpic-cli candidates <dir> 24` before (`4b5e0a39`,
 the eye window) and after (`a7d2fbc4`), alternated, four runs each, reading
 the `... total` line, which times only the scan's `extract_analysis` pass:
 12.65 / 13.95 / 13.07 / 12.10s before, 22.20 / 21.89 / 21.09 / 20.64s after
@@ -604,7 +570,7 @@ window (see `docs/plans/_archived/20261008-mesh-face-gate/`). On this folder
 that skips 261 of the 1952 faced files (13.4%), and the saving is within the
 run-to-run spread. Measured on 2026-10-08 on the same CPU under Windows 11, the
 same folder from the local NTFS drive, warm page cache (one run of each
-before timing), 24 threads, `riffle-cli candidates <dir> 24` before
+before timing), 24 threads, `handpic-cli candidates <dir> 24` before
 (`176a96b6`) and after (the face-size gate on top of it), alternated, four
 runs each, reading the `... total` line: 20.28 / 20.94 / 20.68 / 20.51s
 before, 19.98 / 21.13 / 19.84 / 19.88s after (mean 20.6 -> 20.2s, -0.4s,
@@ -630,7 +596,7 @@ a face. A file without a larger JPEG is not measured. Measured on 2026-11-15 on
 the folder `2026-11-07` (3638 α7 V ARW, every one with a larger JPEG),
 local NTFS drive, warm page cache (one run before timing), release build,
 8 threads, `scan::extract_analysis` alone timed per file by a scratch
-`riffle-cli` subcommand, before (`5c7d094a`) and after (this change)
+`handpic-cli` subcommand, before (`5c7d094a`) and after (this change)
 alternated, two runs each:
 
 | Files | n | Before mean / median / p95 (ms) | After mean / median / p95 (ms) |
@@ -676,7 +642,7 @@ and 15% only eyes too small, blurred or dark to call. By face side in
 preview pixels, 0 of 5 faces below 40 px were labelable, 6 of 31 at 40-59 px
 and about two in three from 60 px up.
 
-For scale, `riffle-cli detect` on 40 of those ARWs in the same session
+For scale, `handpic-cli detect` on 40 of those ARWs in the same session
 took 13.4-13.6ms to decode and 31.8-32.7ms to detect per file, so the
 classifier would add about 1% to the cue path's per-file cost, face mesh v1
 33-35%, the iris model 40% and Face Landmarker v2 105-109%. None fits the
@@ -699,46 +665,27 @@ largest face at or above 0.8, and none below a 60 px face side. For that
 face the second pass stores the eye aspect ratio
 and the head pose from the mesh it already runs for the focus candidate cue
 (no extra model run), and the meta pane's `Eyes` row and the filter menu's
-`Eyes` section read those. The measurements below were taken when the
-on-demand call was the earlier Tauri app's `eyes_of` command and fed the meta
-pane's row (then `Eyes open: NN%`, the probability that the eyes are open).
-Measured on
+`Eyes` section read those. Measured on
 2026-10-07 on the same Windows 11 machine, release builds, one thread, on
 `main` at `392f9c25` (the size before from the same day's build before the
 model was called):
 
 | Binary | Before | After |
 |--------|--------|-------|
-| `riffle-cli` | 24.6 MB | 29.6 MB |
+| `handpic-cli` | 24.6 MB | 29.6 MB |
 
 It grew by about the 4.9 MB ONNX file, which is embedded with
 `include_bytes!`.
 
-The model itself (crop, resize, run, eye aspect ratio), `riffle-cli eyes` on
+The model itself (crop, resize, run, eye aspect ratio), `handpic-cli eyes` on
 the 504 labeled faces: mean 34.6ms, median 34.1ms, p95 41.2ms. The first
 call, which builds the plan and runs once, took 182ms. That is faster than
 the survey's 50.9ms, which ran three other models between its calls.
 
-The whole `eyes_of` call (an `#[ignore]`d `times_eyes_of_on_real_files` test
-that left with the earlier Tauri app, run with no app running), the first file of each set
-left out because it pays the plan builds (256ms on the ARW, 315ms on the
-DNG):
+The time from the preview to the overlay in the running app (the `eyes`
+timing line in `Handpic.log`) has not been measured yet: it needs the GUI.
 
-| Files | Read | Decode | Detect | Model | Total |
-|-------|------|--------|--------|-------|-------|
-| 17 α7 V ARWs with an AF point and a face judged (of `_DSC1881`-`_DSC1899` in `2026-09-19`) | 0.8-6.1ms | 10.6-11.7ms | 27.4-32.7ms | 35.8-46.8ms | 80.2-91.9ms |
-| 11 M11-P DNGs without one (`L1005148`-`L1005191` in `2026-02-01`, a face judged in each) | 7.0-9.7ms | 19.5-27.1ms | 73.8-80.0ms | 36.7-39.9ms | 139.9-156.1ms |
-
-The two other ARWs had no face to judge and returned after the detection in
-43.9 / 45.5ms. On the AF path one full-size decode serves both the detection
-and the crop; without an AF point the decode is the 3/8 one of the
-whole-image search plus a full-size one for the crop, and the whole-image
-detection, not the second decode, is most of the cost. Every file of the two
-sets labeled closed came back closed. The time from the preview to the overlay
-in the running app (the `eyes` timing line in `Handpic.log`)
-has not been measured yet: it needs the GUI.
-
-Accuracy, from `riffle-core` itself (`riffle-cli eyes`, which gives the
+Accuracy, from `handpic-core` itself (`handpic-cli eyes`, which gives the
 survey's eye aspect ratios exactly): face AUC 0.974 over the 253 labeled
 faces (57 closed); at the threshold (closed iff the ratio is at most 0.137)
 accuracy 0.957, precision 0.94, recall 0.86. Over the 246 faces at or above
@@ -751,22 +698,9 @@ port of MediaPipe's face geometry pipeline over the points of the same model
 run (`crates/core/src/pose.rs`), so it adds no model run and no decode. The
 solve takes 8.2µs per face at the median (p95 18µs, max 26µs; the 72 judged
 faces of the M11-P folder, 200 repetitions each, one thread, release build).
-The whole `eyes_of` call with the same test on the same files as the table
-above, measured on 2026-10-07 on `main` at `9048e952` against `bde23660`, the
-commit before the pose, built and run back to back on the same machine, the
-first file of each set left out:
-
-| Files | Total before | Total after |
-|-------|--------------|-------------|
-| 16 ARWs with a face judged | 60.7-73.1ms (median 65.3) | 61.4-68.2ms (median 65.9) |
-| 2 ARWs without one | 32.8 / 33.5ms | 33.3 / 33.8ms |
-| 10 DNGs | 109.2-119.1ms (median 116.0) | 110.8-120.7ms (median 117.1) |
-
-The difference is run-to-run noise: the solve is three orders of magnitude
-smaller, and the detection, which the pose does not touch, moved as much.
-Both runs were faster than the table above; a first run of the after build
-straight after compiling it read 81-92ms and 144-160ms. The CLI binary grew by
-the code alone: `riffle-cli` from 29,556,224 B to 29,577,728 B (+21,504 B).
+The CLI binary grew by the code alone (`main` at `9048e952` against
+`bde23660`, the commit before the pose, 2026-10-07): `handpic-cli` from
+29,556,224 B to 29,577,728 B (+21,504 B).
 
 Accuracy, against 159 readable faces of 190 drawn from the same two folders
 (with more turned and leaning faces than the folders have), labeled by eye with coarse classes and directions (there is no ground-truth
@@ -788,9 +722,9 @@ about 1 deg.
 ### Which pass carries which cost
 
 Since the sharpness score moved to the second pass, the first pass
-(`riffle_core::scan::extract`, `riffle-cli scan`, the app's `scan extract`
+(`handpic_core::scan::extract`, `handpic-cli scan`, the app's `scan extract`
 line) reads the preview and computes the thumbnail and the metadata only. The
-second pass (`riffle_core::scan::extract_analysis`, the app's `scan faces`
+second pass (`handpic_core::scan::extract_analysis`, the app's `scan faces`
 line) reads the preview once more and computes both the
 focus candidate cue and the sharpness score:
 
@@ -809,14 +743,14 @@ focus marks fill in during the second pass. The
 numbers in "Sharpness scoring cost", "Face detection cost" and "Focus
 candidate pass" above were measured before the move, except the two Windows
 11 subsections of "Face detection cost" and the face mesh paragraphs of "Focus
-candidate pass", which time the second pass. The `riffle-cli scan` "after"
+candidate pass", which time the second pass. The `handpic-cli scan` "after"
 figures in "Face detection cost" include costs that pass no longer carries.
 
 In the app both passes run below normal OS priority (on Windows
 `THREAD_PRIORITY_BELOW_NORMAL` for the first, `THREAD_PRIORITY_LOWEST` for
 the second; on macOS the `UTILITY` and `BACKGROUND` QoS classes; on Linux a
 nice of at least 5 and 10), and they take the shown file and the strip's visible cells before
-the rest. `riffle-cli scan` and `candidates` run at normal priority and in
+the rest. `handpic-cli scan` and `candidates` run at normal priority and in
 file-name order, so their numbers stay comparable with the tables above.
 
 Not measured yet: the `scan extract` / `scan faces` wall
@@ -933,7 +867,7 @@ full of foreign sidecars pays the parse as well and was not measured.
 
 ## Copying from a memory card
 
-`Import…` copies through `riffle_core::copy`: one thread reads the card in
+`Import…` copies through `handpic_core::copy`: one thread reads the card in
 order in 8 MiB chunks and feeds up to 4 buffers to one thread writing the
 destination, which flushes each file before renaming it into place. No speedup
 over Explorer is claimed. The one measurement so far found the destination
@@ -965,7 +899,7 @@ neither was kept.
 
 ### Comparing with Explorer on your own card
 
-`riffle-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]` copies every
+`handpic-cli copybench <src-dir> <dst-dir> [chunk-mib] [buffers]` copies every
 RAW and JPEG under `src-dir`, flat, into `dst-dir` through the pipeline the app
 uses and prints the files, bytes, seconds and MB/s. A real import writes the same
 figures to `Handpic.log`, as the `import:` line (`mb_per_s=`; see

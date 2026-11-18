@@ -258,9 +258,3 @@
   actions on the page or implement compare. Files:
   `crates/backend/src/shortcuts.rs`, `crates/native/src/settingsmodal.rs`,
   `crates/native/src/main.rs` (`key_down`), `docs/humans/usage.md`.
-- `docs/humans/performance.md` / `.ja.md` still name `riffle-cli`,
-  `riffle-core` and `riffle_core::` in the commands and paths of their
-  measurements (the CLI is `handpic-cli` now). Step 5 kept them as the names
-  the measurements were taken under. Decide whether to rename them to the
-  current names with a note, so a reader can rerun the commands. Files:
-  `docs/humans/performance.md`, `docs/humans/performance.ja.md`.
