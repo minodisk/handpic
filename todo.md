@@ -2333,16 +2333,6 @@ Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/n
 
 - [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/native/icons/` reads Handpic and the derivation is written down.
 
-### Native: real-device check of the index move out of the `.native` folder (remove-tauri Step 3)
-
-The remove-tauri plan's Step 3 put the native app's default index and log under `dev.minodisk.handpic` and added `datadir::move_native_index`, which `open_index` runs only without `--index`. It moves a `dev.minodisk.handpic.native` index into the plain folder and renames an index already there aside, with the `-wal` / `-shm` files. Unit tests over temp folders cover the move and the aside rename. Never exercised: the move on a real machine holding a `main` build's `.native` index and a Tauri build's index in the plain folder. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs` (`open_index`).
-
-#### TODO
-
-- [ ] On Windows, with an index under `%LOCALAPPDATA%\dev.minodisk.handpic.native\` (from a `main` build) and optionally a Tauri build's under `%LOCALAPPDATA%\dev.minodisk.handpic\`, launch the native app without `--index`. Expect `Handpic.log` (now under `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`) to show `index: moved in from the .native folder` (with the aside name when a Tauri index was there). Expect `index.sqlite` (and its `-wal` / `-shm`) gone from `.native`, with that folder kept because the old `logs\` is still in it. Expect the Tauri index kept as `index-aside-1.sqlite`, and the open folder's thumbnails shown without a cold pass 1.
-
 ---
 
 ### Native: the issue template says `Help > Open Log Folder`, which the native app does not have

@@ -24,8 +24,6 @@ macro).
 - `--log <path>` names the file instead; every debug or hand-check run passes
   it (see `native-app.md`). A file that cannot be opened is reported once on
   stderr and the app runs with stderr only.
-- An earlier build's log under `dev.minodisk.handpic.native` stays where it
-  was; nothing moves it.
 - The same lines also go to stderr, which only a `mise run native:dev`
   terminal shows.
 

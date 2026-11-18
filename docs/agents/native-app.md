@@ -2168,20 +2168,9 @@ invalid one leaves the stored one and shows its reason.
 The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic/index.sqlite`;
 `--index <path>` overrides it. The folder is named after the Handpic
 identifier (`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`).
-While the Tauri app still existed, the native app kept its index apart under
-`dev.minodisk.handpic.native`. Without `--index`, `open_index` first runs
-`datadir::move_native_index`: an `index.sqlite` left under
-`dev.minodisk.handpic.native` moves into the plain folder with its `-wal` and
-`-shm`, and an index already there (a Tauri build's from `main`) is renamed
-aside to the first free `index-aside-<n>.sqlite` rather than deleted; the
-emptied `.native` folder goes (on Windows it stays, still holding the old
-`logs\Handpic.log`, as the cache and data-local directories are both
-`%LOCALAPPDATA%`). A failed move is logged and the app opens
-whatever the plain folder then holds. Nothing is migrated from the earlier
-`com.minodisk.riffle.native` or `com.minodisk.handpic.native`: the native app
-never shipped, so an old developer cache is simply rebuilt by pass 1. An index
-that cannot be opened leaves the pager working with `no index: …` on the
-status line.
+An index an earlier build kept under another folder is not picked up; pass
+1 rebuilds it. An index that cannot be opened leaves the pager working with
+`no index: …` on the status line.
 
 - Rule: never point a debug or measurement run at the user's index; use
   `--index` with a fresh file.
