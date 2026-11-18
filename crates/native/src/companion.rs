@@ -127,6 +127,8 @@ pub mod coverage {
     const CLIPBOARD: &str = "a client has the paths already, and a tool would write the user's \
          clipboard unseen";
     const MCP_GRANT: &str = "the user's to grant, on the MCP page of the settings";
+    const UPDATES: &str = "the check and the restart stay the user's; get_status reports the \
+         update state";
 
     /// Every keymap action (`shortcuts.rs`'s `DEFAULTS`), in its order.
     pub const KEYMAP: &[(&str, Coverage)] = &[
@@ -229,6 +231,7 @@ pub mod coverage {
             }
             Tab::Cache => Coverage::Tool("clear_cache"),
             Tab::Mcp => Coverage::Excluded(MCP_GRANT),
+            Tab::Updates => Coverage::Excluded(UPDATES),
         }
     }
 
@@ -758,6 +761,8 @@ pub struct Status {
     pub operation: Option<Operation>,
     /// The preview a confirming call runs (`previewed`).
     pub pending: Option<Value>,
+    /// The update flow's state (`update::Updates::state`).
+    pub update: Value,
 }
 
 impl Status {
@@ -797,6 +802,7 @@ pub fn get_status(status: &Status) -> Value {
             "dialog": op.dialog,
         })),
         "pending": status.pending,
+        "update": status.update,
     })
 }
 
@@ -3927,6 +3933,7 @@ mod tests {
                 "errors": ["a.ARW: denied"],
                 "operation": null,
                 "pending": null,
+                "update": null,
             })
         );
     }

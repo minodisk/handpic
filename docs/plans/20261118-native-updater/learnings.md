@@ -163,6 +163,49 @@
   through `zipsign-api` 0.2.2's `sign-zip` / `sign-tar` (a dev-dependency,
   with `zip` 9, `tar` and `flate2` to build the archives).
 
+## Step 4: the app's update flow and the Updates page
+
+- The phases are set around the engine's two calls, as Step 3 left it: the
+  model goes `Checking` before `check`, `Downloading` before `install`,
+  `Verifying` when `self_update`'s `progress_callback` reports the archive's
+  full size (the digest, signature, extraction and replace follow inside the
+  same `update()`), and `ReadyToRestart` or `Failed` on `install`'s answer.
+  So `install` gained a `progress` parameter; the guide's "percentage only
+  when the total is trustworthy" holds, a download without a size showing
+  no percent.
+- Deferred issue from Step 3 decided: the check's requests are bounded by
+  `CHECK_TIMEOUT` (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), set
+  with the builder's `timeout` in `crates/backend/src/update.rs`. In
+  `self_update` 1.3.3 that timeout is `ureq`'s `timeout_global` per request,
+  the body included, so one bound for the download must cover the whole
+  archive; 10 min is about 50 KB/s for today's archives. Not exercised by a
+  test (a stalled-server test would take the timeout's length).
+- The last-check time is a settings store key (`updateCheckedAt`, Unix
+  seconds), not `UpdateCheckGuard`: the store already keeps session state,
+  follows `--settings`, and needs no new path. It is written before the
+  launch's check runs, so an offline launch is not repeated within the hour.
+- The check and the install run on `std::thread`s rather than
+  `background_spawn`: a download of minutes would hold one of the executor's
+  pool threads.
+- Inno Setup and `.app` installs stop at `Available` with `Open Release
+  Page` until Steps 5 and 6 give them their owners; `update::installs`
+  is the one place to change.
+- Measured on Windows 11 (debug build, a temporary patch making the `--auto`
+  end call `cx.set_restart_path(whoami.exe)` and `cx.restart()`, reverted):
+  all three quit lines (`scan stopped`, `judgment stores drained=true
+  sidecar writer drained=true`, `settings writes drained=true`) were logged
+  after the restart request and the process exited 0. GPUI's Windows
+  restart posts `PostQuitMessage` once its PowerShell waiter is spawned, so
+  the shutdown and its handlers run as on a plain quit.
+- Deviations from the gpui-kit guide recorded here beyond the plan's list:
+  none of substance. The guide's "let the user defer the restart" holds
+  (nothing restarts without `Restart Now`); its "tell the user when a new
+  version is ready" is the pane's note naming `Restart Now` on the Updates
+  page, as the native app has no notification for it; the reported version
+  is the running one (`CARGO_PKG_VERSION`) until the new process starts.
+- The MCP companion exposes the state in `get_status` (`update`); the
+  coverage table excludes the Updates page with that reason.
+
 ## Deferred issues (todo candidates)
 
 - No request timeout on the update check or download
@@ -170,4 +213,23 @@
   is unset, as in the gpui-kit guide's snippet, so a stalled connection
   could keep a check in `Checking`. Step 4 ("never two checks at once")
   should decide whether to set `.timeout(..)` on the check (and a separate,
-  longer one on the download). Basis: Step 3 implementation.
+  longer one on the download). Basis: Step 3 implementation. Resolved in
+  Step 4 (`CHECK_TIMEOUT` and `INSTALL_TIMEOUT`, see its section); not a
+  todo.
+- Pending manual check (Step 4): on a portable ZIP install (Windows) and a
+  tarball install (Linux) of a release build packaged with
+  `update_test_repo`, an older version launched with a newer release on the
+  test feed should, without any click, go `Checking` → `Downloading` →
+  `Verifying` → `ReadyToRestart` on the Updates page, with the pane's note;
+  `Restart Now` should log the three `quit:` drain lines and come back as
+  the newer version (on Linux through the path read at launch, not the
+  ` (deleted)` one). A second launch within the hour should not check
+  (`updateCheckedAt`). A deb install should show `Open Release Page` and
+  install nothing. These are Step 7's rows; the Step 4 checkbox was ticked on
+  the unit tests, the local checks and the Windows restart-drain
+  measurement. Basis: Step 4 implementation; files
+  `crates/native/src/update.rs`, `crates/native/src/main.rs`.
+- The page's click paths (the three buttons, `Check for Updates` disabled
+  while busy) were not driven headless; the hand check belongs with the
+  pending manual check above. Basis: Step 4 implementation;
+  `crates/native/src/settingsview.rs`.

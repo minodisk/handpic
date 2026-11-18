@@ -34,6 +34,7 @@ use crate::{
     settings::Settings as Stored,
     settingsmodal::{self, Edit, FORMATS, LABEL_COLORS, MODES, ModalKey, SettingsModal, TABS, Tab},
     theme::{self, Mode},
+    update::{self, Updates},
 };
 
 /// The key context of the box while a shortcut row waits for a key.
@@ -65,7 +66,7 @@ type Languages = SelectState<SearchableVec<SharedString>>;
 type Themes = SelectState<SearchableVec<SharedString>>;
 
 /// What the main view applies.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Change {
     AutoAdvance(bool),
     SidecarFormat(SidecarFormat),
@@ -83,6 +84,10 @@ pub enum Change {
     McpAllowDestructive(bool),
     /// `Clear Cache` pressed.
     ClearCache,
+    /// The Updates page's buttons.
+    CheckForUpdates,
+    RestartNow,
+    OpenReleasePage(String),
     /// The main view takes the focus back.
     Closed,
 }
@@ -120,6 +125,8 @@ pub struct SettingsView {
     index_size: SharedString,
     clear_waiting: bool,
     clear_running: bool,
+    /// The update flow as the main view last handed it over.
+    updates: Option<Updates>,
     status: Option<SharedString>,
 }
 
@@ -198,6 +205,7 @@ impl SettingsView {
             index_size: cache::UNKNOWN_SIZE.into(),
             clear_waiting: false,
             clear_running: false,
+            updates: None,
             status: None,
         }
     }
@@ -518,6 +526,19 @@ impl SettingsView {
         cx.notify();
     }
 
+    /// The update flow's state, on every change of it.
+    pub fn show_updates(&mut self, updates: Updates, cx: &mut Context<Self>) {
+        self.updates = Some(updates);
+        cx.notify();
+    }
+
+    /// An Updates page button: the main view runs it.
+    fn update_button(&mut self, change: Change, cx: &mut Context<Self>) {
+        self.status = None;
+        cx.emit(change);
+        cx.notify();
+    }
+
     /// A switch failed: its message goes to the status line.
     pub fn failed(&mut self, message: String, cx: &mut Context<Self>) {
         self.status = Some(message.into());
@@ -539,6 +560,7 @@ impl SettingsView {
                 Tab::Import => self.import(page, &view),
                 Tab::Mcp => self.mcp(page, &view),
                 Tab::Appearance => self.appearance(page, &view),
+                Tab::Updates => self.updates(page, &view),
             }
         }))
     }
@@ -802,6 +824,62 @@ impl SettingsView {
         }
         page.description(cache::NOTE)
             .group(SettingGroup::new().item(item))
+    }
+
+    /// The running version and its install kind (and a test build's note),
+    /// then the phase with `Check for Updates` and, by phase and install
+    /// kind, `Restart Now` or `Open Release Page`.
+    fn updates(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
+        let Some(updates) = self.updates.clone() else {
+            return page;
+        };
+        let mut version = SettingItem::new(
+            "Version",
+            SettingField::render({
+                let line = updates.version_line();
+                move |_, _, _| div().text_size(px(13.)).child(line.clone())
+            }),
+        );
+        if let Some(note) = updates.test_note() {
+            version = version.description(note);
+        }
+        let can_check = updates.can_check();
+        let restart = updates.shows_restart();
+        let release_page = updates.release_page().map(str::to_owned);
+        let view = view.clone();
+        let status = SettingItem::new(
+            updates.status_text(),
+            SettingField::render(move |_, window, _| {
+                let button = |id: &'static str, label: &'static str, change: Change| {
+                    small_button(id, label).on_click(window.listener_for(
+                        &view,
+                        move |this, _: &ClickEvent, window, cx| {
+                            this.leave_field(window, cx);
+                            this.update_button(change.clone(), cx);
+                        },
+                    ))
+                };
+                div()
+                    .flex()
+                    .gap(px(4.))
+                    .children(restart.then(|| {
+                        button("update-restart", update::RESTART_LABEL, Change::RestartNow)
+                    }))
+                    .children(release_page.clone().map(|page| {
+                        button(
+                            "update-release-page",
+                            update::RELEASE_PAGE_LABEL,
+                            Change::OpenReleasePage(page),
+                        )
+                    }))
+                    .child(
+                        button("update-check", update::CHECK_LABEL, Change::CheckForUpdates)
+                            .disabled(!can_check),
+                    )
+            }),
+        )
+        .keywords([update::CHECK_LABEL, update::RESTART_LABEL, "Version"]);
+        page.group(SettingGroup::new().item(version).item(status))
     }
 
     /// The Tauri paragraph as the page's description, the read-only root

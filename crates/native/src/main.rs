@@ -63,6 +63,7 @@ mod tree;
 mod treekeys;
 #[cfg(test)]
 mod uitest;
+mod update;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -631,6 +632,12 @@ struct Handpic {
     /// The decoded neighbours of the current file, `None` under
     /// `--no-prefetch`.
     prefetch: Option<Ring<Held>>,
+    /// The update flow, the build's feed and keys, and the executable as
+    /// the launch found it (on Linux `current_exe` names the replaced file
+    /// once an update moved a new one in), which the restart relaunches.
+    updates: update::Updates,
+    update_source: Arc<handpic_backend::update::Source>,
+    update_exe: Option<PathBuf>,
     heading: Heading,
     /// `None` while `image` is.
     screen: Option<OnScreen>,
@@ -791,6 +798,9 @@ impl Handpic {
             window,
             |this, _, change, window, cx| match change {
                 Change::ClearCache => this.press_clear(cx),
+                Change::CheckForUpdates => this.check_for_updates(cx),
+                Change::RestartNow => this.restart_now(cx),
+                Change::OpenReleasePage(page) => cx.open_url(page),
                 Change::Closed => {
                     if this.clear.waiting() {
                         this.record_dropped(cache::CLEAR_LABEL, "the settings closed");
@@ -804,7 +814,36 @@ impl Handpic {
             },
         )
         .detach();
+        cx.spawn(async move |this, cx| {
+            this.update(cx, |this, cx| {
+                this.sync_updates(cx);
+                this.launch_update_check(cx);
+            })
+            .ok();
+        })
+        .detach();
+        let update_source = Arc::new(handpic_backend::update::source());
+        let update_exe = env::current_exe().ok();
+        let updates = update::Updates::new(
+            env!("CARGO_PKG_VERSION"),
+            update_exe
+                .as_deref()
+                .map_or(handpic_backend::update::InstallKind::Unknown, |exe| {
+                    handpic_backend::update::detect(exe)
+                }),
+            update_source
+                .test
+                .then(|| format!("{}/{}", update_source.feed.owner, update_source.feed.repo)),
+        );
+        log::info!(
+            "update: version {} install {:?}",
+            updates.version,
+            updates.kind
+        );
         Self {
+            updates,
+            update_source,
+            update_exe,
             mcp: mcp::start(
                 settings.mcp_enabled,
                 mcp_port,
@@ -2454,6 +2493,126 @@ impl Handpic {
         self.list(PathBuf::from(dir), true, cx).detach();
     }
 
+    /// Hands the update flow's state to the settings view.
+    fn sync_updates(&mut self, cx: &mut Context<Self>) {
+        let updates = self.updates.clone();
+        self.settings_view
+            .update(cx, |view, cx| view.show_updates(updates, cx));
+    }
+
+    /// The launch's check: a release build, not under `--auto`, at most once
+    /// an hour, the time written to the store first so a failed check is not
+    /// repeated at every launch either.
+    fn launch_update_check(&mut self, cx: &mut Context<Self>) {
+        let now = index::now_secs().max(0) as u64;
+        if !update::launch_checks(
+            !cfg!(debug_assertions),
+            !self.remember,
+            self.settings.update_checked_at,
+            now,
+        ) {
+            return;
+        }
+        self.settings.update_checked_at = Some(now);
+        self.settings.writes.set(update::LAST_CHECK_KEY, now.into());
+        self.check_for_updates(cx);
+    }
+
+    /// A check on a thread of its own, never two at once; nothing while an
+    /// installed update waits for the restart.
+    fn check_for_updates(&mut self, cx: &mut Context<Self>) {
+        if !self.updates.start_check() {
+            return;
+        }
+        let (source, version, events) = (
+            self.update_source.clone(),
+            self.updates.version.clone(),
+            self.events.clone(),
+        );
+        log::info!("update: checking {version}");
+        thread::spawn(move || {
+            let checked = handpic_backend::update::check(&source, &version);
+            let _ = events.unbounded_send(Event::Update(update::Message::Checked(checked)));
+        });
+        self.sync_updates(cx);
+        cx.notify();
+    }
+
+    /// A worker's answer; a check offering a release this install updates
+    /// to starts the install, downloaded, verified and put in place without
+    /// asking.
+    fn update_message(&mut self, message: update::Message, cx: &mut Context<Self>) {
+        match &message {
+            update::Message::Checked(Ok(offer)) => {
+                log::info!("update: offered {:?}", offer.as_ref().map(|o| &o.version));
+            }
+            update::Message::Checked(Err(e)) => log::warn!("update: check failed: {e}"),
+            update::Message::Installed(Ok(())) => log::info!("update: installed"),
+            update::Message::Installed(Err(e)) => log::warn!("update: install failed: {e}"),
+            update::Message::Progress(..) => {}
+        }
+        if let update::Next::Install(offer) = self.updates.apply(message) {
+            self.install_update(offer);
+        }
+        self.sync_updates(cx);
+        cx.notify();
+    }
+
+    fn install_update(&mut self, offer: handpic_backend::update::Offer) {
+        let Some(exe) = self.update_exe.clone() else {
+            let _ = self
+                .events
+                .unbounded_send(Event::Update(update::Message::Installed(Err(
+                    "the executable's path is unknown".into(),
+                ))));
+            return;
+        };
+        let (source, kind, version, events) = (
+            self.update_source.clone(),
+            self.updates.kind,
+            self.updates.version.clone(),
+            self.events.clone(),
+        );
+        log::info!(
+            "update: installing {} over {}",
+            offer.version,
+            exe.display()
+        );
+        thread::spawn(move || {
+            let progress = {
+                let events = events.clone();
+                let last = AtomicU64::new(u64::MAX);
+                move |done, total| {
+                    let step = update::progress_step(done, total);
+                    if last.swap(step, Ordering::Relaxed) != step
+                        || total.is_some_and(|total| done >= total)
+                    {
+                        let _ = events
+                            .unbounded_send(Event::Update(update::Message::Progress(done, total)));
+                    }
+                }
+            };
+            let installed =
+                handpic_backend::update::install(&source, &offer, kind, &exe, &version, progress);
+            let _ = events.unbounded_send(Event::Update(update::Message::Installed(installed)));
+        });
+    }
+
+    /// `Restart Now`: GPUI's restart, which quits through the quit handlers
+    /// (the scan's stop, the judgment stores', the sidecar writer's and the
+    /// settings writes' drains) and relaunches the executable the launch
+    /// found once this process has exited.
+    fn restart_now(&mut self, cx: &mut Context<Self>) {
+        if !self.updates.shows_restart() {
+            return;
+        }
+        if let Some(exe) = self.update_exe.clone() {
+            log::info!("update: restarting into {}", exe.display());
+            cx.set_restart_path(exe);
+        }
+        cx.restart();
+    }
+
     /// A setting changed in the settings modal or by `set_settings`: in force
     /// at once and written to the store. The theme is applied under the
     /// window's `appearance`.
@@ -2518,7 +2677,11 @@ impl Handpic {
                 }
                 self.settings.writes.set("mcpAllowDestructive", on.into());
             }
-            Change::ClearCache | Change::Closed => {}
+            Change::ClearCache
+            | Change::CheckForUpdates
+            | Change::RestartNow
+            | Change::OpenReleasePage(_)
+            | Change::Closed => {}
         }
     }
 
@@ -3243,6 +3406,7 @@ impl Handpic {
             Event::Changed(dir) => return self.changed(dir, cx),
             Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
+            Event::Update(message) => return self.update_message(message.clone(), cx),
             Event::FolderOp(message) => return self.folder_op_message(*message, cx),
             Event::TrashProgress { mode, done, total } => {
                 // The last message can land after the run came back.
@@ -3310,7 +3474,8 @@ impl Handpic {
             | Event::Mcp(_)
             | Event::FolderOp(_)
             | Event::TrashProgress { .. }
-            | Event::Perf(_) => {}
+            | Event::Perf(_)
+            | Event::Update(_) => {}
         }
         self.pump(cx);
         cx.notify();
@@ -4703,6 +4868,7 @@ impl Handpic {
                     }),
             )
             .chain(self.folderops.import_note())
+            .chain(self.updates.notice())
             .collect()
     }
 
@@ -4741,6 +4907,7 @@ impl Handpic {
             errors: self.pane_errors(),
             operation: self.operation_of(),
             pending: self.mcp_pending.as_ref().map(companion::previewed),
+            update: self.updates.state(),
         }
     }
 

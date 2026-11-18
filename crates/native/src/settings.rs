@@ -66,6 +66,9 @@ pub struct Settings {
     pub strip_height: f32,
     /// The theme and its mode (`theme`); the Appearance tab writes it back.
     pub theme: theme::Setting,
+    /// The last automatic update check, in Unix seconds
+    /// (`update::LAST_CHECK_KEY`); the launch's check writes it.
+    pub update_checked_at: Option<u64>,
     /// The writes to the store the values came from; a no-op when it did not
     /// open.
     pub writes: Writes,
@@ -280,6 +283,9 @@ fn from_values(values: &Map<String, Value>) -> Settings {
         pane_widths: PaneWidths::from_setting(values.get("panelWidths")),
         strip_height: stripheight::from_setting(values.get("stripHeight")),
         theme: theme::Setting::from_setting(values.get("theme")),
+        update_checked_at: values
+            .get(crate::update::LAST_CHECK_KEY)
+            .and_then(Value::as_u64),
         writes: Writes::spawn(None),
     }
 }
