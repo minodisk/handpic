@@ -272,7 +272,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder`, `windowBounds` and the last automatic update check (`updateCheckedAt`), and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore

@@ -1385,7 +1385,7 @@ impl Companion {
         and did nothing. `update` is the update flow's state: the running `version`, its \
         `install` kind, the `phase` (`idle`, `checking`, `available`, `downloading`, \
         `verifying`, `ready_to_restart` or `failed`), the `target` version, the download's \
-        `percent`, its `message` and the `release_page`; the check and the restart are the \
+        `percent`, its `message`, the `release_page` and `test_build` (whether the build trusts the test feed and key); the check and the restart are the \
         user's, on the Updates page of the settings."
     )]
     async fn get_status(&self) -> CallToolResult {

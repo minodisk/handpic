@@ -2080,7 +2080,8 @@ call.
   executable is a check of the plan's Step 7.
 - Rule: MCP. `get_status` carries the state (`update`: the version, the
   install kind, the phase, the target version, the percent, the message and
-  the release page); no tool checks or restarts, and the coverage table
+  the release page, and whether the build trusts the test feed and key);
+  no tool checks or restarts, and the coverage table
   excludes the page for that reason.
 
 ### The keymap is edited in the modal and replaced whole (Inferred)
