@@ -154,6 +154,28 @@
 - The smoke test passed 25 runs alone and 20 runs of the whole crate's
   tests (1054) on Windows; it takes ~50 ms.
 
+## Step 5
+
+- A minimal generated DNG is enough, so no binary RAW fixture was needed: a
+  little-endian TIFF whose IFD0 holds Orientation (SHORT, inline),
+  `JPEGInterchangeFormat` and its length, then a 64 x 48 `mozjpeg` JPEG.
+  `arw::parse` (which a DNG goes through) needs no Exif IFD, make or raw
+  data; the listing, pass 1, pass 2 and the preview read all take it, with
+  the status line empty and no failure. The Orientation tag also gives the
+  filter test its two shapes, so every test uses the same generator.
+- The filter test uses the orientation section through `apply_menu`
+  (`b` portrait current, Landscape on, lands on `c`, the next passing file),
+  not the menu's popover: an item's click needs its drawn coordinates.
+- A fresh settings store has auto-advance on (after `3` the current file was
+  `b`); the test reads file 0 rather than the current one.
+- The app's own `.xmp` write did not re-list the folder (`listing` stayed 1
+  for 1 s after the sidecar appeared), so the judgment test waits only for
+  the row, the sidecar and the advanced file's preview.
+- The settings modal is visible in `painted_quads`: 33 quads before
+  `ctrl+,`, 77 after.
+- The six UI tests take ~2 s; the set passed 20 runs in a row and the whole
+  crate's tests (1059) 5 runs on Windows.
+
 ## Deferred issues (todo candidates)
 
 - Step 2's failed-capture path (Linux's "not implemented for this platform",
@@ -162,3 +184,9 @@
   it is a tool error with that message, not a panic. Basis: the Done-when
   "A failed capture ... is a tool error"; files `crates/native/src/main.rs`
   (`screenshot`), `crates/native/src/screenshot.rs` (`capture`).
+- The macOS `native` CI job took 22m17s on PR #1165 (Step 4, which rebuilt
+  the GPUI crates with `test-support`) against the job's 30-minute timeout.
+  Watch its cold-cache duration on later PRs and consider caching more or
+  splitting the job if it nears the limit. Basis: the PR #1165 checks;
+  files `.github/workflows/ci.yml` (the `native` job), `crates/native/Cargo.toml`
+  (the `test-support` dev-dependency).

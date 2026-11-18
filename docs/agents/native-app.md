@@ -2527,6 +2527,49 @@ after about 11 ms, one retry) and fails the test if it is still held after
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.
 
+### The UI tests drive the view with keys over generated DNGs (Measured)
+
+The UI tests in `uitest.rs` check the wiring between the pure modules, not
+their rules, which those modules' own tests cover: a key through `key_down`
+and the keymap to `perform` or `judge`, a judgment to the view, the strip,
+the index row and the sidecar, a menu click to `refilter`, and the settings
+modal's hold on the keys.
+
+- Fixtures: `Ui::open_folder(&[(name, orientation)])` writes each file as the
+  smallest DNG the reader takes, generated at test time (a little-endian
+  TIFF whose IFD0 holds the Orientation tag and a `JPEGInterchangeFormat`
+  preview of 64 x 48 encoded with `mozjpeg`, no raw data), into a `photos`
+  folder in the `Ui`'s temporary folder. The listing, pass 1 (thumbnail,
+  facts, orientation), pass 2 and the preview read all take it, so the
+  folder is not view-only and the judgment keys work. The repository holds no
+  image file; do not add one.
+- Opening: `open_folder` opens through `open_from_tree`, a click in the
+  tree's path, and returns after `wait_idle`: the files listed, the view
+  idle (`status_of().idle()`, no listing, scan or run) and the current
+  file's preview on screen. Call `wait_idle` again at a test's end when a
+  key started a preview read, so the drop does not race it.
+- Input: `ui.cx.simulate_keystrokes` with GPUI's key names (`right`,
+  `escape`, `ctrl-,`, `cmd-,` on macOS), which reach `key_down` through the
+  focused view as a real key does. A mouse path whose target is drawn at
+  computed coordinates (a menu item, a strip cell) is called at its handler
+  through `Ui::update` instead (`apply_menu` for a filter click); it
+  `run_until_parked`s after.
+- Assertions: on the view's fields through `Ui::read` (`files`, `pager`,
+  `judgments`, `strip_cells()`), on the index through `entries_of` on the
+  view's `reader` within `wait_until` (the judgment queue is a thread), and
+  on `window.painted_quads()` where a layer's presence is the point (the
+  settings modal drew 33 -> 77 quads).
+- A fresh settings store has auto-advance on: a star key moves to the next
+  file. The app's own sidecar write did not re-list the folder (watched for
+  1 s after the `.xmp` appeared).
+- The six tests take about 2 s together; the set passed 20 runs in a row
+  and the whole crate 5 runs on Windows.
+
+They do not cover pixels (the `screenshot` tool's), pointer hit testing,
+drags and scrolling, the tree's roots (the real machine's), the OS folder
+picker and notifications, a real RAW's maker notes, AF point and faces (the
+generated preview has none), the MCP companion's transport, or timings.
+
 ### There is no after-`Present` hook (Measured)
 
 `cx.defer` from the paint closure runs after the frame's `draw()` and
