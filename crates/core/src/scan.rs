@@ -752,7 +752,8 @@ pub enum Priority {
     /// Linux nice 5.
     BelowNormal,
     /// Windows `THREAD_PRIORITY_LOWEST` (not `IDLE`, which can starve behind
-    /// any other process), macOS `QOS_CLASS_BACKGROUND`, Linux nice 10.
+    /// any other process), macOS `QOS_CLASS_UTILITY` at relative priority
+    /// `LOWEST_RELATIVE_PRIORITY`, Linux nice 10.
     Lowest,
 }
 
@@ -775,16 +776,20 @@ fn lower_current_priority(lowest: bool) -> Result<(), String> {
     set_current_thread_priority(ThreadPriority::Os(level.into())).map_err(|e| e.to_string())
 }
 
+/// `Priority::Lowest`'s relative priority within `QOS_CLASS_UTILITY` on
+/// macOS, below `BelowNormal`'s 0 (the floor is -15). Not
+/// `QOS_CLASS_BACKGROUND`, which throttled one file's analysis 6 to 14 times
+/// on the macOS CI runner.
+#[cfg(target_os = "macos")]
+const LOWEST_RELATIVE_PRIORITY: libc::c_int = -5;
+
 #[cfg(target_os = "macos")]
 fn lower_current_priority(lowest: bool) -> Result<(), String> {
-    use libc::qos_class_t::{QOS_CLASS_BACKGROUND, QOS_CLASS_UTILITY};
-    let class = if lowest {
-        QOS_CLASS_BACKGROUND
-    } else {
-        QOS_CLASS_UTILITY
-    };
+    let relative = if lowest { LOWEST_RELATIVE_PRIORITY } else { 0 };
     // SAFETY: sets the calling thread's own QoS class; no pointers involved.
-    match unsafe { libc::pthread_set_qos_class_self_np(class, 0) } {
+    match unsafe {
+        libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, relative)
+    } {
         0 => Ok(()),
         e => Err(std::io::Error::from_raw_os_error(e).to_string()),
     }
@@ -1020,7 +1025,30 @@ mod tests {
         inherited.max(if lowest { 10 } else { 5 })
     }
 
-    #[cfg(any(windows, target_os = "linux"))]
+    /// The calling thread's QoS class and relative priority.
+    #[cfg(target_os = "macos")]
+    fn worker_level() -> (u32, i32) {
+        let mut class = libc::qos_class_t::QOS_CLASS_UNSPECIFIED;
+        let mut relative = 0;
+        // SAFETY: reads the calling thread's own QoS into the two locals.
+        let e = unsafe {
+            libc::pthread_get_qos_class_np(libc::pthread_self(), &mut class, &mut relative)
+        };
+        assert_eq!(e, 0);
+        (class as u32, relative)
+    }
+
+    #[cfg(target_os = "macos")]
+    fn expected_level(lowest: bool, _inherited: (u32, i32)) -> (u32, i32) {
+        let utility = libc::qos_class_t::QOS_CLASS_UTILITY as u32;
+        if lowest {
+            (utility, super::LOWEST_RELATIVE_PRIORITY)
+        } else {
+            (utility, 0)
+        }
+    }
+
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     #[test]
     fn every_worker_runs_at_the_priority_it_was_given() {
         let paths: Vec<PathBuf> = (0..32).map(|i| PathBuf::from(format!("{i}.ARW"))).collect();

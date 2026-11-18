@@ -748,7 +748,8 @@ figures in "Face detection cost" include costs that pass no longer carries.
 
 In the app both passes run below normal OS priority (on Windows
 `THREAD_PRIORITY_BELOW_NORMAL` for the first, `THREAD_PRIORITY_LOWEST` for
-the second; on macOS the `UTILITY` and `BACKGROUND` QoS classes; on Linux a
+the second; on macOS the `UTILITY` QoS class, the second at a relative
+priority of -5; on Linux a
 nice of at least 5 and 10), and they take the shown file and the strip's visible cells before
 the rest. `handpic-cli scan` runs at normal priority and in
 file-name order, so their numbers stay comparable with the tables above.

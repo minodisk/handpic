@@ -116,9 +116,15 @@ What the investigation established (from the code and the CI logs):
         hunt before the final commit; the test logger and the idle time in
         the timeout message stay.
     - Then fix on that evidence:
-      - Pass 2 confirmed slow under `QOS_CLASS_BACKGROUND` (decided): option
-        A below, the UI tests' scans at normal priority through a narrow
-        seam.
+      - Pass 2 confirmed slow under `QOS_CLASS_BACKGROUND`: option D below
+        (the user's decision once the evidence was in, replacing the
+        earlier choice of A): pass 2 at `QOS_CLASS_UTILITY` with a relative
+        priority of -5 on macOS, pass 1 unchanged at `UTILITY` 0, the
+        priority test given a macOS branch. Evidence (run 44345428381
+        attempt 2): pass 2 ended in every test, after 15 s to 44 s for 2 to
+        4 files, and one file's analysis took 0.5 s to 0.9 s at normal
+        priority against 3.2 s to 8.9 s at `Priority::Lowest` on the same
+        runner (see `learnings.md`).
       - Pass 2 stuck: an app fix with a unit test; update this plan first.
       - Do not raise `WAIT` alone without evidence that the scan finishes in
         a bounded time.
@@ -142,8 +148,10 @@ What the investigation established (from the code and the CI logs):
   show pass 2 stuck rather than slow, the fix is an app fix with a unit test
   and the options below do not apply; update the plan then.
 - Fix options if pass 2 is confirmed slow under `QOS_CLASS_BACKGROUND`;
-  A is chosen.
-  - A (chosen). Run the UI tests' scans at normal priority through a narrow
+  A was chosen first, then D replaced it on the user's decision once the
+  diagnostics confirmed the throttling, since D also spares users the slow
+  pass 2.
+  - A. Run the UI tests' scans at normal priority through a narrow
     seam: the passes' priority becomes a parameter of `index::run_scan` /
     `index::run_faces_scan` (or of `Scan::start`) that the app passes as
     today and the harness overrides. Removes the throttling from the tests.
@@ -157,15 +165,15 @@ What the investigation established (from the code and the CI logs):
     `[profile.dev.package]` (the tract crates, `ndarray`, `handpic-core`).
     Helps only if the throttle is on CPU; a longer cold build on a job near
     its limit.
-  - D. Change the app: pass 2 at `QOS_CLASS_UTILITY` on macOS. Changes the
-    paging latency the priority was chosen for, which needs measuring on a
-    Mac; out of this plan's reach.
+  - D (chosen). Change the app: pass 2 at `QOS_CLASS_UTILITY` on macOS.
+    Changes the paging latency the priority was chosen for, which needs
+    measuring on a Mac (a pending manual check in `learnings.md`); a
+    relative priority of -5 keeps it below pass 1.
 - Product question raised by the finding: if pass 2 of a 3 KB file takes
   more than 10 s on an idle macOS machine at `QOS_CLASS_BACKGROUND`, users
-  may see "analyzing 0/N" for long on macOS. This plan does not change that;
-  if the diagnostics confirm it, record it in `learnings.md` as a deferred
-  issue with the measured times (it becomes a todo item at the wrap-up)
-  rather than change the QoS here.
+  may see "analyzing 0/N" for long on macOS. The diagnostics confirmed it
+  and option D changes the QoS here; what is left is the paging latency on a
+  real Mac (a pending manual check in `learnings.md`).
 - Order with PR #1171 (`chore/archive-native-qa`), which adds the todo item
   "### Native: the uitest tests timed out once on macOS CI waiting for the
   listing (native-qa)" and whose own macOS check is one of the failing runs

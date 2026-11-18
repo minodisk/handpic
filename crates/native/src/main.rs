@@ -420,9 +420,6 @@ struct Handpic {
     settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
-    /// The OS priority of the scan's passes: `Priorities::APP`, normal in the
-    /// UI tests, where macOS throttled pass 2's `QOS_CLASS_BACKGROUND`.
-    scan_priorities: scan::Priorities,
     /// The pending `ScanFocus` update, replaced on every change.
     scan_focus: Option<Task<()>>,
     next_scan: u64,
@@ -856,7 +853,6 @@ impl Handpic {
             settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: running,
-            scan_priorities: scan::Priorities::APP,
             scan_focus: None,
             next_scan: 0,
             dir: None,
@@ -3070,7 +3066,6 @@ impl Handpic {
                     listed.dir,
                     todo,
                     focus,
-                    self.scan_priorities,
                     self.events.clone(),
                 );
                 self.scan.put(scan);

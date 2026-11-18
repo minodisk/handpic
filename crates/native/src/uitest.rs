@@ -10,17 +10,12 @@ use std::{
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
-use handpic_core::{Flag, scan::Priority};
+use handpic_core::Flag;
 use tempfile::TempDir;
 
 use crate::{
-    Handpic,
-    args::Args,
-    entries_of, file_name,
-    filter::Orientation,
-    menu, open_index, open_main,
-    scan::{Priorities, Running},
-    settings,
+    Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
+    scan::Running, settings,
 };
 
 /// How long `wait_until` waits on the app's own threads before failing.
@@ -112,15 +107,8 @@ impl Ui {
         let (window, view) = cx
             .update(|cx| open_main(Args::default(), index, settings, None, cx))
             .unwrap();
-        let mut cx = VisualTestContext::from_window(window, &cx);
-        // macOS throttles pass 2's `QOS_CLASS_BACKGROUND` past `WAIT`.
-        let scan = view.update(&mut cx, |view, _| {
-            view.scan_priorities = Priorities {
-                extract: Priority::Normal,
-                faces: Priority::Normal,
-            };
-            view.scan.clone()
-        });
+        let cx = VisualTestContext::from_window(window, &cx);
+        let scan = view.read_with(&cx, |view, _| view.scan.clone());
         cx.run_until_parked();
         Self {
             cx,

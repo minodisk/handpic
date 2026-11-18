@@ -42,11 +42,21 @@ normal against 1.5 s `Lowest`: Windows `THREAD_PRIORITY_LOWEST` costs little.
 
 ### Fix
 
-Option A of the plan: the passes' priority is a parameter of
-`index::run_scan` and `index::run_faces_scan` (the backend's tests pass the
-app's values), `Scan::start` takes `scan::Priorities` (`APP`: pass 1
-`BelowNormal`, pass 2 `Lowest`), the view holds `scan_priorities`, and
-`Ui::open` sets both passes to `Priority::Normal`.
+Option D, on the user's decision once the evidence was in (option A was
+implemented first as `9a4a6752`, the passes' priority a parameter of
+`index::run_scan` / `index::run_faces_scan` that the harness set to
+`Normal`; its CI run 44409033574 was cancelled and the code reverted, since
+D also spares users the slow pass 2): on macOS `Priority::Lowest` is now
+`QOS_CLASS_UTILITY` at relative priority -5 (`LOWEST_RELATIVE_PRIORITY` in
+`crates/core/src/scan.rs`), `BelowNormal` stays `UTILITY` at 0, and
+`every_worker_runs_at_the_priority_it_was_given` gained a macOS branch that
+reads the class and relative priority back with `pthread_get_qos_class_np`.
+`WAIT` stays 10 s. The harness keeps the test logger and the cascade fix; the
+grace wait and the probe were hunt-only and are gone.
+
+`cargo check --target aarch64-apple-darwin` cannot run on this Windows host
+(`mozjpeg-sys` needs a C compiler for the target), so the macOS branch is
+only compiled and run by the macOS CI jobs.
 
 ### Notes
 
@@ -58,21 +68,20 @@ app's values), `Scan::start` takes `scan::Priorities` (`APP`: pass 1
 
 ## Deferred issues (todo candidates)
 
-- macOS users may see `analyzing 0/N` for long: pass 2 runs at
-  `Priority::Lowest`, `QOS_CLASS_BACKGROUND` on macOS, which throttled it
-  heavily on the macOS CI runner. Measured there (PR #1173, run 44345428381
-  attempt 2, job 134951506173): one tiny generated DNG's `extract_analysis`
-  took 3.2 s to 8.9 s at `Lowest` against 0.5 s to 0.9 s at normal priority
-  on the same runner, and pass 2 of 2 to 4 files 15 s to 44 s (pass 1 at
-  `QOS_CLASS_UTILITY`: milliseconds). Not measured on a real Mac. The plan's
-  option D (pass 2 at `QOS_CLASS_UTILITY` on macOS, perhaps with a negative
-  relative priority through `pthread_set_qos_class_self_np(class, relpri)`;
-  `libc` has no `QOS_MIN_RELATIVE_PRIORITY`, and the
-  `every_worker_runs_at_the_priority_it_was_given` test is
-  `cfg(windows, linux)` only) changes the paging latency the priority was
-  chosen for, so it needs measuring on a Mac first. The UI tests no longer
-  see it (they run the scan at normal priority). Related files:
-  `crates/core/src/scan.rs` (`lower_current_priority`),
-  `crates/native/src/scan.rs` (`Priorities::APP`),
+- Pending manual check (macOS, real machine): the paging latency with pass 2
+  at `QOS_CLASS_UTILITY` relative priority -5 instead of
+  `QOS_CLASS_BACKGROUND`. Steps: open a large RAW folder with a cold index in
+  the native app and page through it while `scanning N / M` and then
+  `analyzing N / M` run; expect paging to stay as responsive as on Windows
+  (the `page` timing lines in `Handpic.log`), the analysis pass not to crawl
+  and no `ran at normal priority` warning in the log. Basis: option D of this
+  plan, chosen on the CI evidence alone (the throttling was measured on the
+  macOS CI runner, not on a Mac; see "Cause" above). At the wrap-up, extend
+  the existing todo item "### Core: real-device check of the scan priority's
+  macOS QoS branch" (`todo.md`) with this rather than adding a duplicate: its
+  check still names `QOS_CLASS_BACKGROUND` and its "move it to
+  `QOS_CLASS_UTILITY`" remedy is now done. The step's checkbox was ticked on
+  the automated criteria. Related files: `crates/core/src/scan.rs`
+  (`lower_current_priority`, `LOWEST_RELATIVE_PRIORITY`),
   `docs/agents/shared-crates.md` ("The scan pool's priority levels"),
-  `docs/humans/performance.md` and `docs/humans/performance.ja.md`.
+  `docs/humans/performance.md`, `docs/humans/performance.ja.md`.

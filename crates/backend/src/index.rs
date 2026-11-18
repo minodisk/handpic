@@ -2201,9 +2201,9 @@ pub type DirtyRow = (String, Option<i8>, Flag, Option<String>, bool);
 /// file and once more after the trailing flush. `ready` holds the paths whose
 /// rows a batch committed since the previous notification, so a path is
 /// reported only once the index can answer for it; a batch whose write failed
-/// is not reported at all. Its workers run at `priority` (the app's
-/// `Priority::BelowNormal`, so the viewer's preview decode and the UI win the
-/// cores they contend for) and take the files `focus` lists first.
+/// is not reported at all. Its workers run at `Priority::BelowNormal`, so the
+/// viewer's preview decode and the UI win the cores they contend for, and take
+/// the files `focus` lists first.
 ///
 /// Once `cancel` is set, files still in flight are abandoned at their next
 /// pipeline stage: they get no row, are not in `ready` and are not counted in
@@ -2219,7 +2219,6 @@ pub fn run_scan<P>(
     dir: &str,
     files: &[FileStat],
     threads: usize,
-    priority: Priority,
     focus: &ScanFocus,
     cancel: &AtomicBool,
     progress_interval: Duration,
@@ -2288,7 +2287,14 @@ where
     };
 
     let started = Instant::now();
-    match extract_all(&paths, threads, priority, focus, on_item, cancel) {
+    match extract_all(
+        &paths,
+        threads,
+        Priority::BelowNormal,
+        focus,
+        on_item,
+        cancel,
+    ) {
         Ok(Some(e)) => log::warn!("scan of {dir} ran at normal priority: {e}"),
         Ok(None) => {}
         Err(e) => log::error!("scan of {dir} failed: {e}"),
@@ -2323,16 +2329,14 @@ where
 /// retried until that version moves. A file abandoned mid-pipeline by
 /// `cancel` is neither written nor counted, the way `run_scan` treats it, so
 /// it keeps its old `faces_extractor`. The same no-panic rule as `run_scan`
-/// holds for `on_item`. Its workers run at `priority` (the app's
-/// `Priority::Lowest`, below the first pass's) and take the files `focus`
-/// lists first.
+/// holds for `on_item`. Its workers run at `Priority::Lowest`, below the
+/// first pass's, and take the files `focus` lists first.
 #[allow(clippy::too_many_arguments)]
 pub fn run_faces_scan<P>(
     index: &Mutex<Index>,
     dir: &str,
     paths: &[String],
     threads: usize,
-    priority: Priority,
     focus: &ScanFocus,
     cancel: &AtomicBool,
     progress_interval: Duration,
@@ -2421,7 +2425,14 @@ where
     };
 
     let started = Instant::now();
-    match extract_analysis_all(&path_bufs, threads, priority, focus, on_item, cancel) {
+    match extract_analysis_all(
+        &path_bufs,
+        threads,
+        Priority::Lowest,
+        focus,
+        on_item,
+        cancel,
+    ) {
         Ok(Some(e)) => log::warn!("faces scan of {dir} ran at normal priority: {e}"),
         Ok(None) => {}
         Err(e) => log::error!("faces scan of {dir} failed: {e}"),
@@ -5626,7 +5637,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5683,7 +5693,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5719,7 +5728,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5765,7 +5773,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5809,7 +5816,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &cancel,
             Duration::ZERO,
@@ -5863,7 +5869,6 @@ pub(crate) mod tests {
             "d",
             &files,
             2,
-            Priority::BelowNormal,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5895,7 +5900,6 @@ pub(crate) mod tests {
             "d",
             &paths,
             2,
-            Priority::Lowest,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -5989,7 +5993,6 @@ pub(crate) mod tests {
             "d",
             &todo,
             2,
-            Priority::Lowest,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
@@ -6023,7 +6026,6 @@ pub(crate) mod tests {
             "d",
             &paths,
             2,
-            Priority::Lowest,
             &ScanFocus::default(),
             &cancel,
             Duration::ZERO,
@@ -6078,7 +6080,6 @@ pub(crate) mod tests {
             "d",
             &paths,
             2,
-            Priority::Lowest,
             &ScanFocus::default(),
             &AtomicBool::new(false),
             PROGRESS_INTERVAL,
