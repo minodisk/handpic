@@ -122,7 +122,23 @@ impl Ui {
             if self.read(&done) {
                 return;
             }
-            assert!(started.elapsed() < WAIT, "timed out waiting for {what}");
+            if started.elapsed() >= WAIT {
+                let state = self.read(|view| {
+                    let s = view.status_of();
+                    format!(
+                        "dir {:?}, listed {}, listing {}, scan {:?}, running {}, opening {:?}, screen {:?}, current {:?}",
+                        view.dir,
+                        view.all.len(),
+                        s.listing,
+                        s.scan,
+                        s.running,
+                        s.opening,
+                        view.screen.as_ref().map(|s| &s.path),
+                        view.current_path(),
+                    )
+                });
+                panic!("timed out waiting for {what}: {state}");
+            }
             thread::sleep(Duration::from_millis(10));
         }
     }
