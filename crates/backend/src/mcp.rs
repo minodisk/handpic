@@ -1588,7 +1588,12 @@ impl Companion {
 #[tool_router(router = screenshot_router)]
 impl Companion {
     #[tool(
-        description = "A debugging aid: Handpic's window as a PNG of its last drawn frame, in         device pixels, scaled down so its long edge is at most `long_edge` (1568 by default,         256 to 4096) and never scaled up, followed by its width and height. Present only in a         build of Handpic with the `screenshot` feature; an error on Linux. A call right after         another tool can show the frame before that tool's change: call again to see it."
+        description = "A debugging aid: Handpic's window as a PNG of its last drawn frame, in \
+          device pixels, scaled down so its long edge is at most `long_edge` \
+          (1568 by default, 256 to 4096) and never scaled up, followed by its \
+          width and height. Present only in a build of Handpic with the \
+          `screenshot` feature; an error on Linux. A call right after another \
+          tool can show the frame before that tool's change: call again to see it."
     )]
     async fn screenshot(&self, Parameters(args): Parameters<ScreenshotArgs>) -> CallToolResult {
         let long_edge = screenshot_long_edge(args.long_edge);

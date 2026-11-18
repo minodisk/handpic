@@ -7,9 +7,10 @@
   height)`; Step 2's native side should answer through it rather than
   building the JSON itself.
 - `with_screenshot` adds `screenshot_router` to whatever tools the server
-  already lists, so it composes with `with_all_tools` in either order
-  (`Mcp::new(..).with_screenshot()` lists eight tools). The native app should
-  call it after `with_all_tools`, which replaces the router.
+  already lists (`Mcp::new(..).with_screenshot()` alone lists eight tools).
+  It must come after `with_all_tools`, which replaces the router and would
+  drop the tool: `Mcp::new(..).with_screenshot().with_all_tools()` does not
+  list `screenshot`.
 - The tool uses `Bridge::call` (the 5 s `BRIDGE_TIMEOUT`); Step 2 measures
   whether that is enough.
 - A Python heredoc turned `b"\x89PNG"` into a raw 0x89 byte, which rustc
