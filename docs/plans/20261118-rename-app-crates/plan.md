@@ -347,3 +347,5 @@ and minus binary files.
   `crates/app/target`.
 
 ## Progress
+
+(2026-11-19) Step 1 complete
