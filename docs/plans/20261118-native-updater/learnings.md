@@ -82,3 +82,19 @@
 - `HANDPIC_UPDATE_TEST_REPO` goes through `$GITHUB_ENV` from a conditional
   step, so a build without the input does not see the variable at all
   (rather than an empty one). Nothing reads it before Step 3.
+- `Package` runs on the branch at 7e557cce:
+  - 44296484243 (`update_test_repo=minodisk/handpic-update-test`), green on
+    the first try: every leg built with `HANDPIC_UPDATE_TEST_REPO` set,
+    `sign.sh` printed zipsign's `OK` for the Linux tarball, both macOS
+    tarballs and both Windows ZIPs (building zipsign took 10 to 30 s per
+    leg), the runner's `pwsh` `Expand-Archive` opened both signed ZIPs (the
+    setup ZIP one entry, the setup's digest), the `.app` extracted from each
+    signed macOS tarball passed `codesign --verify --strict` (no `._`
+    entries), `install.sh` installed the signed tarball in the `linux` leg
+    and again in `checksums` with the digest from `SHA256SUMS`, which lists
+    the ten assets including the two new ones.
+  - 44296501086 (no input): green after one rerun. The first attempt's
+    `macos-latest` leg failed in `hdiutil create` with "No space left on
+    device" while writing the DMG (before the new tarball step; the same leg
+    of the other run passed), so it was taken for a runner flake and the
+    failed job rerun; it passed. No signing step ran.
