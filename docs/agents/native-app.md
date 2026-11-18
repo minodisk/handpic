@@ -3228,8 +3228,10 @@ pinned rev has no text input of its own. The state registers itself as the
 window's input handler while focused, so the platform's text input and the
 IME reach its `EntityInputHandler`. The view reads the text with `value`, sets
 it with `set_value` (which emits no `Change` and clears the undo history, so
-`settingsview.rs`'s `show` leaves a field already showing the text alone) and
-subscribes to `InputEvent`:
+`settingsview.rs`'s `show` leaves a field already showing the text alone; a
+value the main view learns in a handler with no `Window` (the MCP page's URL,
+from `scanned`'s state) is synced in `SettingsView::render`, where a `Window`
+exists) and subscribes to `InputEvent`:
 
 | Owner's meaning | `InputEvent` / key |
 | --- | --- |

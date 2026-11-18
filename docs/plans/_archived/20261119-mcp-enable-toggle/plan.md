@@ -158,3 +158,5 @@ start (say, the port is in use). MCP clients still cannot change `mcpEnabled`.
   free port keeps it from colliding with an installed Handpic on 41917.
 
 ## Progress
+
+- (2026-11-19) Step 1 complete

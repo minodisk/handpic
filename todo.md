@@ -2424,18 +2424,6 @@ Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md`.
 
 ---
 
-### Native: the MCP companion has no switch in the app
-
-`mcpEnabled` is read only at startup from the settings store. A new store seeds it from an earlier install's `settings.json`, and neither the `MCP` page nor `set_settings` sets it (the companion's coverage table lists it as excluded). A user without an earlier install cannot turn the server on except by editing the store. The remove-tauri plan's Step 5 documents this as is in `README.md` / `usage.md` and their `.ja.md`. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/mcp.rs`, `crates/native/src/companion.rs` (coverage table), `docs/humans/usage.md`.
-
-#### TODO
-
-- [ ] Either add the switch to the `MCP` page (with the URL, status and client examples the Tauri `MCP` tab had), or decide it stays hidden and keep `usage.md` as is.
-
----
-
 ### Native: the keymap's `compare` action is bound to `v` and listed, but does nothing
 
 The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The native app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
