@@ -30,6 +30,9 @@ tokio = { version = "1", features = ["rt", "sync"] }
 screenshot = ["dep:gpui-pre-platform", "image/png"]
 
 [dev-dependencies]
+# GPUI's `TestAppContext` for the UI tests, through the same crate the
+# `screenshot` feature turns `test-support` on in (see there).
+gpui-pre-platform = { version = "=0.3.12", features = ["test-support"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 

@@ -374,8 +374,10 @@ ci:local` (its `clippy native screenshot` check, selected wherever `clippy
 native` is) on a Windows host. Windows is where the `screenshot` tool was
 checked live, Linux's `render_to_image` is not implemented, and the macOS leg
 already compiles a second variant of the app for its bundle step. The feature
-turns on `test-support` in a direct `gpui-pre-platform` dependency, so this
-run checks the GPUI platform crates and everything above them a second time.
+turns on `test-support` in a direct `gpui-pre-platform` dependency, the same
+crate and feature the UI tests' dev-dependency turns on (see "The main view
+opens on GPUI's test platform"), so the default `clippy --all-targets` already
+builds the GPUI crates that way and this run only re-checks `handpic-native`.
 
 - Rule: keep the feature command string identical in `ci.yml`,
   `tools/ci/local.sh` and `native:check`.
@@ -2433,6 +2435,55 @@ Measured in a debug build on a 5058x1440 maximized window: the capture about
 PNG encode took 4.1 s at 4096; the resize now goes through `DynamicImage`
 (compiled in the optimized `image` crate) and the encoding crates are in
 `[profile.dev.package]`.
+
+### The main view opens on GPUI's test platform (Measured)
+
+`uitest.rs`'s `Ui::open` builds the real `Handpic` view on GPUI's
+`TestAppContext` (`VisualTestContext` as its window handle) through
+`open_main`, the function `main` calls too: `gpui_kit::init`, the key
+bindings, `theme::apply` and `gpui_kit::open_window`, which wraps the view in
+`Root`. The window used to be opened inline in `main`'s `run` closure; that
+was the only thing in the way. `main` keeps what only a launch does: the
+command line, the logger, the panic hook, the app identity, the quit on the
+window's close, the assets and `activate`. `Ui` gives `open_main` an
+`open_index` and a `settings::load` over files in a temporary folder and
+`Args::default()`, so `remember` is on against that temporary store, no MCP
+thread starts and no folder opens.
+
+`TestAppContext` needs gpui-pre's `test-support`. `gpui-kit/test-support`
+fails to resolve (the gpui-fast pin, see the `render_to_image` entry), so the
+dev-dependency is `gpui-pre-platform` with `test-support`, as the
+`screenshot` feature's; `Cargo.lock` does not change. `cargo test` and
+`cargo clippy --all-targets` build the GPUI crates with it, `cargo run`,
+`cargo build`, the release build and the packages without. gpui-base's
+`test-support` stays off, so the tests draw the same elements as the app.
+The test app has no asset source (`Icons` is given to `Application` only), so
+the SVG icons do not load there.
+
+The test platform runs the foreground and background executors, its timers
+included (`run_until_parked` advances the clock to the next timer). The
+view's eviction, watchers, sidecar writer, judgment queue, settings `Writes`
+and scan run on `std::thread`s that it does not run; their results reach the
+view through its channel. `Ui::open` calls `allow_parking`, and
+`Ui::wait_until` runs `run_until_parked`, checks a condition on the view and
+sleeps 10 ms, failing after 10 s. `read_roots` lists the real home directory
+and volumes: assert nothing about the tree's roots.
+
+`Ui`'s drop releases its view handle and calls `TestAppContext::quit`, which
+runs the quit handlers (the scan stop, the stores and the writer drained, the
+settings writes drained): about 0.5 ms with nothing queued, asserted under
+1 s, below every drain's 2 s timeout. The writer and settings threads close
+their SQLite files only after the senders the view held are dropped, a little
+after the quit, so the drop retries removing the temporary folder (gone
+after about 11 ms, one retry) and fails the test if it is still held after
+10 s; nothing is written outside it. The smoke test passed 25 runs alone and
+20 runs of the whole crate's tests on Windows.
+
+- Rule: build a UI test on `Ui`, wait on the app's threads with
+  `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
+- Rule: non-test code must not use a test-only GPUI API. `cargo test` and
+  `clippy --all-targets` see `test-support` and pass it; only a plain build
+  (the macOS job's bundle step, `cargo build`) fails.
 
 ### There is no after-`Present` hook (Measured)
 
