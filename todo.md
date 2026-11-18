@@ -679,11 +679,11 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
-`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`). CI covers the priority read back inside a worker on Windows and Linux and the macOS compilation. The macOS QoS branch was never exercised on a real machine. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost").
+`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI). CI covers the priority read back inside a worker on Windows and Linux and the macOS compilation. The macOS QoS branch was never exercised on a real machine. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost").
 
 #### TODO
 
-- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_BACKGROUND`, which also throttles disk IO) not to crawl; if it does, move it to `QOS_CLASS_UTILITY` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
+- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay responsive; if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
 ### Native: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
 

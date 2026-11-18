@@ -89,7 +89,8 @@ What the investigation established (from the code and the CI logs):
     - Files: `crates/native/src/uitest.rs` for the diagnostics and the
       harness side of the fix; `docs/agents/native-app.md`. Which other files
       change depends on the fix chosen below. This PR does not touch
-      `todo.md` (see "Trade-offs and risks" for the order with PR #1171).
+      `todo.md` except the macOS QoS real-device item, rewritten to the new QoS
+      (see "Trade-offs and risks" for the order with PR #1171).
     - Diagnostics first, as the PR's first commits, since no macOS host
       exists:
       - No logger is installed under `cargo test` (`logger::install` is
