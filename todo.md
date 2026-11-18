@@ -2399,3 +2399,51 @@ Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/n
 #### TODO
 
 - [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/native/icons/` reads Handpic and the derivation is written down.
+
+### Native: real-device check of the index move out of the `.native` folder (remove-tauri Step 3)
+
+The remove-tauri plan's Step 3 put the native app's default index and log under `dev.minodisk.handpic` and added `datadir::move_native_index`, which `open_index` runs only without `--index`. It moves a `dev.minodisk.handpic.native` index into the plain folder and renames an index already there aside, with the `-wal` / `-shm` files. Unit tests over temp folders cover the move and the aside rename. Never exercised: the move on a real machine holding a `main` build's `.native` index and a Tauri build's index in the plain folder. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
+
+Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs` (`open_index`).
+
+#### TODO
+
+- [ ] On Windows, with an index under `%LOCALAPPDATA%\dev.minodisk.handpic.native\` (from a `main` build) and optionally a Tauri build's under `%LOCALAPPDATA%\dev.minodisk.handpic\`, launch the native app without `--index`. Expect `Handpic.log` (now under `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`) to show `index: moved in from the .native folder` (with the aside name when a Tauri index was there). Expect `index.sqlite` (and its `-wal` / `-shm`) gone from `.native`, with that folder kept because the old `logs\` is still in it. Expect the Tauri index kept as `index-aside-1.sqlite`, and the open folder's thumbnails shown without a cold pass 1.
+
+---
+
+### Native: the issue template says `Help > Open Log Folder`, which the native app does not have
+
+`.github/ISSUE_TEMPLATE/os.yml` tells the reporter that `Help > Open Log Folder` opens the log folder. Nothing under `crates/native/src` names it, because only the Tauri app had it. `docs/agents/app-log.md`'s "Where the file is" bullets say the same. Found by the remove-tauri plan's Step 3 while checking the template's log paths, which are correct. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
+
+Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md`.
+
+#### TODO
+
+- [ ] Either add an equivalent to the native app (a way to open the log folder) or drop the sentence from the template and from `app-log.md`.
+
+---
+
+### Native: the MCP companion has no switch in the app
+
+`mcpEnabled` is read only at startup from the settings store. A new store seeds it from an earlier install's `settings.json`, and neither the `MCP` page nor `set_settings` sets it (the companion's coverage table lists it as excluded). A user without an earlier install cannot turn the server on except by editing the store. The remove-tauri plan's Step 5 documents this as is in `README.md` / `usage.md` and their `.ja.md`. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
+
+Files: `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/mcp.rs`, `crates/native/src/companion.rs` (coverage table), `docs/humans/usage.md`.
+
+#### TODO
+
+- [ ] Either add the switch to the `MCP` page (with the URL, status and client examples the Tauri `MCP` tab had), or decide it stays hidden and keep `usage.md` as is.
+
+---
+
+### Native: the keymap's `compare` action is bound to `v` and listed, but does nothing
+
+The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The native app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
+
+Files: `crates/backend/src/shortcuts.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/main.rs` (`key_down`), `docs/humans/usage.md`.
+
+#### TODO
+
+- [ ] Either hide unimplemented actions on the `Keyboard Shortcuts` page, or implement compare.
+
+---
