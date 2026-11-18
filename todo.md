@@ -2447,3 +2447,39 @@ Files: `crates/backend/src/shortcuts.rs`, `crates/native/src/settingsmodal.rs`, 
 - [ ] Either hide unimplemented actions on the `Keyboard Shortcuts` page, or implement compare.
 
 ---
+
+### Native: real-device check of the screenshot tool's failed-capture path on Linux (native-qa)
+
+#### Background
+
+The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--features screenshot` build of `crates/native`. Its Done-when says a failed capture (Linux's "not implemented for this platform", a lost device) is a tool error with a message, not a panic. The capture was exercised on Windows only. There was no Linux host, so the error path was reasoned about from the code, and no CI job builds or runs the feature on Linux. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `crates/native/src/main.rs` (`screenshot`), `crates/native/src/screenshot.rs` (`capture`).
+
+#### TODO
+
+- [ ] On Linux, build the app with `--features screenshot` (`cargo run --features screenshot -- --mcp-port <port>` with `mcpEnabled` on), call the `screenshot` tool through the MCP endpoint, and expect a tool error carrying `render_to_image`'s message ("not implemented for this platform"), the app still running and the window still drawing, not a panic or a bridge timeout.
+
+---
+
+### Native: watch the macOS native CI job's cold-cache duration against the 30-minute timeout after the test-support dev-dependency (native-qa)
+
+#### Background
+
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/native`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `native` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/native/Cargo.toml` (the dev-dependency).
+
+#### TODO
+
+- [ ] Read the macOS `native` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/native-app.md`'s CI entry.
+
+---
+
+### Native: the uitest tests timed out once on macOS CI waiting for the listing (native-qa)
+
+#### Background
+
+On PR #1166's first run (run 44301956697), 5 of the 6 `uitest` tests hit the 10 s `WAIT` in `crates/native/src/uitest.rs` waiting for the folder's listing, scan and preview on macOS. Only `opens_with_no_folder` passed. Ubuntu and Windows passed, and a re-run (run 44304437316, with a diagnostic commit that makes the timeout panic print the view's state) passed on all three. The cause is unknown; slow-runner flakiness is a hypothesis, not confirmed. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `crates/native/src/uitest.rs`.
+
+#### TODO
+
+- [ ] The next time a `uitest` test times out in CI, read the panic message's view state to see which condition stalled, then fix the cause or raise `WAIT`. If it never recurs over a reasonable span of PRs, delete this item.
+
+---
