@@ -82,3 +82,5 @@ docs-only change: one step, one PR, `todo.md` only.
 - **origin/main moved** from `091ea31c` to `7619ce6d` before the branch was cut; locate items by heading, and if a named heading is gone or changed, report it rather than guessing.
 
 ## Progress
+
+- (2026-11-19) Step 1 complete
