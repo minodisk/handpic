@@ -6,12 +6,15 @@
 use gpui_kit::component::ThemeMode;
 use handpic_backend::{
     import,
-    shortcuts::Keymap,
+    shortcuts::{Binding, Keymap},
     sidecar::{SidecarFormat, label_names_setting},
 };
 use handpic_core::{i18n, xmp::LabelNames};
 
-use crate::theme::{self, Mode};
+use crate::{
+    context,
+    theme::{self, Mode},
+};
 
 /// The key that opens the modal, the Tauri app menu's `Settings…`
 /// accelerator, which the keymap refuses to bind.
@@ -293,6 +296,23 @@ pub fn shortcut_group(action: &str) -> ShortcutGroup {
     known_group(action).unwrap_or(ShortcutGroup::General)
 }
 
+/// The rows of `group` in the keymap's order, the Judgment group's in the
+/// strip menu's order instead, its actions the menu does not hold after them.
+pub fn shortcut_rows(bindings: &[Binding], group: ShortcutGroup) -> Vec<&Binding> {
+    let mut rows: Vec<&Binding> = bindings
+        .iter()
+        .filter(|b| shortcut_group(b.action) == group)
+        .collect();
+    if group == ShortcutGroup::Judgment {
+        rows.sort_by_key(|b| {
+            context::judgment_actions()
+                .position(|action| action == b.action)
+                .unwrap_or(usize::MAX)
+        });
+    }
+    rows
+}
+
 fn known_group(action: &str) -> Option<ShortcutGroup> {
     Some(match action {
         "previous" | "next" | "burstPrevious" | "burstNext" | "burstFramePrevious"
@@ -422,8 +442,8 @@ mod tests {
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         OPEN_TIP, SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit,
         format_change, known_group, label_change, label_names_of, label_texts, mode_change,
-        pattern_change, preset_of, root_note, shortcut_group, shortcut_label, stops, theme_change,
-        writes_xmp,
+        pattern_change, preset_of, root_note, shortcut_group, shortcut_label, shortcut_rows, stops,
+        theme_change, writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
 
@@ -643,6 +663,49 @@ mod tests {
         }
         assert_eq!(shortcut_group("pick"), ShortcutGroup::Judgment);
         assert_eq!(shortcut_group("somethingNew"), ShortcutGroup::General);
+    }
+
+    #[test]
+    fn the_judgment_rows_follow_the_strip_menu_then_the_keymap() {
+        let bindings = Keymap::defaults().bindings();
+        let rows: Vec<&str> = shortcut_rows(&bindings, ShortcutGroup::Judgment)
+            .iter()
+            .map(|b| b.action)
+            .collect();
+        let mut expected: Vec<&str> = crate::context::judgment_actions().collect();
+        expected.extend(["rejectRest", "clearall"]);
+        assert_eq!(rows, expected);
+        assert_eq!(
+            &rows[..9],
+            [
+                "pick", "unflag", "reject", "rate5", "rate4", "rate3", "rate2", "rate1", "clear"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_other_rows_keep_the_keymap_order() {
+        let bindings = Keymap::defaults().bindings();
+        for group in SHORTCUT_GROUPS {
+            if group == ShortcutGroup::Judgment {
+                continue;
+            }
+            let expected: Vec<&str> = bindings
+                .iter()
+                .filter(|b| shortcut_group(b.action) == group)
+                .map(|b| b.action)
+                .collect();
+            let rows: Vec<&str> = shortcut_rows(&bindings, group)
+                .iter()
+                .map(|b| b.action)
+                .collect();
+            assert_eq!(rows, expected, "{group:?}");
+        }
+        let total: usize = SHORTCUT_GROUPS
+            .iter()
+            .map(|&group| shortcut_rows(&bindings, group).len())
+            .sum();
+        assert_eq!(total, bindings.len());
     }
 
     #[test]

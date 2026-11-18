@@ -293,7 +293,7 @@ then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
 gpui-component's controls draw, with the title bar's
 `icons/64x64.png` for `img(..)`),
 `src/settingsmodal.rs` the settings modal's model (open state, the pages' order and titles, the key
-rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`, the Keyboard Shortcuts page's groups: `ShortcutGroup`, `SHORTCUT_GROUPS` and `shortcut_group`, an unknown action under `General`) and `src/settingsview.rs`
+rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP_KEYS`, the Keyboard Shortcuts page's groups: `ShortcutGroup`, `SHORTCUT_GROUPS` and `shortcut_group`, an unknown action under `General`, and `shortcut_rows`, each group's rows in the keymap's order but the Judgment group's in the strip menu's, the actions it does not hold after them) and `src/settingsview.rs`
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),

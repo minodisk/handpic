@@ -1934,7 +1934,11 @@ unchanged): `settingsmodal::shortcut_group` gives each action one
 falling back to `General` so no row leaves the page, and the page draws one
 `SettingGroup` titled `ShortcutGroup::title` per `SHORTCUT_GROUPS` entry, in
 that order (`Filmstrip`, `Judgment`, `Preview`, `Panes`, `General`), each
-keeping the keymap's order within it. A titled group is also a sub-entry of
+keeping the keymap's order within it but `Judgment`, which
+`settingsmodal::shortcut_rows` orders after the strip menu's judgment items
+(`context::judgment_actions`: the flags, 5 stars down to 0 stars, the labels,
+as the filter menu lists them), the Judgment actions neither menu holds
+(`rejectRest`, `clearall`) after them in the keymap's order. A titled group is also a sub-entry of
 the page in the settings sidebar, a click scrolling to it. gpui-component
 renders each group under `group-{ix}` and each item under `item-{ix}`, so the
 rows' repeated button ids stay unique though the item index restarts in every
