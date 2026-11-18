@@ -104,7 +104,7 @@ ways to do that.
     - Work outside the test dispatcher: the index eviction thread, `Watch::spawn`, `TreeWatch::spawn`, the sidecar `Writer`, the judgment queue, the settings `Writes` thread and the scan's threads are `std::thread`s whose results reach the view through its one channel. `run_until_parked` does not wait for them, so the helper needs a bounded "wait until this holds" loop (parking allowed, real time, a timeout that fails the test). Timers on the background executor (`SCAN_FOCUS_DELAY`, the dwell, the debounces) need `advance_clock`.
     - `read_roots` reads the real home directory and volumes (`dirs::home_dir()`); the tests must not assert on the tree's roots. Decide here whether passing the home directory in is worth it or leaving it is enough.
     - With the dev-dependency feature, `cargo clippy --all-targets` and `cargo test` compile the GPUI crates, and the binary target inside those invocations, with `test-support`; `cargo run`, `native:release`, the macOS bundle step and the packages compile them without. Confirm the app still compiles and its existing tests pass under `test-support` (gpui-base's `Observed` element wrappers, gpui-component's hooks), and that a plain `cargo build` still passes.
-- [ ] Step 5: Add the first UI regression tests through `TestAppContext`
+- [x] Step 5: Add the first UI regression tests through `TestAppContext`
   - Done when:
     - Tests in the default `cargo test`, built on Step 4's helper, each driving the real view with simulated input and asserting on its state and, where it adds something, on `painted_quads`:
       - opening a folder of generated files lists them: the file count, the current file, the status, the strip's cells;
