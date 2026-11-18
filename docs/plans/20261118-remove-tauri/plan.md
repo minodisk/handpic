@@ -61,6 +61,11 @@ says so (the binary's name in Step 2, the data folders in Step 3).
   each of those steps starts.
 - (2026-11-18) The user chose Option 3 for Step 3: the `.native` index is
   moved into the plain folder and an index already there is renamed aside.
+- (2026-11-18) The user chose to delete the Tauri measurements from
+  `performance.md` / `.ja.md` (Step 5).
+- (2026-11-18) The user chose to move the three remaining measurements of code
+  the native app still runs from `performance.md` / `.ja.md` into
+  `docs/agents/shared-crates.md`.
 
 ## Steps
 
@@ -361,7 +366,7 @@ says so (the binary's name in Step 2, the data folders in Step 3).
       Tauri app in the present tense (for example `datadir.rs`'s "apart from
       the Tauri app's", `logger.rs`'s "Tauri's `app_log_dir`") belongs here.
       Comment-only.
-- [ ] Step 5: Rewrite the user docs for the GPUI app
+- [x] Step 5: Rewrite the user docs for the GPUI app
   - Done when:
     - `README.md` and `docs/humans/usage.md` describe what the native app
       does and nothing it lacks, and `README.ja.md` and
@@ -477,3 +482,4 @@ says so (the binary's name in Step 2, the data folders in Step 3).
 - (2026-11-18) Step 2 complete
 - (2026-11-18) Step 3 complete
 - (2026-11-18) Step 4 complete
+- (2026-11-18) Step 5 complete

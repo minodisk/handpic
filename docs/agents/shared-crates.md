@@ -852,6 +852,83 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   the file, as `extract_unless` does at its other stages.
 - Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2.
 
+### Scan, on-demand faces and eyes: timings taken through the earlier app (Measured)
+
+These three were measured through the earlier webview app, but the Rust code
+they time is what the native app still runs: the scan's pass 1
+(`index::run_scan`), `ondemand::read_faces` (then the `faces_of` command) and
+`ondemand::read_eyes` (then `eyes_of`). They moved here from
+`docs/humans/performance.md` / `.ja.md`, which keep only measurements a reader
+can repeat with the native app or the CLI.
+
+- **Real-folder first scan, Windows (2026-09-21).** Release build, Windows 11
+  Home, real folders of Sony ARWs on a DRAM-less QLC SATA SSD (Crucial BX500
+  4TB), 22 extraction threads, a different folder per run; from that app's
+  `scan prepare` (the listing, reconcile and sidecar lines together) and
+  `scan extract` log lines:
+
+  | Run | files | prepare | extract | total | per file | files/s |
+  |-----|-------|---------|---------|-------|----------|---------|
+  | Cold first scan, Defender real-time protection on | 2677 | 1427ms | 42509ms | ~43.9s | ~16ms | ~61 |
+  | Cold first scan, folder excluded from Defender | 3401 | 639ms | 65605ms | ~66.2s | ~19ms | ~51 |
+  | First scan, warm page cache (index cleared, files read moments before) | 2134 | 47ms | 2084ms | ~2.1s | ~1ms | ~1000 |
+
+  Both cold runs finished with 0 errors. Excluding the folder from Defender
+  did not make the scan faster, so Defender is not the cause; the warm run
+  shows the CPU side costs ~1ms per file, so cold IO dominates. Extrapolated
+  to 5000 files, a cold first scan takes ~82-97s; at a 1MiB bounded read per
+  file and ~16ms per file, the effective throughput works out to ~63MB/s
+  (derived, not measured). The thread-count sweep that pins this on the drive
+  (2026-09-22, `handpic-cli scan`) stays in `performance.md`.
+- **`faces_of`, now `ondemand::read_faces` (2026-09-25).** Read the preview +
+  `detect_around`. Linux WSL2 (24 hardware threads), release build, the
+  command's body called directly on two α7 V ARWs read from the Windows NTFS
+  drive, warm page cache, 20 calls each after a first one:
+
+  | File | First call | Mean | Median | Max |
+  |------|------------|------|--------|-----|
+  | `_DSC3113.ARW` (1616x1080 preview, 3 faces) | 70.5ms (with the model build) | 29.9ms | 29.9ms | 34.1ms |
+  | `_DSC1942.ARW` (1616x1080 preview, 3 faces) | 34.0ms | 30.6ms | 29.7ms | 37.4ms |
+
+  The first call of a session also builds the model. A cold read from a card
+  or a slow disk, and the redraw, are not in these numbers. The timing ran
+  from a temporary `#[ignore]`d test removed before committing.
+- **`eyes_of`, now `ondemand::read_eyes` (2026-10-07).** Windows 11,
+  release build, one thread, `main` at `392f9c25`, the
+  `#[ignore]`d `times_eyes_of_on_real_files` test (it left with the earlier
+  app), run with no app running; the first file of each set left out because
+  it pays the plan builds (256ms on the ARW, 315ms on the DNG). The call then
+  fed the meta pane's `Eyes open: NN%` row:
+
+  | Files | Read | Decode | Detect | Model | Total |
+  |-------|------|--------|--------|-------|-------|
+  | 17 α7 V ARWs with an AF point and a face judged (of `_DSC1881`-`_DSC1899` in `2026-09-19`) | 0.8-6.1ms | 10.6-11.7ms | 27.4-32.7ms | 35.8-46.8ms | 80.2-91.9ms |
+  | 11 M11-P DNGs without one (`L1005148`-`L1005191` in `2026-02-01`, a face judged in each) | 7.0-9.7ms | 19.5-27.1ms | 73.8-80.0ms | 36.7-39.9ms | 139.9-156.1ms |
+
+  The two other ARWs had no face to judge and returned after the detection in
+  43.9 / 45.5ms. On the AF path one full-size decode serves both the
+  detection and the crop; without an AF point the decode is the 3/8 one of
+  the whole-image search plus a full-size one for the crop, and the
+  whole-image detection, not the second decode, is most of the cost. Every
+  file of the two sets labeled closed came back closed.
+
+  The head pose's cost, the same test on the same files, 2026-10-07, `main`
+  at `9048e952` against `bde23660` (the commit before the pose), built and
+  run back to back on the same machine, the first file of each set left out:
+
+  | Files | Total before | Total after |
+  |-------|--------------|-------------|
+  | 16 ARWs with a face judged | 60.7-73.1ms (median 65.3) | 61.4-68.2ms (median 65.9) |
+  | 2 ARWs without one | 32.8 / 33.5ms | 33.3 / 33.8ms |
+  | 10 DNGs | 109.2-119.1ms (median 116.0) | 110.8-120.7ms (median 117.1) |
+
+  The difference is run-to-run noise: the solve is three orders of magnitude
+  smaller, and the detection, which the pose does not touch, moved as much.
+  Both runs were faster than the table above; a first run of the after build
+  straight after compiling it read 81-92ms and 144-160ms.
+- Source: `docs/humans/performance.md` before the remove-tauri plan
+  (`docs/plans/20261118-remove-tauri/plan.md`, Step 5).
+
 ### The third pass: `embeddings` is its own table, and the pass is not "scanning" (Inferred)
 
 `index::run_embed_scan` embeds each RAW file's preview with the SigLIP 2 model
