@@ -29,10 +29,10 @@ a crate that is never built locally.
 This plan takes over three pieces of in-flight work and must annotate them
 when the matching step lands:
 
-- [the gpui-port plan](../20261109-gpui-port/plan.md), Step 10: sub-milestone
+- [the gpui-port plan](../../20261109-gpui-port/plan.md), Step 10: sub-milestone
   5's removal of `crates/app` (without the workspace merge, which stays
   there) and sub-milestone 6's docs.
-- [the rename-to-handpic plan](../20261109-rename-to-handpic/plan.md), Step 3
+- [the rename-to-handpic plan](../../20261109-rename-to-handpic/plan.md), Step 3
   (the crate rename).
 - `todo.md`'s item "Native: drop the `.native` suffix from the native app's
   index and log folders at the switch-over".

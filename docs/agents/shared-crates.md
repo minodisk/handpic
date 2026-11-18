@@ -1376,6 +1376,17 @@ final footer block. The release PR stayed at the old version after merge.
 - Source: `docs/plans/_archived/20260925-lightroom-layout/learnings.md`,
   "Release-As footer".
 
+### Before deleting or renaming a guide, grep the whole tree, archived plans included (Hit)
+
+Archived plans link to guides (`docs/plans/_archived/*/plan.md` linked
+`tauri-app.md` and `ui-styling.md`), and `ci:local`'s lychee run fails on the
+dead links. A plan's "nothing else links it" claim is not evidence. Run
+`git grep -n '<guide>.md' -- docs` first. Turn each hit in an archived plan into
+the plain name marked "removed since" rather than a link. The same applies to a
+moved asset: a `git grep 'app/icons'` over the whole tree, not only the plan's
+listed files, found `tools/package/linux.sh` reading an icon the plan missed.
+Source: `docs/plans/_archived/20261118-remove-tauri/learnings.md`, Steps 1 and 4.
+
 ## Verification
 
 ### Write a performance number with its measurement conditions (Hit, twice)

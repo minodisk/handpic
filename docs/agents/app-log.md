@@ -50,6 +50,15 @@ the restart cannot be recovered; ask for a reproduction.
   (`handpic_backend::index`, `handpic_backend::diagnostics`, ...), or a
   dependency such as GPUI's own `INFO` lines (`gpui_windows::*`: the UI font,
   the GPU).
+- The native crate is bin-only, so its crate name, and with it the `target` and
+  `CARGO_CRATE_NAME` the logger's own-lines filter uses, comes from
+  `[[bin]].name` (`handpic`), not from the package name (`handpic-native`).
+  `handpic` is also a string prefix of `handpic_backend` and `handpic_core`, so
+  `logger.rs`'s `is_own` matches the target exactly or as a `handpic::` module
+  path. A plain `starts_with` let the backend's debug lines through under
+  `RUST_LOG=debug`. Renaming the binary changes every target, so recheck that
+  filter and its test. Source:
+  `docs/plans/_archived/20261118-remove-tauri/learnings.md`, Step 2.
 - One record is one line, except a `panic:` record when a backtrace was
   captured (see below).
 
