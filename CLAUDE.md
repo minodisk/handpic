@@ -580,7 +580,13 @@ names, `dropped_dir`, a directory as is and a file by its parent, and
 `DROP_TEXT`, the status line's refusal), which the window's root `div` takes
 through `on_drop::<ExternalPaths>`, resolving off the UI thread, a later drop
 winning, and opening the folder as a click in the tree does, while
-`drop_outline` draws the Tauri drag outline over the main area.
+`drop_outline` draws the Tauri drag outline over the main area; `main.rs`'s
+`open_main` starts the UI layers and opens the window, which `main` and the
+test-only `src/uitest.rs` both call (`Ui`, the view opened on GPUI's
+`TestAppContext` over a temporary index and settings store, GPUI's
+`test-support` coming from a `gpui-pre-platform` dev-dependency;
+`wait_until`, a bounded real-time wait for the app's own threads; its drop
+quitting the app and removing the folder, and the UI tests).
 
 The `.ts` files a `crates/native` module is called a port of (`sort.ts`,
 `filter.ts`, `focus.ts` and the rest), and the Tauri commands some are ported

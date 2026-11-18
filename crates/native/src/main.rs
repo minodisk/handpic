@@ -61,6 +61,8 @@ mod timing;
 mod trash;
 mod tree;
 mod treekeys;
+#[cfg(test)]
+mod uitest;
 mod viewed;
 mod viewonly;
 mod zoom;
@@ -7026,8 +7028,6 @@ fn main() {
             "none"
         }
     );
-    let mcp_port = args.mcp_port;
-    let prefetch = !args.no_prefetch;
     let remember = args.auto.is_none();
     args.folder = session::startup_folder(
         args.folder.take(),
@@ -7036,43 +7036,57 @@ fn main() {
         Path::is_dir,
     );
     let saved = settings.window.clone().filter(|_| remember);
-    let theme = settings.theme;
     application()
         .with_assets(icons::Icons)
         .run(move |cx: &mut App| {
-            gpui_kit::init(cx);
-            cx.bind_keys(keymap_keys());
-            theme::apply(theme, cx.window_appearance(), cx);
             cx.set_app_identity(datadir::IDENTIFIER, "Handpic");
             cx.on_window_closed(|cx, _| cx.quit()).detach();
-            let (display_id, window_bounds) = window_placement(saved.as_ref(), cx);
-            gpui_kit::open_window(
-                WindowOptions {
-                    titlebar: Some(TitlebarOptions {
-                        title: Some("Handpic".into()),
-                        ..TitleBar::title_bar_options()
-                    }),
-                    window_bounds: Some(window_bounds),
-                    display_id,
-                    app_id: Some(datadir::IDENTIFIER.into()),
-                    window_decorations: Some(WindowDecorations::Client),
-                    ..TitleBar::window_options()
-                },
-                cx,
-                |window, cx| {
-                    cx.new(|cx| {
-                        let focus = cx.focus_handle();
-                        window.focus(&focus, cx);
-                        Handpic::start(args, cx);
-                        Handpic::new(
-                            focus, index, settings, mcp_port, prefetch, remember, window, cx,
-                        )
-                    })
-                },
-            )
-            .unwrap();
+            open_main(args, index, settings, saved.as_ref(), cx).unwrap();
             cx.activate(true);
         });
+}
+
+/// Starts the UI layers and opens the main window over the given index and
+/// settings: what `main` runs at launch and the UI tests on GPUI's test
+/// platform.
+fn open_main(
+    args: Args,
+    index: Result<Indexes, String>,
+    settings: Settings,
+    saved: Option<&session::Geometry>,
+    cx: &mut App,
+) -> gpui_kit::Result<(AnyWindowHandle, Entity<Handpic>)> {
+    let mcp_port = args.mcp_port;
+    let prefetch = !args.no_prefetch;
+    let remember = args.auto.is_none();
+    gpui_kit::init(cx);
+    cx.bind_keys(keymap_keys());
+    theme::apply(settings.theme, cx.window_appearance(), cx);
+    let (display_id, window_bounds) = window_placement(saved, cx);
+    gpui_kit::open_window(
+        WindowOptions {
+            titlebar: Some(TitlebarOptions {
+                title: Some("Handpic".into()),
+                ..TitleBar::title_bar_options()
+            }),
+            window_bounds: Some(window_bounds),
+            display_id,
+            app_id: Some(datadir::IDENTIFIER.into()),
+            window_decorations: Some(WindowDecorations::Client),
+            ..TitleBar::window_options()
+        },
+        cx,
+        |window, cx| {
+            cx.new(|cx| {
+                let focus = cx.focus_handle();
+                window.focus(&focus, cx);
+                Handpic::start(args, cx);
+                Handpic::new(
+                    focus, index, settings, mcp_port, prefetch, remember, window, cx,
+                )
+            })
+        },
+    )
 }
 
 #[cfg(test)]

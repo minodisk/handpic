@@ -119,6 +119,41 @@
   with no cache (a lock change on a branch with no prior cache, or the cache
   deleted).
 
+## Step 4
+
+- The dev-dependency is `gpui-pre-platform = { version = "=0.3.12",
+  features = ["test-support"] }`, the same crate and feature the
+  `screenshot` feature turns on (`gpui-kit/test-support` still fails on the
+  gpui-fast `wgpu` pin). `Cargo.lock` did not change. `gpui_kit::*`
+  re-exports gpui-pre, so `gpui_kit::TestAppContext` and
+  `VisualTestContext` are there; `gpui_kit::test` (gpui-kit's own UI test
+  module) is behind `gpui-kit/test-support` and is not.
+- Effect on Step 3: the GPUI crates now have one feature set for
+  `clippy --all-targets`, `cargo test` and the `--features screenshot`
+  clippy (the dev-dependency's `image/png` was already there), so the feature
+  clippy after the default one compiled only `handpic-native` (3 s here).
+  `docs/agents/native-app.md`'s CI entry says so. `cargo build` (plain)
+  still compiles; it rebuilt only `handpic-native`.
+- The seam is `open_main(args, index, settings, saved, cx)` in `main.rs`:
+  init, key bindings, theme, placement and `open_window`. `main` keeps the
+  app identity, `on_window_closed` -> quit and `activate` around it (the
+  order relative to `gpui_kit::init` moved; they do not depend on it).
+  `mcp_port`, `prefetch` and `remember` are derived from `Args` inside, so
+  the test passes `Args::default()` (`remember` on, against the temporary
+  settings store; `--auto` would run its presses and quit).
+- Teardown: the first version left `index.sqlite*` and `settings.sqlite*`
+  behind. Two causes: `Ui` held a strong `Entity<Handpic>` (taken in `Drop`
+  now, before `quit`), and the sidecar writer and settings `Writes` threads
+  close their connections only once they see their senders dropped, a few
+  ms after `quit`. The drop retries `remove_dir_all` (removed after ~11 ms,
+  one retry) within a 10 s bound. `quit` (the quit handlers' drains) took
+  ~0.5 ms; the drop asserts under 1 s, below the 2 s drain timeouts.
+- `TestAppContext::single()` plus `executor().allow_parking()`;
+  `run_until_parked` also advances the clock to the next timer, so the
+  view's background timers do not need `advance_clock` to fire.
+- The smoke test passed 25 runs alone and 20 runs of the whole crate's
+  tests (1054) on Windows; it takes ~50 ms.
+
 ## Deferred issues (todo candidates)
 
 - Step 2's failed-capture path (Linux's "not implemented for this platform",

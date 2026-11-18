@@ -89,7 +89,7 @@ ways to do that.
     - Until Step 4 lands, this run compiles the GPUI crates a second time (with `test-support`). After Step 4 the default `clippy --all-targets` and `cargo test` builds use `test-support` too, so the two runs share the GPUI artifacts and only `handpic-native` itself is compiled twice.
     - The CI job runs its commands through `mise exec rust@1.98.1 -- ...` rather than `mise run native:check` (NASM lookup on Windows); keep that form for the new command, and keep the command string identical in the three places.
     - Whether the new run is a second command of the existing `clippy native` check or a check of its own in `local.sh` is decided here; `local.test.sh` asserts the planned check names, so its expectations change either way.
-- [ ] Step 4: Make the main view constructible in a GPUI test
+- [x] Step 4: Make the main view constructible in a GPUI test
   - Done when:
     - `gpui-kit`'s `test-support` feature is on for `crates/native`'s test builds through a dev-dependency, so the default `cargo test` gets `TestAppContext` without any flag, and `cargo run` / the release build still compile without it.
     - One function opens the main window (the init, the key bindings, the theme, `gpui_kit::open_window` with the `Handpic` view) and both `main` and the tests call it; the app's behavior at launch is unchanged.
