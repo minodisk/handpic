@@ -81,7 +81,7 @@ and minus binary files.
 
 ## Steps
 
-- [ ] Step 1: Remove the legacy `.native` index migration
+- [x] Step 1: Remove the legacy `.native` index migration
   - Done when:
     - `crates/native/src/datadir.rs` no longer has `move_native_index`,
       `IndexMove`, `with_companions`, `rename_present`, or the tests of the

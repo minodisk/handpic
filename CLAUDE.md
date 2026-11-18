@@ -235,9 +235,7 @@ with the `update_test_repo` input (`owner/name`), which signs with the test
 key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
 and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
-`--index <path>`; without it, an index an earlier build left under
-`<IDENTIFIER>.native` is moved in first, one already there renamed aside,
-`move_native_index`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
+`--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the line format `docs/agents/app-log.md` describes under the `<IDENTIFIER>` folder (or
