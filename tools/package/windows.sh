@@ -59,7 +59,8 @@ bash "${root}/tools/package/notices.sh" "${stage}/Handpic/licenses"
 
 # MSYS would rewrite ISCC's /-options as paths.
 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
-	"/DAppVersion=${version}" 	"/DFileVersion=${file_version}" \
+	"/DAppVersion=${version}" \
+	"/DFileVersion=${file_version}" \
 	"/DBinary=${binary}" \
 	"/DReleaseDir=$(cygpath -w "${release}")" \
 	"/DLicensesDir=$(cygpath -w "${stage}/Handpic/licenses")" \
