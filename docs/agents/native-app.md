@@ -364,6 +364,18 @@ clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
 `cfg(windows)`-only, and `tree.rs`'s path helpers work on strings, so its
 `C:\` and UNC test paths do not depend on the host's `std::path`.
 
+The Windows leg alone also runs `cargo clippy --all-targets --features
+screenshot -- -D warnings`, as do `mise run native:check` and `mise run
+ci:local` (its `clippy native screenshot` check, selected wherever `clippy
+native` is) on a Windows host. Windows is where the `screenshot` tool was
+checked live, Linux's `render_to_image` is not implemented, and the macOS leg
+already compiles a second variant of the app for its bundle step. The feature
+turns on `test-support` in a direct `gpui-pre-platform` dependency, so this
+run checks the GPUI platform crates and everything above them a second time.
+
+- Rule: keep the feature command string identical in `ci.yml`,
+  `tools/ci/local.sh` and `native:check`.
+
 - Rule: code reached only under one platform's `cfg` must not fail
   `-D warnings` on the other two; give it a `cfg_attr(..., expect(dead_code))`
   or the same `cfg`.

@@ -106,6 +106,9 @@ shell = "bash -c"
 run = """
 set -euo pipefail
 cargo clippy --all-targets -- -D warnings
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*) cargo clippy --all-targets --features screenshot -- -D warnings ;;
+esac
 cargo test
 """
 

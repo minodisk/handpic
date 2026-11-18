@@ -76,6 +76,49 @@
   "choose an app" dialog instead; it was closed. A topmost WinForms form from
   PowerShell is the reliable way for an agent to cover the window.
 
+## Step 3
+
+- The Windows-only run is a check of its own in `tools/ci/local.sh`,
+  `clippy native screenshot`, printed right after `clippy native` wherever
+  that one is, on a host whose `uname -s` is `MINGW*` / `MSYS*` / `CYGWIN*`.
+  `CI_LOCAL_UNAME` overrides the `uname -s` so `local.test.sh` pins it
+  (`Linux` for the existing cases, a `MINGW64_NT-...` and a `Darwin` block
+  for the new ones). `every_check` lists it on every host, so a Linux or
+  macOS run shows it under "skipped (left to GitHub Actions)", which is true:
+  the Windows leg runs it.
+- `native:check` picks Windows the same way (`uname -s` under its
+  `bash -c`); `ci.yml` uses `$RUNNER_OS`. The three command strings are the
+  same `cargo clippy --all-targets --features screenshot -- -D warnings`.
+- Step 2 changed what this step's notes assumed: the feature turns on
+  `test-support` in a direct optional `gpui-pre-platform` dependency, not
+  `gpui-kit/test-support`, so the feature run re-checks the GPUI platform
+  crates (gpui-pre, gpui-pre-windows, gpui-pre-platform) and everything above
+  them (gpui-kit, gpui-component, `handpic-native`) plus the 36 crates the
+  lock gained. Whether Step 4's dev-dependency lands on the same feature set
+  (and so shares these artifacts) depends on how it gets around the
+  `gpui-kit/test-support` resolution failure Step 2 hit.
+- The `native` job's cargo cache is keyed on `crates/native/Cargo.lock`, and
+  `actions/cache` saves nothing on an exact key hit. This PR does not change
+  the lock, so the cache main saved after Step 2 (no feature artifacts) is
+  hit and never re-saved: every Windows run pays the feature check's compile
+  until the lock next changes, a warm run included. Measure it on the PR.
+- Windows `native` job duration, before this step (from `gh run` on
+  main and PR branches):
+  - warm cache (exact key hit): 2m45s (run 44206444223) and 3m12s (run
+    44205356383); the lint-and-test step about 2 minutes.
+  - a restore-key hit after a lock change (Step 2's merge, run 44214212075):
+    11m57s, the lint-and-test step 7m48s.
+  - cold (`Cache not found`): 19m01s (run 44121287234, job 134173026923; the
+    lint-and-test step 17m16s) and 16m58s (run 44202881195, job
+    134461222844; the step 15m32s). Well within the 30-minute timeout, but a
+    second check of the GPUI stack on top of the cold figure is the margin
+    to watch.
+- After this step: PENDING, to be filled from the PR's Windows `native` job
+  (its duration and the lint-and-test step's, noting whether the cache was an
+  exact hit, a restore-key hit or not found). A truly cold figure needs a run
+  with no cache (a lock change on a branch with no prior cache, or the cache
+  deleted).
+
 ## Deferred issues (todo candidates)
 
 - Step 2's failed-capture path (Linux's "not implemented for this platform",
