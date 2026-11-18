@@ -32,7 +32,7 @@ function expect() {
 	output=$(CI_LOCAL_UNAME="${uname}" bash "${target}" --select "${mode}" <<<"${paths}") || status=$?
 
 	if [[ "${status}" -ne 0 || "${output}" != "${expected}" ]]; then
-		echo "FAIL: [${mode}, ${uname}]${paths//$'\n'/ }" >&2
+		echo "FAIL: [${mode}, ${uname}] ${paths//$'\n'/ }" >&2
 		echo "  exit ${status}; expected:" >&2
 		printf '    %s\n' "${expected//$'\n'/$'\n'    }" >&2
 		echo "  got:" >&2
