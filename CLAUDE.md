@@ -147,7 +147,17 @@ on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
 the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
+handed to a callback), `src/update.rs` the native app's update engine on
+`self_update` (`detect`, the `InstallKind` from the executable's path:
+portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app`, tarball
+under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,
+the build's feed and trusted zipsign key, `minodisk/handpic` with
+`crates/native/packaging/update.pub`, or with `HANDPIC_UPDATE_TEST_REPO` set
+at build time that repository and the test key; `check`, the release
+`offered` to the running version, newer by SemVer and with a prerelease
+part only for a prerelease install; `install`, a portable or tarball update
+pinned to that release's tag, checked against its `SHA256SUMS` and
+signature, blocking, the caller's worker), `src/mcp.rs` the MCP companion's server (`Mcp`: the
 loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
 tools, or every tool after `with_all_tools` (the native app's), plus
 `screenshot` after `with_screenshot` (its reply built by `screenshot_reply`), started,

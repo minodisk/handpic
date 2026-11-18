@@ -20,4 +20,5 @@ pub mod store;
 pub mod text;
 pub mod trash;
 pub mod treewatch;
+pub mod update;
 pub mod watch;

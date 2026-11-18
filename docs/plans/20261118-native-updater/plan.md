@@ -190,7 +190,7 @@ overrides it:
       `package.yml`, `crates/native/packaging/`, `CLAUDE.md`'s packaging
       paragraph, `docs/agents/native-app.md`.
 
-- [ ] Step 3: Add the update engine to `crates/backend`
+- [x] Step 3: Add the update engine to `crates/backend`
   - Done when:
     - `crates/backend/src/update.rs` detects the install kind from the
       executable's path: portable ZIP, Inno Setup, `.app`, tarball
