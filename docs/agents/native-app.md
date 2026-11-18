@@ -2508,10 +2508,17 @@ view's eviction, watchers, sidecar writer, judgment queue, settings `Writes`
 and scan run on `std::thread`s that it does not run; their results reach the
 view through its channel. `Ui::open` calls `allow_parking`, and
 `Ui::wait_until` runs `run_until_parked`, checks a condition on the view and
-sleeps 10 ms, failing after 10 s. `read_roots` lists the real home directory
+sleeps 10 ms, failing after 10 s. `Ui::open` installs a test-only `log`
+logger once per process, which keeps every line stamped with the time since
+the first `Ui`, so a timed-out `wait_until` puts the view's state and the
+app's log lines naming its temporary folder (`scan list:`, `scan extract:`,
+`scan faces:` with their times) in its panic message. `read_roots` lists the real home directory
 and volumes: assert nothing about the tree's roots.
 
-`Ui`'s drop releases its view handle and calls `TestAppContext::quit`, which
+`Ui`'s drop releases its view handle; while the test is panicking it only
+cancels the view's scan (the `scan::Running` it cloned at the open), so a
+timed-out test leaves no pass 2 worker running next to the later tests.
+Otherwise it calls `TestAppContext::quit`, which
 runs the quit handlers (the scan stop, the stores and the writer drained, the
 settings writes drained): about 0.5 ms with nothing queued, asserted under
 1 s, below every drain's 2 s timeout. The writer and settings threads close
@@ -2523,6 +2530,13 @@ after about 11 ms, one retry) and fails the test if it is still held after
 
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
+- Rule: the UI tests' scans run at normal priority. `Ui::open` sets the
+  view's `scan_priorities` (`scan::Priorities`, `APP` in the app) to
+  `Priority::Normal` for both passes: on the macOS CI runner pass 2's
+  `QOS_CLASS_BACKGROUND` made one tiny DNG's analysis 6 to 14 times slower
+  and pass 2 of 2 to 4 files take 15 s to 44 s, past the 10 s wait, in five
+  tests of six on most runs. The tests check the wiring, not the scheduling.
+  Do not raise the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.

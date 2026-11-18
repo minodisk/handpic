@@ -62,7 +62,7 @@ What the investigation established (from the code and the CI logs):
 
 ## Steps
 
-- [ ] Step 1: Make the folder-opening UI tests pass reliably on macOS CI
+- [x] Step 1: Make the folder-opening UI tests pass reliably on macOS CI
   - Done when:
     - The cause is recorded in `learnings.md` with its evidence: the log
       lines of a failing macOS run of this PR that show whether pass 2 was

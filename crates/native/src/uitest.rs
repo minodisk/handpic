@@ -4,26 +4,27 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock, atomic::AtomicBool},
+    sync::{Mutex, OnceLock},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
-use handpic_core::Flag;
+use handpic_core::{Flag, scan::Priority};
 use tempfile::TempDir;
 
 use crate::{
-    Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
-    scan::Running, settings,
+    Handpic,
+    args::Args,
+    entries_of, file_name,
+    filter::Orientation,
+    menu, open_index, open_main,
+    scan::{Priorities, Running},
+    settings,
 };
 
 /// How long `wait_until` waits on the app's own threads before failing.
 const WAIT: Duration = Duration::from_secs(10);
-
-/// How long a timed-out `wait_until` keeps waiting to tell a slow app from a
-/// stuck one before it fails.
-const GRACE: Duration = Duration::from_secs(90);
 
 /// Under every quit handler's drain timeout, so a quit that waits one out
 /// fails the test.
@@ -81,12 +82,7 @@ fn log_lines(dir: &str) -> String {
             .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|line| line.contains(dir))
-            .map(|line| {
-                format!(
-                    "
-  {line}"
-                )
-            })
+            .map(|line| format!("\n  {line}"))
             .collect()
     })
 }
@@ -97,7 +93,6 @@ pub struct Ui {
     view: Option<Entity<Handpic>>,
     /// The view's scan, cancelled when the `Ui` drops while panicking.
     scan: Running,
-    folder: Option<PathBuf>,
     /// Taken at the drop, which removes it once the app's threads let go.
     dir: Option<TempDir>,
 }
@@ -117,14 +112,20 @@ impl Ui {
         let (window, view) = cx
             .update(|cx| open_main(Args::default(), index, settings, None, cx))
             .unwrap();
-        let cx = VisualTestContext::from_window(window, &cx);
+        let mut cx = VisualTestContext::from_window(window, &cx);
+        // macOS throttles pass 2's `QOS_CLASS_BACKGROUND` past `WAIT`.
+        let scan = view.update(&mut cx, |view, _| {
+            view.scan_priorities = Priorities {
+                extract: Priority::Normal,
+                faces: Priority::Normal,
+            };
+            view.scan.clone()
+        });
         cx.run_until_parked();
-        let scan = view.read_with(&cx, |view, _| view.scan.clone());
         Self {
             cx,
             view: Some(view),
             scan,
-            folder: None,
             dir: Some(dir),
         }
     }
@@ -159,7 +160,6 @@ impl Ui {
         for (name, orientation) in files {
             fs::write(folder.join(name), dng(*orientation)).unwrap();
         }
-        self.folder = Some(folder.clone());
         let path = folder.to_string_lossy().into_owned();
         self.update(|view, cx| view.open_from_tree(path, cx).detach());
         self.wait_idle("the folder's listing, scan and preview", files.len());
@@ -212,17 +212,6 @@ impl Ui {
                         view.current_path(),
                     )
                 });
-                let idle = loop {
-                    self.cx.run_until_parked();
-                    if self.read(&done) {
-                        break format!("done after {:?}", started.elapsed());
-                    }
-                    if started.elapsed() >= WAIT + GRACE {
-                        break format!("still not done after {:?}", started.elapsed());
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                };
-                let probe = self.folder.as_ref().map(|f| probe(f)).unwrap_or_default();
                 let name = self
                     .dir()
                     .file_name()
@@ -230,45 +219,13 @@ impl Ui {
                     .to_string_lossy()
                     .into_owned();
                 panic!(
-                    "timed out waiting for {what}: {state}; {idle}; {probe}; log:{}",
+                    "timed out waiting for {what}: {state}; log:{}",
                     log_lines(&name)
                 );
             }
             thread::sleep(Duration::from_millis(10));
         }
     }
-}
-
-/// Times pass 2's analysis of one of `folder`'s files on this thread at
-/// normal priority, then on a worker at the pass's own `Priority::Lowest`.
-fn probe(folder: &Path) -> String {
-    use handpic_core::scan::{Priority, ScanFocus, extract_analysis, extract_analysis_all};
-    let Some(path) = fs::read_dir(folder)
-        .ok()
-        .and_then(|mut d| d.next())
-        .and_then(|e| e.ok())
-        .map(|e| e.path())
-    else {
-        return String::new();
-    };
-    let t = Instant::now();
-    let normal = extract_analysis(&path).is_ok();
-    let normal_took = t.elapsed();
-    let t = Instant::now();
-    let lowest = Mutex::new(None);
-    let _ = extract_analysis_all(
-        std::slice::from_ref(&path),
-        1,
-        Priority::Lowest,
-        &ScanFocus::default(),
-        |_, r| *lowest.lock().unwrap() = Some(r.is_ok()),
-        &AtomicBool::new(false),
-    );
-    let lowest_took = t.elapsed();
-    format!(
-        "probe normal {normal} in {normal_took:?}, lowest {:?} in {lowest_took:?}",
-        lowest.into_inner().unwrap()
-    )
 }
 
 /// A baseline JPEG of `width` x `height`, a gradient.

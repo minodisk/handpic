@@ -757,10 +757,12 @@ otherwise those paths would never be reported.
 
 `handpic_core::scan::for_each_path` builds its rayon pool with a
 `spawn_handler` that lowers each worker's OS priority once, before rayon's
-`run`. `run_scan` passes `Priority::BelowNormal` (Windows
-`THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice of at
-least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
-`QOS_CLASS_BACKGROUND`, nice of at least 10); the CLI passes
+`run`. `run_scan` and `run_faces_scan` take the priority as a parameter: the
+native app (`scan::Priorities::APP`) gives `run_scan` `Priority::BelowNormal`
+(Windows `THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice
+of at least 5) and `run_faces_scan` `Priority::Lowest`
+(`THREAD_PRIORITY_LOWEST`, `QOS_CLASS_BACKGROUND`, nice of at least 10), its
+UI tests `Priority::Normal` to both; the CLI passes
 `Priority::Normal`, which makes no call, so its numbers stay comparable with
 `docs/humans/performance.md`.
 
@@ -772,7 +774,11 @@ least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
   and on macOS `BACKGROUND` also throttles disk IO. The first pass reads the
   files cold, so it stays at `BELOW_NORMAL` / `UTILITY`; only the analysis
   pass, whose reads follow the first pass's, takes `BACKGROUND`. If a Mac
-  shows that pass crawling, move it to `UTILITY` too.
+  shows that pass crawling, move it to `UTILITY` too. On the macOS CI runner
+  (one scan worker) one tiny DNG's analysis took 3.2 s to 8.9 s at `Lowest`
+  against 0.5 s to 0.9 s at normal priority, and pass 2 of 2 to 4 files 15 s
+  to 44 s (see `docs/plans/20261119-uitest-macos-timeout/`); a real Mac is
+  not measured yet.
 - `thread-priority` has no macOS QoS API, so it is a Windows-only dependency
   and the unix branches call `libc` directly (`pthread_set_qos_class_self_np`,
   `setpriority(PRIO_PROCESS, 0, ..)`, which on Linux sets the calling
