@@ -449,7 +449,7 @@ them; their contents are deliberately coarse.
        the usage guide's "Updating" and "Upgrading from Riffle" text and the
        README's AppImage download row.
 
-    Note (2026-11-18): [the remove-tauri plan](../20261118-remove-tauri/plan.md)
+    Note (2026-11-18): [the remove-tauri plan](../_archived/20261118-remove-tauri/plan.md)
     takes item 5's removal of `crates/app` and `crates/app/ui` with their
     Vite+, pnpm and Tauri tooling (its Step 1) and item 6's docs (its Steps 4
     and 5). Item 5's merge of the native crate into the root workspace stays
