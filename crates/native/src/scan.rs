@@ -104,6 +104,8 @@ pub enum Event {
     FolderOp(crate::folderops::Message),
     /// A performance overlay sample from the sampler's thread.
     Perf(handpic_backend::perf::Sample),
+    /// An answer of the update check's or install's thread.
+    Update(crate::update::Message),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its

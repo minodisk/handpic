@@ -1795,8 +1795,8 @@ takes the pending page and releases the scan pause (`hold.rs`'s
 file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
-with seven `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
-Import and MCP (no Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
+with eight `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
+Import and MCP (no Debug), then Appearance and Updates, the native app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
@@ -2023,6 +2023,65 @@ not open.
   click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at
   the pinned rev; the hand check is pending in
   `../plans/20261113-gpui-settings/learnings.md`.
+
+### The update flow runs on threads of its own and restarts through GPUI (Measured)
+
+`update.rs` is the pure model, as `cache.rs` is to the Cache page; the
+backend's `update.rs` is the engine. The engine reports no phase, since
+`self_update`'s `update()` downloads, verifies and installs in one blocking
+call, so `Updates` sets the phases (`Idle`, `Checking`, `Available`,
+`Downloading`, `Verifying`, `ReadyToRestart`, `Failed`, gpui-kit's guide's)
+around `update::check` and `update::install`. The window runs each on a
+`std::thread` (a download can take minutes, too long for the background
+executor's pool) and the answers come back through the view's one channel
+as `scan::Event::Update`. The download's `progress` callback is sent only
+when its percent changes (`progress_step`; each MiB without a size), and the
+download reaching its size turns `Downloading` into `Verifying`, the digest,
+the signature, the extraction and the replace following inside the same
+call.
+
+- Rule: the launch check. Only in a release build (`cfg!(debug_assertions)`
+  off), never under `--auto`, and at most once an hour: the time of the last
+  automatic check is the settings store's `updateCheckedAt` key (Unix
+  seconds, a time in the future counting as due), written before the check
+  runs, so a launch that fails offline is not retried at the next launch
+  within the hour either. It is a key in the store, not `self_update`'s
+  `UpdateCheckGuard` stamp file: the store already keeps the session's
+  state (`lastFolder`, `windowBounds`) and its path follows `--settings`.
+  `Check for Updates` always checks and writes nothing.
+- Rule: never two checks at once, and nothing installed twice. A check is
+  refused while a check or an install is under way, and once this process
+  installed a version (the Tauri `UpdateRun.installed` rule), until the
+  restart. A failure leaves the app as it was and the button enabled.
+- Rule: who installs. A portable ZIP or a tarball install is downloaded,
+  verified and installed without asking (the plan's recorded policy, against
+  the guide's consent step), then `ReadyToRestart`, with the pane's note
+  naming `Restart Now`. Every other kind, the deb and an unknown copy (a
+  `cargo run`, a `target/` binary) and, until their own steps, the Inno
+  Setup and `.app` installs, stops at `Available` with `Open Release Page`
+  (`cx.open_url`).
+- Rule: the timeouts. The check's requests are bounded by `CHECK_TIMEOUT`
+  (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the backend's: a
+  stalled connection fails into `Failed` rather than holding `Checking` and
+  so every later check. `ureq`'s per-call timeout is global, the body's read
+  included, hence the long one for the download.
+- Rule: the restart. `Restart Now` calls `cx.set_restart_path` with the
+  executable `current_exe` gave at launch (on Linux it names the replaced
+  file with a ` (deleted)` suffix after the update) and `cx.restart()`, not
+  `self_update::restart`, which would `exec` past the drains. GPUI's
+  `restart` spawns a script that waits for this process's exit and quits
+  the app (`PostQuitMessage` on Windows, the platform's `quit` on macOS and
+  Linux), so the app-level `on_app_quit` handlers run first. Measured on
+  Windows 11 (2026-11-19, a debug build whose `--auto` end called
+  `cx.restart()` towards `whoami.exe` on an empty folder): `quit: scan
+  stopped`, `quit: judgment stores drained=true sidecar writer
+  drained=true` and `quit: settings writes drained=true` were logged after
+  the restart and the process exited 0. The relaunch of an updated
+  executable is a check of the plan's Step 7.
+- Rule: MCP. `get_status` carries the state (`update`: the version, the
+  install kind, the phase, the target version, the percent, the message and
+  the release page); no tool checks or restarts, and the coverage table
+  excludes the page for that reason.
 
 ### The keymap is edited in the modal and replaced whole (Inferred)
 

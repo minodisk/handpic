@@ -7,6 +7,7 @@
 //! build's own are `source()`'s. Blocking: the caller runs it on a worker.
 
 use std::path::Path;
+use std::time::Duration;
 
 use self_update::backends::github;
 use self_update::VerifyingKey;
@@ -14,6 +15,13 @@ use semver::Version;
 
 /// The release asset whose digests every download is checked against.
 const SUMS: &str = "SHA256SUMS";
+
+/// The bound on each request of a check: a stalled connection fails the
+/// check rather than holding it, so the next one can run.
+pub const CHECK_TIMEOUT: Duration = Duration::from_secs(30);
+/// The bound on each request of an install, the archive's download whole
+/// (`ureq`'s global timeout covers reading the body), so longer.
+pub const INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 /// The production verifying key, whose private key the maintainer keeps
 /// outside the repository.
@@ -160,6 +168,7 @@ pub fn check(source: &Source, current: &str) -> Result<Option<Offer>, String> {
     Version::parse(current).map_err(|e| format!("version {current}: {e}"))?;
     let releases = configure(source, current)
         .bin_name("handpic")
+        .timeout(CHECK_TIMEOUT)
         .build()
         .and_then(|update| update.get_newer_releases())
         .map_err(|e| e.to_string())?
@@ -194,13 +203,15 @@ fn portable_asset(kind: InstallKind, version: &str, exe_name: &str) -> Option<(S
 /// release pinned by its tag: a portable or tarball install only. The
 /// archive is downloaded to a temporary folder and checked against the
 /// release's `SHA256SUMS` and `source`'s keys first; every `Err` leaves `exe`
-/// as it was.
+/// as it was. `progress` is given the archive's bytes downloaded so far and
+/// its size when the server sent one; the checks run after its last call.
 pub fn install(
     source: &Source,
     offer: &Offer,
     kind: InstallKind,
     exe: &Path,
     current: &str,
+    progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
 ) -> Result<(), String> {
     let exe_name = exe
         .file_name()
@@ -212,6 +223,8 @@ pub fn install(
         .bin_name(exe_name)
         .bin_path_in_archive(path_in_archive)
         .bin_install_path(exe)
+        .timeout(INSTALL_TIMEOUT)
+        .progress_callback(progress)
         .release_tag(format!("v{}", offer.version))
         .asset_matcher(move |assets| assets.iter().find(|a| a.name() == asset).cloned())
         .build()
@@ -445,6 +458,7 @@ mod tests {
             InstallKind::Portable,
             &exe,
             "1.0.0",
+            |_, _| {},
         );
         (result, std::fs::read(&exe).unwrap())
     }
@@ -509,7 +523,8 @@ mod tests {
             &offer("2.0.0"),
             InstallKind::Portable,
             &exe,
-            "1.0.0"
+            "1.0.0",
+            |_, _| {}
         )
         .is_err());
         assert_eq!(std::fs::read(&exe).unwrap(), OLD);
@@ -527,6 +542,7 @@ mod tests {
     #[test]
     fn a_signed_tarball_replaces_the_tarball_exe() {
         let archive = signed(TAR, &tar_gz_of("Handpic/bin/handpic", NEW), &key(1));
+        let size = archive.len() as u64;
         let archive = (TAR.to_string(), archive);
         let mut r = release("2.0.0");
         r.assets = with_sums(archive);
@@ -536,14 +552,18 @@ mod tests {
         let exe = bin.join("handpic");
         std::fs::write(&exe, OLD).unwrap();
         assert_eq!(detect(&exe), InstallKind::Tarball);
+        let last = Arc::new(std::sync::Mutex::new(None));
+        let seen = last.clone();
         install(
             &source,
             &offer("2.0.0"),
             InstallKind::Tarball,
             &exe,
             "1.0.0",
+            move |done, total| *seen.lock().unwrap() = Some((done, total)),
         )
         .unwrap();
+        assert_eq!(*last.lock().unwrap(), Some((size, Some(size))));
         assert_eq!(std::fs::read(&exe).unwrap(), NEW);
     }
 
@@ -594,7 +614,7 @@ mod tests {
         let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
         let exe = portable_install("deb");
         for kind in [InstallKind::Deb, InstallKind::Unknown] {
-            assert!(install(&source, &offer("2.0.0"), kind, &exe, "1.0.0").is_err());
+            assert!(install(&source, &offer("2.0.0"), kind, &exe, "1.0.0", |_, _| {}).is_err());
             assert_eq!(std::fs::read(&exe).unwrap(), OLD);
         }
     }

@@ -259,7 +259,7 @@ overrides it:
     - Files: `crates/backend/src/update.rs`, `crates/backend/src/lib.rs`,
       `crates/backend/Cargo.toml`, the root `Cargo.lock`, `CLAUDE.md`.
 
-- [ ] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
+- [x] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
   - Done when:
     - The native app checks at launch on a background task. Not under
       `--auto`, not in a debug build, and not within one hour of the last
