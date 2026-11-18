@@ -140,7 +140,7 @@ overrides it:
       (`../20261118-remove-tauri/plan.md`, Step 2) renames it, so keep reading
       the name from each script's `binary=`.
 
-- [ ] Step 2: Add the updater's assets and the signing tooling to the packaging
+- [x] Step 2: Add the updater's assets and the signing tooling to the packaging
   - Done when:
     - `Package` also builds the two assets the updater needs:
       - `Handpic-<version>-macos-<arch>.tar.gz`, holding `Handpic.app`;
