@@ -4,6 +4,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock, atomic::AtomicBool},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
@@ -14,20 +15,89 @@ use tempfile::TempDir;
 
 use crate::{
     Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
-    settings,
+    scan::Running, settings,
 };
 
 /// How long `wait_until` waits on the app's own threads before failing.
 const WAIT: Duration = Duration::from_secs(10);
 
+/// How long a timed-out `wait_until` keeps waiting to tell a slow app from a
+/// stuck one before it fails.
+const GRACE: Duration = Duration::from_secs(90);
+
 /// Under every quit handler's drain timeout, so a quit that waits one out
 /// fails the test.
 const QUIT_MAX: Duration = Duration::from_secs(1);
+
+/// The `log` records of every test in the process, each stamped with the
+/// time since the first `Ui` opened, which a timed-out `wait_until` prints
+/// for its own folder: no logger is installed under `cargo test` otherwise.
+struct TestLog {
+    started: Instant,
+    lines: Mutex<Vec<String>>,
+}
+
+impl log::Log for TestLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            let line = format!(
+                "{:>8.3}s [{}][{}] {}",
+                self.started.elapsed().as_secs_f64(),
+                record.target(),
+                record.level(),
+                record.args()
+            );
+            self.lines
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(line);
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOG: OnceLock<TestLog> = OnceLock::new();
+
+fn install_log() {
+    let log = LOG.get_or_init(|| TestLog {
+        started: Instant::now(),
+        lines: Mutex::new(Vec::new()),
+    });
+    if log::set_logger(log).is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
+    }
+}
+
+/// The logged lines that name `dir`, a temporary folder's unique name.
+fn log_lines(dir: &str) -> String {
+    LOG.get().map_or_else(String::new, |log| {
+        log.lines
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|line| line.contains(dir))
+            .map(|line| {
+                format!(
+                    "
+  {line}"
+                )
+            })
+            .collect()
+    })
+}
 
 pub struct Ui {
     pub cx: VisualTestContext,
     /// Taken at the drop, so the view goes with the app.
     view: Option<Entity<Handpic>>,
+    /// The view's scan, cancelled when the `Ui` drops while panicking.
+    scan: Running,
+    folder: Option<PathBuf>,
     /// Taken at the drop, which removes it once the app's threads let go.
     dir: Option<TempDir>,
 }
@@ -36,6 +106,7 @@ impl Ui {
     /// The main window over a new index and settings store in a temporary
     /// folder, with no folder open.
     pub fn open() -> Self {
+        install_log();
         let dir = tempfile::tempdir().unwrap();
         let cx = TestAppContext::single();
         // The view's scan, watchers and writers are threads of their own, so
@@ -48,9 +119,12 @@ impl Ui {
             .unwrap();
         let cx = VisualTestContext::from_window(window, &cx);
         cx.run_until_parked();
+        let scan = view.read_with(&cx, |view, _| view.scan.clone());
         Self {
             cx,
             view: Some(view),
+            scan,
+            folder: None,
             dir: Some(dir),
         }
     }
@@ -85,6 +159,7 @@ impl Ui {
         for (name, orientation) in files {
             fs::write(folder.join(name), dng(*orientation)).unwrap();
         }
+        self.folder = Some(folder.clone());
         let path = folder.to_string_lossy().into_owned();
         self.update(|view, cx| view.open_from_tree(path, cx).detach());
         self.wait_idle("the folder's listing, scan and preview", files.len());
@@ -137,11 +212,63 @@ impl Ui {
                         view.current_path(),
                     )
                 });
-                panic!("timed out waiting for {what}: {state}");
+                let idle = loop {
+                    self.cx.run_until_parked();
+                    if self.read(&done) {
+                        break format!("done after {:?}", started.elapsed());
+                    }
+                    if started.elapsed() >= WAIT + GRACE {
+                        break format!("still not done after {:?}", started.elapsed());
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                };
+                let probe = self.folder.as_ref().map(|f| probe(f)).unwrap_or_default();
+                let name = self
+                    .dir()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                panic!(
+                    "timed out waiting for {what}: {state}; {idle}; {probe}; log:{}",
+                    log_lines(&name)
+                );
             }
             thread::sleep(Duration::from_millis(10));
         }
     }
+}
+
+/// Times pass 2's analysis of one of `folder`'s files on this thread at
+/// normal priority, then on a worker at the pass's own `Priority::Lowest`.
+fn probe(folder: &Path) -> String {
+    use handpic_core::scan::{Priority, ScanFocus, extract_analysis, extract_analysis_all};
+    let Some(path) = fs::read_dir(folder)
+        .ok()
+        .and_then(|mut d| d.next())
+        .and_then(|e| e.ok())
+        .map(|e| e.path())
+    else {
+        return String::new();
+    };
+    let t = Instant::now();
+    let normal = extract_analysis(&path).is_ok();
+    let normal_took = t.elapsed();
+    let t = Instant::now();
+    let lowest = Mutex::new(None);
+    let _ = extract_analysis_all(
+        std::slice::from_ref(&path),
+        1,
+        Priority::Lowest,
+        &ScanFocus::default(),
+        |_, r| *lowest.lock().unwrap() = Some(r.is_ok()),
+        &AtomicBool::new(false),
+    );
+    let lowest_took = t.elapsed();
+    format!(
+        "probe normal {normal} in {normal_took:?}, lowest {:?} in {lowest_took:?}",
+        lowest.into_inner().unwrap()
+    )
 }
 
 /// A baseline JPEG of `width` x `height`, a gradient.
@@ -201,6 +328,7 @@ impl Drop for Ui {
     fn drop(&mut self) {
         self.view.take();
         if thread::panicking() {
+            self.scan.cancel();
             return;
         }
         let started = Instant::now();
