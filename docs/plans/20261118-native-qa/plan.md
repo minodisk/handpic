@@ -37,7 +37,7 @@ ways to do that.
 
 ## Steps
 
-- [ ] Step 1: Add the `screenshot` tool to the backend's MCP server, listed only when the host opts in
+- [x] Step 1: Add the `screenshot` tool to the backend's MCP server, listed only when the host opts in
   - Done when:
     - `Mcp` has a builder (`with_screenshot`, next to `with_all_tools`) that adds one `screenshot` tool to the listed tools; without it the tool lists of `Mcp::new` and `with_all_tools` are exactly what they are today (the two existing list tests stay unchanged and pass).
     - The tool takes an optional `long_edge` (1568 when omitted, clamped to 256 to 4096), sends a `screenshot` request through the `Bridge` with the clamped value, and turns the main window's reply into an MCP image content block (`image/png`) followed by a text block with the image's width and height, as `get_preview` does. A refusal or a malformed reply becomes a tool error.
@@ -138,3 +138,5 @@ ways to do that.
 - **Dropped: headless pixel snapshots.** A `HeadlessAppContext` + wgpu spike on the Linux runner was considered and left out; B asserts state and painted quads only, and pixels are A's live screenshot.
 
 ## Progress
+
+- (2026-11-18) Step 1 complete
