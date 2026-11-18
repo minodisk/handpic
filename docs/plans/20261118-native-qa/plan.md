@@ -75,7 +75,7 @@ ways to do that.
     - gpui-base swaps some element types for `test_support::Observed` wrappers under `test-support`, and gpui-component compiles extra hooks. Confirm the whole app compiles and behaves the same in the feature build.
     - mise task: `native:dev` passes `"$@"` after `--`, so a cargo feature cannot be given through it. Add a sibling task (same `dir`, `tools` and `shell` as `native:dev`) that runs `cargo run --features screenshot -- "$@"`.
     - Docs: `README.md` and `docs/humans/usage.md` list only the seven companion tools in their table, not the native app's, and this tool is a development aid absent from the packages, so the README / usage pairs are not changed. `docs/agents/native-app.md`: extend "The MCP companion answers from the view, one channel hop away" with the opt-in tool and add a GPUI entry on `render_to_image` (feature gate, per-platform support, no present, what was measured).
-- [ ] Step 3: Lint the `screenshot` feature build in CI and in the local checks
+- [x] Step 3: Lint the `screenshot` feature build in CI and in the local checks
   - Done when:
     - On Windows, `cargo clippy --all-targets --features screenshot -- -D warnings` runs in `crates/native` in all three places that lint the native app: the `native` job of `.github/workflows/ci.yml`, `tools/ci/local.sh` (so `mise run ci:local` runs it when the branch touches `crates/native`) and the `native:check` mise task. On macOS and Linux none of the three runs it.
     - `tools/ci/local.test.sh` covers the new check and passes.
@@ -141,3 +141,4 @@ ways to do that.
 
 - (2026-11-18) Step 1 complete
 - (2026-11-18) Step 2 complete
+- (2026-11-18) Step 3 complete

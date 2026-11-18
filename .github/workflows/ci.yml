@@ -114,7 +114,8 @@ jobs:
       # the build script behind that shell did not find nasm ("program not
       # found") even with the directory on PATH. Run the same two commands
       # through `mise exec`, which hands cargo the environment directly, on
-      # every platform so the job has one command path.
+      # every platform so the job has one command path. The `screenshot` feature
+      # build is linted on Windows only, the platform its tool is checked on.
       - name: Lint and test the native app
         shell: bash
         working-directory: crates/native
@@ -125,6 +126,9 @@ jobs:
           fi
           mise exec rust@1.98.1 -- nasm -v
           mise exec rust@1.98.1 -- cargo clippy --all-targets -- -D warnings
+          if [ "$RUNNER_OS" = Windows ]; then
+            mise exec rust@1.98.1 -- cargo clippy --all-targets --features screenshot -- -D warnings
+          fi
           mise exec rust@1.98.1 -- cargo test
 
       # The debug build keeps the step short; the layout is the release one's.

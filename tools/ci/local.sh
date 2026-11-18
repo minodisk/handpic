@@ -27,6 +27,14 @@ set -o nounset
 # `native` job and `[tasks."native:check"]` use it.
 native_rust="rust@1.98.1"
 
+# Whether this host is Windows, where the native app's `screenshot` feature
+# build is linted too (`uname -s`, overridable through CI_LOCAL_UNAME so the
+# tests can pin it).
+case "${CI_LOCAL_UNAME:-$(uname -s)}" in
+MINGW* | MSYS* | CYGWIN*) on_windows=1 ;;
+*) on_windows=0 ;;
+esac
+
 # The root packages checked one by one (crates/core, crates/backend,
 # crates/cli).
 root_packages=(handpic-core handpic-backend handpic-cli)
@@ -161,6 +169,7 @@ function select_checks() {
 		[[ "${packages}" != *" ${package} "* ]] || echo "test ${package}"
 	done
 	[[ "${native_clippy}" -eq 0 ]] || echo "clippy native"
+	[[ "${native_clippy}" -eq 0 || "${on_windows}" -eq 0 ]] || echo "clippy native screenshot"
 	[[ "${native}" -eq 0 ]] || echo "test native"
 }
 
@@ -175,6 +184,7 @@ function every_check() {
 	printf 'clippy %s\n' "${root_packages[@]}"
 	printf 'test %s\n' "${root_packages[@]}"
 	echo "clippy native"
+	echo "clippy native screenshot"
 	echo "test native"
 }
 
@@ -250,6 +260,10 @@ function run_check() {
 		ensure_nasm
 		(cd crates/native && mise exec "${native_rust}" -- cargo clippy --all-targets -- -D warnings)
 		;;
+	"clippy native screenshot")
+		ensure_nasm
+		(cd crates/native && mise exec "${native_rust}" -- cargo clippy --all-targets --features screenshot -- -D warnings)
+		;;
 	"test native")
 		ensure_nasm
 		(cd crates/native && mise exec "${native_rust}" -- cargo test)
@@ -322,14 +336,14 @@ function main() {
 	local clippy_packages=() test_packages=()
 	for check in "${selected[@]}"; do
 		case "${check}" in
-		"clippy native" | "test native") ;;
+		"clippy native" | "clippy native screenshot" | "test native") ;;
 		"clippy "*) clippy_packages+=("${check#clippy }") ;;
 		"test "*) test_packages+=("${check#test }") ;;
 		esac
 	done
 	for check in "${selected[@]}"; do
 		case "${check}" in
-		"clippy native" | "test native") run_check "${check}" ;;
+		"clippy native" | "clippy native screenshot" | "test native") run_check "${check}" ;;
 		"clippy "*)
 			if [[ "${#clippy_packages[@]}" -gt 0 ]]; then
 				run_check "clippy ${clippy_packages[*]}"

@@ -18,6 +18,9 @@ target="${script_dir}/local.sh"
 failures=0
 cases=0
 
+# The host's `uname -s` the cases select for; the Windows cases set it.
+uname=Linux
+
 # expect <mode> <paths, one per line> <expected checks, one per line>
 function expect() {
 	local mode="$1"
@@ -26,10 +29,10 @@ function expect() {
 	local output status=0
 
 	cases=$((cases + 1))
-	output=$(bash "${target}" --select "${mode}" <<<"${paths}") || status=$?
+	output=$(CI_LOCAL_UNAME="${uname}" bash "${target}" --select "${mode}" <<<"${paths}") || status=$?
 
 	if [[ "${status}" -ne 0 || "${output}" != "${expected}" ]]; then
-		echo "FAIL: [${mode}] ${paths//$'\n'/ }" >&2
+		echo "FAIL: [${mode}, ${uname}] ${paths//$'\n'/ }" >&2
 		echo "  exit ${status}; expected:" >&2
 		printf '    %s\n' "${expected//$'\n'/$'\n'    }" >&2
 		echo "  got:" >&2
@@ -152,6 +155,27 @@ expect all "" "${every}"
 expect none "mise.toml" "${every}"
 expect none ".shellcheckrc
 docs/a.md" "${every}"
+
+# --- Windows: the native app's screenshot feature build ----------------------
+uname=MINGW64_NT-10.0-26200
+expect none "crates/native/src/x.rs" "fmt native
+clippy native
+clippy native screenshot
+test native"
+expect none "crates/backend/src/x.rs" "fmt root
+clippy handpic-backend
+test handpic-backend
+clippy native
+clippy native screenshot"
+expect none "crates/cli/src/x.rs" "fmt root
+clippy handpic-cli
+test handpic-cli"
+expect none "README.md" "lychee"
+expect all "" "${every/$'clippy native\n'/$'clippy native\nclippy native screenshot\n'}"
+uname=Darwin
+expect none "crates/native/src/x.rs" "fmt native
+clippy native
+test native"
 
 if [[ "${failures}" -gt 0 ]]; then
 	echo "${failures} of ${cases} cases failed" >&2
