@@ -54,6 +54,16 @@ reads the class and relative priority back with `pthread_get_qos_class_np`.
 `WAIT` stays 10 s. The harness keeps the test logger and the cascade fix; the
 grace wait and the probe were hunt-only and are gone.
 
+Result on `361d5c4e` (`fix(core): run the analysis pass at QoS utility on
+macOS`), CI run 44410310963: every job passed on attempt 1, and the macOS
+`native` job passed 3 times in a row, all six `uitest` tests ok each time
+(job 135176364852 attempt 1, the crate's tests in 3.59 s; job 135183066315
+attempt 2, 6.02 s; job 135185406000 attempt 3, 10.61 s, against 52.78 s with
+the five timeouts before). `scan::tests::every_worker_runs_at_the_priority_it_was_given`
+passed in the macOS `test` job (135176364686 of the same run, attempt 1), so the macOS
+branch reads back `UTILITY` at -5 and 0. The commit that adds these lines
+changes only this file.
+
 `cargo check --target aarch64-apple-darwin` cannot run on this Windows host
 (`mozjpeg-sys` needs a C compiler for the target), so the macOS branch is
 only compiled and run by the macOS CI jobs.
