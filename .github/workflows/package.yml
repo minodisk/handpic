@@ -4,8 +4,16 @@ name: Package
 # this run's artifacts. Manual only, and it touches no release: attaching them
 # to one is release.yml's business. A dispatch runs the workflow file of the
 # chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.
+# `-f version=<x.y.z[-prerelease]>` packages that version instead of
+# crates/native/Cargo.toml's, which set-version.sh writes before the build.
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: The version to package (x.y.z or x.y.z-<prerelease>); empty keeps crates/native/Cargo.toml's
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -48,10 +56,22 @@ jobs:
           key: cargo-native-release-${{ matrix.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
           restore-keys: cargo-native-release-${{ matrix.os }}-
 
+      # After the cache step, so its key is Cargo.lock as checked in.
+      - name: Set the version
+        if: inputs.version != ''
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash tools/package/set-version.sh "$VERSION"
+
       - name: Read the version
         id: version
         shell: bash
-        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          for form in numeric windows deb; do
+            echo "$form=$(bash tools/package/version.sh "$form")" >> "$GITHUB_OUTPUT"
+          done
+          echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
       # Through `mise exec`, as ci.yml's `native` job builds, so every
       # platform's leg has the one command path.
@@ -73,6 +93,7 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          NUMERIC: ${{ steps.version.outputs.numeric }}
           ARCH: ${{ matrix.arch }}
         run: |
           dmg="crates/native/target/release/Handpic-$VERSION-macos-$ARCH.dmg"
@@ -83,8 +104,13 @@ jobs:
           codesign --verify --strict --verbose=2 "$app"
           test -x "$app/Contents/MacOS/handpic"
           lipo -archs "$app/Contents/MacOS/handpic" | grep -qx "$ARCH"
-          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$VERSION"
-          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$VERSION"
+          # Both fields take the numeric form, a prerelease's suffix dropped.
+          for field in CFBundleShortVersionString CFBundleVersion; do
+            value="$(plutil -extract "$field" raw "$app/Contents/Info.plist")"
+            echo "$field $value"
+            [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            test "$value" = "$NUMERIC"
+          done
           ls "$app/Contents/Resources/licenses"
           test -s "$app/Contents/Resources/licenses/NOTICE-gpui"
           test -L "$mount/Applications"
@@ -118,10 +144,22 @@ jobs:
           key: cargo-native-release-windows-latest-${{ hashFiles('crates/native/Cargo.lock') }}
           restore-keys: cargo-native-release-windows-latest-
 
+      # After the cache step, so its key is Cargo.lock as checked in.
+      - name: Set the version
+        if: inputs.version != ''
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash tools/package/set-version.sh "$VERSION"
+
       - name: Read the version
         id: version
         shell: bash
-        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          for form in numeric windows deb; do
+            echo "$form=$(bash tools/package/version.sh "$form")" >> "$GITHUB_OUTPUT"
+          done
+          echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
       # As ci.yml's `native` job: setup-nasm's folder is put on PATH by hand
       # for the build script behind `mise exec`.
@@ -145,11 +183,17 @@ jobs:
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          WINDOWS_VERSION: ${{ steps.version.outputs.windows }}
         run: |
           $ErrorActionPreference = 'Stop'
           $release = 'crates/native/target/release'
           $setup = Resolve-Path "$release/Handpic-$env:VERSION-windows-x64-setup.exe"
           $zip = Resolve-Path "$release/Handpic-$env:VERSION-windows-x64.zip"
+          # The setup's file version is the Windows form, Inno's VersionInfoVersion.
+          $info = (Get-Item $setup).VersionInfo
+          $fileVersion = "$($info.FileMajorPart).$($info.FileMinorPart).$($info.FileBuildPart).$($info.FilePrivatePart)"
+          Write-Output "setup file version $fileVersion"
+          if ($fileVersion -ne $env:WINDOWS_VERSION) { throw "setup file version $fileVersion" }
           $silent = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
           function Invoke-Silent($exe, $what) {
             $p = Start-Process -FilePath $exe -ArgumentList $silent -Wait -PassThru
@@ -167,6 +211,9 @@ jobs:
             $entry = Get-ItemProperty $key
             $entry | Format-List DisplayName, DisplayVersion, InstallLocation, UninstallString
             if ($entry.DisplayVersion -ne $env:VERSION) { throw "DisplayVersion $($entry.DisplayVersion)" }
+            # winresource writes CARGO_PKG_VERSION as the exe's ProductVersion.
+            $product = (Get-Item $exe).VersionInfo.ProductVersion
+            if ($product -ne $env:VERSION) { throw "the exe's ProductVersion $product" }
             foreach ($k in $machineKeys) { if (Test-Path $k) { throw "machine-wide entry $k" } }
             if (-not (Test-Path $shortcut)) { throw "no $shortcut" }
           }
@@ -233,10 +280,22 @@ jobs:
           key: cargo-native-release-ubuntu-latest-${{ hashFiles('crates/native/Cargo.lock') }}
           restore-keys: cargo-native-release-ubuntu-latest-
 
+      # After the cache step, so its key is Cargo.lock as checked in.
+      - name: Set the version
+        if: inputs.version != ''
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash tools/package/set-version.sh "$VERSION"
+
       - name: Read the version
         id: version
         shell: bash
-        run: echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
+        run: |
+          for form in numeric windows deb; do
+            echo "$form=$(bash tools/package/version.sh "$form")" >> "$GITHUB_OUTPUT"
+          done
+          echo "version=$(bash tools/package/version.sh)" >> "$GITHUB_OUTPUT"
 
       - name: Build the release binary
         shell: bash
@@ -289,10 +348,19 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          DEB_VERSION: ${{ steps.version.outputs.deb }}
         run: |
           deb="$PWD/crates/native/target/release/handpic_${VERSION}_amd64.deb"
           dpkg-deb --info "$deb"
           dpkg-deb --contents "$deb"
+          test "$(dpkg-deb --field "$deb" Version)" = "$DEB_VERSION"
+          # A prerelease sorts before its release, rc.2 before rc.10.
+          rc2="$(bash tools/package/version.sh deb 2.0.0-rc.2)"
+          rc10="$(bash tools/package/version.sh deb 2.0.0-rc.10)"
+          stable="$(bash tools/package/version.sh deb 2.0.0)"
+          test "$rc2" = 2.0.0~rc.2
+          dpkg --compare-versions "$rc2" lt "$rc10"
+          dpkg --compare-versions "$rc10" lt "$stable"
           depends="$(dpkg-deb --field "$deb" Depends)"
           for package in libc6 libvulkan1 libwayland-client0; do
             grep -qE "(^|, )$package( |,|$)" <<<"$depends"

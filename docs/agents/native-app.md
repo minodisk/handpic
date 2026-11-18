@@ -456,9 +456,9 @@ the distributables").
 out `crates/native/target/<profile>/Handpic.app` with the checked-in
 `crates/native/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
 `crates/native/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
-version `tools/package/version.sh` prints into the copied `Info.plist`'s
-`CFBundleShortVersionString` and `CFBundleVersion` (`plutil -replace`; the
-checked-in file keeps `0.0.0`) and copies the notices into
+numeric form `tools/package/version.sh numeric` prints into the copied
+`Info.plist`'s `CFBundleShortVersionString` and `CFBundleVersion` (`plutil
+-replace`; the checked-in file keeps `0.0.0`) and copies the notices into
 `Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `native`
 CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
 executable and the `.icns` present).
@@ -485,9 +485,29 @@ of them. Each leg builds with `mise exec rust@1.98.1 -- cargo build --release
 packages the built `target/release` binary with a script under
 `tools/package/`, which builds nothing.
 
-- `version.sh` prints `[package].version` of `crates/native/Cargo.toml`
-  (`0.0.0` until release-please owns it), which the bundle and every file
-  name carry.
+- `version.sh [form] [version]` prints `[package].version` of
+  `crates/native/Cargo.toml` (`0.0.0` until release-please owns it), or the
+  version given, in the form a package format takes, and refuses a version
+  that is not `x.y.z` or `x.y.z-<prerelease>` (the prerelease dot-separated
+  alphanumeric identifiers, no `-`, which the deb form could not carry):
+
+  | Form      | Stable    | Prerelease   | Used by                                              |
+  | --------- | --------- | ------------ | ---------------------------------------------------- |
+  | `semver`  | `2.0.0`   | `2.0.0-rc.1` | every asset file name, Inno `AppVersion`, the binary |
+  | `numeric` | `2.0.0`   | `2.0.0`      | `CFBundleShortVersionString`, `CFBundleVersion`      |
+  | `windows` | `2.0.0.0` | `2.0.0.0`    | Inno `VersionInfoVersion`                            |
+  | `deb`     | `2.0.0`   | `2.0.0~rc.1` | the control file's `Version`                         |
+
+  `semver` is the default. The deb's file name keeps the SemVer string
+  (`handpic_2.0.0-rc.1_amd64.deb`); only the control field uses `~`, so a
+  prerelease sorts before its release.
+- `set-version.sh <version>` writes a version to `crates/native/Cargo.toml`
+  and to the crate's entry in `crates/native/Cargo.lock`, so `cargo build
+  --locked` still passes and the binary (on Windows, the exe's
+  `ProductVersion`, which `winresource` takes from `CARGO_PKG_VERSION`)
+  carries it. The workflow's optional `version` input runs it before the
+  build (`gh workflow run package.yml --ref <branch> -f version=2.0.0-rc.1`);
+  a tester runs it for local N and N+1 builds.
 - `macos.sh` signs the laid-out `Handpic.app` ad hoc (`codesign --force
   --sign -`, then `codesign --verify --strict`; no Developer ID, no
   notarization), stages it with `ditto` (not `cp -R`, so the ad hoc
@@ -498,7 +518,7 @@ packages the built `target/release` binary with a script under
   runs it on `macos-latest` (arm64) and `macos-15-intel` (x86_64), after
   `mise run native:bundle:macos`, and checks the DMG (`hdiutil verify`, then
   attached: the signature, the executable's architecture, both version
-  fields and the notices).
+  fields numeric and equal to the `numeric` form, and the notices).
 - `mise run native:package:macos` is the same locally on a Mac: the bundle
   task (its release build included), then `macos.sh`.
 - `windows.sh` compiles `crates/native/packaging/windows/handpic.iss` with
@@ -506,18 +526,21 @@ packages the built `target/release` binary with a script under
   machine-wide install folders, else it fails with the `winget install
   JRSoftware.InnoSetup` hint) into
   `crates/native/target/release/Handpic-<version>-windows-x64-setup.exe`,
-  passing the version, the executable's name and the folders as `/D`
-  defines, and zips one `Handpic/` folder (the exe and `licenses/`) into
+  passing the version (`AppVersion`, the SemVer form, and `FileVersion`,
+  the `windows` form the `.iss` sets as `VersionInfoVersion`, which Inno
+  derives from `AppVersion` only when that is numeric), the executable's name
+  and the folders as `/D` defines, and zips one `Handpic/` folder (the exe and `licenses/`) into
   `Handpic-<version>-windows-x64.zip` with Windows' own
   `System32/tar.exe -a` (Git Bash has no `zip` and its GNU `tar` writes
   none). The setup installs per user (`PrivilegesRequired=lowest`,
   `{autopf}\Handpic`, which is `%LOCALAPPDATA%\Programs\Handpic`), adds a
   Start menu shortcut (`{autoprograms}`) and takes its icon from
   `crates/native/icons/icon.ico`, read in place. The workflow's `windows` leg
-  runs it on `windows-latest`, then installs the setup silently
+  runs it on `windows-latest`, checks the setup's file version is the
+  `windows` form, then installs the setup silently
   (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), checks the exe under
-  `%LOCALAPPDATA%\Programs\Handpic`, the `HKCU` uninstall entry and its
-  `DisplayVersion`, no `HKLM` entry and the shortcut, runs the setup again
+  `%LOCALAPPDATA%\Programs\Handpic` and its `ProductVersion`, the `HKCU`
+  uninstall entry and its `DisplayVersion` (both the SemVer form), no `HKLM` entry and the shortcut, runs the setup again
   over the install, uninstalls silently and checks all of it gone, then
   checks the ZIP's contents. `windows-latest` ships Inno Setup 6.7.1 with
   `iscc` on `PATH` (Chocolatey's shim), so the workflow installs nothing.
@@ -541,15 +564,17 @@ packages the built `target/release` binary with a script under
     --root-owner-group --build` from `usr/lib/handpic/handpic`, the
     desktop entry with `Exec=/usr/lib/handpic/handpic`, the icon, and
     the notices under `usr/share/doc/handpic/`, its `DEBIAN/control` from the
-    `crates/native/packaging/linux/control` template (version, installed
-    size, `Depends`).
+    `crates/native/packaging/linux/control` template (the `deb` form of the
+    version, installed size, `Depends`).
 
   The workflow's `linux` leg runs it on `ubuntu-latest` after the `native`
   CI job's apt list, prints the binary's `NEEDED` entries, the sonames it
   names and the image's glibc, runs `install.sh` under a throwaway `HOME`
   and checks the binary, the desktop entry (absolute `Exec`, `Icon`,
   `StartupWMClass`) and the icon, checks that a wrong digest installs
-  nothing, prints `dpkg-deb --info` / `--contents`, checks the `Depends`,
+  nothing, prints `dpkg-deb --info` / `--contents`, checks the `Version` is
+  the `deb` form and that `dpkg --compare-versions` puts `2.0.0~rc.2` before
+  `2.0.0~rc.10` before `2.0.0`, checks the `Depends`,
   and installs and removes the deb with `apt-get`. Nothing is launched: the
   runner has no display and no GPU. `mise run native:package:linux` is the
   release build plus `linux.sh` locally.

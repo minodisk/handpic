@@ -18,6 +18,7 @@ binary="handpic.exe"
 
 release="${root}/crates/native/target/release"
 version="$(bash "${root}/tools/package/version.sh")"
+file_version="$(bash "${root}/tools/package/version.sh" windows)"
 setup_name="Handpic-${version}-windows-x64-setup"
 zip="${release}/Handpic-${version}-windows-x64.zip"
 
@@ -59,6 +60,7 @@ bash "${root}/tools/package/notices.sh" "${stage}/Handpic/licenses"
 # MSYS would rewrite ISCC's /-options as paths.
 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
 	"/DAppVersion=${version}" \
+	"/DFileVersion=${file_version}" \
 	"/DBinary=${binary}" \
 	"/DReleaseDir=$(cygpath -w "${release}")" \
 	"/DLicensesDir=$(cygpath -w "${stage}/Handpic/licenses")" \
