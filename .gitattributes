@@ -1,2 +1,5 @@
 * text=auto eol=lf
 crates/core/src/fixtures/dop/* -text
+crates/native/packaging/update.pub -text
+crates/native/packaging/test/update.key -text
+crates/native/packaging/test/update.pub -text

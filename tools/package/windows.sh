@@ -6,8 +6,9 @@ set -o nounset
 
 # windows.sh — packages the release executable cargo built under
 # crates/native/target/release as a per-user Inno Setup setup .exe and a
-# portable ZIP (one Handpic/ folder: the exe and licenses/), both for x64.
-# Prints their paths. It builds nothing. Runs under Git Bash.
+# portable ZIP (one Handpic/ folder: the exe and licenses/), both for x64, and
+# a ZIP holding only the setup, for the updater (sign.sh signs it and the
+# portable ZIP). Prints their paths. It builds nothing. Runs under Git Bash.
 #
 # Usage: windows.sh
 
@@ -21,6 +22,7 @@ version="$(bash "${root}/tools/package/version.sh")"
 file_version="$(bash "${root}/tools/package/version.sh" windows)"
 setup_name="Handpic-${version}-windows-x64-setup"
 zip="${release}/Handpic-${version}-windows-x64.zip"
+setup_zip="${release}/${setup_name}.exe.zip"
 
 if [[ ! -f "${release}/${binary}" ]]; then
 	echo "windows.sh: no ${release}/${binary}; build the release binary first." >&2
@@ -70,8 +72,11 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
 
 # Windows' own bsdtar writes a ZIP; Git Bash's GNU tar and a stock Windows
 # have no zip.
-rm -f "${zip}"
-"$(cygpath -u "${SYSTEMROOT}")/System32/tar.exe" -a -c -f "$(cygpath -w "${zip}")" -C "$(cygpath -w "${stage}")" Handpic
+bsdtar="$(cygpath -u "${SYSTEMROOT}")/System32/tar.exe"
+rm -f "${zip}" "${setup_zip}"
+"${bsdtar}" -a -c -f "$(cygpath -w "${zip}")" -C "$(cygpath -w "${stage}")" Handpic
+"${bsdtar}" -a -c -f "$(cygpath -w "${setup_zip}")" -C "$(cygpath -w "${release}")" "${setup_name}.exe"
 
 echo "${release}/${setup_name}.exe"
 echo "${zip}"
+echo "${setup_zip}"

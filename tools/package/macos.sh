@@ -5,9 +5,10 @@ set -o pipefail
 set -o nounset
 
 # macos.sh — packages the Handpic.app `mise run native:bundle:macos` laid out
-# under crates/native/target/release as a DMG for this Mac's architecture:
-# signed ad hoc (no Developer ID, no notarization), the app beside an
-# /Applications link. Prints the DMG's path. It builds nothing.
+# under crates/native/target/release for this Mac's architecture, signed ad
+# hoc (no Developer ID, no notarization): a DMG, the app beside an
+# /Applications link, for people, and a tarball holding Handpic.app, for the
+# updater (sign.sh signs it). Prints their paths. It builds nothing.
 #
 # Usage: macos.sh
 
@@ -21,6 +22,7 @@ app="${release}/Handpic.app"
 version="$(bash "${root}/tools/package/version.sh")"
 arch="$(uname -m)"
 dmg="${release}/Handpic-${version}-macos-${arch}.dmg"
+tarball="${release}/Handpic-${version}-macos-${arch}.tar.gz"
 
 if [[ ! -x "${app}/Contents/MacOS/${binary}" ]]; then
 	echo "macos.sh: no ${app}; run \`mise run native:bundle:macos\` first." >&2
@@ -37,4 +39,11 @@ ln -s /Applications "${stage}/Applications"
 
 rm -f "${dmg}"
 hdiutil create -volname Handpic -srcfolder "${stage}" -ov -format UDZO "${dmg}" >&2
+
+# COPYFILE_DISABLE keeps bsdtar from adding `._` entries for extended
+# attributes.
+rm -f "${tarball}"
+COPYFILE_DISABLE=1 tar -czf "${tarball}" -C "${stage}" Handpic.app
+
 echo "${dmg}"
+echo "${tarball}"

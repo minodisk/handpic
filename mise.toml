@@ -170,6 +170,37 @@ cargo build --release --locked
 bash ../../tools/package/linux.sh
 """
 
+[tasks."native:sign"]
+description = "Sign the updater's archives in place with zipsign and verify them (tools/package/sign.sh <private-key> <verifying-key> <archive>...)"
+tools = { "cargo:zipsign" = "0.2.2" }
+shell = "bash -c"
+run = """
+set -euo pipefail
+bash tools/package/sign.sh "$@"
+"""
+
+[tasks."native:keygen"]
+description = "Generate the updater's signing key pair with zipsign: the private key to the path given, outside the repository, and the verifying key to crates/native/packaging/update.pub"
+tools = { "cargo:zipsign" = "0.2.2" }
+shell = "bash -c"
+usage = 'arg "<private_key>" help="Where to write the private key, outside the repository (an absolute path)"'
+run = """
+set -euo pipefail
+key="${usage_private_key}"
+public=crates/native/packaging/update.pub
+dir="$(cd "$(dirname "$key")" && pwd -P)"
+root="$(pwd -P)"
+case "$dir/" in
+"$root/"*)
+  echo "native:keygen: keep the private key outside the repository, not in $dir" >&2
+  exit 1
+  ;;
+esac
+zipsign gen-key "$key" "$public"
+echo "private key: $dir/$(basename "$key") (keep it offline; never commit it)"
+echo "verifying key: $public ($(wc -c <"$public" | tr -d ' ') bytes, base64 $(base64 <"$public"))"
+"""
+
 [tasks."native:install:linux"]
 description = "Install the GPUI app for the current user (Linux): the release binary to ~/.local/bin, its .desktop file and icon under ~/.local/share"
 dir = "crates/native"
