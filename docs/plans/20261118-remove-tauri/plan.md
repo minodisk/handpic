@@ -303,7 +303,7 @@ says so (the binary's name in Step 2, the data folders in Step 3).
     - Any move of the index happens before `Index::open`, takes
       `index.sqlite` with its `-wal` and `-shm`, and is skipped under
       `--index`.
-- [ ] Step 4: Rewrite the agent docs and `todo.md` for one app
+- [x] Step 4: Rewrite the agent docs and `todo.md` for one app
   - Done when:
     - `docs/agents/tauri-app.md` and `docs/agents/ui-styling.md` are gone.
       The sections of `tauri-app.md` that are still true of `crates/core`,
@@ -476,3 +476,4 @@ says so (the binary's name in Step 2, the data folders in Step 3).
 - (2026-11-18) Step 1 complete
 - (2026-11-18) Step 2 complete
 - (2026-11-18) Step 3 complete
+- (2026-11-18) Step 4 complete

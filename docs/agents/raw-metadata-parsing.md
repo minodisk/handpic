@@ -13,9 +13,9 @@ pitfalls this repository has already hit, each with the reason it happens.
 `crates/core/src/reader.rs` only picks which bytes to read (and hands an HEVC
 image to `crates/core/src/hevc.rs` to decode); no maker-specific parsing lives
 there. For a new Sony MakerNote field, also read
-[Sony MakerNote fields: verify each tag's type and model `Condition` in Sony.pm directly](./tauri-app.md#sony-makernote-fields-verify-each-tags-type-and-model-condition-in-sonypm-directly-hit).
+[Sony MakerNote fields: verify each tag's type and model `Condition` in Sony.pm directly](#sony-makernote-fields-verify-each-tags-type-and-model-condition-in-sonypm-directly-hit).
 
-The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something
+The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
 or docs only.
 
@@ -90,7 +90,8 @@ shot) and IFD1 (a 160x120 thumbnail); the SubIFD is the raw data. Recent
 bodies add IFD2, the full-size JPEG. `arw::parse` picks the largest JPEG in
 the chain and the SubIFDs, and when that one is smaller than the preview by
 byte length (the thumbnail is a few KB against a 300-900 KB preview) it takes
-the preview as `full` instead, so the 1:1 view (`read_focus_crop`) crops the
+the preview as `full` instead, so the 1:1 view (`zoom::read` in `crates/native`, through
+`partial::decode_focus_crop`) crops the
 preview, as on ORF. `Embedded` carries no pixel size, so the comparison is by
 bytes. A preview-only file (no other JPEG) keeps `full` at `None`, and the DNG
 strip branch is not affected.
@@ -208,6 +209,34 @@ that fits in the entry and so is read from the value field
   `Sigma BF` (`SIGMA_BF_MODEL`).
 - Source: [sigma-bf-af-point learnings, Step 1](../plans/_archived/20260924-sigma-bf-af-point/learnings.md#step-1)
   (the exiftool comparison and the grid check).
+
+### Sony MakerNote fields: verify each tag's type and model `Condition` in Sony.pm directly (Hit)
+
+Don't infer a new Sony MakerNote tag's type or model gate from a
+similarly-numbered or similarly-named tag; check ExifTool's `Sony.pm` for
+that exact tag.
+
+- Types vary per-tag even among neighbors: `AFAreaModeSetting` (0x201c) is
+  BYTE, count 1, while 0x201a is a LONG. `RAWFileType` (0x2029),
+  `MeteringMode2` (0x202c), `ExposureMode` (0xb041), `ReleaseMode` (0xb049),
+  `SequenceNumber` (0xb04a) are SHORT; `DynamicRangeOptimizer` (0xb025) and
+  `ImageStabilization` (0xb026) are LONG; `CreativeStyle` (0xb020) is ASCII,
+  count 16, out of line.
+- `ReleaseMode`, `SequenceNumber` and `ExposureMode` use 65535 as
+  ExifTool's `RawConv` sentinel for "no value"; match it by having no
+  formatting arm for that value, not by special-casing it.
+- Unlike `FocusMode` / `AFTracking`, none of `AFAreaModeSetting`,
+  `RAWFileType`, `MeteringMode2`, `ExposureMode`, `ReleaseMode`,
+  `SequenceNumber`, `DynamicRangeOptimizer`, `ImageStabilization` or
+  `CreativeStyle` carries a model `Condition` in Sony.pm, so no model gate
+  is needed when formatting them — but check Sony.pm per-tag rather than
+  assuming this applies to the next field you add.
+- The formatting of these fields for display is
+  `crates/backend/src/exif.rs`'s; the parsing itself (the Sony gate, the
+  stored type of `FocusFrameSize`) is in the sections above.
+
+Source: `docs/plans/_archived/20260925-sony-af-meta/learnings.md`, Steps 1
+and 3.
 
 ## NEF
 

@@ -6,7 +6,7 @@ mesh that judges closed eyes), `crates/core/src/embed.rs` (the SigLIP 2
 image embedding) or adding another ONNX model to `crates/core`. It lists what loading
 and running a model through `tract-onnx` 0.23 took here, each with the reason.
 
-The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something
+The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
 or docs only.
 
@@ -324,10 +324,10 @@ side resize and a center crop for OpenCLIP and TinyCLIP).
 `include_bytes!` puts the model in a `static`; the linker drops it from a
 binary that never reaches the code reading it. Adding `eyes.rs` grew the
 release `handpic-cli` (whose `eyes` and `bench` call it) by 4.97 MB and the
-release `riffle-app` (which did not call it yet) by 8 KB. Measure a model's
+release app binary of the time (which did not call it yet) by 8 KB. Measure a model's
 binary cost on a build where the app actually calls it.
 
-Once `eyes_of` called it, the release `riffle-app` grew from 47,499,776 B to
+Once `eyes_of` called it, that release app binary grew from 47,499,776 B to
 52,494,336 B (+4,994,560 B, +10.5%), about the ONNX file, so a model's full
 size lands on every binary that reaches it. Source:
 [closed-eyes-detection learnings, Step 3](../plans/_archived/20261007-closed-eyes-detection/learnings.md).

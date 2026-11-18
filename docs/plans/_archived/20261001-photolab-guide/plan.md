@@ -57,7 +57,7 @@ the other.
       the style of `docs/agents/github-actions-workflows.md` ("Read this
       before touching `crates/core/src/dop.rs`, `crates/app/src/photolab.rs`
       or the `.dop` side of `crates/app/src/sidecar.rs` ..."; "The tags
-      follow [`tauri-app.md`](../../../agents/tauri-app.md): **Hit** ... **Measured** ...
+      follow `tauri-app.md` (removed since): **Hit** ... **Measured** ...
       **Inferred** ..."), followed by these four sections moved verbatim from
       `tauri-app.md` (heading text, body, bullets and `Source:` lines
       unchanged; only the heading level may change to fit the new file):

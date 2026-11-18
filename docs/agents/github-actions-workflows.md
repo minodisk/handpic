@@ -5,7 +5,7 @@ secrets, or a dedicated branch as a data store (like `stats`, written by
 `.github/workflows/stats.yml`). It lists what writing and debugging such a
 workflow took here, each with the reason.
 
-The tags follow [`tauri-app.md`](./tauri-app.md): **Hit** broke something
+The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
 or docs only.
 

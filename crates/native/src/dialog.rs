@@ -2,7 +2,7 @@
 //! shows, its run button and Cancel, which of them are enabled, which one the
 //! focus goes to, and what a key does while it is open. The focus itself and
 //! the Tab walk between the buttons are GPUI's, in the component `Dialog`
-//! `folderops.rs` draws for all of them. The Tauri app gives each operation
+//! `folderops.rs` draws for all of them. The Tauri app gave each operation
 //! its own HTML dialog with the settings modal's key decisions.
 
 /// The run button's look: `primary`, or `destructive` for a run that moves
