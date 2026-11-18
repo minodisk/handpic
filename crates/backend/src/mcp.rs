@@ -6,7 +6,8 @@
 //! caller's tokio runtime, so `Mcp::switch` and `Mcp::stop` must run inside
 //! one. The tools a server lists are its host's: the seven companion tools by
 //! default (what the removed Tauri app listed), all of them after
-//! `Mcp::with_all_tools` (the native app).
+//! `Mcp::with_all_tools` (the native app), and `screenshot` only after
+//! `Mcp::with_screenshot`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -53,6 +54,12 @@ const PREVIEW_LONG_EDGE_MIN: u32 = 256;
 const PREVIEW_LONG_EDGE_MAX: u32 = 1616;
 
 const PREVIEW_QUALITY: f32 = 75.0;
+
+/// The long edge `screenshot` asks the window for when none is given, and
+/// the range it clamps a request to.
+const SCREENSHOT_LONG_EDGE: u32 = 1568;
+const SCREENSHOT_LONG_EDGE_MIN: u32 = 256;
+const SCREENSHOT_LONG_EDGE_MAX: u32 = 4096;
 
 /// How long `stop` waits for open connections to close before it drops them.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
@@ -205,6 +212,42 @@ fn long_edge(requested: Option<u32>) -> usize {
         .clamp(PREVIEW_LONG_EDGE_MIN, PREVIEW_LONG_EDGE_MAX) as usize
 }
 
+fn screenshot_long_edge(requested: Option<u32>) -> u32 {
+    requested
+        .unwrap_or(SCREENSHOT_LONG_EDGE)
+        .clamp(SCREENSHOT_LONG_EDGE_MIN, SCREENSHOT_LONG_EDGE_MAX)
+}
+
+/// The main window's answer to a `screenshot` request: the PNG and its size.
+pub fn screenshot_reply(png: &[u8], width: u32, height: u32) -> Value {
+    json!({
+        "png": base64::engine::general_purpose::STANDARD.encode(png),
+        "width": width,
+        "height": height,
+    })
+}
+
+/// The `screenshot` tool's result from the main window's reply: the image,
+/// then its size.
+fn screenshot_result(reply: Reply) -> CallToolResult {
+    let image = reply.and_then(|value| {
+        let png = value["png"].as_str();
+        let width = value["width"].as_u64();
+        let height = value["height"].as_u64();
+        match (png, width, height) {
+            (Some(png), Some(width), Some(height)) => Ok((png.to_string(), width, height)),
+            _ => Err("Handpic's main window answered without an image".to_string()),
+        }
+    });
+    match image {
+        Ok((png, width, height)) => CallToolResult::success(vec![
+            ContentBlock::image(png, "image/png"),
+            ContentBlock::text(json!({ "width": width, "height": height }).to_string()),
+        ]),
+        Err(e) => CallToolResult::error(vec![ContentBlock::text(e)]),
+    }
+}
+
 /// What `get_photo` answers: the index row's judgment and focus with the
 /// shooting settings read from the file.
 #[derive(serde::Serialize)]
@@ -255,6 +298,15 @@ pub struct PreviewArgs {
     /// omitted.
     path: Option<String>,
     /// The long edge in pixels, 256 to 1616; 1024 when omitted.
+    long_edge: Option<u32>,
+}
+
+#[derive(Debug, serde::Deserialize, JsonSchema)]
+#[schemars(crate = "rmcp::schemars")]
+#[serde(deny_unknown_fields)]
+pub struct ScreenshotArgs {
+    /// The most pixels of the image's long edge, 256 to 4096; 1568 when
+    /// omitted. A smaller window is not scaled up.
     long_edge: Option<u32>,
 }
 
@@ -1532,6 +1584,22 @@ impl Companion {
     }
 }
 
+/// The tool a host lists only after `Mcp::with_screenshot`.
+#[tool_router(router = screenshot_router)]
+impl Companion {
+    #[tool(
+        description = "A debugging aid: Handpic's window as a PNG of its last drawn frame, in         device pixels, scaled down so its long edge is at most `long_edge` (1568 by default,         256 to 4096) and never scaled up, followed by its width and height. Present only in a         build of Handpic with the `screenshot` feature; an error on Linux. A call right after         another tool can show the frame before that tool's change: call again to see it."
+    )]
+    async fn screenshot(&self, Parameters(args): Parameters<ScreenshotArgs>) -> CallToolResult {
+        let long_edge = screenshot_long_edge(args.long_edge);
+        screenshot_result(
+            self.bridge
+                .call("screenshot", json!({ "long_edge": long_edge }))
+                .await,
+        )
+    }
+}
+
 #[tool_handler(router = self.tools)]
 impl ServerHandler for Companion {
     fn get_info(&self) -> ServerConfig {
@@ -1584,6 +1652,16 @@ impl Mcp {
         let companion = Companion {
             tools: Companion::tool_router() + Companion::native_router(),
             instructions: NATIVE_INSTRUCTIONS,
+            ..self.companion
+        };
+        Mcp { companion, ..self }
+    }
+
+    /// The server also listing `screenshot`, which the native app answers
+    /// only in a build with its `screenshot` feature.
+    pub fn with_screenshot(self) -> Self {
+        let companion = Companion {
+            tools: self.companion.tools.clone() + Companion::screenshot_router(),
             ..self.companion
         };
         Mcp { companion, ..self }
@@ -2495,6 +2573,85 @@ mod tests {
         );
         drop(index);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn screenshot_is_listed_only_after_with_screenshot() {
+        let seven = Mcp::new(Bridge::new(|_| Ok(())), None);
+        assert!(!names(&seven.companion).contains(&"screenshot".to_string()));
+        let all = Mcp::new(Bridge::new(|_| Ok(())), None).with_all_tools();
+        let all_names = names(&all.companion);
+        assert!(!all_names.contains(&"screenshot".to_string()));
+
+        let with = Mcp::new(Bridge::new(|_| Ok(())), None)
+            .with_all_tools()
+            .with_screenshot();
+        let mut expected = all_names;
+        expected.push("screenshot".to_string());
+        expected.sort();
+        assert_eq!(names(&with.companion), expected);
+        assert_eq!(
+            with.companion.get_info().instructions.as_deref(),
+            Some(NATIVE_INSTRUCTIONS)
+        );
+        let seven_with = Mcp::new(Bridge::new(|_| Ok(())), None).with_screenshot();
+        assert_eq!(names(&seven_with.companion).len(), 8);
+    }
+
+    #[test]
+    fn screenshot_long_edge_defaults_and_clamps() {
+        assert_eq!(screenshot_long_edge(None), 1568);
+        assert_eq!(screenshot_long_edge(Some(2000)), 2000);
+        assert_eq!(screenshot_long_edge(Some(1)), 256);
+        assert_eq!(screenshot_long_edge(Some(10_000)), 4096);
+    }
+
+    #[test]
+    fn a_screenshot_reply_becomes_a_png_then_its_size() {
+        let result = screenshot_result(Ok(screenshot_reply(b"png", 640, 400)));
+        assert_ne!(result.is_error, Some(true));
+        let image = result.content[0].as_image().unwrap();
+        assert_eq!(image.mime_type, "image/png");
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(&image.data)
+                .unwrap(),
+            b"png"
+        );
+        let size: Value = serde_json::from_str(&result.content[1].as_text().unwrap().text).unwrap();
+        assert_eq!(size, json!({ "width": 640, "height": 400 }));
+    }
+
+    #[test]
+    fn a_screenshot_reply_without_its_fields_is_an_error() {
+        let result = screenshot_result(Ok(json!({ "png": "AAAA", "width": 2 })));
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(result.content.len(), 1);
+    }
+
+    #[test]
+    fn a_refused_screenshot_sends_the_clamped_edge_and_is_an_error() {
+        let sent = Arc::new(Mutex::new(Vec::new()));
+        let record = sent.clone();
+        let mcp = Mcp::new(
+            Bridge::new(move |request| {
+                record.lock().unwrap().push((request.kind, request.args));
+                Err("not implemented for this platform".into())
+            }),
+            None,
+        )
+        .with_screenshot();
+        let args: ScreenshotArgs = serde_json::from_value(json!({ "long_edge": 9000 })).unwrap();
+        let result = block_on(mcp.companion.screenshot(Parameters(args)));
+        assert_eq!(result.is_error, Some(true));
+        assert_eq!(
+            result.content[0].as_text().unwrap().text,
+            "not implemented for this platform"
+        );
+        assert_eq!(
+            *sent.lock().unwrap(),
+            [("screenshot", json!({ "long_edge": 4096 }))]
+        );
     }
 
     #[test]
