@@ -135,6 +135,46 @@
   matched zero or several times stopped the run, which caught nothing here
   but would have caught a stale anchor text.
 
+## Step 5
+
+- The user docs were checked against `crates/native/src` rather than the
+  plan's `not_in_native` list alone. Gaps beyond that list, removed from
+  `usage.md` / `README.md` and their `.ja.md`: the first-launch
+  developing-software dialog (the format defaults to XMP and is chosen on the
+  `Sidecar` page), every menu bar item (`File > Reload Folder` /
+  `CmdOrCtrl+R`, `Help > Open Log Folder`, the `View` and `Edit` menus and
+  their accelerator rules), the tree's multi-folder selection, the tree's
+  `ArrowLeft` / `ArrowRight` (the native tree uses `Space`, and the arrows
+  page the strip), the filter menu's `Face focus` `?` help, the re-listing on
+  window focus (only the roots are re-read), the strip's file `Rename…` and
+  slow-click rename, the MCP page's `Let MCP clients connect` switch and its
+  URL and Copy buttons, and dismissing a pane error (they clear on the next
+  folder open).
+- Native behavior the old docs did not describe, added: `q` quits and
+  `Home` / `End` go to the first / last file (fixed keys the keymap refuses),
+  the arrows wrap at the strip's ends, the strip menu's judgment items, the
+  position moved from the strip header to the status row, the resizable
+  panes and strip, the `Appearance` page, the meta pane's `AF point` /
+  `AF frame` rows and its longer `Analysis` group (`Eye focus` instead of
+  `Eyes at full size`, `Eyes closed`, `Eye aspect ratio`, `Mesh eye offset`,
+  `Edge gap`, `Sharpness`, all from the stored pass-2 values only), and the
+  MCP companion's full tool list with the `mcpAllowDestructive` confirmation
+  rule.
+- `performance.md` / `.ja.md`: the Tauri-only measurements were deleted (the
+  webview page latency table, the 1:1 end-to-end table with `ipc` /
+  `bitmap`, the 2677-ARW reopen table with its `open list` / `open entries`
+  lines, the `riffle-app` binary sizes, the `scan_id` note). Measurements of
+  Rust code the native app still runs were kept and relabeled as taken
+  through the earlier Tauri app (the 2026-09-21 real-folder scan throughput,
+  the `faces_of` / `eyes_of` timings, now `ondemand::read_faces` /
+  `read_eyes`). "Measuring on your own folder" now names the native log lines
+  (`scan list` / `scan reconcile` / `scan sidecars` / `scan extract` /
+  `scan faces`) and the `page` / `zoom` lines the native app prints to
+  stdout, with `--auto N` and the quit summary.
+- Running `python` bare from Git Bash hung the Bash call (moved to the
+  background after the 120 s timeout); the edits were done with heredoc
+  fragments spliced in with `head` / `tail` instead.
+
 ## Deferred issues (todo candidates)
 
 - **Pending check: a `Package` run dispatched on the branch.** Step 1's
@@ -200,3 +240,27 @@
   `shared-crates.md`, since it is not made moot by the Tauri removal. Check
   the item against those measurements and close it or narrow it. Files:
   `todo.md`, `docs/agents/native-app.md`, `docs/agents/shared-crates.md`.
+- The native app has no switch for the MCP companion: `mcpEnabled` is read
+  only at startup from the settings store, which a new store seeds from an
+  earlier `settings.json`, and neither the `MCP` page nor `set_settings`
+  sets it (the companion's coverage table lists it as excluded). A user
+  without an earlier install cannot turn the server on except by editing
+  the store. Step 5 documents this as is in `README.md` / `usage.md` and
+  their `.ja.md`. Either add the switch (with the URL, status and the
+  client examples the Tauri `MCP` tab had) to the `MCP` page or decide it
+  stays hidden. Files: `crates/native/src/settingsview.rs`,
+  `crates/native/src/settingsmodal.rs`, `crates/native/src/mcp.rs`,
+  `crates/native/src/companion.rs` (coverage table), `docs/humans/usage.md`.
+- The keymap still has the `compare` action bound to `v`, and the
+  `Keyboard Shortcuts` page lists it as `Compare frames`, but the native app
+  does nothing on it (`key: compare is not handled yet` in the debug log).
+  Step 5 left `v` out of `usage.md`'s key table. Either hide unimplemented
+  actions on the page or implement compare. Files:
+  `crates/backend/src/shortcuts.rs`, `crates/native/src/settingsmodal.rs`,
+  `crates/native/src/main.rs` (`key_down`), `docs/humans/usage.md`.
+- `docs/humans/performance.md` / `.ja.md` still name `riffle-cli`,
+  `riffle-core` and `riffle_core::` in the commands and paths of their
+  measurements (the CLI is `handpic-cli` now). Step 5 kept them as the names
+  the measurements were taken under. Decide whether to rename them to the
+  current names with a note, so a reader can rerun the commands. Files:
+  `docs/humans/performance.md`, `docs/humans/performance.ja.md`.

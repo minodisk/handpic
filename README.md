@@ -21,37 +21,22 @@ verified cameras, see [docs/humans/cameras.md](./docs/humans/cameras.md).
 
 ### Install
 
-Download the file for your OS from the latest release on the
-[Releases page](https://github.com/minodisk/handpic/releases):
-
-| OS | File |
-|----|------|
-| macOS, Apple Silicon | `Handpic_<version>_aarch64.dmg` |
-| macOS, Intel | `Handpic_<version>_x64.dmg` |
-| Windows | `Handpic_<version>_x64-setup.exe` |
-| Linux | `Handpic_<version>_amd64.AppImage` |
-
-The app is not signed by the OS vendors, so the first launch needs your
-permission once:
-
-- **macOS**: on macOS 15 and later, after the first launch is blocked, open
-  System Settings → Privacy & Security → Open Anyway. On macOS 14 and earlier,
-  right-click `Handpic.app` → Open.
-- **Windows**: in the SmartScreen warning, More info → Run anyway.
-
-After that, updates are downloaded automatically on launch and take effect the
-next time Handpic starts. For the other packages and the details, see
-[docs/humans/usage.md](./docs/humans/usage.md#installing).
+Packaged builds of the current app are not released yet. Until they are,
+build it from source as [CONTRIBUTING.md](./CONTRIBUTING.md) describes. The
+packages on the [Releases page](https://github.com/minodisk/handpic/releases)
+(up to 1.10.0) are of the earlier app this one replaced, and they do not
+update to it. See [docs/humans/usage.md](./docs/humans/usage.md#installing)
+for what a new install picks up from an earlier one.
 
 ### First steps
 
-1. Choose your developing software (Lightroom, DxO PhotoLab, or both) in the
-   dialog Handpic shows on its first launch, and for Lightroom also the
-   language its menus are in, so the color labels match its names; both can
-   be changed later in Settings.
+1. Open the settings (`Cmd+,` / `Ctrl+,`, or the gear at the right end of the
+   title bar) and choose your developing software on the `Sidecar` page:
+   Lightroom (XMP, the default), DxO PhotoLab, or both, and for Lightroom
+   also the language its menus are in, so the color labels match its names.
 2. Drop a folder onto the window (or open one with `Cmd+O` / `Ctrl+O`). To
-   start from a memory card, set the destination in the settings' `Import`
-   tab, right-click the card in the folder tree and choose `Import…`; the
+   start from a memory card, set the destination on the settings' `Import`
+   page, right-click the card in the folder tree and choose `Import…`; the
    first date folder opens while the copy runs.
 3. Page through the shots with `←` `→`, give stars with `1`-`5` and reject with
    `x`.
@@ -79,9 +64,10 @@ DxO PhotoLab.
 ## Key features
 
 - **Folder tree**: the left pane browses home and the mounted volumes; click
-  a folder to open it. The click also gives the tree the keyboard: the
-  arrows, `Home` / `End`, `Enter` and typing a name move through and open
-  folders, with the culling keys off until `Escape`. Right-click a folder
+  a folder to open it. The click also gives the tree the keyboard:
+  `ArrowUp` / `ArrowDown`, `Home` / `End`, `Space`, `Enter` and typing a
+  name move through, expand and open folders, with the culling keys off
+  until `Escape` (`←` / `→` still page the strip). Right-click a folder
   to reveal it in Finder / File Explorer / the file manager, copy its
   path or name, rename it with `Rename…` or after its photos' capture date
   with `Rename by Capture Date…` (one `YYYY-MM-DD` folder, or one sibling
@@ -96,7 +82,7 @@ DxO PhotoLab.
 - **Import from a card**: right-click a memory card, or any folder, in the
   folder tree and choose `Import…` to copy its RAW files, its JPEGs and the
   sidecars next to the RAW files into one folder per capture date, under the
-  root and the pattern set in the settings' `Import` tab (`%Y/%F` by default,
+  root and the pattern set on the settings' `Import` page (`%Y/%F` by default,
   so `2026/2026-10-24`). Videos stay behind and the card is never modified.
   A preview lists what will be copied; what is already there is skipped,
   a same-named file of another size is listed and never overwritten, and
@@ -107,23 +93,22 @@ DxO PhotoLab.
   `Cmd+click` / `Ctrl+click` adds or removes one, `Shift+click` and
   `Shift+←` / `Shift+→` select a range, `Cmd+A` / `Ctrl+A` selects every
   file the filter shows, and every judgment applies to the whole selection.
-  Right-click a file and choose `Rename…`, or click the shown file's name
-  again after a moment, to rename it in place: `Enter` or a click away
-  renames, `Escape` cancels, and its XMP and `.dop` sidecars and its
-  ratings move with it. Right-click and choose `Move to Trash…` to move the
+  Right-click and choose `Move to Trash…` to move the
   file, or the whole selection, to the Trash with its sidecars after a
   count-only confirmation (filter to the rejects and select all to clear
-  them out). Nothing is deleted: one `Edit > Undo` brings the whole move
-  back with the judgments, and `Edit > Redo` moves it to the Trash again.
+  them out). Nothing is deleted: one `Cmd+Z` / `Ctrl+Z` brings the whole move
+  back with the judgments, and `Cmd+Shift+Z` / `Ctrl+Shift+Z` moves it to the
+  Trash again.
   When the disk is full, `Delete Permanently…` removes them with their sidecars
   instead of moving them: there is no Undo, and only a mouse click on its
   confirmation goes ahead.
-  The right-click menu also reveals the file in Finder / File Explorer and
-  copies its path or file name (every selected file's, one per line).
+  The right-click menu also reveals the file in Finder / File Explorer,
+  copies its path or file name (every selected file's, one per line) and
+  sets the flag, the stars or the color label, checked from the shown file.
   `Ctrl+Alt+ArrowDown` (`Alt+Cmd+ArrowDown` on macOS) hides the filmstrip,
   `…ArrowLeft` the folder tree, `…ArrowRight` the meta pane and `Tab` both
-  side panes, to give the viewer more room (the first three are also check
-  items in the `View` menu). The meta
+  side panes, to give the viewer more room; dragging a pane's edge resizes
+  it. The meta
   pane's `Maker note` group shows the Sony AF, drive, stabilization and
   picture settings.
 - **1:1 focus check**: `z` shows the image at 1:1, centered on the focus point.
@@ -167,11 +152,11 @@ DxO PhotoLab.
   priority, so the viewer comes first when they compete for the CPU); the strip marks each bright green or gray file
   with an icon at the cell's bottom-left in the mark's color (a smiling face
   on a good photo, a frowning face on gray, none on white), the meta pane
-  shows the full-size sharpness of those eyes as `Eyes at full size`, whether that
+  shows the full-size sharpness of those eyes as `Eye focus`, whether that
   face's eyes are open and how open (0 to 100) as `Eyes` and the face's
-  yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, both stored by the same second pass
-  for the judged face and judged when the file is shown until then, and the filter menu's `Face focus` section (`Good` / `Neutral` /
-  `Low`, with a `?` that shows their definitions) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
+  yaw, pitch and roll as `Yaw`, `Pitch` and `Roll`, all stored by the same second pass
+  for the judged face, and the filter menu's `Face focus` section (`Good` / `Neutral` /
+  `Low`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
   `Unknown`). The mark also draws the faces
   Handpic detects near the AF point as a cyan box with a cyan dot on each eye,
@@ -190,8 +175,7 @@ DxO PhotoLab.
   locally with no network access. The strip's
   focus mark icons, also on the filter menu's `Good` and `Low` items, are
   [Lucide](https://lucide.dev)'s `scan-face` and the same with its mouth
-  turned down, and its
-  recommended icon is Lucide's `sparkles` (ISC license).
+  turned down (ISC license).
 - **HDR PQ (HEIF) CR3 previews**: the HEVC previews of Canon CR3 files shot
   with HDR PQ on are decoded by the bundled
   [hpvcd](https://github.com/awxkee/hpvcd) (BSD-3-Clause OR Apache-2.0).
@@ -201,9 +185,6 @@ DxO PhotoLab.
   its ends, and `Shift+x` rejects the rest of one. Cameras that record no
   sub-second capture time are grouped by whole seconds (see
   [What the camera records](./docs/humans/cameras.md)).
-- **Compare**: `v` shows 2–4 selected shots together, or the current shot
-  beside its burst's first good frame (else the burst's first frame). Click a frame to rate, pick or
-  reject only that one.
 - **Sequence JPEG Timestamps**: after culling in Handpic and exporting the keepers
   as JPEGs from your RAW developer, right-click the export folder in the
   folder tree and choose `Sequence JPEG Timestamps…` to space the capture
@@ -220,33 +201,16 @@ DxO PhotoLab.
   times can be checked in Handpic: thumbnails, the preview and the EXIF rows,
   in capture-time order. Stars, flags, color labels, sidecars and the focus
   cue do not apply there.
-- **Genres (AI analysis)**: with `AI analysis of what each photo shows` on
-  in the settings (off by default; the first enable downloads a 378 MB model
-  from Hugging Face), a background pass embeds each RAW file's preview
-  locally with SigLIP 2, and the filter menu's `Genre` section narrows the
-  strip to sports (basketball), portrait (group photo), landscape,
-  birds / animals (pets), snap (camping) or `Unknown`. It is a rough sort,
-  calibrated on the author's photos: reliable for sports, right about half
-  the time for portrait, landscape and snap, and it never changes a judgment
-  (see [AI analysis and genres](./docs/humans/usage.md#features)).
-- **Recommended order (AI analysis)**: with AI analysis on, the sort menu's
-  `Recommended` keeps the bursts in capture order and puts each burst's
-  frames in the order of a small model learned from picks, and the meta
-  pane shows the frame's place in its burst, the reasons and a confidence,
-  and the strip marks each burst's first-ranked frame with an icon.
-  It starts from a model learned on the author's culling and learns yours
-  from the frames you viewed (on screen for about half a second) and did not
-  pick, and from your rejects, with a correction per genre once you have
-  judged enough of it. It is a
-  modest suggestion (held out on the author's folders, the top-ranked frame
-  was a pick in about 55% of the bursts, against 39% for the first
-  frame), and it never changes a judgment (see
-  [Recommended order](./docs/humans/usage.md#features)).
+- **Appearance**: the settings' `Appearance` page follows the system's light
+  or dark mode or keeps one, with a theme of its own for each. The window
+  reopens where it was, with the last folder open and the panes as they were.
 - **MCP companion**: an MCP client, such as an AI assistant, can follow along
-  while you cull: read what Handpic shows, look at a preview, move the view and
-  record stars, picks / rejects and labels the way the keys do. It is off by
-  default, listens on this computer only and cannot move anything to the
-  Trash (see [MCP companion](#mcp-companion)).
+  while you cull: read what Handpic shows, look at a preview, move the view,
+  record stars, picks / rejects and labels the way the keys do, and start the
+  menus' operations. It is off by default and listens on this computer only;
+  a move to the Trash or a folder operation it asks for opens Handpic's
+  dialog for you to confirm, unless you allow it on the settings' `MCP` page,
+  and a permanent delete always asks you (see [MCP companion](#mcp-companion)).
 
 Every feature, and the full key reference, is described in
 [docs/humans/usage.md](./docs/humans/usage.md) ([Keys](./docs/humans/usage.md#keys)).
@@ -254,7 +218,7 @@ Every feature, and the full key reference, is described in
 ## Working with other software
 
 Judgments are saved in a sidecar file next to the RAW. The format is chosen on
-the first launch and can be changed in the settings:
+the settings' `Sidecar` page (Lightroom (XMP) until you choose):
 
 - **Lightroom (XMP)**: `FOO.ARW` gets `FOO.xmp`, the format Lightroom
   and others read. Picks and rejects are written as `xmpDM:good` and color
@@ -331,9 +295,12 @@ format is chosen), or keep such RAWs in separate folders.
 ### MCP companion
 
 Handpic can serve an [MCP](https://modelcontextprotocol.io/) endpoint for an
-MCP client (an AI assistant, say) to sit beside you while you cull. Turn on
-`Let MCP clients connect` in the `MCP` tab of the settings (it is off by
-default); the server then listens on this computer only, at:
+MCP client (an AI assistant, say) to sit beside you while you cull. It is off
+by default, and the app has no switch for it yet: it starts when the
+`mcpEnabled` setting is on, which an earlier install's `Let MCP clients
+connect` carries over (see
+[docs/humans/usage.md](./docs/humans/usage.md#mcp-companion)). The server
+listens on this computer only, at:
 
 ```text
 http://127.0.0.1:41917/mcp
@@ -359,8 +326,8 @@ examples:
   }
   ```
 
-The `MCP` tab shows the URL and these examples with Copy buttons. What the
-tools do is described in [docs/humans/usage.md](./docs/humans/usage.md#mcp-companion).
+What the tools do is described in
+[docs/humans/usage.md](./docs/humans/usage.md#mcp-companion).
 
 ## Compatibility
 

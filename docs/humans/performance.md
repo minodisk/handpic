@@ -87,9 +87,8 @@ match what `riffle-cli scan` measures today.
 
 ## Per-page preview read
 
-The per-page cost on the Rust side only, on an Apple Silicon Mac.
-**It excludes the IPC hop and `createImageBitmap`**; the end-to-end number is
-in "End to end on Windows, keypress to pixels" below. Reading the whole 48MB ARW (`std::fs::read` plus `arw::parse`) is
+The per-page cost of the read alone, on an Apple Silicon Mac; the app's
+end-to-end numbers are in "Keypress to pixels (GPUI)" below. Reading the whole 48MB ARW (`std::fs::read` plus `arw::parse`) is
 compared with reading a bounded 1MiB prefix (`reader::read_preview`), which is
 where the metadata and the embedded preview live:
 
@@ -104,33 +103,14 @@ order by a fresh process. The "first read" column cannot be guaranteed cold.
 
 The whole-file read dominates, which is what the bounded read removes.
 
-### End to end on Windows, keypress to pixels
+### Keypress to pixels (GPUI)
 
-From the key to the canvas draw returning, in ms as p50 / p95, measured on
-2026-11-08 with `Timing logs` on and the overlay on: Windows 11, a
-`mise run tauri:release:devtools` build, a SATA SSD, a folder already scanned
-(warm, not otherwise established) and no scan pass running. At n below 20 the
-p95 is the largest sample. WebView compositing and input latency are not
-included.
-
-| Case | n | keypressToPixels | wait | read | ipc | post | worker | decode | draw |
-|---|---|---|---|---|---|---|---|---|---|
-| 1616x1080 preview | 20 | 19.4 / 22.6 | 0.9 / 1.5 | 6.0 / 9.0 | 4.0 / 5.8 | 0.1 / 0.2 | 0.3 / 0.8 | 6.0 / 6.7 | 1.0 / 2.0 |
-| RAF, 4416x2944 | 7 | 97.8 / 113.0 | 1.9 / 3.0 | 3.0 / 4.0 | 28.0 / 32.7 | 0.7 / 0.8 | 0.7 / 1.9 | 55.2 / 58.2 | 6.0 / 15.3 |
-| RAF, 1920x1280 | 4 | 23.9 / 26.6 | 1.9 / 2.2 | 1.1 / 1.5 | 8.6 / 10.2 | 0.1 / 0.3 | 0.3 / 1.0 | 11.1 / 12.3 | 0.4 / 0.4 |
-
-While the first pass ran only 3 presses landed, so this is a reference value and
-not a p95: p50 138.2 ms, largest 151.5 ms, with `read` up to 139.5 ms, on a
-folder never opened in the app whose files may still have been in the OS cache.
-
-### Native preview (GPUI)
-
-The experimental `crates/native` pager, from the key to the frame presented
-(including the vsync wait and `Present`, which the Tauri numbers above do not).
+The app's pager (`crates/native`, then still experimental), from the key to the frame presented
+(including the vsync wait and `Present`).
 In ms as the median of three runs' p50 / p95, each run n=20, timer-driven
 presses, measured on 2026-11-09: Windows 11, release build with SIMD mozjpeg,
 i7-13700, RTX 4060 Ti, 5120x1440 at 59 Hz, SATA SSD, files warmed by a throwaway
-run, load up to 15 % during the timed presses but with a Tauri app open and other work
+run, load up to 15 % during the timed presses but with the earlier Tauri app open and other work
 on the machine. The p95 is the largest of 20 samples.
 
 | Case | keypressToPixels | read | decode | frameWait | paint |
@@ -145,7 +125,7 @@ below, so it does not meet them either. Per-run numbers, the conditions and whic
 [`results.md`](../plans/20261109-gpui-port/results.md).
 
 A re-measurement the same day, alternating the pager with the spike's own binary
-with the Tauri app closed (three runs each, 60 presses over the 20 files), had
+with the earlier Tauri app closed (three runs each, 60 presses over the 20 files), had
 the pager at 20.2 ms on ARW and 65.9 ms on RAF and the spike's binary at 19.9 ms
 and 64.6 ms (median of the three runs' p50 `keypressToPixels`). The pager's page
 work matches the spike's; on RAF the roughly 1 ms left over is consistent with
@@ -251,11 +231,13 @@ regardless.
 
 ### Real folders on Windows
 
-Measured on 2026-09-21 with the release app on Windows 11 Home, reading
+Measured on 2026-09-21 with a release build of the earlier Tauri app, whose
+scan is the pass the app runs now, on Windows 11 Home, reading
 real folders of Sony ARWs from a DRAM-less QLC SATA SSD (Crucial BX500 4TB)
 with 22 extraction threads.
-The numbers come from the `scan prepare` and `scan extract` lines of
-`Handpic.log` (see "Measuring on your own folder" below). Each run used a
+The numbers come from that app's `scan prepare` (the listing, reconcile and
+sidecar lines together) and `scan extract` lines of
+its log (see "Measuring on your own folder" below for today's lines). Each run used a
 different folder:
 
 | Run | files | prepare | extract | total | per file | files/s |
@@ -298,10 +280,6 @@ measured, so there is no NVMe-vs-SATA comparison. The expected workaround,
 not a measurement, is to keep the folders being culled on an NVMe drive,
 internal or in an external USB NVMe enclosure with UASP; even over 5Gbps USB
 it should be several times faster.
-
-After a cache clear, the log once showed a `scan_id` superseded by the next
-one with no `scan extract` line for the first (`todo.md`: "App: a scan can be
-started twice after a cache clear / focus rescan").
 
 ### Sharpness scoring cost
 
@@ -350,9 +328,6 @@ binaries on the same machine:
 | Binary | Before | After |
 |--------|--------|-------|
 | `riffle-cli` | 1.7 MB | 31.3 MB |
-| `riffle-app` | 26.8 MB | 47.8 MB |
-
-The `riffle-app` growth came in through `riffle-core` (tract and the model).
 
 A cold `cargo build --release -p riffle-cli` went from 10.8s to 140s.
 
@@ -423,10 +398,10 @@ On one thread the mean did not rise (the first after run, 29.5ms, was an
 outlier the next three did not repeat); on 12 threads the runs overlap and
 the spread is the drive's, not the detector's.
 
-The faces the `f` focus mark draws are detected on demand by the `faces_of`
-command (read the preview + `detect_around`), not at scan time. Measured once
+The faces the `f` focus mark draws are detected on demand (now the backend's `ondemand::read_faces`, then the earlier Tauri app's `faces_of`
+command: read the preview + `detect_around`), not at scan time. Measured once
 on 2026-09-25 on the same Linux WSL2 machine, release build, calling the
-command's body directly (no IPC) on two α7 V ARWs read from the Windows NTFS
+command's body directly on two α7 V ARWs read from the Windows NTFS
 drive, warm page cache, 20 calls each after a first one:
 
 | File | First call | Mean | Median | Max |
@@ -435,7 +410,7 @@ drive, warm page cache, 20 calls each after a first one:
 | `_DSC1942.ARW` (1616x1080 preview, 3 faces) | 34.0ms | 30.6ms | 29.7ms | 37.4ms |
 
 The first call of a session also builds the model. A cold read
-from a card or a slow disk adds its own latency on top; that, and the IPC and
+from a card or a slow disk adds its own latency on top; that, and the
 redraw in the app, are not measured here. The timing ran from a temporary
 `#[ignore]`d test removed before committing.
 
@@ -716,37 +691,36 @@ the whole-image search uses, the classifier's eye AUC fell from 0.78 to
 
 #### Closed-eyes judgment on demand (Windows 11)
 
-The app judges closed eyes with Face Landmarker v2 for the shown file only:
-the `eyes_of` command runs when a file is shown, outside both scan passes,
-and the meta pane's Analysis group shows the `Eyes` row, open or closed with
-the openness from 0 to 100 (`Eyes open: NN%`, the probability that the eyes
-are open, when this was measured). It judges one face, the face nearest a trusted AF point, else the
-largest face at or above 0.8, and none below a 60 px face side. For the face
-nearest a trusted AF point, the second pass now stores the eye aspect ratio
+The app judges closed eyes with Face Landmarker v2 at scan time and, for
+the shown file, on demand: the backend's `ondemand::read_eyes` runs when a
+file is shown under the `f` overlay, outside both scan passes, for the face
+parts it draws. It judges one face, the face nearest a trusted AF point, else the
+largest face at or above 0.8, and none below a 60 px face side. For that
+face the second pass stores the eye aspect ratio
 and the head pose from the mesh it already runs for the focus candidate cue
-(no extra model run), and the meta pane and the filter menu's `Eyes` section
-read those; `eyes_of` still runs on every shown file, for the face parts
-overlay and for a file with no stored value (no AF point, a face under 60 px).
+(no extra model run), and the meta pane's `Eyes` row and the filter menu's
+`Eyes` section read those. The measurements below were taken when the
+on-demand call was the earlier Tauri app's `eyes_of` command and fed the meta
+pane's row (then `Eyes open: NN%`, the probability that the eyes are open).
 Measured on
 2026-10-07 on the same Windows 11 machine, release builds, one thread, on
-`main` at `392f9c25` (the sizes before from the same day's builds before the
-app called the model):
+`main` at `392f9c25` (the size before from the same day's build before the
+model was called):
 
 | Binary | Before | After |
 |--------|--------|-------|
 | `riffle-cli` | 24.6 MB | 29.6 MB |
-| `riffle-app` | 47.5 MB | 52.5 MB |
 
-Both grew by about the 4.9 MB ONNX file, which is embedded with
-`include_bytes!` (`riffle-app` +4,994,560 B, +10.5%).
+It grew by about the 4.9 MB ONNX file, which is embedded with
+`include_bytes!`.
 
 The model itself (crop, resize, run, eye aspect ratio), `riffle-cli eyes` on
 the 504 labeled faces: mean 34.6ms, median 34.1ms, p95 41.2ms. The first
 call, which builds the plan and runs once, took 182ms. That is faster than
 the survey's 50.9ms, which ran three other models between its calls.
 
-The whole `eyes_of` call (the `#[ignore]`d `times_eyes_of_on_real_files` test
-in `crates/app/src/commands.rs`, no app running), the first file of each set
+The whole `eyes_of` call (an `#[ignore]`d `times_eyes_of_on_real_files` test
+that left with the earlier Tauri app, run with no app running), the first file of each set
 left out because it pays the plan builds (256ms on the ARW, 315ms on the
 DNG):
 
@@ -760,9 +734,9 @@ The two other ARWs had no face to judge and returned after the detection in
 and the crop; without an AF point the decode is the 3/8 one of the
 whole-image search plus a full-size one for the crop, and the whole-image
 detection, not the second decode, is most of the cost. Every file of the two
-sets labeled closed came back closed. The time from the preview to the row
-in the running app (the `eyes` timing line with `Timing logs` on, IPC
-included) has not been measured yet: it needs the GUI.
+sets labeled closed came back closed. The time from the preview to the overlay
+in the running app (the `eyes` timing line in `Handpic.log`)
+has not been measured yet: it needs the GUI.
 
 Accuracy, from `riffle-core` itself (`riffle-cli eyes`, which gives the
 survey's eye aspect ratios exactly): face AUC 0.974 over the 253 labeled
@@ -791,9 +765,8 @@ first file of each set left out:
 The difference is run-to-run noise: the solve is three orders of magnitude
 smaller, and the detection, which the pose does not touch, moved as much.
 Both runs were faster than the table above; a first run of the after build
-straight after compiling it read 81-92ms and 144-160ms. The binaries grew by
-the code alone: `riffle-app` from 52,503,040 B to 52,520,448 B (+17,408 B,
-+0.03%), `riffle-cli` from 29,556,224 B to 29,577,728 B (+21,504 B).
+straight after compiling it read 81-92ms and 144-160ms. The CLI binary grew by
+the code alone: `riffle-cli` from 29,556,224 B to 29,577,728 B (+21,504 B).
 
 Accuracy, against 159 readable faces of 190 drawn from the same two folders
 (with more turned and leaning faces than the folders have), labeled by eye with coarse classes and directions (there is no ground-truth
@@ -828,7 +801,7 @@ focus candidate cue and the sharpness score:
 | Whole-preview face search without a trusted AF point (~17ms at 320x320; ~64ms at 640x448 on Windows, after a 3/8 decode of ~5ms instead of the full-size ~14ms) | first | second |
 | Focus candidate cue (crop detection + face mesh eye regions, eye window fallback) | second | second |
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
-| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face; 80-160ms per call) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; `eyes_of` stays on demand for the shown file, for the overlay and the files with no stored value |
+| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face; 80-160ms per call) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) stays for the shown file's overlay |
 
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the
 thumbnails appear at the speed of the read and the thumbnail encode, and the
@@ -846,8 +819,7 @@ nice of at least 5 and 10), and they take the shown file and the strip's visible
 the rest. `riffle-cli scan` and `candidates` run at normal priority and in
 file-name order, so their numbers stay comparable with the tables above.
 
-Not measured yet: the page latency (the `page` timing lines) while the passes
-run, against the previous release, and the `scan extract` / `scan faces` wall
+Not measured yet: the `scan extract` / `scan faces` wall
 time with the lowered priority and the on-screen-first queue. Those hand
 measurements are pending on a real folder in the app.
 
@@ -868,84 +840,58 @@ they flatter a read benchmark, but 5000 lookups of one cached inode's metadata
 is still cheaper than 5000 distinct 48MB files' metadata on a card. The first
 scan is the same folder and procedure as the scan throughput table above, at
 10 threads, a thread count that table does not have a row for; for a real
-folder of distinct files, see the Windows numbers below and "Real folders on
+folder of distinct files, see "Real folders on
 Windows" above; on a card reader or a slow external disk the first scan is
 disk-bound regardless.
 
 [^1]: Measured with a temporary `#[ignore]`d test that was removed before
 committing, so this number is not reproducible from the committed tree.
 
-On a real folder of 2677 Sony ARWs on the same SATA SSD (Windows 11 Home,
-release app, 2026-09-21, from `Handpic.log`):
-
-| Step | Target | Measured |
-|------|--------|----------|
-| Second open after a relaunch (`open list` 34ms + `open entries` 56ms + `scan prepare` 73ms) | 3s | ~163ms |
-| Focus rescan of the unchanged folder (`scan prepare`) | - | ~65ms |
-
-The focus rescan is not noticeable, so the watcher's debounce does not need
-to grow for it. Two anomalies showed up in the log. Each open called
-`open entries` twice (56ms and 76ms), and the second call is not counted in
-the ~163ms above: it was the `scan-done` re-read of the rows, which every scan
-did before 2026-09-26 and which is now skipped when the scan wrote nothing. A
-rescan asked for during a scan (a focus of the main window, a watcher event,
-`File > Reload Folder`) still runs once the scan ends, and reads the rows
-only when it changed something; with `Timing logs` on, its `rescan
-deferred: trigger=…` and `rescan: trigger=… deferred=true` lines name what
-asked for it. And two focus rescans once fired at the same instant
-(`todo.md`: "App: a scan can be started twice after a cache clear / focus
-rescan").
-
 ### Measuring on your own folder
 
 Handpic logs its own scan timings, so these numbers can be reproduced on any
-folder. Clear the cache in `Handpic > Settings...` (the `Cache` tab) so the next
+folder. Clear the cache on the settings' `Cache` page so the next
 open counts as a first scan, and reopen the folder. Then quit and launch again
-to get the second open, and use `Help > Open Log Folder` to find `Handpic.log`.
+to get the second open, and read `Handpic.log` (see
+[Log file](./usage.md#features) for where it is).
 
-Every open writes `open list`, `open entries`, `scan list` (reading the
-folder), `scan reconcile` (stat-ing the files against the index),
-`scan sidecars`, `scan prepare` (the sum of those three) and `scan extract`,
-which carries the whole extraction pass with its `files`, `done`, `errors`
-and `threads` counts. The first scan's `scan extract` has `files` > 0; `scan
-prepare` plus that `scan extract` is the first-scan total. A further
-`scan_id` right after the cold scan's end with `todo=0` is a deferred rescan
-(see the `rescan:` line before it), not part of the first-scan total.
+Every open writes `scan list` (reading the folder), `scan reconcile`
+(stat-ing the files against the index, with how many are `todo`) and
+`scan sidecars`, and then `scan extract`, which carries the whole extraction
+pass with its `files`, `done`, `errors` and `threads` counts, and
+`scan faces`, the second pass's. The first scan's `scan extract` has
+`files` > 0; the three lines before it plus that `scan extract` are the
+first-scan total.
 
 The second open writes the same lines but with `todo=0`, and its
 `scan extract` reads `files=0 done=0` with a near-zero duration — that
-`files=0` line, not its absence, is what marks a cached open. It spans three
-separate calls, so there is no single number for it: add the `open list`,
-`open entries` and `scan prepare` lines of that open. Every line ends in
-`in <n>ms` and names its directory, and the timestamps tell the two runs
-apart.
+`files=0` line, not its absence, is what marks a cached open; add the
+`scan list`, `scan reconcile` and `scan sidecars` lines of that open. Every
+line ends in `in <n>ms` and names its directory, and the timestamps tell the
+two runs apart.
 
-Per-page latency is logged the same way. Turn on `Timing logs` in the settings
-window (the item only shows in a `mise run tauri:release:devtools` or debug
-build), page through a folder with the next/previous keys, and read the
-`page wait=… read=… ipc=… post=… worker=… decode=… draw=… total=…
-keypressToPixels=… jpegKB=… px=WxH scan=… source=…` lines in `Handpic.log`. `wait` is the
-time a key spent behind an in-flight request, `read` the Rust read (the pause
-of the scan's reads included), `ipc` the rest of the `preview` call's round
-trip, `post` the main thread's work before handing the JPEG to the worker,
-`worker` the two hops to the worker and back, `decode` its `createImageBitmap` (every stage but `wait` and `draw` is 0 for `source=prefetch`, a preview read ahead)
-and `draw` the rest of the main thread's work to the drawn canvas (the meta pane
-rebuild and the canvas draw). `total` runs from the request to the drawn canvas
-and `keypressToPixels` from the keypress to the drawn canvas; `jpegKB` is the
-payload size, `px` the decoded size and `scan` the scan pass running at the
-request (`idle`, `1`, `2` or `3`). `wait` and `keypressToPixels` are left out
-for a page not asked for by a key (a strip click or a folder open). A page turn
-overtaken by the next one logs nothing.
+Per-page latency is printed instead: run Handpic from a terminal, and each
+page turn a key asked for prints a `page wait=… read=… decode=… orient=…
+hop=… frameWait=… paint=… present=… keypressToPixels=… jpegKB=… px=WxH
+orientation=… source=… file=…` line on standard output (a 1:1 crop prints a
+`zoom read=… decode=… orient=… keypressToPixels=…` line). `wait` is the
+time from the key to the read's request, `read`, `decode` and `orient` the
+preview's read (the pause of the scan's reads included), decode and turn
+upright (all 0 for `source=prefetch`, a preview read ahead), `hop` the hand
+over to the window, `frameWait` the wait for the next frame, `paint` the
+drawing and `present` the frame's presentation; `keypressToPixels` runs from
+the keypress to the presented frame. A page not asked for by a key (a strip
+click or a folder open) prints nothing. Quitting prints a summary table of
+the stages, and `--auto N` pages through N files on a timer and quits.
 
 ## The 1:1 focus check path
 
-The Rust side of one zoom keypress, on one α7 V ARW (Orientation 8,
+The read and decode of one zoom keypress, on one α7 V ARW (Orientation 8,
 `JpgFromRaw` 7008x4672 baseline 4:2:2, 5.76MB) on an Apple Silicon Mac. **One real file, warm
 page cache, in-process, release build, n=20, medians.** Measured against the
-functions the CLI and the app both call.
-**The IPC hop and `createImageBitmap` are excluded** — they could not be
-measured headlessly; the end-to-end numbers the user measured by hand are in
-the next table.
+functions the CLI and the app both call. The turn upright and the drawing
+are not included; the app prints them as a `zoom` line (see "Measuring on
+your own folder" above), and no end-to-end number is recorded here yet.
 
 | Step | Median |
 |------|--------|
@@ -955,38 +901,10 @@ the next table.
 
 Crop size barely matters; the crop's **row** dominates. `jpeg_skip_scanlines`
 on a baseline JPEG still entropy-decodes every skipped row, so a focus point
-low in the frame costs four times one at the top, and 44ms leaves nothing of
-the 50ms budget for the IPC hop and the bitmap. The payload is raw RGBA (4.2MB
-at the 1024 cap) rather than a re-encoded JPEG because re-encoding that crop
-with `mozjpeg::Compress`'s defaults measured 49ms at q85 — more
-than the decode it follows.
-
-### End to end, keypress to pixels
-
-Measured by hand in the running app. **Conditions**:
-optimized build (`mise run tauri:release:devtools`), `Timing logs` on in the settings window, **DevTools
-open** (a webview can be slower with the inspector attached, so these may be
-upper bounds), warm page cache (the folder had been opened before), one real
-folder of Sony ARW files. `read` and `decode` come
-from the `focus_crop` payload header (`Instant` inside `spawn_blocking`), the
-rest from `performance.now()` on the frontend; **`ipc` is derived** as the
-invoke elapsed minus `read` minus `decode`, so it is everything else on the
-Rust side plus transport, not pure transport.
-
-n=8 crops across 3 `z` presses:
-
-| Measurement | n | Measured |
-|-------------|---|----------|
-| Keypress → pixels, for the crop the keypress itself asked for | 3 | 39 / 45 / 40ms |
-| `read` | 8 | 1.8-2.7ms |
-| `decode` | 8 | 21.9-38.7ms |
-| `ipc` (derived) | 8 | 2.3-3.7ms |
-| `bitmap` | 8 | 0-1ms |
-| Total per crop | 8 | 26-45ms |
-
-`decode` dominates. `read`, `ipc` and `bitmap` are noise beside it, so the
-raw-RGBA-over-IPC decision (a 4MB payload at the 1024 cap) costs a few
-milliseconds: **IPC is not the bottleneck**.
+low in the frame costs four times one at the top, and 44ms leaves little of
+a 50ms budget for the rest. Re-encoding that crop as a JPEG with
+`mozjpeg::Compress`'s defaults measured 49ms at q85, more than the decode it
+follows.
 
 ## What the sidecar pass adds to a folder open
 
