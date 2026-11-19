@@ -153,7 +153,7 @@ const OTHER_SYSTEM: &[&str] = &[
 /// Lone modifiers, which never name a key. An earlier bug let them into the
 /// stored `shortcuts`, so they are dropped when it is read. The native app
 /// never names a lone modifier as a key (`key_name` in
-/// `crates/native/src/keys.rs`).
+/// `crates/app/src/keys.rs`).
 const MODIFIER_ONLY: [&str; 4] = ["control", "alt", "shift", "meta"];
 
 /// Why `key` cannot be bound on macOS or elsewhere, if it cannot.

@@ -4,8 +4,8 @@ Read this before touching `crates/core`, `crates/backend` or `crates/cli`
 (the index, the scan passes, the sidecars, the trash, the JPEG decode, the MCP
 server), the CI workflows or the release tooling, or before running checks on
 this machine. It lists the pitfalls this repository has already hit, each with
-the reason it happens. The desktop app itself (`crates/native`) has its own
-guide, [`native-app.md`](./native-app.md).
+the reason it happens. The desktop app itself (`crates/app`) has its own
+guide, [`app.md`](./app.md).
 
 Each item is tagged:
 
@@ -32,7 +32,7 @@ let a rescan index a half-moved folder.
   check for a scan or drain the sidecar writer; the caller does. The earlier
   app held a `Scans` lock across the call; the native app holds the operation
   in `idle::IdleGate` until the listing or scan under way ends (see
-  `native-app.md`, "A trash or delete goes through the gate, and nothing
+  `app.md`, "A trash or delete goes through the gate, and nothing
   lists under it").
 - Do the refusal checks before anything on disk changes, and place a
   blocking step (canonicalizing / stat-ing paths) first, before any flush: a
@@ -113,7 +113,7 @@ because `reject` comes before `pick`, so `p` still looked taken.
   (for example `a_stale_default_in_an_old_store_drops_only_that_key` used `d`)
   fails once a default takes that key, so use a key no default holds. A
   main-view key that the folder tree swallows is absent from
-  `TREE_PASSTHROUGH` (`crates/native/src/treekeys.rs`).
+  `TREE_PASSTHROUGH` (`crates/app/src/treekeys.rs`).
 - Source: `docs/plans/_archived/20260920-pick-shortcut-editable/learnings.md`,
   Step 1; `docs/plans/20260929-shortcut-override-partial-conflict/learnings.md`,
   Step 1; `docs/plans/_archived/20261011-performance-graph-overlay/learnings.md`,
@@ -627,7 +627,7 @@ zero `pick` (now `flag`), which lost a pick set during a switch.
 
 ### The good-photo mark's rule is validated against the user's stars; know what it can claim (Hit)
 
-`crates/native/src/mark.rs`'s `photo_tier` (a port of the earlier app's
+`crates/app/src/mark.rs`'s `photo_tier` (a port of the earlier app's
 `focus.ts` `photoTier`) says whether a frame is good. The rule needs the
 stored `full_eye_sharp`, `eyes_ear`, `pose`, `eye_offset` and `edge_gap`;
 `af_eye_state` makes Low from `full_eye_sharp` too, on the consumer's side,
@@ -711,7 +711,7 @@ was just written.
 
 `Index::evict` runs once at launch on a plain `std::thread` and holds the
 writer lock for the whole evict + `VACUUM`; the native app's first scan joins
-that thread before it reconciles (see `native-app.md`). The size cap counts
+that thread before it reconciles (see `app.md`). The size cap counts
 pages in use (`page_count - freelist_count`), since a delete only moves pages
 to the freelist until `VACUUM` runs.
 
@@ -790,7 +790,7 @@ of at least 5) and `run_faces_scan` `Priority::Lowest`
 - Each pass builds its own `WorkQueue`; both read their hot list from the
   one `ScanFocus` handle the scan was started with. The app hands that handle
   the current file and the strip's range before the scan starts and again
-  after the view moves (`native-app.md`, "The hot list is set before the
+  after the view moves (`app.md`, "The hot list is set before the
   scan's workers start"). The paths must be the listing's strings, built
   with the same `to_string_lossy` as the scan's `FileStat` paths, or the
   queue will not match them.
@@ -815,7 +815,7 @@ read while it is held. Pass 2's
 workers also wait out a held pause at their stage boundaries (after the read,
 the decode, YuNet, the face mesh, the sharpness score and the full-size read;
 `scan::yield_to_pause`, one `MAX_PAUSE` budget per file). The native app
-holds the pause until its image is painted (`native-app.md`); the earlier app
+holds the pause until its image is painted (`app.md`); the earlier app
 held it only across the read, which the numbers below measure. The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
 so `docs/humans/performance.md`'s numbers stay comparable.
@@ -1053,7 +1053,7 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
   `scan_threads()` (Measured; pass 2 runs on fewer still, an eighth,
   `faces_threads()`, since the GPUI port measured it costing paging +9.4 ms
   on ARW and +89 ms on RAF at `scan_threads()` and +13 ms on RAF at a
-  quarter, see `native-app.md`). Priority does not keep the viewer's reads
+  quarter, see `app.md`). Priority does not keep the viewer's reads
   fast against 22 busy workers on 24 logical cores: shared physical cores
   (SMT) and an all-core clock do not care about thread priority. On
   `2026-09-19` (2134 ARW), a preview read + full decode on a
@@ -1070,7 +1070,7 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
 ### `crates/core`, `crates/backend` and `crates/cli` are on Rust edition 2021: no `if ... && let` chains (Hit)
 
 `if let Some(x) = a && let Some(y) = b` does not compile there; nest the
-`if let`s. `crates/native` is on edition 2024, where the chain compiles, so
+`if let`s. `crates/app` is on edition 2024, where the chain compiles, so
 code moved from it into the backend may need its chains nested.
 
 - Source: `docs/plans/_archived/20260920-app-quick-fixes/learnings.md`, Step 2.
@@ -1081,7 +1081,7 @@ The backend's `crates/backend/src/mcp.rs` serves `rmcp`'s
 `StreamableHttpService` through `axum::serve`, spawned with a bare
 `tokio::spawn`, so `Mcp::switch` and `Mcp::stop` must run inside a tokio
 runtime: the native app's `mcp.rs` owns a current-thread runtime on its one
-`mcp` thread (see `native-app.md`). `tokio` is a backend dependency for its `net`,
+`mcp` thread (see `app.md`). `tokio` is a backend dependency for its `net`,
 `rt`, `sync` and `time` features, and the backend's tests drive the server on
 a current-thread runtime of their own, so no tokio `macros` feature.
 
@@ -1125,7 +1125,7 @@ completes it.
   index key.
 - A tool's write goes through the same path a key press does, so it writes
   the same sidecar bytes (the native app's `set_judgment`, see
-  `native-app.md`).
+  `app.md`).
 - Source: `docs/plans/_archived/20260924-mcp-companion/learnings.md`, Steps 2-5.
 
 ### The folder watcher cannot loop on the app's own sidecar writes (Inferred)
@@ -1281,7 +1281,7 @@ sequences — a risk for Windows-path test fixtures.
   Windows-path string literals afterward.
 - Source: `docs/plans/_archived/20260929-tree-root-dedup/learnings.md`, Step 1.
 - Source: `docs/plans/_archived/20261114-gpui-perf-overlay/learnings.md`,
-  Step 1 (hit `crates/native/src/main.rs` and `scan.rs` too).
+  Step 1 (hit `crates/app/src/main.rs` and `scan.rs` too).
 
 A related trap: a Python heredoc run through the Bash tool can also turn
 escape text meant to stay literal (`\0`, `\x01` inside a byte-string

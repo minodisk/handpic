@@ -66,7 +66,7 @@ You are given:
 
 Write the check lines of a step's "Done when" against what the agents run:
 `mise run ci:local` passing locally and the PR's GitHub checks passing. Do not
-write "`mise run ci` passes" or "`mise run native:check` passes" as a local
+write "`mise run ci` passes" or "`mise run app:check` passes" as a local
 gate: no agent runs either full task locally (the full root workspace build has
 run this host out of memory), and `ci:local` leaves the other platforms and
 the dependent crates' tests to the PR's checks.

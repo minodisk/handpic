@@ -1,5 +1,5 @@
 /target
-crates/native/target
+crates/app/target
 /out
 
 /tmp

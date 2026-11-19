@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 # windows.sh — packages the release executable cargo built under
-# crates/native/target/release as a per-user Inno Setup setup .exe and a
+# crates/app/target/release as a per-user Inno Setup setup .exe and a
 # portable ZIP (one Handpic/ folder: the exe and licenses/), both for x64, and
 # a ZIP holding only the setup, for the updater (sign.sh signs it and the
 # portable ZIP). Prints their paths. It builds nothing. Runs under Git Bash.
@@ -17,7 +17,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # The executable's name.
 binary="handpic.exe"
 
-release="${root}/crates/native/target/release"
+release="${root}/crates/app/target/release"
 version="$(bash "${root}/tools/package/version.sh")"
 file_version="$(bash "${root}/tools/package/version.sh" windows)"
 setup_name="Handpic-${version}-windows-x64-setup"
@@ -68,7 +68,7 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
 	"/DLicensesDir=$(cygpath -w "${stage}/Handpic/licenses")" \
 	"/O$(cygpath -w "${release}")" \
 	"/F${setup_name}" \
-	"$(cygpath -w "${root}/crates/native/packaging/windows/handpic.iss")" >&2
+	"$(cygpath -w "${root}/crates/app/packaging/windows/handpic.iss")" >&2
 
 # Windows' own bsdtar writes a ZIP; Git Bash's GNU tar and a stock Windows
 # have no zip.

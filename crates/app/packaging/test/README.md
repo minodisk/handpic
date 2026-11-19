@@ -13,4 +13,4 @@ Such a build must never be distributed.
 
 Released builds verify with the production key, `../update.pub`, whose
 private key the maintainer keeps outside the repository
-(`mise run native:keygen`).
+(`mise run app:keygen`).

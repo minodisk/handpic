@@ -18,7 +18,7 @@
 // The Face focus Low icon is `scan-face` with its mouth turned down, and the
 // filled star is `star` with `fill="currentColor"`, derivatives.
 //
-// Full notice in `crates/native/LICENSE-lucide`. The unmodified icons come
+// Full notice in `crates/app/LICENSE-lucide`. The unmodified icons come
 // from `gpui-kit-assets`, under its own `LICENSE-LUCIDE`.
 
 use std::borrow::Cow;

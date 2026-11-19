@@ -48,7 +48,7 @@ GitHub lists a workflow, and `gh workflow run` accepts it, only once its file
 is on the default branch; after that, `gh workflow run <file> --ref <branch>`
 runs the file as the branch has it. `.github/workflows/package.yml` (the
 native app's `Package` workflow, see
-[`native-app.md`](./native-app.md#the-package-workflow-builds-the-distributables-inferred))
+[`app.md`](./app.md#the-package-workflow-builds-the-distributables-inferred))
 is `workflow_dispatch` only, so the PR that adds it cannot dispatch it.
 
 - Rule: to run a new dispatch-only workflow on its own PR, push a temporary

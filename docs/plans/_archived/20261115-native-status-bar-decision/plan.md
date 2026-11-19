@@ -24,7 +24,7 @@ after the gpui-component adoption work a later port could be tempted to
 "finish" the adoption by swapping the row for it. The swap was examined from
 the sources and the user decided against it. This plan records that decision,
 its reasons and the condition for revisiting it in
-[`native-app.md`](../../../agents/native-app.md), so the examination is not
+[`native-app.md`](../../../agents/app.md), so the examination is not
 repeated and the row is not replaced by mistake.
 
 ## Steps

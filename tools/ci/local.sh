@@ -9,7 +9,7 @@ set -o nounset
 # Selects each check from the branch's changed paths and runs only those, on
 # this platform; a crate that depends on a changed one is not tested. GitHub
 # Actions runs all of it on the PR (`lint`, `test` on three platforms,
-# `native`), and `mise run ci` stays the full local run.
+# `app`), and `mise run ci` stays the full local run.
 #
 # Changed paths: the working tree against `git merge-base HEAD origin/main`
 # (committed and uncommitted, renames as both paths) plus the untracked,
@@ -23,9 +23,9 @@ set -o nounset
 #                               `moved` (a path was deleted or renamed) or
 #                               `all` (as when the merge base is missing)
 
-# The pinned toolchain of crates/native, as .github/workflows/ci.yml's
-# `native` job and `[tasks."native:check"]` use it.
-native_rust="rust@1.98.1"
+# The pinned toolchain of crates/app, as .github/workflows/ci.yml's
+# `app` job and `[tasks."app:check"]` use it.
+app_rust="rust@1.98.1"
 
 # Whether this host is Windows, where the native app's `screenshot` feature
 # build is linted too (`uname -s`, overridable through CI_LOCAL_UNAME so the
@@ -55,7 +55,7 @@ shellcheck_patterns=(
 	'^tools/stats/[^/]+\.sh$'
 	'^tools/ci/[^/]+\.sh$'
 	'^tools/package/[^/]+\.sh$'
-	'^crates/native/packaging/linux/[^/]+\.sh$'
+	'^crates/app/packaging/linux/[^/]+\.sh$'
 )
 
 # select_checks <none|moved|all>
@@ -74,7 +74,7 @@ function select_checks() {
 		;;
 	esac
 
-	local fmt_root=0 fmt_native=0 actionlint=0 lychee=0 native=0
+	local fmt_root=0 fmt_app=0 actionlint=0 lychee=0 app=0
 	local packages=' ' tests=' ' scripts=''
 	local path pattern any=0
 	while IFS= read -r path; do
@@ -86,7 +86,7 @@ function select_checks() {
 		if [[ "${path}" == *.rs ]]; then
 			case "${path}" in
 			crates/backend/* | crates/cli/* | crates/core/*) fmt_root=1 ;;
-			crates/native/*) fmt_native=1 ;;
+			crates/app/*) fmt_app=1 ;;
 			esac
 		fi
 		case "${path}" in
@@ -98,7 +98,7 @@ function select_checks() {
 		crates/core/*) packages+="handpic-core " ;;
 		crates/backend/*) packages+="handpic-backend " ;;
 		crates/cli/*) packages+="handpic-cli " ;;
-		crates/native/*) native=1 ;;
+		crates/app/*) app=1 ;;
 		esac
 		for pattern in "${shellcheck_patterns[@]}"; do
 			if [[ "${path}" =~ ${pattern} ]]; then
@@ -137,7 +137,7 @@ function select_checks() {
 
 	local package test
 	if [[ "${all}" -eq 1 ]]; then
-		fmt_root=1 fmt_native=1 actionlint=1 lychee=1 native=1
+		fmt_root=1 fmt_app=1 actionlint=1 lychee=1 app=1
 		for package in "${root_packages[@]}"; do
 			packages+="${package} "
 		done
@@ -145,13 +145,13 @@ function select_checks() {
 			tests+="${test} "
 		done
 	fi
-	local native_clippy="${native}"
+	local app_clippy="${app}"
 	if [[ "${packages}" == *" handpic-core "* || "${packages}" == *" handpic-backend "* ]]; then
-		native_clippy=1
+		app_clippy=1
 	fi
 
 	[[ "${fmt_root}" -eq 0 ]] || echo "fmt root"
-	[[ "${fmt_native}" -eq 0 ]] || echo "fmt native"
+	[[ "${fmt_app}" -eq 0 ]] || echo "fmt app"
 	if [[ "${all}" -eq 1 ]]; then
 		echo "shellcheck-all"
 	elif [[ -n "${scripts}" ]]; then
@@ -168,24 +168,24 @@ function select_checks() {
 	for package in "${root_packages[@]}"; do
 		[[ "${packages}" != *" ${package} "* ]] || echo "test ${package}"
 	done
-	[[ "${native_clippy}" -eq 0 ]] || echo "clippy native"
-	[[ "${native_clippy}" -eq 0 || "${on_windows}" -eq 0 ]] || echo "clippy native screenshot"
-	[[ "${native}" -eq 0 ]] || echo "test native"
+	[[ "${app_clippy}" -eq 0 ]] || echo "clippy app"
+	[[ "${app_clippy}" -eq 0 || "${on_windows}" -eq 0 ]] || echo "clippy app screenshot"
+	[[ "${app}" -eq 0 ]] || echo "test app"
 }
 
 # Every check select_checks can print, shellcheck counted once.
 function every_check() {
 	echo "fmt root"
-	echo "fmt native"
+	echo "fmt app"
 	echo "shellcheck"
 	echo "actionlint"
 	echo "lychee"
 	printf 'bash-test %s\n' "${bash_tests[@]}"
 	printf 'clippy %s\n' "${root_packages[@]}"
 	printf 'test %s\n' "${root_packages[@]}"
-	echo "clippy native"
-	echo "clippy native screenshot"
-	echo "test native"
+	echo "clippy app"
+	echo "clippy app screenshot"
+	echo "test app"
 }
 
 # changed_paths <base>
@@ -213,7 +213,7 @@ function changed_paths() {
 	echo "moved=${moved}"
 }
 
-# Puts NASM on PATH for crates/native's build script (it refuses to build
+# Puts NASM on PATH for crates/app's build script (it refuses to build
 # without it), trying where `winget install NASM.NASM` puts it on Windows.
 function ensure_nasm() {
 	if ! command -v nasm >/dev/null 2>&1 && [[ -n "${LOCALAPPDATA:-}" ]]; then
@@ -223,8 +223,8 @@ function ensure_nasm() {
 			export PATH="${PATH}:${dir}"
 		fi
 	fi
-	if ! mise exec "${native_rust}" -- nasm -v >/dev/null 2>&1; then
-		echo "ci:local: NASM is not on PATH; crates/native's build script needs it." >&2
+	if ! mise exec "${app_rust}" -- nasm -v >/dev/null 2>&1; then
+		echo "ci:local: NASM is not on PATH; crates/app's build script needs it." >&2
 		echo "  Install it (winget install NASM.NASM, apt-get install nasm, brew install nasm) and put it on PATH." >&2
 		return 1
 	fi
@@ -235,8 +235,8 @@ function run_check() {
 	echo "==> ${check}"
 	case "${check}" in
 	"fmt root") cargo fmt --all -- --check ;;
-	"fmt native") cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check ;;
-	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/native/packaging/linux/*.sh ;;
+	"fmt app") cargo fmt --manifest-path crates/app/Cargo.toml --all -- --check ;;
+	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh ;;
 	"shellcheck "*)
 		local script="${check#shellcheck }"
 		if [[ -f "${script}" ]]; then
@@ -256,17 +256,17 @@ function run_check() {
 			echo "(deleted, nothing to run)"
 		fi
 		;;
-	"clippy native")
+	"clippy app")
 		ensure_nasm
-		(cd crates/native && mise exec "${native_rust}" -- cargo clippy --all-targets -- -D warnings)
+		(cd crates/app && mise exec "${app_rust}" -- cargo clippy --all-targets -- -D warnings)
 		;;
-	"clippy native screenshot")
+	"clippy app screenshot")
 		ensure_nasm
-		(cd crates/native && mise exec "${native_rust}" -- cargo clippy --all-targets --features screenshot -- -D warnings)
+		(cd crates/app && mise exec "${app_rust}" -- cargo clippy --all-targets --features screenshot -- -D warnings)
 		;;
-	"test native")
+	"test app")
 		ensure_nasm
-		(cd crates/native && mise exec "${native_rust}" -- cargo test)
+		(cd crates/app && mise exec "${app_rust}" -- cargo test)
 		;;
 	"clippy "*)
 		local -a packages
@@ -336,14 +336,14 @@ function main() {
 	local clippy_packages=() test_packages=()
 	for check in "${selected[@]}"; do
 		case "${check}" in
-		"clippy native" | "clippy native screenshot" | "test native") ;;
+		"clippy app" | "clippy app screenshot" | "test app") ;;
 		"clippy "*) clippy_packages+=("${check#clippy }") ;;
 		"test "*) test_packages+=("${check#test }") ;;
 		esac
 	done
 	for check in "${selected[@]}"; do
 		case "${check}" in
-		"clippy native" | "clippy native screenshot" | "test native") run_check "${check}" ;;
+		"clippy app" | "clippy app screenshot" | "test app") run_check "${check}" ;;
 		"clippy "*)
 			if [[ "${#clippy_packages[@]}" -gt 0 ]]; then
 				run_check "clippy ${clippy_packages[*]}"

@@ -29,7 +29,7 @@ shell = "bash -c"
 run = """
 set -euo pipefail
 cargo fmt --all
-cargo fmt --manifest-path crates/native/Cargo.toml --all
+cargo fmt --manifest-path crates/app/Cargo.toml --all
 """
 
 [tasks.lint]
@@ -38,8 +38,8 @@ shell = "bash -c"
 run = """
 set -euo pipefail
 cargo fmt --all -- --check
-cargo fmt --manifest-path crates/native/Cargo.toml --all -- --check
-shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/native/packaging/linux/*.sh
+cargo fmt --manifest-path crates/app/Cargo.toml --all -- --check
+shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh
@@ -58,9 +58,9 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 """
 
-[tasks."native:dev"]
+[tasks."app:dev"]
 description = "Run the GPUI app (debug build, the GPUI crates optimized as the GPUI Kit guide has it)"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -68,9 +68,9 @@ set -euo pipefail
 cargo run -- "$@"
 """
 
-[tasks."native:dev:screenshot"]
+[tasks."app:dev:screenshot"]
 description = "Run the GPUI app (debug build) with the screenshot feature, which adds the MCP companion's screenshot tool"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -78,9 +78,9 @@ set -euo pipefail
 cargo run --features screenshot -- "$@"
 """
 
-[tasks."native:watch"]
+[tasks."app:watch"]
 description = "Run the GPUI app (debug build) and rebuild and restart it on a source change (a restart, not a hot reload)"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" }, watchexec = "2.8.0" }
 shell = "bash -c"
 run = """
@@ -88,9 +88,9 @@ set -euo pipefail
 watchexec --restart --shell=none --watch src --watch build.rs --watch Cargo.toml --watch ../core --watch ../backend --exts rs,toml,json -- cargo run -- "$@"
 """
 
-[tasks."native:release"]
+[tasks."app:release"]
 description = "Run the GPUI app with an optimized build (use this for any timing measurement)"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -98,9 +98,9 @@ set -euo pipefail
 cargo run --release -- "$@"
 """
 
-[tasks."native:check"]
+[tasks."app:check"]
 description = "Lint and test the GPUI app (a separate workspace, so `lint` and `test` do not cover it)"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -112,9 +112,9 @@ esac
 cargo test
 """
 
-[tasks."native:bundle:macos"]
-description = "Build Handpic.app from the GPUI app under crates/native/target (macOS; release, or the profile given as its argument, e.g. `debug`)"
-dir = "crates/native"
+[tasks."app:bundle:macos"]
+description = "Build Handpic.app from the GPUI app under crates/app/target (macOS; release, or the profile given as its argument, e.g. `debug`)"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 usage = 'arg "[profile]" default="release"'
@@ -139,18 +139,18 @@ bash ../../tools/package/notices.sh "$app/Contents/Resources/licenses"
 echo "$app"
 """
 
-[tasks."native:package:macos"]
-description = "Build the release Handpic.app and package it as an ad hoc signed DMG for this Mac's architecture under crates/native/target/release (macOS)"
+[tasks."app:package:macos"]
+description = "Build the release Handpic.app and package it as an ad hoc signed DMG for this Mac's architecture under crates/app/target/release (macOS)"
 shell = "bash -c"
 run = """
 set -euo pipefail
-mise run native:bundle:macos
+mise run app:bundle:macos
 bash tools/package/macos.sh
 """
 
-[tasks."native:package:windows"]
-description = "Build the release GPUI app and package it as a per-user Inno Setup setup .exe and a portable ZIP under crates/native/target/release (Windows, Inno Setup 6 installed)"
-dir = "crates/native"
+[tasks."app:package:windows"]
+description = "Build the release GPUI app and package it as a per-user Inno Setup setup .exe and a portable ZIP under crates/app/target/release (Windows, Inno Setup 6 installed)"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -159,9 +159,9 @@ cargo build --release --locked
 bash ../../tools/package/windows.sh
 """
 
-[tasks."native:package:linux"]
-description = "Build the release GPUI app and package it as a tarball with its install.sh and a .deb under crates/native/target/release (x86_64 Linux, dpkg-dev installed)"
-dir = "crates/native"
+[tasks."app:package:linux"]
+description = "Build the release GPUI app and package it as a tarball with its install.sh and a .deb under crates/app/target/release (x86_64 Linux, dpkg-dev installed)"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """
@@ -170,7 +170,7 @@ cargo build --release --locked
 bash ../../tools/package/linux.sh
 """
 
-[tasks."native:sign"]
+[tasks."app:sign"]
 description = "Sign the updater's archives in place with zipsign and verify them (tools/package/sign.sh <private-key> <verifying-key> <archive>...)"
 tools = { "cargo:zipsign" = "0.2.2" }
 shell = "bash -c"
@@ -179,20 +179,20 @@ set -euo pipefail
 bash tools/package/sign.sh "$@"
 """
 
-[tasks."native:keygen"]
-description = "Generate the updater's signing key pair with zipsign: the private key to the path given, outside the repository, and the verifying key to crates/native/packaging/update.pub"
+[tasks."app:keygen"]
+description = "Generate the updater's signing key pair with zipsign: the private key to the path given, outside the repository, and the verifying key to crates/app/packaging/update.pub"
 tools = { "cargo:zipsign" = "0.2.2" }
 shell = "bash -c"
 usage = 'arg "<private_key>" help="Where to write the private key, outside the repository (an absolute path)"'
 run = """
 set -euo pipefail
 key="${usage_private_key}"
-public=crates/native/packaging/update.pub
+public=crates/app/packaging/update.pub
 dir="$(cd "$(dirname "$key")" && pwd -P)"
 root="$(pwd -P)"
 case "$dir/" in
 "$root/"*)
-  echo "native:keygen: keep the private key outside the repository, not in $dir" >&2
+  echo "app:keygen: keep the private key outside the repository, not in $dir" >&2
   exit 1
   ;;
 esac
@@ -201,9 +201,9 @@ echo "private key: $dir/$(basename "$key") (keep it offline; never commit it)"
 echo "verifying key: $public ($(wc -c <"$public" | tr -d ' ') bytes, base64 $(base64 <"$public"))"
 """
 
-[tasks."native:install:linux"]
+[tasks."app:install:linux"]
 description = "Install the GPUI app for the current user (Linux): the release binary to ~/.local/bin, its .desktop file and icon under ~/.local/share"
-dir = "crates/native"
+dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
 run = """

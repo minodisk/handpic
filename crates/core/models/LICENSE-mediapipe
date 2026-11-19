@@ -16,7 +16,7 @@ Provenance:
   cafab16c9132f1252e59f250b216831fa9e9c08f1424e7856e3e849771c05804.
 
 The face mesh edge tables `FACE_OUTLINE_EDGES` and `FACE_IRIS_EDGES` in
-crates/native/src/facemesh.rs are also MediaPipe's, Copyright 2021 The
+crates/app/src/facemesh.rs are also MediaPipe's, Copyright 2021 The
 MediaPipe Authors, under the same license.
 
 Provenance:

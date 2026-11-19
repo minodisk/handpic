@@ -62,7 +62,7 @@ const LEFT_EYE: [usize; 6] = [33, 160, 158, 133, 153, 144];
 const RIGHT_EYE: [usize; 6] = [362, 385, 387, 263, 373, 380];
 /// The eyelid contour of the eye on the left of the image, the 16 points of
 /// MediaPipe's `FACEMESH_RIGHT_EYE` edges (the subject's right eye; the same
-/// edges `crates/native/src/facemesh.rs` draws). The contour and iris tables
+/// edges `crates/app/src/facemesh.rs` draws). The contour and iris tables
 /// come from `mediapipe/python/solutions/face_mesh_connections.py`; notice in
 /// `models/LICENSE-mediapipe`.
 pub const LEFT_EYE_CONTOUR: [usize; 16] = [

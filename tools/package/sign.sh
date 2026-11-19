@@ -11,7 +11,7 @@ set -o nounset
 # the file's name, so a signed file is never renamed, and SHA256SUMS is
 # computed after signing. Then verifies each file with the given verifying
 # key, so a private key that does not match it fails here. Prints the paths.
-# Needs zipsign 0.2.2 on PATH; `mise run native:sign` provides it.
+# Needs zipsign 0.2.2 on PATH; `mise run app:sign` provides it.
 #
 # Usage: sign.sh <private-key> <verifying-key> <archive>...
 

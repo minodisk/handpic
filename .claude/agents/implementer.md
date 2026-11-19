@@ -65,7 +65,7 @@ You are given:
      clippy and the tests of the changed crates. It runs on this platform only
      and does not test the crates that depend on a changed one; the PR's
      GitHub checks run the other platforms and those tests
-   - A plan's Done-when that names `mise run ci` or `mise run native:check`
+   - A plan's Done-when that names `mise run ci` or `mise run app:check`
      is met by `mise run ci:local` passing here and the PR's GitHub checks
      passing. Run neither full task locally as a gate (the full root
      workspace build has run this host out of memory)

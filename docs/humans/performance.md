@@ -105,7 +105,7 @@ The whole-file read dominates, which is what the bounded read removes.
 
 ### Keypress to pixels (GPUI)
 
-The app's pager (`crates/native`, then still experimental), from the key to the frame presented
+The app's pager (`crates/app`, then still experimental), from the key to the frame presented
 (including the vsync wait and `Present`).
 In ms as the median of three runs' p50 / p95, each run n=20, timer-driven
 presses, measured on 2026-11-09: Windows 11, release build with SIMD mozjpeg,

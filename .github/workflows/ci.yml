@@ -65,10 +65,10 @@ jobs:
       - name: Build and test
         run: mise run test
 
-  # crates/native is its own Cargo workspace on its own toolchain, so neither
+  # crates/app is its own Cargo workspace on its own toolchain, so neither
   # job above sees it. It runs on all three platforms like the test job, with
   # fail-fast off for the same reason.
-  native:
+  app:
     strategy:
       fail-fast: false
       matrix:
@@ -106,19 +106,19 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git/db
-            crates/native/target
-          key: cargo-native-${{ runner.os }}-${{ hashFiles('crates/native/Cargo.lock') }}
-          restore-keys: cargo-native-${{ runner.os }}-
+            crates/app/target
+          key: cargo-app-${{ runner.os }}-${{ hashFiles('crates/app/Cargo.lock') }}
+          restore-keys: cargo-app-${{ runner.os }}-
 
-      # `mise run native:check` runs its task through `bash -c`, and on Windows
+      # `mise run app:check` runs its task through `bash -c`, and on Windows
       # the build script behind that shell did not find nasm ("program not
       # found") even with the directory on PATH. Run the same two commands
       # through `mise exec`, which hands cargo the environment directly, on
       # every platform so the job has one command path. The `screenshot` feature
       # build is linted on Windows only, the platform its tool is checked on.
-      - name: Lint and test the native app
+      - name: Lint and test the app
         shell: bash
-        working-directory: crates/native
+        working-directory: crates/app
         run: |
           if [ "$RUNNER_OS" = Windows ]; then
             nasm_dir="$(cygpath -u "$USERPROFILE")/nasm"
@@ -136,8 +136,8 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          mise run native:bundle:macos debug
-          app=crates/native/target/debug/Handpic.app
+          mise run app:bundle:macos debug
+          app=crates/app/target/debug/Handpic.app
           plutil -lint "$app/Contents/Info.plist"
           test -x "$app/Contents/MacOS/handpic"
           test -s "$app/Contents/Resources/icon.icns"
@@ -147,7 +147,7 @@ jobs:
   # required check going missing. always() makes it report a failure rather
   # than being skipped when something it needs fails.
   ci:
-    needs: [lint, test, native]
+    needs: [lint, test, app]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -155,4 +155,4 @@ jobs:
         run: |
           [ "${{ needs.lint.result }}" = success ]
           [ "${{ needs.test.result }}" = success ]
-          [ "${{ needs.native.result }}" = success ]
+          [ "${{ needs.app.result }}" = success ]

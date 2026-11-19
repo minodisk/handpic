@@ -24,7 +24,7 @@ gpui-component 0.9.1. A few controls are still hand-drawn `div`s. This plan
 replaces them with the component each one imitates, keeping the look as close
 as the component allows, and adds no new UI.
 
-Read [native-app.md](../../../agents/native-app.md) first: "gpui-component is
+Read [native-app.md](../../../agents/app.md) first: "gpui-component is
 initialized", "The settings modal is its own entity", "The sort and filter
 menus are deferred popovers over the window", "The status row is
 gpui-component's `StatusBar`" and "The right-click menu is a deferred popover
@@ -101,7 +101,7 @@ state's clickable message (text, not a button).
     - **Sort / Filter (`main.rs`, `menu_button`).** `Button` implements
       `InteractiveElement`, so the caller's
       `.on_mouse_down(MouseButton::Left, ..)` stays the toggle (not
-      `on_click`; see the `on_mouse_down_out` rule in native-app.md).
+      `on_click`; see the `on_mouse_down_out` rule in app.md).
       `Button`'s own mouse-down only calls `window.prevent_default()`, so the
       window's one focus handle keeps the focus. Give it `.tab_stop(false)`:
       the main view routes every key through its own handle. The default
@@ -115,7 +115,7 @@ state's clickable message (text, not a button).
       handler for the view-only sort button by which looks closer. The
       `relative()` wrapper and the `deferred` / `anchored` popover stay.
       Measure the preview canvas (1160 x 842 at the default window, per
-      native-app.md): `.xsmall()` is 20 px tall where the `div` is about
+      app.md): `.xsmall()` is 20 px tall where the `div` is about
       21 px, so either pin the height to keep 842 or record the new size.
     - **Kbd.** `Kbd::new` takes a `gpui::Keystroke`. Add
       `keys::keystroke_of(name: &str) -> Keystroke` in `keys.rs`, the inverse

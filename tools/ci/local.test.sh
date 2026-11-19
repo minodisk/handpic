@@ -42,7 +42,7 @@ function expect() {
 }
 
 every="fmt root
-fmt native
+fmt app
 shellcheck-all
 actionlint
 lychee
@@ -57,8 +57,8 @@ clippy handpic-cli
 test handpic-core
 test handpic-backend
 test handpic-cli
-clippy native
-test native"
+clippy app
+test app"
 
 # --- nothing ----------------------------------------------------------------
 expect none "" ""
@@ -66,11 +66,11 @@ expect moved "" ""
 expect none "tools/stats/foo.py" ""
 expect none "crates/core/models/LICENSE-x" "clippy handpic-core
 test handpic-core
-clippy native"
+clippy app"
 
 # --- Markdown ---------------------------------------------------------------
 expect none "README.md
-docs/agents/native-app.md
+docs/agents/app.md
 .claude/agents/implementer.md" "lychee"
 expect moved "docs/a.md
 docs/b.md" "lychee"
@@ -79,7 +79,7 @@ docs/new.md" "lychee"
 expect moved "crates/core/genres/old.py" "lychee
 clippy handpic-core
 test handpic-core
-clippy native"
+clippy app"
 expect none "docs/plans/20260101-x/plan.md
 docs/plans/20260101-x/data.json" "lychee"
 expect none ".claude/settings.json" ""
@@ -88,44 +88,44 @@ expect none ".claude/settings.json" ""
 expect none "crates/core/src/x.rs" "fmt root
 clippy handpic-core
 test handpic-core
-clippy native"
+clippy app"
 expect none "crates/backend/src/x.rs" "fmt root
 clippy handpic-backend
 test handpic-backend
-clippy native"
+clippy app"
 expect none "crates/cli/src/x.rs" "fmt root
 clippy handpic-cli
 test handpic-cli"
-expect none "crates/native/src/x.rs" "fmt native
-clippy native
-test native"
-expect none "crates/native/Cargo.lock" "clippy native
-test native"
+expect none "crates/app/src/x.rs" "fmt app
+clippy app
+test app"
+expect none "crates/app/Cargo.lock" "clippy app
+test app"
 expect none "crates/core/Cargo.toml" "clippy handpic-core
 test handpic-core
-clippy native"
+clippy app"
 expect none "Cargo.lock" "clippy handpic-core
 clippy handpic-backend
 clippy handpic-cli
 test handpic-core
 test handpic-backend
 test handpic-cli
-clippy native"
+clippy app"
 expect none "crates/cli/src/x.rs
 crates/core/src/y.rs" "fmt root
 clippy handpic-core
 clippy handpic-cli
 test handpic-core
 test handpic-cli
-clippy native"
+clippy app"
 
 # --- shell scripts and workflows ---------------------------------------------
 expect none "tools/git/x.sh" "shellcheck tools/git/x.sh"
 expect none "tools/stats/x.sh" "shellcheck tools/stats/x.sh"
 expect none "tools/package/x.sh" "shellcheck tools/package/x.sh"
-expect none "crates/native/packaging/linux/install.sh" "shellcheck crates/native/packaging/linux/install.sh
-clippy native
-test native"
+expect none "crates/app/packaging/linux/install.sh" "shellcheck crates/app/packaging/linux/install.sh
+clippy app
+test app"
 expect none ".claude/skills/develop/scripts/commit-push.sh" "shellcheck .claude/skills/develop/scripts/commit-push.sh"
 expect none "scripts/x.sh
 tools/git/sub/x.sh
@@ -134,8 +134,8 @@ tools/package/sub/x.sh
 expect none "tools/ci/local.sh" "shellcheck tools/ci/local.sh
 bash-test tools/ci/local.test.sh"
 expect none ".github/workflows/ci.yml" "actionlint"
-expect none "crates/native/packaging/NOTICE-gpui" "clippy native
-test native"
+expect none "crates/app/packaging/NOTICE-gpui" "clippy app
+test app"
 
 # --- bash tests -------------------------------------------------------------
 expect none ".claude/skills/merge/scripts/check-merge-approval.sh" "shellcheck .claude/skills/merge/scripts/check-merge-approval.sh
@@ -158,24 +158,24 @@ docs/a.md" "${every}"
 
 # --- Windows: the native app's screenshot feature build ----------------------
 uname=MINGW64_NT-10.0-26200
-expect none "crates/native/src/x.rs" "fmt native
-clippy native
-clippy native screenshot
-test native"
+expect none "crates/app/src/x.rs" "fmt app
+clippy app
+clippy app screenshot
+test app"
 expect none "crates/backend/src/x.rs" "fmt root
 clippy handpic-backend
 test handpic-backend
-clippy native
-clippy native screenshot"
+clippy app
+clippy app screenshot"
 expect none "crates/cli/src/x.rs" "fmt root
 clippy handpic-cli
 test handpic-cli"
 expect none "README.md" "lychee"
-expect all "" "${every/$'clippy native\n'/$'clippy native\nclippy native screenshot\n'}"
+expect all "" "${every/$'clippy app\n'/$'clippy app\nclippy app screenshot\n'}"
 uname=Darwin
-expect none "crates/native/src/x.rs" "fmt native
-clippy native
-test native"
+expect none "crates/app/src/x.rs" "fmt app
+clippy app
+test app"
 
 if [[ "${failures}" -gt 0 ]]; then
 	echo "${failures} of ${cases} cases failed" >&2

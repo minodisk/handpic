@@ -19,7 +19,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 ## Purpose
 
 Sub-milestone 3 of Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md).
-The native app (`crates/native`, product "Handpic") cannot update itself:
+The native app (`crates/app`, product "Handpic") cannot update itself:
 `tauri-plugin-updater` left with the Tauri app. Once this plan is done, an
 install of the native app checks for a newer release at launch and on demand
 and updates through the owner of its install, as
@@ -108,8 +108,8 @@ overrides it:
       (`handpic_2.0.0-rc.1_amd64.deb`); only the control field uses `~`.
     - `package.yml` has an optional `version` input. When given, a new
       `tools/package/set-version.sh <version>` writes it to
-      `crates/native/Cargo.toml` and to the crate's entry in
-      `crates/native/Cargo.lock` before the build, so `cargo build --release
+      `crates/app/Cargo.toml` and to the crate's entry in
+      `crates/app/Cargo.lock` before the build, so `cargo build --release
       --locked` still passes and the binary reports that version.
     - `package.yml`'s checks assert each mapping:
       - the two plist fields are numeric;
@@ -123,11 +123,11 @@ overrides it:
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
     - Files: `tools/package/version.sh`, `tools/package/set-version.sh`,
-      `macos.sh` and the `native:bundle:macos` task in `mise.toml` (whichever
+      `macos.sh` and the `app:bundle:macos` task in `mise.toml` (whichever
       writes the plist's two fields), `windows.sh`,
-      `crates/native/packaging/windows/handpic.iss` (a `VersionInfoVersion`
+      `crates/app/packaging/windows/handpic.iss` (a `VersionInfoVersion`
       define), `linux.sh`, `package.yml`, and the "Packaging" section of
-      `docs/agents/native-app.md`.
+      `docs/agents/app.md`.
     - `shellcheck` covers `tools/package/*.sh` through `mise run lint`.
     - `handpic.iss` sets no `VersionInfoVersion` today; Inno derives it from
       `AppVersion` only when that is numeric.
@@ -151,8 +151,8 @@ overrides it:
       `.tar.gz`, the macOS `.tar.gz` and the setup ZIP.
     - `SHA256SUMS` is computed after signing.
     - The production verifying key is checked in at
-      `crates/native/packaging/update.pub`. A test key pair is checked in
-      under `crates/native/packaging/test/`, with a README saying no released
+      `crates/app/packaging/update.pub`. A test key pair is checked in
+      under `crates/app/packaging/test/`, with a README saying no released
       build trusts it.
     - `package.yml` has an optional `update_test_repo` input (`owner/name`).
       - When given: the build gets `HANDPIC_UPDATE_TEST_REPO` and the archives
@@ -187,8 +187,8 @@ overrides it:
       the repository or this plan's workflows. See Trade-offs for who
       generates it and when.
     - Files: `tools/package/macos.sh`, `windows.sh`, `sign.sh`, `mise.toml`,
-      `package.yml`, `crates/native/packaging/`, `CLAUDE.md`'s packaging
-      paragraph, `docs/agents/native-app.md`.
+      `package.yml`, `crates/app/packaging/`, `CLAUDE.md`'s packaging
+      paragraph, `docs/agents/app.md`.
 
 - [x] Step 3: Add the update engine to `crates/backend`
   - Done when:
@@ -243,7 +243,7 @@ overrides it:
       it and decide between the guide's `ureq` and `self_update`'s `reqwest`
       feature with the backend's client (`reqwest_client`).
     - The key and the feed: `include_bytes!` of
-      `crates/native/packaging/update.pub`, and `minodisk/handpic`. With
+      `crates/app/packaging/update.pub`, and `minodisk/handpic`. With
       `HANDPIC_UPDATE_TEST_REPO` set at build time: the test verifying key and
       that repository. Log which one a build uses.
     - Release tags are `v<version>` (`include-component-in-tag` is false).
@@ -285,7 +285,7 @@ overrides it:
     - Assumes Step 3 is merged.
     - There is no menu bar in the native app; the Updates page is "the menu
       item" of the plan's wording (see Trade-offs).
-    - Follow the app's split: a pure model in `crates/native/src/update.rs`
+    - Follow the app's split: a pure model in `crates/app/src/update.rs`
       (as `cache.rs` is to the Cache page), the page in `settingsmodal.rs` /
       `settingsview.rs`, and the backend's events through the view's existing
       channel (`scan::Event`), as `Event::Perf` and `Event::Mcp` arrive.
@@ -306,7 +306,7 @@ overrides it:
       state only (in `get_settings` or `get_status`); the check and the
       restart stay the user's (see Trade-offs).
     - Add the page to `CLAUDE.md` and a section to
-      `docs/agents/native-app.md`.
+      `docs/agents/app.md`.
 
 - [ ] Step 5: Update an Inno Setup install: the setup downloaded in the background and run at quit
   - Done when:
@@ -358,7 +358,7 @@ overrides it:
       (`bundle_install_path`), including a rejected signature leaving the old
       bundle in place.
     - `mise run ci:local` passes locally and the PR's GitHub checks pass (the
-      macOS leg of the `native` job runs the bundle test).
+      macOS leg of the `app` job runs the bundle test).
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Step 4 is merged; independent of Step 5.
     - `self_update` stages inside the bundle's parent folder, restores the old
@@ -376,7 +376,7 @@ overrides it:
     - `tools/package/test-release.sh` publishes the artifacts of a `Package`
       run as a release of a scratch repository (a prerelease when the version
       has a prerelease part), and its use is described in
-      `docs/agents/native-app.md`.
+      `docs/agents/app.md`.
     - Two test builds, `2.0.0-rc.1` and `2.0.0-rc.2`, were packaged with
       `update_test_repo` set and published there.
     - Each row below is recorded in `packaging-updater.md` as **Measured**
