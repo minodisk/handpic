@@ -328,7 +328,9 @@ pub mod coverage {
         ),
         (
             "mcpEnabled",
-            Coverage::Excluded("read only at startup, and a client would cut its own connection"),
+            Coverage::Excluded(
+                "the user's switch on the MCP page, and a client would cut its own connection",
+            ),
         ),
         ("mcpAllowDestructive", Coverage::Excluded(MCP_GRANT)),
     ];

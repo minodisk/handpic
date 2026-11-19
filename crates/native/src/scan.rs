@@ -113,6 +113,8 @@ pub enum Event {
     },
     /// A tool call of the MCP companion for the view to answer.
     Mcp(handpic_backend::mcp::Request),
+    /// The MCP companion's server after a switch.
+    McpState(handpic_backend::mcp::McpState),
     /// How far the move to the Trash or the delete in flight got.
     TrashProgress {
         mode: crate::trash::Mode,
