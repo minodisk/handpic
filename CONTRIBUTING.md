@@ -49,7 +49,7 @@ mise run app:check              # clippy and the tests
 [docs/humans/performance.md](./docs/humans/performance.md) are all optimized
 ones and a debug build is not comparable to them.
 
-`mise run ci` does not run `app:check` (CI has a `app` job for it); only
+`mise run ci` does not run `app:check` (CI has an `app` job for it); only
 the formatting check of the crate is part of `mise run lint`.
 
 ## Checks
