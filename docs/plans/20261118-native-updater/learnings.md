@@ -206,6 +206,74 @@
 - The MCP companion exposes the state in `get_status` (`update`); the
   coverage table excludes the Updates page with that reason.
 
+## Step 5: the Inno Setup install's update
+
+- The engine's `stage_setup` does not go through `self_update`'s
+  `update()` (which replaces an executable); it uses the pieces
+  `self_update` 1.3.3 exports: `get_release_version("v<version>")` for the
+  pinned release, `Download` (with `Accept: application/octet-stream`, the
+  API asset URL being `url`, and its default User-Agent) for `SHA256SUMS`
+  and the ZIP, `Checksum::from_sums_file` for the entry (its `verify` is
+  crate-private, so the SHA-256 is compared here with `sha2`, now used in
+  the module body, not only the tests), `verify_signature` and
+  `Extract::extract_file`. The ZIP keeps its asset name in the staging
+  folder, since zipsign's context is the file name.
+- `self_update::verify_signature` returns `Ok` for an empty key list, so
+  `stage_setup` refuses one itself (tested).
+- How the setup gets the exe unlocked: neither the Restart Manager nor a
+  retry, but a `[Code]` wait. The app passes `/WAITPID=<its pid>` and
+  `InitializeSetup` waits on that process handle (`OpenProcess` with
+  `SYNCHRONIZE`, `WaitForSingleObject`, at most 60 s) before anything is
+  installed. The Restart Manager (`CloseApplications`, Inno's default `yes`,
+  with `RestartApplications` `yes`) was not chosen: in a silent run it
+  closes and then restarts the app itself, which would relaunch on a plain
+  quit too. It stays at its defaults for a setup run by hand while the app
+  runs; after a 60 s wait for a hung app it would apply there as well.
+- The relaunch belongs to the setup: `[Run]` starts `{app}\<exe>` `nowait`
+  only when `/RELAUNCH` is on the command line (`RelaunchAsked`, a
+  `ParamStr` scan). So `Restart Now` on an Inno install sets `relaunch` and
+  calls `cx.quit()`; `cx.restart()` would start the old exe while the setup
+  replaces it.
+- Where the setup is spawned: a third `on_app_quit` handler registered in
+  `Handpic::new` after the judgment / sidecar one and the settings one.
+  GPUI 0.3.12's `shutdown` calls the quit observers synchronously in
+  registration order (a `BTreeMap` keyed by subscription id) before awaiting
+  their futures, and both drains run in their handlers' bodies, so the
+  setup is started after both have finished. It is spawned with
+  `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP` and the staging folder as
+  its working directory; the `/WAITPID` wait covers whatever the process
+  still does after the handlers. `CREATE_BREAKAWAY_FROM_JOB` was not added:
+  a launch from Explorer or the Start menu is in no job.
+- The staging folder (`<cache dir>/dev.minodisk.handpic/update`,
+  `datadir::update_staging`) is cleared at launch only for an Inno install,
+  so a test or `cargo run` binary never touches the real cache. After
+  `/RELAUNCH` the relaunched app may find the setup still running from that
+  folder (Inno's `setup.exe` waits for its `setup.tmp`), so the removal can
+  fail; it is logged and the next launch clears it.
+- Inno Setup is still not installed on this machine, so the `[Code]` was
+  not compiled locally; the `Package` run compiles it. The `windows` leg's
+  check now: installs N; upgrades with `/WAITPID` of a `pwsh` stand-in that
+  holds the installed exe open (`FileShare.Read`, as a running image) for
+  8 s, asserting exit code 0, the holder's own exit code 0 (not closed by
+  the Restart Manager), the setup not finishing before the hold ends, the
+  installed files, and no launch within 10 s; then upgrades with
+  `/RELAUNCH` and asserts a launch within 30 s (a `handpic.exe` process from
+  the install folder, or `Handpic.log` written since), stopping the app
+  before the uninstall.
+- Against gpui-kit's guide (<https://gpui-kit.com/docs/auto-update/>): it
+  names the installer as the owner of an Inno Setup install, staging in an
+  app-owned location outside the install, never running a partial payload,
+  and the installer handling the file lock; all followed. Its "verify the
+  publisher signature" on Windows is the project's zipsign key (the plan's
+  deviations 1 and 2) and running the setup at quit without asking is the
+  plan's deviation 4. No new deviation.
+- The `ReadyToRestart` phase of an Inno install means "staged"; its texts
+  say the update installs when Handpic quits.
+- Tripped up locally: Python's text-mode writes on Windows turn each newline
+  into CRLF, and a Rust string continuation (`\` at a line's end) before a CRLF
+  kept the next line's indent in the string, so a text test failed on the
+  first `mise run ci:local`. Edit with LF endings.
+
 ## Deferred issues (todo candidates)
 
 - No request timeout on the update check or download
@@ -233,3 +301,25 @@
   while busy) were not driven headless; the hand check belongs with the
   pending manual check above. Basis: Step 4 implementation;
   `crates/app/src/settingsview.rs`.
+- Pending check (Step 5): a `Package` run dispatched on the branch (with or
+  without `update_test_repo`) must be green; it is the first compile of the
+  `.iss` `[Code]` (its `DWORD` / `BOOL` / `THandle` external declarations)
+  and runs the `windows` leg's `/WAITPID` and `/RELAUNCH` checks. Not run by
+  the implementation agent, which does not push. The Step 5 checkbox was
+  ticked on the engine's tests, the model's tests and the local checks.
+  Basis: Step 5 implementation; files
+  `crates/app/packaging/windows/handpic.iss`,
+  `.github/workflows/package.yml`.
+- Pending manual check (Step 5, Windows, an Inno Setup install of a test
+  build packaged with `update_test_repo`): with a newer release on the test
+  feed, launch the older install; the Updates page should go `Checking` to
+  `Downloading` to `Verifying` to `ReadyToRestart` ("installs when Handpic
+  quits"), the setup staged under
+  `%LOCALAPPDATA%\dev.minodisk.handpic\update`. A plain quit should log
+  `quit: update setup ... relaunch=false`, install the newer version without
+  a prompt (no UAC or SmartScreen) and start nothing; `Restart Now` should
+  log `relaunch=true` and come back as the newer version. A tampered setup
+  ZIP on the feed should end in `Failed` with nothing staged. This is Step
+  7's Inno Setup row; the checkbox was ticked on the automated criteria.
+  Basis: Step 5 implementation; files `crates/app/src/main.rs`,
+  `crates/backend/src/update.rs`.

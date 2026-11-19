@@ -308,7 +308,7 @@ overrides it:
     - Add the page to `CLAUDE.md` and a section to
       `docs/agents/app.md`.
 
-- [ ] Step 5: Update an Inno Setup install: the setup downloaded in the background and run at quit
+- [x] Step 5: Update an Inno Setup install: the setup downloaded in the background and run at quit
   - Done when:
     - On an Inno Setup install the app downloads
       `Handpic-<version>-windows-x64-setup.exe.zip` into an app-owned staging
