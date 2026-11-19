@@ -421,6 +421,10 @@ struct Handpic {
     settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
+    /// The OS priority of the scan's passes: `Priorities::APP`, normal in the
+    /// UI tests, where pass 2 at `Priority::Lowest` starved behind the other
+    /// tests.
+    scan_priorities: scan::Priorities,
     /// The pending `ScanFocus` update, replaced on every change.
     scan_focus: Option<Task<()>>,
     next_scan: u64,
@@ -892,6 +896,7 @@ impl Handpic {
             settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: running,
+            scan_priorities: scan::Priorities::APP,
             scan_focus: None,
             next_scan: 0,
             dir: None,
@@ -3229,6 +3234,7 @@ impl Handpic {
                     listed.dir,
                     todo,
                     focus,
+                    self.scan_priorities,
                     self.events.clone(),
                 );
                 self.scan.put(scan);
