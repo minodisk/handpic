@@ -273,6 +273,17 @@
   into CRLF, and a Rust string continuation (`\` at a line's end) before a CRLF
   kept the next line's indent in the string, so a text test failed on the
   first `mise run ci:local`. Edit with LF endings.
+- The first `Package` run (44536402810, `version=2.0.0-rc.1`,
+  `update_test_repo=minodisk/handpic`) compiled the `[Code]` and passed the
+  `/WAITPID` upgrade (8.9 s against the 8 s hold, the holder's exit 0) and
+  the no-launch check, then hung for 40 minutes until cancelled: pwsh 7's
+  `Start-Process -Wait` waits for the whole process tree, so the `/RELAUNCH`
+  upgrade never returned while the relaunched Handpic ran. `Invoke-Silent`
+  now starts the setup with `-PassThru` and waits on its own handle
+  (`WaitForExit(300000)`, throwing past it), the holder's wait is bounded at
+  60 s, and the step has `timeout-minutes: 15`. Package run 44547625174 on
+  the fix passed every job (the `/WAITPID` upgrade 9.1 s, the relaunch, the
+  uninstall and the ZIP checks).
 
 ## Deferred issues (todo candidates)
 
@@ -301,15 +312,6 @@
   while busy) were not driven headless; the hand check belongs with the
   pending manual check above. Basis: Step 4 implementation;
   `crates/app/src/settingsview.rs`.
-- Pending check (Step 5): a `Package` run dispatched on the branch (with or
-  without `update_test_repo`) must be green; it is the first compile of the
-  `.iss` `[Code]` (its `DWORD` / `BOOL` / `THandle` external declarations)
-  and runs the `windows` leg's `/WAITPID` and `/RELAUNCH` checks. Not run by
-  the implementation agent, which does not push. The Step 5 checkbox was
-  ticked on the engine's tests, the model's tests and the local checks.
-  Basis: Step 5 implementation; files
-  `crates/app/packaging/windows/handpic.iss`,
-  `.github/workflows/package.yml`.
 - Pending manual check (Step 5, Windows, an Inno Setup install of a test
   build packaged with `update_test_repo`): with a newer release on the test
   feed, launch the older install; the Updates page should go `Checking` to
