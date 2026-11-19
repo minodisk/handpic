@@ -6,6 +6,7 @@
 use gpui_kit::component::ThemeMode;
 use handpic_backend::{
     import,
+    mcp::McpState,
     shortcuts::{Binding, Keymap},
     sidecar::{SidecarFormat, label_names_setting},
 };
@@ -173,6 +174,36 @@ pub fn stops(key: &ModalKey, editing: bool) -> bool {
 
 /// The modal's status line while the settings store did not open.
 pub const NOT_SAVED: &str = "The settings store did not open, so changes last until the app quits.";
+
+/// The MCP page's server switch, its note and the address's label.
+pub const MCP_ENABLED_LABEL: &str = "Let MCP clients connect";
+pub const MCP_ENABLED_NOTE: &str = "When on, Handpic serves MCP clients on this computer at the address below, so an AI assistant can follow and assist your culling session. MCP clients cannot change this setting.";
+pub const MCP_URL_LABEL: &str = "Server address";
+
+/// The endpoint's URL on `port`.
+pub fn mcp_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}/mcp")
+}
+
+/// The port the page shows: the running server's, else `configured`.
+pub fn mcp_port(configured: u16, state: Option<&McpState>) -> u16 {
+    state
+        .filter(|state| state.enabled && state.error.is_none())
+        .map_or(configured, |state| state.port)
+}
+
+/// The server's state under the switch and its last reported state: off is
+/// stopped, on is running, the bind error, or starting until it is known.
+pub fn mcp_status(enabled: bool, state: Option<&McpState>) -> String {
+    match state {
+        _ if !enabled => "The server is stopped.".into(),
+        Some(McpState {
+            error: Some(error), ..
+        }) => format!("The server could not start: {error}"),
+        Some(_) => "The server is running.".into(),
+        None => "The server is starting\u{2026}".into(),
+    }
+}
 
 /// The MCP page's switch and its note.
 pub const ALLOW_DESTRUCTIVE_LABEL: &str =
@@ -438,15 +469,15 @@ impl SettingsModal {
 #[cfg(test)]
 mod tests {
     use gpui_kit::component::ThemeMode;
-    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
+    use handpic_backend::{mcp::McpState, shortcuts::Keymap, sidecar::SidecarFormat};
     use handpic_core::xmp::LabelNames;
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         OPEN_TIP, SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit,
-        format_change, known_group, label_change, label_names_of, label_texts, mode_change,
-        pattern_change, preset_of, root_note, shortcut_group, shortcut_label, shortcut_rows, stops,
-        theme_change, writes_xmp,
+        format_change, known_group, label_change, label_names_of, label_texts, mcp_port,
+        mcp_status, mcp_url, mode_change, pattern_change, preset_of, root_note, shortcut_group,
+        shortcut_label, shortcut_rows, stops, theme_change, writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
 
@@ -913,6 +944,38 @@ mod tests {
         assert_eq!(
             format_change(SidecarFormat::Both, SidecarFormat::Xmp),
             Some(SidecarFormat::Xmp)
+        );
+    }
+
+    #[test]
+    fn the_mcp_page_shows_the_running_port_and_the_switchs_state() {
+        let running = McpState {
+            enabled: true,
+            port: 50123,
+            error: None,
+        };
+        let failed = McpState {
+            enabled: true,
+            port: 41917,
+            error: Some("could not listen on 127.0.0.1:41917: in use".into()),
+        };
+        let stopped = McpState {
+            enabled: false,
+            port: 41917,
+            error: None,
+        };
+        assert_eq!(mcp_url(41917), "http://127.0.0.1:41917/mcp");
+        assert_eq!(mcp_port(0, Some(&running)), 50123);
+        assert_eq!(mcp_port(41917, Some(&failed)), 41917);
+        assert_eq!(mcp_port(41999, Some(&stopped)), 41999);
+        assert_eq!(mcp_port(41999, None), 41999);
+        assert_eq!(mcp_status(false, None), "The server is stopped.");
+        assert_eq!(mcp_status(false, Some(&running)), "The server is stopped.");
+        assert_eq!(mcp_status(true, None), "The server is starting\u{2026}");
+        assert_eq!(mcp_status(true, Some(&running)), "The server is running.");
+        assert_eq!(
+            mcp_status(true, Some(&failed)),
+            "The server could not start: could not listen on 127.0.0.1:41917: in use"
         );
     }
 }

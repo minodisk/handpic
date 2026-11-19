@@ -679,11 +679,11 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
-`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`). CI covers the priority read back inside a worker on Windows and Linux and the macOS compilation. The macOS QoS branch was never exercised on a real machine. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost").
+`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
 
 #### TODO
 
-- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_BACKGROUND`, which also throttles disk IO) not to crawl; if it does, move it to `QOS_CLASS_UTILITY` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
+- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
 ### Native: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
 
@@ -2334,18 +2334,6 @@ Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md`.
 
 ---
 
-### Native: the MCP companion has no switch in the app
-
-`mcpEnabled` is read only at startup from the settings store. A new store seeds it from an earlier install's `settings.json`, and neither the `MCP` page nor `set_settings` sets it (the companion's coverage table lists it as excluded). A user without an earlier install cannot turn the server on except by editing the store. The remove-tauri plan's Step 5 documents this as is in `README.md` / `usage.md` and their `.ja.md`. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/native/src/settingsview.rs`, `crates/native/src/settingsmodal.rs`, `crates/native/src/mcp.rs`, `crates/native/src/companion.rs` (coverage table), `docs/humans/usage.md`.
-
-#### TODO
-
-- [ ] Either add the switch to the `MCP` page (with the URL, status and client examples the Tauri `MCP` tab had), or decide it stays hidden and keep `usage.md` as is.
-
----
-
 ### Native: the keymap's `compare` action is bound to `v` and listed, but does nothing
 
 The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The native app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
@@ -2355,5 +2343,29 @@ Files: `crates/backend/src/shortcuts.rs`, `crates/native/src/settingsmodal.rs`, 
 #### TODO
 
 - [ ] Either hide unimplemented actions on the `Keyboard Shortcuts` page, or implement compare.
+
+---
+
+### Native: real-device check of the screenshot tool's failed-capture path on Linux (native-qa)
+
+#### Background
+
+The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--features screenshot` build of `crates/native`. Its Done-when says a failed capture (Linux's "not implemented for this platform", a lost device) is a tool error with a message, not a panic. The capture was exercised on Windows only. There was no Linux host, so the error path was reasoned about from the code, and no CI job builds or runs the feature on Linux. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `crates/native/src/main.rs` (`screenshot`), `crates/native/src/screenshot.rs` (`capture`).
+
+#### TODO
+
+- [ ] On Linux, build the app with `--features screenshot` (`cargo run --features screenshot -- --mcp-port <port>` with `mcpEnabled` on), call the `screenshot` tool through the MCP endpoint, and expect a tool error carrying `render_to_image`'s message ("not implemented for this platform"), the app still running and the window still drawing, not a panic or a bridge timeout.
+
+---
+
+### Native: watch the macOS native CI job's cold-cache duration against the 30-minute timeout after the test-support dev-dependency (native-qa)
+
+#### Background
+
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/native`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `native` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/native/Cargo.toml` (the dev-dependency).
+
+#### TODO
+
+- [ ] Read the macOS `native` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/native-app.md`'s CI entry.
 
 ---

@@ -421,6 +421,10 @@ struct Handpic {
     settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
+    /// The OS priority of the scan's passes: `Priorities::APP`, normal in the
+    /// UI tests, where pass 2 at `Priority::Lowest` starved behind the other
+    /// tests.
+    scan_priorities: scan::Priorities,
     /// The pending `ScanFocus` update, replaced on every change.
     scan_focus: Option<Task<()>>,
     next_scan: u64,
@@ -625,8 +629,11 @@ struct Handpic {
     grayscale: grayscale::Hold,
     /// The performance overlay on `d`.
     perf: perfgraph::Overlay,
-    /// The MCP companion's server, `None` while `mcpEnabled` is off.
-    mcp: Option<mcp::Server>,
+    /// The MCP companion's server, switched by `mcpEnabled`.
+    mcp: mcp::Control,
+    /// The server's last state, of the switch in force; none since a flip
+    /// until its answer comes.
+    mcp_state: Option<handpic_backend::mcp::McpState>,
     /// The `wait_for_idle` calls waiting for the view to be idle, by id.
     idle_waiters: Vec<u64>,
     /// The decoded neighbours of the current file, `None` under
@@ -844,13 +851,14 @@ impl Handpic {
             updates,
             update_source,
             update_exe,
-            mcp: mcp::start(
+            mcp: mcp::Control::new(
                 settings.mcp_enabled,
                 mcp_port,
                 events.clone(),
                 reader.clone(),
                 cx,
             ),
+            mcp_state: None,
             idle_waiters: Vec::new(),
             focus,
             all: Vec::new(),
@@ -892,6 +900,7 @@ impl Handpic {
             settled: None,
             slots: ReadSlots::new(scan::READ_SLOTS),
             scan: running,
+            scan_priorities: scan::Priorities::APP,
             scan_focus: None,
             next_scan: 0,
             dir: None,
@@ -2667,6 +2676,19 @@ impl Handpic {
                 self.settings.writes.set("theme", setting.setting());
                 self.settings.theme = setting;
             }
+            Change::McpEnabled(on) => {
+                log::info!("mcp: enabled={on}");
+                self.settings.mcp_enabled = on;
+                if !on {
+                    // No client is left to confirm a preview.
+                    self.mcp_pending = None;
+                    self.mcp_folder = None;
+                }
+                self.settings.writes.set("mcpEnabled", on.into());
+                self.mcp_state = None;
+                self.mcp.switch(on, cx);
+                self.show_mcp(cx);
+            }
             Change::McpAllowDestructive(on) => {
                 log::info!("mcp: allow destructive operations={on}");
                 self.settings.mcp_allow_destructive = on;
@@ -2970,8 +2992,26 @@ impl Handpic {
         self.settings_view.update(cx, |view, cx| {
             view.open(settings, window, cx);
         });
+        self.show_mcp(cx);
         self.refresh_index_size(cx);
         cx.notify();
+    }
+
+    /// The MCP server's state after a switch, kept only when it is of the
+    /// switch in force, so a late answer of an earlier flip is not shown.
+    fn mcp_switched(&mut self, state: handpic_backend::mcp::McpState, cx: &mut Context<Self>) {
+        if state.enabled != self.settings.mcp_enabled {
+            return;
+        }
+        self.mcp_state = Some(state);
+        self.show_mcp(cx);
+    }
+
+    /// The MCP page's port and server state.
+    fn show_mcp(&mut self, cx: &mut Context<Self>) {
+        let (port, state) = (self.mcp.port(), self.mcp_state.clone());
+        self.settings_view
+            .update(cx, |view, cx| view.show_mcp(port, state, cx));
     }
 
     /// Read the index's size on disk off the UI thread and show it on the
@@ -3229,6 +3269,7 @@ impl Handpic {
                     listed.dir,
                     todo,
                     focus,
+                    self.scan_priorities,
                     self.events.clone(),
                 );
                 self.scan.put(scan);
@@ -3406,6 +3447,7 @@ impl Handpic {
             Event::Changed(dir) => return self.changed(dir, cx),
             Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
+            Event::McpState(state) => return self.mcp_switched(state.clone(), cx),
             Event::Update(message) => return self.update_message(message.clone(), cx),
             Event::FolderOp(message) => return self.folder_op_message(*message, cx),
             Event::TrashProgress { mode, done, total } => {
@@ -3472,6 +3514,7 @@ impl Handpic {
             | Event::TreeChanged(_)
             | Event::SidecarError { .. }
             | Event::Mcp(_)
+            | Event::McpState(_)
             | Event::FolderOp(_)
             | Event::TrashProgress { .. }
             | Event::Perf(_)
@@ -5087,9 +5130,7 @@ impl Handpic {
                 };
                 this.idle_waiters.remove(at);
                 let status = companion::get_status(&this.status_of());
-                if let Some(server) = &this.mcp {
-                    server.reply(id, Ok(status));
-                }
+                this.mcp.reply(id, Ok(status));
             })
             .ok();
         })
@@ -5107,9 +5148,7 @@ impl Handpic {
         }
         let status = companion::get_status(&status);
         for id in std::mem::take(&mut self.idle_waiters) {
-            if let Some(server) = &self.mcp {
-                server.reply(id, Ok(status.clone()));
-            }
+            self.mcp.reply(id, Ok(status.clone()));
         }
     }
 
@@ -5752,9 +5791,7 @@ impl Handpic {
             }
             Err(e) => Err(e),
         };
-        if let Some(server) = &self.mcp {
-            server.reply(request.id, reply);
-        }
+        self.mcp.reply(request.id, reply);
         cx.notify();
     }
 
@@ -5834,12 +5871,7 @@ impl Handpic {
             if let Err(e) = &reply {
                 log::warn!("screenshot: {e}");
             }
-            this.update(cx, |this, _| {
-                if let Some(server) = &this.mcp {
-                    server.reply(id, reply);
-                }
-            })
-            .ok();
+            this.update(cx, |this, _| this.mcp.reply(id, reply)).ok();
         })
         .detach();
     }

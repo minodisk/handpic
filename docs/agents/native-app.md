@@ -1004,13 +1004,26 @@ process exits with the scan running, as before.
 
 ### The MCP companion answers from the view, one channel hop away (Measured)
 
-With `mcpEnabled` true in the settings store, `mcp.rs` builds a tokio
-current-thread runtime on one named `mcp` thread, which runs the backend's
-`Mcp::switch(true)` on an `Mcp` built `with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`), waits for the
-quit handler's signal and runs `Mcp::stop` (logged as `quit: MCP server
-stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). With it off or missing there
-is no runtime, no thread and no server. A bind failure is logged with the
-`mcp: McpState` line and the app runs on. The backend's `Bridge` send callback
+`mcp.rs`'s `Control` switches the server on `mcpEnabled`: at launch when the
+settings store holds it true, and on every flip of the MCP page's
+`Let MCP clients connect` (`Change::McpEnabled`, which `apply_setting` writes
+to the store, clearing `mcp_pending` and `mcp_folder` on an off as the
+destructive switch's off does). The first switch on builds a tokio
+current-thread runtime on one named `mcp` thread over an `Mcp` built
+`with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`; `0` binds a free
+port, which the state reports) and registers the quit handler once; the
+thread stays for the session, runs each switch's `Mcp::switch` in order,
+logs its `mcp: McpState` line and sends the state as `scan::Event::McpState`,
+and on the quit handler's command runs `Mcp::stop` (logged as `quit: MCP
+server stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). Off at launch, there
+is no runtime, no thread and no server until the first switch on. The view
+keeps a state only when its `enabled` is the switch in force (a late answer
+of an earlier flip is dropped) and hands it with the port to the MCP page,
+which shows the URL read-only and the state (`settingsmodal::mcp_status`:
+stopped, starting, running or the bind error). A bind failure keeps the
+switch and the stored value on, as the backend's rule has it, so the next
+launch tries again; the app runs on. A reply to a call whose server stopped
+finds no waiter in the `Bridge` and is dropped. The backend's `Bridge` send callback
 only puts the request into the view's channel as `scan::Event::Mcp`; the
 view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
 returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
@@ -1273,8 +1286,9 @@ backend). `set_settings` is refused while a folder operation runs
 (`FolderOps::busy`), as `key_down` keeps the modal shut then.
 `mcpAllowDestructive` is never set over MCP: `SettingsArgs` has no such field
 (`deny_unknown_fields`), and the companion refuses it should it arrive.
-`mcpEnabled` has no tool either: the native app reads it only at startup, and
-a client would be switching off its own connection.
+`mcpEnabled` has no tool either (`SettingsArgs` has no such field; a test
+pins the refusal): it is the user's switch on the MCP page, and a client
+would be switching off its own connection.
 
 Every request but the reads (`get_view`, `get_status`, `wait_for_idle`,
 `get_settings`) is refused while `key_down` drops keys (`companion::Busy`): the settings modal
@@ -1330,16 +1344,16 @@ Excluded, each with its reason (the table's `Excluded` entries):
 - Opening the Sort, Filter and right-click menus: a menu is a way to an
   action, and each item has its tool.
 - Opening the settings modal: `get_settings` and `set_settings` read and
-  change what it shows. Its MCP page, `mcpAllowDestructive`, is the user's to
-  grant.
+  change what it shows. Its MCP page, `mcpEnabled` and `mcpAllowDestructive`,
+  is the user's.
 - The tree's keyboard cursor and type-ahead: a way to a row, which the folder
   tools name by path.
 - Strip scrolling, the pane widths, the strip height and the window's
   geometry: pointer-only geometry; `show_photo` brings a photo into view.
 - The OS folder pickers (`open`, the Import page's `Choose…`) and drag and
   drop: replaced by the path arguments of `open_folder` and `set_settings`.
-- `mcpEnabled`: read only at startup, and a client would cut its own
-  connection.
+- `mcpEnabled`: the user's switch on the MCP page, and a client would cut
+  its own connection.
 - The clipboard copies (`Copy Path`, `Copy File Name`, `Copy Folder Name`):
   a client has the paths already, and a tool would write the user's
   clipboard unseen.
@@ -2557,10 +2571,17 @@ view's eviction, watchers, sidecar writer, judgment queue, settings `Writes`
 and scan run on `std::thread`s that it does not run; their results reach the
 view through its channel. `Ui::open` calls `allow_parking`, and
 `Ui::wait_until` runs `run_until_parked`, checks a condition on the view and
-sleeps 10 ms, failing after 10 s. `read_roots` lists the real home directory
+sleeps 10 ms, failing after 10 s. `Ui::open` installs a test-only `log`
+logger once per process, which keeps every line stamped with the time since
+the first `Ui`, so a timed-out `wait_until` puts the view's state and the
+app's log lines naming its temporary folder (`scan list:`, `scan extract:`,
+`scan faces:` with their times) in its panic message. `read_roots` lists the real home directory
 and volumes: assert nothing about the tree's roots.
 
-`Ui`'s drop releases its view handle and calls `TestAppContext::quit`, which
+`Ui`'s drop releases its view handle; while the test is panicking it only
+cancels the view's scan (the `scan::Running` it cloned at the open), so a
+timed-out test leaves no pass 2 worker running next to the later tests.
+Otherwise it calls `TestAppContext::quit`, which
 runs the quit handlers (the scan stop, the stores and the writer drained, the
 settings writes drained): about 0.5 ms with nothing queued, asserted under
 1 s, below every drain's 2 s timeout. The writer and settings threads close
@@ -2572,6 +2593,20 @@ after about 11 ms, one retry) and fails the test if it is still held after
 
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
+- Rule: a UI test that times out is diagnosed from its log lines, not by
+  raising the 10 s wait. On the macOS CI runner five tests of six used to
+  time out with pass 2 at `analyzing 0/N`: its `QOS_CLASS_BACKGROUND` made
+  one tiny DNG's analysis 6 to 14 times slower than at normal priority and
+  pass 2 of 2 to 4 files take 15 s to 44 s. The app's pass 2 now runs at
+  `QOS_CLASS_UTILITY` with a relative priority of -5 on macOS (see
+  `docs/agents/shared-crates.md`, "The scan pool's priority levels").
+- Rule: the UI tests' scans run at normal priority. `Ui::open` sets the
+  view's `scan_priorities` (`scan::Priorities`, `APP` in the app) to
+  `Priority::Normal` for both passes. At the app's `Priority::Lowest` pass 2
+  starves behind the crate's other tests running in parallel on every OS: on
+  the Windows CI runner (`THREAD_PRIORITY_LOWEST`) one test's pass 2 had done
+  3 of 4 files after 10 s, where it normally takes about 0.7 s for 3. The
+  tests check the wiring, not the scheduling. Do not raise the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.
@@ -3263,8 +3298,10 @@ pinned rev has no text input of its own. The state registers itself as the
 window's input handler while focused, so the platform's text input and the
 IME reach its `EntityInputHandler`. The view reads the text with `value`, sets
 it with `set_value` (which emits no `Change` and clears the undo history, so
-`settingsview.rs`'s `show` leaves a field already showing the text alone) and
-subscribes to `InputEvent`:
+`settingsview.rs`'s `show` leaves a field already showing the text alone; a
+value the main view learns in a handler with no `Window` (the MCP page's URL,
+from `scanned`'s state) is synced in `SettingsView::render`, where a `Window`
+exists) and subscribes to `InputEvent`:
 
 | Owner's meaning | `InputEvent` / key |
 | --- | --- |

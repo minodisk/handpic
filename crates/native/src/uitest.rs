@@ -3,17 +3,25 @@
 
 use std::{
     fs,
+    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
-use handpic_core::Flag;
+use handpic_backend::store::Store;
+use handpic_core::{Flag, scan::Priority};
 use tempfile::TempDir;
 
 use crate::{
-    Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
+    Handpic,
+    args::Args,
+    entries_of, file_name,
+    filter::Orientation,
+    menu, open_index, open_main,
+    scan::{Priorities, Running},
     settings,
 };
 
@@ -24,10 +32,69 @@ const WAIT: Duration = Duration::from_secs(10);
 /// fails the test.
 const QUIT_MAX: Duration = Duration::from_secs(1);
 
+/// The `log` records of every test in the process, each stamped with the
+/// time since the first `Ui` opened, which a timed-out `wait_until` prints
+/// for its own folder: no logger is installed under `cargo test` otherwise.
+struct TestLog {
+    started: Instant,
+    lines: Mutex<Vec<String>>,
+}
+
+impl log::Log for TestLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            let line = format!(
+                "{:>8.3}s [{}][{}] {}",
+                self.started.elapsed().as_secs_f64(),
+                record.target(),
+                record.level(),
+                record.args()
+            );
+            self.lines
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(line);
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOG: OnceLock<TestLog> = OnceLock::new();
+
+fn install_log() {
+    let log = LOG.get_or_init(|| TestLog {
+        started: Instant::now(),
+        lines: Mutex::new(Vec::new()),
+    });
+    if log::set_logger(log).is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
+    }
+}
+
+/// The logged lines that name `dir`, a temporary folder's unique name.
+fn log_lines(dir: &str) -> String {
+    LOG.get().map_or_else(String::new, |log| {
+        log.lines
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|line| line.contains(dir))
+            .map(|line| format!("\n  {line}"))
+            .collect()
+    })
+}
+
 pub struct Ui {
     pub cx: VisualTestContext,
     /// Taken at the drop, so the view goes with the app.
     view: Option<Entity<Handpic>>,
+    /// The view's scan, cancelled when the `Ui` drops while panicking.
+    scan: Running,
     /// Taken at the drop, which removes it once the app's threads let go.
     dir: Option<TempDir>,
 }
@@ -36,6 +103,12 @@ impl Ui {
     /// The main window over a new index and settings store in a temporary
     /// folder, with no folder open.
     pub fn open() -> Self {
+        Self::open_with(Args::default())
+    }
+
+    /// `open`, under the command line's `args`.
+    pub fn open_with(args: Args) -> Self {
+        install_log();
         let dir = tempfile::tempdir().unwrap();
         let cx = TestAppContext::single();
         // The view's scan, watchers and writers are threads of their own, so
@@ -44,13 +117,23 @@ impl Ui {
         let index = open_index(Some(dir.path().join("index.sqlite")));
         let settings = settings::load(Some(dir.path().join("settings.sqlite")), None);
         let (window, view) = cx
-            .update(|cx| open_main(Args::default(), index, settings, None, cx))
+            .update(|cx| open_main(args, index, settings, None, cx))
             .unwrap();
-        let cx = VisualTestContext::from_window(window, &cx);
+        let mut cx = VisualTestContext::from_window(window, &cx);
+        // Pass 2 at the app's lowest priority starves past `WAIT` behind the
+        // other tests running in parallel, on every OS.
+        let scan = view.update(&mut cx, |view, _| {
+            view.scan_priorities = Priorities {
+                extract: Priority::Normal,
+                faces: Priority::Normal,
+            };
+            view.scan.clone()
+        });
         cx.run_until_parked();
         Self {
             cx,
             view: Some(view),
+            scan,
             dir: Some(dir),
         }
     }
@@ -137,7 +220,16 @@ impl Ui {
                         view.current_path(),
                     )
                 });
-                panic!("timed out waiting for {what}: {state}");
+                let name = self
+                    .dir()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                panic!(
+                    "timed out waiting for {what}: {state}; log:{}",
+                    log_lines(&name)
+                );
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -201,6 +293,7 @@ impl Drop for Ui {
     fn drop(&mut self) {
         self.view.take();
         if thread::panicking() {
+            self.scan.cancel();
             return;
         }
         let started = Instant::now();
@@ -347,4 +440,70 @@ fn the_settings_modal_drops_the_paging_keys_until_escape_closes_it() {
     ui.cx.simulate_keystrokes("right");
     assert_eq!(ui.current(), "b.dng");
     ui.wait_idle("the next file's preview", 2);
+}
+
+/// Flips the MCP page's server switch as a click does.
+fn flip_mcp(ui: &mut Ui) {
+    let settings = ui.read(|view| view.settings_view.clone());
+    settings.update(&mut ui.cx, |view, cx| view.flip_mcp_enabled(cx));
+    ui.cx.run_until_parked();
+}
+
+/// The stored `mcpEnabled`, once the view's writes are in.
+fn stored_mcp_enabled(ui: &Ui) -> Option<serde_json::Value> {
+    assert!(ui.read(|view| view.settings.writes.drain(settings::DRAIN_TIMEOUT)));
+    let store = Store::open(&ui.dir().join("settings.sqlite"), Default::default).unwrap();
+    store.values().unwrap().get("mcpEnabled").cloned()
+}
+
+#[test]
+fn the_mcp_switch_starts_and_stops_the_server_and_is_stored() {
+    let mut ui = Ui::open_with(Args {
+        mcp_port: Some(0),
+        ..Args::default()
+    });
+    assert!(ui.read(|view| view.mcp_state.is_none()));
+    flip_mcp(&mut ui);
+    ui.wait_until("the server's start", |view| {
+        view.mcp_state
+            .as_ref()
+            .is_some_and(|state| state.enabled && state.error.is_none())
+    });
+    let port = ui.read(|view| view.mcp_state.as_ref().unwrap().port);
+    assert_ne!(port, 0);
+    assert!(TcpStream::connect(("127.0.0.1", port)).is_ok());
+    assert_eq!(stored_mcp_enabled(&ui), Some(true.into()));
+    flip_mcp(&mut ui);
+    ui.wait_until("the server's stop", |view| {
+        view.mcp_state.as_ref().is_some_and(|state| !state.enabled)
+    });
+    assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
+    assert_eq!(stored_mcp_enabled(&ui), Some(false.into()));
+}
+
+#[test]
+fn a_port_in_use_leaves_the_switch_on_with_the_bind_error() {
+    let held = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = held.local_addr().unwrap().port();
+    let mut ui = Ui::open_with(Args {
+        mcp_port: Some(port),
+        ..Args::default()
+    });
+    flip_mcp(&mut ui);
+    ui.wait_until("the failed start", |view| {
+        view.mcp_state
+            .as_ref()
+            .is_some_and(|state| state.error.is_some())
+    });
+    ui.read(|view| {
+        assert!(view.settings.mcp_enabled);
+        let state = view.mcp_state.as_ref().unwrap();
+        assert!(state.enabled);
+        assert!(
+            crate::settingsmodal::mcp_status(true, Some(state))
+                .starts_with("The server could not start: could not listen on 127.0.0.1:")
+        );
+    });
+    assert_eq!(stored_mcp_enabled(&ui), Some(true.into()));
+    drop(held);
 }

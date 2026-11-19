@@ -113,11 +113,11 @@
     134461222844; the step 15m32s). Well within the 30-minute timeout, but a
     second check of the GPUI stack on top of the cold figure is the margin
     to watch.
-- After this step: PENDING, to be filled from the PR's Windows `native` job
-  (its duration and the lint-and-test step's, noting whether the cache was an
-  exact hit, a restore-key hit or not found). A truly cold figure needs a run
-  with no cache (a lock change on a branch with no prior cache, or the cache
-  deleted).
+- After this step (PR #1164, run 44218297713, job 134513551548): the job
+  3m31s, the lint-and-test step 1m51s, of which the `--features screenshot`
+  clippy took 35 s. The cache step took 66 s and the post-cache step saved
+  nothing, consistent with an exact hit on main's key; not confirmed from the
+  log. No truly cold figure was taken (it needs a run with no cache).
 
 ## Step 4
 
@@ -190,3 +190,13 @@
   splitting the job if it nears the limit. Basis: the PR #1165 checks;
   files `.github/workflows/ci.yml` (the `native` job), `crates/native/Cargo.toml`
   (the `test-support` dev-dependency).
+- The UI tests timed out once on macOS CI: on PR #1166's first run (run
+  44301956697) 5 of the 6 `uitest` tests hit the 10 s `WAIT` in
+  `crates/native/src/uitest.rs` waiting for the folder's listing, scan and
+  preview (only `opens_with_no_folder` passed); Ubuntu and Windows passed,
+  and a re-run (run 44304437316, with a diagnostic commit that makes the
+  timeout panic print the view's state) passed on all three. Cause unknown;
+  slow-runner flakiness is a hypothesis, not confirmed. The user chose to
+  merge and track it. Next time it fails, read the new panic message to see
+  which condition stalled, then fix the cause or raise `WAIT`. Basis: PR
+  #1166's checks; file `crates/native/src/uitest.rs`.
