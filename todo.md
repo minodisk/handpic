@@ -2471,15 +2471,3 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 - [ ] Read the macOS `native` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/native-app.md`'s CI entry.
 
 ---
-
-### Native: the uitest tests timed out once on macOS CI waiting for the listing (native-qa)
-
-#### Background
-
-On PR #1166's first run (run 44301956697), 5 of the 6 `uitest` tests hit the 10 s `WAIT` in `crates/native/src/uitest.rs` waiting for the folder's listing, scan and preview on macOS. Only `opens_with_no_folder` passed. Ubuntu and Windows passed, and a re-run (run 44304437316, with a diagnostic commit that makes the timeout panic print the view's state) passed on all three. The cause is unknown; slow-runner flakiness is a hypothesis, not confirmed. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `crates/native/src/uitest.rs`.
-
-#### TODO
-
-- [ ] The next time a `uitest` test times out in CI, read the panic message's view state to see which condition stalled, then fix the cause or raise `WAIT`. If it never recurs over a reasonable span of PRs, delete this item.
-
----
