@@ -1,18 +1,18 @@
 # todo
 
 ## Cross-cutting / other
-### Native app: real-device Ctrl+C and window check of the native:watch task
+### Native app: real-device Ctrl+C and window check of the app:watch task
 
 #### Background
 
-The `native:watch` mise task (the native-watch feature) runs the debug GPUI app under watchexec and rebuilds and restarts it on a `.rs`, `.toml` or `.json` change under `crates/app`, `crates/core` and `crates/backend`. It was checked by hand on Windows (Git Bash), but only from a non-interactive shell under `timeout`. That run covered the watchexec install, the launch, the restart on a source touch, no `os error 5` on the relink, no restart from the build's own output, and a folder argument holding spaces passed on every restart. The agent could see only processes and the app's log. Two things were never exercised: pressing Ctrl+C in a real terminal, and the window itself. A forced `taskkill /F` of `watchexec.exe` leaves `cargo` and the app running, because the job object is not kill-on-close. Ctrl+C is a different path (the console's ctrl event), so it needs a real terminal. Plan: `docs/plans/_archived/20261115-native-watch/plan.md`.
+The `app:watch` mise task (the native-watch feature) runs the debug GPUI app under watchexec and rebuilds and restarts it on a `.rs`, `.toml` or `.json` change under `crates/app`, `crates/core` and `crates/backend`. It was checked by hand on Windows (Git Bash), but only from a non-interactive shell under `timeout`. That run covered the watchexec install, the launch, the restart on a source touch, no `os error 5` on the relink, no restart from the build's own output, and a folder argument holding spaces passed on every restart. The agent could see only processes and the app's log. Two things were never exercised: pressing Ctrl+C in a real terminal, and the window itself. A forced `taskkill /F` of `watchexec.exe` leaves `cargo` and the app running, because the job object is not kill-on-close. Ctrl+C is a different path (the console's ctrl event), so it needs a real terminal. Plan: `docs/plans/_archived/20261115-native-watch/plan.md`.
 
-Files: `mise.toml` (`[tasks."native:watch"]`)
+Files: `mise.toml` (`[tasks."app:watch"]`)
 
 #### TODO
 
-- [ ] On Windows (Git Bash), run `mise run native:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `handpic.exe` all to exit (none left in Task Manager) and the prompt to return.
-- [ ] On Windows (Git Bash), run `mise run native:watch`, save a `.rs` file under `crates/app/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
+- [ ] On Windows (Git Bash), run `mise run app:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `handpic.exe` all to exit (none left in Task Manager) and the prompt to return.
+- [ ] On Windows (Git Bash), run `mise run app:watch`, save a `.rs` file under `crates/app/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
 
 ### Native app docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
 
@@ -1133,11 +1133,11 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 #### Background
 
-`gpui-held-key-preview` made the GPUI native app (`crates/app`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run native:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/app/src/pager.rs`, `crates/app/src/zoom.rs`, `crates/app/src/main.rs`.
+`gpui-held-key-preview` made the GPUI native app (`crates/app`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run app:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/app/src/pager.rs`, `crates/app/src/zoom.rs`, `crates/app/src/main.rs`.
 
 #### TODO
 
-- [ ] On Windows, fit view: open a folder in the native app (`mise run native:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
+- [ ] On Windows, fit view: open a folder in the native app (`mise run app:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
 - [ ] On Windows, 1:1 view: on a folder whose crop read outlasts the key repeat (RAF, ARW), press `z`, then hold `→`. Expected: the 1:1 view flips through crops during the hold (skipping some files) instead of staying on the first one until release. No crop is ever drawn over another file's scaled preview. On release the current file's crop is shown. A single press while zoomed goes old crop, new crop. `z` off / on on the same file reuses its crop with no new `zoom` line, and a `z` press prints one `zoom` line.
 
 ### Native: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
@@ -1165,7 +1165,7 @@ During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 
 
 `gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/app`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the native window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/app/src/mark.rs`, `crates/app/src/overlay.rs`, `crates/app/src/faces.rs`, `crates/app/src/eyes.rs`, `crates/app/src/facemesh.rs`, `crates/app/src/main.rs`.
 
-Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run native:dev -- <folder> --index <fresh file in that test folder>` for the native app, and, for the comparison, open the same folder in a reference Tauri build with its own index (never share one): an installed Riffle 1.10.0, or a build of the commit before #1150, which removed the Tauri app.
+Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run app:dev -- <folder> --index <fresh file in that test folder>` for the native app, and, for the comparison, open the same folder in a reference Tauri build with its own index (never share one): an installed Riffle 1.10.0, or a build of the commit before #1150, which removed the Tauri app.
 
 #### TODO
 
@@ -1381,7 +1381,7 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 
 #### TODO
 
-- [ ] On Windows, with the release build (`mise run native:release`, NASM on `PATH`) on a folder under `D:\Photos\tests\`, wait for the scan to end, then press `→` onto the next file. Expect it to show at once, and its `page` line to say `source=prefetch`.
+- [ ] On Windows, with the release build (`mise run app:release`, NASM on `PATH`) on a folder under `D:\Photos\tests\`, wait for the scan to end, then press `→` onto the next file. Expect it to show at once, and its `page` line to say `source=prefetch`.
 - [ ] On Windows, in the same build, open another folder from the tree. Expect no image of the previous folder to show at any point.
 - [ ] On Windows, in the same build, change the filter so the current file's neighbour is hidden, then press `→`. Expect a hidden file's image never to show.
 
@@ -1417,13 +1417,13 @@ The test failed once in four `cargo test` runs of the native workspace during `g
 
 ### Native: real-device check of the performance overlay on `d`
 
-`gpui-perf-overlay` ported the Tauri app's performance overlay to the GPUI app: the keymap action `performance` (default key `d`) toggles a 120 px band along the bottom of the preview area that plots the last 60 s of Handpic's and the system's CPU, Handpic's read throughput, the system's disk busy time and one stacked bar per preview switch, with a one-line legend. CI and the unit tests cover the pure model (`crates/app/src/perf.rs`) and the graph layout (`crates/app/src/perfgraph.rs`), and `mise run native:check` passes. The agent could not see the window, so the drawing, the 500 ms motion and the bars were never exercised; the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-perf-overlay/plan.md`.
+`gpui-perf-overlay` ported the Tauri app's performance overlay to the GPUI app: the keymap action `performance` (default key `d`) toggles a 120 px band along the bottom of the preview area that plots the last 60 s of Handpic's and the system's CPU, Handpic's read throughput, the system's disk busy time and one stacked bar per preview switch, with a one-line legend. CI and the unit tests cover the pure model (`crates/app/src/perf.rs`) and the graph layout (`crates/app/src/perfgraph.rs`), and `mise run app:check` passes. The agent could not see the window, so the drawing, the 500 ms motion and the bars were never exercised; the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-perf-overlay/plan.md`.
 
 Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/main.rs`, `crates/app/src/scan.rs` (`Event::Perf`).
 
 #### TODO
 
-- [ ] On Windows, in a release build of `crates/app`, open a folder with `mise run native:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight native stage names fading, with `<n> MB/s  <n> ms` at the right.
+- [ ] On Windows, in a release build of `crates/app`, open a folder with `mise run app:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight native stage names fading, with `<n> MB/s  <n> ms` at the right.
 - [ ] On Windows, with the overlay on, switch previews with an arrow key, with a strip click and by opening a folder from the tree. Expected: one red stacked bar per preview switch, and the key or click works as before.
 - [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
 - [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.
@@ -1432,7 +1432,7 @@ Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/
 
 #### Background
 
-`gpui-session-restore` made the GPUI native app (`crates/app`) reopen the last folder and the window's position, size, display and maximized state on a launch without arguments (`session.rs`, the `lastFolder` and `windowBounds` keys of the settings store, written on open and in the quit handler). Step 1 was ticked on its automated criteria (the `session.rs` unit tests, `mise run ci`, `mise run native:check`) and a hand check on one Windows 11 display at 96 DPI: a moved and resized window, a maximized quit, a minimized quit, bounds off every display, an unknown display UUID, a relaunch without arguments, a renamed remembered folder, and `--auto 1 <other folder>`. Never exercised: quitting with `q`, a window snapped to a screen half, a second monitor (especially one with a different scale factor), a taskbar docked at the top or left, paging to a file before the quit, and a visual check of `--auto`'s centered default. macOS and Linux are covered by the CI build and the unit tests only. Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store. Record the results as `(Measured)` in `docs/agents/app.md` ("A launch restores the last folder and the window") and remove that section's "Not seen yet" bullet. Plan: `docs/plans/_archived/20261114-gpui-session-restore/plan.md`. Files: `crates/app/src/session.rs`, `crates/app/src/main.rs`, `crates/app/src/settings.rs`.
+`gpui-session-restore` made the GPUI native app (`crates/app`) reopen the last folder and the window's position, size, display and maximized state on a launch without arguments (`session.rs`, the `lastFolder` and `windowBounds` keys of the settings store, written on open and in the quit handler). Step 1 was ticked on its automated criteria (the `session.rs` unit tests, `mise run ci`, `mise run app:check`) and a hand check on one Windows 11 display at 96 DPI: a moved and resized window, a maximized quit, a minimized quit, bounds off every display, an unknown display UUID, a relaunch without arguments, a renamed remembered folder, and `--auto 1 <other folder>`. Never exercised: quitting with `q`, a window snapped to a screen half, a second monitor (especially one with a different scale factor), a taskbar docked at the top or left, paging to a file before the quit, and a visual check of `--auto`'s centered default. macOS and Linux are covered by the CI build and the unit tests only. Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store. Record the results as `(Measured)` in `docs/agents/app.md` ("A launch restores the last folder and the window") and remove that section's "Not seen yet" bullet. Plan: `docs/plans/_archived/20261114-gpui-session-restore/plan.md`. Files: `crates/app/src/session.rs`, `crates/app/src/main.rs`, `crates/app/src/settings.rs`.
 
 #### TODO
 
@@ -1445,7 +1445,7 @@ Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/
 
 ### Native: real-device checks of the pane toggles and Open Folder (gpui-pane-toggles)
 
-`gpui-pane-toggles` made `open`, `toggleRight`, `toggleStrip` and `toggleSides` run in the GPUI app (`crates/app`) and remembered the panes under the `panels` key of the settings store, `toggleLeft` included. Unit tests cover the pure rules (`panels.rs`, `settings.rs`'s load of `panels`), and `mise run ci` and `mise run native:check` pass. A launch with `--auto` on a store holding `{"panels":{"left":false}}` quit cleanly and left the store unchanged. Nobody has run the picker or the toggles in the window, or seen what the window drew: the picker, the canvas resize, the 1:1 re-cut, the hidden strip's bookkeeping, the keyboard hand-back, the persistence across a quit and a relaunch, and a rebound key are all unchecked. Plan: `docs/plans/_archived/20261114-gpui-pane-toggles/plan.md`. Files: `crates/app/src/main.rs` (`pick_folder`, `change_panels`, `render`), `crates/app/src/panels.rs`, `crates/app/src/settings.rs`.
+`gpui-pane-toggles` made `open`, `toggleRight`, `toggleStrip` and `toggleSides` run in the GPUI app (`crates/app`) and remembered the panes under the `panels` key of the settings store, `toggleLeft` included. Unit tests cover the pure rules (`panels.rs`, `settings.rs`'s load of `panels`), and `mise run ci` and `mise run app:check` pass. A launch with `--auto` on a store holding `{"panels":{"left":false}}` quit cleanly and left the store unchanged. Nobody has run the picker or the toggles in the window, or seen what the window drew: the picker, the canvas resize, the 1:1 re-cut, the hidden strip's bookkeeping, the keyboard hand-back, the persistence across a quit and a relaunch, and a rebound key are all unchecked. Plan: `docs/plans/_archived/20261114-gpui-pane-toggles/plan.md`. Files: `crates/app/src/main.rs` (`pick_folder`, `change_panels`, `render`), `crates/app/src/panels.rs`, `crates/app/src/settings.rs`.
 
 Run each check with `--settings <fresh test store>` and `--log <test file>`, never the real store. When done, record the results and update `docs/agents/app.md`'s "Not verified" note on the picker.
 
@@ -1492,7 +1492,7 @@ each runner had to `TaskStop` and re-run repeatedly (plan:
 
 #### TODO
 
-- [ ] On Windows, launch the native app without a folder (`mise run native:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
+- [ ] On Windows, launch the native app without a folder (`mise run app:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
 - [ ] On Windows, open a folder without RAW or JPEG files. Expect a click on the "This folder has no RAW or JPEG files." message to do nothing.
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
 - [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
@@ -1550,7 +1550,7 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 
 #### TODO
 
-- [ ] On Windows, with `mise run native:dev` running, drag a folder from Explorer over the window. Expect a 3px `#737373` outline on the main area (tree, preview, meta pane), also while the pointer is over the strip or the status row. Drop it: the folder opens and is revealed in the tree, and the outline goes.
+- [ ] On Windows, with `mise run app:dev` running, drag a folder from Explorer over the window. Expect a 3px `#737373` outline on the main area (tree, preview, meta pane), also while the pointer is over the strip or the status row. Drop it: the folder opens and is revealed in the tree, and the outline goes.
 - [ ] On Windows, drop one file (a RAW, then a non-RAW such as a `.txt`). Expect its parent folder to open and the file not to be selected.
 - [ ] On Windows, drop two folders at once. Expect nothing to open and the status line to read `Drop a single folder or RAW file.`
 - [ ] On Windows, open the settings modal (`ctrl+,`) and drop a folder over it. Expect nothing to open (the occluded layer swallows the drop).
@@ -1584,7 +1584,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 3 ported the folder menu's part-2 items, the shared confirmation dialog (`dialog.rs`), `folderops.rs` and the two sidecar operations to the GPUI app. CI and the unit tests of `dialog.rs`, `sidecars.rs`, `context.rs`, `trash.rs`, `history.rs` and `idle.rs` cover the models, and `mise run ci` and `mise run native:check` passed. Nobody has driven the dialog, its keys, the waiting note during a scan or the runs on disk in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full numbered steps are in the `learnings.md` of the same folder). Files: `crates/app/src/dialog.rs`, `crates/app/src/folderops.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/context.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`.
+`gpui-folder-dialogs` Step 3 ported the folder menu's part-2 items, the shared confirmation dialog (`dialog.rs`), `folderops.rs` and the two sidecar operations to the GPUI app. CI and the unit tests of `dialog.rs`, `sidecars.rs`, `context.rs`, `trash.rs`, `history.rs` and `idle.rs` cover the models, and `mise run ci` and `mise run app:check` passed. Nobody has driven the dialog, its keys, the waiting note during a scan or the runs on disk in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full numbered steps are in the `learnings.md` of the same folder). Files: `crates/app/src/dialog.rs`, `crates/app/src/folderops.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/context.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`.
 
 #### TODO
 
@@ -1669,15 +1669,15 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-The `native-app-icon` feature gave the GPUI native app its icon: `crates/app/build.rs` embeds `crates/app/icons/icon.ico` as icon resource ID 1 on a Windows target (through `winresource`), `crates/app/packaging/macos/Info.plist` and the `native:bundle:macos` mise task produce `Handpic.app`, and the window opens with `app_id: Some(IDENTIFIER)` with `crates/app/packaging/linux/dev.minodisk.handpic.desktop` and the `native:install:linux` task for Linux. CI and the tests cover the resource: the icon resource ID 1 was verified in the built Windows exe with `FindResourceW` / `LoadImageW`, the `datadir.rs` consistency test checks the `Info.plist` and `.desktop` file against `IDENTIFIER` and the binary's name on all three legs, and the macOS CI leg runs `plutil -lint` and checks that the executable and the `.icns` exist. Nobody has looked at the icon as the OS shows it: the taskbar, title bar and Explorer on Windows, the Dock and Finder on macOS, and the dock / taskbar / alt-tab of a running window on a Wayland and an X11 session. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-app-icon/plan.md`.
+The `native-app-icon` feature gave the GPUI native app its icon: `crates/app/build.rs` embeds `crates/app/icons/icon.ico` as icon resource ID 1 on a Windows target (through `winresource`), `crates/app/packaging/macos/Info.plist` and the `app:bundle:macos` mise task produce `Handpic.app`, and the window opens with `app_id: Some(IDENTIFIER)` with `crates/app/packaging/linux/dev.minodisk.handpic.desktop` and the `app:install:linux` task for Linux. CI and the tests cover the resource: the icon resource ID 1 was verified in the built Windows exe with `FindResourceW` / `LoadImageW`, the `datadir.rs` consistency test checks the `Info.plist` and `.desktop` file against `IDENTIFIER` and the binary's name on all three legs, and the macOS CI leg runs `plutil -lint` and checks that the executable and the `.icns` exist. Nobody has looked at the icon as the OS shows it: the taskbar, title bar and Explorer on Windows, the Dock and Finder on macOS, and the dock / taskbar / alt-tab of a running window on a Wayland and an X11 session. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-app-icon/plan.md`.
 
 Files: `crates/app/build.rs`, `crates/app/src/main.rs`, `crates/app/packaging/macos/Info.plist`, `crates/app/packaging/linux/dev.minodisk.handpic.desktop`, `mise.toml`, `docs/agents/app.md`.
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev`. Expect the Handpic icon, not the generic one, in the taskbar button and the title bar. Also expect it in Explorer for `crates/app/target/debug/handpic.exe`.
-- [ ] On macOS, run `mise run native:bundle:macos`, then open `crates/app/target/release/Handpic.app`. Expect the Handpic icon in the Dock and in Finder.
-- [ ] On Linux, on a Wayland session and on an X11 session, run `mise run native:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`.
+- [ ] On Windows, run `mise run app:dev`. Expect the Handpic icon, not the generic one, in the taskbar button and the title bar. Also expect it in Explorer for `crates/app/target/debug/handpic.exe`.
+- [ ] On macOS, run `mise run app:bundle:macos`, then open `crates/app/target/release/Handpic.app`. Expect the Handpic icon in the Dock and in Finder.
+- [ ] On Linux, on a Wayland session and on an X11 session, run `mise run app:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`.
 - [ ] Once the checks above are done (or a failure is filed as its own issue), update the "Pending manual checks" bullet under `## Packaging` in `docs/agents/app.md`. It lists only macOS and Linux and leaves out the Windows check. Done when the bullet matches what is still pending.
 
 ### Native: real-device checks of the strip's face focus icon and cell tooltips
@@ -1690,7 +1690,7 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` and open a folder with faces on a fresh index (`--index` pointing at a new file). Expect the smiling `scan-face` in bright green at the image box's bottom-left on good frames and the frowning one in gray on low frames to appear while pass 2 runs, with no other input, and nothing on neutral frames or JPEGs. Expect the 12 px icon to be crisp at 100 % and 150 % display scale.
+- [ ] On Windows, run `mise run app:dev` and open a folder with faces on a fresh index (`--index` pointing at a new file). Expect the smiling `scan-face` in bright green at the image box's bottom-left on good frames and the frowning one in gray on low frames to appear while pass 2 runs, with no other input, and nothing on neutral frames or JPEGs. Expect the 12 px icon to be crisp at 100 % and 150 % display scale.
 - [ ] On Windows, reject a good frame. Expect its icon to be dimmed with the cell.
 - [ ] On Windows, hover a cell the scan failed on (e.g. a truncated RAW). Expect the full error in a themed tooltip after about 500 ms, wrapping at 360 px and staying inside the window. Hover a labeled cell's name band and expect the label's name. On a failed and labeled cell, expect the band to show the name and the rest of the cell the error. A plain cell shows nothing.
 - [ ] On Windows, move from one cell's region to the next and expect the tooltip to swap. Scroll the strip under a still pointer and expect the tooltip of the cell that moved away to go. A cell cut by the window's left edge must still show its tooltip.
@@ -1799,7 +1799,7 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folde
 
 #### TODO
 
-- [ ] On Windows (and any platform the native app runs on), run the native app (`mise run native:dev`) and open a folder tree holding a folder with a long name (e.g. `2026-10-03-dop-orientation`) at several depths. Check each of the following.
+- [ ] On Windows (and any platform the native app runs on), run the native app (`mise run app:dev`) and open a folder tree holding a folder with a long name (e.g. `2026-10-03-dop-orientation`) at several depths. Check each of the following.
   - Long name: a name longer than the pane ends in an ellipsis inside the pane at every depth, and no row content reaches past the pane's right edge.
   - Count badge: expand a folder holding RAW files. Its count badge is fully visible at the row's right edge, both next to a short name and next to a truncated one.
   - Highlights: the keyboard cursor ring (click in the tree, move with the arrows), the hover highlight and the open row's highlight span the pane less a 4 px inset on both sides, with rounded corners.
@@ -1841,7 +1841,7 @@ Files: `crates/app/src/main.rs` (`tree_key_down`), `crates/app/src/treekeys.rs`,
 
 #### TODO
 
-- [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run native:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, each label and value string as written here (the removed Tauri pane named the `Eye focus` row `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
+- [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run app:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, each label and value string as written here (the removed Tauri pane named the `Eye focus` row `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
 - [ ] On Windows, a file with no analysis value (a JPEG without an AF point, or a RAW pass 2 has not reached) shows no `Analysis` group (a JPEG shows at most `Sharpness`). A file hidden by a refilter shows neither the `Analysis` group nor the AF rows. A file whose preview failed still shows its `Analysis` group and a `Maker note` group holding only the AF rows. Turning the `f` overlay on or off does not change the `Analysis` rows (they never use the on-demand eyes judgment).
 - [ ] On Windows, open a second folder while a file of the first is on screen. Expected: until the new folder's first preview arrives, the pane shows no rows from the index (not another file's), then the new file's rows.
 
@@ -1891,7 +1891,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` (or `native:watch`) on a folder and hover the preview's left edge beside the tree. Expect the cursor to turn col-resize and the handle's pill to show, with the 1 px line reading well on the theme.
+- [ ] On Windows, run `mise run app:dev` (or `app:watch`) on a folder and hover the preview's left edge beside the tree. Expect the cursor to turn col-resize and the handle's pill to show, with the 1 px line reading well on the theme.
 - [ ] On Windows, drag that edge right and left, then the meta pane's edge. Expect each pane to follow the pointer between 160 and 480 px with the preview taking the rest. Note whether the boundary jumps a few px at the first move.
 - [ ] On Windows, with both panes wide, narrow the window. Expect the preview to keep 240 px while the panes narrow (never under 160), and widening the window again to bring the panes back to the dragged widths.
 - [ ] On Windows, release a drag over the preview, over a pane, over the strip and outside the window, and restart each time. Expect the widths to come back each time. For a release outside the window, note whether the width is written at once or only at the next click inside.
@@ -1911,9 +1911,9 @@ Files: `crates/app/src/tree.rs` (`set_cached_counts`, `set_listed_count`, `Count
 
 #### TODO
 
-- [ ] On Windows (`mise run native:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a mapped network drive, a symlink or a junction, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed. If the rules in `docs/agents/app.md` ("The folder tree is a `uniform_list` over rows kept in the view", the count's sources, writes and reads) are marked Inferred, change them to Measured with the observed result once the above is confirmed.
-- [ ] On macOS (`mise run native:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a symlink or a network volume, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed.
-- [ ] On Linux (`mise run native:dev`), the same steps as on macOS (a symlink and a mounted network folder for the last link check).
+- [ ] On Windows (`mise run app:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a mapped network drive, a symlink or a junction, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed. If the rules in `docs/agents/app.md` ("The folder tree is a `uniform_list` over rows kept in the view", the count's sources, writes and reads) are marked Inferred, change them to Measured with the observed result once the above is confirmed.
+- [ ] On macOS (`mise run app:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a symlink or a network volume, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed.
+- [ ] On Linux (`mise run app:dev`), the same steps as on macOS (a symlink and a mounted network folder for the last link check).
 
 ### Native: real-device checks of the title bar (native-title-bar)
 
@@ -1951,11 +1951,11 @@ Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/ap
 
 #### TODO
 
-- [ ] On Windows (`mise run native:dev`), switch to one shipped (non-Neutral) theme in Settings > Appearance, in Light or Dark. Expect the gear and its hover fill to be visible and to follow the theme.
+- [ ] On Windows (`mise run app:dev`), switch to one shipped (non-Neutral) theme in Settings > Appearance, in Light or Dark. Expect the gear and its hover fill to be visible and to follow the theme.
 - [ ] On Windows, click minimize, maximize / restore and close after this change. Expect all three to work, and expect a drag on the bar's empty part to still move the window.
 - [ ] On Windows, open the settings with the gear, close them, then press a judgment key and page with the arrow keys. Expect them to work at once, with the keyboard back on the view (only `ctrl+,` was tried).
 - [ ] On Windows, click the gear (a) with the tree holding the keyboard, (b) with `Sort ▾` / `Filter ▾` open, (c) with a right-click menu open, (d) during an inline folder rename. Expect the settings to open, the menu to close, and the rename to end as a press elsewhere ends it.
-- [ ] On macOS (`mise run native:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
+- [ ] On macOS (`mise run app:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
 - [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
 
 ### Native: real-device check of the settings controls drawn with gpui-component (native-component-controls)
@@ -1968,7 +1968,7 @@ Files: `crates/app/src/settingsview.rs`.
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev`, open the settings (`ctrl+,`) and check each of these. Expected: all as described.
+- [ ] On Windows, run `mise run app:dev`, open the settings (`ctrl+,`) and check each of these. Expected: all as described.
   1. Tab / Shift+Tab through every page: the focus stays inside the settings on every Tab, including with the language menu open.
   2. Culling: Space and Enter toggle the auto-advance switch.
   3. Sidecar (XMP on): open the language menu by pointer and by keys (Space / Enter, Up / Down); Escape with the menu open closes only the menu, with it closed closes the settings; choose a language and press `Reset`, which fills in the chosen language's names.
@@ -1986,7 +1986,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs` (`context_item
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.
+- [ ] On Windows, run `mise run app:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.
 
 ### Native: real-device check of the OS notification when an import ends while the window is inactive (native-import-notification)
 
@@ -1998,7 +1998,7 @@ Files: `crates/app/src/folderops.rs` (`import_ran`, the deferred post), `crates/
 
 #### TODO
 
-- [ ] On Windows, build with `mise run native:dev` (or `native:release`), start an `Import…` from a card or folder, switch to another application, and wait for the run to end. Expect one toast titled `Import finished` (or `Import canceled` after a cancel) whose body is the status line's summary. Click the toast and expect the Handpic window to come forward. Run an import that ends with the Handpic window active and expect no toast. Check that the taskbar icon and grouping of the running app look unchanged (an existing pin of the exe may no longer group with the running window), and that `Handpic.log` has no `failed to register AppUserModelID` or `cannot show a system notification` warning.
+- [ ] On Windows, build with `mise run app:dev` (or `app:release`), start an `Import…` from a card or folder, switch to another application, and wait for the run to end. Expect one toast titled `Import finished` (or `Import canceled` after a cancel) whose body is the status line's summary. Click the toast and expect the Handpic window to come forward. Run an import that ends with the Handpic window active and expect no toast. Check that the taskbar icon and grouping of the running app look unchanged (an existing pin of the exe may no longer group with the running window), and that `Handpic.log` has no `failed to register AppUserModelID` or `cannot show a system notification` warning.
 - [ ] Once the above is confirmed, replace the "(Inferred)" marker on the `docs/agents/app.md` section "An import's end posts a system-only notification while inactive" with the observed result. If the toast, the click activation or the taskbar grouping misbehaves, file a fix issue instead.
 
 ### Native: real-device checks of the gpui-kit umbrella crate (native-gpui-kit)
@@ -2009,9 +2009,9 @@ Files: `crates/app/src/folderops.rs` (`import_ran`, the deferred post), `crates/
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` with the real settings. Expected: the window restores its saved place, the Lucide icons (strip, menus) and the settings modal's controls (the `Checkbox` check mark, the `Radio`s, the `Input` fields) draw, and `tab` behaves as before (`toggleSides` in the main view, the focus walk inside a dialog).
-- [ ] On macOS, run `mise run native:dev` (the build now has `font-kit` and `runtime_shaders`). Expected: the window draws text (the status row, the meta pane, the menus) and opens without a shader error at startup.
-- [ ] On Linux, in an X11 session and in a Wayland session, run `mise run native:dev` (the build now compiles both backends). Expected: the window opens, draws, and takes the keyboard.
+- [ ] On Windows, run `mise run app:dev` with the real settings. Expected: the window restores its saved place, the Lucide icons (strip, menus) and the settings modal's controls (the `Checkbox` check mark, the `Radio`s, the `Input` fields) draw, and `tab` behaves as before (`toggleSides` in the main view, the focus walk inside a dialog).
+- [ ] On macOS, run `mise run app:dev` (the build now has `font-kit` and `runtime_shaders`). Expected: the window draws text (the status row, the meta pane, the menus) and opens without a shader error at startup.
+- [ ] On Linux, in an X11 session and in a Wayland session, run `mise run app:dev` (the build now compiles both backends). Expected: the window opens, draws, and takes the keyboard.
 
 ### Native: real-device checks of the Appearance tab (mode, shipped themes) (native-themes)
 
@@ -2058,7 +2058,7 @@ Files: `crates/app/src/icons.rs`.
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` and open the status row's `Filter ▾` menu. Confirm the star rows (outlined and filled), the label squares (outlined and filled), the orientation rectangles (vertical, horizontal) and the `Face focus` faces (smiling and frowning) look as they did on `main`. Then, with a folder open and pass 2 finished, confirm the strip's face focus icon on a good frame and on a low frame looks as before. Expected: no visible change.
+- [ ] On Windows, run `mise run app:dev` and open the status row's `Filter ▾` menu. Confirm the star rows (outlined and filled), the label squares (outlined and filled), the orientation rectangles (vertical, horizontal) and the `Face focus` faces (smiling and frowning) look as they did on `main`. Then, with a folder open and pass 2 finished, confirm the strip's face focus icon on a good frame and on a low frame looks as before. Expected: no visible change.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
 
 ### Docs: the gpui-port plan's Progress entries link plan folders that have since been archived
@@ -2081,7 +2081,7 @@ Files: `crates/app/src/main.rs` (`tree_row`, `tree_row_clicked`, `reveal`), `cra
 
 #### TODO
 
-- [ ] On Windows (and any platform the native app runs on, best on Windows), run `mise run native:dev` and open a folder tree. Check each of the following in Neutral dark, Neutral light and one vendored theme.
+- [ ] On Windows (and any platform the native app runs on, best on Windows), run `mise run app:dev` and open a folder tree. Check each of the following in Neutral dark, Neutral light and one vendored theme.
   - States: the open row is lit (Neutral: `accent`, semibold). The hover lights other rows only, not the open or cursor row. The keyboard cursor is outlined (Neutral: `ring`) only after a click in the pane, and the outline also shows on the open row.
   - Clicks: a click on a collapsed row that is not open opens the folder and expands it. A click on an expanded row that is not open opens the folder and the row stays collapsed once the reveal ends. A click on the open row's icon, indent or count toggles it without re-listing the folder (the scan does not restart). A click on the open row's name only arms the slow-click rename and neither toggles nor reopens. A click on an open leaf row does nothing. A right-click opens the context menu.
   - Rename: a slow click on the open row's name starts the inline rename, whose input fits the 22 px row, and Escape cancels it.
@@ -2100,7 +2100,7 @@ Files: `crates/app/src/context.rs`, `crates/app/src/main.rs`.
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
+- [ ] On Windows, run `mise run app:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
 
 ### Native: real-device check of the Keyboard Shortcuts page's groups
@@ -2111,7 +2111,7 @@ The `native-shortcut-groups` feature grouped the native settings modal's Keyboar
 
 #### TODO
 
-- [ ] On Windows (any platform the native app runs on), run `mise run native:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.
+- [ ] On Windows (any platform the native app runs on), run `mise run app:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.
 
 ### Native: a held open-and-collapse click leaves the row expanded when a rename moves the folder
 
@@ -2136,7 +2136,7 @@ Files: `crates/app/src/main.rs` (`menu_row`, `context_item`, `label_tag`, `paint
 
 #### TODO
 
-- [ ] On Windows (or any other desktop platform at hand), run `mise run native:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
+- [ ] On Windows (or any other desktop platform at hand), run `mise run app:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
 
 ### Native app: real-device Windows check of the momentary grayscale preview
 
@@ -2164,7 +2164,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` on a folder and hover the strip's top edge. Expect the cursor to turn row-resize and the handle's 1 px line to read well on the theme, with clicks on the cells and the scrollbar still working.
+- [ ] On Windows, run `mise run app:dev` on a folder and hover the strip's top edge. Expect the cursor to turn row-resize and the handle's 1 px line to read well on the theme, with clicks on the cells and the scrollbar still working.
 - [ ] On Windows, drag the strip's top edge up and down. Expect the strip to follow the pointer between 96 and 302 px, the thumbnails to scale with it, the preview never to get under 240 px, and the cells that were in view (the current one when on screen) to stay in view. Note whether the edge jumps a few px at the first move.
 - [ ] On Windows, at 96 px, check that the stars, the flag dot, the burst badge, the face icon and the file name are legible on the 96 x 64 boxes. At 302 px, check the thumbnails' sharpness at 100 % and on a HiDPI display.
 - [ ] On Windows, release the drag over the preview, over a pane, over the status row and outside the window, and restart each time. Expect the height to come back each time. For a release outside the window, note whether the height is written at once or only at the next click inside.
@@ -2182,7 +2182,7 @@ Files: `crates/app/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, 
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` with a test `--settings` / `--index` and check each of these. Expected: all as described.
+- [ ] On Windows, run `mise run app:dev` with a test `--settings` / `--index` and check each of these. Expected: all as described.
   1. Open a scanned folder, open the settings (`ctrl+,`) and pick `Cache`: `Index cache: <size>` with a non-zero size, the explanation paragraph and `Clear Cache`.
   2. Press `Clear Cache`: `Clear the index cache?` opens over the settings with the dimmed backdrop, focus on `Clear`. Press Escape: only the dialog closes, the settings stay open, nothing is cleared (size unchanged), and Tab still walks the settings' controls.
   3. Press `Clear Cache` again and confirm with Enter: the log has `index cleared: EvictSummary { … }`; the size shrinks; the open folder is listed again and pass 1 / pass 2 refill thumbnails, the meta pane and the filter facts, the current file staying put; the tree's cached counts of unlisted folders disappear.
@@ -2242,7 +2242,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` on a folder. Expect the header on the strip's top edge with `Sort ▾` and `Filter ▾` at its right end. Each opens its menu upward from its button, a second press closes it, a press outside dismisses it and `escape` closes it. The filter button is lit while a filter is active (its border goes to `input` while hovered, a known `Button` hover limit), and the sort button is dimmed in a view-only (JPEG-only) folder, where it does not hover and does not open.
+- [ ] On Windows, run `mise run app:dev` on a folder. Expect the header on the strip's top edge with `Sort ▾` and `Filter ▾` at its right end. Each opens its menu upward from its button, a second press closes it, a press outside dismisses it and `escape` closes it. The filter button is lit while a filter is active (its border goes to `input` while hovered, a known `Button` hover limit), and the sort button is dimmed in a view-only (JPEG-only) folder, where it does not hover and does not open.
 - [ ] On Windows, with a long filter menu (EXIF sections), the strip at its tallest and a short window, expect the menu to stay inside the window, to scroll, and its button to still toggle it (the popover is not snapped over the button). Expect the popover not to be clipped by the header.
 - [ ] On Windows, check the handle on the header's top edge: the resize cursor, the 1 px line, a drag down to `MIN` and up to `MAX`, and the preview stopping at `PREVIEW_MIN`. Expect a press on a button not to be taken by the handle's top 5 px band.
 - [ ] On Windows, at a stored `stripHeight` of 128, expect the cell box to be still 144 x 96.
@@ -2259,9 +2259,9 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 
 #### TODO
 
-- [ ] On macOS, run `mise run native:package:macos`. Expect `crates/app/target/release/Handpic-0.0.0-macos-<arch>.dmg`. Open it, drag `Handpic.app` to `Applications` and start it. Gatekeeper asks for the ad hoc signed app's first launch to be allowed under System Settings, Privacy & Security. Expect the app to start.
-- [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run native:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
-- [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run native:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
+- [ ] On macOS, run `mise run app:package:macos`. Expect `crates/app/target/release/Handpic-0.0.0-macos-<arch>.dmg`. Open it, drag `Handpic.app` to `Applications` and start it. Gatekeeper asks for the ad hoc signed app's first launch to be allowed under System Settings, Privacy & Security. Expect the app to start.
+- [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run app:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
+- [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run app:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
 
 ### Package: the macOS DMG step fails with `hdiutil: create failed - No space left on device`
 
