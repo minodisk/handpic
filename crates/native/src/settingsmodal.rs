@@ -378,11 +378,12 @@ pub enum Tab {
     Import,
     Mcp,
     Appearance,
+    Updates,
 }
 
 /// The pages in the Tauri order, less the Debug one, then the native app's
-/// own Appearance.
-pub const TABS: [Tab; 7] = [
+/// own Appearance and Updates.
+pub const TABS: [Tab; 8] = [
     Tab::Sidecar,
     Tab::Culling,
     Tab::Shortcuts,
@@ -390,6 +391,7 @@ pub const TABS: [Tab; 7] = [
     Tab::Import,
     Tab::Mcp,
     Tab::Appearance,
+    Tab::Updates,
 ];
 
 impl Tab {
@@ -402,6 +404,7 @@ impl Tab {
             Tab::Import => "Import",
             Tab::Mcp => "MCP",
             Tab::Appearance => "Appearance",
+            Tab::Updates => "Updates",
         }
     }
 }
@@ -851,7 +854,8 @@ mod tests {
                 "Cache",
                 "Import",
                 "MCP",
-                "Appearance"
+                "Appearance",
+                "Updates"
             ]
         );
     }

@@ -18,11 +18,11 @@ Files: `mise.toml` (`[tasks."native:watch"]`)
 
 #### Background
 
-The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) left the neighbouring sections of `docs/agents/native-app.md` untouched, and `native-status-bar` then rewrote its status-row sections (the sentence "only the settings modal and the tree's inline rename draw from it" went with them). One piece of text is still out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". Files: `docs/agents/native-app.md`.
+The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) left the neighbouring sections of `docs/agents/native-app.md` untouched, and `native-status-bar` then rewrote its status-row sections (the sentence "only the settings modal and the tree's inline rename draw from it" went with them). One piece of text is still out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". The heading is at about line 71 of `docs/agents/native-app.md`. Other places refer to the section by its exact heading name, for example the mention "table in "gpui-component is initialized"" near line 3227 of the same file. The native-progress-bar-reason feature fixed the same stale claim in the progress bar section's sentence and left the heading alone on purpose. Plan: `docs/plans/_archived/20261115-native-progress-bar-reason/plan.md`. Files: `docs/agents/native-app.md`.
 
 #### TODO
 
-- [ ] Reword the "gpui-component is initialized; ..." heading so it names the dialogs, tooltips and scrollbars as well. Check that no quoted-title reference to the heading goes stale.
+- [ ] Reword the "gpui-component is initialized; ..." heading so it names the dialogs, tooltips and scrollbars as well, or make it generic. Update every quoted-title reference to the old heading name, found with `rg -n 'gpui-component is initialized' docs CLAUDE.md` (one is near `docs/agents/native-app.md:3227`), and check that `mise run lint` (lychee) still passes.
 
 ### Core: the `.dop` reader ignores a picked PhotoLab virtual copy
 
@@ -679,11 +679,11 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
-`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`). CI covers the priority read back inside a worker on Windows and Linux and the macOS compilation. The macOS QoS branch was never exercised on a real machine. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost").
+`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The native app's paging cost during the passes was measured on Windows (see `docs/agents/native-app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
 
 #### TODO
 
-- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_BACKGROUND`, which also throttles disk IO) not to crawl; if it does, move it to `QOS_CLASS_UTILITY` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
+- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
 ### Native: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
 
@@ -1085,6 +1085,19 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 - [ ] On Windows, on a 1000+ RAW folder with a fresh index (`manual3.sqlite`), wait for the scan to end, press `End`, then `←` a few times, wait a second and quit with `q`. (a) Run again with the same arguments: the preview, the outlined strip cell and the status line open at the file left at, and the strip is scrolled to it. (b) Run on the same folder with another fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next.
 - [ ] On Windows, copy a few ARW files into a new folder under `D:\Photos\tests\` (e.g. `D:\Photos\tests\20261110-gpui-strip-index\manual4`) and run `handpic.exe <that folder> --index <fresh file>`. Page to the second file. (1) From Explorer, copy another ARW into the folder: within about a second its cell appears in the strip at its name's place and gets a thumbnail, the outlined cell, the preview and the status line still name the same file, the status line's total grows by one, and the other thumbnails do not flash back to gray. (2) From Explorer, delete a file that is not the current one: its cell disappears and the current file stays current. (3) Delete the current file: the preview, the outline and the status line move to the file after it (the one before it when it was the last).
 
+### Native: the first launch on a fresh index shows the startup folder empty
+
+#### Background
+
+On 2026-11-19 a debug build launched as `handpic.exe <folder> --index <new file> --settings <new file> --import-settings <seed> --log <file> --mcp-port 41931` on a folder of 12 ARW files logged `scan list: files=12`, a reconcile with todo=12, and pass 1 and pass 2 with done=12, and the tree showed 12. But the MCP `get_view` kept `count: 0`, the preview area said "This folder has no RAW or JPEG files." and the status line said `no RAW files in <folder>`, while `get_view`'s `filter_offers` did list the files' EXIF values. Opening another folder and coming back listed all 12, and a relaunch on the now-filled index restored all 12, so the failure seems limited to a fresh index.
+
+Files: `crates/native/src/main.rs` (the startup open and the listing path), `crates/native/src/scan.rs`, `crates/native/src/uitest.rs`.
+
+#### TODO
+
+- [ ] Reproduce with a fresh `--index` and a folder on the command line. Find why the first listing's entries do not reach `all` / `files`, and fix it.
+- [ ] Add a UI test in `uitest.rs` that launches on a fresh index with the folder given at startup (`Ui::open` launches with no folder and opens one afterwards, the path that worked) and expects the files listed.
+
 ### Native: measure the scan pause in `load` with presses on files pass 1 has not read yet
 
 `gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. The one 336.75 ms read without the pause came on a disk slowed by 40 GB of just-written copies, so it proves nothing. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md` (`results.md` in the same folder). Files: `crates/native/src/main.rs` (`load`), `crates/native/src/focus.rs`, `crates/native/src/args.rs` (`--auto`).
@@ -1235,17 +1248,6 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 - [ ] On Windows, the Import tab (Step 7). Create `...\import-root` first. Run on `...\photos` with `--index ...\index-s7a.sqlite --settings ...\step7.sqlite` (fresh, nothing seeded). Ctrl+, → Import: the paragraph, `Destination root` with an empty box, `Choose…` and the note `Choose the folder imports are copied into.`, the pattern field holding `%Y/%F`, the example `2026\2026-11-14` (today's date, relative while no root is set), the four example buttons and the eleven-row specifier table. `Choose…`: the Windows folder dialog opens; pick `...\import-root`: the root box shows it, the note is gone, and the example reads `...\import-root\2026\2026-11-14`; type into the field without committing, open `Choose…` again and pick the same folder: the typed text stays. Replace the pattern with `%Y/%m` by typing: the example changes as each character is typed and ends `...\import-root\2026\11`; press Enter. Type `%H` and press Enter: the example line shows the time-specifier refusal in red; type `%Y//%d` and press Enter: the empty-folder-name refusal; Escape closes the modal. Quit, start again with the same `--settings` and a fresh `--index` (`index-s7b.sqlite`): Ctrl+, → Import shows the chosen root and `%Y/%m` (the last valid pattern), not `%Y//%d`. Click `%F`: the field shows `%F` and the example `...\2026-11-14`; quit and restart as above: `%F` is kept. Open `Choose…` and close the modal with the `×` while the dialog is up (if the dialog lets the window be clicked), then pick a folder: it still shows on the next open and after a restart. Press Cancel in the dialog if the window cannot be clicked, and skip this last part.
 - [ ] On Windows, the `Lightroom language` `Select` applies on selection (`native-label-language-apply`; plan: `docs/plans/_archived/20261116-native-label-language-apply/plan.md`; files: `crates/native/src/settingsview.rs`). Run with a fresh `--index`, `--settings` and `--log` under `D:\Photos\tests\`, format XMP. Ctrl+, → Sidecar: the `Select` shows English with the default names and there is no `Reset` button. Choose `日本語`: the five fields fill with the Japanese names at once, the strip's label names follow, and the log has `label names: ... -> ...`. Choosing the language already shown changes nothing. Edit one field and press Enter: the `Select` clears to its placeholder. Type the English names back and commit: English is selected again. Close and reopen the modal: the `Select` shows the language of the names in force. Expect no panic on any choice (the open applies nothing and a choice applies once).
 
-### Native: real-device checks of the MCP companion (read, navigate and set_judgment tools)
-
-`gpui-companions` Steps 5 and 6 made the GPUI app (`crates/native`) serve the MCP endpoint (`mcpEnabled` in the settings it reads, default port 41917, `--mcp-port` to override) and answer `get_view`, `get_photo`, `get_preview`, `show_photo`, `set_view` (`normal` / `zoom`), `select_photos` (one path) and `set_judgment`. Unit tests and a `curl` check against the running exe on a test copy (the replies are in the plan's `learnings.md`) cover the answers, the sidecar and the index row. No real MCP client was connected, and nobody watched the window react. Plan: `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/native/src/mcp.rs`, `crates/native/src/companion.rs`, `crates/native/src/main.rs` (`mcp_request`, `judge_paths`).
-
-Run on a test copy under `D:\Photos\tests\` with `"mcpEnabled": true` seeded through `--import-settings`, and `--index`, `--settings`, `--log` in that folder and a free `--mcp-port`.
-
-#### TODO
-
-- [ ] On Windows, connect a real MCP client (for example Claude Code with an `http` server at `http://127.0.0.1:<port>/mcp`) and ask it to show another photo, zoom and unzoom. Expect: the client lists the seven tools, `show_photo` visibly moves the window's preview and strip to that photo, `set_view` `zoom` / `normal` visibly enters and leaves the 1:1 view, and closing the window by hand leaves `quit: MCP server stopped=true` in the `--log` file.
-- [ ] On Windows, with the same setup, ask the client to rate two photos (by path) and then to pick the current one. Expect: the stars and the flag show in the strip's cells and the meta pane at once, the window does not advance, one `Ctrl+Z` undoes the two-photo call as a whole (both cells revert, the sidecars follow), and closing the window by hand leaves `quit: judgment stores drained=true sidecar writer drained=true` and `quit: MCP server stopped=true` in the `--log` file.
-
 ### Native: the settings-store tests are flaky on CI
 
 After #1020 merged, main's CI `native` job failed in `settings::tests::reads_the_stored_values` and `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`. A stored `sidecarFormat` of `both` read back as `xmp`. Rerunning the job passed (run 43465601803). The tests come from the settings store (#1008 / #1012), not `gpui-companions`. The likely cause is the store's writer thread not having flushed the seed before the reopen. Found during `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/native/src/settings.rs`.
@@ -1298,7 +1300,7 @@ Build in `crates/native` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) With the settings closed, call `set_settings {"theme":{"mode":"light","light":"Ayu Light"}}`: expect the window to repaint in Ayu Light at once. (3) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
+- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/native-app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
 
 ### Native: real-device check of Move to Trash over MCP with `mcpAllowDestructive` off, and the redo refusal
 
@@ -1436,7 +1438,6 @@ Files: `crates/native/src/perf.rs`, `crates/native/src/perfgraph.rs`, `crates/na
 
 - [ ] On Windows, in a release build of `crates/native`, open a folder with `mise run native:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight native stage names fading, with `<n> MB/s  <n> ms` at the right.
 - [ ] On Windows, with the overlay on, switch previews with an arrow key, with a strip click and by opening a folder from the tree. Expected: one red stacked bar per preview switch, and the key or click works as before.
-- [ ] On Windows, press `z` with the overlay on. Expected: the band sits over the fit view and the 1:1 view without moving them.
 - [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
 - [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.
 
@@ -1464,31 +1465,9 @@ Run each check with `--settings <fresh test store>` and `--log <test file>`, nev
 #### TODO
 
 - [ ] On Windows, press `ctrl+o` and pick a folder: it opens and the tree reveals it. Press it again and cancel: nothing changes. Press it again with the tree holding the keyboard. Also note whether a second `ctrl+o` while the picker is up opens a second dialog (if so, a flag on the view that ignores the press is needed) and whether the culling keys work right after the picker closes without a click.
-- [ ] On Windows, press `ctrl+alt+arrowright`, `ctrl+alt+arrowdown`, `ctrl+alt+arrowleft` and `tab`, each twice, with a photo shown, again at 1:1 (`z`) and with peaking on (`e`). Expect the canvas to resize and the 1:1 crop to be re-cut. With the strip hidden, paging, judging and the `Sort` / `Filter` menus still work, and showing the strip again draws it around the current file with its thumbnails. The perf overlay (`d`) still sits along the canvas's bottom with the panes hidden.
 - [ ] On Windows, give the tree the keyboard and hide the left pane with `tab`. Expect the arrow keys to page the photos again.
-- [ ] On Windows, hide the right pane and the strip, quit with `q` and relaunch: both are still hidden. Repeat, quitting with the title bar's close button.
 - [ ] On Windows, put `{"panels": {"left": false}}` in a Tauri-style `settings.json` and launch with `--import-settings` on a new store: the tree is hidden and the other two panes are shown.
 - [ ] On Windows, rebind one of the four actions in the Keyboard Shortcuts tab: the new key runs it.
-
-### Native: real-device check that the app runs as before after the move to gpui-pre and gpui-component
-
-#### Background
-
-`gpui-component-dep` moved the native app's GPUI from the Zed git rev `b5cd310b` to the crates.io `gpui-pre` / `gpui-pre-platform` `=0.3.12` snapshot and added `gpui-component` `=0.9.1` as a dependency only. No source file changed, and nothing calls `gpui_component::init`. `cargo tree`, the lock and `mise run native:check` (clippy `-D warnings`, 697 tests) cover the build. The Step 1 checkbox was ticked on those automated criteria only. Nobody has run the app by hand on the new GPUI and compared it with `main`. Plan: `docs/plans/_archived/20261114-gpui-component-dep/plan.md`. Files: `crates/native/Cargo.toml`, `crates/native/Cargo.lock`, `docs/agents/native-app.md`.
-
-#### TODO
-
-- [ ] On Windows, run `mise run native:dev` on a build with the gpui-pre snapshot and compare it with `main`. Open a folder, page through it, press the judgment keys, open the sort / filter menus and the right-click menus, open the settings modal and use the tree's keyboard. Expected: no difference from `main`, since no source file changed and `gpui_component::init` is not called.
-
-### Native: read the native CI job's build time per leg against the 30-minute timeout after the move to gpui-pre
-
-#### Background
-
-`gpui-component-dep` changed `crates/native/Cargo.lock`, so each leg of the `native` CI job (Windows, Linux, macOS) makes a nearly cold build of a larger graph (two versions of the `windows` crate, `markdown`, `lsp-types`, `ropey`, `html5ever`, a second `resvg`). The local first build took several minutes. The CI times against `timeout-minutes: 30` were not seen when the step was written. Plan: `docs/plans/_archived/20261114-gpui-component-dep/plan.md`. Files: `.github/workflows/ci.yml`, `docs/agents/native-app.md`.
-
-#### TODO
-
-- [ ] Read the build time of each leg of the `native` CI job (Windows, Linux, macOS) on the `gpui-component-dep` PR. Done when every leg finishes inside `timeout-minutes: 30` with margin. Otherwise raise the timeout and record it in the "gpui-pre snapshot" entry of `docs/agents/native-app.md`.
 
 ### Agents: a cold Rust `ci:local` is moved to the background by the Bash tool after 180 s
 
@@ -1527,8 +1506,7 @@ each runner had to `TaskStop` and re-run repeatedly (plan:
 #### TODO
 
 - [ ] On Windows, launch the native app without a folder (`mise run native:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
-- [ ] On Windows, open a folder without RAW or JPEG files. Expect "This folder has no RAW or JPEG files." in the preview area, and a click on it does nothing.
-- [ ] On Windows, set a filter that hides every file. Expect "No files match the current filter." in the preview area.
+- [ ] On Windows, open a folder without RAW or JPEG files. Expect a click on the "This folder has no RAW or JPEG files." message to do nothing.
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
 - [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
 
@@ -1574,8 +1552,8 @@ Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `c
 
 #### TODO
 
-- [ ] On Windows and macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `handpic`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
-- [ ] On Windows and macOS, in `handpic` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
+- [ ] On macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `handpic`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
+- [ ] On macOS, in `handpic` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
 
 ### Native: real-device check of the folder drop (gpui-folder-drop)
 
@@ -1756,13 +1734,6 @@ Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, wi
   - Commit with Enter: the folder is renamed and the tree has the keyboard again. Start another and commit with a click elsewhere: renamed as well.
   - Start another and press Escape: nothing is renamed, the name comes back, the tree has the keyboard.
   - Switch to another app with the editor open: no rename until the window comes back.
-- [ ] On Windows (Step 3: settings controls), open `ctrl+,` and expect the last tab focused. Walk every tab with the keyboard only: Tab and Shift+Tab walk the tab, then each control in order (format radios, name fields, languages and `Reset`, auto-advance, each row's chips' `×`, `+`, `Reset` and `Reset all`, the root's `Choose…`, the pattern, the example patterns, the close `×`) and wrap. ArrowUp / ArrowDown / Home / End on the focused tab select and focus another. Then:
-  - Space and Enter on each control kind press it: a button, the auto-advance checkbox (flips, check mark draws), a format radio (switches, the folder re-lists). Flip auto-advance and switch the sidecar format with the mouse.
-  - Type a label name, then click a format radio, a language or `Reset` without Enter: the name is committed first. Same in the Import tab with `Choose…` or an example pattern.
-  - Keyboard Shortcuts tab: `+` then `tab` adds a chip, likewise `enter` and `space`; a chip's `×` removes it; `+` then `home` shows the refusal in the status line; `Reset` and `Reset all` restore.
-  - Scroll the Shortcuts list and the Import tab (short window) with the wheel: a scrollbar shows; drag its thumb and the list follows.
-  - Look: outlined buttons about as on `main` (24 px, 13 px labels, faint fill, white-15 % border, `#262626` hover), the chosen language lit with the `#e5e5e5` border, a focused control with the `#737373` ring, the checked radio a filled circle with a check (new).
-  - Click the backdrop: the modal closes. Reopen and click `×`: it closes. After closing the arrows page again.
 - [ ] On Windows (Step 4: menus), the Sort and Filter menus are the `#171717` surface with a white-10 % border and 6 px radius, 26 px rows with 6 px rounded `#262626` hover, the check icon at the left of a checked item, muted headings, separators across the padding, and a disabled item muted with no hover. Use a folder with bursts and EXIF variety so the Filter menu is long. Then:
   - Sort and Filter open above their button with the right edges aligned.
   - An outside press closes an open Sort / Filter menu (in the strip, in the preview, and on the menu's own button, which does not reopen it). An item click applies and leaves the menu open.
@@ -1800,15 +1771,6 @@ Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, wi
   - Rewrite Sidecars / Rename by Capture Date during a run: Escape does nothing, both buttons look disabled, and the dialog closes at the run's end.
   - An operation pressed during pass 1 opens its dialog when the scan ends.
   - After each close the tree still has the keyboard, and an inline rename then works (Enter commits, Escape cancels).
-- [ ] On Windows (Step 8: settings modal as a `Dialog`), `ctrl+,` opens the settings centered, 90 % of the window up to 860 px wide and 80 % up to 720 px high, the window dimmed, the title row with `×`, the tab list, content and status line as before, no animation, and the last tab selected with the focus ring. Then:
-  - Close by each path, reopening between: Escape; a press on the dimmed area; `×`; a typed label name then Escape (committed); a typed pattern then Escape. After each close the arrows page.
-  - On every tab, Tab forward through every control and wrap, then Shift+Tab back: the same stops in the same order as before. ArrowUp / ArrowDown on the focused tab move between tabs. Enter and Space press the focused button, checkbox and radio.
-  - Keyboard Shortcuts: `+` then `enter` adds; again `space`, `tab`, `shift+tab`, `ctrl+alt+1` are each added as typed; `+` then `escape` ends the capture with the dialog open; `+` then `q` shows `"q" is taken by this app`; `+` then a key bound elsewhere shows the backend's refusal.
-  - IME (Japanese) in a label name and in the import pattern composes in place and commits into the field.
-  - Import tab `Choose…`: the OS folder picker opens, and after choosing or canceling the root shows and Tab still walks the dialog.
-  - With it open, paging keys, `f`, `tab` and `ctrl+z` do nothing on the window, and a click on the strip or the tree closes the settings without acting on what was under the pointer.
-  - Click in the tree, `ctrl+,`, close by Escape: the arrows still move the tree's cursor.
-  - While a folder operation's dialog is open (or the import has stepped aside), `ctrl+,` does not open the settings.
 
 ### Native: real-device checks of the strip, folder tree and meta pane scrollbars
 
@@ -1820,12 +1782,9 @@ Files: `crates/native/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` on a folder of a few hundred files with a deep folder tree. Scroll the strip, the tree and the meta pane each by the wheel. Expect each bar to show, then fade out about 2 s after the scroll stops.
-- [ ] On Windows, within the time a bar is shown, drag its thumb and click its track, on each of the three. Expect the area to scroll.
 - [ ] On Windows, on the strip, drag the thumb to the far end of a long folder. Expect the thumbnails there to appear. Expect the bar to show with the thumb following the arrow keys (the current file scrolled into view), a refilter and a window resize.
-- [ ] On Windows, on the strip, press on the shown bar. Expect the current file and the selection not to change. With the bar faded out, press in its place and expect the cell to be selected as before. Expect the cells' tooltips to still show on hover.
+- [ ] On Windows, on the strip, press on the shown bar. Expect the current file and the selection not to change. Expect the cells' tooltips to still show on hover.
 - [ ] On Windows, on the tree, click a row, right-click a row and rename a row inline next to the bar. Expect all three to behave as before.
-- [ ] On Windows, look at a short folder's strip, a short tree and a short meta pane. Expect no bar.
 - [ ] On Windows, open the settings modal's lists and the sort, filter and right-click menus, and scroll them. Expect their scrollbars to behave as before.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and ideally the other two).
 
@@ -1842,18 +1801,6 @@ Files: `mise.toml`, `crates/native/mise.toml`.
 - [ ] At the repository root, run `mise current rust` (expect `1.97.1` or the current resolved version). Run `rustup component remove rust-analyzer --toolchain <resolved version>`, then a plain `mise install`, then `rustup component list --installed --toolchain <resolved version>`. Expected result: the list includes `rust-analyzer-<host triple>`. Pass the resolved full version to rustup, not `1.97`, because rustup treats `1.97` as a separate toolchain and auto-installs it.
 - [ ] In `crates/native`, run `rustup component remove rust-analyzer --toolchain 1.98.1`, then a plain `mise install`, then `rustup component list --installed --toolchain 1.98.1`. Expected result: the list includes `rust-analyzer-<host triple>`.
 - [ ] Record the result. If a plain `mise install` is not enough, add a `mise install --force rust` line to the setup docs (`docs/agents/native-app.md` or the README setup section).
-
-### Docs: the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it" in native-app.md is stale
-
-#### Background
-
-`docs/agents/native-app.md` (the heading at about line 48) still says only the settings modal and the tree's inline rename draw from gpui-component. The dialogs, tooltips and scrollbars are drawn from it too. The `native-progress-bar-reason` feature fixed the same stale claim in the progress bar section's sentence. It left the heading alone on purpose, to keep that PR to one sentence. Other places refer to the section by its exact heading name, for example the `docs/agents/native-app.md` mention "table in "gpui-component is initialized"" near line 1900. A rename must update those references, and `mise run lint` (lychee) must still pass. Plan: `docs/plans/_archived/20261115-native-progress-bar-reason/plan.md`.
-
-Files: `docs/agents/native-app.md`.
-
-#### TODO
-
-- [ ] Rename the heading so it states what gpui-component now draws (settings modal, tree rename, dialogs, tooltips, scrollbars), or make it generic. Update every reference to the old heading name, found with `rg -n 'gpui-component is initialized' docs CLAUDE.md`.
 
 ### Native app: real-device check of the folder tree rows' name truncation inside the pane
 
@@ -2023,18 +1970,6 @@ Files: `crates/native/src/main.rs` (`settings_button`, `open_settings`), `crates
 - [ ] On Windows, click the gear (a) with the tree holding the keyboard, (b) with `Sort ▾` / `Filter ▾` open, (c) with a right-click menu open, (d) during an inline folder rename. Expect the settings to open, the menu to close, and the rename to end as a press elsewhere ends it.
 - [ ] On macOS (`mise run native:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
 - [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
-
-### Native: real-device check of the Sort / Filter buttons drawn with gpui-component's `Button` (native-component-controls)
-
-#### Background
-
-The `native-component-controls` feature replaced the status row's hand-drawn `Sort ▾` / `Filter ▾` `div`s (`menu_button`) with gpui-component `Button`s, pinned to 21 px (`MENU_BUTTON_HEIGHT`) to keep the status row and the 842 px preview canvas. `mise run ci:local`, clippy and the unit tests cover the build and the pure rules. Nobody has pressed the buttons in the running window: the toggle, the lit and dimmed states and the popover's corner are unverified, and the button height was read from `gpui-pre` 0.3.12 `style.rs`, not measured on screen. Plan: `docs/plans/_archived/20261116-native-component-controls/plan.md`.
-
-Files: `crates/native/src/main.rs` (`menu_button`).
-
-#### TODO
-
-- [ ] On Windows, run `mise run native:dev`, open a RAW folder, press `Sort ▾`, then press it again with the menu open; set a filter; open a JPEG-only folder. Expected: a press toggles the menu; a press on the open menu's own button closes it without reopening; `Filter ▾` shows the `primary` border and label while a filter is on (the border goes to `input` while hovered, a known `Button` hover limit); the view-only sort button is dimmed, does not hover and does not open; the popover opens upward from the button's top-right corner; the preview canvas stays 1160 x 842 in the default window.
 
 ### Native: real-device check of the settings controls drawn with gpui-component (native-component-controls)
 
@@ -2286,9 +2221,7 @@ Files: `crates/native/src/main.rs` (`status_row`, the meta pane's name `div`), `
 
 #### TODO
 
-- [ ] On Windows, in a debug build (`mise run native:run` or equivalent, with a fresh `--index` and `--settings`, on a copy under `D:\Photos\tests\`), open a folder. Expect the status bar's right region to show `n / total` as its first item, left of the progress circle (visible during a scan), `Sort ▾` and `Filter ▾`. With a filter on it reads `n / shown (listed)`, including `n / total (total)` when the filter hides nothing. With no shown file (an empty folder, a filter that hides everything) no position shows.
 - [ ] On Windows, with a long status text (for example an error), expect the position not to be clipped by the right region's `overflow_hidden`. Expect the `Sort ▾` and `Filter ▾` popovers to still anchor to their buttons.
-- [ ] On Windows, expect the meta pane to show the file name (and the error line of a failed preview) and no position. Hide the meta pane (`toggleRight`): the position stays visible in the status bar.
 
 ### Native: real-device checks of the always-visible scrollbars
 
@@ -2322,7 +2255,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 #### TODO
 
-- [ ] On Windows, run `mise run native:dev` on a folder. Expect the header on the strip's top edge with `Sort ▾` and `Filter ▾` at its right end. Each opens its menu upward from its button, a second press closes it, a press outside dismisses it and `escape` closes it. The filter button is lit while a filter is active, and the sort button is dimmed in a view-only (JPEG-only) folder.
+- [ ] On Windows, run `mise run native:dev` on a folder. Expect the header on the strip's top edge with `Sort ▾` and `Filter ▾` at its right end. Each opens its menu upward from its button, a second press closes it, a press outside dismisses it and `escape` closes it. The filter button is lit while a filter is active (its border goes to `input` while hovered, a known `Button` hover limit), and the sort button is dimmed in a view-only (JPEG-only) folder, where it does not hover and does not open.
 - [ ] On Windows, with a long filter menu (EXIF sections), the strip at its tallest and a short window, expect the menu to stay inside the window, to scroll, and its button to still toggle it (the popover is not snapped over the button). Expect the popover not to be clipped by the header.
 - [ ] On Windows, check the handle on the header's top edge: the resize cursor, the 1 px line, a drag down to `MIN` and up to `MAX`, and the preview stopping at `PREVIEW_MIN`. Expect a press on a button not to be taken by the handle's top 5 px band.
 - [ ] On Windows, at a stored `stripHeight` of 128, expect the cell box to be still 144 x 96.
@@ -2399,16 +2332,6 @@ Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/n
 #### TODO
 
 - [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/native/icons/` reads Handpic and the derivation is written down.
-
-### Native: real-device check of the index move out of the `.native` folder (remove-tauri Step 3)
-
-The remove-tauri plan's Step 3 put the native app's default index and log under `dev.minodisk.handpic` and added `datadir::move_native_index`, which `open_index` runs only without `--index`. It moves a `dev.minodisk.handpic.native` index into the plain folder and renames an index already there aside, with the `-wal` / `-shm` files. Unit tests over temp folders cover the move and the aside rename. Never exercised: the move on a real machine holding a `main` build's `.native` index and a Tauri build's index in the plain folder. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/native/src/datadir.rs`, `crates/native/src/main.rs` (`open_index`).
-
-#### TODO
-
-- [ ] On Windows, with an index under `%LOCALAPPDATA%\dev.minodisk.handpic.native\` (from a `main` build) and optionally a Tauri build's under `%LOCALAPPDATA%\dev.minodisk.handpic\`, launch the native app without `--index`. Expect `Handpic.log` (now under `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`) to show `index: moved in from the .native folder` (with the aside name when a Tauri index was there). Expect `index.sqlite` (and its `-wal` / `-shm`) gone from `.native`, with that folder kept because the old `logs\` is still in it. Expect the Tauri index kept as `index-aside-1.sqlite`, and the open folder's thumbnails shown without a cold pass 1.
 
 ---
 

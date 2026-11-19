@@ -190,7 +190,7 @@ overrides it:
       `package.yml`, `crates/native/packaging/`, `CLAUDE.md`'s packaging
       paragraph, `docs/agents/native-app.md`.
 
-- [ ] Step 3: Add the update engine to `crates/backend`
+- [x] Step 3: Add the update engine to `crates/backend`
   - Done when:
     - `crates/backend/src/update.rs` detects the install kind from the
       executable's path: portable ZIP, Inno Setup, `.app`, tarball
@@ -259,7 +259,7 @@ overrides it:
     - Files: `crates/backend/src/update.rs`, `crates/backend/src/lib.rs`,
       `crates/backend/Cargo.toml`, the root `Cargo.lock`, `CLAUDE.md`.
 
-- [ ] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
+- [x] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
   - Done when:
     - The native app checks at launch on a background task. Not under
       `--auto`, not in a debug build, and not within one hour of the last
@@ -530,3 +530,5 @@ overrides it:
 
 - (2026-11-18) Step 1 complete
 - (2026-11-18) Step 2 complete
+- (2026-11-18) Step 3 complete
+- (2026-11-19) Step 4 complete

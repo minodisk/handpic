@@ -1809,8 +1809,8 @@ takes the pending page and releases the scan pause (`hold.rs`'s
 file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
-with seven `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
-Import and MCP (no Debug), then Appearance, the native app's own, in a `relative` `flex_1` slot holding an
+with eight `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
+Import and MCP (no Debug), then Appearance and Updates, the native app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
@@ -2038,6 +2038,66 @@ not open.
   the pinned rev; the hand check is pending in
   `../plans/20261113-gpui-settings/learnings.md`.
 
+### The update flow runs on threads of its own and restarts through GPUI (Measured)
+
+`update.rs` is the pure model, as `cache.rs` is to the Cache page; the
+backend's `update.rs` is the engine. The engine reports no phase, since
+`self_update`'s `update()` downloads, verifies and installs in one blocking
+call, so `Updates` sets the phases (`Idle`, `Checking`, `Available`,
+`Downloading`, `Verifying`, `ReadyToRestart`, `Failed`, gpui-kit's guide's)
+around `update::check` and `update::install`. The window runs each on a
+`std::thread` (a download can take minutes, too long for the background
+executor's pool) and the answers come back through the view's one channel
+as `scan::Event::Update`. The download's `progress` callback is sent only
+when its percent changes (`progress_step`; each MiB without a size), and the
+download reaching its size turns `Downloading` into `Verifying`, the digest,
+the signature, the extraction and the replace following inside the same
+call.
+
+- Rule: the launch check. Only in a release build (`cfg!(debug_assertions)`
+  off), never under `--auto`, and at most once an hour: the time of the last
+  automatic check is the settings store's `updateCheckedAt` key (Unix
+  seconds, a time in the future counting as due), written before the check
+  runs, so a launch that fails offline is not retried at the next launch
+  within the hour either. It is a key in the store, not `self_update`'s
+  `UpdateCheckGuard` stamp file: the store already keeps the session's
+  state (`lastFolder`, `windowBounds`) and its path follows `--settings`.
+  `Check for Updates` always checks and writes nothing.
+- Rule: never two checks at once, and nothing installed twice. A check is
+  refused while a check or an install is under way, and once this process
+  installed a version (the Tauri `UpdateRun.installed` rule), until the
+  restart. A failure leaves the app as it was and the button enabled.
+- Rule: who installs. A portable ZIP or a tarball install is downloaded,
+  verified and installed without asking (the plan's recorded policy, against
+  the guide's consent step), then `ReadyToRestart`, with the pane's note
+  naming `Restart Now`. Every other kind, the deb and an unknown copy (a
+  `cargo run`, a `target/` binary) and, until their own steps, the Inno
+  Setup and `.app` installs, stops at `Available` with `Open Release Page`
+  (`cx.open_url`).
+- Rule: the timeouts. The check's requests are bounded by `CHECK_TIMEOUT`
+  (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the backend's: a
+  stalled connection fails into `Failed` rather than holding `Checking` and
+  so every later check. `ureq`'s per-call timeout is global, the body's read
+  included, hence the long one for the download.
+- Rule: the restart. `Restart Now` calls `cx.set_restart_path` with the
+  executable `current_exe` gave at launch (on Linux it names the replaced
+  file with a ` (deleted)` suffix after the update) and `cx.restart()`, not
+  `self_update::restart`, which would `exec` past the drains. GPUI's
+  `restart` spawns a script that waits for this process's exit and quits
+  the app (`PostQuitMessage` on Windows, the platform's `quit` on macOS and
+  Linux), so the app-level `on_app_quit` handlers run first. Measured on
+  Windows 11 (2026-11-19, a debug build whose `--auto` end called
+  `cx.restart()` towards `whoami.exe` on an empty folder): `quit: scan
+  stopped`, `quit: judgment stores drained=true sidecar writer
+  drained=true` and `quit: settings writes drained=true` were logged after
+  the restart and the process exited 0. The relaunch of an updated
+  executable is a check of the plan's Step 7.
+- Rule: MCP. `get_status` carries the state (`update`: the version, the
+  install kind, the phase, the target version, the percent, the message and
+  the release page, and whether the build trusts the test feed and key);
+  no tool checks or restarts, and the coverage table
+  excludes the page for that reason.
+
 ### The keymap is edited in the modal and replaced whole (Inferred)
 
 The Keyboard Shortcuts page groups `Keymap::bindings()` by the area an action
@@ -2182,20 +2242,9 @@ invalid one leaves the stored one and shows its reason.
 The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic/index.sqlite`;
 `--index <path>` overrides it. The folder is named after the Handpic
 identifier (`datadir.rs`'s `IDENTIFIER`, next to `LEGACY_IDENTIFIERS`).
-While the Tauri app still existed, the native app kept its index apart under
-`dev.minodisk.handpic.native`. Without `--index`, `open_index` first runs
-`datadir::move_native_index`: an `index.sqlite` left under
-`dev.minodisk.handpic.native` moves into the plain folder with its `-wal` and
-`-shm`, and an index already there (a Tauri build's from `main`) is renamed
-aside to the first free `index-aside-<n>.sqlite` rather than deleted; the
-emptied `.native` folder goes (on Windows it stays, still holding the old
-`logs\Handpic.log`, as the cache and data-local directories are both
-`%LOCALAPPDATA%`). A failed move is logged and the app opens
-whatever the plain folder then holds. Nothing is migrated from the earlier
-`com.minodisk.riffle.native` or `com.minodisk.handpic.native`: the native app
-never shipped, so an old developer cache is simply rebuilt by pass 1. An index
-that cannot be opened leaves the pager working with `no index: …` on the
-status line.
+An index an earlier build kept under another folder is not picked up; pass
+1 rebuilds it. An index that cannot be opened leaves the pager working with
+`no index: …` on the status line.
 
 - Rule: never point a debug or measurement run at the user's index; use
   `--index` with a fresh file.
@@ -2522,10 +2571,17 @@ view's eviction, watchers, sidecar writer, judgment queue, settings `Writes`
 and scan run on `std::thread`s that it does not run; their results reach the
 view through its channel. `Ui::open` calls `allow_parking`, and
 `Ui::wait_until` runs `run_until_parked`, checks a condition on the view and
-sleeps 10 ms, failing after 10 s. `read_roots` lists the real home directory
+sleeps 10 ms, failing after 10 s. `Ui::open` installs a test-only `log`
+logger once per process, which keeps every line stamped with the time since
+the first `Ui`, so a timed-out `wait_until` puts the view's state and the
+app's log lines naming its temporary folder (`scan list:`, `scan extract:`,
+`scan faces:` with their times) in its panic message. `read_roots` lists the real home directory
 and volumes: assert nothing about the tree's roots.
 
-`Ui`'s drop releases its view handle and calls `TestAppContext::quit`, which
+`Ui`'s drop releases its view handle; while the test is panicking it only
+cancels the view's scan (the `scan::Running` it cloned at the open), so a
+timed-out test leaves no pass 2 worker running next to the later tests.
+Otherwise it calls `TestAppContext::quit`, which
 runs the quit handlers (the scan stop, the stores and the writer drained, the
 settings writes drained): about 0.5 ms with nothing queued, asserted under
 1 s, below every drain's 2 s timeout. The writer and settings threads close
@@ -2537,6 +2593,20 @@ after about 11 ms, one retry) and fails the test if it is still held after
 
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
+- Rule: a UI test that times out is diagnosed from its log lines, not by
+  raising the 10 s wait. On the macOS CI runner five tests of six used to
+  time out with pass 2 at `analyzing 0/N`: its `QOS_CLASS_BACKGROUND` made
+  one tiny DNG's analysis 6 to 14 times slower than at normal priority and
+  pass 2 of 2 to 4 files take 15 s to 44 s. The app's pass 2 now runs at
+  `QOS_CLASS_UTILITY` with a relative priority of -5 on macOS (see
+  `docs/agents/shared-crates.md`, "The scan pool's priority levels").
+- Rule: the UI tests' scans run at normal priority. `Ui::open` sets the
+  view's `scan_priorities` (`scan::Priorities`, `APP` in the app) to
+  `Priority::Normal` for both passes. At the app's `Priority::Lowest` pass 2
+  starves behind the crate's other tests running in parallel on every OS: on
+  the Windows CI runner (`THREAD_PRIORITY_LOWEST`) one test's pass 2 had done
+  3 of 4 files after 10 s, where it normally takes about 0.7 s for 3. The
+  tests check the wiring, not the scheduling. Do not raise the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.

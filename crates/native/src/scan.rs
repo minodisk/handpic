@@ -18,7 +18,10 @@ use handpic_backend::{
     output,
     sidecar::{self, SidecarError, SidecarFormat, Writer},
 };
-use handpic_core::{scan::ScanFocus, xmp::LabelNames};
+use handpic_core::{
+    scan::{Priority, ScanFocus},
+    xmp::LabelNames,
+};
 
 use crate::viewonly;
 
@@ -29,6 +32,22 @@ pub const READ_SLOTS: usize = 2;
 /// stage of the file they are on, which a slow or network volume can hold
 /// longer; past this the process exits with the scan still running.
 pub const STOP_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The OS priority of each pass's workers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Priorities {
+    pub extract: Priority,
+    pub faces: Priority,
+}
+
+impl Priorities {
+    /// The app's: pass 1 below normal, pass 2 lower still, so the viewer's
+    /// preview decode and the UI win the cores they contend for.
+    pub const APP: Self = Self {
+        extract: Priority::BelowNormal,
+        faces: Priority::Lowest,
+    };
+}
 
 /// Two fewer than the cores, at least one, as the Tauri app's `scan_threads`:
 /// two cores stay with the paging path.
@@ -106,6 +125,8 @@ pub enum Event {
     FolderOp(crate::folderops::Message),
     /// A performance overlay sample from the sampler's thread.
     Perf(handpic_backend::perf::Sample),
+    /// An answer of the update check's or install's thread.
+    Update(crate::update::Message),
 }
 
 /// One folder's listing: its canonical path, the key of every index row, its
@@ -360,6 +381,7 @@ impl Scan {
         dir: String,
         todo: Vec<FileStat>,
         focus: ScanFocus,
+        priorities: Priorities,
         events: UnboundedSender<Event>,
     ) -> Self {
         let cancel = Arc::new(AtomicBool::new(false));
@@ -373,6 +395,7 @@ impl Scan {
                     &dir,
                     &todo,
                     scan_threads(),
+                    priorities.extract,
                     &focus,
                     &cancel,
                     index::PROGRESS_INTERVAL,
@@ -391,8 +414,13 @@ impl Scan {
                     },
                 );
                 let _ = events.unbounded_send(Event::Done { scan: id, summary });
-                let summary =
-                    run_faces_pass(&index, &dir, &focus, &cancel, |done, total, ready| {
+                let summary = run_faces_pass(
+                    &index,
+                    &dir,
+                    priorities.faces,
+                    &focus,
+                    &cancel,
+                    |done, total, ready| {
                         invariant!(
                             done <= total,
                             "scan progress within total",
@@ -404,7 +432,8 @@ impl Scan {
                             total,
                             ready,
                         });
-                    });
+                    },
+                );
                 let _ = events.unbounded_send(Event::FacesDone { scan: id, summary });
             })
         };
@@ -507,6 +536,7 @@ fn reconcile_sidecars(
 fn run_faces_pass(
     index: &Mutex<Index>,
     dir: &str,
+    priority: Priority,
     focus: &ScanFocus,
     cancel: &AtomicBool,
     progress: impl Fn(usize, usize, Vec<FaceReady>) + Send + Sync,
@@ -531,6 +561,7 @@ fn run_faces_pass(
         dir,
         &todo,
         faces_threads(),
+        priority,
         focus,
         cancel,
         index::PROGRESS_INTERVAL,
@@ -550,7 +581,8 @@ fn run_faces_pass(
 #[cfg(test)]
 mod tests {
     use super::{
-        Running, STOP_TIMEOUT, Scan, Status, faces_threads_for, list, natural_order, threads_for,
+        Priorities, Running, STOP_TIMEOUT, Scan, Status, faces_threads_for, list, natural_order,
+        threads_for,
     };
     use handpic_backend::{
         index::Index,
@@ -630,6 +662,7 @@ mod tests {
             temp.path().to_string_lossy().into_owned(),
             Vec::new(),
             ScanFocus::default(),
+            Priorities::APP,
             events,
         ));
         assert!(running.is(7));

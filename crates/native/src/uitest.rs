@@ -5,17 +5,23 @@ use std::{
     fs,
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
 use handpic_backend::store::Store;
-use handpic_core::Flag;
+use handpic_core::{Flag, scan::Priority};
 use tempfile::TempDir;
 
 use crate::{
-    Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
+    Handpic,
+    args::Args,
+    entries_of, file_name,
+    filter::Orientation,
+    menu, open_index, open_main,
+    scan::{Priorities, Running},
     settings,
 };
 
@@ -26,10 +32,69 @@ const WAIT: Duration = Duration::from_secs(10);
 /// fails the test.
 const QUIT_MAX: Duration = Duration::from_secs(1);
 
+/// The `log` records of every test in the process, each stamped with the
+/// time since the first `Ui` opened, which a timed-out `wait_until` prints
+/// for its own folder: no logger is installed under `cargo test` otherwise.
+struct TestLog {
+    started: Instant,
+    lines: Mutex<Vec<String>>,
+}
+
+impl log::Log for TestLog {
+    fn enabled(&self, metadata: &log::Metadata) -> bool {
+        metadata.level() <= log::Level::Info
+    }
+
+    fn log(&self, record: &log::Record) {
+        if self.enabled(record.metadata()) {
+            let line = format!(
+                "{:>8.3}s [{}][{}] {}",
+                self.started.elapsed().as_secs_f64(),
+                record.target(),
+                record.level(),
+                record.args()
+            );
+            self.lines
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(line);
+        }
+    }
+
+    fn flush(&self) {}
+}
+
+static LOG: OnceLock<TestLog> = OnceLock::new();
+
+fn install_log() {
+    let log = LOG.get_or_init(|| TestLog {
+        started: Instant::now(),
+        lines: Mutex::new(Vec::new()),
+    });
+    if log::set_logger(log).is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
+    }
+}
+
+/// The logged lines that name `dir`, a temporary folder's unique name.
+fn log_lines(dir: &str) -> String {
+    LOG.get().map_or_else(String::new, |log| {
+        log.lines
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter(|line| line.contains(dir))
+            .map(|line| format!("\n  {line}"))
+            .collect()
+    })
+}
+
 pub struct Ui {
     pub cx: VisualTestContext,
     /// Taken at the drop, so the view goes with the app.
     view: Option<Entity<Handpic>>,
+    /// The view's scan, cancelled when the `Ui` drops while panicking.
+    scan: Running,
     /// Taken at the drop, which removes it once the app's threads let go.
     dir: Option<TempDir>,
 }
@@ -43,6 +108,7 @@ impl Ui {
 
     /// `open`, under the command line's `args`.
     pub fn open_with(args: Args) -> Self {
+        install_log();
         let dir = tempfile::tempdir().unwrap();
         let cx = TestAppContext::single();
         // The view's scan, watchers and writers are threads of their own, so
@@ -53,11 +119,21 @@ impl Ui {
         let (window, view) = cx
             .update(|cx| open_main(args, index, settings, None, cx))
             .unwrap();
-        let cx = VisualTestContext::from_window(window, &cx);
+        let mut cx = VisualTestContext::from_window(window, &cx);
+        // Pass 2 at the app's lowest priority starves past `WAIT` behind the
+        // other tests running in parallel, on every OS.
+        let scan = view.update(&mut cx, |view, _| {
+            view.scan_priorities = Priorities {
+                extract: Priority::Normal,
+                faces: Priority::Normal,
+            };
+            view.scan.clone()
+        });
         cx.run_until_parked();
         Self {
             cx,
             view: Some(view),
+            scan,
             dir: Some(dir),
         }
     }
@@ -144,7 +220,16 @@ impl Ui {
                         view.current_path(),
                     )
                 });
-                panic!("timed out waiting for {what}: {state}");
+                let name = self
+                    .dir()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned();
+                panic!(
+                    "timed out waiting for {what}: {state}; log:{}",
+                    log_lines(&name)
+                );
             }
             thread::sleep(Duration::from_millis(10));
         }
@@ -208,6 +293,7 @@ impl Drop for Ui {
     fn drop(&mut self) {
         self.view.take();
         if thread::panicking() {
+            self.scan.cancel();
             return;
         }
         let started = Instant::now();

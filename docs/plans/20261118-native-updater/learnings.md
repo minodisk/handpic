@@ -98,3 +98,138 @@
     device" while writing the DMG (before the new tarball step; the same leg
     of the other run passed), so it was taken for a runner flake and the
     failed job rerun; it passed. No signing step ran.
+
+## Step 3: the update engine in `crates/backend`
+
+- `self_update` resolved to 1.3.3 (edition 2024, `rust-version` 1.88). With
+  the guide's features plus `signatures` it brings `ureq` 3.4 on its `_ring`
+  rustls feature, the same `rustls` 0.23 the backend's `reqwest` uses, and
+  no `aws-lc-sys` on any target (`cargo tree --target all -i aws-lc-sys`
+  prints nothing, in the root workspace and in `crates/native`). So the
+  guide's `ureq` stays; `reqwest_client` was not needed. It does add a
+  second HTTP client (`ureq` next to `reqwest`), about 350 lock entries in
+  `crates/native/Cargo.lock` and 700 lines in the root one.
+- `crates/native/Cargo.lock` must be updated with the backend's new
+  dependencies too (`cargo fetch` in `crates/native`), or `Package`'s
+  `cargo build --release --locked` fails; the plan's file list named only
+  the root lock.
+- 1.3.3 differs from older `self_update` docs: `build()` returns the
+  concrete `github::Update` with inherent `update()` /
+  `get_newer_releases()`, `checksum_from_asset` fails the update
+  (`ChecksumSourceInvalid`, naming the asset) when the release has no such
+  asset, `verify_release_digest` is on by default and also checks GitHub's
+  per-asset `digest` field when present, and `bin_install_path` other than
+  the running exe takes a plain move instead of `self_replace`, which is
+  what lets the tests install into a temp folder. An `asset_matcher`
+  replaces the target substring match entirely, so `target` is irrelevant.
+- The order of checks in `self_update` is: the `SHA256SUMS` entry fetched
+  before the archive download, then digest, release digest, zipsign
+  signature (context: the downloaded file's name, which `self_update` keeps
+  as the asset name), extraction, replace. Every failure case in the tests
+  leaves the exe byte for byte as it was.
+- `get_newer_releases()` already drops releases not newer than the current
+  version and non-SemVer tags; `offered` applies the channel rule on top
+  and takes the SemVer maximum, so the listing's order does not matter.
+- Inno Setup against portable: an `unins000.exe` beside the exe is Inno
+  Setup; else a `licenses/` folder beside it is the portable ZIP (the
+  installer also writes `licenses/`, so the uninstaller is checked first);
+  else unknown. That makes a `cargo run` or `target/release` binary
+  unknown without a debug-build check here. The `HKCU` uninstall entry was
+  not used: it needs the registry and would not tell a moved install
+  apart. `.app` is `<x>.app/Contents/MacOS/<exe>`, the deb
+  `/usr/lib/handpic/<exe>`, the tarball `<…>/.local/bin/<exe>`; these are
+  path rules only, so the tests run on every platform.
+- The binary's name is read from the exe path (`Handpic/<name>` in the
+  ZIP, `Handpic/bin/<name>` in the tarball), so `install` needs no binary
+  name parameter and follows a rename.
+- Deviation from the plan's approach: the engine has no state callback like
+  `ai.rs`. `self_update`'s `update()` downloads, verifies and installs in
+  one blocking call, so the only phases the engine could report are the
+  ones its caller already knows (before and after `check` / `install`).
+  Step 4's pure model sets the phases around the two calls; a
+  `progress_callback` for a download percentage can be added then if the
+  page shows one.
+- Deviation from the guide's snippet beyond the plan's list: none new. The
+  version is a parameter rather than `cargo_crate_version!()` (that would
+  be the backend's), as the plan said. No request timeout is set (the
+  guide sets none); see the deferred issue below.
+- `source()` logs `update: feed <owner>/<repo>, test|production key`;
+  `HANDPIC_UPDATE_TEST_REPO` is read with `option_env!` while compiling
+  the backend, which `Package` does in the same build as the app.
+- The fake GitHub API is a `TcpListener` thread per test serving the
+  listing, `/releases/tags/v<version>` and each asset with
+  `Connection: close`; `ureq` reads plain `http` on loopback without any
+  extra setting. The test key is `SigningKey::from_bytes(&[seed; 32])`
+  through `zipsign-api` 0.2.2's `sign-zip` / `sign-tar` (a dev-dependency,
+  with `zip` 9, `tar` and `flate2` to build the archives).
+
+## Step 4: the app's update flow and the Updates page
+
+- The phases are set around the engine's two calls, as Step 3 left it: the
+  model goes `Checking` before `check`, `Downloading` before `install`,
+  `Verifying` when `self_update`'s `progress_callback` reports the archive's
+  full size (the digest, signature, extraction and replace follow inside the
+  same `update()`), and `ReadyToRestart` or `Failed` on `install`'s answer.
+  So `install` gained a `progress` parameter; the guide's "percentage only
+  when the total is trustworthy" holds, a download without a size showing
+  no percent.
+- Deferred issue from Step 3 decided: the check's requests are bounded by
+  `CHECK_TIMEOUT` (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), set
+  with the builder's `timeout` in `crates/backend/src/update.rs`. In
+  `self_update` 1.3.3 that timeout is `ureq`'s `timeout_global` per request,
+  the body included, so one bound for the download must cover the whole
+  archive; 10 min is about 50 KB/s for today's archives. Not exercised by a
+  test (a stalled-server test would take the timeout's length).
+- The last-check time is a settings store key (`updateCheckedAt`, Unix
+  seconds), not `UpdateCheckGuard`: the store already keeps session state,
+  follows `--settings`, and needs no new path. It is written before the
+  launch's check runs, so an offline launch is not repeated within the hour.
+- The check and the install run on `std::thread`s rather than
+  `background_spawn`: a download of minutes would hold one of the executor's
+  pool threads.
+- Inno Setup and `.app` installs stop at `Available` with `Open Release
+  Page` until Steps 5 and 6 give them their owners; `update::installs`
+  is the one place to change.
+- Measured on Windows 11 (debug build, a temporary patch making the `--auto`
+  end call `cx.set_restart_path(whoami.exe)` and `cx.restart()`, reverted):
+  all three quit lines (`scan stopped`, `judgment stores drained=true
+  sidecar writer drained=true`, `settings writes drained=true`) were logged
+  after the restart request and the process exited 0. GPUI's Windows
+  restart posts `PostQuitMessage` once its PowerShell waiter is spawned, so
+  the shutdown and its handlers run as on a plain quit.
+- Deviations from the gpui-kit guide recorded here beyond the plan's list:
+  none of substance. The guide's "let the user defer the restart" holds
+  (nothing restarts without `Restart Now`); its "tell the user when a new
+  version is ready" is the pane's note naming `Restart Now` on the Updates
+  page, as the native app has no notification for it; the reported version
+  is the running one (`CARGO_PKG_VERSION`) until the new process starts.
+- The MCP companion exposes the state in `get_status` (`update`); the
+  coverage table excludes the Updates page with that reason.
+
+## Deferred issues (todo candidates)
+
+- No request timeout on the update check or download
+  (`crates/backend/src/update.rs`, `configure`): `self_update`'s `timeout`
+  is unset, as in the gpui-kit guide's snippet, so a stalled connection
+  could keep a check in `Checking`. Step 4 ("never two checks at once")
+  should decide whether to set `.timeout(..)` on the check (and a separate,
+  longer one on the download). Basis: Step 3 implementation. Resolved in
+  Step 4 (`CHECK_TIMEOUT` and `INSTALL_TIMEOUT`, see its section); not a
+  todo.
+- Pending manual check (Step 4): on a portable ZIP install (Windows) and a
+  tarball install (Linux) of a release build packaged with
+  `update_test_repo`, an older version launched with a newer release on the
+  test feed should, without any click, go `Checking` → `Downloading` →
+  `Verifying` → `ReadyToRestart` on the Updates page, with the pane's note;
+  `Restart Now` should log the three `quit:` drain lines and come back as
+  the newer version (on Linux through the path read at launch, not the
+  ` (deleted)` one). A second launch within the hour should not check
+  (`updateCheckedAt`). A deb install should show `Open Release Page` and
+  install nothing. These are Step 7's rows; the Step 4 checkbox was ticked on
+  the unit tests, the local checks and the Windows restart-drain
+  measurement. Basis: Step 4 implementation; files
+  `crates/native/src/update.rs`, `crates/native/src/main.rs`.
+- The page's click paths (the three buttons, `Check for Updates` disabled
+  while busy) were not driven headless; the hand check belongs with the
+  pending manual check above. Basis: Step 4 implementation;
+  `crates/native/src/settingsview.rs`.

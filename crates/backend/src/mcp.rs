@@ -1382,7 +1382,11 @@ impl Companion {
         and the `message` it ended with), and the `pending` preview a call with its `id` and \
         `confirm: true` runs. A held operation dropped before it ran (by a folder open, a later \
         request or a dialog open at the scan's end) is `failed` with a `dropped: ...` message \
-        and did nothing."
+        and did nothing. `update` is the update flow's state: the running `version`, its \
+        `install` kind, the `phase` (`idle`, `checking`, `available`, `downloading`, \
+        `verifying`, `ready_to_restart` or `failed`), the `target` version, the download's \
+        `percent`, its `message`, the `release_page` and `test_build` (whether the build trusts the test feed and key); the check and the restart are the \
+        user's, on the Updates page of the settings."
     )]
     async fn get_status(&self) -> CallToolResult {
         self.view_call("get_status").await

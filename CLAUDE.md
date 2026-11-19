@@ -147,7 +147,19 @@ on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
 the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), `src/mcp.rs` the MCP companion's server (`Mcp`: the
+handed to a callback), `src/update.rs` the native app's update engine on
+`self_update` (`detect`, the `InstallKind` from the executable's path:
+portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app`, tarball
+under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,
+the build's feed and trusted zipsign key, `minodisk/handpic` with
+`crates/native/packaging/update.pub`, or with `HANDPIC_UPDATE_TEST_REPO` set
+at build time that repository and the test key; `check`, the release
+`offered` to the running version, newer by SemVer and with a prerelease
+part only for a prerelease install, each request bounded by `CHECK_TIMEOUT`;
+`install`, a portable or tarball update
+pinned to that release's tag, checked against its `SHA256SUMS` and
+signature, its download reported to a `progress` callback, each request
+bounded by `INSTALL_TIMEOUT`, blocking, the caller's worker), `src/mcp.rs` the MCP companion's server (`Mcp`: the
 loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
 tools, or every tool after `with_all_tools` (the native app's), plus
 `screenshot` after `with_screenshot` (its reply built by `screenshot_reply`), started,
@@ -225,9 +237,7 @@ with the `update_test_repo` input (`owner/name`), which signs with the test
 key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
 and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/native`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
-`--index <path>`; without it, an index an earlier build left under
-`<IDENTIFIER>.native` is moved in first, one already there renamed aside,
-`move_native_index`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
+`--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
 Handpic one, and the earlier `LEGACY_IDENTIFIERS`), `src/logger.rs` writes the `log` lines to stderr
 and to a `Handpic.log` in the line format `docs/agents/app-log.md` describes under the `<IDENTIFIER>` folder (or
@@ -260,7 +270,7 @@ reads the backend's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
-sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder` and `windowBounds`, and writes them back in order on one thread
+sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder`, `windowBounds` and the last automatic update check (`updateCheckedAt`), and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
@@ -308,7 +318,8 @@ rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
-holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpEnabled` switch (`Let MCP clients connect`), which starts and stops the server live, the server's URL in a read-only `Input` and its state (`mcp_status`), and its `mcpAllowDestructive` switch, both switches only the user flips, and the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`,
+holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpEnabled` switch (`Let MCP clients connect`), which starts and stops the server live, the server's URL in a read-only `Input` and its state (`mcp_status`), and its `mcpAllowDestructive` switch, both switches only the user flips, the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`, and the Updates page's running version and install kind, its phase, `Check for Updates`, `Restart Now` and `Open Release Page`,
+`src/update.rs` that Updates page's pure parts and the update flow (`Updates`: the phases `Idle`, `Checking`, `Available`, `Downloading`, `Verifying`, `ReadyToRestart` and `Failed` set around the backend's `update::check` and `update::install`, which the window runs on threads of their own, their answers arriving as `scan::Event::Update`; a portable or tarball install downloaded, verified and installed without asking, any other kind given the release page; the version this process installed never checked or installed again; `launch_checks`, a release build's launch check, not under `--auto` and at most once an hour by the store's `updateCheckedAt`; the texts, the pane's restart notice and the `update` state `get_status` reports), whose `Restart Now` the window runs as GPUI's `cx.restart()` on the executable the launch found, after the quit handlers' drains,
 `src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close, or an MCP confirm run or held without asking, `confirmed`), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
