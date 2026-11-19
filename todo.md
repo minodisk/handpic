@@ -1085,19 +1085,6 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 - [ ] On Windows, on a 1000+ RAW folder with a fresh index (`manual3.sqlite`), wait for the scan to end, press `End`, then `←` a few times, wait a second and quit with `q`. (a) Run again with the same arguments: the preview, the outlined strip cell and the status line open at the file left at, and the strip is scrolled to it. (b) Run on the same folder with another fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next.
 - [ ] On Windows, copy a few ARW files into a new folder under `D:\Photos\tests\` (e.g. `D:\Photos\tests\20261110-gpui-strip-index\manual4`) and run `handpic.exe <that folder> --index <fresh file>`. Page to the second file. (1) From Explorer, copy another ARW into the folder: within about a second its cell appears in the strip at its name's place and gets a thumbnail, the outlined cell, the preview and the status line still name the same file, the status line's total grows by one, and the other thumbnails do not flash back to gray. (2) From Explorer, delete a file that is not the current one: its cell disappears and the current file stays current. (3) Delete the current file: the preview, the outline and the status line move to the file after it (the one before it when it was the last).
 
-### Native: the first launch on a fresh index shows the startup folder empty
-
-#### Background
-
-On 2026-11-19 a debug build launched as `handpic.exe <folder> --index <new file> --settings <new file> --import-settings <seed> --log <file> --mcp-port 41931` on a folder of 12 ARW files logged `scan list: files=12`, a reconcile with todo=12, and pass 1 and pass 2 with done=12, and the tree showed 12. But the MCP `get_view` kept `count: 0`, the preview area said "This folder has no RAW or JPEG files." and the status line said `no RAW files in <folder>`, while `get_view`'s `filter_offers` did list the files' EXIF values. Opening another folder and coming back listed all 12, and a relaunch on the now-filled index restored all 12, so the failure seems limited to a fresh index.
-
-Files: `crates/native/src/main.rs` (the startup open and the listing path), `crates/native/src/scan.rs`, `crates/native/src/uitest.rs`.
-
-#### TODO
-
-- [ ] Reproduce with a fresh `--index` and a folder on the command line. Find why the first listing's entries do not reach `all` / `files`, and fix it.
-- [ ] Add a UI test in `uitest.rs` that launches on a fresh index with the folder given at startup (`Ui::open` launches with no folder and opens one afterwards, the path that worked) and expects the files listed.
-
 ### Native: measure the scan pause in `load` with presses on files pass 1 has not read yet
 
 `gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. The one 336.75 ms read without the pause came on a disk slowed by 40 GB of just-written copies, so it proves nothing. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md` (`results.md` in the same folder). Files: `crates/native/src/main.rs` (`load`), `crates/native/src/focus.rs`, `crates/native/src/args.rs` (`--auto`).
