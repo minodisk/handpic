@@ -265,6 +265,7 @@ jobs:
       # entry and the silent runs, not the absence of a UAC prompt.
       - name: Check the setup and the ZIPs
         shell: pwsh
+        timeout-minutes: 15
         env:
           VERSION: ${{ steps.version.outputs.version }}
           WINDOWS_VERSION: ${{ steps.version.outputs.windows }}
@@ -279,8 +280,12 @@ jobs:
           Write-Output "setup file version $fileVersion"
           if ($fileVersion -ne $env:WINDOWS_VERSION) { throw "setup file version $fileVersion" }
           $silent = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+          # Not -Wait: it waits for every descendant too, so a setup that
+          # relaunches the app would never return while the app runs.
           function Invoke-Silent($exe, $what, $more = @()) {
-            $p = Start-Process -FilePath $exe -ArgumentList ($silent + $more) -Wait -PassThru
+            $p = Start-Process -FilePath $exe -ArgumentList ($silent + $more) -PassThru
+            $null = $p.Handle
+            if (-not $p.WaitForExit(300000)) { throw "$what did not finish in 300 s" }
             if ($p.ExitCode -ne 0) { throw "$what exited with $($p.ExitCode)" }
           }
           $app = Join-Path $env:LOCALAPPDATA 'Programs\Handpic'
@@ -324,7 +329,7 @@ jobs:
           $started = Get-Date
           Invoke-Silent $setup 'the upgrade at quit' @("/WAITPID=$($holder.Id)")
           $elapsed = ((Get-Date) - $started).TotalSeconds
-          $holder.WaitForExit()
+          if (-not $holder.WaitForExit(60000)) { throw 'the holder did not exit in 60 s' }
           Write-Output "the upgrade at quit took $elapsed s; the holder exited with $($holder.ExitCode)"
           if ($holder.ExitCode -ne 0) { throw "the holder exited with $($holder.ExitCode)" }
           if ($elapsed -lt $hold - 3) { throw "the setup did not wait for the holder ($elapsed s)" }
