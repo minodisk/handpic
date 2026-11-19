@@ -52,3 +52,5 @@ change to the empty-state or status wording).
   removal only).
 
 ## Progress
+
+- (2026-11-19) Step 1 complete
