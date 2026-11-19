@@ -68,6 +68,38 @@ changes only this file.
 (`mozjpeg-sys` needs a C compiler for the target), so the macOS branch is
 only compiled and run by the macOS CI jobs.
 
+### Option A added on top of D (Windows starvation)
+
+PR #1173's CI run 44424162778 (head `3d0577fa`), Windows `native` job
+135224757562, failed one UI test,
+`uitest::a_filter_choice_narrows_the_files_and_lands_on_the_anchor`:
+
+```text
+timed out waiting for the folder's listing, scan and preview: ... listed 4, listing false, scan Some(("analyzing", 3, 4)), running false, ...
+     0.548s [handpic::scan][INFO] scan list: dir=\\?\C:\...\.tmpcEvsJ7\photos files=4 in 0ms
+     0.553s [handpic_backend::index][INFO] scan extract: dir=\\?\C:\...\.tmpcEvsJ7\photos files=4 done=4 errors=0 threads=2 canceled=false in 2ms
+test result: FAILED. 1067 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.05s
+```
+
+Pass 1 took 2 ms, and pass 2, at `Priority::Lowest`
+(`THREAD_PRIORITY_LOWEST`), had done 3 of 4 files after the 10 s wait,
+where it normally takes about 0.7 s for 3 files: it starved behind the
+crate's other tests running in parallel at normal priority. So the
+starvation under test load is not macOS-only; D only removed macOS's
+`BACKGROUND` throttling.
+
+Decision (the user's): keep D for the app and add option A back on top of it,
+adapted from `9a4a6752`: `index::run_scan` / `index::run_faces_scan` take a
+`Priority` (the backend's tests pass the app's values; the embedding pass is
+untouched), `scan::Scan::start` takes `scan::Priorities` (`APP`: pass 1
+`BelowNormal`, pass 2 `Lowest`), the view holds `scan_priorities` (`APP`),
+and `Ui::open` sets both passes to `Priority::Normal`. The CLI does not call
+`run_scan` / `run_faces_scan`, so its benchmarks stay at `Priority::Normal`.
+
+Local result on Windows: the native crate's whole `cargo test --bin handpic`
+(the six `uitest` tests among the 1059, so they run under the same parallel
+load as on CI) passed 20 runs of 20, each in 2.0 s to 3.1 s.
+
 ### Notes
 
 - The user briefly asked to ignore the five tests on macOS instead, then

@@ -2537,6 +2537,13 @@ after about 11 ms, one retry) and fails the test if it is still held after
   pass 2 of 2 to 4 files take 15 s to 44 s. The app's pass 2 now runs at
   `QOS_CLASS_UTILITY` with a relative priority of -5 on macOS (see
   `docs/agents/shared-crates.md`, "The scan pool's priority levels").
+- Rule: the UI tests' scans run at normal priority. `Ui::open` sets the
+  view's `scan_priorities` (`scan::Priorities`, `APP` in the app) to
+  `Priority::Normal` for both passes. At the app's `Priority::Lowest` pass 2
+  starves behind the crate's other tests running in parallel on every OS: on
+  the Windows CI runner (`THREAD_PRIORITY_LOWEST`) one test's pass 2 had done
+  3 of 4 files after 10 s, where it normally takes about 0.7 s for 3. The
+  tests check the wiring, not the scheduling. Do not raise the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.

@@ -757,11 +757,13 @@ otherwise those paths would never be reported.
 
 `handpic_core::scan::for_each_path` builds its rayon pool with a
 `spawn_handler` that lowers each worker's OS priority once, before rayon's
-`run`. `run_scan` passes `Priority::BelowNormal` (Windows
-`THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice of at
-least 5), `run_faces_scan` `Priority::Lowest` (`THREAD_PRIORITY_LOWEST`,
-`QOS_CLASS_UTILITY` at relative priority -5 (`LOWEST_RELATIVE_PRIORITY`),
-nice of at least 10); the CLI passes
+`run`. `run_scan` and `run_faces_scan` take the priority as a parameter: the
+native app (`scan::Priorities::APP`) gives `run_scan` `Priority::BelowNormal`
+(Windows `THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice
+of at least 5) and `run_faces_scan` `Priority::Lowest`
+(`THREAD_PRIORITY_LOWEST`, `QOS_CLASS_UTILITY` at relative priority -5
+(`LOWEST_RELATIVE_PRIORITY`), nice of at least 10), its UI tests
+`Priority::Normal` to both (see `docs/agents/native-app.md`); the CLI passes
 `Priority::Normal`, which makes no call, so its numbers stay comparable with
 `docs/humans/performance.md`.
 

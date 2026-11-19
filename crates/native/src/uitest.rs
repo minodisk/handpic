@@ -10,12 +10,17 @@ use std::{
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
-use handpic_core::Flag;
+use handpic_core::{Flag, scan::Priority};
 use tempfile::TempDir;
 
 use crate::{
-    Handpic, args::Args, entries_of, file_name, filter::Orientation, menu, open_index, open_main,
-    scan::Running, settings,
+    Handpic,
+    args::Args,
+    entries_of, file_name,
+    filter::Orientation,
+    menu, open_index, open_main,
+    scan::{Priorities, Running},
+    settings,
 };
 
 /// How long `wait_until` waits on the app's own threads before failing.
@@ -107,8 +112,16 @@ impl Ui {
         let (window, view) = cx
             .update(|cx| open_main(Args::default(), index, settings, None, cx))
             .unwrap();
-        let cx = VisualTestContext::from_window(window, &cx);
-        let scan = view.read_with(&cx, |view, _| view.scan.clone());
+        let mut cx = VisualTestContext::from_window(window, &cx);
+        // Pass 2 at the app's lowest priority starves past `WAIT` behind the
+        // other tests running in parallel, on every OS.
+        let scan = view.update(&mut cx, |view, _| {
+            view.scan_priorities = Priorities {
+                extract: Priority::Normal,
+                faces: Priority::Normal,
+            };
+            view.scan.clone()
+        });
         cx.run_until_parked();
         Self {
             cx,

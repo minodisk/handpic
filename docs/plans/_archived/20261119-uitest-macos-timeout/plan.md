@@ -126,6 +126,16 @@ What the investigation established (from the code and the CI logs):
         4 files, and one file's analysis took 0.5 s to 0.9 s at normal
         priority against 3.2 s to 8.9 s at `Priority::Lowest` on the same
         runner (see `learnings.md`).
+      - Then option A on top of D (the user's decision after PR #1173's
+        run 44424162778, Windows `native` job 135224757562, failed: one
+        UI test's pass 2 at `THREAD_PRIORITY_LOWEST` had done 3 of 4 files
+        after 10 s while the crate's other tests ran in parallel, pass 1
+        having taken 2 ms): the passes' priority is a parameter of
+        `index::run_scan` / `index::run_faces_scan`, `Scan::start` takes
+        `scan::Priorities` (`APP` for the app, unchanged), and `Ui::open`
+        sets both passes to `Priority::Normal`. D keeps the app's macOS
+        pass 2 out of `BACKGROUND`; A keeps the UI tests independent of the
+        OS scheduler on every platform.
       - Pass 2 stuck: an app fix with a unit test; update this plan first.
       - Do not raise `WAIT` alone without evidence that the scan finishes in
         a bounded time.
@@ -151,8 +161,11 @@ What the investigation established (from the code and the CI logs):
 - Fix options if pass 2 is confirmed slow under `QOS_CLASS_BACKGROUND`;
   A was chosen first, then D replaced it on the user's decision once the
   diagnostics confirmed the throttling, since D also spares users the slow
-  pass 2.
-  - A. Run the UI tests' scans at normal priority through a narrow
+  pass 2, and then A was added back on top of D once a Windows run showed
+  the starvation is not macOS-only (run 44424162778: pass 2 at
+  `THREAD_PRIORITY_LOWEST` behind about 1060 parallel tests did 3 of 4 files
+  in 10 s, where it normally takes about 0.7 s for 3 files).
+  - A (chosen, with D). Run the UI tests' scans at normal priority through a narrow
     seam: the passes' priority becomes a parameter of `index::run_scan` /
     `index::run_faces_scan` (or of `Scan::start`) that the app passes as
     today and the harness overrides. Removes the throttling from the tests.
@@ -166,7 +179,7 @@ What the investigation established (from the code and the CI logs):
     `[profile.dev.package]` (the tract crates, `ndarray`, `handpic-core`).
     Helps only if the throttle is on CPU; a longer cold build on a job near
     its limit.
-  - D (chosen). Change the app: pass 2 at `QOS_CLASS_UTILITY` on macOS.
+  - D (chosen, with A). Change the app: pass 2 at `QOS_CLASS_UTILITY` on macOS.
     Changes the paging latency the priority was chosen for, which needs
     measuring on a Mac (a pending manual check in `learnings.md`); a
     relative priority of -5 keeps it below pass 1.
