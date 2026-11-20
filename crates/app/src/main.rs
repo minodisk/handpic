@@ -2710,9 +2710,19 @@ impl Handpic {
             cx.quit();
             return;
         }
-        if let Some(exe) = self.update_exe.clone() {
-            log::info!("update: restarting into {}", exe.display());
-            cx.set_restart_path(exe);
+        // GPUI's macOS restart `open`s the path: the bundle, whose path the
+        // swap kept, not the executable inside it.
+        let target = match self.updates.kind {
+            handpic_backend::update::InstallKind::App => self
+                .update_exe
+                .as_deref()
+                .and_then(handpic_backend::update::app_bundle)
+                .map(Path::to_path_buf),
+            _ => self.update_exe.clone(),
+        };
+        if let Some(target) = target {
+            log::info!("update: restarting into {}", target.display());
+            cx.set_restart_path(target);
         }
         cx.restart();
     }

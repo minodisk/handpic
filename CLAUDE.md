@@ -149,14 +149,17 @@ place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
 handed to a callback), `src/update.rs` the native app's update engine on
 `self_update` (`detect`, the `InstallKind` from the executable's path:
-portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app`, tarball
+portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app` (`app_bundle`), tarball
 under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,
 the build's feed and trusted zipsign key, `minodisk/handpic` with
 `crates/app/packaging/update.pub`, or with `HANDPIC_UPDATE_TEST_REPO` set
 at build time that repository and the test key; `check`, the release
 `offered` to the running version, newer by SemVer and with a prerelease
 part only for a prerelease install, each request bounded by `CHECK_TIMEOUT`;
-`install`, a portable or tarball update
+`install`, a portable or tarball update, or a `.app` install's whole bundle
+swapped from the macOS tarball (`self_update`'s bundle mode, the staged
+bundle passing `codesign --verify --strict` first, a translocated copy or an
+unwritable folder refused with the move to `/Applications`),
 pinned to that release's tag, checked against its `SHA256SUMS` and
 signature, its download reported to a `progress` callback, each request
 bounded by `INSTALL_TIMEOUT`, blocking, the caller's worker; `stage_setup`,

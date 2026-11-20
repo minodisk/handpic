@@ -5,7 +5,7 @@
 //! their own and hands their answers here as `Message`s; the engine reports
 //! no phase itself, so the phases are set around the two calls. An Inno
 //! Setup install's "installed" is its setup staged (`update::stage_setup`),
-//! which the quit runs (`Staged`).
+//! which the quit runs (`Staged`); a `.app` install's is its bundle swapped.
 
 use std::path::PathBuf;
 
@@ -34,11 +34,11 @@ pub fn launch_checks(release_build: bool, auto: bool, last: Option<u64>, now: u6
 }
 
 /// Whether the app installs an update itself for `kind`. The others get the
-/// release page (the `.app` install until its step lands).
+/// release page.
 pub fn installs(kind: InstallKind) -> bool {
     matches!(
         kind,
-        InstallKind::Portable | InstallKind::Tarball | InstallKind::Inno
+        InstallKind::Portable | InstallKind::Tarball | InstallKind::Inno | InstallKind::App
     )
 }
 
@@ -390,11 +390,12 @@ mod tests {
     }
 
     #[test]
-    fn a_portable_tarball_or_inno_install_downloads_verifies_and_waits_for_the_restart() {
+    fn a_portable_tarball_inno_or_app_install_downloads_verifies_and_waits_for_the_restart() {
         for kind in [
             InstallKind::Portable,
             InstallKind::Tarball,
             InstallKind::Inno,
+            InstallKind::App,
         ] {
             let mut updates = checking(kind);
             assert_eq!(updates.status_text(), "Checking for updates\u{2026}");
@@ -469,7 +470,7 @@ mod tests {
 
     #[test]
     fn a_deb_or_unknown_install_gets_the_release_page_and_installs_nothing() {
-        for kind in [InstallKind::Deb, InstallKind::Unknown, InstallKind::App] {
+        for kind in [InstallKind::Deb, InstallKind::Unknown] {
             let mut updates = checking(kind);
             assert_eq!(
                 updates.apply(Message::Checked(Ok(Some(offer("2.0.0"))))),

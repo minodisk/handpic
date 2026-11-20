@@ -342,7 +342,7 @@ overrides it:
     - Staging folder: under the native app's cache folder (`datadir.rs`).
     - `AppId` never changes; the per-user install needs no elevation.
 
-- [ ] Step 6: Update a `Handpic.app`: the whole bundle staged and swapped
+- [x] Step 6: Update a `Handpic.app`: the whole bundle staged and swapped
   - Done when:
     - On a `.app` install the app updates through `self_update`'s bundle mode
       from `Handpic-<version>-macos-<arch>.tar.gz`
