@@ -119,7 +119,14 @@ use gpui_kit::{
     base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline, point, prelude::*, px, rgb,
     rgba, size, svg, uniform_list,
 };
-use handpic_backend::{
+use handpic_core::{
+    Flag,
+    arw::FocusLocation,
+    reader,
+    scan::{Paused, ReadSlots, ScanFocus},
+    xmp::LabelNames,
+};
+use handpic_engine::{
     exif::Metadata,
     folders::{self, Folder},
     index::{self, Index},
@@ -128,13 +135,6 @@ use handpic_backend::{
     text::{self, SIZE_BASE, format_bytes},
     treewatch::TreeWatch,
     watch::{self, Watch},
-};
-use handpic_core::{
-    Flag,
-    arw::FocusLocation,
-    reader,
-    scan::{Paused, ReadSlots, ScanFocus},
-    xmp::LabelNames,
 };
 use history::{Judged, TrashEntry, Undo};
 use hold::PaintHold;
@@ -229,7 +229,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let preview = reader::read_preview(path);
     let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
-    let meta = handpic_backend::exif::metadata(file_name(path), &arw.shot);
+    let meta = handpic_engine::exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
     let mut d = mozjpeg::Decompress::new_mem(&jpeg)
         .map_err(|e| e.to_string())?
@@ -377,7 +377,7 @@ struct Handpic {
     bursts: HashMap<String, BurstMember>,
     /// Pass 2 files reported since the last read of the index, laid over a
     /// snapshot read before they were written.
-    pending_faces: Vec<handpic_backend::index::FaceReady>,
+    pending_faces: Vec<handpic_engine::index::FaceReady>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
@@ -505,7 +505,7 @@ struct Handpic {
     /// starts under.
     gate: idle::IdleGate<HeldOp>,
     /// The recorded runs to the Trash, for undo.
-    runs: Arc<handpic_backend::trash::Runs>,
+    runs: Arc<handpic_engine::trash::Runs>,
     /// The undo entry whose restore or redo is out, so a second undo or
     /// redo does nothing until it comes back.
     trash_step: Option<u64>,
@@ -633,7 +633,7 @@ struct Handpic {
     mcp: mcp::Control,
     /// The server's last state, of the switch in force; none since a flip
     /// until its answer comes.
-    mcp_state: Option<handpic_backend::mcp::McpState>,
+    mcp_state: Option<handpic_engine::mcp::McpState>,
     /// The `wait_for_idle` calls waiting for the view to be idle, by id.
     idle_waiters: Vec<u64>,
     /// The decoded neighbours of the current file, `None` under
@@ -643,7 +643,7 @@ struct Handpic {
     /// the launch found it (on Linux `current_exe` names the replaced file
     /// once an update moved a new one in), which the restart relaunches.
     updates: update::Updates,
-    update_source: Arc<handpic_backend::update::Source>,
+    update_source: Arc<handpic_engine::update::Source>,
     update_exe: Option<PathBuf>,
     /// An Inno Setup install's staging folder and the setup staged there,
     /// which the last quit handler starts.
@@ -833,14 +833,14 @@ impl Handpic {
             .ok();
         })
         .detach();
-        let update_source = Arc::new(handpic_backend::update::source());
+        let update_source = Arc::new(handpic_engine::update::source());
         let update_exe = env::current_exe().ok();
         let updates = update::Updates::new(
             env!("CARGO_PKG_VERSION"),
             update_exe
                 .as_deref()
-                .map_or(handpic_backend::update::InstallKind::Unknown, |exe| {
-                    handpic_backend::update::detect(exe)
+                .map_or(handpic_engine::update::InstallKind::Unknown, |exe| {
+                    handpic_engine::update::detect(exe)
                 }),
             update_source
                 .test
@@ -851,7 +851,7 @@ impl Handpic {
             updates.version,
             updates.kind
         );
-        let update_staging = (updates.kind == handpic_backend::update::InstallKind::Inno)
+        let update_staging = (updates.kind == handpic_engine::update::InstallKind::Inno)
             .then(|| datadir::update_staging(dirs::cache_dir().as_deref()))
             .flatten();
         if let Some(dir) = update_staging.as_deref()
@@ -869,7 +869,7 @@ impl Handpic {
                 let staged = std::mem::take(&mut *staged.lock().unwrap());
                 if let Some(setup) = staged.setup {
                     let started =
-                        handpic_backend::update::run_setup(&setup, process::id(), staged.relaunch);
+                        handpic_engine::update::run_setup(&setup, process::id(), staged.relaunch);
                     log::info!(
                         "quit: update setup {} relaunch={} started={started:?}",
                         setup.display(),
@@ -1719,10 +1719,10 @@ impl Handpic {
                     };
                     match mode {
                         trash::Mode::Trash => {
-                            handpic_backend::trash::trash_listed(&ran, &paths, &runs, progress)
+                            handpic_engine::trash::trash_listed(&ran, &paths, &runs, progress)
                         }
                         trash::Mode::Delete => {
-                            handpic_backend::trash::delete_listed(&ran, &paths, progress)
+                            handpic_engine::trash::delete_listed(&ran, &paths, progress)
                         }
                     }
                 })
@@ -1756,7 +1756,7 @@ impl Handpic {
         what: trash::What,
         own: bool,
         redo: bool,
-        result: Result<handpic_backend::trash::Summary, String>,
+        result: Result<handpic_engine::trash::Summary, String>,
         cx: &mut Context<Self>,
     ) {
         self.gate.leave_in_flight();
@@ -1921,7 +1921,7 @@ impl Handpic {
         let started = Instant::now();
         cx.spawn(async move |this, cx| {
             let result = cx
-                .background_spawn(async move { handpic_backend::trash::undo_run(&runs, run_id) })
+                .background_spawn(async move { handpic_engine::trash::undo_run(&runs, run_id) })
                 .await;
             log::info!(
                 "trash: undo of run {run_id} in {}ms: {:?}",
@@ -1943,7 +1943,7 @@ impl Handpic {
     fn restored(
         &mut self,
         entry: TrashEntry,
-        result: Result<handpic_backend::trash::Restored, String>,
+        result: Result<handpic_engine::trash::Restored, String>,
         cx: &mut Context<Self>,
     ) {
         self.trash_step = None;
@@ -2042,7 +2042,7 @@ impl Handpic {
                     if let Some(writer) = &writer {
                         writer.flush(sidecar::DRAIN_TIMEOUT);
                     }
-                    handpic_backend::trash::redo_run(&runs, run_id, |done, total| {
+                    handpic_engine::trash::redo_run(&runs, run_id, |done, total| {
                         let _ = events.unbounded_send(Event::TrashProgress {
                             mode: trash::Mode::Trash,
                             done,
@@ -2575,7 +2575,7 @@ impl Handpic {
         );
         log::info!("update: checking {version}");
         thread::spawn(move || {
-            let checked = handpic_backend::update::check(&source, &version);
+            let checked = handpic_engine::update::check(&source, &version);
             let _ = events.unbounded_send(Event::Update(update::Message::Checked(checked)));
         });
         self.sync_updates(cx);
@@ -2602,8 +2602,8 @@ impl Handpic {
         cx.notify();
     }
 
-    fn install_update(&mut self, offer: handpic_backend::update::Offer) {
-        if self.updates.kind == handpic_backend::update::InstallKind::Inno {
+    fn install_update(&mut self, offer: handpic_engine::update::Offer) {
+        if self.updates.kind == handpic_engine::update::InstallKind::Inno {
             self.stage_setup(offer);
             return;
         }
@@ -2641,14 +2641,14 @@ impl Handpic {
                 }
             };
             let installed =
-                handpic_backend::update::install(&source, &offer, kind, &exe, &version, progress);
+                handpic_engine::update::install(&source, &offer, kind, &exe, &version, progress);
             let _ = events.unbounded_send(Event::Update(update::Message::Installed(installed)));
         });
     }
 
     /// An Inno Setup install's update: the setup downloaded, verified and
     /// extracted into the staging folder, handed to the quit handler.
-    fn stage_setup(&mut self, offer: handpic_backend::update::Offer) {
+    fn stage_setup(&mut self, offer: handpic_engine::update::Offer) {
         let Some(dir) = self.update_staging.clone() else {
             let _ = self
                 .events
@@ -2682,12 +2682,13 @@ impl Handpic {
                     }
                 }
             };
-            let installed =
-                handpic_backend::update::stage_setup(&source, &offer, &dir, &version, progress)
-                    .map(|setup| {
-                        log::info!("update: setup staged at {}", setup.display());
-                        staged.lock().unwrap().setup = Some(setup);
-                    });
+            let installed = handpic_engine::update::stage_setup(
+                &source, &offer, &dir, &version, progress,
+            )
+            .map(|setup| {
+                log::info!("update: setup staged at {}", setup.display());
+                staged.lock().unwrap().setup = Some(setup);
+            });
             let _ = events.unbounded_send(Event::Update(update::Message::Installed(installed)));
         });
     }
@@ -2704,7 +2705,7 @@ impl Handpic {
         }
         // The setup relaunches the app once installed; a GPUI restart would
         // start the old exe in its way.
-        if self.updates.kind == handpic_backend::update::InstallKind::Inno {
+        if self.updates.kind == handpic_engine::update::InstallKind::Inno {
             log::info!("update: quitting for the setup to install and relaunch");
             self.update_staged.lock().unwrap().relaunch = true;
             cx.quit();
@@ -2713,10 +2714,10 @@ impl Handpic {
         // GPUI's macOS restart `open`s the path: the bundle, whose path the
         // swap kept, not the executable inside it.
         let target = match self.updates.kind {
-            handpic_backend::update::InstallKind::App => self
+            handpic_engine::update::InstallKind::App => self
                 .update_exe
                 .as_deref()
-                .and_then(handpic_backend::update::app_bundle)
+                .and_then(handpic_engine::update::app_bundle)
                 .map(Path::to_path_buf),
             _ => self.update_exe.clone(),
         };
@@ -3104,7 +3105,7 @@ impl Handpic {
 
     /// The MCP server's state after a switch, kept only when it is of the
     /// switch in force, so a late answer of an earlier flip is not shown.
-    fn mcp_switched(&mut self, state: handpic_backend::mcp::McpState, cx: &mut Context<Self>) {
+    fn mcp_switched(&mut self, state: handpic_engine::mcp::McpState, cx: &mut Context<Self>) {
         if state.enabled != self.settings.mcp_enabled {
             return;
         }
@@ -5631,7 +5632,7 @@ impl Handpic {
 
     /// Answer an MCP companion tool call from the view, after moving it as
     /// the call asks.
-    fn mcp_request(&mut self, request: handpic_backend::mcp::Request, cx: &mut Context<Self>) {
+    fn mcp_request(&mut self, request: handpic_engine::mcp::Request, cx: &mut Context<Self>) {
         // Not a user-facing action: answered whatever the view is doing.
         #[cfg(feature = "screenshot")]
         if request.kind == "screenshot" {
@@ -5971,7 +5972,7 @@ impl Handpic {
                     png.len(),
                     started.elapsed().as_millis()
                 );
-                handpic_backend::mcp::screenshot_reply(&png, width, height)
+                handpic_engine::mcp::screenshot_reply(&png, width, height)
             });
             if let Err(e) = &reply {
                 log::warn!("screenshot: {e}");
@@ -7303,7 +7304,7 @@ fn main() {
         }
     };
     logger::install(args.log.take());
-    handpic_backend::diagnostics::install_panic_hook();
+    handpic_engine::diagnostics::install_panic_hook();
     let index = open_index(args.index.take()).inspect_err(|e| log::warn!("no index: {e}"));
     let settings = settings::load(args.settings.take(), args.import_settings.take().as_deref());
     log::info!(

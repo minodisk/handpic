@@ -59,6 +59,29 @@
   two in-flight plans) became `` `app` ``, history included, so a reader finds
   the job by its current name. The prose "the native app" was left for Step 4.
 
+## Step 3: Rename `crates/backend` to `crates/engine`
+
+- The Done-when asks `docs/agents/app-log.md` to mention the old
+  `handpic_backend::*` targets while the same Done-when's leftover grep
+  (`handpic[-_]backend`) must print nothing over the live files. The sentence
+  was worded around the token: a log from a build before the rename "carries
+  the same targets with `backend` in place of `engine`".
+- No relative `backend/` path outside the plan's tokens this time: the
+  `include_bytes!` paths in `crates/engine/src` point at `../../core/` and
+  `../../app/`, which the directory move does not affect. `../backend` had
+  three hits (the app's path dependency, `app:watch`'s `--watch` and
+  `docs/agents/app.md`), all covered by the token.
+- The root `Cargo.toml`'s `members` was kept in alphabetical order
+  (`crates/cli`, `crates/core`, `crates/engine`), as it was before the replace.
+- Both lock files were rewritten by `cargo metadata` without `--locked`: in
+  each, the entry moved after `handpic-core`, and the app lock's dependency
+  list of `handpic-app` reordered; no version moved. Both `--locked` runs then
+  succeeded.
+- The `native-qa` plan had been archived by the time of this step, so only
+  `20261118-native-updater` got the "update engine" → "updater" rewording
+  (its plan Step 3 title and approach, its learnings' Step 3 heading and
+  three mentions).
+
 ## Deferred issues (todo candidates)
 
 - `mise run app:run` (formerly `native:run`) names no mise task. Basis: Step 2's
@@ -66,3 +89,12 @@
   say "`mise run app:run` or the built binary" / "or a debug build" should say
   `mise run app:dev`. Files: `todo.md` (the GPUI grayscale and title-bar folder
   name checks).
+- "the update engine" still names `update.rs` outside the updater plan, which
+  collides with the crate now called `engine`: `CLAUDE.md` ("`src/update.rs`
+  the native app's update engine"), the module docs of
+  `crates/engine/src/update.rs` ("The native app's update engine") and
+  `crates/app/src/update.rs` ("the engine reports"), and `docs/agents/app.md`
+  ("backend's `update.rs` is the engine. The engine reports no phase"). Basis:
+  Step 3's rewording, which the plan scoped to the in-flight updater plan.
+  Step 4's prose sweep ("the backend" → "the engine") should call that module
+  "the updater" there so the two uses do not read as one.

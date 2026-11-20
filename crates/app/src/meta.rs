@@ -4,9 +4,9 @@
 //! the app's own analysis (`analysis`): every value pass 1 and pass 2 stored
 //! for the file, never the on-demand eyes judgment `metaGroups` falls back to.
 
-use handpic_backend::exif::Metadata;
-use handpic_backend::index::{Focus, FocusPoint};
 use handpic_core::eyes::{EYES_CLOSED_EAR, EyeState};
+use handpic_engine::exif::Metadata;
+use handpic_engine::index::{Focus, FocusPoint};
 
 use crate::mark::GOOD_FULL_EYE_SHARP;
 
@@ -188,7 +188,7 @@ pub fn groups<'a>(
 
 #[cfg(test)]
 mod tests {
-    use handpic_backend::index::{EyesPose, FocusSize, StoredEyes};
+    use handpic_engine::index::{EyesPose, FocusSize, StoredEyes};
 
     use super::*;
 

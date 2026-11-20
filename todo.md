@@ -5,7 +5,7 @@
 
 #### Background
 
-The `app:watch` mise task (the native-watch feature) runs the debug GPUI app under watchexec and rebuilds and restarts it on a `.rs`, `.toml` or `.json` change under `crates/app`, `crates/core` and `crates/backend`. It was checked by hand on Windows (Git Bash), but only from a non-interactive shell under `timeout`. That run covered the watchexec install, the launch, the restart on a source touch, no `os error 5` on the relink, no restart from the build's own output, and a folder argument holding spaces passed on every restart. The agent could see only processes and the app's log. Two things were never exercised: pressing Ctrl+C in a real terminal, and the window itself. A forced `taskkill /F` of `watchexec.exe` leaves `cargo` and the app running, because the job object is not kill-on-close. Ctrl+C is a different path (the console's ctrl event), so it needs a real terminal. Plan: `docs/plans/_archived/20261115-native-watch/plan.md`.
+The `app:watch` mise task (the native-watch feature) runs the debug GPUI app under watchexec and rebuilds and restarts it on a `.rs`, `.toml` or `.json` change under `crates/app`, `crates/core` and `crates/engine`. It was checked by hand on Windows (Git Bash), but only from a non-interactive shell under `timeout`. That run covered the watchexec install, the launch, the restart on a source touch, no `os error 5` on the relink, no restart from the build's own output, and a folder argument holding spaces passed on every restart. The agent could see only processes and the app's log. Two things were never exercised: pressing Ctrl+C in a real terminal, and the window itself. A forced `taskkill /F` of `watchexec.exe` leaves `cargo` and the app running, because the job object is not kill-on-close. Ctrl+C is a different path (the console's ctrl event), so it needs a real terminal. Plan: `docs/plans/_archived/20261115-native-watch/plan.md`.
 
 Files: `mise.toml` (`[tasks."app:watch"]`)
 
@@ -106,7 +106,7 @@ must be wider than the source crop.
 
 ### Native: the macOS / Linux manual checks for Move to Trash are still open
 
-The strip's `Move to Trash…` moves files through the backend's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the native checks in `### Native: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/backend/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/backend/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.
+The strip's `Move to Trash…` moves files through the backend's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the native checks in `### Native: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/engine/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.
 
 #### TODO
 
@@ -153,7 +153,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       more in groups). Needs either a row per face or
       a worst-of summary (`Eyes: Closed (1 of 3)`), a pattern the meta pane
       does not have, and a check of the accuracy on non-subject faces, which
-      `eyes-truth.md` did not label. Files: `crates/backend/src/ondemand.rs`
+      `eyes-truth.md` did not label. Files: `crates/engine/src/ondemand.rs`
       (`read_eyes`), `crates/core/src/eyes.rs` (`judged_face`),
       `crates/app/src/meta.rs`.
 - [ ] Use the model's face presence output (`Identity_1`, a logit the
@@ -181,13 +181,13 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
       "Closed-eyes judgment on demand (Windows 11)".
 - [ ] Derive the good-photo rule in the backend, in
-      `crates/backend/src/index.rs`, so the MCP `get_view` tool can carry it.
+      `crates/engine/src/index.rs`, so the MCP `get_view` tool can carry it.
       The rule lives only in `crates/app/src/mark.rs` (`photo_tier`) and
       `get_view` says nothing about it. Done when the index derives the tier
       from the stored columns with the thresholds in one place (the app
       reads it instead of recomputing), `get_view` carries it for the
       current file, and the boundary tests of `mark.rs` move with the rule.
-      Files: `crates/backend/src/index.rs`, `crates/app/src/mark.rs`,
+      Files: `crates/engine/src/index.rs`, `crates/app/src/mark.rs`,
       `crates/app/src/companion.rs`.
 - [ ] Measure the good-photo mark's precision on labels. Decision B rests
       on the user's stars and the mark rate; no labeled set was made. Done
@@ -312,8 +312,8 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       points, and it is the fallback for files with no stored value (face
       under 60 px, or a file pass 2 has not reached). Reusing the scan's
       mesh needs the points stored or a path that runs the model only while
-      `f` is on. Files: `crates/backend/src/ondemand.rs` (`read_eyes`),
-      `crates/app/src/overlay.rs`, `crates/backend/src/index.rs`,
+      `f` is on. Files: `crates/engine/src/ondemand.rs` (`read_eyes`),
+      `crates/app/src/overlay.rs`, `crates/engine/src/index.rs`,
       `crates/core/src/eyes.rs`.
 - [ ] Suggest the sharpest-eye frame within a burst group. Measured and not
       shipped (`docs/plans/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
@@ -341,7 +341,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Face focus state is Neutral (white), even when the camera tracked
       them. Files: `crates/core/src/candidate.rs`, `crates/core/src/faces.rs`.
 
-Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/backend/src/index.rs`, `crates/app/src/burst.rs`.
+Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/engine/src/index.rs`, `crates/app/src/burst.rs`.
 
 ### Core: the review of the closed-eyes labels is still open
 
@@ -375,7 +375,7 @@ Files: `crates/core/src/scan.rs` (`extract_analysis_unless`, `whole_image_cue`, 
 
 #### TODO
 
-- [ ] Score a faced no-AF-point file from the full-size RGB decode the cue already made (its `candidate::luma`) instead of `score_preview`'s own grayscale decode. Measure the per-file saving with `handpic-cli features` on one thread over `D:\photos\2026\2026-02-01` and `2026-09-05` before and after, check that the score's ranking within bursts holds on those folders (Spearman per burst against the old score), and bump `FACES_VERSION`. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/backend/src/index.rs`.
+- [ ] Score a faced no-AF-point file from the full-size RGB decode the cue already made (its `candidate::luma`) instead of `score_preview`'s own grayscale decode. Measure the per-file saving with `handpic-cli features` on one thread over `D:\photos\2026\2026-02-01` and `2026-09-05` before and after, check that the score's ranking within bursts holds on those folders (Spearman per burst against the old score), and bump `FACES_VERSION`. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/engine/src/index.rs`.
 
 ### Agents: confirm `pr-runner` waits for a child's hand-back on a real `/pr` run
 
@@ -454,7 +454,7 @@ the fixed 2/8 gives 800x600 thumbnails, about four times the pixels of the
 ~404x270 ones (`crates/core/src/orf.rs`; decided in
 `docs/plans/_archived/20260930-olympus-orf/plan.md` to leave `scan.rs`
 alone for now). Files: `crates/core/src/decode.rs` (`thumbnail_jpeg`), `crates/core/src/scan.rs`,
-`crates/backend/src/index.rs`, `crates/app/src/thumbs.rs`,
+`crates/engine/src/index.rs`, `crates/app/src/thumbs.rs`,
 `crates/core/src/arw.rs` (`PREVIEW_MIN_WIDTH`, tier selection).
 
 #### TODO
@@ -622,7 +622,7 @@ whole JPEG as is. The native app decodes the whole JPEG for its preview too.
 
 ### Backend: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
-`crates/backend/src/photolab.rs` looks up the registered Uuids on macOS too
+`crates/engine/src/photolab.rs` looks up the registered Uuids on macOS too
 (`docs/plans/_archived/20261005-photolab-uuids-macos/plan.md`), verified by
 hand on macOS (PhotoLab 10, 2026-10-05; see `docs/agents/photolab.md`). Paths
 under `/Volumes` get no lookup yet, so a fresh `.dop` there still gets random
@@ -635,16 +635,16 @@ Uuids and may become a virtual copy.
 - [ ] External volumes: open a folder on `/Volumes/X` in PhotoLab, find how it
       records the volume (`ZTYPE`, `ZNAME`, `ZUNIQUEID` in `ZDOPFOLDER`), then
       extend `folder_names` / `query`'s macOS mapping in
-      `crates/backend/src/photolab.rs`.
+      `crates/engine/src/photolab.rs`.
 
 ### Backend: PhotoLab after a file or folder rename
 
-From Step 3's check of the PhotoLab Uuid lookup (`crates/backend/src/photolab.rs`
+From Step 3's check of the PhotoLab Uuid lookup (`crates/engine/src/photolab.rs`
 queries `Sources` by `FolderId` and `Name`; `crates/core/src/dop.rs` writes
 the RAW's `Name` into the `.dop`). The Tauri app's `rename_file` moved the
 `.dop` unchanged (the native app has no file rename yet, `not_in_native`),
 so its inner `Name` still named the old file and PhotoLab's database still
-held the old name. A folder rename (`crates/backend/src/rename.rs`) leaves
+held the old name. A folder rename (`crates/engine/src/rename.rs`) leaves
 PhotoLab's database holding the old folder.
 
 #### TODO
@@ -679,7 +679,7 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
-`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The native app's paging cost during the passes was measured on Windows (see `docs/agents/app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/backend/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
+`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The native app's paging cost during the passes was measured on Windows (see `docs/agents/app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/engine/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
 
 #### TODO
 
@@ -689,7 +689,7 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 `big-endian-dng` (`docs/plans/_archived/20261002-big-endian-dng/plan.md`) made `arw::parse` follow the TIFF header's byte order, so the `MM` DNGs of Pentax, Samsung, Ricoh, Leica M (Typ 240 / 246) and iPhone no longer fail with `not a little-endian TIFF/ARW`. It also bumped `EXTRACTOR_VERSION` from 11 to 12, so an index that cached those parse errors should re-extract the rows. The unit tests, `riffle-cli check` on the sample tree (34 of the 52 `MM` files open at every stage) and `mise run ci` cover the parser. The Riffle app was never opened on such a folder, so the re-extraction of cached failed rows and the thumbnails, preview and 1:1 view for these files were never exercised. The step was ticked on the automated criteria only.
 
-Files: `crates/core/src/arw.rs`, `crates/backend/src/index.rs` (`EXTRACTOR_VERSION`).
+Files: `crates/core/src/arw.rs`, `crates/engine/src/index.rs` (`EXTRACTOR_VERSION`).
 
 #### TODO
 
@@ -721,7 +721,7 @@ Files: `CLAUDE.md` (Development) or a new `docs/agents/dev-environment.md`.
 
 #### Background
 
-The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run`) moves the sidecars to the Trash again but writes no index row. When the target folder is open, the app's resync clears the judgments. When another folder is open, the rows keep the judgments that the undo's rescan restored, until the folder is next opened and its reconcile clears them. A `Rewrite Sidecars from Index…` run in between would mint the sidecars again. Fixing it needs the run to remember each sidecar's RAW, for example in `trash::Trashed`. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/backend/src/trash.rs` (`redo_run`), `crates/backend/src/foldersidecars.rs`, `crates/app/src/main.rs`.
+The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run`) moves the sidecars to the Trash again but writes no index row. When the target folder is open, the app's resync clears the judgments. When another folder is open, the rows keep the judgments that the undo's rescan restored, until the folder is next opened and its reconcile clears them. A `Rewrite Sidecars from Index…` run in between would mint the sidecars again. Fixing it needs the run to remember each sidecar's RAW, for example in `trash::Trashed`. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/engine/src/trash.rs` (`redo_run`), `crates/engine/src/foldersidecars.rs`, `crates/app/src/main.rs`.
 
 #### TODO
 
@@ -732,7 +732,7 @@ The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run
 
 #### Background
 
-The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidecars::rewrite` hands every listed row to the writer, including a file whose sidecar is larger than `MAX_SIDECAR_BYTES`. A folder open deliberately keeps such a file away from the writer through `sidecar::reconcile_of`, because its contents were never read. This was left as is because the user asked for the index to be pushed out. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/backend/src/foldersidecars.rs` (`rewrite`), `crates/backend/src/sidecar.rs` (`MAX_SIDECAR_BYTES`, `reconcile_of`).
+The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidecars::rewrite` hands every listed row to the writer, including a file whose sidecar is larger than `MAX_SIDECAR_BYTES`. A folder open deliberately keeps such a file away from the writer through `sidecar::reconcile_of`, because its contents were never read. This was left as is because the user asked for the index to be pushed out. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/engine/src/foldersidecars.rs` (`rewrite`), `crates/engine/src/sidecar.rs` (`MAX_SIDECAR_BYTES`, `reconcile_of`).
 
 #### TODO
 
@@ -743,7 +743,7 @@ The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidec
 
 #### Background
 
-`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/backend/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
+`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/engine/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
 
 #### TODO
 
@@ -785,7 +785,7 @@ The `genre-ranking-offsets` feature kept per-genre offsets on the shared ranking
 
 #### Background
 
-Three leftovers from `image-embeddings` Step 3. (1) `embed::shared` keeps the SigLIP 2 plan (about 395 MB of working set) in a `OnceLock` for the rest of the process once one pass has run, even with `aiEnabled` off. Dropping it would cost the ~0.5 s build and the 773 MB load peak again on the next folder. (2) Turning AI off keeps `models/siglip2-base-patch32-256/vision_model.onnx` (378 MB) in the local data dir, and a cut download restarts from zero (no HTTP range resume). (3) tract runs the weight-only fp16 re-export (190 MB, `weight_only.py`) at 2-5x FP32's cost because it re-widens the weights on every run. Widening the float16 initializers in the ONNX protobuf before tract builds the plan (`tract_onnx::onnx().proto_model_for_read`, then `model_for_proto_model`) might give the smaller download at FP32 speed. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/core/src/embed.rs` (`shared`), `crates/backend/src/ai.rs`, `docs/plans/_archived/20261012-image-embeddings/weight_only.py`, `docs/plans/_archived/20261012-image-embeddings/models.md`.
+Three leftovers from `image-embeddings` Step 3. (1) `embed::shared` keeps the SigLIP 2 plan (about 395 MB of working set) in a `OnceLock` for the rest of the process once one pass has run, even with `aiEnabled` off. Dropping it would cost the ~0.5 s build and the 773 MB load peak again on the next folder. (2) Turning AI off keeps `models/siglip2-base-patch32-256/vision_model.onnx` (378 MB) in the local data dir, and a cut download restarts from zero (no HTTP range resume). (3) tract runs the weight-only fp16 re-export (190 MB, `weight_only.py`) at 2-5x FP32's cost because it re-widens the weights on every run. Widening the float16 initializers in the ONNX protobuf before tract builds the plan (`tract_onnx::onnx().proto_model_for_read`, then `model_for_proto_model`) might give the smaller download at FP32 speed. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/core/src/embed.rs` (`shared`), `crates/engine/src/ai.rs`, `docs/plans/_archived/20261012-image-embeddings/weight_only.py`, `docs/plans/_archived/20261012-image-embeddings/models.md`.
 
 #### TODO
 
@@ -926,7 +926,7 @@ Files: `docs/plans/_archived/20261019-discard-retarget/plan.md`, `docs/plans/_ar
 
 Two RAWs sharing a stem (`a.ARW` and `a.NEF`) share `a.xmp`. `Rename by Capture Date…` moves that sidecar with whichever RAW moves first, which leaves the other RAW without it when the two have different dates. This is the same ambiguity `rename::file_plan` has. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
 
-Files: `crates/backend/src/datefolder.rs` (`move_plan`), `crates/backend/src/rename.rs`.
+Files: `crates/engine/src/datefolder.rs` (`move_plan`), `crates/engine/src/rename.rs`.
 
 #### TODO
 
@@ -983,7 +983,7 @@ Files: `crates/core/src/copy.rs`.
 #### Background
 
 `trash-over-scan` Step 4 moves files to the Trash in chunks of 100 on Windows (`run_chunked`), measured at about 7 ms a file against 200 ms per-file (see `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`). Tests use a fake mover and the bench used copies; the real app path was never exercised, and a locked file in a real chunk is covered only by the fake mover and the bench probe. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
-Files: `crates/backend/src/trash.rs` (`run_chunked`, `move_chunk`, `trash_listed`, `redo_run`), `crates/app/src/main.rs`.
+Files: `crates/engine/src/trash.rs` (`run_chunked`, `move_chunk`, `trash_listed`, `redo_run`), `crates/app/src/main.rs`.
 
 #### TODO
 
@@ -995,7 +995,7 @@ Files: `crates/backend/src/trash.rs` (`run_chunked`, `move_chunk`, `trash_listed
 #### Background
 
 Found by `trash-over-scan` Step 4's measurement. trash 5.2.9's Windows `restore_all` moves the `$R` file back and nothing removes its `$I`. Riffle's Undo restores through the same call, so it presumably leaves one for every file it brings back. D: already held 5327 older orphans naming other paths (source not traced, left alone). Each is small and the shell does not list them, but they pile up and cost a file record each. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md` (safety record).
-Files: `crates/backend/src/trash.rs` (`undo_run`, `restore`).
+Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
 
 #### TODO
 
@@ -1006,7 +1006,7 @@ Files: `crates/backend/src/trash.rs` (`undo_run`, `restore`).
 #### Background
 
 After `trash-over-scan` Step 4 chunked the move, an Undo (`trash::undo_run`) is still per-item, one shell operation each. Not timed, but if an operation costs what a move did (about 200 ms), an Undo of a large move takes far longer than the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
-Files: `crates/backend/src/trash.rs` (`restore`, `undo_run`).
+Files: `crates/engine/src/trash.rs` (`restore`, `undo_run`).
 
 #### TODO
 
@@ -1018,7 +1018,7 @@ Files: `crates/backend/src/trash.rs` (`restore`, `undo_run`).
 #### Background
 
 From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. Not tried.
-Files: `crates/backend/src/trash.rs` (`remove_one`).
+Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 #### TODO
 
@@ -1066,7 +1066,7 @@ Files: `crates/backend/src/trash.rs` (`remove_one`).
 
 #### Background
 
-`gpui-backend-crate` Step 4 moved the folder watcher into `crates/backend/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/app/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/shared-crates.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The native app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/app/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/backend/src/watch.rs`, `crates/app/Cargo.lock`, `docs/agents/shared-crates.md`.
+`gpui-backend-crate` Step 4 moved the folder watcher into `crates/engine/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/app/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/shared-crates.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The native app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/app/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/engine/src/watch.rs`, `crates/app/Cargo.lock`, `docs/agents/shared-crates.md`.
 
 #### TODO
 
@@ -1229,7 +1229,7 @@ The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitiv
 
 ### Native: real-device checks of the settings store and the settings modal (sort / filter persistence, Culling, Sidecar, Keyboard Shortcuts, label names, Import)
 
-`gpui-settings` gave the GPUI app (`crates/app`) its own settings store (a SQLite file seeded once from the Tauri `settings.json`), persisted the strip's filter and sort order in it, and ported the settings modal: the Culling, Sidecar, Keyboard Shortcuts and Import tabs, opened with Ctrl+, (Meta+, on macOS). CI and the unit tests (`settingsmodal.rs`, `settings.rs`, `textinput.rs`, `filter.rs`, the backend's `store.rs`, `sidecar.rs` `switch_to` and `import.rs` `today_example`) cover the pure models and the store. Only Step 1's store seed was hand-checked, headless. Nobody has opened the modal, clicked or typed in it, used the OS folder dialog, or seen the Japanese IME compose in the text input: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-settings/plan.md` (the steps are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/settings.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/textinput.rs`, `crates/backend/src/store.rs`, `crates/backend/src/sidecar.rs`, `crates/backend/src/import.rs`.
+`gpui-settings` gave the GPUI app (`crates/app`) its own settings store (a SQLite file seeded once from the Tauri `settings.json`), persisted the strip's filter and sort order in it, and ported the settings modal: the Culling, Sidecar, Keyboard Shortcuts and Import tabs, opened with Ctrl+, (Meta+, on macOS). CI and the unit tests (`settingsmodal.rs`, `settings.rs`, `textinput.rs`, `filter.rs`, the backend's `store.rs`, `sidecar.rs` `switch_to` and `import.rs` `today_example`) cover the pure models and the store. Only Step 1's store seed was hand-checked, headless. Nobody has opened the modal, clicked or typed in it, used the OS folder dialog, or seen the Japanese IME compose in the text input: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-settings/plan.md` (the steps are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/settings.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/textinput.rs`, `crates/engine/src/store.rs`, `crates/engine/src/sidecar.rs`, `crates/engine/src/import.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first. Work only on copies under `D:\Photos\tests\20261113-settings\` with a fresh `--index` per run and an explicit `--settings <test store>.sqlite` (plus `--import-settings <test json>` where a seed is needed); never the default index or store, never the real Tauri `settings.json`, and never a folder under `D:\Photos\` outside `D:\Photos\tests\`. In every command below, `...\` stands for `D:\Photos\tests\20261113-settings\`, and the run is `target\debug\handpic.exe <folder> --index ...\<index> --settings ...\<store> --log ...\Handpic.log`. Record what was seen in `docs/agents/app.md`, above all the key names that arrive in the shortcut capture for Shift+1 and Ctrl+Alt+1 (the open question in "Every keystroke goes through the keymap": the code expects `!` and `ctrl+alt+1`).
 
@@ -1253,7 +1253,7 @@ After #1020 merged, main's CI `native` job failed in `settings::tests::reads_the
 
 ### Native: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo
 
-`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the backend's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. Nobody has clicked the tree, opened the menus or dialog, used Explorer, the clipboard or the Recycle Bin, or seen the keyboard focus model run: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/backend/src/folders.rs`, `crates/backend/src/treewatch.rs`, `crates/backend/src/trash.rs`.
+`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the backend's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. Nobody has clicked the tree, opened the menus or dialog, used Explorer, the clipboard or the Recycle Bin, or seen the keyboard focus model run: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/engine/src/folders.rs`, `crates/engine/src/treewatch.rs`, `crates/engine/src/trash.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first (rename a locked `handpic.exe` aside, never kill it). Work only on copies under `D:\Photos\tests\20261113-gpui-tree-trash\` with a fresh `--index` per run and an explicit `--settings` test file; never the Tauri index or the default native index. The tree may list and watch the roots and the ancestors of a test folder; open (click the name of, or press Enter on) only folders under `D:\Photos\tests\`. Trash and delete only the copies.
 
@@ -1533,7 +1533,7 @@ Files: `crates/app/src/progress.rs`, `crates/app/src/main.rs`, `crates/app/src/s
 
 `gpui-progress-bars` feeds the bar from the scan and from Move to Trash / Delete Permanently / trash redo. `trash::undo_run` takes no progress callback, and neither do the Rewrite Sidecars from Index and Delete Sidecars runs, so the bar shows nothing for them (`redo_run` has one and already feeds the bar). Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
 
-Files: `crates/backend/src/trash.rs`, `crates/backend/src/foldersidecars.rs`, `crates/app/src/progress.rs`.
+Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `crates/app/src/progress.rs`.
 
 #### TODO
 
@@ -1609,7 +1609,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 4 ported Sequence JPEG Timestamps… to the GPUI app (`sequence.rs`, a run on its own thread with a cancel flag and progress through the event channel). The unit tests of `sequence.rs`, `dialog.rs` and `context.rs` cover the model; `cargo clippy` and `cargo test` in `crates/app` passed locally and the full CI passed on GitHub Checks (the local `mise run ci` was skipped for memory). Nobody has seen the dialog, the run's progress, the cancel or the reveal in Explorer in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/sequence.rs`, `crates/app/src/folderops.rs`, `crates/app/src/dialog.rs`, `crates/backend/src/sequence.rs`.
+`gpui-folder-dialogs` Step 4 ported Sequence JPEG Timestamps… to the GPUI app (`sequence.rs`, a run on its own thread with a cancel flag and progress through the event channel). The unit tests of `sequence.rs`, `dialog.rs` and `context.rs` cover the model; `cargo clippy` and `cargo test` in `crates/app` passed locally and the full CI passed on GitHub Checks (the local `mise run ci` was skipped for memory). Nobody has seen the dialog, the run's progress, the cancel or the reveal in Explorer in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/sequence.rs`, `crates/app/src/folderops.rs`, `crates/app/src/dialog.rs`, `crates/engine/src/sequence.rs`.
 
 #### TODO
 
@@ -1625,7 +1625,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/backend/src/import.rs`.
+`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/engine/src/import.rs`.
 
 #### TODO
 
@@ -1641,7 +1641,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 6 ported Rename by Capture Date… and the "a folder was renamed" path (`folderops::folder_renamed`, `tree.rs` `rebase` / `rename_folder`, the trash entries' rebase) to the GPUI app. CI and the unit tests of `datefolder.rs` (including `watch_release` on `notify` 8.2.2), `tree.rs`, `history.rs` and `context.rs` cover the models and the watcher release. Nobody has seen the dialog, the tree row following in place, the reopen or the undo of a trash run across the rename in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/datefolder.rs`, `crates/app/src/folderops.rs`, `crates/app/src/tree.rs`, `crates/backend/src/datefolder.rs`, `crates/backend/src/rename.rs`.
+`gpui-folder-dialogs` Step 6 ported Rename by Capture Date… and the "a folder was renamed" path (`folderops::folder_renamed`, `tree.rs` `rebase` / `rename_folder`, the trash entries' rebase) to the GPUI app. CI and the unit tests of `datefolder.rs` (including `watch_release` on `notify` 8.2.2), `tree.rs`, `history.rs` and `context.rs` cover the models and the watcher release. Nobody has seen the dialog, the tree row following in place, the reopen or the undo of a trash run across the rename in the running app. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/datefolder.rs`, `crates/app/src/folderops.rs`, `crates/app/src/tree.rs`, `crates/engine/src/datefolder.rs`, `crates/engine/src/rename.rs`.
 
 #### TODO
 
@@ -1915,7 +1915,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 The native-tree-index-counts work made every drawn row of the GPUI app's folder tree show its file count, expanded or collapsed, when it is above zero. The native-folder-count-cache work moved the count of a row not listed in this session to the index's `folder_counts` table: one row per folder, keyed by the tree node's own path, written off the UI thread whenever the tree learns a count from disk (an expand, `Refresh`, a tree watcher change, `Expand All`, a reveal's chain, an open's listing), carried by a folder rename and written for a date split's new folders, kept by the eviction, and read whole once at startup and after a rename or a date split. A listed folder shows its `read_dir` count. The table starts empty at the upgrade, so no collapsed row shows a count until its folder has been listed once. `mise run ci:local` and the `tree.rs` / `index.rs` / `rename.rs` / `datefolder.rs` unit tests cover the merge, the case folding, the write coalescing and the table's writes, carry and read. Nobody has seen the pills drawn, the cached count after a restart, or the re-read after a rename or a split in the running app. A write still queued at quit is lost (not drained), which the folder's next listing repairs. The native-folder-count-prune work made every successful tree listing also delete the `folder_counts` rows of the child folders the listing no longer holds, and the rows under them, keeping the child leading to any tree root under the listed folder; `index.rs` and `tree.rs` unit tests cover the prune and its order within `CountWrites`, but nobody has seen it in the running app. Plans: `docs/plans/_archived/20261115-native-tree-index-counts/plan.md`, `docs/plans/_archived/20261116-native-folder-count-cache/plan.md`, `docs/plans/_archived/20261117-native-folder-count-prune/plan.md`.
 
-Files: `crates/app/src/tree.rs` (`set_cached_counts`, `set_listed_count`, `CountWrites`, `prune_keep`), `crates/app/src/main.rs` (the tree row's count pill, `tree_listed`, `cache_count`, `prune_counts`, the read at startup, `opened`), `crates/app/src/folderops.rs`, `crates/backend/src/index.rs` (`folder_counts`, `set_folder_counts`, `rename_folder_counts`, `prune_folder_counts`), `crates/backend/src/rename.rs`, `crates/backend/src/datefolder.rs`, `docs/agents/app.md` (the folder tree section).
+Files: `crates/app/src/tree.rs` (`set_cached_counts`, `set_listed_count`, `CountWrites`, `prune_keep`), `crates/app/src/main.rs` (the tree row's count pill, `tree_listed`, `cache_count`, `prune_counts`, the read at startup, `opened`), `crates/app/src/folderops.rs`, `crates/engine/src/index.rs` (`folder_counts`, `set_folder_counts`, `rename_folder_counts`, `prune_folder_counts`), `crates/engine/src/rename.rs`, `crates/engine/src/datefolder.rs`, `docs/agents/app.md` (the folder tree section).
 
 #### TODO
 
@@ -2308,9 +2308,9 @@ Files: `crates/app/src/main.rs` (the title bar in `impl Render for Riffle`, `TIT
 
 #### Background
 
-The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) removed the Tauri app but left the backend and core code only it called, since the AI features are more likely to be wired into the native app than deleted. Nothing in `crates/app` calls it today: `handpic_backend::ai` (the `aiEnabled` switch and the model download), `index::run_embed_scan` with the `embeddings` table, `Index::rank_rows` / `rank_dirs`, `handpic_core::rank`, `genre` and `embed`, and the seven-tool default mode of `mcp::Mcp` (`Mcp::new`; the native app uses `with_all_tools`). The native app refuses the matching MCP tools with `not_in_native` (the `recommended` sort, the Genre filter, `refit_ranking`, the AI switch). What this code needs, and what it got wrong, is in `docs/agents/shared-crates.md` ("The third pass").
+The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) removed the Tauri app but left the backend and core code only it called, since the AI features are more likely to be wired into the native app than deleted. Nothing in `crates/app` calls it today: `handpic_engine::ai` (the `aiEnabled` switch and the model download), `index::run_embed_scan` with the `embeddings` table, `Index::rank_rows` / `rank_dirs`, `handpic_core::rank`, `genre` and `embed`, and the seven-tool default mode of `mcp::Mcp` (`Mcp::new`; the native app uses `with_all_tools`). The native app refuses the matching MCP tools with `not_in_native` (the `recommended` sort, the Genre filter, `refit_ranking`, the AI switch). What this code needs, and what it got wrong, is in `docs/agents/shared-crates.md` ("The third pass").
 
-Files: `crates/backend/src/ai.rs`, `crates/backend/src/index.rs`, `crates/backend/src/mcp.rs`, `crates/core/src/rank.rs`, `crates/core/src/genre.rs`, `crates/core/src/embed.rs`, `crates/app/src/companion.rs`.
+Files: `crates/engine/src/ai.rs`, `crates/engine/src/index.rs`, `crates/engine/src/mcp.rs`, `crates/core/src/rank.rs`, `crates/core/src/genre.rs`, `crates/core/src/embed.rs`, `crates/app/src/companion.rs`.
 
 #### TODO
 
@@ -2346,7 +2346,7 @@ Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md`.
 
 The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The native app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
 
-Files: `crates/backend/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/main.rs` (`key_down`), `docs/humans/usage.md`.
+Files: `crates/engine/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/main.rs` (`key_down`), `docs/humans/usage.md`.
 
 #### TODO
 

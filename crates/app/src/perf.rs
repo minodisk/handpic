@@ -6,7 +6,7 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use handpic_backend::perf::Sample;
+use handpic_engine::perf::Sample;
 
 use crate::timing::Stages;
 
@@ -123,7 +123,7 @@ impl Perf {
 mod tests {
     use super::{LATENCY_FLOOR, Latency, Perf, READ_FLOOR_BPS, Stamped, WINDOW, latency_start};
     use crate::timing::Stages;
-    use handpic_backend::perf::Sample;
+    use handpic_engine::perf::Sample;
     use std::time::{Duration, Instant};
 
     const fn millis(n: u64) -> Duration {

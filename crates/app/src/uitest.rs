@@ -11,8 +11,8 @@ use std::{
 };
 
 use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
-use handpic_backend::store::Store;
 use handpic_core::{Flag, scan::Priority};
+use handpic_engine::store::Store;
 use tempfile::TempDir;
 
 use crate::{

@@ -226,7 +226,7 @@ and minus binary files.
       the cold time in `learnings.md`.
     - Commit and PR title: `refactor(app): rename crates/native to crates/app`.
 
-- [ ] Step 3: Rename `crates/backend` to `crates/engine` (package `handpic-engine`, `handpic_engine::`)
+- [x] Step 3: Rename `crates/backend` to `crates/engine` (package `handpic-engine`, `handpic_engine::`)
   - Done when:
     - `crates/engine` holds the crate; the root `Cargo.toml` lists it in
       `members`; `crates/app/Cargo.toml` depends on
@@ -350,3 +350,4 @@ and minus binary files.
 
 (2026-11-19) Step 1 complete
 (2026-11-19) Step 2 complete
+(2026-11-20) Step 3 complete

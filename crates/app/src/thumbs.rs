@@ -4,7 +4,7 @@ use std::{
 };
 
 use gpui_kit::{AppContext, Context, RenderImage};
-use handpic_backend::index::{self, Index};
+use handpic_engine::index::{self, Index};
 use image::{Frame, RgbaImage};
 
 use crate::{Handpic, guarded, orient};

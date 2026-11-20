@@ -9,7 +9,7 @@
 
 use std::path::PathBuf;
 
-use handpic_backend::update::{InstallKind, Offer};
+use handpic_engine::update::{InstallKind, Offer};
 use serde_json::{Value, json};
 
 /// The settings store's key of the last automatic check, in Unix seconds.

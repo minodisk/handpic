@@ -1,5 +1,5 @@
 //! The native app's settings, kept in its own store
-//! (`handpic_backend::store`) and read with the backend's rules, so a native
+//! (`handpic_engine::store`) and read with the backend's rules, so a native
 //! judgment writes the same sidecars with the same label names and keys as
 //! the Tauri app did. A new store is seeded once from an earlier install's
 //! Tauri `settings.json`, which is only ever read and never again once the
@@ -12,13 +12,13 @@ use std::{
     time::Duration,
 };
 
-use handpic_backend::{
+use handpic_core::xmp::LabelNames;
+use handpic_engine::{
     import, mcp,
     shortcuts::Keymap,
     sidecar::{self, SidecarFormat},
     store::Store,
 };
-use handpic_core::xmp::LabelNames;
 use serde_json::{Map, Value};
 
 use crate::{
@@ -309,8 +309,8 @@ mod tests {
         stripheight,
         theme::{self, Mode},
     };
-    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
     use handpic_core::xmp::LabelNames;
+    use handpic_engine::{shortcuts::Keymap, sidecar::SidecarFormat, store::Store};
     use serde_json::{Map, Value, json};
     use std::{
         fs,

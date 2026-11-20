@@ -105,7 +105,7 @@ strip branch is not affected.
   `short_entries_ignore_the_padding_in_their_high_half` and
   `picks_dng_strip_jpegs_out_of_a_big_endian_sub_ifd_array`.
 - Consumers: only `reader::read_full` (`Kind::Full`) and the CLI `info` /
-  `bench` / `check` read `full`. `scan.rs` and `crates/backend/src/index.rs` do not,
+  `bench` / `check` read `full`. `scan.rs` and `crates/engine/src/index.rs` do not,
   so this change needs no `EXTRACTOR_VERSION` bump.
 - Source: [sony-arw-coverage learnings, Step 1](../plans/_archived/20260930-sony-arw-coverage/learnings.md#step-1-sony-arw-sample-verification),
   [sony-arw-preview-full learnings, Step 1](../plans/_archived/20261005-sony-arw-preview-full/learnings.md#step-1).
@@ -232,7 +232,7 @@ that exact tag.
   is needed when formatting them — but check Sony.pm per-tag rather than
   assuming this applies to the next field you add.
 - The formatting of these fields for display is
-  `crates/backend/src/exif.rs`'s; the parsing itself (the Sony gate, the
+  `crates/engine/src/exif.rs`'s; the parsing itself (the Sony gate, the
   stored type of `FocusFrameSize`) is in the sections above.
 
 Source: `docs/plans/_archived/20260925-sony-af-meta/learnings.md`, Steps 1

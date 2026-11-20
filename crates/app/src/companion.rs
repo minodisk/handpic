@@ -42,13 +42,13 @@ use std::{
 };
 
 use gpui_kit::component::ThemeMode;
-use handpic_backend::shortcuts::Keymap;
-use handpic_backend::{
+use handpic_core::{Flag, i18n, xmp::LabelNames};
+use handpic_engine::shortcuts::Keymap;
+use handpic_engine::{
     import::{self as importer, ImportSettings},
     index::{flag_name, parse_flag},
     ondemand::EyesJudgment,
 };
-use handpic_core::{Flag, i18n, xmp::LabelNames};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -2390,12 +2390,12 @@ mod tests {
         trash::{self, Target},
         tree::Row,
     };
-    use handpic_backend::{
+    use handpic_core::{Flag, i18n, xmp::LabelNames};
+    use handpic_engine::{
         index::EyesPose,
         ondemand::{EyesJudgment, EyesMesh},
     };
-    use handpic_backend::{shortcuts::Keymap, sidecar::SidecarFormat};
-    use handpic_core::{Flag, i18n, xmp::LabelNames};
+    use handpic_engine::{shortcuts::Keymap, sidecar::SidecarFormat};
     use serde_json::{Value, json};
     use std::{
         collections::{HashMap, HashSet},

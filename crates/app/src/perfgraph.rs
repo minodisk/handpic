@@ -12,7 +12,7 @@ use gpui_kit::{
     App, Bounds, ContentMask, Context, Hsla, PathBuilder, Pixels, Point, Task, TextAlign, Window,
     fill, point, px, rgb, rgba, size,
 };
-use handpic_backend::perf::{Sample, Sampler};
+use handpic_engine::perf::{Sample, Sampler};
 
 use crate::perf::{Latency, Perf, Stamped, WINDOW};
 use crate::timing::Stages;
@@ -339,7 +339,7 @@ mod tests {
     use super::{LINES, STAGES, shown, stack, stage_alpha, x_of, y_of};
     use crate::perf::{Stamped, WINDOW};
     use crate::timing::Stages;
-    use handpic_backend::perf::Sample;
+    use handpic_engine::perf::Sample;
     use std::time::{Duration, Instant};
 
     const fn millis(n: u64) -> Duration {

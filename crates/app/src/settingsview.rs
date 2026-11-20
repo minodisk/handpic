@@ -22,13 +22,13 @@ use gpui_kit::{
     SharedString, Window, div, prelude::*, px, transparent_black,
 };
 
-use handpic_backend::{
+use handpic_core::{i18n, xmp::LabelNames};
+use handpic_engine::{
     import,
     mcp::{MCP_PORT, McpState},
     shortcuts::{Binding, Keymap},
     sidecar::SidecarFormat,
 };
-use handpic_core::{i18n, xmp::LabelNames};
 
 use crate::{
     cache, keys,

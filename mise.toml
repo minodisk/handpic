@@ -85,7 +85,7 @@ tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" }, watchexe
 shell = "bash -c"
 run = """
 set -euo pipefail
-watchexec --restart --shell=none --watch src --watch build.rs --watch Cargo.toml --watch ../core --watch ../backend --exts rs,toml,json -- cargo run -- "$@"
+watchexec --restart --shell=none --watch src --watch build.rs --watch Cargo.toml --watch ../core --watch ../engine --exts rs,toml,json -- cargo run -- "$@"
 """
 
 [tasks."app:release"]

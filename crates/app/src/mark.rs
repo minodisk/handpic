@@ -3,7 +3,7 @@
 //! (`photoTier`, `afEyeState`, `focusMark`, `uprightPoint`, `faceMarks`,
 //! `faceLabel`, `faceLabelAt`); its comments say where each cut comes from.
 
-use handpic_backend::{index::Focus, ondemand::FaceBox};
+use handpic_engine::{index::Focus, ondemand::FaceBox};
 
 use crate::icons;
 
@@ -252,8 +252,8 @@ pub fn face_label_at(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use handpic_backend::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
-    use handpic_backend::ondemand::FacePoint;
+    use handpic_engine::index::{EyesPose, FocusPoint, FocusSize, StoredEyes};
+    use handpic_engine::ondemand::FacePoint;
 
     const AT: FocusPoint = FocusPoint {
         sensor_w: 7008,

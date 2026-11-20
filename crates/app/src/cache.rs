@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use handpic_backend::index;
+use handpic_engine::index;
 
 use crate::dialog::{Content, Dialog, Style};
 

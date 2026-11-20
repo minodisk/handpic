@@ -215,7 +215,7 @@ key-down listener, so a binding that matches takes the key from
 - Rule: the inspector binding is left in place. In a debug build
   `ctrl+shift+i` opens the inspector and a user binding on it is shadowed;
   a release build has no such binding. No default of
-  `crates/backend/src/shortcuts.rs` and none of `settingsmodal::APP_KEYS`
+  `crates/engine/src/shortcuts.rs` and none of `settingsmodal::APP_KEYS`
   uses it.
 - Rule: `Root`'s `tab` / `shift-tab` are masked inside the app's view, so
   the keymap keeps them (see "`Root` wraps the window's content").
@@ -675,11 +675,11 @@ packages the built `target/release` binary with a script under
 `mise run app:watch [-- <folder>]` runs the GPUI app under watchexec, which
 the task's own `tools` installs next to rust, so the top-level `[tools]` (and
 every CI job) stays without it. An edit under `crates/app`, `crates/core` or
-`crates/backend` stops the app, rebuilds and relaunches it. Measured in
+`crates/engine` stops the app, rebuilds and relaunches it. Measured in
 `docs/plans/_archived/20261115-native-watch/learnings.md`.
 
 - Rule: the task watches the crate's inputs by name (`src`, `build.rs`,
-  `Cargo.toml`, `../core`, `../backend`), not `.`, so `crates/app/target`,
+  `Cargo.toml`, `../core`, `../engine`), not `.`, so `crates/app/target`,
   whose `.fingerprint` holds `.json`, never triggers a restart. Keep it that
   way when you edit the task.
 - Rule: the watchexec line is the script's last line and runs with
@@ -697,7 +697,7 @@ every CI job) stays without it. An edit under `crates/app`, `crates/core` or
 
 ### The backend names no event and no `AppHandle` (Inferred)
 
-`handpic-backend` knows no GUI, so it reports through callbacks (it served the
+`handpic-engine` knows no GUI, so it reports through callbacks (it served the
 Tauri app and the native app alike until the Tauri app was removed):
 `watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
 take the `&Watch`; the tree's watcher is
@@ -728,25 +728,25 @@ The CPU and disk sampler and the AI model's state follow the same seam.
 `impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
 (stopping needs no callback); the callback returns a `Result` so the warn-once
 on a failed report stays in the backend (`perf sample report failed: ...`,
-target `handpic_backend::perf`). `ai::Ai` is a cloneable `Arc` over the
+target `handpic_engine::perf`). `ai::Ai` is a cloneable `Arc` over the
 status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
 `Ai::new`, so the download thread holds a clone of the `Ai` itself and
 reports progress and the final state through that callback; `switch` also
 returns the state. The `on_state` callback returns nothing because the Tauri
 app always ignored its report errors. The download's and the server's
-`log` lines sit under `handpic_backend::ai` / `handpic_backend::mcp`, so grep
+`log` lines sit under `handpic_engine::ai` / `handpic_engine::mcp`, so grep
 for the backend target. Source:
 `docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
 
 - Rule: never add a GUI crate, an event name or an app handle to
-  `crates/backend`; take a callback or the state itself.
+  `crates/engine`; take a callback or the state itself.
 - Rule: a backend body that changes a folder on disk leaves the scan check to
   its caller and says so in its doc comment; call it only with the caller's
   refusal of a running scan held across the call.
 
 ### The backend is compiled twice (Inferred)
 
-`crates/backend` is a member of the root workspace, and `crates/app`, a
+`crates/engine` is a member of the root workspace, and `crates/app`, a
 separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
 as it does `handpic-core`. A dependency added to the backend also lands in
 `crates/app/Cargo.lock`, and clippy lints the backend only from the root.
@@ -755,7 +755,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   only `lint` and `test` of the root workspace, so it never covers
   `crates/app`. The agents run `mise run ci:local` locally
   (`tools/ci/local.sh`), which checks only the changed crates: for a
-  `crates/core` or `crates/backend` change, clippy and the tests of that root
+  `crates/core` or `crates/engine` change, clippy and the tests of that root
   package plus the native clippy; for a `crates/app` change (the app's
   identifier, `datadir`, `logger`, `settings` and the rest), the native clippy
   and tests. The PR's `test` and `app` jobs, on all three platforms, run
@@ -763,7 +763,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   change can break. Neither full task is run locally as a gate.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
   workspace to be safe. `cargo clippy -p` / `cargo test -p` of `handpic-core`,
-  `handpic-backend` or `handpic-cli` compiled 161 / 317 / 169 crates against
+  `handpic-engine` or `handpic-cli` compiled 161 / 317 / 169 crates against
   537 for the Tauri app's package, measured while it was in the workspace. The
   largest check's process-tree peak was 5.5 GB (the native test) and a cold
   `crates/core` change peaked at 3.3 GB, so the earlier out-of-memory kills
@@ -772,7 +772,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   each), because three separate cold calls for every check at once took 594 s,
   at the Bash tool's 600 s limit, against 382 s in one call. Cold wall times:
   Markdown only under 10 s, `crates/cli` 66 s,
-  `crates/app` 154 s, `crates/backend` 199 s, `crates/core` 265 s. Source:
+  `crates/app` 154 s, `crates/engine` 199 s, `crates/core` 265 s. Source:
   `docs/plans/_archived/20261114-light-local-ci/learnings.md`, Step 1.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
@@ -819,7 +819,7 @@ directory is the caller's, and the reveal itself is the app's (GPUI's
 ### The settings live in the native app's own store, seeded once (Inferred)
 
 `settings.rs` reads the native app's settings store
-(`handpic_backend::store`): one SQLite file, one `settings` table of
+(`handpic_engine::store`): one SQLite file, one `settings` table of
 `key TEXT PRIMARY KEY` / `value TEXT NOT NULL` (JSON), WAL, the schema
 version in `user_version`. It is `--settings <path>`, else
 `settings.sqlite` in the `IDENTIFIER` folder under the config dir
@@ -3945,7 +3945,7 @@ face icon keep their sizes.
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
-The view holds one `handpic_backend::treewatch::TreeWatch` whose callback sends
+The view holds one `handpic_engine::treewatch::TreeWatch` whose callback sends
 `Event::TreeChanged(path)` (the tree's spelling) into the scan's channel.
 `tree_changed`, which every change of the tree runs, computes
 `Tree::watched_folders` and, when it differs from the set last handed over,

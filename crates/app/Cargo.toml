@@ -16,7 +16,7 @@ gpui-kit = "=0.9.1"
 # `Window::render_to_image` (gpui-kit's own would pull gpui-fast into the lock).
 gpui-pre-platform = { version = "=0.3.12", optional = true, features = ["test-support"] }
 handpic-core = { path = "../core" }
-handpic-backend = { path = "../backend" }
+handpic-engine = { path = "../engine" }
 mozjpeg = "0.10"
 natord = "1"
 dirs = "6"

@@ -57,7 +57,7 @@ impl Log for Logger {
 }
 
 /// Whether `target` is this crate's or one of its modules: not a crate whose
-/// name merely starts with it (`handpic_backend`, `handpic_core`).
+/// name merely starts with it (`handpic_engine`, `handpic_core`).
 fn is_own(target: &str) -> bool {
     const CRATE: &str = env!("CARGO_CRATE_NAME");
     target == CRATE
@@ -197,11 +197,11 @@ mod tests {
         assert_eq!(
             line(
                 1_709_251_199,
-                "handpic_backend::index",
+                "handpic_engine::index",
                 log::Level::Warn,
                 &format_args!("x={}", 1)
             ),
-            "[2024-02-29][23:59:59][handpic_backend::index][WARN] x=1\n"
+            "[2024-02-29][23:59:59][handpic_engine::index][WARN] x=1\n"
         );
         assert_eq!(
             line(1_794_618_123, "t", log::Level::Error, &format_args!("m")),
@@ -213,7 +213,7 @@ mod tests {
     fn the_debug_filter_keeps_this_crate_and_drops_the_backend() {
         assert!(is_own("handpic"));
         assert!(is_own("handpic::scan"));
-        assert!(!is_own("handpic_backend::photolab"));
+        assert!(!is_own("handpic_engine::photolab"));
         assert!(!is_own("handpic_core::scan"));
     }
 

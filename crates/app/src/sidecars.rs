@@ -3,7 +3,7 @@
 //! through the dialog to the run's end. A port of the Tauri app's
 //! `sidecars.ts`; the window runs the backend's `foldersidecars`.
 
-use handpic_backend::foldersidecars::{DeletePreview, Preview, Summary};
+use handpic_engine::foldersidecars::{DeletePreview, Preview, Summary};
 
 pub const REWRITE_RUNNING_NOTE: &str =
     "Writing the sidecars; this closes once every file is written.";
@@ -203,7 +203,7 @@ impl SidecarFlow {
 
 #[cfg(test)]
 mod tests {
-    use handpic_backend::foldersidecars::KindCount;
+    use handpic_engine::foldersidecars::KindCount;
 
     use super::*;
 

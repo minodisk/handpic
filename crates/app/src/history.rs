@@ -5,7 +5,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use handpic_backend::trash::Restored;
+use handpic_engine::trash::Restored;
 
 use crate::judgment::State;
 use crate::trash::{self, What};
@@ -361,8 +361,8 @@ mod tests {
     use super::{Batch, Change, Entry, History, Judged, Top, TrashEntry, Undo, step, undone_trash};
     use crate::judgment::State;
     use crate::trash::What;
-    use handpic_backend::trash::{Failure, Restored};
     use handpic_core::Flag;
+    use handpic_engine::trash::{Failure, Restored};
     use std::collections::{HashMap, HashSet};
 
     fn batch(id: u64, judged: Vec<Judged>) -> Entry {

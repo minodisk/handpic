@@ -15,7 +15,7 @@ use std::{
 
 use futures::channel::mpsc::UnboundedSender;
 use gpui_kit::App;
-use handpic_backend::{
+use handpic_engine::{
     index::Index,
     mcp::{Bridge, MCP_PORT, Mcp, McpState},
 };

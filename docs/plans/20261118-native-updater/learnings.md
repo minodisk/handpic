@@ -99,7 +99,7 @@
     of the other run passed), so it was taken for a runner flake and the
     failed job rerun; it passed. No signing step ran.
 
-## Step 3: the update engine in `crates/backend`
+## Step 3: the updater in `crates/engine`
 
 - `self_update` resolved to 1.3.3 (edition 2024, `rust-version` 1.88). With
   the guide's features plus `signatures` it brings `ureq` 3.4 on its `_ring`
@@ -142,9 +142,9 @@
 - The binary's name is read from the exe path (`Handpic/<name>` in the
   ZIP, `Handpic/bin/<name>` in the tarball), so `install` needs no binary
   name parameter and follows a rename.
-- Deviation from the plan's approach: the engine has no state callback like
+- Deviation from the plan's approach: the updater has no state callback like
   `ai.rs`. `self_update`'s `update()` downloads, verifies and installs in
-  one blocking call, so the only phases the engine could report are the
+  one blocking call, so the only phases the updater could report are the
   ones its caller already knows (before and after `check` / `install`).
   Step 4's pure model sets the phases around the two calls; a
   `progress_callback` for a download percentage can be added then if the
@@ -165,7 +165,7 @@
 
 ## Step 4: the app's update flow and the Updates page
 
-- The phases are set around the engine's two calls, as Step 3 left it: the
+- The phases are set around the updater's two calls, as Step 3 left it: the
   model goes `Checking` before `check`, `Downloading` before `install`,
   `Verifying` when `self_update`'s `progress_callback` reports the archive's
   full size (the digest, signature, extraction and replace follow inside the
@@ -175,7 +175,7 @@
   no percent.
 - Deferred issue from Step 3 decided: the check's requests are bounded by
   `CHECK_TIMEOUT` (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), set
-  with the builder's `timeout` in `crates/backend/src/update.rs`. In
+  with the builder's `timeout` in `crates/engine/src/update.rs`. In
   `self_update` 1.3.3 that timeout is `ureq`'s `timeout_global` per request,
   the body included, so one bound for the download must cover the whole
   archive; 10 min is about 50 KB/s for today's archives. Not exercised by a
@@ -323,7 +323,7 @@
   `macos-latest` leg of the PR's checks.
 - Deviation from the plan's Done-when wording: it says "the macOS leg of the
   `app` job runs the bundle test", but the engine and its tests are in
-  `crates/backend`, a root-workspace member, so `cargo test` of the `test`
+  `crates/engine`, a root-workspace member, so `cargo test` of the `test`
   job's `macos-latest` leg runs them (the `app` job tests `crates/app`'s own
   crate only). No CI change was needed.
 - The restart: GPUI 0.3.12's macOS `restart` runs `open <path>` after the
@@ -341,7 +341,7 @@
 ## Deferred issues (todo candidates)
 
 - No request timeout on the update check or download
-  (`crates/backend/src/update.rs`, `configure`): `self_update`'s `timeout`
+  (`crates/engine/src/update.rs`, `configure`): `self_update`'s `timeout`
   is unset, as in the gpui-kit guide's snippet, so a stalled connection
   could keep a check in `Checking`. Step 4 ("never two checks at once")
   should decide whether to set `.timeout(..)` on the check (and a separate,
@@ -377,7 +377,7 @@
   ZIP on the feed should end in `Failed` with nothing staged. This is Step
   7's Inno Setup row; the checkbox was ticked on the automated criteria.
   Basis: Step 5 implementation; files `crates/app/src/main.rs`,
-  `crates/backend/src/update.rs`.
+  `crates/engine/src/update.rs`.
 - Pending manual check (Step 6, macOS, a `Handpic.app` of a test build
   packaged with `update_test_repo`): with a newer release on the test feed,
   an older `Handpic.app` in `/Applications` should go `Checking` to
@@ -391,5 +391,5 @@
   6 checkbox was ticked on the automated criteria (the swap tests on every
   platform; the real `codesign` test runs on the PR's checks, the `test`
   job's `macos-latest` leg). Basis: Step 6
-  implementation; files `crates/backend/src/update.rs`,
+  implementation; files `crates/engine/src/update.rs`,
   `crates/app/src/main.rs`.

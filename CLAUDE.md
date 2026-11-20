@@ -75,7 +75,7 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
-`crates/backend` (`handpic-backend`, the GUI-free backend the app depends on,
+`crates/engine` (`handpic-engine`, the GUI-free backend the app depends on,
 a root-workspace member that `crates/app` uses by path and so compiled twice
 like `handpic-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
@@ -199,7 +199,7 @@ run over `handpic_core::sequence` (`preview`, `run`, with a cancel flag and a
 those failures in `Handpic.log` under greppable prefixes (see
 `docs/agents/app-log.md`)), `crates/app` (`handpic-app`)
 is the desktop app, built on GPUI, a separate Cargo workspace with its own
-`Cargo.lock` and Rust toolchain that uses `handpic-core` and `handpic-backend`, takes GPUI and
+`Cargo.lock` and Rust toolchain that uses `handpic-core` and `handpic-engine`, takes GPUI and
 gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 `gpui_kit::component` gpui-component, started by `gpui_kit::init` and
 `gpui_kit::open_window`, see `docs/agents/app.md`); its `build.rs`
