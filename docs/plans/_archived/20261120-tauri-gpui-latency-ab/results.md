@@ -42,7 +42,7 @@ worktree's `out\20261120` folder.
   `hop`, `frameWait`, `paint` and `present`.
 - Tauri `keypressToPixels`: from the key event to the return of the canvas
   `drawImage` (as in
-  [the latency breakdown](../_archived/20261108-preview-latency-breakdown/results.md)).
+  [the latency breakdown](../20261108-preview-latency-breakdown/results.md)).
   The vsync wait, WebView compositing and the present are in none of its
   stages (`wait`, `read`, `ipc`, `post`, `worker`, `decode`, `draw`, `total`).
 - Tauri `frame1` / `frame2`: the first and the nested second
@@ -242,7 +242,7 @@ percentiles are not per-press differences.
   holds input delivery that neither in-app number has; it is the same ruler for
   both apps.
 - Only a same-session A/B is a valid comparison on this machine, as
-  [the gpui-port results](../20261109-gpui-port/results.md) found; the numbers
+  [the gpui-port results](../../20261109-gpui-port/results.md) found; the numbers
   here are not to be compared with other sessions'.
 
 ## Open question

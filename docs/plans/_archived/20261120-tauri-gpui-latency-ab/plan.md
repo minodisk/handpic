@@ -21,7 +21,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 The removed Tauri app's `keypressToPixels` ended when the canvas `drawImage`
 returned, so the vsync wait, WebView compositing and the present were in none
 of its numbers
-([the latency breakdown](../_archived/20261108-preview-latency-breakdown/results.md)
+([the latency breakdown](../20261108-preview-latency-breakdown/results.md)
 left that open). The GPUI app's `keypressToPixels` includes `frameWait` and
 `present`, so the two in-app numbers never had the same endpoint.
 
@@ -29,7 +29,7 @@ On 2026-11-20 both apps were measured in one session, alternating, against one
 external ruler: keypress (`SendInput`) to the DWM present of the frame that
 shows the new image. This plan records that measurement as `results.md` in this
 folder, so the comparison with an aligned endpoint is on record next to
-[the gpui-port results](../20261109-gpui-port/results.md).
+[the gpui-port results](../../20261109-gpui-port/results.md).
 
 The measurement is already done. The plan changes no code: the measurement
 tooling stays on the local-only branch `measure/tauri-latency-ab`.

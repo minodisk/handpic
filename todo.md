@@ -1109,6 +1109,14 @@ In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW co
 
 - [ ] When a later strip change (marks, badges) lands, re-run the same-session A/B and check that `present` p95 has not grown past 1 ms; if it has, look at `paint_strip` first.
 
+### Native: the in-app `keypressToPixels` stops about 48 ms before the DWM present on 4416x2944 RAF previews
+
+The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeds the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). So on the large image the in-app `present` stamp precedes the frame reaching the DWM by about 34 ms more than on ARW. A hypothesis, not a finding: the large texture's upload or sampling on the GPU. Nothing in the data separates it from other causes. The plan did not follow it up, and the measurement tooling stays on the local-only branch `measure/tauri-latency-ab`. Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it). Files: `crates/native/src/main.rs` (`present`).
+
+#### TODO
+
+- [ ] Find where the extra ~34 ms on RAF goes (for example a GPU-side timestamp or a PresentMon trace of the GPUI process on the RAF folder, compared with the ARW folder), and decide whether the in-app `present` stamp should move to match the DWM present. Until then, treat the in-app RAF `keypressToPixels` (p50 67.51 ms) as under-reporting what the screen shows (`screen` p50 115.46 ms).
+
 ### Agents: `GIT_DIR` / `GIT_WORK_TREE` exported around `mise run ci` leak into `merge.test.sh` and write to the real repository
 
 #### Background
