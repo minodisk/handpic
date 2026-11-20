@@ -1230,6 +1230,7 @@ mod tests {
 
         let app = signed_bundle(&temp_dir("codesign-src"));
         codesign_check(&app).unwrap();
+        let signed_exe = std::fs::read(app.join("Contents/MacOS/handpic")).unwrap();
         let good = tar_gz_dir(&app);
         let mut plist = std::fs::OpenOptions::new()
             .append(true)
@@ -1257,7 +1258,7 @@ mod tests {
             codesign_check,
         )
         .unwrap();
-        assert_eq!(exe_of(&bundle), std::fs::read("/usr/bin/true").unwrap());
+        assert_eq!(exe_of(&bundle), signed_exe);
         codesign_check(&bundle).unwrap();
     }
 
