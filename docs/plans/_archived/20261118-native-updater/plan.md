@@ -18,12 +18,12 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
-Sub-milestone 3 of Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md).
+Sub-milestone 3 of Step 10 of [the gpui-port plan](../../20261109-gpui-port/plan.md).
 The app (`crates/app`, product "Handpic") cannot update itself:
 `tauri-plugin-updater` left with the Tauri app. Once this plan is done, an
 install of the app checks for a newer release at launch and on demand
 and updates through the owner of its install, as
-[`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md) decided
+[`packaging-updater.md`](../../20261109-gpui-port/packaging-updater.md) decided
 and as gpui-kit's guide (<https://gpui-kit.com/docs/auto-update/>) explains:
 
 - the portable ZIP and the `.tar.gz` install by `self_update`;
