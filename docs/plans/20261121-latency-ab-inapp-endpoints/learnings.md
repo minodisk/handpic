@@ -10,5 +10,5 @@
   existing tables' `keypressToPixels`, `frame1` and `frame2` cells per run and
   in the median row.
 - In this Bash tool, backslashes inside a quoted heredoc reached the written
-  file halved (`\` became `\`), which broke a Python string literal holding
+  file halved (`\\` became `\`), which broke a Python string literal holding
   `out\20261120`. Writing the helper script with the Write tool avoided it.

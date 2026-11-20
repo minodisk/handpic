@@ -154,3 +154,5 @@ points at it.
   `raw/endpoints.txt` is the kept output.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete: added the `## In-app endpoints, aligned` section to the archived A/B `results.md`, with `raw/endpoints.py` and its kept output `raw/endpoints.txt`; the re-run reproduced `endpoints.txt` exactly.
