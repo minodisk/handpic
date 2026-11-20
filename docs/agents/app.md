@@ -794,6 +794,14 @@ as it does `handpic-core`. A dependency added to the engine also lands in
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   engine, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
+- Rule: the engine reads the app's updater keys with a relative
+  `include_bytes!("../../app/packaging/...")` (`crates/engine/src/update.rs`).
+  A crate rename or directory move therefore breaks it, and only the compiler
+  sees that; a grep for `crates/<name>` does not. When renaming or moving a
+  crate, also grep `(\.\./|\b)<old>/` and run clippy on the engine and the app.
+  The `crates/native` to `crates/app` rename failed its first `ci:local` on this
+  exact path. Source:
+  [`learnings.md`](../plans/_archived/20261118-rename-app-crates/learnings.md), Step 2.
 - Rule: `mise run app:check` runs clippy and tests but does not build
   `handpic.exe`. Run `cargo build` before launching the exe, or you run a
   stale binary. A still-running older `handpic.exe` locks
