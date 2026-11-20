@@ -258,17 +258,32 @@ the MCP `get_status` `update` object. A quit was the window's close
 | Install      | Check                                                                                           | Result |
 | ------------ | ----------------------------------------------------------------------------------------------- | ------ |
 | Portable ZIP | rc.1 updates to rc.2 while running                                                              | **Measured** (2026-11-21, the PC above). rc.1 unpacked with `Expand-Archive` logged `install Portable`, was offered `2.0.0-rc.2` and installed it 4 s after launch without a click. `handpic.exe` read `2.0.0-rc.2` while rc.1 still ran (`self_replace` left `.handpic.<random>.__relocated__.exe` and `.__selfdelete__.exe` beside it, the latter running as a helper), `get_status` said `ready_to_restart` with target `2.0.0-rc.2`, and the pane's note named `Restart Now`. |
-| Portable ZIP | `Restart Now` relaunches rc.2; the judgments made just before the restart are in the sidecars   | **Pending the user's check**, **Unverified** until then and deferred to the rc dry run: it needs a click on `Restart Now`, which no agent makes. A judgment set over MCP after the install (4 stars, Green) was in `x1.xmp` at once, so the writer works in the copy updated in place, and the drains on a quit were logged on every copy below. |
+| Portable ZIP | `Restart Now` relaunches rc.2; the judgments made just before the restart are in the sidecars   | **Measured** (2026-11-21, the PC above, the user's click). The quit handlers drained (scan stopped, judgment stores and sidecar writer drained, settings drained, MCP stopped) and the relaunched process started in the same second, `handpic.exe` reading `2.0.0-rc.2`. A rating pressed just before `Restart Now` reached the `.xmp` (`xmp:Rating="4"`). No `__relocated__` / `__selfdelete__` file was left in the install folder. |
 | Inno Setup   | rc.1 downloads in the background                                                                | **Measured** (2026-11-21, the PC above). rc.1 installed by its setup (`/VERYSILENT`, exit 0 in 2 s) logged `install Inno`, staged `Handpic-2.0.0-rc.2-windows-x64-setup.exe` in `%LOCALAPPDATA%\dev.minodisk.handpic\update` 2 s after the offer, and `get_status` said `ready_to_restart` ("installs when Handpic quits"). |
 | Inno Setup   | a plain quit installs rc.2 without a prompt                                                     | **Measured** (2026-11-21, the PC above). After the three drain lines the quit logged `update setup … relaunch=false started=Ok(())`; the installed exe and the uninstall entry's `DisplayVersion` read `2.0.0-rc.2` 2 s later, unattended, and no Handpic process ran 15 s after that. The staging folder was gone at the next launch. |
-| Inno Setup   | `Restart Now` relaunches rc.2                                                                   | **Pending the user's check**, **Unverified** until then and deferred to the rc dry run: it needs a click on `Restart Now`, which no agent makes. |
-| Inno Setup   | no SmartScreen or UAC prompt for a standard user                                                | **Measured** for this account's non-elevated token: both silent installs and the upgrade at quit finished unattended in about 2 s (a prompt would have held them), and the staged setup carries no `Zone.Identifier` stream (no Mark of the Web, which SmartScreen keys on). **Unverified**: a standard (non-administrator) account, and someone watching the screen during `Restart Now`; left to the rc dry run. |
+| Inno Setup   | `Restart Now` relaunches rc.2                                                                   | **Measured** (2026-11-21, the PC above, the user's click). The last quit handler logged `quit: update setup …\update\Handpic-2.0.0-rc.2-windows-x64-setup.exe relaunch=true started=Ok(())`; the installed exe read `2.0.0-rc.2` and the app came back about 2 s after the quit, with no UAC and no SmartScreen prompt. |
+| Inno Setup   | no SmartScreen or UAC prompt for a standard user                                                | **Measured** for this account's non-elevated token: both silent installs and the upgrade at quit finished unattended in about 2 s (a prompt would have held them), and the staged setup carries no `Zone.Identifier` stream (no Mark of the Web, which SmartScreen keys on). The user watched the screen during `Restart Now`: no prompt appeared. **Unverified**: a standard (non-administrator) account; left to the rc dry run. |
 | `.app`       | rc.1 in `/Applications` swaps to rc.2 and reopens; from the DMG or Downloads it fails with the move message; Gatekeeper and the folder-access grants after the swap | **Unverified**: no macOS machine at hand. Deferred to the rc dry run. The swap and its refusals are the engine's tests, the real `codesign` one on the `test` job's macOS leg. |
 | Tarball      | rc.1 from `install.sh` updates to rc.2 and relaunches                                           | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
 | deb          | rc.1 shows the notice and opens the release page; nothing is installed                          | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
 | Any          | a stable build on the same feed is not offered an rc                                            | **Measured** (2026-11-21, the PC above). The local `1.99.0` build as a portable copy, with `v2.0.0-rc.2` on the feed, logged `offered None`, and `get_status` said `idle`, "Handpic is up to date." |
 | Any          | offline at launch leaves the app usable                                                         | **Measured** (2026-11-21, the PC above), offline simulated by `HTTPS_PROXY` / `HTTP_PROXY` naming a closed loopback port (`ureq` reads them). rc.1 portable logged `check failed: TransportError … (os error 10061)` 2 s after launch, `get_status` said `failed` with that message, a pick set over MCP was written to the sidecar, the exe stayed rc.1, and the quit drained as usual. |
 | Any          | a tampered asset installs nothing                                                               | **Measured** (2026-11-21, the PC above). A `v2.0.0-rc.3` prerelease of rc.2's portable ZIP and setup ZIP, renamed and one byte flipped in each, with a recomputed `SHA256SUMS` (so only the signature could catch it), was published for the test and deleted after it. rc.1 portable failed with `SignatureError: no matching key/signature pair found` and its exe stayed byte for byte the same; the Inno install (rc.2 by then) failed with the same error on the setup ZIP, the staging folder was removed, and its quit started no setup. A wrong digest, a missing asset and an unsigned archive are the engine's tests. |
+
+Two more things the `Restart Now` runs showed:
+
+- **Measured** (the same runs). The relaunch does not carry the original
+  command-line arguments: both relaunched processes' command lines held only
+  the exe path, so a test run started with `--log`, `--index` or
+  `--settings` comes back on the default data folders. Users pass none, so
+  this only matters to a test run.
+- **Hit** (the same runs). Both relaunches opened a console window streaming
+  the log: the Windows release `handpic.exe` is a console-subsystem binary
+  (PE Subsystem 3; `crates/app/src/main.rs` sets no `windows_subsystem`).
+  The updater does not cause it: any launch from Explorer or the Start menu
+  shows it, and the earlier runs missed it because they were started from a
+  shell. Fixed in a separate PR, which must land before the release PR
+  #928.
 
 ## Unverified
 
@@ -293,8 +308,8 @@ To be checked in the sub-milestone that needs each one.
   installed (the plan's deviation 6 from gpui-kit's guide).
 - **Measured** (2026-11-21, the test feed above). Replacing the running exe
   works on Windows for the portable copy: `self_update` (`self_replace`)
-  installed rc.2 over the running rc.1. **Pending the user's check**: the
-  relaunch by `Restart Now`.
+  installed rc.2 over the running rc.1, and `Restart Now` relaunched it as
+  rc.2 with the `self_replace` leftovers gone.
 - **Unverified.** The executable's name in a release (`riffle-native` today
   in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
 - **Measured** (2026-11-17, the gpui-packaging plan). The version source is
@@ -375,9 +390,9 @@ To be checked in the sub-milestone that needs each one.
 - **Source** (`crates/app/src/main.rs`'s `Restart Now`,
   `crates/engine/src/update.rs`). For a portable, tarball or `.app` install
   `Restart Now` is GPUI's `cx.restart()` after the drains, towards the path
-  read at launch (the bundle for a `.app`). No run measured it: the relaunch
-  of an updated executable is pending the user's check for the portable and
-  unverified for the tarball and the `.app`, as the test-feed table records.
+  read at launch (the bundle for a `.app`). Measured for the portable copy
+  on 2026-11-21 (the test-feed table); unverified for the tarball and the
+  `.app`.
 - **Measured** (2026-11-21, the test feed above). The setup `.exe` the app
   downloads carries no Mark of the Web and ran at quit unattended; a
   standard account is left to the rc dry run.

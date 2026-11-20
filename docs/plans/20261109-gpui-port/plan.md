@@ -442,8 +442,13 @@ them; their contents are deliberately coarse.
        skill's text, `CONTRIBUTING.md`'s stats note and
        `release-please-config.json`'s version files. Before the first native
        release is published: a real-device install, an update from N to N+1
-       and an uninstall per format, and the reinstall notice in the first
-       native release's notes. v1.10.0 is the last Tauri release, and no
+       and an uninstall per format, the reinstall notice in the first
+       native release's notes, and the Windows `handpic.exe` built as a GUI
+       binary (the update rehearsal's **Hit**: the release build is a
+       console-subsystem binary, so a launch from Explorer, the Start menu
+       or `Restart Now` opens a console window streaming the log; fixed in
+       its own PR, which lands before the release PR #928). v1.10.0 is the
+       last Tauri release, and no
        release is cut from `main` before this sub-milestone. From
        sub-milestone 3, `release.yml` must:
        - sign the four updater archives with the production key
@@ -457,7 +462,7 @@ them; their contents are deliberately coarse.
        - publish `rc.N` versions as GitHub prereleases;
        - be followed by the end-to-end rc.1 to rc.2 dry run on real devices
          from the real repository, which also covers the rows the scratch
-         feed left **Unverified** or pending in
+         feed left **Unverified** in
          [`packaging-updater.md`](./packaging-updater.md) (the `.app`, the
          tarball and the deb rows, for want of a macOS or Linux machine).
     5. Merge the native crate into the root workspace: one `Cargo.lock`, the

@@ -377,8 +377,8 @@
   newest.
 - `self_update` on Windows leaves `.handpic.<random>.__relocated__.exe` and
   `.__selfdelete__.exe` beside the portable exe while the old process runs,
-  the latter a running helper that removes them after the exit. Whether they
-  are gone after `Restart Now` is part of the user's pending check.
+  the latter a running helper that removes them after the exit. They were
+  gone after `Restart Now` (the user's check below).
 - The setup runs as a downgrade too: rc.1's setup over the rc.2 install
   exited 0 and left rc.1, which is how the Inno `Restart Now` check was set
   up again after the plain-quit row.
@@ -398,6 +398,19 @@
   - Its "read-only destinations, file locks" row is covered for the `.app`
     by the engine's tests and for the Inno setup by the `/WAITPID` check in
     `Package`, not by a hands-on run here.
+
+- The user's `Restart Now` runs (see the Step 7 pending manual check below)
+  showed that the relaunch does not carry the original command-line
+  arguments: the relaunched processes' command lines held only the exe path,
+  so a test run started with `--log`, `--index` or `--settings` comes back on
+  the default data folders. Harmless for users, who pass none.
+- Hit in the same runs: both relaunches opened a console window streaming
+  the log. The Windows release `handpic.exe` is a console-subsystem binary
+  (PE Subsystem 3; `crates/app/src/main.rs` has no `windows_subsystem`
+  attribute), so any launch from Explorer or the Start menu shows it; the
+  earlier runs missed it because they were started from a shell. Not the
+  updater's doing; fixed in a separate PR that must land before the release
+  PR #928 (recorded in the gpui-port plan's Step 10, sub-milestone 4).
 
 ## Deferred issues (todo candidates)
 
@@ -474,7 +487,17 @@
   then uninstall (`unins000.exe /VERYSILENT`) and remove
   `D:\handpic-update-e2e`. The Step 7 checkbox was ticked on the other
   criteria. Basis: Step 7 rehearsal; files `crates/app/src/main.rs`,
-  `crates/engine/src/update.rs`.
+  `crates/engine/src/update.rs`. Done by the user on 2026-11-21 (Windows 11
+  Home 10.0.26200, non-elevated token, rc.1 to rc.2 on
+  `minodisk/handpic-update-test`), both rows **Measured** in
+  `packaging-updater.md`: (1) the portable copy drained (scan, judgment
+  stores and sidecar writer, settings, MCP) and the relaunched process
+  started in the same second as `2.0.0-rc.2`, the rating pressed just before
+  in the `.xmp` (`xmp:Rating="4"`), no `__relocated__` / `__selfdelete__`
+  file left; (2) the Inno Setup install logged `quit: update setup
+  …\update\Handpic-2.0.0-rc.2-windows-x64-setup.exe relaunch=true
+  started=Ok(())`, became `2.0.0-rc.2` and came back about 2 s after the
+  quit, with no UAC and no SmartScreen prompt. Not a todo.
 - Deferred to the rc dry run (sub-milestone 4): the `.app`, tarball and deb
   rows of the test-feed table (no macOS or Linux machine at hand), the
   standard-account UAC / SmartScreen check, a real network cut rather than a

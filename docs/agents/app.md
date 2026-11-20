@@ -2155,8 +2155,12 @@ call.
   on 2026-11-21: a portable rc.1 replaced its running exe with rc.2, an Inno
   Setup rc.1 staged the rc.2 setup and a plain quit installed it, a stable
   build was not offered the rc, an unreachable feed left the app usable,
-  and a tampered asset installed nothing. The relaunch after `Restart Now`
-  and the macOS and Linux rows are recorded as pending or unverified in
+  and a tampered asset installed nothing. `Restart Now` relaunched both the
+  portable and the Inno Setup copy as rc.2 after the drains, the judgment
+  pressed just before it in the sidecar. The relaunch drops the original
+  command-line arguments, so a test run started with `--log`, `--index` or
+  `--settings` comes back on the default data folders. The macOS and Linux
+  rows are recorded as unverified in
   `docs/plans/20261109-gpui-port/packaging-updater.md`.
 - Rule: MCP. `get_status` carries the state (`update`: the version, the
   install kind, the phase, the target version, the percent, the message and
