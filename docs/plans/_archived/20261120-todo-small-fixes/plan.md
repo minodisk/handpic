@@ -118,3 +118,5 @@ only the template is left to fix.
       sentence became wrong.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete

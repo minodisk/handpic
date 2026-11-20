@@ -24,3 +24,5 @@
   passing. Basis: Step 1's Done-when on `tools/package/macos.sh`'s new
   `-size`. The step's checkbox was ticked on the automated criteria. Files:
   `tools/package/macos.sh`, `todo.md`.
+
+- (2026-11-21) The `Package` proof run on the PR branch (run 44757162994) was green on all legs, both macOS DMG legs included, so the DMG entry stays removed from `todo.md`.
