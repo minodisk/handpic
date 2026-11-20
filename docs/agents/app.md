@@ -2076,9 +2076,9 @@ call.
   verified and installed without asking (the plan's recorded policy, against
   the guide's consent step), then `ReadyToRestart`, with the pane's note
   naming `Restart Now`. An Inno Setup install gets its setup staged the same
-  way (below). Every other kind, the deb and an unknown copy (a `cargo run`,
-  a `target/` binary) and, until its own step, the `.app` install, stops at
-  `Available` with `Open Release Page` (`cx.open_url`).
+  way and a `.app` install its whole bundle swapped (both below). Every other
+  kind, the deb and an unknown copy (a `cargo run`, a `target/` binary),
+  stops at `Available` with `Open Release Page` (`cx.open_url`).
 - Rule: the Inno Setup install's setup. The backend's `stage_setup`
   downloads `Handpic-<version>-windows-x64-setup.exe.zip` of the pinned
   release into `datadir::update_staging` (`update` in the `<IDENTIFIER>`
@@ -2095,6 +2095,26 @@ call.
   setup replaces it. The staging folder of an Inno Setup install is removed
   at launch (a failure, such as the relaunching setup still running from it,
   is logged and left to the next launch).
+- Rule: the `.app` install's bundle. The backend's `install` takes the
+  bundle from the executable's path (`app_bundle`, the `<x>.app` of
+  `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
+  mode (`bundle_path_in_archive("Handpic.app")`, `bundle_install_path`, no
+  `bin_path_in_archive`, `bin_name` still set) with the portable path's
+  `SHA256SUMS`, zipsign keys, tag pin and exact asset name
+  (`Handpic-<version>-macos-<arch>.tar.gz`, `arm64` for Rust's `aarch64`).
+  `self_update` extracts the whole bundle into a temporary folder beside the
+  installed one, runs the `verify_binary` hook on it (`codesign --verify
+  --strict`, the ad hoc signature `macos.sh` made) and swaps the two folders
+  by renames, putting the old one back on a failed step; the executable
+  inside is never replaced alone. Before anything is downloaded the engine
+  refuses a bundle under an `AppTranslocation` path (a quarantined copy
+  opened from the DMG or Downloads) and one whose folder it cannot create a
+  file in (a read-only disk image, another user's folder), with a `Failed`
+  message saying to move Handpic.app to `/Applications`; `self_update`'s own
+  `AppTranslocated` and `InstallPathNotWritable` get the same advice. An
+  explicit `bundle_install_path` is passed, so `self_update`'s own
+  translocation check (only on its default path) does not run; hence the
+  engine's.
 - Rule: the timeouts. The check's requests are bounded by `CHECK_TIMEOUT`
   (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the backend's: a
   stalled connection fails into `Failed` rather than holding `Checking` and
@@ -2102,7 +2122,9 @@ call.
   included, hence the long one for the download.
 - Rule: the restart. `Restart Now` calls `cx.set_restart_path` with the
   executable `current_exe` gave at launch (on Linux it names the replaced
-  file with a ` (deleted)` suffix after the update) and `cx.restart()`, not
+  file with a ` (deleted)` suffix after the update), or for a `.app` install
+  with its bundle, which GPUI's macOS restart `open`s and the swap left at
+  the same path, and `cx.restart()`, not
   `self_update::restart`, which would `exec` past the drains. GPUI's
   `restart` spawns a script that waits for this process's exit and quits
   the app (`PostQuitMessage` on Windows, the platform's `quit` on macOS and

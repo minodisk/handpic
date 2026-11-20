@@ -285,6 +285,59 @@
   the fix passed every job (the `/WAITPID` upgrade 9.1 s, the relaunch, the
   uninstall and the ZIP checks).
 
+## Step 6: the `.app` install's bundle swap
+
+- `self_update` 1.3.3's bundle mode as used: `bundle_path_in_archive("Handpic.app")`
+  plus an explicit `bundle_install_path` (the `.app` taken from the exe path,
+  `app_bundle`), `bin_name` set and `bin_path_in_archive` / `bin_install_path`
+  left unset (either is a `ConflictingConfig` from `build()`). It downloads
+  and checks the archive as in single-file mode (`SHA256SUMS`, release
+  digest, zipsign), extracts the whole archive into a `TempDir` inside the
+  bundle's parent, refuses an archive without the bundle folder or without a
+  file at the running exe's relative path, runs `verify_binary` on the
+  staged bundle root, then renames: the running exe aside, the old bundle
+  into a stash `TempDir`, the staged bundle into place, reversing them on a
+  failure. Both temp folders are dropped, so the parent is left holding only
+  `Handpic.app` (tested).
+- `self_update` reports `AppTranslocated` only while resolving its *default*
+  bundle path (macOS, no `bundle_install_path`), and its
+  `check_install_path_writable` probe fails only on `PermissionDenied`, so a
+  read-only disk image (`EROFS`) would pass it and fail mid-install. The
+  engine passes the path explicitly and checks first itself (`misplaced`):
+  an `AppTranslocation` path component, or a probe file it cannot create in
+  the bundle's parent, either way a `Failed` message ending "move
+  Handpic.app to /Applications and open it from there, then check again";
+  `self_update`'s own `AppTranslocated` / `InstallPathNotWritable` get the
+  same suffix.
+- `codesign_check` compiles on every target (`cfg!`, not `#[cfg]`) and
+  refuses on anything but macOS, where an `App` install cannot occur. The
+  verifier is a `fn` parameter of the private `install_app`, so the swap
+  tests run on every platform with stub verifiers (accepting, and rejecting
+  as a failed codesign would), and a `#[cfg(target_os = "macos")]` test runs
+  the real `codesign_check`: it asserts that a bundle of `/usr/bin/true`
+  with a minimal `Info.plist`, `codesign --force --sign -`, archived with
+  `tar`'s `append_dir_all`, swaps in and still verifies, and that the same
+  bundle with a byte appended to its `Info.plist` after signing is refused
+  and the old bundle stays. It is compiled and run only on macOS, so it was
+  not run locally (Windows) and first runs on the `test` job's
+  `macos-latest` leg of the PR's checks.
+- Deviation from the plan's Done-when wording: it says "the macOS leg of the
+  `app` job runs the bundle test", but the engine and its tests are in
+  `crates/backend`, a root-workspace member, so `cargo test` of the `test`
+  job's `macos-latest` leg runs them (the `app` job tests `crates/app`'s own
+  crate only). No CI change was needed.
+- The restart: GPUI 0.3.12's macOS `restart` runs `open <path>` after the
+  process exits, so the restart path set for an `App` install is now the
+  bundle, not the executable inside it (`open` on the bare executable would
+  start it through Terminal). Without a path GPUI would use
+  `NSBundle.bundlePath`, the same folder; the explicit path keeps one rule.
+- Against gpui-kit's guide (<https://gpui-kit.com/docs/auto-update/>): it
+  asks for "a bundle-aware updater", to replace and validate the complete
+  `.app` after staging and never one executable inside it, and to fail
+  safely without partially replacing files; all followed. Its "signed and
+  notarized" replacement is the ad hoc `codesign --verify --strict` plus the
+  zipsign key (the plan's deviation 2). No new deviation.
+
 ## Deferred issues (todo candidates)
 
 - No request timeout on the update check or download
@@ -325,3 +378,18 @@
   7's Inno Setup row; the checkbox was ticked on the automated criteria.
   Basis: Step 5 implementation; files `crates/app/src/main.rs`,
   `crates/backend/src/update.rs`.
+- Pending manual check (Step 6, macOS, a `Handpic.app` of a test build
+  packaged with `update_test_repo`): with a newer release on the test feed,
+  an older `Handpic.app` in `/Applications` should go `Checking` to
+  `Downloading` to `Verifying` to `ReadyToRestart` without a click, leave
+  only `Handpic.app` in `/Applications`, and `Restart Now` should log the
+  three `quit:` drain lines and reopen the bundle as the newer version. The
+  same build opened from the mounted DMG or from `~/Downloads` (translocated)
+  should end in `Failed` with the move-to-`/Applications` message and change
+  nothing. Also record whether Gatekeeper prompts after the swap and whether
+  the folder-access grants survive it. This is Step 7's `.app` row; the Step
+  6 checkbox was ticked on the automated criteria (the swap tests on every
+  platform; the real `codesign` test runs on the PR's checks, the `test`
+  job's `macos-latest` leg). Basis: Step 6
+  implementation; files `crates/backend/src/update.rs`,
+  `crates/app/src/main.rs`.

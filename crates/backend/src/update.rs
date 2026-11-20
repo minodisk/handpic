@@ -1,7 +1,8 @@
 //! The native app's update engine: which install the running executable
 //! belongs to (`detect`), the release a feed offers it under the prerelease
 //! policy (`check`, `offered`), the install of a portable ZIP or tarball
-//! update through `self_update` (`install`), and an Inno Setup install's
+//! update and the swap of a whole `Handpic.app` through `self_update`
+//! (`install`), and an Inno Setup install's
 //! setup staged (`stage_setup`) and started at quit (`run_setup`), every
 //! archive checked against the release's `SHA256SUMS` and its zipsign
 //! signature before anything is replaced or run. The feed and the trusted keys are parameters (`Source`); a
@@ -80,11 +81,7 @@ pub fn detect(exe: &Path) -> InstallKind {
     let Some(dir) = exe.parent() else {
         return InstallKind::Unknown;
     };
-    let bundle = Some(dir)
-        .filter(|dir| dir.ends_with("Contents/MacOS"))
-        .and_then(Path::parent)
-        .and_then(Path::parent);
-    if bundle.is_some_and(|app| app.extension().is_some_and(|ext| ext == "app")) {
+    if app_bundle(exe).is_some() {
         InstallKind::App
     } else if dir == Path::new("/usr/lib/handpic") {
         InstallKind::Deb
@@ -97,6 +94,15 @@ pub fn detect(exe: &Path) -> InstallKind {
     } else {
         InstallKind::Unknown
     }
+}
+
+/// The `<x>.app` of an executable at `<x>.app/Contents/MacOS/<exe>`.
+pub fn app_bundle(exe: &Path) -> Option<&Path> {
+    exe.parent()
+        .filter(|dir| dir.ends_with("Contents/MacOS"))
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .filter(|app| app.extension().is_some_and(|ext| ext == "app"))
 }
 
 /// This build's feed and keys: `minodisk/handpic` and the production key,
@@ -202,11 +208,12 @@ fn portable_asset(kind: InstallKind, version: &str, exe_name: &str) -> Option<(S
 }
 
 /// Replace the executable at `exe` with the one in `offer`'s release, the
-/// release pinned by its tag: a portable or tarball install only. The
-/// archive is downloaded to a temporary folder and checked against the
-/// release's `SHA256SUMS` and `source`'s keys first; every `Err` leaves `exe`
-/// as it was. `progress` is given the archive's bytes downloaded so far and
-/// its size when the server sent one; the checks run after its last call.
+/// release pinned by its tag: a portable or tarball install, or for a `.app`
+/// install the whole bundle (`install_app`). The archive is downloaded to a
+/// temporary folder and checked against the release's `SHA256SUMS` and
+/// `source`'s keys first; every `Err` leaves `exe` as it was. `progress` is
+/// given the archive's bytes downloaded so far and its size when the server
+/// sent one; the checks run after its last call.
 pub fn install(
     source: &Source,
     offer: &Offer,
@@ -219,6 +226,19 @@ pub fn install(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("{}: no file name", exe.display()))?;
+    if kind == InstallKind::App {
+        let bundle = app_bundle(exe)
+            .ok_or_else(|| format!("{}: not inside a .app bundle", exe.display()))?;
+        return install_app(
+            source,
+            offer,
+            bundle,
+            exe_name,
+            current,
+            progress,
+            codesign_check,
+        );
+    }
     let (asset, path_in_archive) = portable_asset(kind, &offer.version, exe_name)
         .ok_or_else(|| format!("a {kind:?} install is not updated by the app"))?;
     let status = configure(source, current)
@@ -232,6 +252,117 @@ pub fn install(
         .build()
         .and_then(|update| update.update())
         .map_err(|e| e.to_string())?;
+    if !status.is_updated() {
+        return Err(format!("{} was not installed", offer.version));
+    }
+    Ok(())
+}
+
+/// The bundle's folder in the macOS tarball.
+const APP_IN_ARCHIVE: &str = "Handpic.app";
+
+/// What a `.app` install that cannot replace itself is told.
+const MOVE_TO_APPLICATIONS: &str =
+    "move Handpic.app to /Applications and open it from there, then check again";
+
+/// The macOS tarball a `.app` install updates from, for this Mac's
+/// architecture as `uname -m` names it (`arm64`, `x86_64`), as `macos.sh`
+/// names the file.
+fn app_asset(version: &str) -> String {
+    let arch = match std::env::consts::ARCH {
+        "aarch64" => "arm64",
+        arch => arch,
+    };
+    format!("Handpic-{version}-macos-{arch}.tar.gz")
+}
+
+/// Why the bundle at `bundle` cannot be swapped where it is: run from a
+/// translocated copy (a quarantined app opened outside `/Applications`), or
+/// in a folder it cannot write (a read-only disk image, a folder of another
+/// user). Checked before anything is downloaded.
+fn misplaced(bundle: &Path) -> Option<String> {
+    if bundle
+        .components()
+        .any(|c| c.as_os_str() == "AppTranslocation")
+    {
+        return Some(format!(
+            "Handpic runs from a translocated copy: {MOVE_TO_APPLICATIONS}"
+        ));
+    }
+    let parent = bundle.parent().filter(|p| !p.as_os_str().is_empty())?;
+    let probe = parent.join(format!(".handpic-update-{}", std::process::id()));
+    match std::fs::File::create_new(&probe) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&probe);
+            None
+        }
+        Err(e) => Some(format!(
+            "{} is not writable ({e}): {MOVE_TO_APPLICATIONS}",
+            parent.display()
+        )),
+    }
+}
+
+/// The staged bundle's code signature, `codesign --verify --strict`, the
+/// check before the swap. Only macOS has `codesign`.
+fn codesign_check(bundle: &Path) -> Result<(), String> {
+    if !cfg!(target_os = "macos") {
+        return Err("a bundle's code signature is checked on macOS only".to_string());
+    }
+    let output = std::process::Command::new("codesign")
+        .args(["--verify", "--strict"])
+        .arg(bundle)
+        .output()
+        .map_err(|e| format!("codesign: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(format!(
+            "codesign --verify --strict: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))
+    }
+}
+
+/// Replace the `.app` at `bundle` with the `Handpic.app` of `offer`'s macOS
+/// tarball through `self_update`'s bundle mode: the archive checked as
+/// `install`'s, the whole bundle extracted beside `bundle`, `verify`
+/// (`codesign_check`) run on it, and the two folders swapped by renames, the
+/// old one put back on a failed step. The executable inside is never
+/// replaced alone. `exe_name` is `self_update`'s required `bin_name`.
+fn install_app(
+    source: &Source,
+    offer: &Offer,
+    bundle: &Path,
+    exe_name: &str,
+    current: &str,
+    progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
+    verify: fn(&Path) -> Result<(), String>,
+) -> Result<(), String> {
+    if let Some(reason) = misplaced(bundle) {
+        return Err(reason);
+    }
+    let asset = app_asset(&offer.version);
+    let status = configure(source, current)
+        .bin_name(exe_name)
+        .bundle_path_in_archive(APP_IN_ARCHIVE)
+        .bundle_install_path(bundle)
+        .timeout(INSTALL_TIMEOUT)
+        .progress_callback(progress)
+        .release_tag(format!("v{}", offer.version))
+        .asset_matcher(move |assets| assets.iter().find(|a| a.name() == asset).cloned())
+        .verify_binary(move |staged| {
+            verify(staged).map_err(self_update::Error::verification_rejected)
+        })
+        .build()
+        .and_then(|update| update.update())
+        .map_err(|e| match e {
+            self_update::Error::AppTranslocated { .. }
+            | self_update::Error::InstallPathNotWritable { .. } => {
+                format!("{e}: {MOVE_TO_APPLICATIONS}")
+            }
+            e => e.to_string(),
+        })?;
     if !status.is_updated() {
         return Err(format!("{} was not installed", offer.version));
     }
@@ -877,6 +1008,267 @@ mod tests {
         assert!(iss.contains(&format!("'{RELAUNCH_SWITCH}'")));
     }
 
+    /// The files of a `.app`, relative to it, with the executable at
+    /// `Contents/MacOS/handpic` holding `exe`.
+    fn app_files(exe: &[u8]) -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("Contents/Info.plist", b"<plist/>".to_vec()),
+            ("Contents/MacOS/handpic", exe.to_vec()),
+            ("Contents/Resources/icon.icns", exe.to_vec()),
+        ]
+    }
+
+    /// A `.tar.gz` holding `Handpic.app` with `files`.
+    fn app_tar_gz(files: &[(&str, Vec<u8>)]) -> Vec<u8> {
+        let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+        let mut tar = tar::Builder::new(gz);
+        for (path, bytes) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(bytes.len() as u64);
+            header.set_mode(0o755);
+            header.set_cksum();
+            tar.append_data(&mut header, format!("Handpic.app/{path}"), bytes.as_slice())
+                .unwrap();
+        }
+        tar.into_inner().unwrap().finish().unwrap()
+    }
+
+    /// `Handpic.app` at 1.0.0 under `Applications` in a temp folder; the
+    /// bundle.
+    fn app_install(name: &str) -> PathBuf {
+        let bundle = temp_dir(name).join("Applications").join("Handpic.app");
+        for (path, bytes) in app_files(OLD) {
+            let file = bundle.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, bytes).unwrap();
+        }
+        bundle
+    }
+
+    /// Swap in the 2.0.0 bundle of a feed of `assets` trusting `key(1)`,
+    /// checking the staged bundle with `verify`.
+    fn install_bundle(
+        bundle: &Path,
+        assets: Vec<(String, Vec<u8>)>,
+        verify: fn(&Path) -> Result<(), String>,
+    ) -> Result<(), String> {
+        let mut r = release("2.0.0");
+        r.assets = assets;
+        let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
+        install_app(
+            &source,
+            &offer("2.0.0"),
+            bundle,
+            "handpic",
+            "1.0.0",
+            |_, _| {},
+            verify,
+        )
+    }
+
+    fn app_archive(tar_gz: &[u8], signer: Option<&SigningKey>) -> (String, Vec<u8>) {
+        let name = app_asset("2.0.0");
+        let bytes = match signer {
+            Some(key) => signed(&name, tar_gz, key),
+            None => tar_gz.to_vec(),
+        };
+        (name, bytes)
+    }
+
+    fn exe_of(bundle: &Path) -> Vec<u8> {
+        std::fs::read(bundle.join("Contents/MacOS/handpic")).unwrap()
+    }
+
+    type Verify = fn(&Path) -> Result<(), String>;
+    /// A case: its name, the feed's assets, the verifier and the error's words.
+    type Case = (&'static str, Vec<(String, Vec<u8>)>, Verify, &'static str);
+
+    #[test]
+    fn a_signed_tarball_swaps_the_whole_bundle() {
+        let bundle = app_install("app");
+        std::fs::write(bundle.join("Contents/Resources/stale"), OLD).unwrap();
+        let tar = app_tar_gz(&app_files(NEW));
+        install_bundle(
+            &bundle,
+            with_sums(app_archive(&tar, Some(&key(1)))),
+            |staged| {
+                assert!(staged.ends_with(APP_IN_ARCHIVE));
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(exe_of(&bundle), NEW);
+        assert_eq!(
+            std::fs::read(bundle.join("Contents/Resources/icon.icns")).unwrap(),
+            NEW
+        );
+        assert!(!bundle.join("Contents/Resources/stale").exists());
+        let left: Vec<_> = std::fs::read_dir(bundle.parent().unwrap())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(left, ["Handpic.app"]);
+    }
+
+    #[test]
+    fn a_bundle_failing_a_check_leaves_the_old_bundle_in_place() {
+        let tar = app_tar_gz(&app_files(NEW));
+        let other = tar_gz_of("Other.app/Contents/MacOS/handpic", NEW);
+        let cases: [Case; 5] = [
+            (
+                "app-unsigned",
+                with_sums(app_archive(&tar, None)),
+                |_| Ok(()),
+                "signature",
+            ),
+            (
+                "app-foreign",
+                with_sums(app_archive(&tar, Some(&key(2)))),
+                |_| Ok(()),
+                "signature",
+            ),
+            (
+                "app-digest",
+                vec![
+                    sums(&app_asset("2.0.0"), b"other bytes"),
+                    app_archive(&tar, Some(&key(1))),
+                ],
+                |_| Ok(()),
+                "checksum",
+            ),
+            (
+                "app-codesign",
+                with_sums(app_archive(&tar, Some(&key(1)))),
+                |_| Err("code signature invalid".to_string()),
+                "code signature invalid",
+            ),
+            (
+                "app-nobundle",
+                with_sums(app_archive(&other, Some(&key(1)))),
+                |_| Ok(()),
+                "no bundle directory",
+            ),
+        ];
+        for (name, assets, verify, reason) in cases {
+            let bundle = app_install(name);
+            let error = install_bundle(&bundle, assets, verify).unwrap_err();
+            assert!(error.to_lowercase().contains(reason), "{name}: {error}");
+            assert_eq!(exe_of(&bundle), OLD, "{name}");
+            let left = std::fs::read_dir(bundle.parent().unwrap()).unwrap().count();
+            assert_eq!(left, 1, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_translocated_bundle_is_told_to_move_to_applications() {
+        let bundle = temp_dir("translocated")
+            .join("AppTranslocation")
+            .join("d")
+            .join("Handpic.app");
+        std::fs::create_dir_all(&bundle).unwrap();
+        let tar = app_tar_gz(&app_files(NEW));
+        let error = install_bundle(&bundle, with_sums(app_archive(&tar, Some(&key(1)))), |_| {
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(error.contains("/Applications"), "{error}");
+        assert!(!bundle.join("Contents").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_bundle_in_a_folder_it_cannot_write_is_told_to_move_to_applications() {
+        use std::os::unix::fs::PermissionsExt;
+        let bundle = app_install("readonly");
+        let parent = bundle.parent().unwrap().to_path_buf();
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let tar = app_tar_gz(&app_files(NEW));
+        let result = install_bundle(&bundle, with_sums(app_archive(&tar, Some(&key(1)))), |_| {
+            Ok(())
+        });
+        std::fs::set_permissions(&parent, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let error = result.unwrap_err();
+        assert!(error.contains("/Applications"), "{error}");
+        assert_eq!(exe_of(&bundle), OLD);
+    }
+
+    /// A real, ad hoc signed bundle passes `codesign_check` and is swapped
+    /// in; one changed after signing is refused and the old bundle stays.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn codesign_checks_the_staged_bundle_before_the_swap() {
+        fn signed_bundle(dir: &Path) -> PathBuf {
+            let app = dir.join(APP_IN_ARCHIVE);
+            std::fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
+            std::fs::copy("/usr/bin/true", app.join("Contents/MacOS/handpic")).unwrap();
+            std::fs::write(
+                app.join("Contents/Info.plist"),
+                concat!(
+                    r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+                    "\n<plist version=\"1.0\"><dict>",
+                    "<key>CFBundleExecutable</key><string>handpic</string>",
+                    "<key>CFBundleIdentifier</key><string>dev.minodisk.handpic.test</string>",
+                    "<key>CFBundlePackageType</key><string>APPL</string>",
+                    "</dict></plist>\n"
+                ),
+            )
+            .unwrap();
+            let status = std::process::Command::new("codesign")
+                .args(["--force", "--sign", "-"])
+                .arg(&app)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            app
+        }
+        fn tar_gz_dir(app: &Path) -> Vec<u8> {
+            let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            let mut tar = tar::Builder::new(gz);
+            tar.append_dir_all(APP_IN_ARCHIVE, app).unwrap();
+            tar.into_inner().unwrap().finish().unwrap()
+        }
+
+        let app = signed_bundle(&temp_dir("codesign-src"));
+        codesign_check(&app).unwrap();
+        let signed_exe = std::fs::read(app.join("Contents/MacOS/handpic")).unwrap();
+        let good = tar_gz_dir(&app);
+        let mut plist = std::fs::OpenOptions::new()
+            .append(true)
+            .open(app.join("Contents/Info.plist"))
+            .unwrap();
+        plist.write_all(b"\n").unwrap();
+        drop(plist);
+        assert!(codesign_check(&app).is_err());
+        let tampered = tar_gz_dir(&app);
+
+        let bundle = app_install("codesign-bad");
+        let error = install_bundle(
+            &bundle,
+            with_sums(app_archive(&tampered, Some(&key(1)))),
+            codesign_check,
+        )
+        .unwrap_err();
+        assert!(error.contains("codesign"), "{error}");
+        assert_eq!(exe_of(&bundle), OLD);
+
+        let bundle = app_install("codesign-good");
+        install_bundle(
+            &bundle,
+            with_sums(app_archive(&good, Some(&key(1)))),
+            codesign_check,
+        )
+        .unwrap();
+        assert_eq!(exe_of(&bundle), signed_exe);
+        codesign_check(&bundle).unwrap();
+    }
+
+    #[test]
+    fn the_macos_tarball_is_named_for_this_macs_architecture() {
+        let name = app_asset("2.0.0");
+        assert!(name.starts_with("Handpic-2.0.0-macos-") && name.ends_with(".tar.gz"));
+        assert!(!name.contains("aarch64"));
+    }
+
     #[test]
     fn the_install_kind_follows_the_executables_place() {
         let exe = portable_install("detect");
@@ -899,6 +1291,13 @@ mod tests {
                 InstallKind::Unknown,
             ),
         ];
+        assert_eq!(
+            app_bundle(Path::new(
+                "/Applications/Handpic.app/Contents/MacOS/handpic"
+            )),
+            Some(Path::new("/Applications/Handpic.app"))
+        );
+        assert_eq!(app_bundle(Path::new("/usr/lib/handpic/handpic")), None);
         for (path, kind) in cases {
             assert_eq!(detect(Path::new(path)), kind, "{path}");
         }
