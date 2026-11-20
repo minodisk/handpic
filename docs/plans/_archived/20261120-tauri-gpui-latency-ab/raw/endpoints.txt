@@ -1,0 +1,24 @@
+
+## ARW GPUI
+ARW-A1-try3 60 painted=8.76/11.71(n=60) nextFrame=19.40/29.01(n=60)
+ARW-A2-try2 60 painted=11.79/16.53(n=60) nextFrame=22.50/33.32(n=60)
+ARW-A3-try1 60 painted=8.23/11.54(n=60) nextFrame=20.79/28.85(n=60)
+median painted=8.76/11.71 nextFrame=20.79/29.01
+
+## ARW Tauri
+ARW-B1-try3 60 painted=20.90/29.40(n=60) nextFrame=44.80/54.10(n=60) frame1=28.70/37.70(n=60)
+ARW-B2-try1 60 painted=20.20/27.50(n=60) nextFrame=44.90/54.50(n=60) frame1=28.50/38.10(n=60)
+ARW-B3-try2 60 painted=19.90/31.10(n=60) nextFrame=44.50/54.30(n=60) frame1=28.00/37.70(n=60)
+median painted=20.20/29.40 nextFrame=44.80/54.30 frame1=28.50/37.70
+
+## RAF GPUI
+RAF-A1-try1 60 painted=55.80/66.22(n=60) nextFrame=67.51/80.21(n=60)
+RAF-A2-try1 60 painted=57.01/69.68(n=60) nextFrame=66.10/77.73(n=60)
+RAF-A3-try2 60 painted=57.96/68.03(n=60) nextFrame=67.73/79.46(n=60)
+median painted=57.01/68.03 nextFrame=67.51/79.46
+
+## RAF Tauri
+RAF-B1-try2 60 painted=115.20/131.40(n=60) nextFrame=116.20/132.40(n=60) frame1=115.60/131.60(n=60)
+RAF-B2-try1 60 painted=115.80/134.90(n=60) nextFrame=117.90/135.70(n=60) frame1=116.10/135.10(n=60)
+RAF-B3-try2 60 painted=115.60/142.70(n=60) nextFrame=118.20/143.30(n=60) frame1=115.80/142.90(n=60)
+median painted=115.60/134.90 nextFrame=117.90/135.70 frame1=115.80/135.10

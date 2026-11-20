@@ -24,9 +24,11 @@ neither the even ARW numbers (20.79 against 20.20) nor the wide RAF gap
 difference of the medians shown, not a per-press difference.
 
 The raw output is kept beside this file: [raw/summary.md](raw/summary.md) (the
-`summarize.py` output every table below comes from) and
+`summarize.py` output every table below comes from),
 [raw/runs.txt](raw/runs.txt) (every attempt, its load samples and why it was
-discarded). The per-press CSVs and the app logs stay in the measurement
+discarded) and [raw/endpoints.py](raw/endpoints.py) with its output
+[raw/endpoints.txt](raw/endpoints.txt) (the aligned in-app endpoints). The
+per-press CSVs and the app logs stay in the measurement
 worktree's `out\20261120` folder.
 
 ## What each number measures
@@ -223,6 +225,84 @@ percentiles are not per-press differences.
   between a press and the next) is 1-3 per press for GPUI ARW, 2-3 for GPUI
   RAF and 3-7 for Tauri on both folders.
 
+## In-app endpoints, aligned
+
+The two `keypressToPixels` columns above end at different points. This
+section compares the in-app numbers at two endpoints the apps share, from the
+same per-press `page` lines, with no new measurement:
+
+- **painted**: the image painted, before any vsync wait. GPUI:
+  `keypressToPixels - frameWait - present`, per press. Tauri:
+  `keypressToPixels` as logged (the return of `drawImage`).
+- **next frame**: the next frame after the paint. GPUI: `keypressToPixels`
+  (the `present` stamp). Tauri: `frame2`, with `frame1` for reference.
+
+Method: [raw/endpoints.py](raw/endpoints.py), whose output is
+[raw/endpoints.txt](raw/endpoints.txt), every number below. It takes the 12
+used runs (the `runs.txt` lines with `bad=[]` that are not warm runs), reads
+the 60 `page` lines of each (GPUI from `<run>.stdout.txt`, Tauri from
+`<run>.app.log`) and applies the percentile rule of the Measurement
+conditions: sorted index `n / 2` and `n * 0.95` per run; the median row is
+the median of the three runs' p50s and, separately, of their p95s. Runs 1, 2
+and 3 are the slots A1 / A2 / A3 and B1 / B2 / B3. The GPUI next frame, the
+Tauri painted, `frame1` and `frame2` cells equal the `keypressToPixels`,
+`frame1` and `frame2` cells of the tables above.
+
+Cells are `p50 / p95` in ms.
+
+### ARW, aligned
+
+| Run | GPUI painted | Tauri painted | GPUI next frame | Tauri next frame (`frame2`) | Tauri `frame1` |
+|---|---|---|---|---|---|
+| 1 | 8.76 / 11.71 | 20.90 / 29.40 | 19.40 / 29.01 | 44.80 / 54.10 | 28.70 / 37.70 |
+| 2 | 11.79 / 16.53 | 20.20 / 27.50 | 22.50 / 33.32 | 44.90 / 54.50 | 28.50 / 38.10 |
+| 3 | 8.23 / 11.54 | 19.90 / 31.10 | 20.79 / 28.85 | 44.50 / 54.30 | 28.00 / 37.70 |
+| **median of 3** | **8.76 / 11.71** | **20.20 / 29.40** | **20.79 / 29.01** | **44.80 / 54.30** | **28.50 / 37.70** |
+
+### RAF, aligned
+
+| Run | GPUI painted | Tauri painted | GPUI next frame | Tauri next frame (`frame2`) | Tauri `frame1` |
+|---|---|---|---|---|---|
+| 1 | 55.80 / 66.22 | 115.20 / 131.40 | 67.51 / 80.21 | 116.20 / 132.40 | 115.60 / 131.60 |
+| 2 | 57.01 / 69.68 | 115.80 / 134.90 | 66.10 / 77.73 | 117.90 / 135.70 | 116.10 / 135.10 |
+| 3 | 57.96 / 68.03 | 115.60 / 142.70 | 67.73 / 79.46 | 118.20 / 143.30 | 115.80 / 142.90 |
+| **median of 3** | **57.01 / 68.03** | **115.60 / 134.90** | **67.51 / 79.46** | **117.90 / 135.70** | **115.80 / 135.10** |
+
+### Reading, aligned
+
+Differences are Tauri minus GPUI, of the median cells.
+
+- ARW, painted: GPUI is faster by 11.44 ms at p50 and 17.69 ms at p95.
+- ARW, next frame: GPUI is faster by 24.01 ms at p50 and 25.29 ms at p95
+  against `frame2` (7.71 / 8.69 ms against `frame1`).
+- RAF, painted: GPUI is faster by 58.59 ms at p50 and 66.87 ms at p95.
+- RAF, next frame: GPUI is faster by 50.39 ms at p50 and 56.24 ms at p95
+  against `frame2` (48.29 / 55.64 ms against `frame1`).
+
+### Caveats, aligned
+
+- GPUI painted is not a timestamp. `keypressToPixels` runs from the key to
+  the `present` stamp (`crates/app/src/timing.rs`, `Page::stages`), and the
+  value is that minus two stage durations. `frameWait` sits between `hop` and
+  `paint`, so the value is the time to the end of `paint` had `paint` not
+  waited for the frame, not a moment that occurred.
+- Tauri `keypressToPixels` includes its own `wait` stage (it equals `wait` +
+  `total` in the log lines); it is used as logged.
+- Tauri's lines carry one decimal, GPUI's two; the output prints two.
+- Differences of percentiles are not per-press differences. The GPUI painted
+  percentiles are of the per-press differences, so they are not the
+  `keypressToPixels` percentile minus the `frameWait` and `present`
+  percentiles of the tables above.
+- Neither in-app endpoint is the DWM present. The `screen` column remains the
+  fair end-to-end comparison.
+- On RAF, GPUI's `screen` is 47.95 ms after its `keypressToPixels` (13.55 ms
+  on ARW), the open question below and of the root `todo.md`. So GPUI's
+  in-app endpoints under-report on the large image, and the RAF in-app leads
+  here overstate what reaches the screen (15.65 ms at p50).
+- On RAF, Tauri's `frame1` and `frame2` sit within 2.30 ms of its
+  `keypressToPixels` (see Reading), so next frame there is not a refresh after
+  the draw as it is on ARW.
+
 ## Caveats
 
 - `LastPresentTime` is the DWM present, not scanout: display and panel latency
@@ -270,3 +350,5 @@ On the local-only branch `measure/tauri-latency-ab` at `1e97309e` (on
    ```
 
 5. The tables: `python tools\latprobe\summarize.py out\20261120`.
+6. The aligned in-app endpoints: `python endpoints.py out\20261120`, with
+   `endpoints.py` this folder's `raw/endpoints.py`.
