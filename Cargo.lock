@@ -952,7 +952,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "handpic-backend"
+name = "handpic-cli"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "handpic-core",
+ "image",
+ "rayon",
+]
+
+[[package]]
+name = "handpic-core"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hpvcd",
+ "image",
+ "kamadak-exif",
+ "libc",
+ "mozjpeg",
+ "mozjpeg-sys",
+ "natord",
+ "quick-xml",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thread-priority",
+ "tract-onnx",
+]
+
+[[package]]
+name = "handpic-engine"
 version = "1.10.0"
 dependencies = [
  "axum",
@@ -983,38 +1015,6 @@ dependencies = [
  "windows",
  "zip",
  "zipsign-api",
-]
-
-[[package]]
-name = "handpic-cli"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "handpic-core",
- "image",
- "rayon",
-]
-
-[[package]]
-name = "handpic-core"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hpvcd",
- "image",
- "kamadak-exif",
- "libc",
- "mozjpeg",
- "mozjpeg-sys",
- "natord",
- "quick-xml",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thread-priority",
- "tract-onnx",
 ]
 
 [[package]]

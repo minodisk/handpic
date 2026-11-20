@@ -1,5 +1,5 @@
 [package]
-name = "handpic-backend"
+name = "handpic-engine"
 version = "1.10.0"
 edition = "2021"
 

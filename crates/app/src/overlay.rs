@@ -12,7 +12,7 @@ use gpui_kit::{
     App, AppContext, Bounds, Context, Hsla, PaintQuad, PathBuilder, Pixels, Point, TextAlign,
     Window, fill, hsla, point, px, rgb, size,
 };
-use handpic_backend::{
+use handpic_engine::{
     index::{self, Focus, Index},
     ondemand::{self, EyesJudgment, FacesResponse},
 };
@@ -535,7 +535,7 @@ fn segments(m: &FocusMark, width: f32) -> [((f32, f32), (f32, f32)); 4] {
 mod tests {
     use super::*;
     use crate::mark::MarkState;
-    use handpic_backend::index::{FocusPoint, StoredEyes};
+    use handpic_engine::index::{FocusPoint, StoredEyes};
 
     fn focus() -> Focus {
         Focus {

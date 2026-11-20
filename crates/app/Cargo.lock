@@ -3190,8 +3190,8 @@ dependencies = [
  "futures",
  "gpui-kit",
  "gpui-pre-platform",
- "handpic-backend",
  "handpic-core",
+ "handpic-engine",
  "image",
  "log",
  "mozjpeg",
@@ -3203,7 +3203,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "handpic-backend"
+name = "handpic-core"
+version = "1.10.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "hpvcd",
+ "libc",
+ "mozjpeg",
+ "mozjpeg-sys",
+ "natord",
+ "quick-xml 0.42.0",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thread-priority",
+ "tract-onnx",
+]
+
+[[package]]
+name = "handpic-engine"
 version = "1.10.0"
 dependencies = [
  "axum",
@@ -3228,26 +3248,6 @@ dependencies = [
  "tokio-util",
  "trash",
  "windows 0.62.2",
-]
-
-[[package]]
-name = "handpic-core"
-version = "1.10.0"
-dependencies = [
- "anyhow",
- "chrono",
- "hpvcd",
- "libc",
- "mozjpeg",
- "mozjpeg-sys",
- "natord",
- "quick-xml 0.42.0",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thread-priority",
- "tract-onnx",
 ]
 
 [[package]]

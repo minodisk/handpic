@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use handpic_backend::trash::{RUN_GONE, Restored, Summary, UNDONE_GONE};
+use handpic_engine::trash::{RUN_GONE, Restored, Summary, UNDONE_GONE};
 
 use crate::context::shown_path;
 use crate::judgment::State;
@@ -354,7 +354,7 @@ pub fn carry_stash(
 
 #[cfg(test)]
 mod tests {
-    use handpic_backend::trash::{Failure, Summary};
+    use handpic_engine::trash::{Failure, Summary};
 
     use super::*;
 

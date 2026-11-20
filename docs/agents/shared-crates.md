@@ -1,6 +1,6 @@
 # Working on the shared crates and the tooling
 
-Read this before touching `crates/core`, `crates/backend` or `crates/cli`
+Read this before touching `crates/core`, `crates/engine` or `crates/cli`
 (the index, the scan passes, the sidecars, the trash, the JPEG decode, the MCP
 server), the CI workflows or the release tooling, or before running checks on
 this machine. It lists the pitfalls this repository has already hit, each with
@@ -91,7 +91,7 @@ let a rescan index a half-moved folder.
 
 ### Resolve shortcut overrides order-independently, not in a single pass (Hit)
 
-`from_overrides` in `crates/backend/src/shortcuts.rs` checks each stored override
+`from_overrides` in `crates/engine/src/shortcuts.rs` checks each stored override
 against the keymap built so far. A single pass in action order silently drops
 a valid override that wants a key another override in the same batch frees
 later: `{"pick": ["q"], "reject": ["p"]}` left `reject` on its default,
@@ -121,7 +121,7 @@ because `reject` comes before `pick`, so `p` still looked taken.
 
 ### Volume listing: dedupe home by canonical path, plus a macOS-only ancestor rule (Hit)
 
-`volumes()` in `crates/backend/src/folders.rs` drops the home volume's duplicate
+`volumes()` in `crates/engine/src/folders.rs` drops the home volume's duplicate
 by canonical-path equality, and, on macOS only, also drops "a volume whose
 canonical path is an ancestor of home": `/Volumes/Macintosh HD` resolves to
 `/`, which never equals the home directory itself.
@@ -143,7 +143,7 @@ canonical path is an ancestor of home": `/Volumes/Macintosh HD` resolves to
   shape for other Linux-only helpers that need tests on non-Linux CI.
 - Windows also skips entries with `FILE_ATTRIBUTE_HIDDEN` (a `MetadataExt`
   one-liner) in addition to dot-names. `cargo check --target
-  x86_64-pc-windows-gnu` in `crates/backend` verifies `cfg(windows)` code
+  x86_64-pc-windows-gnu` in `crates/engine` verifies `cfg(windows)` code
   without a Windows machine, when that target is installed.
 - Source: `docs/plans/_archived/20260925-lightroom-layout/learnings.md`, Step 2.
 
@@ -289,9 +289,9 @@ so a `set_rating` landing in that window was silently discarded by the
 `cargo check --target aarch64-apple-darwin` failed here while the earlier app
 was in the workspace, because `objc2-exception-helper`'s build script needs a
 C compiler for that target. That crate is no longer in either `Cargo.lock`;
-whether `crates/backend` alone now checks for that target here is
+whether `crates/engine` alone now checks for that target here is
 unverified. Until it is, the macOS `cfg` branches (such as
-`crates/backend/src/trash.rs`'s `trashItemAtURL`) are verified only by CI's
+`crates/engine/src/trash.rs`'s `trashItemAtURL`) are verified only by CI's
 macOS job. To partially self-check new macOS-only code (e.g. `objc2-foundation`
 calls) before pushing, copy just that code into a scratch crate depending
 on the same `objc2-foundation` / `percent-encoding` versions pinned in
@@ -529,7 +529,7 @@ that already have the column, and the `ALTER TABLE` fails.
 #376) never reached existing caches: error rows in particular were never
 retried.
 
-- Bump `EXTRACTOR_VERSION` (`crates/backend/src/index.rs`) on any change to what
+- Bump `EXTRACTOR_VERSION` (`crates/engine/src/index.rs`) on any change to what
   `handpic_core::scan::extract` produces: ARW/DNG parsing or embedded JPEG tier
   selection (`crates/core/src/arw.rs`), which preview bytes are read
   (`crates/core/src/reader.rs`), thumbnail generation (`crates/core/src/decode.rs`,
@@ -740,7 +740,7 @@ the clear for the scan's end (`cache::ClearFlow`).
 ### A scan's progress carries flushed paths, not a done-index high-water mark (Inferred)
 
 `done` cannot tell the app what became readable: `run_scan`
-(`crates/backend/src/index.rs`) drives `extract_all` on rayon workers that finish
+(`crates/engine/src/index.rs`) drives `extract_all` on rayon workers that finish
 in no particular order, `done` is an unordered `AtomicUsize`, and rows reach
 the index in `BATCH`-sized transactions, so a file counted in `done` is not
 necessarily answerable by `Index::thumbnail` yet. The only promise the backend
@@ -1067,7 +1067,7 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
 - Source: [image-embeddings learnings](../plans/_archived/20261012-image-embeddings/learnings.md),
   Step 3.
 
-### `crates/core`, `crates/backend` and `crates/cli` are on Rust edition 2021: no `if ... && let` chains (Hit)
+### `crates/core`, `crates/engine` and `crates/cli` are on Rust edition 2021: no `if ... && let` chains (Hit)
 
 `if let Some(x) = a && let Some(y) = b` does not compile there; nest the
 `if let`s. `crates/app` is on edition 2024, where the chain compiles, so
@@ -1077,7 +1077,7 @@ code moved from it into the backend may need its chains nested.
 
 ### The MCP server runs on the caller's tokio runtime; `rmcp` 3.4 macro traps (Hit)
 
-The backend's `crates/backend/src/mcp.rs` serves `rmcp`'s
+The backend's `crates/engine/src/mcp.rs` serves `rmcp`'s
 `StreamableHttpService` through `axum::serve`, spawned with a bare
 `tokio::spawn`, so `Mcp::switch` and `Mcp::stop` must run inside a tokio
 runtime: the native app's `mcp.rs` owns a current-thread runtime on its one
@@ -1130,7 +1130,7 @@ completes it.
 
 ### The folder watcher cannot loop on the app's own sidecar writes (Inferred)
 
-`crates/backend/src/watch.rs` watches the open folder as the listing
+`crates/engine/src/watch.rs` watches the open folder as the listing
 canonicalizes it (non-recursively, so the watched folder can never diverge
 from the indexed one) and calls its callback 500 ms (`DEBOUNCE`) after the
 last event of a burst; the native app re-lists the folder when it is still
@@ -1169,7 +1169,7 @@ watched folder itself **succeeds**; renaming a folder that has a watched
 `ReadDirectoryChangesW` handle blocks renaming any ancestor of the watched
 path, not the watched path itself.
 
-`crates/backend/src/treewatch.rs` uses this to watch the whole folder tree with
+`crates/engine/src/treewatch.rs` uses this to watch the whole folder tree with
 one `RecommendedWatcher`, `watch`/`unwatch` per expanded folder, mapped
 through a shared canonical-path -> tree-key list (several tree paths can
 canonicalize to the same folder, e.g. a symlink; the last key's `unwatch`

@@ -5,7 +5,7 @@
 
 use std::cmp::Ordering;
 
-use handpic_backend::exif::Exif;
+use handpic_engine::exif::Exif;
 
 /// One EXIF section of the filter menu, in the menu's order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -81,7 +81,7 @@ pub fn exif_key(exif: Option<&Exif>, group: Group) -> Option<Key> {
             order: Order::Text(t.clone()),
         })
     };
-    let labeled = |labeled: &Option<handpic_backend::exif::Labeled>| {
+    let labeled = |labeled: &Option<handpic_engine::exif::Labeled>| {
         labeled.as_ref().map(|l| Key {
             label: l.label.clone(),
             order: Order::Number(l.value),
@@ -162,7 +162,7 @@ mod tests {
     //! no Tauri test.
 
     use super::*;
-    use handpic_backend::exif::Labeled;
+    use handpic_engine::exif::Labeled;
 
     fn labeled(value: f64, label: &str) -> Option<Labeled> {
         Some(Labeled {

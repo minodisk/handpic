@@ -7,8 +7,8 @@
 //! Unflag, Reject and the rating from 5 stars down to the unrated, and the
 //! rating rows draw its stars.
 
-use handpic_backend::shortcuts::Binding;
 use handpic_core::Flag;
+use handpic_engine::shortcuts::Binding;
 
 use crate::strip::Tint;
 use crate::{judgment::State, menu::Label};

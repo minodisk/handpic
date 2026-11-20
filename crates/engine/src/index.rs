@@ -6925,7 +6925,7 @@ pub(crate) mod tests {
     }
 
     /// `VACUUM` time after evicting half of a ~100 MB index. Run with
-    /// `cargo test -p handpic-backend --release -- --ignored --nocapture vacuum_cost`.
+    /// `cargo test -p handpic-engine --release -- --ignored --nocapture vacuum_cost`.
     #[test]
     #[ignore]
     fn vacuum_cost_on_a_100_mb_index() {
@@ -6960,7 +6960,7 @@ pub(crate) mod tests {
     }
 
     /// Commit cost per chunk size. Run with
-    /// `cargo test -p handpic-backend --release -- --ignored --nocapture write_batch_cost`.
+    /// `cargo test -p handpic-engine --release -- --ignored --nocapture write_batch_cost`.
     #[test]
     #[ignore]
     fn write_batch_cost_per_chunk_size() {

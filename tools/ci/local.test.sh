@@ -52,10 +52,10 @@ bash-test .claude/skills/merge-settings/scripts/merge.test.sh
 bash-test .claude/skills/pr/scripts/wait-pr-actionable.test.sh
 bash-test tools/ci/local.test.sh
 clippy handpic-core
-clippy handpic-backend
+clippy handpic-engine
 clippy handpic-cli
 test handpic-core
-test handpic-backend
+test handpic-engine
 test handpic-cli
 clippy app
 test app"
@@ -89,9 +89,9 @@ expect none "crates/core/src/x.rs" "fmt root
 clippy handpic-core
 test handpic-core
 clippy app"
-expect none "crates/backend/src/x.rs" "fmt root
-clippy handpic-backend
-test handpic-backend
+expect none "crates/engine/src/x.rs" "fmt root
+clippy handpic-engine
+test handpic-engine
 clippy app"
 expect none "crates/cli/src/x.rs" "fmt root
 clippy handpic-cli
@@ -105,10 +105,10 @@ expect none "crates/core/Cargo.toml" "clippy handpic-core
 test handpic-core
 clippy app"
 expect none "Cargo.lock" "clippy handpic-core
-clippy handpic-backend
+clippy handpic-engine
 clippy handpic-cli
 test handpic-core
-test handpic-backend
+test handpic-engine
 test handpic-cli
 clippy app"
 expect none "crates/cli/src/x.rs
@@ -162,9 +162,9 @@ expect none "crates/app/src/x.rs" "fmt app
 clippy app
 clippy app screenshot
 test app"
-expect none "crates/backend/src/x.rs" "fmt root
-clippy handpic-backend
-test handpic-backend
+expect none "crates/engine/src/x.rs" "fmt root
+clippy handpic-engine
+test handpic-engine
 clippy app
 clippy app screenshot"
 expect none "crates/cli/src/x.rs" "fmt root

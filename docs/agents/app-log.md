@@ -6,7 +6,7 @@ anything that matters is written here, and the failures an agent most needs
 carry a fixed, greppable prefix (`panic:`, `invariant:`).
 
 The log is written by `crates/app/src/logger.rs`; the prefixed lines come
-from `crates/backend/src/diagnostics.rs` (the panic hook and the `invariant!`
+from `crates/engine/src/diagnostics.rs` (the panic hook and the `invariant!`
 macro).
 
 ## Where the file is
@@ -44,14 +44,16 @@ the restart cannot be recovered; ask for a reproduction.
 
 - The time is UTC, not the user's local time.
 - `target` is the Rust module path that logged the line: `handpic` and its
-  modules (`handpic::scan`, `handpic::settings`, ...), `handpic_backend::*`
-  (`handpic_backend::index`, `handpic_backend::diagnostics`, ...), or a
+  modules (`handpic::scan`, `handpic::settings`, ...), `handpic_engine::*`
+  (`handpic_engine::index`, `handpic_engine::diagnostics`, ...), or a
   dependency such as GPUI's own `INFO` lines (`gpui_windows::*`: the UI font,
-  the GPU).
+  the GPU). A log written by a build before the crate was renamed to
+  `handpic-engine` carries the same targets with `backend` in place of
+  `engine`.
 - The native crate is bin-only, so its crate name, and with it the `target` and
   `CARGO_CRATE_NAME` the logger's own-lines filter uses, comes from
   `[[bin]].name` (`handpic`), not from the package name (`handpic-app`).
-  `handpic` is also a string prefix of `handpic_backend` and `handpic_core`, so
+  `handpic` is also a string prefix of `handpic_engine` and `handpic_core`, so
   `logger.rs`'s `is_own` matches the target exactly or as a `handpic::` module
   path. A plain `starts_with` let the backend's debug lines through under
   `RUST_LOG=debug`. Renaming the binary changes every target, so recheck that
@@ -70,7 +72,7 @@ the restart cannot be recovered; ask for a reproduction.
 
 Many `INFO` lines are timing lines, `<label>: key=value ... in <N>ms`:
 `scan list`, `scan reconcile`, `scan sidecars` (`handpic::scan`), `scan
-extract`, `scan faces`, `scan embed` (`handpic_backend::index`) and `import`
+extract`, `scan faces`, `scan embed` (`handpic_engine::index`) and `import`
 (one line per run with its throughput). They describe performance, not
 failures.
 
@@ -91,7 +93,7 @@ survived and reported in its own words (settings falling back to defaults,
 `sidecar write failed: path=<path> <message>`, an index cache that would not
 open). The two prefixed kinds follow.
 
-### `panic:` (`ERROR`, target `handpic_backend::diagnostics`)
+### `panic:` (`ERROR`, target `handpic_engine::diagnostics`)
 
 ```text
 panic: thread=<name or unnamed> location=<file>:<line>:<col> payload=<text>

@@ -29,7 +29,7 @@ use gpui_kit::{
     HighlightStyle, KeyDownEvent, MouseButton, ScrollStrategy, SharedString, StyledText,
     Subscription, Task, WeakEntity, Window, div, prelude::*, px, rgb, transparent_black,
 };
-use handpic_backend::{
+use handpic_engine::{
     datefolder::{self as datefolders, Kind as DateKind, Split},
     foldersidecars::{self, DeletePreview, Preview, Summary},
     import::{self as importer, ImportSettings, Plan, Ran as Imported},

@@ -3,7 +3,7 @@
 //! A port of the Tauri app's `sequence.ts`; the window runs the backend's
 //! `sequence`.
 
-use handpic_backend::sequence::{Failure, Preview, Ran, Row};
+use handpic_engine::sequence::{Failure, Preview, Ran, Row};
 
 /// The operation's name, the dialog's title.
 pub const LABEL: &str = "Sequence JPEG Timestamps";

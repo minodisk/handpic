@@ -4,13 +4,13 @@
 //! keymap.
 
 use gpui_kit::component::ThemeMode;
-use handpic_backend::{
+use handpic_core::{i18n, xmp::LabelNames};
+use handpic_engine::{
     import,
     mcp::McpState,
     shortcuts::{Binding, Keymap},
     sidecar::{SidecarFormat, label_names_setting},
 };
-use handpic_core::{i18n, xmp::LabelNames};
 
 use crate::{
     context,
@@ -469,8 +469,8 @@ impl SettingsModal {
 #[cfg(test)]
 mod tests {
     use gpui_kit::component::ThemeMode;
-    use handpic_backend::{mcp::McpState, shortcuts::Keymap, sidecar::SidecarFormat};
     use handpic_core::xmp::LabelNames;
+    use handpic_engine::{mcp::McpState, shortcuts::Keymap, sidecar::SidecarFormat};
 
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
@@ -510,10 +510,10 @@ mod tests {
         );
         assert_eq!(
             IMPORT_PATTERN_EXAMPLES[0],
-            handpic_backend::import::DEFAULT_PATTERN
+            handpic_engine::import::DEFAULT_PATTERN
         );
         for pattern in IMPORT_PATTERN_EXAMPLES {
-            assert!(handpic_backend::import::validate_pattern(pattern).is_ok());
+            assert!(handpic_engine::import::validate_pattern(pattern).is_ok());
         }
     }
 

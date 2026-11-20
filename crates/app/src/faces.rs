@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use handpic_backend::ondemand::FacesResponse;
+use handpic_engine::ondemand::FacesResponse;
 
 /// What a file whose detection failed is cached as, so it is not retried on
 /// every draw.
@@ -63,7 +63,7 @@ impl FaceCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use handpic_backend::ondemand::{FaceBox, FacePoint};
+    use handpic_engine::ondemand::{FaceBox, FacePoint};
 
     fn found() -> FacesResponse {
         let p = |x: f32, y: f32| FacePoint { x, y };

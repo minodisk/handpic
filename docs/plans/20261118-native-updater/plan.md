@@ -190,9 +190,9 @@ overrides it:
       `package.yml`, `crates/app/packaging/`, `CLAUDE.md`'s packaging
       paragraph, `docs/agents/app.md`.
 
-- [x] Step 3: Add the update engine to `crates/backend`
+- [x] Step 3: Add the updater to `crates/engine`
   - Done when:
-    - `crates/backend/src/update.rs` detects the install kind from the
+    - `crates/engine/src/update.rs` detects the install kind from the
       executable's path: portable ZIP, Inno Setup, `.app`, tarball
       (`~/.local/bin`), deb (`/usr/lib/handpic`), or unknown.
     - It checks a feed (API base URL, owner, repository) for the release to
@@ -212,7 +212,7 @@ overrides it:
         `Handpic/bin/<binary>` for the tarball.
     - A deb or unknown install gets the release and its page URL and installs
       nothing.
-    - Tests run the engine against a local fake GitHub API (a loopback
+    - Tests run the updater against a local fake GitHub API (a loopback
       listener in the test) with archives signed by a test key made in the
       test, installing into a temp folder. They cover:
       - the policy table above;
@@ -228,7 +228,7 @@ overrides it:
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Step 2 is merged (the key files and the asset names).
-    - The engine lives in `crates/backend` like `ai.rs`: no GPUI, state handed
+    - The updater lives in `crates/engine` like `ai.rs`: no GPUI, state handed
       to a callback, the feed and the keys as parameters so the tests inject
       theirs.
     - The app's version is a parameter; `cargo_crate_version!()` here would be
@@ -256,8 +256,8 @@ overrides it:
       `unins000.exe` beside the exe, or the `HKCU` uninstall entry's install
       location) and record it. A debug build or a `cargo run` binary is
       `unknown`.
-    - Files: `crates/backend/src/update.rs`, `crates/backend/src/lib.rs`,
-      `crates/backend/Cargo.toml`, the root `Cargo.lock`, `CLAUDE.md`.
+    - Files: `crates/engine/src/update.rs`, `crates/engine/src/lib.rs`,
+      `crates/engine/Cargo.toml`, the root `Cargo.lock`, `CLAUDE.md`.
 
 - [x] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
   - Done when:
@@ -320,7 +320,7 @@ overrides it:
     - `Restart Now` does the same and the app comes back as the new version.
     - A quit without `Restart Now` does not relaunch.
     - A stale staging folder is cleared at launch.
-    - The engine's tests cover the download and both verifications against
+    - The updater's tests cover the download and both verifications against
       the fake feed, without running the setup.
     - `package.yml`'s Windows check installs version N, runs the setup of N
       again with the relaunch switch off and on, and asserts the upgrade's
@@ -517,7 +517,7 @@ overrides it:
   section; see Step 7.
 - **Risks to watch.**
   - `self_update` may pull a second HTTP client and TLS stack into
-    `crates/backend` (Step 3 measures).
+    `crates/engine` (Step 3 measures).
   - The Windows quit may race the setup for the exe's lock (Step 5 measures).
   - An ad hoc signed bundle may lose the folder-access grants on every update
     (Step 7 records).

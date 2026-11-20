@@ -35,9 +35,9 @@ MINGW* | MSYS* | CYGWIN*) on_windows=1 ;;
 *) on_windows=0 ;;
 esac
 
-# The root packages checked one by one (crates/core, crates/backend,
+# The root packages checked one by one (crates/core, crates/engine,
 # crates/cli).
-root_packages=(handpic-core handpic-backend handpic-cli)
+root_packages=(handpic-core handpic-engine handpic-cli)
 
 # Each bash test and the paths whose change runs it.
 bash_tests=(
@@ -85,18 +85,18 @@ function select_checks() {
 		esac
 		if [[ "${path}" == *.rs ]]; then
 			case "${path}" in
-			crates/backend/* | crates/cli/* | crates/core/*) fmt_root=1 ;;
+			crates/engine/* | crates/cli/* | crates/core/*) fmt_root=1 ;;
 			crates/app/*) fmt_app=1 ;;
 			esac
 		fi
 		case "${path}" in
 		Cargo.toml | Cargo.lock)
 			packages+="handpic-core "
-			packages+="handpic-backend "
+			packages+="handpic-engine "
 			packages+="handpic-cli "
 			;;
 		crates/core/*) packages+="handpic-core " ;;
-		crates/backend/*) packages+="handpic-backend " ;;
+		crates/engine/*) packages+="handpic-engine " ;;
 		crates/cli/*) packages+="handpic-cli " ;;
 		crates/app/*) app=1 ;;
 		esac
@@ -146,7 +146,7 @@ function select_checks() {
 		done
 	fi
 	local app_clippy="${app}"
-	if [[ "${packages}" == *" handpic-core "* || "${packages}" == *" handpic-backend "* ]]; then
+	if [[ "${packages}" == *" handpic-core "* || "${packages}" == *" handpic-engine "* ]]; then
 		app_clippy=1
 	fi
 

@@ -2,7 +2,7 @@
 //! from the menu item through the preview to the run's end. A port of the
 //! Tauri app's `import.ts`; the window runs the backend's `import`.
 
-use handpic_backend::import::{Preview, Ran};
+use handpic_engine::import::{Preview, Ran};
 
 /// The operation's name, the dialog's title.
 pub const LABEL: &str = "Import";
@@ -119,7 +119,7 @@ pub fn progress_status(done: usize, total: usize) -> String {
 /// The pane's notes word a run's failure this way through `write_failed`,
 /// which takes the path and the message apart, so only the tests use it.
 #[cfg(test)]
-pub fn failure_text(failure: &handpic_backend::import::Failure) -> String {
+pub fn failure_text(failure: &handpic_engine::import::Failure) -> String {
     format!("{}: {}", base_name(&failure.path), failure.message)
 }
 
@@ -332,7 +332,7 @@ impl ImportFlow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use handpic_backend::import::{Failure, FolderSummary, Totals};
+    use handpic_engine::import::{Failure, FolderSummary, Totals};
 
     fn folder(
         path: &str,
