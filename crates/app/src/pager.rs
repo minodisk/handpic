@@ -112,16 +112,25 @@ pub enum Finished {
 /// The status bar's `n / shown`: the current file over the shown list, as the
 /// Tauri `positionEl`, so a refilter that hides the file on screen moves it at
 /// once. `listed`, the whole listing while a filter is active, follows in
-/// parentheses. Nothing while no file is shown.
-pub fn position(current: usize, shown: usize, listed: Option<usize>) -> Option<String> {
+/// parentheses, and ` · K selected` while more than one file is selected, as
+/// the Tauri `renderMeta`. Nothing while no file is shown.
+pub fn position(
+    current: usize,
+    shown: usize,
+    listed: Option<usize>,
+    selected: usize,
+) -> Option<String> {
     if shown == 0 {
         return None;
     }
-    let position = format!("{} / {}", current + 1, shown);
-    Some(match listed {
-        Some(listed) => format!("{position} ({listed})"),
-        None => position,
-    })
+    let mut position = format!("{} / {}", current + 1, shown);
+    if let Some(listed) = listed {
+        position = format!("{position} ({listed})");
+    }
+    if selected > 1 {
+        position = format!("{position} · {selected} selected");
+    }
+    Some(position)
 }
 
 #[cfg(test)]
@@ -130,23 +139,38 @@ mod tests {
 
     #[test]
     fn the_position_is_one_based() {
-        assert_eq!(position(0, 120, None).as_deref(), Some("1 / 120"));
-        assert_eq!(position(119, 120, None).as_deref(), Some("120 / 120"));
+        assert_eq!(position(0, 120, None, 0).as_deref(), Some("1 / 120"));
+        assert_eq!(position(119, 120, None, 1).as_deref(), Some("120 / 120"));
     }
 
     #[test]
     fn an_active_filter_adds_the_listed_count() {
-        assert_eq!(position(2, 80, Some(120)).as_deref(), Some("3 / 80 (120)"));
         assert_eq!(
-            position(2, 120, Some(120)).as_deref(),
+            position(2, 80, Some(120), 1).as_deref(),
+            Some("3 / 80 (120)")
+        );
+        assert_eq!(
+            position(2, 120, Some(120), 0).as_deref(),
             Some("3 / 120 (120)")
         );
     }
 
     #[test]
+    fn a_multi_selection_adds_the_selected_count() {
+        assert_eq!(
+            position(2, 120, None, 4).as_deref(),
+            Some("3 / 120 · 4 selected")
+        );
+        assert_eq!(
+            position(2, 80, Some(120), 2).as_deref(),
+            Some("3 / 80 (120) · 2 selected")
+        );
+    }
+
+    #[test]
     fn no_shown_file_has_no_position() {
-        assert_eq!(position(0, 0, None), None);
-        assert_eq!(position(0, 0, Some(120)), None);
+        assert_eq!(position(0, 0, None, 0), None);
+        assert_eq!(position(0, 0, Some(120), 0), None);
     }
 
     #[test]

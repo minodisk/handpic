@@ -294,7 +294,7 @@ pub fn exif(shot: &Shot) -> Exif {
     };
     Exif {
         camera,
-        lens: shot.lens_model.clone(),
+        lens: shot.lens_model.clone().filter(|l| !l.trim().is_empty()),
         aperture,
         shutter: shot.exposure_time.and_then(|r| {
             Some(Labeled {
@@ -478,6 +478,17 @@ mod tests {
         assert_eq!(label(&e.iso), Some((800.0, "800".to_string())));
         assert_eq!(label(&e.focal_length), Some((50.0, "50 mm".to_string())));
         assert_eq!(e.lens.as_deref(), Some("FE 50mm F1.4 GM"));
+    }
+
+    #[test]
+    fn a_blank_lens_is_no_lens() {
+        for blank in ["", "   "] {
+            let e = exif(&Shot {
+                lens_model: Some(blank.to_string()),
+                ..Shot::default()
+            });
+            assert_eq!(e.lens, None);
+        }
     }
 
     #[test]
