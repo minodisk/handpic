@@ -312,7 +312,7 @@ side resize and a center crop for OpenCLIP and TinyCLIP).
   within one folder). The scaled decode keeps 0.998 (0.84) and decodes in
   9 ms against 26 ms for the full preview.
 - The file is not bundled. The app downloads it on the first enable (the
-  backend's `ai.rs`) and builds the plan in `embed::shared`, whose `OnceLock`
+  engine's `ai.rs`) and builds the plan in `embed::shared`, whose `OnceLock`
   keeps a failed build for good like `faces.rs`'s, so it is called only once the
   file is in place (`AppAi::model_if_enabled`). Once built, the plan stays
   resident (about 395 MB) for the rest of the process.

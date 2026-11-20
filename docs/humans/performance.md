@@ -377,7 +377,7 @@ On one thread the mean did not rise (the first after run, 29.5ms, was an
 outlier the next three did not repeat); on 12 threads the runs overlap and
 the spread is the drive's, not the detector's.
 
-The faces the `f` focus mark draws are detected on demand (the backend's
+The faces the `f` focus mark draws are detected on demand (the engine's
 `ondemand::read_faces`: read the preview + `detect_around`), not at scan time.
 
 #### Whole-image recall (Windows 11)
@@ -658,7 +658,7 @@ the whole-image search uses, the classifier's eye AUC fell from 0.78 to
 #### Closed-eyes judgment on demand (Windows 11)
 
 The app judges closed eyes with Face Landmarker v2 at scan time and, for
-the shown file, on demand: the backend's `ondemand::read_eyes` runs when a
+the shown file, on demand: the engine's `ondemand::read_eyes` runs when a
 file is shown under the `f` overlay, outside both scan passes, for the face
 parts it draws. It judges one face, the face nearest a trusted AF point, else the
 largest face at or above 0.8, and none below a 60 px face side. For that

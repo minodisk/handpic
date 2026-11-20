@@ -77,7 +77,7 @@ pub struct Context<'a> {
 }
 
 /// Rename the folder `dir` to `name`. Does not check for a scan: the caller
-/// refuses a running scan and holds that refusal across the call (the native
+/// refuses a running scan and holds that refusal across the call (the
 /// app's idle gate), and drains the sidecar writer first. The watcher and the
 /// folder tree's watches on the folder and under it are released before the
 /// rename (Windows refuses to

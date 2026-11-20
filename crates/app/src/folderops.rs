@@ -1164,7 +1164,7 @@ impl Handpic {
     /// planned again (the preview is not trusted across the dialog) and
     /// refused on a collision or a folder already named, then renamed to its
     /// one date or split into one folder per date. The folder watcher and the
-    /// tree watches on it are released by the backend around the moves.
+    /// tree watches on it are released by the engine around the moves.
     fn run_date_folder(&mut self, cx: &mut Context<Self>) {
         let Some(dir) = self.folderops.date.run() else {
             return;
@@ -1319,7 +1319,7 @@ impl Handpic {
     /// canonical path going from `canonical.0` to `canonical.1`, as
     /// `main.ts`'s `folderRenamed`: the tree renames the node in place with
     /// its state, its open row and cursor follow, the trash runs of both
-    /// histories follow (the backend's recorded runs already did), and the
+    /// histories follow (the engine's recorded runs already did), and the
     /// tree's watched set is handed over afresh. When the open folder is the
     /// renamed one or under it, it is reopened under its new path, its
     /// judgments and last viewed file coming back from the carried index
@@ -2023,7 +2023,7 @@ impl Handpic {
 
     /// Run a rename on a background task, in flight so no listing or scan
     /// starts under it: the queued judgment stores and the sidecar writer
-    /// flushed, then the backend's folder rename, which releases the folder
+    /// flushed, then the engine's folder rename, which releases the folder
     /// watcher and the tree watches around it. Until it settles, the folder
     /// and everything under it can be neither opened nor renamed. Refused
     /// when an import began while it was held; false when it did not start.

@@ -1,6 +1,6 @@
 //! The folder tree's `Rename by Capture Date…`, kept pure: the dialog's text
 //! and the flow from the menu item through the dialog to the run's end. A
-//! port of the Tauri app's `datefolder.ts`; the window runs the backend's
+//! port of the Tauri app's `datefolder.ts`; the window runs the engine's
 //! `datefolder` and `rename`.
 
 use handpic_engine::datefolder::{Preview, Split};
@@ -459,7 +459,7 @@ mod tests {
 }
 
 /// The folder rename and the split on this crate's `notify` (8.2.2 in
-/// `Cargo.lock`, 8.2.0 in the root lock): the backend's own tests run on the
+/// `Cargo.lock`, 8.2.0 in the root lock): the engine's own tests run on the
 /// root lock and cannot run from this workspace, so the release-and-settle
 /// path the rename relies on is checked here, on a temp dir.
 #[cfg(test)]

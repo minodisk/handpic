@@ -1,6 +1,6 @@
 name: Package
 
-# Builds the native app's (crates/app) distributables and uploads them as
+# Builds the app's (crates/app) distributables and uploads them as
 # this run's artifacts. Manual only, and it touches no release: attaching them
 # to one is release.yml's business. A dispatch runs the workflow file of the
 # chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.

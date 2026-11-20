@@ -1,5 +1,5 @@
-//! The native app's settings, kept in its own store
-//! (`handpic_engine::store`) and read with the backend's rules, so a native
+//! The app's settings, kept in its own store
+//! (`handpic_engine::store`) and read with the engine's rules, so a
 //! judgment writes the same sidecars with the same label names and keys as
 //! the Tauri app did. A new store is seeded once from an earlier install's
 //! Tauri `settings.json`, which is only ever read and never again once the
@@ -41,7 +41,7 @@ pub struct Settings {
     /// The strip's filter at startup, its remembered sections; the filter
     /// menu writes them back.
     pub filter: Stored,
-    /// The MCP companion's server is on (`mcpEnabled`, by the backend's
+    /// The MCP companion's server is on (`mcpEnabled`, by the engine's
     /// rule).
     pub mcp_enabled: bool,
     /// MCP clients may run the recoverable destructive operations without

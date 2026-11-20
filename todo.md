@@ -1,7 +1,7 @@
 # todo
 
 ## Cross-cutting / other
-### Native app: real-device Ctrl+C and window check of the app:watch task
+### App: real-device Ctrl+C and window check of the app:watch task
 
 #### Background
 
@@ -14,7 +14,7 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 - [ ] On Windows (Git Bash), run `mise run app:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `handpic.exe` all to exit (none left in Task Manager) and the prompt to return.
 - [ ] On Windows (Git Bash), run `mise run app:watch`, save a `.rs` file under `crates/app/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
 
-### Native app docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
+### App docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
 
 #### Background
 
@@ -34,7 +34,7 @@ Files: `crates/core/src/dop.rs`.
 
 - [ ] Decide which `Items` entry's flag Riffle reads and writes, then change `read_flag` and its tests to match.
 
-### Native: the MCP `get_view` eyes summary carries no openness
+### App: the MCP `get_view` eyes summary carries no openness
 
 `burst-keep-score` Step 4b made the meta pane's `Eyes` row show the openness (0-100 from the EAR) but kept `get_view`'s `state` / `probability` / `pose` fields as planned. Whether `EyesSummary` should carry the EAR or the openness is open.
 
@@ -44,9 +44,9 @@ Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
 
 - [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
 
-### Native: real-device check of the 1:1 view on files with a malformed full-size JPEG
+### App: real-device check of the 1:1 view on files with a malformed full-size JPEG
 
-The `partial-decode-error-exit` work (`docs/plans/_archived/20261002-partial-decode-error-exit/plan.md`) made `decode_region` in `crates/core/src/partial.rs` return `Err` on a fatal libjpeg error instead of calling `exit(1)`. Unit tests (empty input, non-JPEG input, a JPEG truncated inside the header) and `riffle-cli crop` / `check` on the real files cover the core path. `crop` returned `libjpeg fatal error: Not a JPEG file: starts with 0x3c 0x44` for `NIKON_D70_Nikon.nef` and `... 0x80 0x03` for `CGO3P_YUN00007.dng`. `check` over the samples ran to its summary in 23.0 s. The native app's 1:1 view (`z`, whose crop read calls the same `decode_focus_crop`) was never exercised on these files, and neither was what it shows for the error. Files: `crates/app/src/zoom.rs`, `crates/core/src/partial.rs`.
+The `partial-decode-error-exit` work (`docs/plans/_archived/20261002-partial-decode-error-exit/plan.md`) made `decode_region` in `crates/core/src/partial.rs` return `Err` on a fatal libjpeg error instead of calling `exit(1)`. Unit tests (empty input, non-JPEG input, a JPEG truncated inside the header) and `riffle-cli crop` / `check` on the real files cover the core path. `crop` returned `libjpeg fatal error: Not a JPEG file: starts with 0x3c 0x44` for `NIKON_D70_Nikon.nef` and `... 0x80 0x03` for `CGO3P_YUN00007.dng`. `check` over the samples ran to its summary in 23.0 s. The app's 1:1 view (`z`, whose crop read calls the same `decode_focus_crop`) was never exercised on these files, and neither was what it shows for the error. Files: `crates/app/src/zoom.rs`, `crates/core/src/partial.rs`.
 
 #### TODO
 
@@ -76,13 +76,13 @@ A real cold first scan on Windows 11 (internal SSD, 22 threads, Sony ARW) costs 
 
 - [ ] Run `handpic-cli scan` on a cold real folder on Windows at thread counts 1 / 4 / 8 / 22 (cold each run) to separate IO concurrency from per-file cost, and compare the bounded 1MiB read against reading the whole file.
 
-### Native: a deep-row focus point still exceeds the 50ms budget
+### App: a deep-row focus point still exceeds the 50ms budget
 
-A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to pixels (n=2, before the #56 and #60 fixes); see "The 1:1 focus check path" in docs/humans/performance.md. Options are prefetching the neighboring files' crops (Phase 4's ring buffer) or a DCT-scaled placeholder; nothing is chosen. The measurement was the Tauri app's; the native 1:1 view (`crates/app/src/zoom.rs`) reads the crop through the same `crates/core/src/partial.rs`.
+A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to pixels (n=2, before the #56 and #60 fixes); see "The 1:1 focus check path" in docs/humans/performance.md. Options are prefetching the neighboring files' crops (Phase 4's ring buffer) or a DCT-scaled placeholder; nothing is chosen. The measurement was the Tauri app's; the app's 1:1 view (`crates/app/src/zoom.rs`) reads the crop through the same `crates/core/src/partial.rs`.
 
 #### TODO
 
-- [ ] Retake the deep-row measurement on the native 1:1 view, then decide between crop prefetch and a DCT-scaled placeholder.
+- [ ] Retake the deep-row measurement on the app's 1:1 view, then decide between crop prefetch and a DCT-scaled placeholder.
 
 ### Docs: consider a guide for verifying Pillow pixel edits
 
@@ -104,9 +104,9 @@ must be wider than the source crop.
       `docs/plans/_archived/20260921-app-icon-enlarge-marks/learnings.md` for
       the concrete numbers. If it does not recur, drop this item.
 
-### Native: the macOS / Linux manual checks for Move to Trash are still open
+### App: the macOS / Linux manual checks for Move to Trash are still open
 
-The strip's `Move to Trash…` moves files through the backend's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the native checks in `### Native: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/engine/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.
+The strip's `Move to Trash…` moves files through the engine's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the app checks in `### App: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/engine/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.
 
 #### TODO
 
@@ -180,7 +180,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       on 68%, the gap at the frontal / oblique boundary. See
       `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
       "Closed-eyes judgment on demand (Windows 11)".
-- [ ] Derive the good-photo rule in the backend, in
+- [ ] Derive the good-photo rule in the engine, in
       `crates/engine/src/index.rs`, so the MCP `get_view` tool can carry it.
       The rule lives only in `crates/app/src/mark.rs` (`photo_tier`) and
       `get_view` says nothing about it. Done when the index derives the tier
@@ -296,7 +296,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Pass 2 now stores the EAR and the pose of the face it meshes (the
       `mesh-eyes-index` work: `eyes_ear`, `eyes`, `eyes_closed` and `pose` on
       `Focus` / `FaceReady`, `docs/plans/_archived/20261008-mesh-eyes-index/plan.md`),
-      but the native `get_view`'s `eyes` still comes from the on-demand
+      but the app's `get_view`'s `eyes` still comes from the on-demand
       judgment (`EyesCache`), so it answers only for a file already shown
       (see `docs/plans/_archived/20261008-mcp-eyes-pose/plan.md`, written for
       the Tauri app). Answer from the stored values when present, falling
@@ -575,7 +575,7 @@ Files: `docs/humans/cameras.md`.
 - [ ] Find an AF-C sample of a person from the α9 III and α7CR (portrait orientation if possible), and turn their `–` for AF point / AF frame size into `✓` if the point lands on the subject.
 - [ ] Confirm orientation on a portrait ARW sample and record the result in `docs/humans/cameras.md`.
 
-### Backend: measure whether a `notify` watch blocks deleting a folder on Windows
+### Engine: measure whether a `notify` watch blocks deleting a folder on Windows
 
 `docs/plans/_archived/20260928-tree-live-watch/plan.md` (Step 1) measured only
 rename on Windows with `notify` 8.2: a watch pins the watched folder's
@@ -591,24 +591,24 @@ so `docs/humans/usage.md` and the plan's Trade-offs section say "rename" only.
       `docs/humans/usage.md` and `docs/agents/shared-crates.md` to match (or confirm
       they need no change).
 
-### Native: a JPEG folder's preview decodes 15-20x longer than an ARW's
+### App: a JPEG folder's preview decodes 15-20x longer than an ARW's
 
 Backend measurement (docs/plans/_archived/20260927-jpeg-view-only/learnings.md,
 Step 2): a 21.5 MP JPEG's `read_preview` + full `decode_rgb` took ~197 ms
 and a 14.8 MP one ~141 ms, versus ~9-15 ms for an ARW/DNG preview. The
 plan's remedy (a DCT-scaled, capped re-encode) was measured and found
 slower than shipping the whole file, so the Tauri app's `preview` sent the
-whole JPEG as is. The native app decodes the whole JPEG for its preview too.
+whole JPEG as is. The app decodes the whole JPEG for its preview too.
 
 #### TODO
 
 - [ ] Find a payload that skips the full decode/encode round trip, e.g. a
       DCT-scaled decode (4/8 or 3/8), or reading a JPEG's embedded Exif
-      thumbnail first. Verify with the native `page` timing lines before
+      thumbnail first. Verify with the app's `page` timing lines before
       choosing. Files: `crates/app/src/main.rs` (the preview load),
       `crates/core/src/decode.rs`.
 
-### Backend: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
+### Engine: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
 `crates/engine/src/photolab.rs` looks up the registered Uuids on macOS too
 (`docs/plans/_archived/20261005-photolab-uuids-macos/plan.md`), verified by
@@ -625,12 +625,12 @@ Uuids and may become a virtual copy.
       extend `folder_names` / `query`'s macOS mapping in
       `crates/engine/src/photolab.rs`.
 
-### Backend: PhotoLab after a file or folder rename
+### Engine: PhotoLab after a file or folder rename
 
 From Step 3's check of the PhotoLab Uuid lookup (`crates/engine/src/photolab.rs`
 queries `Sources` by `FolderId` and `Name`; `crates/core/src/dop.rs` writes
 the RAW's `Name` into the `.dop`). The Tauri app's `rename_file` moved the
-`.dop` unchanged (the native app has no file rename yet, `not_in_native`),
+`.dop` unchanged (the app has no file rename yet, `not_in_app`),
 so its inner `Name` still named the old file and PhotoLab's database still
 held the old name. A folder rename (`crates/engine/src/rename.rs`) leaves
 PhotoLab's database holding the old folder.
@@ -642,7 +642,7 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### Native: real-device check of an ORF folder in the strip, sidecars and Move to Trash
+### App: real-device check of an ORF folder in the strip, sidecars and Move to Trash
 
 `orf.rs` and the `.orf` arm of `scan::is_raw_file` / `reader::parse_raw`
 were verified by unit tests and `riffle-cli bench` / `scan` / `focusbox` on
@@ -667,13 +667,13 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
-`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The native app's paging cost during the passes was measured on Windows (see `docs/agents/app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/engine/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
+`scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The app's paging cost during the passes was measured on Windows (see `docs/agents/app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/engine/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").
 
 #### TODO
 
-- [ ] On macOS, open a large RAW folder with a cold index in the native app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
+- [ ] On macOS, open a large RAW folder with a cold index in the app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
-### Native: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
+### App: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
 
 `big-endian-dng` (`docs/plans/_archived/20261002-big-endian-dng/plan.md`) made `arw::parse` follow the TIFF header's byte order, so the `MM` DNGs of Pentax, Samsung, Ricoh, Leica M (Typ 240 / 246) and iPhone no longer fail with `not a little-endian TIFF/ARW`. It also bumped `EXTRACTOR_VERSION` from 11 to 12, so an index that cached those parse errors should re-extract the rows. The unit tests, `riffle-cli check` on the sample tree (34 of the 52 `MM` files open at every stage) and `mise run ci` cover the parser. The Riffle app was never opened on such a folder, so the re-extraction of cached failed rows and the thumbnails, preview and 1:1 view for these files were never exercised. The step was ticked on the automated criteria only.
 
@@ -683,9 +683,9 @@ Files: `crates/core/src/arw.rs`, `crates/engine/src/index.rs` (`EXTRACTOR_VERSIO
 
 - [ ] On Windows, with an index written by `EXTRACTOR_VERSION` 11 (open `D:\Photos\samples\DNG\` in a build from before the bump, then in this build), open a folder containing the Pentax K-5 II, iPhone 12 Pro and Leica M (Typ 240) samples. Expected: the rows that cached `not a little-endian TIFF/ARW` are re-extracted, and the thumbnails, the preview and the 1:1 view show.
 
-### Native: real-device check of the 1:1 view on older Sony ARW bodies (no full-size JPEG)
+### App: real-device check of the 1:1 view on older Sony ARW bodies (no full-size JPEG)
 
-The `sony-arw-preview-full` work (`docs/plans/_archived/20261005-sony-arw-preview-full/plan.md`) made `arw::parse` fall back to the preview as `full` when the largest other JPEG is smaller, so the α9 II, α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10 no longer take the 160x120 IFD1 thumbnail for the 1:1 view. A synthetic-TIFF unit test, `riffle-cli info` / `bench` on the samples (`full` at the preview's offset / length; decodes of 1616x1080, 1440x1080 on the 4:3 α7C sample and 1920x1080 on the ZV-E10 read from the JPEG SOF) and `mise run ci` cover the core path. The native app's 1:1 view (`z`, whose crop read in `crates/app/src/zoom.rs` goes through `reader::read_full` and `decode_focus_crop`) was never exercised on these files. The step was ticked on the automated criteria only. Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `crates/app/src/zoom.rs`.
+The `sony-arw-preview-full` work (`docs/plans/_archived/20261005-sony-arw-preview-full/plan.md`) made `arw::parse` fall back to the preview as `full` when the largest other JPEG is smaller, so the α9 II, α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10 no longer take the 160x120 IFD1 thumbnail for the 1:1 view. A synthetic-TIFF unit test, `riffle-cli info` / `bench` on the samples (`full` at the preview's offset / length; decodes of 1616x1080, 1440x1080 on the 4:3 α7C sample and 1920x1080 on the ZV-E10 read from the JPEG SOF) and `mise run ci` cover the core path. The app's 1:1 view (`z`, whose crop read in `crates/app/src/zoom.rs` goes through `reader::read_full` and `decode_focus_crop`) was never exercised on these files. The step was ticked on the automated criteria only. Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `crates/app/src/zoom.rs`.
 
 #### TODO
 
@@ -705,7 +705,7 @@ Files: `CLAUDE.md` (Development) or a new `docs/agents/dev-environment.md`.
 
 ---
 
-### Backend: a redo of Delete Sidecars… leaves a closed folder's rows judged
+### Engine: a redo of Delete Sidecars… leaves a closed folder's rows judged
 
 #### Background
 
@@ -716,7 +716,7 @@ The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run
 - [ ] Record each sidecar's RAW in the trash run (for example in `trash::Trashed`), so that a redo clears the index rows of a closed folder.
 - [ ] Add a test covering delete, undo, then redo with another folder open.
 
-### Backend: Rewrite Sidecars from Index… patches an oversize sidecar
+### Engine: Rewrite Sidecars from Index… patches an oversize sidecar
 
 #### Background
 
@@ -757,7 +757,7 @@ The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidec
 #### TODO
 
 - [ ] Revisit `REJECT_WEIGHT` once a user's data holds enough explicit rejects to measure it.
-- [ ] If the native app shows a ranking confidence, base it on how far the fit has moved from the prior, not only on the burst count.
+- [ ] If the app shows a ranking confidence, base it on how far the fit has moved from the prior, not only on the burst count.
 
 ### Core: portrait bursts lean negative under the per-genre ranking offsets
 
@@ -769,7 +769,7 @@ The `genre-ranking-offsets` feature kept per-genre offsets on the shared ranking
 
 - [ ] Once more non-sports judgments have accumulated, take a fresh app dump and re-run `genre_offsets.py` (it needs the scikit-learn venv, e.g. `D:\Photos\tests\.venv-eval\Scripts\python.exe` (the old `%TEMP%\embedvenv` was wiped on 2026-10-19); the run takes about 50 minutes on 20 workers and prints only at the end). If portrait's (or Unknown's) paired difference stays negative with an interval that excludes zero, raise `OFFSET_SHRINK` or drop the offsets for that genre; otherwise leave it as is.
 
-### Backend: the AI model's footprint (resident plan, kept 378 MB file, 190 MB fp16 option)
+### Engine: the AI model's footprint (resident plan, kept 378 MB file, 190 MB fp16 option)
 
 #### Background
 
@@ -778,7 +778,7 @@ Three leftovers from `image-embeddings` Step 3. (1) `embed::shared` keeps the Si
 #### TODO
 
 - [ ] Revisit dropping the plan after a pass if memory becomes a complaint.
-- [ ] Add a "remove the model" action next to the AI switch (the native app has none yet), and consider HTTP range resume for the download.
+- [ ] Add a "remove the model" action next to the AI switch (the app has none yet), and consider HTTP range resume for the download.
 - [ ] Try widening the fp16 initializers before the plan is built, and measure ms/image against the FP32 file (129 ms on one thread).
 
 ### Core: soccer and macro genres need labeled positives to come back
@@ -908,7 +908,7 @@ Files: `docs/plans/_archived/20261019-discard-retarget/plan.md`, `docs/plans/_ar
 
 - [ ] Ask the user: is the existing `G0` at per-folder q5-q10, sorted last (not hidden), worth shipping as it is? If no, delete this item. If yes, write a plan that pre-registers the question and its bars and starts with a fresh blind confirmation round (candidates and controls mixed and unmarked, about 3 s per frame, 600 frames about 30 minutes). Run the offline Python with `D:\Photos\tests\.venv-eval\Scripts\python.exe -I -B` (the old `%TEMP%\embedvenv` was wiped).
 
-### Backend: a split moves a shared sidecar with whichever RAW moves first
+### Engine: a split moves a shared sidecar with whichever RAW moves first
 
 #### Background
 
@@ -966,7 +966,7 @@ Files: `crates/core/src/copy.rs`.
 
 - [ ] Replace the final `fs::rename` with a no-replace rename on Windows, Linux and macOS, and keep the failing-job message `exists: ...`. Done when a unit test that creates the destination between the check and the rename (through a hook or a stub) leaves the existing file untouched on the platform CI runs.
 
-### Native: real-device check of the chunked Move to Trash on Windows (trash-over-scan Step 4)
+### App: real-device check of the chunked Move to Trash on Windows (trash-over-scan Step 4)
 
 #### Background
 
@@ -975,10 +975,10 @@ Files: `crates/engine/src/trash.rs` (`run_chunked`, `move_chunk`, `trash_listed`
 
 #### TODO
 
-- [ ] On Windows, in a test folder of copies, move 500+ files with the native app. Expect the move to take about 7 ms a file, near `trash-bench.md` (a large gap means the app adds a cost the bench did not have). Expect the status count to go up in steps of 100. Undo restores all, each sidecar with its RAW. Redo moves them again.
+- [ ] On Windows, in a test folder of copies, move 500+ files with the app. Expect the move to take about 7 ms a file, near `trash-bench.md` (a large gap means the app adds a cost the bench did not have). Expect the status count to go up in steps of 100. Undo restores all, each sidecar with its RAW. Redo moves them again.
 - [ ] On Windows, hold one file open, then move a selection around it. Expect that file listed as a failure with its sidecars left, and the rest moved and restored by Undo.
 
-### Backend: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
+### Engine: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
 
 #### Background
 
@@ -989,7 +989,7 @@ Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
 
 - [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
 
-### Backend: Undo of Move to Trash is still one shell operation per item
+### Engine: Undo of Move to Trash is still one shell operation per item
 
 #### Background
 
@@ -1001,7 +1001,7 @@ Files: `crates/engine/src/trash.rs` (`restore`, `undo_run`).
 - [ ] Time Undo of a 500+ file move on Windows.
 - [ ] If slow, restore in chunks while keeping the RAW-before-sidecar and never-overwrite rules.
 
-### Backend: Delete Permanently cannot remove a read-only file on some platforms
+### Engine: Delete Permanently cannot remove a read-only file on some platforms
 
 #### Background
 
@@ -1021,13 +1021,13 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
 
-### Native: measure the scan's read cap on NVMe
+### App: measure the scan's read cap on NVMe
 
 `READ_SLOTS` (2) was picked on a SATA SSD; no RAW folder was on the NVMe (`C:`) at the time. A shallower queue costs more on a drive that needs deep queues for throughput, so cap 2 may slow the thumbnail fill there. The harness the cap was measured with (`preview_during_pass_1_on_a_real_folder`) was a test of the Tauri crate and left with it. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/scan.rs` (`READ_SLOTS`), `docs/agents/shared-crates.md` (the read cap section).
 
 #### TODO
 
-- [ ] Put an unopened RAW folder on the NVMe, close the app and measure the preview read during pass 1 at caps 22 and 2 on cold data (a new harness, or the native app's `page` timing lines). Done when `docs/agents/shared-crates.md`'s read cap section has the numbers and the cap is confirmed or changed.
+- [ ] Put an unopened RAW folder on the NVMe, close the app and measure the preview read during pass 1 at caps 22 and 2 on cold data (a new harness, or the app's `page` timing lines). Done when `docs/agents/shared-crates.md`'s read cap section has the numbers and the cap is confirmed or changed.
 
 ### Core: test the scan's read slot in `embed_all` and the post-read cancel check
 
@@ -1050,17 +1050,17 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] Time `handpic-cli features` (or a pass 2 in the app) on a freshly mounted card or after a reboot, with the same 8 threads and release build as Step 3, and compare it with the warm figures. If the second read is a noticeable share of the cost, consider reusing the first read's bytes.
 
-### Backend: re-check that notify 8.2.2 still queues `configure` behind `Unwatch` when the native app starts using `watch`
+### Engine: re-check that notify 8.2.2 still queues `configure` behind `Unwatch` when the app starts using `watch`
 
 #### Background
 
-`gpui-backend-crate` Step 4 moved the folder watcher into `crates/engine/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/app/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/shared-crates.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The native app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/app/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/engine/src/watch.rs`, `crates/app/Cargo.lock`, `docs/agents/shared-crates.md`.
+`gpui-backend-crate` Step 4 moved the folder watcher into `crates/engine/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/app/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/shared-crates.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/app/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/engine/src/watch.rs`, `crates/app/Cargo.lock`, `docs/agents/shared-crates.md`.
 
 #### TODO
 
-- [ ] When the native app first uses `watch` (the ports' rename path), re-check on notify 8.2.2 that `configure` still queues behind `Unwatch`, so that `watch::settle` still holds. Either pin the native lock to the version the root lock holds, or confirm the queuing behavior and note the version in `docs/agents/shared-crates.md`.
+- [ ] When the app first uses `watch` (the ports' rename path), re-check on notify 8.2.2 that `configure` still queues behind `Unwatch`, so that `watch::settle` still holds. Either pin the app lock to the version the root lock holds, or confirm the queuing behavior and note the version in `docs/agents/shared-crates.md`.
 
-### Native: real-device checks of the strip, the scan progress, the resume and the resync
+### App: real-device checks of the strip, the scan progress, the resume and the resync
 
 `gpui-strip-index` added the thumbnail strip, pass 1 of the scan, the resume at the last viewed file and the folder-watcher resync to the GPUI app (`crates/app`). CI and the unit tests cover the pure models (`strip.rs`, `focus.rs`, `viewed.rs`, `resync.rs`); stderr-instrumented debug runs covered the scan, the resume and the resync. Nobody has watched the running window: the strip's drawing, the status line's `scanning done/total` climb, the memory behavior while scrolling, the resume and steered scan on a 1000+ file folder, and the resync from Explorer copies and deletes are all unchecked. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/main.rs`, `crates/app/src/strip.rs`, `crates/app/src/thumbs.rs`, `crates/app/src/focus.rs`, `crates/app/src/viewed.rs`, `crates/app/src/resync.rs`.
 
@@ -1073,7 +1073,7 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 - [ ] On Windows, on a 1000+ RAW folder with a fresh index (`manual3.sqlite`), wait for the scan to end, press `End`, then `←` a few times, wait a second and quit with `q`. (a) Run again with the same arguments: the preview, the outlined strip cell and the status line open at the file left at, and the strip is scrolled to it. (b) Run on the same folder with another fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next.
 - [ ] On Windows, copy a few ARW files into a new folder under `D:\Photos\tests\` (e.g. `D:\Photos\tests\20261110-gpui-strip-index\manual4`) and run `handpic.exe <that folder> --index <fresh file>`. Page to the second file. (1) From Explorer, copy another ARW into the folder: within about a second its cell appears in the strip at its name's place and gets a thumbnail, the outlined cell, the preview and the status line still name the same file, the status line's total grows by one, and the other thumbnails do not flash back to gray. (2) From Explorer, delete a file that is not the current one: its cell disappears and the current file stays current. (3) Delete the current file: the preview, the outline and the status line move to the file after it (the one before it when it was the last).
 
-### Native: measure the scan pause in `load` with presses on files pass 1 has not read yet
+### App: measure the scan pause in `load` with presses on files pass 1 has not read yet
 
 `gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. The one 336.75 ms read without the pause came on a disk slowed by 40 GB of just-written copies, so it proves nothing. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md` (`results.md` in the same folder). Files: `crates/app/src/main.rs` (`load`), `crates/app/src/focus.rs`, `crates/app/src/args.rs` (`--auto`).
 
@@ -1081,15 +1081,15 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 
 - [ ] Run `--auto` with presses that land on unread files (a jump such as `End`, or a stride), on equal cold copies (`robocopy /J`, one per run) and a settled disk, pause on against off, and record `read` p50 / p95 next to Tauri's. Done when `docs/agents/app.md` says whether the pause shortens the read.
 
-### Native: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
+### App: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
 
-`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` was 144x144 (its `style.css`'s `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the native strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/strip.rs` (`Geometry`), `crates/app/src/main.rs` (`paint_strip`).
+`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` was 144x144 (its `style.css`'s `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the app's strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/strip.rs` (`Geometry`), `crates/app/src/main.rs` (`paint_strip`).
 
 #### TODO
 
-- [ ] Decide whether the default strip height, or the box's aspect, changes so the native cell matches the Tauri size, now that the user can drag the strip taller (`stripheight.rs` `DEFAULT`, `strip::Geometry`).
+- [ ] Decide whether the default strip height, or the box's aspect, changes so the app's cell matches the Tauri size, now that the user can drag the strip taller (`stripheight.rs` `DEFAULT`, `strip::Geometry`).
 
-### Native: `present` p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
+### App: `present` p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
 
 In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW compare folder rose with the strip while RAF was unchanged. It is not gated and stays under 1 ms. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/main.rs` (`paint_strip`).
 
@@ -1097,9 +1097,9 @@ In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW co
 
 - [ ] When a later strip change (marks, badges) lands, re-run the same-session A/B and check that `present` p95 has not grown past 1 ms; if it has, look at `paint_strip` first.
 
-### Native: the in-app `keypressToPixels` stops about 48 ms before the DWM present on 4416x2944 RAF previews
+### App: the in-app `keypressToPixels` stops about 48 ms before the DWM present on 4416x2944 RAF previews
 
-The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeds the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). So on the large image the in-app `present` stamp precedes the frame reaching the DWM by about 34 ms more than on ARW. A hypothesis, not a finding: the large texture's upload or sampling on the GPU. Nothing in the data separates it from other causes. The plan did not follow it up, and the measurement tooling stays on the local-only branch `measure/tauri-latency-ab`. Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it). Files: `crates/native/src/main.rs` (`present`).
+The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeds the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). So on the large image the in-app `present` stamp precedes the frame reaching the DWM by about 34 ms more than on ARW. A hypothesis, not a finding: the large texture's upload or sampling on the GPU. Nothing in the data separates it from other causes. The plan did not follow it up, and the measurement tooling stays on the local-only branch `measure/tauri-latency-ab`. Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it). Files: `crates/app/src/main.rs` (`present`).
 
 #### TODO
 
@@ -1115,7 +1115,7 @@ The `tauri-gpui-latency-ab` same-session A/B measured both apps against one exte
 
 - [ ] Either add a line to `CLAUDE.md`'s Development section ("never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`"), or make `merge.test.sh` unset both variables (fixing the cause). Done when the line is in `CLAUDE.md`, or the test script unsets them and a test shows it cannot touch the outer repository.
 
-### Native: private bytes grow while `→` is held in the 1:1 view
+### App: private bytes grow while `→` is held in the 1:1 view
 
 #### Background
 
@@ -1125,18 +1125,18 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 - [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
 
-### Native: real-device checks of the held-key preview and crop (gpui-held-key-preview)
+### App: real-device checks of the held-key preview and crop (gpui-held-key-preview)
 
 #### Background
 
-`gpui-held-key-preview` made the GPUI native app (`crates/app`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run app:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/app/src/pager.rs`, `crates/app/src/zoom.rs`, `crates/app/src/main.rs`.
+`gpui-held-key-preview` made the GPUI app (`crates/app`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run app:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/app/src/pager.rs`, `crates/app/src/zoom.rs`, `crates/app/src/main.rs`.
 
 #### TODO
 
-- [ ] On Windows, fit view: open a folder in the native app (`mise run app:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
+- [ ] On Windows, fit view: open a folder in the app (`mise run app:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
 - [ ] On Windows, 1:1 view: on a folder whose crop read outlasts the key repeat (RAF, ARW), press `z`, then hold `→`. Expected: the 1:1 view flips through crops during the hold (skipping some files) instead of staying on the first one until release. No crop is ever drawn over another file's scaled preview. On release the current file's crop is shown. A single press while zoomed goes old crop, new crop. `z` off / on on the same file reuses its crop with no new `zoom` line, and a `z` press prints one `zoom` line.
 
-### Native: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
+### App: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
 
 `gpui-judgments` added the meta pane, the view-only JPEG folder, the strip's judgment marks, the judgment keys through the keymap, the index and sidecar writes and undo / redo to the GPUI app (`crates/app`). Each step's checkbox was ticked on its automated criteria (unit tests, `--auto` runs); nobody has watched the running window or pressed the keys by hand, and the window close button's writer drain has not been seen. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/meta.rs`, `crates/app/src/viewonly.rs`, `crates/app/src/strip.rs`, `crates/app/src/keys.rs`, `crates/app/src/judgment.rs`, `crates/app/src/history.rs`, `crates/app/src/settings.rs`.
 
@@ -1157,20 +1157,20 @@ During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 
 
 - [ ] Loosen the bound, or wait on a condition (the scan's end) instead of the wall clock, and confirm `mise run ci` passes with full parallelism.
 
-### Native: real-device checks of the f focus mark, face boxes and face mesh
+### App: real-device checks of the f focus mark, face boxes and face mesh
 
-`gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/app`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the native window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/app/src/mark.rs`, `crates/app/src/overlay.rs`, `crates/app/src/faces.rs`, `crates/app/src/eyes.rs`, `crates/app/src/facemesh.rs`, `crates/app/src/main.rs`.
+`gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/app`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the GPUI window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/app/src/mark.rs`, `crates/app/src/overlay.rs`, `crates/app/src/faces.rs`, `crates/app/src/eyes.rs`, `crates/app/src/facemesh.rs`, `crates/app/src/main.rs`.
 
-Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run app:dev -- <folder> --index <fresh file in that test folder>` for the native app, and, for the comparison, open the same folder in a reference Tauri build with its own index (never share one): an installed Riffle 1.10.0, or a build of the commit before #1150, which removed the Tauri app.
+Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run app:dev -- <folder> --index <fresh file in that test folder>` for the app, and, for the comparison, open the same folder in a reference Tauri build with its own index (never share one): an installed Riffle 1.10.0, or a build of the commit before #1150, which removed the Tauri app.
 
 #### TODO
 
-- [ ] On Windows, press `f` in the native app and the reference Tauri build and step through `ILCE-1M2_sony_a1_ii_03.arw`, `ILCE-7M4_DSC07652.ARW`, `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw`, `ILCE-6400_DSC01340.ARW`, `ILCE-6400_DSC00405.ARW`, `_DSC1616.ARW`, `_DSC1758.ARW` and `_DSC1760.ARW`. Expect on each file the crosshair and the AF frame on the same spot of the picture with the same color (bright green on `_DSC1758`, gray on `_DSC1616`, white on the rest), no mark on `ILCE-6400_DSC00405.ARW`, and the arm ends keeping the dark outline.
-- [ ] On Windows, with `f` on in both, check at least `_DSC1758.ARW` (nine faces), `ILCE-6400_DSC01340.ARW` (orientation 6), `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8) and `ILCE-6400_DSC00405.ARW` (a face box without an AF mark). Expect the same boxes, five cyan dots per face and label text in both, each label upright above its box's top-left corner (inside the box at the image's top edge, pulled left at the right edge), and the labels readable over a bright face with the native app's offset-copy halo (`docs/agents/app.md`). If they do not read, switch `paint_label` to a dark quad behind the text.
+- [ ] On Windows, press `f` in the app and the reference Tauri build and step through `ILCE-1M2_sony_a1_ii_03.arw`, `ILCE-7M4_DSC07652.ARW`, `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw`, `ILCE-6400_DSC01340.ARW`, `ILCE-6400_DSC00405.ARW`, `_DSC1616.ARW`, `_DSC1758.ARW` and `_DSC1760.ARW`. Expect on each file the crosshair and the AF frame on the same spot of the picture with the same color (bright green on `_DSC1758`, gray on `_DSC1616`, white on the rest), no mark on `ILCE-6400_DSC00405.ARW`, and the arm ends keeping the dark outline.
+- [ ] On Windows, with `f` on in both, check at least `_DSC1758.ARW` (nine faces), `ILCE-6400_DSC01340.ARW` (orientation 6), `ILCE-1M2_sony_a1_ii_03.arw` (orientation 8) and `ILCE-6400_DSC00405.ARW` (a face box without an AF mark). Expect the same boxes, five cyan dots per face and label text in both, each label upright above its box's top-left corner (inside the box at the image's top edge, pulled left at the right edge), and the labels readable over a bright face with the app's offset-copy halo (`docs/agents/app.md`). If they do not read, switch `paint_label` to a dark quad behind the text.
 - [ ] On Windows, with `f` on in both, stop on `ILCE-6300_Free_raws_by_signatureeditsco_DSC03068.arw` (closed eyes, orientation 8), `_DSC1758.ARW` (open eyes) and `ILCE-6400_DSC01340.ARW` (portrait, orientation 6), waiting for the judgment (up to 2 s in a debug build). Expect the magenta mesh (face oval, eyes, brows, nose, lips) on the same face with the same lines in both, over a dark outline, and the iris rings and two iris dots on the open-eyed frames only. Also hold `→` with `f` on and check that the log's `eyes` lines name only files the paging stopped on or passed slowly.
 - [ ] On Windows, on a folder of a few hundred RAW files with a fresh `--index`, check that the status line shows `analyzing N/total` after `scanning N/total` and ends clean, and that switching to another folder mid-pass 2 from the folder tree stops it (reopening the first folder resumes the remaining files).
 
-### Native: quitting while a re-listing is stopping the previous scan does not wait for that scan
+### App: quitting while a re-listing is stopping the previous scan does not wait for that scan
 
 The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.md`) made every quit path stop the held scan with a bounded wait (`scan::Running::stop_within`, `STOP_TIMEOUT`) in the app-level `on_app_quit` handler. `list` moves the previous scan out of the holder into a background task that calls the unbounded `Scan::stop`. If the user quits while that task is still winding the scan down, the holder is empty, so the handler does not wait for it. The process can then exit before that scan's `scan faces:` line, and its write transaction may be cut. This was left out as rare and as needing more state, and the hand check did not exercise it. Files: `crates/app/src/scan.rs`, `crates/app/src/main.rs`, `docs/agents/app.md`.
 
@@ -1178,7 +1178,7 @@ The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.
 
 - [ ] Let the quit handler also wait, bounded by `STOP_TIMEOUT`, for a scan that a re-listing is stopping in the background (for example by keeping that scan, or a join signal for it, in the shared holder until its stop returns), and log the outcome on the `quit:` line.
 
-### Native: real-device checks of the strip's sort order, the filter and the filter / sort menus
+### App: real-device checks of the strip's sort order, the filter and the filter / sort menus
 
 `gpui-filter-sort` added the strip's sort order, the filter (flags, stars, labels, orientation, `Face focus`, `Eyes`, `Output`) and the status row's `Sort ▾` / `Filter ▾` menus to the GPUI app (`crates/app`). CI, the unit tests (`sort.rs`, `filter.rs`, `menu.rs`) and debug `--auto` runs covered the page order and the log lines headlessly. Clicks and key presses cannot be driven by `--auto`, so nobody has watched the strip's drawing, pressed a judgment key under a sort or a filter, or clicked a menu. Windows only. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/sort.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`.
 
@@ -1191,7 +1191,7 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] `Face focus` and `Eyes` (Step 3): open `faces` with `settings-filter-good.json`. The strip starts empty and fills in while `analyzing n / m` runs, ending with DSC00405, _DSC1758 and ILCE-1M2_sony_a1_ii_03, each with a bright green `f` mark. With `settings-filter-closed.json` only DSC03068 shows.
 - [ ] The menus and the `Output` section (Steps 3 and 4): open `menu\raw` with `settings-name.json`. `Sort ▾` and `Filter ▾` sit at the status row's right end and the preview is the same size as before. Click `Filter ▾`: the menu opens upward over the strip, its right edge on the button's; check `Picked`, then `Red`: the menu stays open, each gets a check mark, the strip narrows (no picked or red file in `raw`: `No files match the current filter.`; use `menu\faces` after picking one with `p` to see a narrowed strip) and the button lights; a click on an item does not also select a strip cell under it. `Escape` closes it; reopen and click the preview: it closes; reopen and click a strip cell: it closes (record whether the cell is also selected); click `Filter ▾` while open: it closes and stays closed. `Reset` unchecks all and shows every file, the button no longer lit. `Sort ▾` then `Rating`: the strip reorders (HX99, RX0, RX0M2, RX100M2, RX100M3, HX95), the menu closes and the current file stays current and in view. With the filter menu open, hold `→`: the pager pages; `e`, `z`, `f` still toggle peaking, 1:1 and the focus mark. On `menu\jpg-sequenced`: `Sort ▾` is dimmed and does nothing, the strip is in capture order. On `menu\faces` the filter menu shows the `Output` section (`Output`: DSC00405, _DSC1616, _DSC1758; `No output`: the other 5); renaming `Output\` away hides the section (its checks cleared) and renaming it back brings it back; on `menu\raw` (no `Output\`) the section is absent. The settings file is untouched.
 
-### Native: real-device checks of the EXIF filter sections and the refilter fixes
+### App: real-device checks of the EXIF filter sections and the refilter fixes
 
 `gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the strip position (then the meta pane's `n / total`, now the status bar's, see `native-status-position`) follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/exif.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`, `crates/app/src/main.rs`.
 
@@ -1207,17 +1207,17 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, the settings file is untouched (its modification time unchanged).
 - [ ] On Windows, on a fresh index with `untagged` plus a `Face focus` item checked, press `p` repeatedly while pass 2 runs: the image on screen must always end up the current file's, never a judged file's left behind (the `shown_after` fix in `refilter`, found by reading only; the race is timing-dependent and may not show either way).
 
-### Native: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
+### App: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
 
-The native EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/app` has no ICU collator. Tauri used `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/app/src/exif.rs` (`compare`).
+The app's EXIF filter orders the `Camera` and `Lens` items by a case-insensitive compare with a plain compare as the tie-break, because `crates/app` has no ICU collator. Tauri used `localeCompare`, so the two may differ for punctuation or non-ASCII model names. Found in `gpui-exif-filter` (the plan's trade-off). Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md`. Files: `crates/app/src/exif.rs` (`compare`).
 
 #### TODO
 
-- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names, against the reference Tauri build named under "Native: real-device checks of the f focus mark, face boxes and face mesh" (an installed Riffle 1.10.0, or a build of the commit before #1150) or against `Intl.Collator` / `localeCompare` results for the same names, and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
+- [ ] Compare the two orders on a folder with punctuated or non-ASCII camera / lens names, against the reference Tauri build named under "App: real-device checks of the f focus mark, face boxes and face mesh" (an installed Riffle 1.10.0, or a build of the commit before #1150) or against `Intl.Collator` / `localeCompare` results for the same names, and, if they differ in a way that matters, order them with a collator (`icu_collator`) or a closer rule.
 
-### Native: real-device checks of the settings store and the settings modal (sort / filter persistence, Culling, Sidecar, Keyboard Shortcuts, label names, Import)
+### App: real-device checks of the settings store and the settings modal (sort / filter persistence, Culling, Sidecar, Keyboard Shortcuts, label names, Import)
 
-`gpui-settings` gave the GPUI app (`crates/app`) its own settings store (a SQLite file seeded once from the Tauri `settings.json`), persisted the strip's filter and sort order in it, and ported the settings modal: the Culling, Sidecar, Keyboard Shortcuts and Import tabs, opened with Ctrl+, (Meta+, on macOS). CI and the unit tests (`settingsmodal.rs`, `settings.rs`, `textinput.rs`, `filter.rs`, the backend's `store.rs`, `sidecar.rs` `switch_to` and `import.rs` `today_example`) cover the pure models and the store. Only Step 1's store seed was hand-checked, headless. Nobody has opened the modal, clicked or typed in it, used the OS folder dialog, or seen the Japanese IME compose in the text input: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-settings/plan.md` (the steps are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/settings.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/textinput.rs`, `crates/engine/src/store.rs`, `crates/engine/src/sidecar.rs`, `crates/engine/src/import.rs`.
+`gpui-settings` gave the GPUI app (`crates/app`) its own settings store (a SQLite file seeded once from the Tauri `settings.json`), persisted the strip's filter and sort order in it, and ported the settings modal: the Culling, Sidecar, Keyboard Shortcuts and Import tabs, opened with Ctrl+, (Meta+, on macOS). CI and the unit tests (`settingsmodal.rs`, `settings.rs`, `textinput.rs`, `filter.rs`, the engine's `store.rs`, `sidecar.rs` `switch_to` and `import.rs` `today_example`) cover the pure models and the store. Only Step 1's store seed was hand-checked, headless. Nobody has opened the modal, clicked or typed in it, used the OS folder dialog, or seen the Japanese IME compose in the text input: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-settings/plan.md` (the steps are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/settings.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/textinput.rs`, `crates/engine/src/store.rs`, `crates/engine/src/sidecar.rs`, `crates/engine/src/import.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first. Work only on copies under `D:\Photos\tests\20261113-settings\` with a fresh `--index` per run and an explicit `--settings <test store>.sqlite` (plus `--import-settings <test json>` where a seed is needed); never the default index or store, never the real Tauri `settings.json`, and never a folder under `D:\Photos\` outside `D:\Photos\tests\`. In every command below, `...\` stands for `D:\Photos\tests\20261113-settings\`, and the run is `target\debug\handpic.exe <folder> --index ...\<index> --settings ...\<store> --log ...\Handpic.log`. Record what was seen in `docs/agents/app.md`, above all the key names that arrive in the shortcut capture for Shift+1 and Ctrl+Alt+1 (the open question in "Every keystroke goes through the keymap": the code expects `!` and `ctrl+alt+1`).
 
@@ -1231,19 +1231,19 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, the Import tab (Step 7). Create `...\import-root` first. Run on `...\photos` with `--index ...\index-s7a.sqlite --settings ...\step7.sqlite` (fresh, nothing seeded). Ctrl+, → Import: the paragraph, `Destination root` with an empty box, `Choose…` and the note `Choose the folder imports are copied into.`, the pattern field holding `%Y/%F`, the example `2026\2026-11-14` (today's date, relative while no root is set), the four example buttons and the eleven-row specifier table. `Choose…`: the Windows folder dialog opens; pick `...\import-root`: the root box shows it, the note is gone, and the example reads `...\import-root\2026\2026-11-14`; type into the field without committing, open `Choose…` again and pick the same folder: the typed text stays. Replace the pattern with `%Y/%m` by typing: the example changes as each character is typed and ends `...\import-root\2026\11`; press Enter. Type `%H` and press Enter: the example line shows the time-specifier refusal in red; type `%Y//%d` and press Enter: the empty-folder-name refusal; Escape closes the modal. Quit, start again with the same `--settings` and a fresh `--index` (`index-s7b.sqlite`): Ctrl+, → Import shows the chosen root and `%Y/%m` (the last valid pattern), not `%Y//%d`. Click `%F`: the field shows `%F` and the example `...\2026-11-14`; quit and restart as above: `%F` is kept. Open `Choose…` and close the modal with the `×` while the dialog is up (if the dialog lets the window be clicked), then pick a folder: it still shows on the next open and after a restart. Press Cancel in the dialog if the window cannot be clicked, and skip this last part.
 - [ ] On Windows, the `Lightroom language` `Select` applies on selection (`native-label-language-apply`; plan: `docs/plans/_archived/20261116-native-label-language-apply/plan.md`; files: `crates/app/src/settingsview.rs`). Run with a fresh `--index`, `--settings` and `--log` under `D:\Photos\tests\`, format XMP. Ctrl+, → Sidecar: the `Select` shows English with the default names and there is no `Reset` button. Choose `日本語`: the five fields fill with the Japanese names at once, the strip's label names follow, and the log has `label names: ... -> ...`. Choosing the language already shown changes nothing. Edit one field and press Enter: the `Select` clears to its placeholder. Type the English names back and commit: English is selected again. Close and reopen the modal: the `Select` shows the language of the names in force. Expect no panic on any choice (the open applies nothing and a choice applies once).
 
-### Native: the settings-store tests are flaky on CI
+### App: the settings-store tests are flaky on CI
 
-After #1020 merged, main's CI `native` job failed in `settings::tests::reads_the_stored_values` and `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`. A stored `sidecarFormat` of `both` read back as `xmp`. Rerunning the job passed (run 43465601803). The tests come from the settings store (#1008 / #1012), not `gpui-companions`. The likely cause is the store's writer thread not having flushed the seed before the reopen. Found during `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/app/src/settings.rs`.
+After #1020 merged, main's CI `app` job failed in `settings::tests::reads_the_stored_values` and `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`. A stored `sidecarFormat` of `both` read back as `xmp`. Rerunning the job passed (run 43465601803). The tests come from the settings store (#1008 / #1012), not `gpui-companions`. The likely cause is the store's writer thread not having flushed the seed before the reopen. Found during `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/app/src/settings.rs`.
 
 #### TODO
 
 - [ ] Make the tests wait for the writer (or write the seed synchronously) so they pass repeatedly. Done when both tests pass across many repeated runs.
 
-### Native: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo
+### App: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo
 
-`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the backend's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. Nobody has clicked the tree, opened the menus or dialog, used Explorer, the clipboard or the Recycle Bin, or seen the keyboard focus model run: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/engine/src/folders.rs`, `crates/engine/src/treewatch.rs`, `crates/engine/src/trash.rs`.
+`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the engine's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. Nobody has clicked the tree, opened the menus or dialog, used Explorer, the clipboard or the Recycle Bin, or seen the keyboard focus model run: every step's checkbox was ticked on the automated criteria. Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/engine/src/folders.rs`, `crates/engine/src/treewatch.rs`, `crates/engine/src/trash.rs`.
 
-Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first (rename a locked `handpic.exe` aside, never kill it). Work only on copies under `D:\Photos\tests\20261113-gpui-tree-trash\` with a fresh `--index` per run and an explicit `--settings` test file; never the Tauri index or the default native index. The tree may list and watch the roots and the ancestors of a test folder; open (click the name of, or press Enter on) only folders under `D:\Photos\tests\`. Trash and delete only the copies.
+Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first (rename a locked `handpic.exe` aside, never kill it). Work only on copies under `D:\Photos\tests\20261113-gpui-tree-trash\` with a fresh `--index` per run and an explicit `--settings` test file; never the Tauri index or the app's default index. The tree may list and watch the roots and the ancestors of a test folder; open (click the name of, or press Enter on) only folders under `D:\Photos\tests\`. Trash and delete only the copies.
 
 #### TODO
 
@@ -1255,7 +1255,7 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, Move to Trash… and Delete Permanently… (Step 7). Ten or so ARWs, some with `.xmp` and `.dop`, in `...\trash\`; a few hundred in `...\trash-large\`. On `...\trash` after the scan, `Move to Trash…` on a RAW with both sidecars: dialog `Move to Trash` / `Move 1 file to the Trash?`, `tab` moves the outline between `Move to Trash` and `Cancel`, `enter` confirms; the three files are in the Recycle Bin, the strip moves to the neighbour, the pane says `Moved 1 file to the Trash`, the log has `trash: moved=1 failed=0 run_id=Some(..)`. Three selected: `Move 3 files to the Trash?`, `escape` / `Cancel` move nothing. `Delete Permanently…`: `Cancel` outlined; `tab` to the delete button, then `enter` and `space` and a double-click do nothing, one click deletes (files and sidecars gone, not in the Recycle Bin, pane `Deleted 1 file`, an earlier judgment on it no longer undoable). With the dialog open `q`, judgment keys, `ctrl+,` and clicks on the tree, strip and status menus do nothing. On `...\trash-large` with a fresh `--index`, during pass 1 pick `Move to Trash…` and confirm: the dialog closes at once, the pane says `Move to Trash: waiting for the scan to finish`, the scan ends early, `moving to Trash 0 / 1` shows briefly, the file goes, the folder re-lists and the scan resumes. Repeat but open another test folder from the tree before the scan ends: nothing is moved and the waiting note goes.
 - [ ] On Windows, Trash undo and redo (Step 8). One ARW with `.xmp` and `.dop` in `...\undo\a\`, a few in `...\undo\b\`. Rate it three stars, trash it, `Ctrl+Z`: `Restored 1 file from the Trash`, the RAW and both sidecars are back (gone from the Recycle Bin), the strip shows it with three stars, current file and selection unmoved. `Ctrl+Shift+Z`: `moving to Trash 0 / 1` briefly, the files are in the Recycle Bin again, `Moved 1 file to the Trash`; `Ctrl+Z` brings them back again. Rate, trash, `Ctrl+Z` twice: file back, then the rating undone (`Undid <name>`). Trash in `a`, open `b`, `Ctrl+Z`: the file is back in `a` in Explorer, `b`'s strip unchanged, reopening `a` lists it. During a scan trash a file then `Ctrl+Z` while the re-listing's scan runs: `Undo Move to Trash: waiting for the scan to finish`, the scan is not canceled, the restore runs at its end. `Ctrl+Z` twice quickly: one `trash: undo of run` log line. `Delete Permanently…` then `Ctrl+Z`: nothing comes back. Empty the file from the Recycle Bin by hand, then `Ctrl+Z`: `Restored 0 files from the Trash, 1 failed`, the notes say `could not restore from the Trash: not in the Trash (emptied or restored by hand)`, nothing left to redo.
 
-### Native: real-device check of `open_folder` deferred by a run and refused during a rename over MCP
+### App: real-device check of `open_folder` deferred by a run and refused during a rename over MCP
 
 #### Background
 
@@ -1263,9 +1263,9 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, with a folder of test copies open. (1) Start a Move to Trash of a few files and, while its run is in flight, call `open_folder` on another folder: expect `opening` set to it and `idle: false` in the reply, then `wait_for_idle` returning with that folder open. (2) Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, with a folder of test copies open. (1) Start a Move to Trash of a few files and, while its run is in flight, call `open_folder` on another folder: expect `opening` set to it and `idle: false` in the reply, then `wait_for_idle` returning with that folder open. (2) Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
 
-### Native: real-device check of the MCP busy guard's wiring (settings, trash dialog, folder dialog, inline rename)
+### App: real-device check of the MCP busy guard's wiring (settings, trash dialog, folder dialog, inline rename)
 
 #### Background
 
@@ -1273,9 +1273,9 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows (or any platform), run the native app with MCP on a test port as `docs/agents/app.md` prescribes. Open the settings (`ctrl+,`) and call `navigate {"to":"next"}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_view` still answers. Repeat with the strip's `Move to Trash…` dialog open, a folder menu dialog (e.g. `Delete Sidecars…`) open, and a folder's inline rename open, each expecting its own message.
+- [ ] On Windows (or any platform), run the app with MCP on a test port as `docs/agents/app.md` prescribes. Open the settings (`ctrl+,`) and call `navigate {"to":"next"}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_view` still answers. Repeat with the strip's `Move to Trash…` dialog open, a folder menu dialog (e.g. `Delete Sidecars…`) open, and a folder's inline rename open, each expecting its own message.
 
-### Native: real-device checks of the MCP settings page and a live theme change over MCP
+### App: real-device checks of the MCP settings page and a live theme change over MCP
 
 #### Background
 
@@ -1283,9 +1283,9 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
 
-### Native: real-device check of Move to Trash over MCP with `mcpAllowDestructive` off, and the redo refusal
+### App: real-device check of Move to Trash over MCP with `mcpAllowDestructive` off, and the redo refusal
 
 #### Background
 
@@ -1293,9 +1293,9 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, with `mcpAllowDestructive` off and a folder of test copies open. (1) Call `trash_photos` on one photo: expect `awaiting_confirmation` and the Move to Trash dialog with its run button focused; click Move to Trash: `wait_for_idle` returns `finished` "Moved 1 file to the Trash". (2) Call `undo`: the file comes back; call `redo`: expect the refusal starting "the next redo moves files to the Trash again without a dialog". (3) Open the delete dialog over MCP, click Delete Permanently once: the file is deleted and `get_status` reports `Delete Permanently` `finished`; open it again and press Cancel: `wait_for_idle` returns idle with nothing deleted.
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, with `mcpAllowDestructive` off and a folder of test copies open. (1) Call `trash_photos` on one photo: expect `awaiting_confirmation` and the Move to Trash dialog with its run button focused; click Move to Trash: `wait_for_idle` returns `finished` "Moved 1 file to the Trash". (2) Call `undo`: the file comes back; call `redo`: expect the refusal starting "the next redo moves files to the Trash again without a dialog". (3) Open the delete dialog over MCP, click Delete Permanently once: the file is deleted and `get_status` reports `Delete Permanently` `finished`; open it again and press Cancel: `wait_for_idle` returns idle with nothing deleted.
 
-### Native: real-device check of a folder operation confirmed in the app's dialog after an MCP call (Rewrite Sidecars, Delete Sidecars, Sequence)
+### App: real-device check of a folder operation confirmed in the app's dialog after an MCP call (Rewrite Sidecars, Delete Sidecars, Sequence)
 
 #### Background
 
@@ -1303,9 +1303,9 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, with a folder of test copies holding judged photos and their `.xmp`. Call `delete_sidecars {"path": <folder>}`, wait for the Delete Sidecars dialog, click Move to Trash: expect `wait_for_idle` to return `finished` "Moved N sidecars to the Trash" and the `.xmp` files gone. Repeat with `rewrite_sidecars` (click Rewrite: `finished` "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps` (click Run: the `-sequenced` folder written and revealed).
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, with a folder of test copies holding judged photos and their `.xmp`. Call `delete_sidecars {"path": <folder>}`, wait for the Delete Sidecars dialog, click Move to Trash: expect `wait_for_idle` to return `finished` "Moved N sidecars to the Trash" and the `.xmp` files gone. Repeat with `rewrite_sidecars` (click Rewrite: `finished` "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps` (click Run: the `-sequenced` folder written and revealed).
 
-### Native: real-device check of Import, Rename by Capture Date and the folder rename confirmed in the app after an MCP call
+### App: real-device check of Import, Rename by Capture Date and the folder rename confirmed in the app after an MCP call
 
 #### Background
 
@@ -1313,10 +1313,10 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, `importRoot` set to a scratch folder, the test folder outside any hidden folder. (1) `import_folder` on a folder of test copies: the Import dialog shows; click Run: `wait_for_idle` returns `finished` "Imported N files ...". (2) `rename_by_capture_date` on a folder of one date: click Run, the folder becomes `YYYY-MM-DD`. (3) `rename_folder {"path": <a drawn folder>, "name": "x"}`: the tree's row turns into a field holding `x`, selected; press Enter: `wait_for_idle` returns `Rename…` `finished` and the row (and the open folder, when it was that one) follows; repeat and press Escape: nothing renamed, `idle` true.
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, `importRoot` set to a scratch folder, the test folder outside any hidden folder. (1) `import_folder` on a folder of test copies: the Import dialog shows; click Run: `wait_for_idle` returns `finished` "Imported N files ...". (2) `rename_by_capture_date` on a folder of one date: click Run, the folder becomes `YYYY-MM-DD`. (3) `rename_folder {"path": <a drawn folder>, "name": "x"}`: the tree's row turns into a field holding `x`, selected; press Enter: `wait_for_idle` returns `Rename…` `finished` and the row (and the open folder, when it was that one) follows; repeat and press Escape: nothing renamed, `idle` true.
 - [ ] On Windows, with `mcpAllowDestructive` on, confirm an `import_folder` preview and, while it runs, right-click the source folder's `Import…`: the dialog comes back running with Cancel enabled.
 
-### Native: real-device check of the Clear Cache dialog opened over MCP, and the grayscale latch on screen
+### App: real-device check of the Clear Cache dialog opened over MCP, and the grayscale latch on screen
 
 #### Background
 
@@ -1324,7 +1324,7 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 #### TODO
 
-- [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, a folder of test copies open, the settings closed. (1) Call `clear_cache`: expect the "Clear the index cache?" dialog over the dimmed main window with Clear focused; click Clear: `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache" and the folder is scanned again; call it again and press Escape: idle, nothing cleared, and the main window takes keys again. (2) Call `set_overlays {"grayscale": true}`: the photo turns gray and stays gray after clicking the tree and switching to another window and back; press and release `g`: it turns back to color.
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, a folder of test copies open, the settings closed. (1) Call `clear_cache`: expect the "Clear the index cache?" dialog over the dimmed main window with Clear focused; click Clear: `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache" and the folder is scanned again; call it again and press Escape: idle, nothing cleared, and the main window takes keys again. (2) Call `set_overlays {"grayscale": true}`: the photo turns gray and stays gray after clicking the tree and switching to another window and back; press and release `g`: it turns back to color.
 
 ### Agents: `local-review-runner` returns before its reviewer finishes, and `pr-runner` aborts on a transient `api.github.com` outage
 
@@ -1337,7 +1337,7 @@ Seen by the orchestrating session of `native-mcp-everything` (plan: `docs/plans/
 - [ ] Make `local-review-runner` wait for the reviewer's result or detect a background launch. Done when a run never returns before the reviewer has.
 - [ ] Make `pr-runner` retry network errors for longer before counting a `pr_status_failure`. Done when a short `api.github.com` outage does not abort a run.
 
-### Native: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
+### App: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
 
 The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending value across folders. A position pushed in folder A while a write is out is replaced by B's first push if B is opened and paged before that write settles, so A reopens one file earlier. The Tauri `lastViewedWriter` had the same shape. Found in `gpui-tree-trash` Step 2's second-open review of `opened`. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. Files: `crates/app/src/viewed.rs`.
 
@@ -1345,7 +1345,7 @@ The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending value a
 
 - [ ] Decide whether to key the pending value by folder (or flush on a folder switch), and fix the writer if so.
 
-### Native: a second open started before the first listing joins the launch eviction can scan before the eviction runs
+### App: a second open started before the first listing joins the launch eviction can scan before the eviction runs
 
 The launch's eviction (`eviction`, joined by the first listing only) is not awaited by a second open started before the first listing joined it, so that listing's `Scan::prepare` may run before the eviction. It is only reachable by opening two folders within the eviction's run at launch. Found in `gpui-tree-trash` Step 2's concurrent-open guard. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. File: `crates/app/src/main.rs` (`list`).
 
@@ -1353,7 +1353,7 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 
 - [ ] Decide whether every listing should wait for the eviction (or the eviction should be a shared future), or accept the race as unreachable in practice.
 
-### Native: real-device check of the prefetch ring on a page turn, a folder switch and a filter change
+### App: real-device check of the prefetch ring on a page turn, a folder switch and a filter change
 
 `gpui-prefetch` added a ring of decoded neighbour previews to the GPUI app (`crates/app`). CI, the ring's unit tests and the `--auto 60` A/B on the ARW and RAF copies cover the logic and the page-turn timing (57 of 60 presses hit, RAF p50 `keypressToPixels` about 66 to 14 ms). Nobody has pressed the keys by hand: the Step 1 checkbox was ticked on the automated criteria only, so a folder switch and a filter change were never watched for another folder's or a hidden file's image appearing. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/main.rs` (`take_held`, `clear_ring`, the `retain` in `refilter`), `crates/app/src/prefetch.rs`.
 
@@ -1363,7 +1363,7 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 - [ ] On Windows, in the same build, open another folder from the tree. Expect no image of the previous folder to show at any point.
 - [ ] On Windows, in the same build, change the filter so the current file's neighbour is hidden, then press `→`. Expect a hidden file's image never to show.
 
-### Native: kept prefetch-ring entries keep their GPU texture
+### App: kept prefetch-ring entries keep their GPU texture
 
 #### Background
 
@@ -1373,27 +1373,27 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 
 - [ ] Decide whether to release a kept entry's texture on `keep`. Measure private bytes and `paint` on a hit on the RAF copy with and without the release.
 
-### Native: the prefetch ring never covers the wrap from the last file to the first
+### App: the prefetch ring never covers the wrap from the last file to the first
 
 #### Background
 
-`prefetch::neighbours` stops at the ends of the list, a faithful port of `prefetch.ts`, but the native `Pager` wraps on `Next` / `Previous`. The press from the last file to the first therefore pays a full read. In `gpui-prefetch`'s `--auto 60` runs on 20 files, those 3 misses in 60 presses set the p95 at a read's latency (RAF 56 ms against a hit's 14 ms p50). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/prefetch.rs`, `crates/app/src/pager.rs`.
+`prefetch::neighbours` stops at the ends of the list, a faithful port of `prefetch.ts`, but the app's `Pager` wraps on `Next` / `Previous`. The press from the last file to the first therefore pays a full read. In `gpui-prefetch`'s `--auto 60` runs on 20 files, those 3 misses in 60 presses set the p95 at a read's latency (RAF 56 ms against a hit's 14 ms p50). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/prefetch.rs`, `crates/app/src/pager.rs`.
 
 #### TODO
 
 - [ ] Decide whether `neighbours` should wrap when the pager does. If so, make it wrap with unit tests, and re-run `--auto 60` to check that the p95 falls.
 
-### Native: `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped` is flaky on a loaded machine
+### App: `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped` is flaky on a loaded machine
 
 #### Background
 
-The test failed once in four `cargo test` runs of the native workspace during `gpui-prefetch`, with no change near `scan.rs`, and passed on the reruns. It is probably a timing-bound `stop_within` on a loaded machine. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/scan.rs`.
+The test failed once in four `cargo test` runs of the app workspace during `gpui-prefetch`, with no change near `scan.rs`, and passed on the reruns. It is probably a timing-bound `stop_within` on a loaded machine. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/scan.rs`.
 
 #### TODO
 
 - [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).
 
-### Native: real-device check of the performance overlay on `d`
+### App: real-device check of the performance overlay on `d`
 
 `gpui-perf-overlay` ported the Tauri app's performance overlay to the GPUI app: the keymap action `performance` (default key `d`) toggles a 120 px band along the bottom of the preview area that plots the last 60 s of Handpic's and the system's CPU, Handpic's read throughput, the system's disk busy time and one stacked bar per preview switch, with a one-line legend. CI and the unit tests cover the pure model (`crates/app/src/perf.rs`) and the graph layout (`crates/app/src/perfgraph.rs`), and `mise run app:check` passes. The agent could not see the window, so the drawing, the 500 ms motion and the bars were never exercised; the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-perf-overlay/plan.md`.
 
@@ -1401,16 +1401,16 @@ Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/
 
 #### TODO
 
-- [ ] On Windows, in a release build of `crates/app`, open a folder with `mise run app:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight native stage names fading, with `<n> MB/s  <n> ms` at the right.
+- [ ] On Windows, in a release build of `crates/app`, open a folder with `mise run app:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight `page` stage names fading, with `<n> MB/s  <n> ms` at the right.
 - [ ] On Windows, with the overlay on, switch previews with an arrow key, with a strip click and by opening a folder from the tree. Expected: one red stacked bar per preview switch, and the key or click works as before.
 - [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
 - [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.
 
-### Native: real-device checks of the restored window and last folder (gpui-session-restore)
+### App: real-device checks of the restored window and last folder (gpui-session-restore)
 
 #### Background
 
-`gpui-session-restore` made the GPUI native app (`crates/app`) reopen the last folder and the window's position, size, display and maximized state on a launch without arguments (`session.rs`, the `lastFolder` and `windowBounds` keys of the settings store, written on open and in the quit handler). Step 1 was ticked on its automated criteria (the `session.rs` unit tests, `mise run ci`, `mise run app:check`) and a hand check on one Windows 11 display at 96 DPI: a moved and resized window, a maximized quit, a minimized quit, bounds off every display, an unknown display UUID, a relaunch without arguments, a renamed remembered folder, and `--auto 1 <other folder>`. Never exercised: quitting with `q`, a window snapped to a screen half, a second monitor (especially one with a different scale factor), a taskbar docked at the top or left, paging to a file before the quit, and a visual check of `--auto`'s centered default. macOS and Linux are covered by the CI build and the unit tests only. Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store. Record the results as `(Measured)` in `docs/agents/app.md` ("A launch restores the last folder and the window") and remove that section's "Not seen yet" bullet. Plan: `docs/plans/_archived/20261114-gpui-session-restore/plan.md`. Files: `crates/app/src/session.rs`, `crates/app/src/main.rs`, `crates/app/src/settings.rs`.
+`gpui-session-restore` made the GPUI app (`crates/app`) reopen the last folder and the window's position, size, display and maximized state on a launch without arguments (`session.rs`, the `lastFolder` and `windowBounds` keys of the settings store, written on open and in the quit handler). Step 1 was ticked on its automated criteria (the `session.rs` unit tests, `mise run ci`, `mise run app:check`) and a hand check on one Windows 11 display at 96 DPI: a moved and resized window, a maximized quit, a minimized quit, bounds off every display, an unknown display UUID, a relaunch without arguments, a renamed remembered folder, and `--auto 1 <other folder>`. Never exercised: quitting with `q`, a window snapped to a screen half, a second monitor (especially one with a different scale factor), a taskbar docked at the top or left, paging to a file before the quit, and a visual check of `--auto`'s centered default. macOS and Linux are covered by the CI build and the unit tests only. Run each check with `--settings <fresh test store>`, `--index <test index>` and `--log <test file>`, never the real store. Record the results as `(Measured)` in `docs/agents/app.md` ("A launch restores the last folder and the window") and remove that section's "Not seen yet" bullet. Plan: `docs/plans/_archived/20261114-gpui-session-restore/plan.md`. Files: `crates/app/src/session.rs`, `crates/app/src/main.rs`, `crates/app/src/settings.rs`.
 
 #### TODO
 
@@ -1421,7 +1421,7 @@ Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/
 - [ ] On Windows, open a folder from the tree, page a few files, quit, relaunch without arguments. Expected: that folder is revealed in the tree at that file. Relaunch with another folder as the argument. Expected: the argument's folder opens.
 - [ ] On Windows, run `--auto 3 <folder>`. Expected: the window visibly opens centered at 1600x1000 whatever is stored.
 
-### Native: real-device checks of the pane toggles and Open Folder (gpui-pane-toggles)
+### App: real-device checks of the pane toggles and Open Folder (gpui-pane-toggles)
 
 `gpui-pane-toggles` made `open`, `toggleRight`, `toggleStrip` and `toggleSides` run in the GPUI app (`crates/app`) and remembered the panes under the `panels` key of the settings store, `toggleLeft` included. Unit tests cover the pure rules (`panels.rs`, `settings.rs`'s load of `panels`), and `mise run ci` and `mise run app:check` pass. A launch with `--auto` on a store holding `{"panels":{"left":false}}` quit cleanly and left the store unchanged. Nobody has run the picker or the toggles in the window, or seen what the window drew: the picker, the canvas resize, the 1:1 re-cut, the hidden strip's bookkeeping, the keyboard hand-back, the persistence across a quit and a relaunch, and a rebound key are all unchecked. Plan: `docs/plans/_archived/20261114-gpui-pane-toggles/plan.md`. Files: `crates/app/src/main.rs` (`pick_folder`, `change_panels`, `render`), `crates/app/src/panels.rs`, `crates/app/src/settings.rs`.
 
@@ -1462,20 +1462,20 @@ each runner had to `TaskStop` and re-run repeatedly (plan:
       `.claude/agents/pr-runner.md`. Done when a PR run needs no manual
       re-dispatch or `TaskStop`.
 
-### Native: real-device checks of the empty state in the preview area
+### App: real-device checks of the empty state in the preview area
 
 #### Background
 
-`gpui-empty-state` ported the Tauri app's empty state to the GPUI app (`crates/app`): the preview area now shows a centered muted message for no folder (the click opens the folder picker), no RAW or JPEG files, a filter hiding every file, and a failed preview of the current file. CI and the unit tests cover the pure module (`empty.rs`: the state judgment and the open hint, ported from `empty.test.ts`). The message layer, the click and the canvas wrapper were never exercised, because the implementing session could not run the native window. Plan: `docs/plans/_archived/20261114-gpui-empty-state/plan.md`. Files: `crates/app/src/empty.rs`, `crates/app/src/main.rs` (`render`, `empty_message`).
+`gpui-empty-state` ported the Tauri app's empty state to the GPUI app (`crates/app`): the preview area now shows a centered muted message for no folder (the click opens the folder picker), no RAW or JPEG files, a filter hiding every file, and a failed preview of the current file. CI and the unit tests cover the pure module (`empty.rs`: the state judgment and the open hint, ported from `empty.test.ts`). The message layer, the click and the canvas wrapper were never exercised, because the implementing session could not run the app's window. Plan: `docs/plans/_archived/20261114-gpui-empty-state/plan.md`. Files: `crates/app/src/empty.rs`, `crates/app/src/main.rs` (`render`, `empty_message`).
 
 #### TODO
 
-- [ ] On Windows, launch the native app without a folder (`mise run app:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
+- [ ] On Windows, launch the app without a folder (`mise run app:dev -- --settings <fresh file>` with no `lastFolder`). Expect "Drop a folder onto the window, or click here to choose one. Or press ctrl+o." centered in the preview area in muted text; a left click on it opens the OS folder picker; rebinding `open` in the Keyboard Shortcuts tab changes the key clause at once (`space` shown as `Space`), and unbinding it removes the clause; a click on the settings modal drawn over it does not open the picker.
 - [ ] On Windows, open a folder without RAW or JPEG files. Expect a click on the "This folder has no RAW or JPEG files." message to do nothing.
 - [ ] On Windows, page from a normal NEF onto `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef`. Expect the previous image to leave the screen and "The preview of this file could not be shown." to show; paging on removes it, paging back shows it again, and `z` on that file hides it.
 - [ ] On Windows, with a folder open, confirm the preview still fits the area and the 1:1 view (`z`) still centers on the focus point, because the canvas's bounds did not change with the new wrapper div.
 
-### Native: real-device checks of the status row's StatusBar and progress circle
+### App: real-device checks of the status row's StatusBar and progress circle
 
 `native-status-bar` rendered the GPUI app's status row (`crates/app`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
 
@@ -1483,13 +1483,13 @@ Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/s
 
 #### TODO
 
-- [ ] On Windows, launch the native app and open a folder. Expect the row to show as a bar with a top border, its fill and 12 px muted text. Open and dismiss both `Sort ▾` and `Filter ▾`, including a tall `Filter ▾` menu: each opens upward with its right edge on the button's, is not clipped by the regions' `overflow_hidden`, fits above the row under the 40 px cap, and is dismissed by a press outside.
+- [ ] On Windows, launch the app and open a folder. Expect the row to show as a bar with a top border, its fill and 12 px muted text. Open and dismiss both `Sort ▾` and `Filter ▾`, including a tall `Filter ▾` menu: each opens upward with its right edge on the button's, is not clipped by the regions' `overflow_hidden`, fits above the row under the 40 px cap, and is dismissed by a press outside.
 - [ ] On Windows, open a cold folder of 500+ RAW files (fresh `--index`). Expect the circle to fill through pass 1, start again at empty for pass 2 and disappear at the end, with the status text and the buttons not moving. Judge whether the full-to-empty drop (animated over 180 ms) reads well, and confirm paging during the scan is not visibly slower from the circle's animation frames. The status line's `scanning d/t` / `analyzing d/t` must read as before; record what is seen in `docs/agents/app.md`.
 - [ ] On Windows, select many files and run `Move to Trash…`, also with the right pane hidden (`toggleRight`) and again with the strip and the left pane hidden. Expect the circle to show the run's progress and go when it ends, and the preview canvas not to resize when it appears or disappears.
 - [ ] On Windows, confirm a long status text does not push the circle or the buttons out and that an error text is still readable in the muted color.
 - [ ] On macOS and Linux, repeat the menu, scan and Move to Trash checks above when at hand.
 
-### Native: Sequence JPEG Timestamps and Import do not feed the progress bar
+### App: Sequence JPEG Timestamps and Import do not feed the progress bar
 
 `gpui-progress-bars` made the GPUI app's progress indicator take a folder operation's `(done, total)` through `progress::shown`'s `folder_op` argument, but `main.rs`'s `progress_circle` passes `None`, so Sequence and Import still show only their pane note. Both already have `(done, total)` callbacks. The folder-dialogs plan (`docs/plans/20261113-gpui-folder-dialogs/plan.md`) wires the dialogs themselves. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
 
@@ -1499,7 +1499,7 @@ Files: `crates/app/src/progress.rs`, `crates/app/src/main.rs`, `crates/app/src/s
 
 - [ ] Pass each run's `(done, total)` into `progress::shown`'s `folder_op` input, and clear it where the run ends, is canceled or is stopped by a re-listing.
 
-### Native: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
+### App: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
 
 `gpui-progress-bars` feeds the bar from the scan and from Move to Trash / Delete Permanently / trash redo. `trash::undo_run` takes no progress callback, and neither do the Rewrite Sidecars from Index and Delete Sidecars runs, so the bar shows nothing for them (`redo_run` has one and already feeds the bar). Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
 
@@ -1509,18 +1509,18 @@ Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `cra
 
 - [ ] Add a `(done, total)` callback to `trash::undo_run` and to the `foldersidecars` rewrite and delete runs, and feed the bar from them in `crates/app`.
 
-### Native: real-device checks of the burst bands, badges, burst keys and reject the rest
+### App: real-device checks of the burst bands, badges, burst keys and reject the rest
 
 #### Background
 
-`gpui-bursts` ported the Tauri app's burst grouping to the GPUI app (`crates/app`): `burst.rs` groups the listing (`BURST_GAP_MS` 1000 ms), the strip paints a band behind each burst of two or more cells with a `position/size` badge, `burstPrevious` / `burstNext` / `burstFramePrevious` / `burstFrameNext` move through them, `rejectRest` rejects the rest of the current file's burst as one undo entry, and the MCP companion's `get_view` reports the current file's `burst`. CI and the unit tests cover the pure parts (`burst.rs` with every `burst.test.ts` case, the `reject_rest` change builder, `companion.rs`'s burst cases). The band's and the badge's look, the keys on a real keyboard, and `rejectRest`'s sidecars and undo on real files were never exercised, because the implementing session could not run the native window. Plan: `docs/plans/_archived/20261114-gpui-bursts/plan.md`. Files: `crates/app/src/main.rs` (`paint_strip`, `move_burst`, `reject_rest`, `mcp_request`), `crates/app/src/burst.rs`, `crates/app/src/companion.rs`.
+`gpui-bursts` ported the Tauri app's burst grouping to the GPUI app (`crates/app`): `burst.rs` groups the listing (`BURST_GAP_MS` 1000 ms), the strip paints a band behind each burst of two or more cells with a `position/size` badge, `burstPrevious` / `burstNext` / `burstFramePrevious` / `burstFrameNext` move through them, `rejectRest` rejects the rest of the current file's burst as one undo entry, and the MCP companion's `get_view` reports the current file's `burst`. CI and the unit tests cover the pure parts (`burst.rs` with every `burst.test.ts` case, the `reject_rest` change builder, `companion.rs`'s burst cases). The band's and the badge's look, the keys on a real keyboard, and `rejectRest`'s sidecars and undo on real files were never exercised, because the implementing session could not run the app's window. Plan: `docs/plans/_archived/20261114-gpui-bursts/plan.md`. Files: `crates/app/src/main.rs` (`paint_strip`, `move_burst`, `reject_rest`, `mcp_request`), `crates/app/src/burst.rs`, `crates/app/src/companion.rs`.
 
 #### TODO
 
 - [ ] On macOS, open a Sony burst folder (sub-second subsec) and a Leica whole-second burst folder in `handpic`. Expect each burst of two or more to show a faint band behind its cells, rounded at its first and last cell, joined across the gaps, distinguishable from the current cell's outline, the selected cell's fill and a failed cell; every member shows `n/size` at the image box's bottom-right, dimmed on a rejected member; `arrowup` / `arrowdown` jump between bursts and `alt+arrowleft` / `alt+arrowright` step within one, also under a filter and a non-capture sort and in a JPEG (view-only) folder, and do nothing while the folder tree has the keyboard.
 - [ ] On macOS, in `handpic` on test copies of a burst folder, put the current file in a burst of three or more (one member already rejected, one hidden by a filter) and press `shift+x`. Expect every other member not yet rejected to turn rejected (its `.xmp` / `.dop` gets the reject flag with the stars and label kept, the hidden one too), the current file to stay current, and nothing to advance; `Ctrl+Z` (`Cmd+Z` on macOS) restores them with `Undid N files` and leaves the current file, `Ctrl+Shift+Z` (`Cmd+Shift+Z`) redoes with `Redid N files`; on a two-frame burst the undo moves to the other frame. Nothing happens in a JPEG folder or on a singleton. With MCP on, `get_view`'s `burst` lists the members with their sharpness and judgments, `visible: false` on the hidden one.
 
-### Native: real-device check of the folder drop (gpui-folder-drop)
+### App: real-device check of the folder drop (gpui-folder-drop)
 
 #### Background
 
@@ -1535,7 +1535,7 @@ Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `cra
 - [ ] On Windows, drag a folder into the window and back out without dropping. Expect the outline to clear.
 - [ ] Record the results in `learnings.md` and turn the "Not verified in the running app" bullet of "A folder dropped onto the window opens, a later drop winning" in `docs/agents/app.md` into a Measured one.
 
-### Native: make the settings writer close its store on drop (flaky seed reload test)
+### App: make the settings writer close its store on drop (flaky seed reload test)
 
 #### Background
 
@@ -1545,7 +1545,7 @@ Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `cra
 
 - [ ] Make `Writes` in `crates/app/src/settings.rs` close its store on drop, and remove the retry from `a_second_load_does_not_reread_a_changed_seed`. Done when the test passes on Windows without the retry.
 
-### Native: real-device checks of the filter menu's icons and headings (gpui-filter-menu-icons)
+### App: real-device checks of the filter menu's icons and headings (gpui-filter-menu-icons)
 
 `gpui-filter-menu-icons` gave the GPUI app's strip `Filter ▾` menu (`crates/app`) a shape per kind of row, drawn with Lucide icons from a new asset source, and a non-clickable heading over every section. The rating rows are now ordered 5 stars down to 0 and drawn as five star icons. The color labels are squares, the `Face focus` rows use `scan-face` and its frown derivative, and Portrait / Landscape use `rectangle-vertical` / `rectangle-horizontal`. New headings are `Flag`, `Rating`, `Color label` and `Orientation`. Unit tests cover the row model (order, headings, leads, checked items) and the asset source (every icon path loads SVG bytes, an unknown path loads `None`), and `mise run ci:local` passes. The window was never run, so how the icons and headings look and behave is unchecked: no agent can see the window, and Step 1's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-filter-menu-icons/plan.md`.
 
@@ -1558,7 +1558,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, expect the text of every row in a section to start at the same x, a click to still toggle each item, and the taller menu to scroll in a small window.
 - [ ] On a HiDPI or fractional-scale display, if available, check that the 1 px stroke icons read cleanly at 12 px. If a shape reads badly, pick a size per kind (`MENU_ICON` in `main.rs`).
 
-### Native: real-device checks of Rewrite Sidecars from Index… and Delete Sidecars… and the folder menu (gpui-folder-dialogs Step 3)
+### App: real-device checks of Rewrite Sidecars from Index… and Delete Sidecars… and the folder menu (gpui-folder-dialogs Step 3)
 
 #### Background
 
@@ -1566,7 +1566,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### TODO
 
-- [ ] On Windows, copy a dozen ARWs (a few with a `.xmp` and a `.dop`) into `D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars\` and two JPEGs alone into `...\jpeg-only\`. `cargo build` in `crates/app` (rename a locked `handpic.exe` aside, never kill it), delete `index-step3.sqlite`, and run `crates\native\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step3.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step3.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step3.log`. Only these copies.
+- [ ] On Windows, copy a dozen ARWs (a few with a `.xmp` and a `.dop`) into `D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars\` and two JPEGs alone into `...\jpeg-only\`. `cargo build` in `crates/app` (rename a locked `handpic.exe` aside, never kill it), delete `index-step3.sqlite`, and run `crates\app\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sidecars --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step3.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step3.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step3.log`. Only these copies.
 - [ ] On Windows, right-click `sidecars` in the tree. Expect `Rename…` and `Rename by Capture Date…`, `Expand All` / `Collapse All`, `Rewrite Sidecars from Index…` / `Delete Sidecars…`, `Sequence JPEG Timestamps…` and `Import…` in that order. On a root (home or a drive) the rename and expand groups are gone.
 - [ ] On Windows, pick `Rewrite Sidecars from Index…` right after launch, while pass 1 runs, then the same with `Delete Sidecars…`. Expect the pane to show `Rewrite Sidecars from Index: waiting for the scan to finish` with the scan not canceled, and the dialog to open once the scan ends.
 - [ ] On Windows, judge a few files, then `Rewrite Sidecars from Index…`. Expect `n files with a judgment`, `m files without one (any existing sidecar is cleared)` and `Rewrite the XMP sidecars of k files in sidecars?`, with `Rewrite` outlined, Tab moving to `Cancel` and back, and Escape closing it. With `Rewrite`: the buttons dim, the running note shows, the dialog closes and the pane says `Rewrote the sidecars of k files in sidecars`; the `.xmp` files carry the judgments.
@@ -1575,7 +1575,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, with a dialog open, a click on the tree or the strip does nothing and no key reaches the strip. With a request waiting during a scan, opening another folder drops the waiting note and opens no dialog. Pressing `Ctrl+,` while the preview is under way does not open the settings modal.
 - [ ] Record the results in the archived `learnings.md`.
 
-### Native: real-device checks of Sequence JPEG Timestamps… (gpui-folder-dialogs Step 4)
+### App: real-device checks of Sequence JPEG Timestamps… (gpui-folder-dialogs Step 4)
 
 #### Background
 
@@ -1583,7 +1583,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### TODO
 
-- [ ] On Windows, copy a dozen exported JPEGs whose `DateTimeOriginal` repeats a second into `D:\Photos\tests\20261113-gpui-folder-dialogs\sequence\`, plus a folder with no JPEG at `...\no-jpeg\`. `cargo build` in `crates/app`, delete `index-step4.sqlite`, and run `crates\native\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sequence --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step4.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step4.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step4.log`. Only these copies.
+- [ ] On Windows, copy a dozen exported JPEGs whose `DateTimeOriginal` repeats a second into `D:\Photos\tests\20261113-gpui-folder-dialogs\sequence\`, plus a folder with no JPEG at `...\no-jpeg\`. `cargo build` in `crates/app`, delete `index-step4.sqlite`, and run `crates\app\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\sequence --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step4.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step4.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step4.log`. Only these copies.
 - [ ] On Windows, right-click `sequence`, pick `Sequence JPEG Timestamps…`. Expect `Source:` / `Output: …\sequence-sequenced`, one row per file `name  old -> new` with the changed field in green and unchanged rows muted, `n files will be written to sequence-sequenced` and `k of them get a new capture time`. `Run` is outlined, Tab moves to `Cancel`, Escape closes.
 - [ ] On Windows, `Run`. Expect `Run` dimmed, `Cancel` focused, the running note, the pane counting `sequencing n / m`. At the end the dialog closes, the pane says `Wrote n of n files to …\sequence-sequenced` and Explorer opens with `sequence-sequenced` selected.
 - [ ] On Windows, open it a third time. Expect `will be rebuilt: its JPEG files are replaced` under the output line.
@@ -1591,7 +1591,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, pick the item on `no-jpeg`. Expect no dialog and the no-JPEG message in red in the pane. A second `Sequence JPEG Timestamps…` right after the first does nothing, and `Ctrl+,` does not open the settings while the dialog or run is up.
 - [ ] Record the results in the archived `learnings.md`.
 
-### Native: real-device checks of Import… (gpui-folder-dialogs Step 5)
+### App: real-device checks of Import… (gpui-folder-dialogs Step 5)
 
 #### Background
 
@@ -1599,7 +1599,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### TODO
 
-- [ ] On Windows, copy RAWs shot on two dates (a few with `.xmp` and `.dop`), a few JPEGs of those dates and one JPEG stripped of its Exif as `undated.jpg` into `D:\Photos\tests\20261113-gpui-folder-dialogs\import-src\`. Write `...\settings-step5.json` as `{"importRoot": "D:\\Photos\\tests\\20261113-gpui-folder-dialogs\\import-dst"}` and `...\settings-step5-noroot.json` as `{}`. `cargo build` in `crates/app`, delete `index-step5.sqlite` and `settings-step5.sqlite`, and run `crates\native\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\import-src --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step5.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.sqlite --import-settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.json --log D:\Photos\tests\20261113-gpui-folder-dialogs\step5.log`. Only these copies.
+- [ ] On Windows, copy RAWs shot on two dates (a few with `.xmp` and `.dop`), a few JPEGs of those dates and one JPEG stripped of its Exif as `undated.jpg` into `D:\Photos\tests\20261113-gpui-folder-dialogs\import-src\`. Write `...\settings-step5.json` as `{"importRoot": "D:\\Photos\\tests\\20261113-gpui-folder-dialogs\\import-dst"}` and `...\settings-step5-noroot.json` as `{}`. `cargo build` in `crates/app`, delete `index-step5.sqlite` and `settings-step5.sqlite`, and run `crates\app\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\import-src --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step5.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.sqlite --import-settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step5.json --log D:\Photos\tests\20261113-gpui-folder-dialogs\step5.log`. Only these copies.
 - [ ] On Windows, right-click `import-src`, pick `Import…`. Expect the pane to show `reading …\import-src…`, then the dialog with `n files (… MB) to copy into 2 folders`, one row per date folder, and the undated file under `Without a capture date, not copied:`. `Run` is outlined, Tab moves to `Cancel`, Escape closes.
 - [ ] On Windows, `Run`. Expect the first date folder to open in the tree and strip, the dialog to step aside, the pane to count `importing n / m` while the strip fills, then `Imported n files (… MB)`.
 - [ ] On Windows, with a larger source (or a slow disk), pick `Import…` again mid-run. Expect the dialog back with `Cancel` focused; Escape hides it and the run goes on; `Cancel` stops it with `Import canceled, k files copied` and no `.handpic-tmp` file left.
@@ -1607,7 +1607,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, quit, delete `settings-step5.sqlite`, relaunch with `--import-settings ...\settings-step5-noroot.json`. Expect `Import…` to show `the destination folder is not set (Settings > Import)` with `Run` dimmed. `step5.log` holds one `import: files=… bytes=… mb_per_s=…` line per run.
 - [ ] Record the results in the archived `learnings.md`.
 
-### Native: real-device checks of Rename by Capture Date… and the folder-rename aftermath (gpui-folder-dialogs Step 6)
+### App: real-device checks of Rename by Capture Date… and the folder-rename aftermath (gpui-folder-dialogs Step 6)
 
 #### Background
 
@@ -1615,7 +1615,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### TODO
 
-- [ ] On Windows, under `D:\Photos\tests\20261113-gpui-folder-dialogs\step6\` make `one-date\` (a few RAWs of one day, a couple with `.xmp`), `three-dates\` (JPEGs of three days plus `undated.jpg` stripped of Exif), `two-dates\` (RAWs of two days) and `collide\` (RAWs of one day); no two folders share a shooting day. `cargo build` in `crates/app`, delete `index-step6.sqlite` and `settings-step6.sqlite`, and run `crates\native\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step6\one-date --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step6.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step6.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step6.log`. Only these copies.
+- [ ] On Windows, under `D:\Photos\tests\20261113-gpui-folder-dialogs\step6\` make `one-date\` (a few RAWs of one day, a couple with `.xmp`), `three-dates\` (JPEGs of three days plus `undated.jpg` stripped of Exif), `two-dates\` (RAWs of two days) and `collide\` (RAWs of one day); no two folders share a shooting day. `cargo build` in `crates/app`, delete `index-step6.sqlite` and `settings-step6.sqlite`, and run `crates\app\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step6\one-date --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step6.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step6.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step6.log`. Only these copies.
 - [ ] On Windows, pick `Rename by Capture Date…` on `one-date` during pass 1. Expect no dialog and the pane to say `a scan is running; wait for it to finish`.
 - [ ] On Windows, after the scan, judge two files, move another RAW to the Trash, page to the fourth file, then pick the item. Expect `Rename one-date to YYYY-MM-DD?` with one row `YYYY-MM-DD  n files`, `Run` outlined, Tab to `Cancel`, Escape closes. `Run`: the buttons dim, the dialog closes, the tree row reads `YYYY-MM-DD` in place, the strip keeps its files, judgments and the fourth file, and `step6.log` shows `datefolder: … renamed to …` then `scan reconcile: dir=…\YYYY-MM-DD todo=0`. `Ctrl+Z` brings the trashed RAW back into the renamed folder (`Restored 1 file from the Trash`).
 - [ ] On Windows, open `collide`, note the date in the dialog, Cancel, create an empty sibling folder of that name, and re-open it. Expect `YYYY-MM-DD already exists next to collide; nothing is merged.`, `Run` dimmed and `Cancel` focused.
@@ -1623,7 +1623,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, on `two-dates` (after its scan) `Run`. Expect `two-dates` to leave the tree, the first date folder to open and the pane to say `Split two-dates into … (a), … (b)`. The item on the already-renamed folder shows `YYYY-MM-DD is already named its capture date.`, `Nothing to rename.` and `Run` dimmed.
 - [ ] Record the results in the archived `learnings.md`.
 
-### Native: real-device checks of the tree's inline folder rename (gpui-folder-dialogs Step 7)
+### App: real-device checks of the tree's inline folder rename (gpui-folder-dialogs Step 7)
 
 #### Background
 
@@ -1631,7 +1631,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### TODO
 
-- [ ] On Windows, under `D:\Photos\tests\20261113-gpui-folder-dialogs\step7\` make `Photos\` (a few dozen RAWs so pass 1 runs for seconds on a fresh index, a few with `.xmp`; `Photos\sub\` with a couple of RAWs), an empty `taken\` and `other\` (a few RAWs). `cargo build` in `crates/app`, delete `index-step7.sqlite` and `settings-step7.sqlite`, and run `crates\native\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step7\Photos --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step7.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step7.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step7.log`. Only these copies.
+- [ ] On Windows, under `D:\Photos\tests\20261113-gpui-folder-dialogs\step7\` make `Photos\` (a few dozen RAWs so pass 1 runs for seconds on a fresh index, a few with `.xmp`; `Photos\sub\` with a couple of RAWs), an empty `taken\` and `other\` (a few RAWs). `cargo build` in `crates/app`, delete `index-step7.sqlite` and `settings-step7.sqlite`, and run `crates\app\target\debug\handpic.exe D:\Photos\tests\20261113-gpui-folder-dialogs\step7\Photos --index D:\Photos\tests\20261113-gpui-folder-dialogs\index-step7.sqlite --settings D:\Photos\tests\20261113-gpui-folder-dialogs\settings-step7.sqlite --log D:\Photos\tests\20261113-gpui-folder-dialogs\step7.log`. Only these copies.
 - [ ] On Windows, after the scan, judge two files and page to the third, then right-click `Photos` > `Rename…`. Expect the row's name to become a field holding `Photos`, all selected. Type `Shots` and Enter: the row reads `Shots` in place, the strip keeps files, judgments and position, the tree keeps the keyboard, and `step7.log` shows `rename: …Photos renamed to …Shots` with no pass 1 work after it. A case-only rename (`shots`) works.
 - [ ] On Windows, `Rename…` with `a/b` then Enter. Expect `a/b: a name cannot contain '/'` and the row keeping its name. With `taken`: `taken already exists`.
 - [ ] On Windows, `Rename…`, type, Escape: nothing renamed. Clear the field, Enter: nothing happens. With the field open, `a`, `1`, `p`, `Ctrl+Z`, the arrows and Space edit the text only (no judgment, paging or tree move), and `Ctrl+A` / `C` / `X` / `V` work in the field.
@@ -1643,11 +1643,11 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, during an import run (see the Import check), confirm a rename. Expect `Rename… is unavailable while an import runs`.
 - [ ] Record the results in the archived `learnings.md`.
 
-### Native: real-device checks of the app icon on Windows, macOS and Linux
+### App: real-device checks of the app icon on Windows, macOS and Linux
 
 #### Background
 
-The `native-app-icon` feature gave the GPUI native app its icon: `crates/app/build.rs` embeds `crates/app/icons/icon.ico` as icon resource ID 1 on a Windows target (through `winresource`), `crates/app/packaging/macos/Info.plist` and the `app:bundle:macos` mise task produce `Handpic.app`, and the window opens with `app_id: Some(IDENTIFIER)` with `crates/app/packaging/linux/dev.minodisk.handpic.desktop` and the `app:install:linux` task for Linux. CI and the tests cover the resource: the icon resource ID 1 was verified in the built Windows exe with `FindResourceW` / `LoadImageW`, the `datadir.rs` consistency test checks the `Info.plist` and `.desktop` file against `IDENTIFIER` and the binary's name on all three legs, and the macOS CI leg runs `plutil -lint` and checks that the executable and the `.icns` exist. Nobody has looked at the icon as the OS shows it: the taskbar, title bar and Explorer on Windows, the Dock and Finder on macOS, and the dock / taskbar / alt-tab of a running window on a Wayland and an X11 session. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-app-icon/plan.md`.
+The `native-app-icon` feature gave the GPUI app its icon: `crates/app/build.rs` embeds `crates/app/icons/icon.ico` as icon resource ID 1 on a Windows target (through `winresource`), `crates/app/packaging/macos/Info.plist` and the `app:bundle:macos` mise task produce `Handpic.app`, and the window opens with `app_id: Some(IDENTIFIER)` with `crates/app/packaging/linux/dev.minodisk.handpic.desktop` and the `app:install:linux` task for Linux. CI and the tests cover the resource: the icon resource ID 1 was verified in the built Windows exe with `FindResourceW` / `LoadImageW`, the `datadir.rs` consistency test checks the `Info.plist` and `.desktop` file against `IDENTIFIER` and the binary's name on all three legs, and the macOS CI leg runs `plutil -lint` and checks that the executable and the `.icns` exist. Nobody has looked at the icon as the OS shows it: the taskbar, title bar and Explorer on Windows, the Dock and Finder on macOS, and the dock / taskbar / alt-tab of a running window on a Wayland and an X11 session. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-app-icon/plan.md`.
 
 Files: `crates/app/build.rs`, `crates/app/src/main.rs`, `crates/app/packaging/macos/Info.plist`, `crates/app/packaging/linux/dev.minodisk.handpic.desktop`, `mise.toml`, `docs/agents/app.md`.
 
@@ -1658,11 +1658,11 @@ Files: `crates/app/build.rs`, `crates/app/src/main.rs`, `crates/app/packaging/ma
 - [ ] On Linux, on a Wayland session and on an X11 session, run `mise run app:install:linux` with `~/.local/bin` on `PATH`, then launch Handpic from the application menu. Expect the running window to show the Handpic icon in the dock / taskbar / alt-tab. If it does not, check `StartupWMClass` (X11) and the `.desktop` file's base name (Wayland) against `IDENTIFIER`.
 - [ ] Once the checks above are done (or a failure is filed as its own issue), update the "Pending manual checks" bullet under `## Packaging` in `docs/agents/app.md`. It lists only macOS and Linux and leaves out the Windows check. Done when the bullet matches what is still pending.
 
-### Native: real-device checks of the strip's face focus icon and cell tooltips
+### App: real-device checks of the strip's face focus icon and cell tooltips
 
 #### Background
 
-The `native-strip-face-icon-tooltips` feature gave the GPUI native strip the Tauri strip's face focus icon (a smiling `scan-face` in bright green on a good frame, the frowning variant in gray on a low one, nothing on a neutral one, painted with `paint_svg` at the image box's bottom-left) and its hover texts (the scan's full error on a failed cell, the label's name over a labeled cell's name band). The tooltips are transparent region `div`s over the strip's canvas that build gpui-component's `Tooltip`. The tree's pending rename icon moved from the hand-drawn `Tip` to the same `Tooltip`. The unit tests of `MarkState::icon` and `strip::tip_regions`, clippy and the native tests cover the pure rules. Nobody has watched the running window: the icon's appearance during pass 2, its crispness at 100 % and 150 % scale, the dimming on a rejected cell, the tooltips' delay, wrapping and placement, and whether a region `div` leaves the strip's click, right-click and wheel input alone were never exercised. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-strip-face-icon-tooltips/plan.md`.
+The `native-strip-face-icon-tooltips` feature gave the GPUI app's strip the Tauri strip's face focus icon (a smiling `scan-face` in bright green on a good frame, the frowning variant in gray on a low one, nothing on a neutral one, painted with `paint_svg` at the image box's bottom-left) and its hover texts (the scan's full error on a failed cell, the label's name over a labeled cell's name band). The tooltips are transparent region `div`s over the strip's canvas that build gpui-component's `Tooltip`. The tree's pending rename icon moved from the hand-drawn `Tip` to the same `Tooltip`. The unit tests of `MarkState::icon` and `strip::tip_regions`, clippy and the app tests cover the pure rules. Nobody has watched the running window: the icon's appearance during pass 2, its crispness at 100 % and 150 % scale, the dimming on a rejected cell, the tooltips' delay, wrapping and placement, and whether a region `div` leaves the strip's click, right-click and wheel input alone were never exercised. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-native-strip-face-icon-tooltips/plan.md`.
 
 Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/src/strip.rs` (`tip_regions`), `crates/app/src/mark.rs` (`MarkState::icon`), `crates/app/src/folderops.rs` (`tree_name`).
 
@@ -1676,7 +1676,7 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 - [ ] On Windows, rename a folder during a scan and hover the tree's pending rename icon. Expect the `PENDING_TITLE` tooltip as before, now in gpui-component's style.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and "when at hand" for the other two).
 
-### Native: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
+### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
 
 `gpui-component-adoption` called `gpui_component::init` with a Neutral dark theme map, replaced `textinput.rs` with `Input`, moved the settings modal's controls to `Button` / `Checkbox` / `Radio` with scrollbars, gave the Sort / Filter and right-click menus the theme's look, mounted `Root`, and turned the trash / delete dialog, the folder operations' dialog and the settings modal into `Dialog`s. `mise run ci:local`, the pure models' unit tests, the keymap tests and the Step 5 A/B latency gate cover the build and the rules. The crate has no GPUI view test and `--auto` cannot click, so the IME, focus, Tab order, outside click, Escape behavior and look of every step were never exercised on screen. Plan: `docs/plans/_archived/20261114-gpui-component-adoption/plan.md`. Files: `crates/app/src/main.rs`, `crates/app/src/theme.rs`, `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/folderops.rs`, `crates/app/src/dialog.rs`, `crates/app/src/trash.rs`, `crates/app/src/modal.rs`, `crates/app/src/icons.rs`, `docs/agents/app.md`.
 
@@ -1737,11 +1737,11 @@ Run only on copies under `D:\Photos\tests\20261114-gpui-component-adoption\`, wi
   - An operation pressed during pass 1 opens its dialog when the scan ends.
   - After each close the tree still has the keyboard, and an inline rename then works (Enter commits, Escape cancels).
 
-### Native: real-device checks of the strip, folder tree and meta pane scrollbars
+### App: real-device checks of the strip, folder tree and meta pane scrollbars
 
 #### Background
 
-The `native-scrollbars` feature gave the GPUI native app's thumbnail strip, folder tree and meta pane gpui-component's scrollbar in the theme's `ScrollbarMode::Scrolling` (shown while the area scrolls, fading out after about 2 s idle, taking a press only while shown). The tree's bar sits on a `relative()` wrapper of its `uniform_list`, the meta pane's body ends in `overflow_y_scrollbar()`, and the strip's horizontal bar goes through `StripBar`, a `ScrollbarHandle` over the strip's own model whose pending offset `Handpic::render` applies through `Strip::scroll_to` and `strip_moved`. `stripbar.rs`'s unit tests and `mise run ci:local` cover the pure logic. Nobody has watched the running window: the bars' look, the fade-out, dragging and track clicks, the thumbnails following a drag, and what a press on a shown bar does and does not reach were never exercised. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261115-native-scrollbars/plan.md`.
+The `native-scrollbars` feature gave the GPUI app's thumbnail strip, folder tree and meta pane gpui-component's scrollbar in the theme's `ScrollbarMode::Scrolling` (shown while the area scrolls, fading out after about 2 s idle, taking a press only while shown). The tree's bar sits on a `relative()` wrapper of its `uniform_list`, the meta pane's body ends in `overflow_y_scrollbar()`, and the strip's horizontal bar goes through `StripBar`, a `ScrollbarHandle` over the strip's own model whose pending offset `Handpic::render` applies through `Strip::scroll_to` and `strip_moved`. `stripbar.rs`'s unit tests and `mise run ci:local` cover the pure logic. Nobody has watched the running window: the bars' look, the fade-out, dragging and track clicks, the thumbnails following a drag, and what a press on a shown bar does and does not reach were never exercised. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261115-native-scrollbars/plan.md`.
 
 Files: `crates/app/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/app/src/stripbar.rs` (`StripBar`), `crates/app/src/strip.rs` (`Strip::content_width`).
 
@@ -1767,17 +1767,17 @@ Files: `mise.toml`, `crates/app/mise.toml`.
 - [ ] In `crates/app`, run `rustup component remove rust-analyzer --toolchain 1.98.1`, then a plain `mise install`, then `rustup component list --installed --toolchain 1.98.1`. Expected result: the list includes `rust-analyzer-<host triple>`.
 - [ ] Record the result. If a plain `mise install` is not enough, add a `mise install --force rust` line to the setup docs (`docs/agents/app.md` or the README setup section).
 
-### Native app: real-device check of the folder tree rows' name truncation inside the pane
+### App: real-device check of the folder tree rows' name truncation inside the pane
 
 #### Background
 
-The native-tree-row-truncate work made a folder tree row in the GPUI app as wide as the list, so a long name ends in an ellipsis inside the 220 px pane and the RAW count badge stays whole. It gave the row `.w_full()`, dropped its `.mx_1()`, and put the 4 px inset on the `uniform_list` itself (`.px_1()`). `mise run ci:local` passed, but `crates/app` has no GPUI window test and the agent could not drive the native app's window. The cause was read from the gpui-pre 0.3.12 and taffy 0.15.0 sources and never observed, and the `app.md` rule is marked Inferred. Plan: `docs/plans/_archived/20261115-native-tree-row-truncate/plan.md`.
+The native-tree-row-truncate work made a folder tree row in the GPUI app as wide as the list, so a long name ends in an ellipsis inside the 220 px pane and the RAW count badge stays whole. It gave the row `.w_full()`, dropped its `.mx_1()`, and put the 4 px inset on the `uniform_list` itself (`.px_1()`). `mise run ci:local` passed, but `crates/app` has no GPUI window test and the agent could not drive the app's window. The cause was read from the gpui-pre 0.3.12 and taffy 0.15.0 sources and never observed, and the `app.md` rule is marked Inferred. Plan: `docs/plans/_archived/20261115-native-tree-row-truncate/plan.md`.
 
 Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folderops.rs` (`tree_name`), `docs/agents/app.md` (the folder tree section).
 
 #### TODO
 
-- [ ] On Windows (and any platform the native app runs on), run the native app (`mise run app:dev`) and open a folder tree holding a folder with a long name (e.g. `2026-10-03-dop-orientation`) at several depths. Check each of the following.
+- [ ] On Windows (and any platform the app runs on), run the app (`mise run app:dev`) and open a folder tree holding a folder with a long name (e.g. `2026-10-03-dop-orientation`) at several depths. Check each of the following.
   - Long name: a name longer than the pane ends in an ellipsis inside the pane at every depth, and no row content reaches past the pane's right edge.
   - Count badge: expand a folder holding RAW files. Its count badge is fully visible at the row's right edge, both next to a short name and next to a truncated one.
   - Highlights: the keyboard cursor ring (click in the tree, move with the arrows), the hover highlight and the open row's highlight span the pane less a 4 px inset on both sides, with rounded corners.
@@ -1786,7 +1786,7 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folde
   - Scrolling into view and clicks: the reveal on open, the keyboard cursor and the rename's row are brought fully into view by `scroll_to_item`, and a click and a right-click on a row's inset edge behave as before.
 - [ ] Once all six are confirmed, change the folder tree rule in `docs/agents/app.md` ("a tree row takes `w_full()` ... not yet observed in the running app") from Inferred to Measured with the observed result. If a point fails, correct the rule with the observed behavior and, per the plan's risk note, record what the layout actually does in `learnings.md` before trying anything wider.
 
-### Native: real-device check of the status row with no current-file info
+### App: real-device check of the status row with no current-file info
 
 #### Background
 
@@ -1794,9 +1794,9 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folde
 
 #### TODO
 
-- [ ] On Windows (or any platform the native app runs on), build `crates/app`, open a folder and page through it with the scan finished and zoom off, so the status text is empty. Then press `z` (adds `1:1`) and drop two files on the window (shows `DROP_TEXT`). Expect the status row to show nothing on the left while paging. Expect the preview area above not to shift in height between the empty and the non-empty status. Expect `1:1` and a scan suffix to start at the row's left edge without leading spaces.
+- [ ] On Windows (or any platform the app runs on), build `crates/app`, open a folder and page through it with the scan finished and zoom off, so the status text is empty. Then press `z` (adds `1:1`) and drop two files on the window (shows `DROP_TEXT`). Expect the status row to show nothing on the left while paging. Expect the preview area above not to shift in height between the empty and the non-empty status. Expect `1:1` and a scan suffix to start at the row's left edge without leading spaces.
 
-### Native: real-device check of Left / Right paging the strip and Space toggling from the folder tree (native-tree-left-right)
+### App: real-device check of Left / Right paging the strip and Space toggling from the folder tree (native-tree-left-right)
 
 #### Background
 
@@ -1806,24 +1806,24 @@ Files: `crates/app/src/main.rs` (`tree_key_down`), `crates/app/src/treekeys.rs`,
 
 #### TODO
 
-- [ ] On Windows (or any desktop platform the native app runs on), open a folder with several photos and click a folder name in the tree so the tree has the keyboard (the cursor ring is drawn). Then check each of the following.
+- [ ] On Windows (or any desktop platform the app runs on), open a folder with several photos and click a folder name in the tree so the tree has the keyboard (the cursor ring is drawn). Then check each of the following.
   - Press Right / Left: the strip's current file moves to the next / previous photo and the preview follows, while the ring stays on the tree cursor.
   - Press Up / Down / Home / End: the tree cursor still moves.
   - Press Space on a collapsed folder with subfolders: it expands. Press Space again: it collapses. Press Space on a folder listed empty: nothing happens and no type-ahead jump occurs.
   - Press Enter: the cursor's folder opens.
   - Press Shift+Left or Alt+Left: nothing happens (swallowed).
 
-### Native: real-device check of the meta pane's `Analysis` group and the AF rows in `Maker note`
+### App: real-device check of the meta pane's `Analysis` group and the AF rows in `Maker note`
 
 `native-meta-analysis` made the GPUI app's (`crates/app`) right-hand meta pane show an `Analysis` group from the values the scan's pass 1 and pass 2 stored in the index (`Eye focus`, `Eyes`, `Eyes closed`, `Eye aspect ratio`, `Yaw`, `Pitch`, `Roll`, `Mesh eye offset`, `Edge gap`, `Sharpness`), and `AF point` / `AF frame` in the `Maker note` group after `AF tracking`. Unit tests in `meta.rs` and `mise run ci:local` cover the row builders, `groups` and the string formats (ported from `meta.test.ts`). Nobody has looked at the running window: what the pane shows for a scanned file, that the rows appear by themselves when the scan reaches the shown file, the failed-preview and hidden-by-refilter cases, and the first preview after a folder open (that path now sets `self.shown`'s index to `None`, so the pane shows the old file name with no index rows until the new folder's first preview arrives) were never exercised. Plan: `docs/plans/_archived/20261114-native-meta-analysis/plan.md`. Files: `crates/app/src/meta.rs`, `crates/app/src/main.rs` (`meta_pane`, the open path's `shown`).
 
 #### TODO
 
-- [ ] On Windows, open a RAW folder with a fresh `--index` in the native app (`mise run app:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, each label and value string as written here (the removed Tauri pane named the `Eye focus` row `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
+- [ ] On Windows, open a RAW folder with a fresh `--index` in the app (`mise run app:dev`) and show a file while pass 2 is still running. Expected: no `Analysis` group before pass 2 reaches that file, then the group appears without another key press once it does. For a Sony ARW with a face, the group lists `Eye focus` (`Sharp · 0.162` / `Soft · 0.143`), and no `AF eye in focus` or `Focus candidate` row, `Eyes` (`Open · 41` / `Closed · 0`), `Eyes closed`, `Eye aspect ratio`, `Yaw` / `Pitch` / `Roll` (`12°`), `Mesh eye offset`, `Edge gap` and `Sharpness`, each label and value string as written here (the removed Tauri pane named the `Eye focus` row `Eyes at full size`). The `Maker note` group shows `AF point` (`3120, 2080 of 8640 × 5760`) and, when recorded, `AF frame` directly after `AF tracking`, and the `Analysis` group holds neither.
 - [ ] On Windows, a file with no analysis value (a JPEG without an AF point, or a RAW pass 2 has not reached) shows no `Analysis` group (a JPEG shows at most `Sharpness`). A file hidden by a refilter shows neither the `Analysis` group nor the AF rows. A file whose preview failed still shows its `Analysis` group and a `Maker note` group holding only the AF rows. Turning the `f` overlay on or off does not change the `Analysis` rows (they never use the on-demand eyes judgment).
 - [ ] On Windows, open a second folder while a file of the first is on screen. Expected: until the new folder's first preview arrives, the pane shows no rows from the index (not another file's), then the new file's rows.
 
-### Native: real-device checks of the settings as a full-window layer (native-settings-component Step 1)
+### App: real-device checks of the settings as a full-window layer (native-settings-component Step 1)
 
 #### Background
 
@@ -1833,7 +1833,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs`.
 
 #### TODO
 
-- [ ] On Windows, run the native app with a test `--settings` store and an open folder, then check each of these. Expected: all as described.
+- [ ] On Windows, run the app with a test `--settings` store and an open folder, then check each of these. Expected: all as described.
   1. `ctrl+,` shows the settings over the whole window, opaque, with the title row, the controls and the status line.
   2. Typing works in a label name field (Sidecar, XMP format) and in the Import pattern field; Enter and blur commit.
   3. Tab / Shift+Tab cycle only through the settings' controls and wrap (no stop in the tree, strip or preview underneath).
@@ -1842,7 +1842,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs`.
   6. A folder dropped on the window while the settings are shown opens nothing (record what actually happens; if it differs, correct the drop rule in `docs/agents/app.md`).
   7. Escape (cancelling a capture first, committing a focused field first) and the `×` return to the main view, where Left / Right page at once.
 
-### Native: real-device checks of the settings body drawn with gpui-component's `Settings` (native-settings-component Step 2)
+### App: real-device checks of the settings body drawn with gpui-component's `Settings` (native-settings-component Step 2)
 
 #### Background
 
@@ -1852,7 +1852,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/theme.rs`.
 
 #### TODO
 
-- [ ] On Windows, run the native app with a test `--settings` store and an open folder, press `ctrl+,`, then check each of these. Expected: all as described.
+- [ ] On Windows, run the app with a test `--settings` store and an open folder, press `ctrl+,`, then check each of these. Expected: all as described.
   1. The body is a sidebar (search field, Sidecar, Culling, Keyboard Shortcuts, Import) beside the selected page, on the box's dark surface, the selected page lit `#262626`; the search placeholder reads "Search...".
   2. Typing works in the search field, the label name fields (Sidecar, XMP format) and the Import pattern field; a name or pattern commits only on Enter or blur, an invalid pattern shows its reason in red.
   3. Escape in the search field with text clears it; pressed again it closes the settings. Escape in a name or pattern field commits and closes.
@@ -1861,7 +1861,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/theme.rs`.
   6. Searching an action name (for example "burst") lists only its rows; clearing the search brings every item back.
   7. The user's visual check of the new look (group headers, label-left / control-right rows, the sidebar's colors).
 
-### Native: real-device checks of the drag-resizable tree and meta panes
+### App: real-device checks of the drag-resizable tree and meta panes
 
 `native-pane-resize` made the GPUI app's (`crates/app`) folder tree and meta pane drag-resizable by their boundary with the preview, stored under the `panelWidths` key of the settings store (default 220 px, a pane 160 to 480 px, the preview at least 240 px). Unit tests (`panewidths.rs`, `settings.rs`'s read of `panelWidths`) and `mise run ci:local` cover the arithmetic and the setting. Nobody has dragged a handle in the running window: the drag itself, the cursor and the handle's look, the narrow-window behavior, a release outside the window, the 1:1 re-cut, the 5 px bands against the preview's clicks and the layout at 160 px are all unchecked. The limits (160 / 480 / 240) were not judged by eye. Plan: `docs/plans/_archived/20261115-native-pane-resize/plan.md`. Files: `crates/app/src/main.rs` (`pane_handle`, `drag_pane`, `end_pane_drag`, the root `div` in `render`), `crates/app/src/panewidths.rs`.
 
@@ -1879,7 +1879,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, launch with `--auto`. Expect the panes to start at 220 whatever is stored and a drag to write nothing to `panelWidths`.
 - [ ] On macOS and Linux, repeat the hover, drag, narrow-window, restart and hide / show checks above. CI only builds these platforms.
 
-### Native app: real-device check of the folder tree's file counts on collapsed rows (native-tree-index-counts, native-folder-count-cache, native-folder-count-prune)
+### App: real-device check of the folder tree's file counts on collapsed rows (native-tree-index-counts, native-folder-count-cache, native-folder-count-prune)
 
 #### Background
 
@@ -1889,15 +1889,15 @@ Files: `crates/app/src/tree.rs` (`set_cached_counts`, `set_listed_count`, `Count
 
 #### TODO
 
-- [ ] On Windows (`mise run app:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a mapped network drive, a symlink or a junction, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed. If the rules in `docs/agents/app.md` ("The folder tree is a `uniform_list` over rows kept in the view", the count's sources, writes and reads) are marked Inferred, change them to Measured with the observed result once the above is confirmed.
-- [ ] On macOS (`mise run app:dev`), launch the native app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a symlink or a network volume, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed.
+- [ ] On Windows (`mise run app:dev`), launch the app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a mapped network drive, a symlink or a junction, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed. If the rules in `docs/agents/app.md` ("The folder tree is a `uniform_list` over rows kept in the view", the count's sources, writes and reads) are marked Inferred, change them to Measured with the observed result once the above is confirmed.
+- [ ] On macOS (`mise run app:dev`), launch the app on an index upgraded from before the cache table: expect no collapsed row to show a count yet. Expand a folder that was never opened and holds RAW files, collapse it, then quit and restart: expect its collapsed row to show the count before you expand it. Open a folder and let it list, restart: the same. A folder never listed shows no count. Expand a folder: its number is the `read_dir` count and looks the same expanded or collapsed. Right-click a folder > `Refresh` and add or remove a RAW outside the app: the count follows, and after a restart the new count shows. Rename a listed folder, restart: the renamed row keeps its count. Run `Rename by Capture Date…` with a split: each new date folder shows its count while collapsed, and the original folder (if undated files keep it) shows none until listed. Expand a folder reached through a symlink or a network volume, restart: expect its count. Check a long name next to a count pill still truncates with the pill whole. Delete or rename a counted folder outside the app, expand or `Refresh` its parent, quit and restart, then create a folder of the old name: expect no count on it until it is listed.
 - [ ] On Linux (`mise run app:dev`), the same steps as on macOS (a symlink and a mounted network folder for the last link check).
 
-### Native: real-device checks of the title bar (native-title-bar)
+### App: real-device checks of the title bar (native-title-bar)
 
 #### Background
 
-The `native-title-bar` feature replaced the OS title bar of the GPUI native app with gpui-component's `TitleBar` (34 px, the app icon from `icons/app.png` served through `Icons`, and the text "Handpic"). The window options are `..TitleBar::window_options()` with an explicit `titlebar` title "Handpic", and Linux requests `WindowDecorations::Client`. CI and the tests cover the build on all three platforms and a test that `Icons` loads the icon's PNG bytes. The author saw one debug-build launch on Windows 11 with no folder open. In it the bar showed the icon, "Handpic" and the three controls, the process's main window title read "Handpic", and the tree, the empty-preview message and the status row laid out below the bar. Nobody has exercised the controls' clicks, drag, the taskbar / Alt+Tab text, a folder's preview and overlays, the menus' height cap, the resize borders, Snap Layouts, the bar under a dialog, saved window geometry, macOS or Linux. The Step 1 checkbox was ticked on the automated criteria and that launch screenshot only. The theme item depends on `feature/native-themes` mapping `title_bar` / `title_bar_border`; until then the bar paints with gpui-component's load-time values. Plan: `docs/plans/_archived/20261116-native-title-bar/plan.md`.
+The `native-title-bar` feature replaced the OS title bar of the GPUI app with gpui-component's `TitleBar` (34 px, the app icon from `icons/app.png` served through `Icons`, and the text "Handpic"). The window options are `..TitleBar::window_options()` with an explicit `titlebar` title "Handpic", and Linux requests `WindowDecorations::Client`. CI and the tests cover the build on all three platforms and a test that `Icons` loads the icon's PNG bytes. The author saw one debug-build launch on Windows 11 with no folder open. In it the bar showed the icon, "Handpic" and the three controls, the process's main window title read "Handpic", and the tree, the empty-preview message and the status row laid out below the bar. Nobody has exercised the controls' clicks, drag, the taskbar / Alt+Tab text, a folder's preview and overlays, the menus' height cap, the resize borders, Snap Layouts, the bar under a dialog, saved window geometry, macOS or Linux. The Step 1 checkbox was ticked on the automated criteria and that launch screenshot only. The theme item depends on `feature/native-themes` mapping `title_bar` / `title_bar_border`; until then the bar paints with gpui-component's load-time values. Plan: `docs/plans/_archived/20261116-native-title-bar/plan.md`.
 
 Files: `crates/app/src/main.rs`, `crates/app/src/icons.rs`, `crates/app/src/modal.rs`, `crates/app/src/session.rs`, `crates/app/src/theme.rs`, `docs/agents/app.md`.
 
@@ -1912,11 +1912,11 @@ Files: `crates/app/src/main.rs`, `crates/app/src/icons.rs`, `crates/app/src/moda
 - [ ] On macOS, expect the traffic lights to sit inside the bar without overlapping the icon and title (80 px left padding), the content to start below the bar, and double-click on the bar to follow the system setting.
 - [ ] On Linux, under client-side decorations expect the bar to draw its controls and `Root`'s frame and shadow. Under server-side decorations (X11 without a compositor, or a Wayland compositor that insists) expect no second set of controls. WSLg can serve as a first pass once a WSL distribution is installed, but it does not replace a check on a regular GNOME / KDE desktop.
 
-### Native: real-device checks of the title bar's settings button (native-title-bar-settings)
+### App: real-device checks of the title bar's settings button (native-title-bar-settings)
 
 #### Background
 
-The `native-title-bar-settings` feature added a gpui-component `Button` with the Lucide `settings` icon as the second child of the native app's `TitleBar`, at the right end of the bar. A click opens the settings modal through `Handpic::open_settings`, the same method `ctrl+,` (`meta+,` on macOS) uses, with the same refusals. The press does not move the window: a wrapping `div` stops the left mouse-down from propagating. The tooltip is "Settings" with the `OPEN_KEY` as a `Kbd`. CI and the unit tests cover the tooltip's text and key per platform and that `icons/settings.svg` loads through `Icons`. By hand on Windows 11 (debug build, driven by a script) the author saw the following:
+The `native-title-bar-settings` feature added a gpui-component `Button` with the Lucide `settings` icon as the second child of the app's `TitleBar`, at the right end of the bar. A click opens the settings modal through `Handpic::open_settings`, the same method `ctrl+,` (`meta+,` on macOS) uses, with the same refusals. The press does not move the window: a wrapping `div` stops the left mouse-down from propagating. The tooltip is "Settings" with the `OPEN_KEY` as a `Kbd`. CI and the unit tests cover the tooltip's text and key per platform and that `icons/settings.svg` loads through `Icons`. By hand on Windows 11 (debug build, driven by a script) the author saw the following:
 - A press and drag on the gear left the window where it was, and a drag on the empty bar moved it.
 - A click opened the settings.
 - `Escape` closed the settings and `ctrl+,` reopened them right away.
@@ -1936,7 +1936,7 @@ Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/ap
 - [ ] On macOS (`mise run app:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
 - [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
 
-### Native: real-device check of the settings controls drawn with gpui-component (native-component-controls)
+### App: real-device check of the settings controls drawn with gpui-component (native-component-controls)
 
 #### Background
 
@@ -1954,7 +1954,7 @@ Files: `crates/app/src/settingsview.rs`.
   5. Import: press `Choose…`, then select and copy the root path in its field; the path is selectable and copyable, not editable; Escape in it closes the settings.
   6. Keyboard Shortcuts: press `+` then a key, and the capture takes the next key; remove a key with its `×`.
 
-### Native: real-device check of the look of the switch and the `Kbd` keys (native-component-controls)
+### App: real-device check of the look of the switch and the `Kbd` keys (native-component-controls)
 
 #### Background
 
@@ -1966,7 +1966,7 @@ Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs` (`context_item
 
 - [ ] On Windows, run `mise run app:dev`. In the settings (`ctrl+,`), check that the off auto-advance switch and its thumb read clearly against the settings' `#171717` and that the Keyboard Shortcuts `Kbd` chips (13 px `foreground` on `muted`) look right. Then right-click a strip cell and check that the `Kbd` shortcuts (`Ctrl+Alt+1`, `Space`) are right-aligned in `muted_foreground`. Expected: if the off switch is hard to read, map `switch` / `switch_thumb` in `theme.rs` with the theme test.
 
-### Native: real-device check of the OS notification when an import ends while the window is inactive (native-import-notification)
+### App: real-device check of the OS notification when an import ends while the window is inactive (native-import-notification)
 
 #### Background
 
@@ -1979,7 +1979,7 @@ Files: `crates/app/src/folderops.rs` (`import_ran`, the deferred post), `crates/
 - [ ] On Windows, build with `mise run app:dev` (or `app:release`), start an `Import…` from a card or folder, switch to another application, and wait for the run to end. Expect one toast titled `Import finished` (or `Import canceled` after a cancel) whose body is the status line's summary. Click the toast and expect the Handpic window to come forward. Run an import that ends with the Handpic window active and expect no toast. Check that the taskbar icon and grouping of the running app look unchanged (an existing pin of the exe may no longer group with the running window), and that `Handpic.log` has no `failed to register AppUserModelID` or `cannot show a system notification` warning.
 - [ ] Once the above is confirmed, replace the "(Inferred)" marker on the `docs/agents/app.md` section "An import's end posts a system-only notification while inactive" with the observed result. If the toast, the click activation or the taskbar grouping misbehaves, file a fix issue instead.
 
-### Native: real-device checks of the gpui-kit umbrella crate (native-gpui-kit)
+### App: real-device checks of the gpui-kit umbrella crate (native-gpui-kit)
 
 #### Background
 
@@ -1991,7 +1991,7 @@ Files: `crates/app/src/folderops.rs` (`import_ran`, the deferred post), `crates/
 - [ ] On macOS, run `mise run app:dev` (the build now has `font-kit` and `runtime_shaders`). Expected: the window draws text (the status row, the meta pane, the menus) and opens without a shader error at startup.
 - [ ] On Linux, in an X11 session and in a Wayland session, run `mise run app:dev` (the build now compiles both backends). Expected: the window opens, draws, and takes the keyboard.
 
-### Native: real-device checks of the Appearance tab (mode, shipped themes) (native-themes)
+### App: real-device checks of the Appearance tab (mode, shipped themes) (native-themes)
 
 The `native-themes` feature made the GPUI app's theme a setting: Step 2 stored `theme` (mode System / Light / Dark), added a Neutral light palette and an `Appearance` tab; Step 3 vendored gpui-component's 21 theme files (36 themes) and added a light-theme and a dark-theme `Select`. `mise run ci:local` and the unit tests cover the setting rule, the mode resolution, the palette mappings, the `Roles` derivations and the theme-file parsing. Nobody has looked at the result on a real machine: both steps' checkboxes were ticked on the automated criteria only, so Light, System following the OS, the shipped themes' readability, the fixed judgment colors on light surfaces and the pickers' keys were never exercised on screen. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
 
@@ -2004,7 +2004,7 @@ Files: `crates/app/src/theme.rs`, `crates/app/src/main.rs`, `crates/app/src/sett
 - [ ] On macOS, repeat both Windows checks above (Light / System / Dark with `meta+,`; the shipped light and dark themes; the pickers' keys).
 - [ ] On Linux, repeat both Windows checks above (Light / System / Dark; the shipped light and dark themes; the pickers' keys). Check System with `window.appearance()` following the desktop's appearance switch.
 
-### Native: check the upstream licenses of the shipped gpui-component themes before packaging (native-themes)
+### App: check the upstream licenses of the shipped gpui-component themes before packaging (native-themes)
 
 The 21 vendored files in `crates/app/themes/` carry no license of their own. Upstream (longbridge/gpui-kit) ships them in its Apache-2.0 repository, but each adapts a third-party scheme (iTerm2-Color-Schemes, Zed's Ayu, Catppuccin, Solarized, Tokyo Night, Twilight / MacroMates and others) whose own license was not checked one by one. `crates/app/themes/LICENSE` holds only the source, the per-file author / url table and the Apache-2.0 text, and `docs/agents/app.md`'s license section does not mention the gap. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
 
@@ -2014,7 +2014,7 @@ Files: `crates/app/themes/LICENSE`, `docs/agents/app.md`.
 
 - [ ] Check each adapted scheme's license and add any missing attribution to `crates/app/themes/LICENSE`, or drop a theme whose license is incompatible. Record the result in the guide's license section. Done when every file in `crates/app/themes/` has a checked upstream license noted in `LICENSE` and the guide's license section states the result.
 
-### Native: real-device checks of the right-click menus drawn as gpui-kit's PopupMenu (native-context-menu)
+### App: real-device checks of the right-click menus drawn as gpui-kit's PopupMenu (native-context-menu)
 
 `native-context-menu` replaced the hand-built `div` menus behind the folder tree's and the thumbnail strip's right-click menus (`context_popover`, `context_row`, `context::Menu` / `Open`) with gpui-component's `PopupMenu` through gpui-kit, placed by the view itself with `deferred` / `anchored` so the menu still flips near the window's edges. `mise run ci:local` and the remaining `context.rs` tests (`folder_groups`, `strip_groups`, `shown_path`) cover the items and groups. The crate has no GPUI view test, so the menu itself was never exercised: the step was ticked on the automated criteria only. Four things were read from the source and never run: the key order (the menu takes `escape` / `up` / `down` / `enter` before the view's `key_down`, while `left` / `right` and every other key still reach it), the canvas-based hand-back of the tree's keyboard on a press on the menu, the focus returning to the view after every close path, and `Rename…` ending with the inline `Input` focused. Windows only. Plan: `docs/plans/_archived/20261116-native-context-menu/plan.md` (the steps and expected results are also in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/context.rs`, `crates/app/src/folderops.rs`, `docs/agents/app.md`.
 
@@ -2026,7 +2026,7 @@ Files: `crates/app/themes/LICENSE`, `docs/agents/app.md`.
 - [ ] On Windows, the items. Run `Rename…` (ends with the inline `Input` focused), `Copy Path`, a judgment (applies to the targets) and `Move to Trash…` (its dialog opens).
 - [ ] On Windows, with a menu open. Escape closes it only. A keymap key (for example `p`) closes it and acts. Left / Right close it and page the strip. Up / Down move the highlight and Enter runs the item. A press outside closes it. A second right-click elsewhere replaces it. After each close the keymap works again (the focus is back on the view), and a press on the menu while the tree had the keyboard hands it back.
 
-### Native: real-device check of the catalog-served icons (native-catalog-icons)
+### App: real-device check of the catalog-served icons (native-catalog-icons)
 
 #### Background
 
@@ -2049,7 +2049,7 @@ Files: `crates/app/src/icons.rs`.
 
 - [ ] Retarget the two Progress links to `../_archived/20261114-gpui-ci-packaging/plan.md` and `../_archived/20261116-gpui-packaging-redecision/plan.md` (check the folders' actual names under `_archived/` first), then run `mise run lint` (lychee) to confirm the links resolve.
 
-### Native: real-device check of the folder tree rows drawn as ListItems (native-tree-listitem)
+### App: real-device check of the folder tree rows drawn as ListItems (native-tree-listitem)
 
 #### Background
 
@@ -2059,7 +2059,7 @@ Files: `crates/app/src/main.rs` (`tree_row`, `tree_row_clicked`, `reveal`), `cra
 
 #### TODO
 
-- [ ] On Windows (and any platform the native app runs on, best on Windows), run `mise run app:dev` and open a folder tree. Check each of the following in Neutral dark, Neutral light and one vendored theme.
+- [ ] On Windows (and any platform the app runs on, best on Windows), run `mise run app:dev` and open a folder tree. Check each of the following in Neutral dark, Neutral light and one vendored theme.
   - States: the open row is lit (Neutral: `accent`, semibold). The hover lights other rows only, not the open or cursor row. The keyboard cursor is outlined (Neutral: `ring`) only after a click in the pane, and the outline also shows on the open row.
   - Clicks: a click on a collapsed row that is not open opens the folder and expands it. A click on an expanded row that is not open opens the folder and the row stays collapsed once the reveal ends. A click on the open row's icon, indent or count toggles it without re-listing the folder (the scan does not restart). A click on the open row's name only arms the slow-click rename and neither toggles nor reopens. A click on an open leaf row does nothing. A right-click opens the context menu.
   - Rename: a slow click on the open row's name starts the inline rename, whose input fits the 22 px row, and Escape cancels it.
@@ -2068,7 +2068,7 @@ Files: `crates/app/src/main.rs` (`tree_row`, `tree_row_clicked`, `reveal`), `cra
   - Text selection: the settings modal's and the inline rename's text selection reads as gray in Neutral.
 - [ ] If Neutral's open row, hover or cursor outline looks wrong, or the 16 px indent leaves too little room for names, record the observed result in the archived `learnings.md` and decide whether to adjust `theme.rs`'s `map` or the indent.
 
-### Native: real-device check of the strip menu's judgment order and star rows (native-strip-menu-order)
+### App: real-device check of the strip menu's judgment order and star rows (native-strip-menu-order)
 
 #### Background
 
@@ -2081,17 +2081,17 @@ Files: `crates/app/src/context.rs`, `crates/app/src/main.rs`.
 - [ ] On Windows, run `mise run app:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
 
-### Native: real-device check of the Keyboard Shortcuts page's groups
+### App: real-device check of the Keyboard Shortcuts page's groups
 
 #### Background
 
-The `native-shortcut-groups` feature grouped the native settings modal's Keyboard Shortcuts page into `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, with `Reset all` alone in a final untitled group. Unit tests in `settingsmodal.rs` and `mise run ci:local` cover the category mapping, its order and titles, and that every default action has an explicit category. Nobody has run the page on screen: the key edits in the groups, the key capture, the sidebar sub-entries and the search were never exercised. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/_archived/20261116-native-shortcut-groups/plan.md`. Files: `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`.
+The `native-shortcut-groups` feature grouped the settings modal's Keyboard Shortcuts page into `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, with `Reset all` alone in a final untitled group. Unit tests in `settingsmodal.rs` and `mise run ci:local` cover the category mapping, its order and titles, and that every default action has an explicit category. Nobody has run the page on screen: the key edits in the groups, the key capture, the sidebar sub-entries and the search were never exercised. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/_archived/20261116-native-shortcut-groups/plan.md`. Files: `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`.
 
 #### TODO
 
-- [ ] On Windows (any platform the native app runs on), run `mise run app:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.
+- [ ] On Windows (any platform the app runs on), run `mise run app:dev`, open the settings (`ctrl+,`) and go to Keyboard Shortcuts. Expect the rows under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, then `Reset all`. In at least two groups (e.g. `Filmstrip` and `Panes`), add a key with `+` (`Press a key...` shows and the key is added), remove it with its `×` (the focus returns to the box), `Reset` a row, then `Reset all`. An `APP_KEYS` key (e.g. `ctrl+,`) is refused as before. The sidebar lists the five groups under `Keyboard Shortcuts` and a click scrolls to the group. Searching an action's label shows only its group, and `Reset all` is found by its keyword.
 
-### Native: a held open-and-collapse click leaves the row expanded when a rename moves the folder
+### App: a held open-and-collapse click leaves the row expanded when a rename moves the folder
 
 #### Background
 
@@ -2104,7 +2104,7 @@ Files: `crates/app/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collapsed
 - [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
 - [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.
 
-### Native: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
+### App: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
 
 #### Background
 
@@ -2116,7 +2116,7 @@ Files: `crates/app/src/main.rs` (`menu_row`, `context_item`, `label_tag`, `paint
 
 - [ ] On Windows (or any other desktop platform at hand), run `mise run app:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
 
-### Native app: real-device Windows check of the momentary grayscale preview
+### App: real-device Windows check of the momentary grayscale preview
 
 #### Background
 
@@ -2126,7 +2126,7 @@ Files: `crates/app/src/grayscale.rs`, `crates/app/src/main.rs`, `crates/app/src/
 
 #### TODO
 
-- [ ] On Windows, run the GPUI app (`mise run native:run` or the built binary), open a folder and hold `g` in the fit view. Expect the photo to turn gray, and color to return on release. Repeat in 1:1 (`z`): the placeholder and the crop both gray.
+- [ ] On Windows, run the GPUI app (`mise run app:dev` or the built binary), open a folder and hold `g` in the fit view. Expect the photo to turn gray, and color to return on release. Repeat in 1:1 (`z`): the placeholder and the crop both gray.
 - [ ] On Windows, with `f` and `e` (and `d`) on, hold `g`. Expect the AF mark, face boxes, mesh, labels, the peaking layer and the performance graph to stay colored, and the strip, the panes and the empty-state text to be unaffected.
 - [ ] On Windows, hold `g` long enough to auto-repeat. Expect no flicker.
 - [ ] On Windows, rebind `grayscale` to `ctrl+g` in the settings. Hold Ctrl+G and release Ctrl first, then repeat releasing `g` first. Expect color to return on the first release either way.
@@ -2134,7 +2134,7 @@ Files: `crates/app/src/grayscale.rs`, `crates/app/src/main.rs`, `crates/app/src/
 - [ ] On Windows, hold `g` and open the settings (`ctrl+,`) or a right-click menu, release `g`, then close it. Expect the photo to be in color (the view's `on_blur` released the hold). If it stays gray, release the hold where the view opens the settings, a dialog or a menu instead.
 - [ ] On Windows, while `g` is held, page, press `z`, `f`, `e` and `d`. Expect them to behave as before.
 
-### Native: real-device checks of the drag-resizable strip height (native-strip-resize)
+### App: real-device checks of the drag-resizable strip height (native-strip-resize)
 
 `native-strip-resize` made the thumbnail strip's height in the GPUI app (`crates/app`) draggable by its top edge, stored under the `stripHeight` key of the settings store (default 128 px, 96 to 302 px, the preview at least 240 px), with the cells' image box scaling with the height. Unit tests (`stripheight.rs`, `strip.rs`'s geometry, hit test, range, content width and carried-offset tests, `settings.rs`'s read of `stripHeight`) and `mise run ci:local` cover the arithmetic and the setting. Nobody has dragged the handle in the running window: the drag itself, the cursor and the handle's line, the marks on the smallest cells, the sharpness of the largest, a release outside the window, the 1:1 re-cut and `--auto` are all unchecked. The limits (96 / 302 / 240) were not judged by eye. Plan: `docs/plans/_archived/20261117-native-strip-resize/plan.md`. Files: `crates/app/src/main.rs` (`strip_handle`, `StripDrag`, `drag_strip`, `end_pane_drag`, the wrapper `div` around the middle row and the strip in `render`), `crates/app/src/stripheight.rs`, `crates/app/src/strip.rs` (`Geometry`, `Strip::set_geometry`).
 
@@ -2150,11 +2150,11 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, launch with `--auto`. Expect the strip to start at 128 whatever is stored and a drag to write nothing to `stripHeight`.
 - [ ] On macOS and Linux, repeat the hover, drag, scaling, restart, 1:1 and hide / show checks above. CI only builds these platforms.
 
-### Native: real-device checks of the Cache page and Clear Cache (native-clear-cache)
+### App: real-device checks of the Cache page and Clear Cache (native-clear-cache)
 
 #### Background
 
-The `native-clear-cache` feature ported the Tauri settings modal's `Cache` tab to the native settings modal: the index size line, a `Clear Cache` button with a confirmation `Dialog`, a clear held until a running scan finishes, and the refresh of the open folder, the tree's cached counts and the size afterwards. `mise run ci:local` and the unit tests (`cache.rs` flow, texts and on-disk size, the `TABS` order) cover the pure parts. The dialog opened over the settings layer (Escape and focus routing), the held clear, the refresh and the size shrinking were never exercised: `--auto` cannot drive the GUI, and the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
+The `native-clear-cache` feature ported the Tauri settings modal's `Cache` tab to the app's settings modal: the index size line, a `Clear Cache` button with a confirmation `Dialog`, a clear held until a running scan finishes, and the refresh of the open folder, the tree's cached counts and the size afterwards. `mise run ci:local` and the unit tests (`cache.rs` flow, texts and on-disk size, the `TABS` order) cover the pure parts. The dialog opened over the settings layer (Escape and focus routing), the held clear, the refresh and the size shrinking were never exercised: `--auto` cannot drive the GUI, and the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
 
 Files: `crates/app/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, `run_clear`, `cleared`, `refresh_index_size`), `crates/app/src/settingsview.rs` (`cache`), `crates/app/src/cache.rs`.
 
@@ -2166,7 +2166,7 @@ Files: `crates/app/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, 
   3. Press `Clear Cache` again and confirm with Enter: the log has `index cleared: EvictSummary { … }`; the size shrinks; the open folder is listed again and pass 1 / pass 2 refill thumbnails, the meta pane and the filter facts, the current file staying put; the tree's cached counts of unlisted folders disappear.
   4. Open a large unscanned folder and, while `scanning` runs, press `Clear Cache`: the note `The cache is cleared as soon as the running scan finishes.` shows, then the dialog opens by itself when the scan ends. Repeat and close the settings while waiting: no dialog at the scan's end.
 
-### Native: a held Clear Cache misses idle points that do not pass through `finished`
+### App: a held Clear Cache misses idle points that do not pass through `finished`
 
 #### Background
 
@@ -2178,7 +2178,7 @@ Files: `crates/app/src/main.rs`.
 
 - [ ] Drain the held clear at those idle points too. Done when a held clear asks by itself after a trash undo into another folder and after a failed rename, with a test of the pure part where possible.
 
-### Native: real-device check of the strip position in the status bar
+### App: real-device check of the strip position in the status bar
 
 `native-status-position` moved the GPUI app's strip position (`3 / 120`) from the meta pane to the status bar's right region, as its first item, left of the progress circle, `Sort ▾` and `Filter ▾`. While `FilterState::is_active` it appends the listed count (`3 / 80 (120)`), and with no shown file it shows nothing. The pure format is `pager::position`. CI, the `pager.rs` unit tests and `mise run ci:local` cover the format and the build. The window was never run, so the placement was never seen on screen: the step was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-status-position/plan.md`.
 
@@ -2188,11 +2188,11 @@ Files: `crates/app/src/main.rs` (`status_row`, the meta pane's name `div`), `cra
 
 - [ ] On Windows, with a long status text (for example an error), expect the position not to be clipped by the right region's `overflow_hidden`. Expect the `Sort ▾` and `Filter ▾` popovers to still anchor to their buttons.
 
-### Native: real-device checks of the always-visible scrollbars
+### App: real-device checks of the always-visible scrollbars
 
 #### Background
 
-The `native-scrollbars-always` feature made `theme::apply` set the GPUI native app's theme `scrollbar_mode` to `ScrollbarMode::Always` (in `theme.rs`'s `finish`). The folder tree's bar, the strip's `StripBar`, the meta pane's bar and the dialog bodies' bars now show at rest and take a press without scrolling first. The mode is global, so the settings modal's lists, the `Sort ▾` / `Filter ▾` popovers, `PopupMenu` and `Select` lists show their bar when they overflow too. A unit test on a plain `Theme` and `mise run ci:local` cover that the mode is `Always` after a vendored config. Nobody has watched the running window: the bars' look and drag were never exercised. gpui-base 0.9.1 still skips a bar whose content fits, so a short folder should show no bar. Plan: `docs/plans/_archived/20261117-native-scrollbars-always/plan.md`. The `native-scrollbar-gutter` feature then reserved the bars' 16 px track instead of leaving them over content: the tree row's right padding and the meta pane's body padding (`theme::SCROLLBAR_TRACK`) and `stripheight::GUTTER`, a 9 px band under the strip's cells. `mise run ci:local` and the unit tests (`SCROLLBAR_TRACK` against gpui-base's `Scrollbar::width()`, `stripheight::dragged` with the gutter) cover the arithmetic; the on-screen result was never exercised, and both features' checkboxes were ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-scrollbar-gutter/plan.md`.
+The `native-scrollbars-always` feature made `theme::apply` set the GPUI app's theme `scrollbar_mode` to `ScrollbarMode::Always` (in `theme.rs`'s `finish`). The folder tree's bar, the strip's `StripBar`, the meta pane's bar and the dialog bodies' bars now show at rest and take a press without scrolling first. The mode is global, so the settings modal's lists, the `Sort ▾` / `Filter ▾` popovers, `PopupMenu` and `Select` lists show their bar when they overflow too. A unit test on a plain `Theme` and `mise run ci:local` cover that the mode is `Always` after a vendored config. Nobody has watched the running window: the bars' look and drag were never exercised. gpui-base 0.9.1 still skips a bar whose content fits, so a short folder should show no bar. Plan: `docs/plans/_archived/20261117-native-scrollbars-always/plan.md`. The `native-scrollbar-gutter` feature then reserved the bars' 16 px track instead of leaving them over content: the tree row's right padding and the meta pane's body padding (`theme::SCROLLBAR_TRACK`) and `stripheight::GUTTER`, a 9 px band under the strip's cells. `mise run ci:local` and the unit tests (`SCROLLBAR_TRACK` against gpui-base's `Scrollbar::width()`, `stripheight::dragged` with the gutter) cover the arithmetic; the on-screen result was never exercised, and both features' checkboxes were ticked on the automated criteria only. Plan: `docs/plans/_archived/20261117-native-scrollbar-gutter/plan.md`.
 
 Files: `crates/app/src/theme.rs` (`finish`, `apply`, `SCROLLBAR_TRACK`), `crates/app/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/app/src/stripbar.rs` (`StripBar`), `crates/app/src/stripheight.rs` (`GUTTER`, `dragged`), `crates/app/src/modal.rs` (`shell`), `docs/agents/app.md` ("The strip, the tree and the meta pane draw the theme's scrollbar").
 
@@ -2208,7 +2208,7 @@ Files: `crates/app/src/theme.rs` (`finish`, `apply`, `SCROLLBAR_TRACK`), `crates
 - [ ] On Windows, look at the bar in Neutral dark, Neutral light and one vendored theme (e.g. Catppuccin Mocha), switching on the Appearance page and, in System mode, on an OS appearance change. Expect the bar's look to be acceptable in each.
 - [ ] On macOS and Linux, repeat the checks above.
 
-### Native: real-device checks of the strip's header row with Sort and Filter (native-strip-header)
+### App: real-device checks of the strip's header row with Sort and Filter (native-strip-header)
 
 #### Background
 
@@ -2229,7 +2229,7 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, re-measure the preview canvas in the default 1600 x 1000 window (expected 1160 x 810, 32 px shorter than the old 842), the status row's height and the header's height. Replace the "inferred / not re-measured" notes in `docs/agents/app.md` (the preview canvas "inferred 32 px shorter", the pre-header 1160 x 842 measurements, the status row height "inferred from the sources") with the measured values.
 - [ ] On macOS and Linux, repeat the header, popover, handle, drag and `toggleStrip` checks above. CI only builds these platforms.
 
-### Native: real-device checks of the packages the Package workflow builds (gpui-packaging)
+### App: real-device checks of the packages the Package workflow builds (gpui-packaging)
 
 The `gpui-packaging` feature added the manual `Package` workflow and `tools/package/` scripts. CI covers building, `hdiutil verify` and `codesign --verify` of the DMGs, the silent install, upgrade and uninstall of the setup `.exe` on an elevated runner, `install.sh` under a throwaway `HOME` (including the wrong-digest refusal), and `apt` installing and removing the `.deb`. Never exercised: the local mise package tasks on a real machine, a launch from any package, Gatekeeper's first-launch prompt, the absence of a UAC prompt for a standard Windows user (the hosted runner is elevated), the Start menu entry, the desktop menu entry and window icon matching on Wayland and X11, and the Vulkan-less GL fallback. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`.
 
@@ -2241,9 +2241,9 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 - [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run app:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
 - [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run app:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
 
-### Native: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
+### App: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
 
-The native deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the native deb does not upgrade it in place. The removed Tauri app's `tauri.conf.json` on `main` had `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
+The app deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the app deb does not upgrade it in place. The removed Tauri app's `tauri.conf.json` on `main` had `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
 
 Files: `crates/app/packaging/linux/control`, `tools/package/linux.sh`.
 
@@ -2252,29 +2252,29 @@ Files: `crates/app/packaging/linux/control`, `tools/package/linux.sh`.
 - [ ] Decide whether `control` gets `Conflicts` / `Replaces: riffle`, after the real-device deb check above. Done when the choice is in the template or `app.md` records why not.
 - [ ] Decide whether `Depends` gets `libegl1`, or `libvulkan1 | libegl1`, after the Vulkan-less machine check. Done when `linux.sh` reflects the choice or the guide records why not.
 
-### Native: real-device checks of the title bar's smaller text and centered folder name (native-title-bar-folder-name)
+### App: real-device checks of the title bar's smaller text and centered folder name (native-title-bar-folder-name)
 
 #### Background
 
-The `native-title-bar-folder-name` feature drew "Handpic" in the native app's title bar at `text_sm` (14 px) instead of the inherited 16 px. It also draws the open folder's name (`context::folder_title`: the last path component, else the shown path for a root such as `C:\` or `/`) centered across the whole window width. The name is an `absolute().inset_0()` overlay `div` over `TitleBar`, padded `TITLE_NAME_MARGIN` (160 px) a side and truncated with an ellipsis. CI and the unit tests cover the build on all three platforms and `folder_title` in `context.rs`. Nobody has looked at the bar running. Never exercised: the text size, the name's centering and truncation in a narrow window, whether 160 px a side of `TITLE_NAME_MARGIN` is right (it was estimated from the control widths, not tuned against a running window; on macOS the 80 px traffic-light padding leaves only about 4 px between the name's edge and "Handpic"), and whether a press on the name still reaches the bar's `WindowControlArea::Drag` row. That last point rests on the source of `gpui-pre` 0.3.12, where a listener-free `div` inserts no hitbox; it was never seen running. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261118-native-title-bar-folder-name/plan.md`.
+The `native-title-bar-folder-name` feature drew "Handpic" in the app's title bar at `text_sm` (14 px) instead of the inherited 16 px. It also draws the open folder's name (`context::folder_title`: the last path component, else the shown path for a root such as `C:\` or `/`) centered across the whole window width. The name is an `absolute().inset_0()` overlay `div` over `TitleBar`, padded `TITLE_NAME_MARGIN` (160 px) a side and truncated with an ellipsis. CI and the unit tests cover the build on all three platforms and `folder_title` in `context.rs`. Nobody has looked at the bar running. Never exercised: the text size, the name's centering and truncation in a narrow window, whether 160 px a side of `TITLE_NAME_MARGIN` is right (it was estimated from the control widths, not tuned against a running window; on macOS the 80 px traffic-light padding leaves only about 4 px between the name's edge and "Handpic"), and whether a press on the name still reaches the bar's `WindowControlArea::Drag` row. That last point rests on the source of `gpui-pre` 0.3.12, where a listener-free `div` inserts no hitbox; it was never seen running. The Step 1 checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261118-native-title-bar-folder-name/plan.md`.
 
 Files: `crates/app/src/main.rs` (the title bar in `impl Render for Riffle`, `TITLE_NAME_MARGIN`), `crates/app/src/context.rs` (`folder_title`).
 
 #### TODO
 
-- [ ] On Windows 11 (`mise run native:run` or a debug build of `crates/app`), open a folder. Expect "Handpic" next to the icon to be visibly smaller than before (14 px) with the icon still 16 px. Expect the folder's name to be centered on the whole window width at the same size as "Handpic", and to disappear with no folder open. Then narrow the window: expect a long name to be truncated with an ellipsis before it reaches "Handpic" or the gear. If 160 px a side of `TITLE_NAME_MARGIN` looks wrong, tune it. Press and drag starting on the name: expect the window to move. Double-click on the name: expect the window to maximize. Expect the minimize / maximize / close controls and the gear to still take their clicks. If the drag over the name does not move the window, fall back to a third `TitleBar` child as the plan says. Also open another folder, rename the open folder and run `Rename by Capture Date…` on it: expect the name to follow.
+- [ ] On Windows 11 (`mise run app:dev` or a debug build of `crates/app`), open a folder. Expect "Handpic" next to the icon to be visibly smaller than before (14 px) with the icon still 16 px. Expect the folder's name to be centered on the whole window width at the same size as "Handpic", and to disappear with no folder open. Then narrow the window: expect a long name to be truncated with an ellipsis before it reaches "Handpic" or the gear. If 160 px a side of `TITLE_NAME_MARGIN` looks wrong, tune it. Press and drag starting on the name: expect the window to move. Double-click on the name: expect the window to maximize. Expect the minimize / maximize / close controls and the gear to still take their clicks. If the drag over the name does not move the window, fall back to a third `TitleBar` child as the plan says. Also open another folder, rename the open folder and run `Rename by Capture Date…` on it: expect the name to follow.
 
-### Backend: decide the fate of the backend code only the Tauri app reached
+### Engine: decide the fate of the engine code only the Tauri app reached
 
 #### Background
 
-The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) removed the Tauri app but left the backend and core code only it called, since the AI features are more likely to be wired into the native app than deleted. Nothing in `crates/app` calls it today: `handpic_engine::ai` (the `aiEnabled` switch and the model download), `index::run_embed_scan` with the `embeddings` table, `Index::rank_rows` / `rank_dirs`, `handpic_core::rank`, `genre` and `embed`, and the seven-tool default mode of `mcp::Mcp` (`Mcp::new`; the native app uses `with_all_tools`). The native app refuses the matching MCP tools with `not_in_native` (the `recommended` sort, the Genre filter, `refit_ranking`, the AI switch). What this code needs, and what it got wrong, is in `docs/agents/shared-crates.md` ("The third pass").
+The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) removed the Tauri app but left the engine and core code only it called, since the AI features are more likely to be wired into the app than deleted. Nothing in `crates/app` calls it today: `handpic_engine::ai` (the `aiEnabled` switch and the model download), `index::run_embed_scan` with the `embeddings` table, `Index::rank_rows` / `rank_dirs`, `handpic_core::rank`, `genre` and `embed`, and the seven-tool default mode of `mcp::Mcp` (`Mcp::new`; the app uses `with_all_tools`). The app refuses the matching MCP tools with `not_in_app` (the `recommended` sort, the Genre filter, `refit_ranking`, the AI switch). What this code needs, and what it got wrong, is in `docs/agents/shared-crates.md` ("The third pass").
 
 Files: `crates/engine/src/ai.rs`, `crates/engine/src/index.rs`, `crates/engine/src/mcp.rs`, `crates/core/src/rank.rs`, `crates/core/src/genre.rs`, `crates/core/src/embed.rs`, `crates/app/src/companion.rs`.
 
 #### TODO
 
-- [ ] Decide, with the user, whether the native app gets pass 3, the Genre filter and the ranking (and plan that), or whether this code goes. Done when either a plan wires it into `crates/app` or a change removes it with its tests and docs.
+- [ ] Decide, with the user, whether the app gets pass 3, the Genre filter and the ranking (and plan that), or whether this code goes. Done when either a plan wires it into `crates/app` or a change removes it with its tests and docs.
 
 ### Icon: the app icon still reads RIFFLE
 
@@ -2290,9 +2290,9 @@ Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/a
 
 ---
 
-### Native: the keymap's `compare` action is bound to `v` and listed, but does nothing
+### App: the keymap's `compare` action is bound to `v` and listed, but does nothing
 
-The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The native app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
+The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
 
 Files: `crates/engine/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/main.rs` (`key_down`), `docs/humans/usage.md`.
 
@@ -2302,7 +2302,7 @@ Files: `crates/engine/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `cra
 
 ---
 
-### Native: real-device check of the screenshot tool's failed-capture path on Linux (native-qa)
+### App: real-device check of the screenshot tool's failed-capture path on Linux (native-qa)
 
 #### Background
 
@@ -2314,14 +2314,14 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 ---
 
-### Native: watch the macOS native CI job's cold-cache duration against the 30-minute timeout after the test-support dev-dependency (native-qa)
+### App: watch the macOS app CI job's cold-cache duration against the 30-minute timeout after the test-support dev-dependency (native-qa)
 
 #### Background
 
-`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `native` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency).
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency).
 
 #### TODO
 
-- [ ] Read the macOS `native` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
+- [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
 
 ---

@@ -78,7 +78,7 @@ pub const LINES: [Line; 4] = [
 
 type Stage = (&'static str, fn(&Stages) -> Duration);
 
-/// The native `page` line's stages, stacked from the bottom in this order.
+/// The `page` line's stages, stacked from the bottom in this order.
 pub const STAGES: [Stage; 8] = [
     ("wait", |s| s.wait),
     ("read", |s| s.read),

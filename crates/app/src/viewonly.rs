@@ -1,5 +1,5 @@
 //! A folder that holds only JPEGs opens view-only, a port of `viewonly.ts`:
-//! the backend lists JPEGs only when there is no RAW, so the listed paths
+//! the engine lists JPEGs only when there is no RAW, so the listed paths
 //! alone decide the mode.
 
 use std::path::Path;

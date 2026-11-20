@@ -1,7 +1,7 @@
 //! The folder tree's `Rewrite Sidecars from Index…` and `Delete Sidecars…`,
 //! kept pure: the confirmation dialog's text and the flow from the menu item
 //! through the dialog to the run's end. A port of the Tauri app's
-//! `sidecars.ts`; the window runs the backend's `foldersidecars`.
+//! `sidecars.ts`; the window runs the engine's `foldersidecars`.
 
 use handpic_engine::foldersidecars::{DeletePreview, Preview, Summary};
 
@@ -18,7 +18,7 @@ fn sidecars(count: usize) -> &'static str {
     if count == 1 { "sidecar" } else { "sidecars" }
 }
 
-/// A sidecar format or kind as the backend's setting names it, as the
+/// A sidecar format or kind as the engine's setting names it, as the
 /// dialog names it.
 pub fn format_name(format: &str) -> &'static str {
     match format {

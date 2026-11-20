@@ -14,7 +14,7 @@ Each item is tagged:
   broke, but the naive choice would have missed a stated budget or cost more.
 - **Inferred**: taken from the sources or docs; nothing has broken on it yet.
 
-Many items were first learned on the earlier webview app, which the native app
+Many items were first learned on the earlier webview app, which the app
 replaced; its source is in git history.
 
 ## Index, scan and files
@@ -27,10 +27,10 @@ delete) must not let a scan start mid-way and index the half-done state, nor
 race the operation's own reconcile. Releasing the guard between files would
 let a rescan index a half-moved folder.
 
-- The backend's bodies (`rename::rename_folder`, `datefolder::split_folder`,
+- The engine's bodies (`rename::rename_folder`, `datefolder::split_folder`,
   `foldersidecars::delete_run`, `trash::trash_listed` and the rest) do not
   check for a scan or drain the sidecar writer; the caller does. The earlier
-  app held a `Scans` lock across the call; the native app holds the operation
+  app held a `Scans` lock across the call; the app holds the operation
   in `idle::IdleGate` until the listing or scan under way ends (see
   `app.md`, "A trash or delete goes through the gate, and nothing
   lists under it").
@@ -364,7 +364,7 @@ test restore's `restored` list for it, not just that the files return.
   another folder. It moves no index rows, so it need not stop the embedding
   pass: the third pass skips a vanished file, and the next rescan's
   reconcile drops the gone rows.
-- Once the backend has recorded the run, the app must keep its undo entry
+- Once the engine has recorded the run, the app must keep its undo entry
   even if the open folder changed meanwhile; only the strip refresh is
   conditional on the open folder being the run's folder.
 - Source: `docs/plans/_archived/20261013-trash-from-strip/learnings.md`,
@@ -597,7 +597,7 @@ retried.
   `fullsharp.rs` next to `SOFT_BELOW`), Neutral otherwise, a missing value
   included. Step 5 of that plan removed the preview's in-focus probability
   and its candidate state from the core, the index and the types. A
-  new field of a pass-2 progress row must also be copied in the native
+  new field of a pass-2 progress row must also be copied in the app's
   `filter::apply_face_ready`, which copies field by field, or a frame scanned
   while on screen keeps its old state until the folder reloads. See
   `docs/plans/_archived/20261108-full-size-eye-check/learnings.md`, Steps 3
@@ -652,7 +652,7 @@ full-eye-sharp-only plan removed.
   full-eye-sharp-only plan replaced that cut with `full_eye_sharp >=
   SOFT_BELOW` and Low with `full_eye_sharp < LOW_BELOW`; its evidence is in
   `docs/plans/20261115-full-eye-sharp-only/` (`experiment.md`,
-  `low-threshold.md`). The native `mark.rs` mirrors `SOFT_BELOW` and
+  `low-threshold.md`). The app's `mark.rs` mirrors `SOFT_BELOW` and
   `LOW_BELOW` as `GOOD_FULL_EYE_SHARP` and `LOW_FULL_EYE_SHARP`, each pinned
   by a test (`fullsharp.rs` against the figures, `mark.rs` against the core
   constants).
@@ -710,13 +710,13 @@ was just written.
 ### Folder-index eviction: what it holds and what shrinks the file (Measured)
 
 `Index::evict` runs once at launch on a plain `std::thread` and holds the
-writer lock for the whole evict + `VACUUM`; the native app's first scan joins
+writer lock for the whole evict + `VACUUM`; the app's first scan joins
 that thread before it reconciles (see `app.md`). The size cap counts
 pages in use (`page_count - freelist_count`), since a delete only moves pages
 to the freelist until `VACUUM` runs.
 
 `Index::clear` (behind the settings' Clear Cache) is the second caller of
-`evict_folder`. A running scan is not canceled for it: the native app holds
+`evict_folder`. A running scan is not canceled for it: the app holds
 the clear for the scan's end (`cache::ClearFlow`).
 
 - Measured (`Index::clear`'s unit test, 2 folders x 5 rows of a 200KB
@@ -743,7 +743,7 @@ the clear for the scan's end (`cache::ClearFlow`).
 (`crates/engine/src/index.rs`) drives `extract_all` on rayon workers that finish
 in no particular order, `done` is an unordered `AtomicUsize`, and rows reach
 the index in `BATCH`-sized transactions, so a file counted in `done` is not
-necessarily answerable by `Index::thumbnail` yet. The only promise the backend
+necessarily answerable by `Index::thumbnail` yet. The only promise the engine
 can make is "these paths have been committed since the previous report",
 which is what the progress callback's `ready` carries. A path is pushed onto that
 list only after its batch's `write_batch` returned `Ok`, which is why the
@@ -758,7 +758,7 @@ otherwise those paths would never be reported.
 `handpic_core::scan::for_each_path` builds its rayon pool with a
 `spawn_handler` that lowers each worker's OS priority once, before rayon's
 `run`. `run_scan` and `run_faces_scan` take the priority as a parameter: the
-native app (`scan::Priorities::APP`) gives `run_scan` `Priority::BelowNormal`
+app (`scan::Priorities::APP`) gives `run_scan` `Priority::BelowNormal`
 (Windows `THREAD_PRIORITY_BELOW_NORMAL`, macOS `QOS_CLASS_UTILITY`, Linux nice
 of at least 5) and `run_faces_scan` `Priority::Lowest`
 (`THREAD_PRIORITY_LOWEST`, `QOS_CLASS_UTILITY` at relative priority -5
@@ -806,7 +806,7 @@ of at least 5) and `run_faces_scan` `Priority::Lowest`
 ### The scan's reads are capped and yield to the preview's at the disk (Measured)
 
 Every scan read goes through one process-wide `handpic_core::scan::ReadSlots`
-(the native app's, built with `scan::READ_SLOTS`): at most 2 workers are inside a
+(the app's, built with `scan::READ_SLOTS`): at most 2 workers are inside a
 file read at once, on any of the three passes, while decoding and the models
 stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`,
 an eighth of the cores, for pass 2 and `embed_threads()`, a quarter, for
@@ -814,7 +814,7 @@ pass 3). The app's preview read holds `pause()`, so no worker starts a new
 read while it is held. Pass 2's
 workers also wait out a held pause at their stage boundaries (after the read,
 the decode, YuNet, the face mesh, the sharpness score and the full-size read;
-`scan::yield_to_pause`, one `MAX_PAUSE` budget per file). The native app
+`scan::yield_to_pause`, one `MAX_PAUSE` budget per file). The app
 holds the pause until its image is painted (`app.md`); the earlier app
 held it only across the read, which the numbers below measure. The CLI and
 the one-file `extract` functions keep an uncapped, never-paused `ReadSlots`,
@@ -863,11 +863,11 @@ so `docs/humans/performance.md`'s numbers stay comparable.
 ### Scan, on-demand faces and eyes: timings taken through the earlier app (Measured)
 
 These three were measured through the earlier webview app, but the Rust code
-they time is what the native app still runs: the scan's pass 1
+they time is what the app still runs: the scan's pass 1
 (`index::run_scan`), `ondemand::read_faces` (then the `faces_of` command) and
 `ondemand::read_eyes` (then `eyes_of`). They moved here from
 `docs/humans/performance.md` / `.ja.md`, which keep only measurements a reader
-can repeat with the native app or the CLI.
+can repeat with the app or the CLI.
 
 - **Real-folder first scan, Windows (2026-09-21).** Release build, Windows 11
   Home, real folders of Sony ARWs on a DRAM-less QLC SATA SSD (Crucial BX500
@@ -945,8 +945,8 @@ can repeat with the native app or the CLI.
 `Priority::Lowest`, on `embed_threads()`. It runs only when `aiEnabled` is on,
 the model file is in place and `embeddings_missing` lists something; a
 JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
-(and the ranking below); the native app runs passes 1 and 2 only (a
-`todo.md` item covers this backend code).
+(and the ranking below); the app runs passes 1 and 2 only (a
+`todo.md` item covers this engine code).
 
 - **A table of its own.** `write_batch` does `INSERT OR REPLACE` of whole
   `files` rows, so a column on `files` would be wiped by every first-pass
@@ -1002,7 +1002,7 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
   `Index::rank_rows` reads every `files` row of a folder with its flag,
   capture time, the pass-2 values when the row is at `FACES_VERSION`, and the
   valid embedding, and `handpic_core::rank::rank` ranks each burst on every
-  call. `rank.rs` forms the bursts as the native `burst.rs` does (capture
+  call. `rank.rs` forms the bursts as the app's `burst.rs` does (capture
   order, 1000 ms gap). The shared weights and the per-genre offsets
   (`offsets`, one 44-vector per top-level genre of `genre::top_level`;
   `rank` adds the burst's `genre::of_burst` offset, none for `Unknown`;
@@ -1024,7 +1024,7 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
   spared.
 - **`views` feeds the fit per file.** The app records a file as viewed once
   its decoded preview has stayed on screen for `VIEW_DWELL_MS` (500 ms; the
-  native `viewed.rs`'s `Dwell`), measured from the paint, not from the page
+  app's `viewed.rs` `Dwell`), measured from the paint, not from the page
   turn: the preview read and decode take 10-100 ms and a held key repeats
   every ~30 ms, so a clock started at the turn would count frames whose image
   never reached the screen. A failed preview does not count: the user saw an
@@ -1071,18 +1071,18 @@ JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
 
 `if let Some(x) = a && let Some(y) = b` does not compile there; nest the
 `if let`s. `crates/app` is on edition 2024, where the chain compiles, so
-code moved from it into the backend may need its chains nested.
+code moved from it into the engine may need its chains nested.
 
 - Source: `docs/plans/_archived/20260920-app-quick-fixes/learnings.md`, Step 2.
 
 ### The MCP server runs on the caller's tokio runtime; `rmcp` 3.4 macro traps (Hit)
 
-The backend's `crates/engine/src/mcp.rs` serves `rmcp`'s
+The engine's `crates/engine/src/mcp.rs` serves `rmcp`'s
 `StreamableHttpService` through `axum::serve`, spawned with a bare
 `tokio::spawn`, so `Mcp::switch` and `Mcp::stop` must run inside a tokio
-runtime: the native app's `mcp.rs` owns a current-thread runtime on its one
-`mcp` thread (see `app.md`). `tokio` is a backend dependency for its `net`,
-`rt`, `sync` and `time` features, and the backend's tests drive the server on
+runtime: the app's `mcp.rs` owns a current-thread runtime on its one
+`mcp` thread (see `app.md`). `tokio` is an engine dependency for its `net`,
+`rt`, `sync` and `time` features, and the engine's tests drive the server on
 a current-thread runtime of their own, so no tokio `macros` feature.
 
 - `#[tool_router]` on an impl with no `#[tool]` fn does not compile in 3.4.1;
@@ -1124,7 +1124,7 @@ completes it.
   decide "in the open folder", and use canonical parent + file name as the
   index key.
 - A tool's write goes through the same path a key press does, so it writes
-  the same sidecar bytes (the native app's `set_judgment`, see
+  the same sidecar bytes (the app's `set_judgment`, see
   `app.md`).
 - Source: `docs/plans/_archived/20260924-mcp-companion/learnings.md`, Steps 2-5.
 
@@ -1133,7 +1133,7 @@ completes it.
 `crates/engine/src/watch.rs` watches the open folder as the listing
 canonicalizes it (non-recursively, so the watched folder can never diverge
 from the indexed one) and calls its callback 500 ms (`DEBOUNCE`) after the
-last event of a burst; the native app re-lists the folder when it is still
+last event of a burst; the app re-lists the folder when it is still
 the open one (`resync.rs`). Two things keep the app's own sidecar writes from feeding
 back into it:
 

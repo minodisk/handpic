@@ -1,4 +1,4 @@
-//! The MCP companion's server, the backend's `mcp::Mcp` with every tool
+//! The MCP companion's server, the engine's `mcp::Mcp` with every tool
 //! (`with_all_tools`, and `with_screenshot` in a build with the `screenshot`
 //! feature) and the tree's home directory (`with_home`), on a tokio runtime
 //! of its own on one named thread, spawned on the first switch on of
@@ -23,7 +23,7 @@ use serde_json::Value;
 
 use crate::scan::Event;
 
-/// How long the quit handler waits for the server to stop: the backend's
+/// How long the quit handler waits for the server to stop: the engine's
 /// own 2 s stop timeout and a little more.
 const STOP_WAIT: Duration = Duration::from_millis(2500);
 
@@ -74,7 +74,7 @@ impl Control {
     }
 
     /// Start or stop the server; its state comes back as
-    /// `Event::McpState`. A failed bind is logged by the backend and
+    /// `Event::McpState`. A failed bind is logged by the engine and
     /// reported in that state, and the app runs on without a server.
     pub fn switch(&mut self, enabled: bool, cx: &mut App) {
         if self.server.is_none() {

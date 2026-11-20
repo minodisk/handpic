@@ -4,7 +4,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# sign.sh — signs the archives the native app's updater installs, in place,
+# sign.sh — signs the archives the app's updater installs, in place,
 # with zipsign and a private key file: a `.zip` (the portable ZIP, the setup
 # ZIP) gets its signature before its data, a `.tar.gz` (the Linux and the
 # macOS tarballs) as a gzip member after it. zipsign binds the signature to

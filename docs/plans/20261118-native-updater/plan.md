@@ -14,14 +14,14 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 </pr-rules>
 </plan-guide>
 
-# The native app's update flow
+# The app's update flow
 
 ## Purpose
 
 Sub-milestone 3 of Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md).
-The native app (`crates/app`, product "Handpic") cannot update itself:
+The app (`crates/app`, product "Handpic") cannot update itself:
 `tauri-plugin-updater` left with the Tauri app. Once this plan is done, an
-install of the native app checks for a newer release at launch and on demand
+install of the app checks for a newer release at launch and on demand
 and updates through the owner of its install, as
 [`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md) decided
 and as gpui-kit's guide (<https://gpui-kit.com/docs/auto-update/>) explains:
@@ -232,16 +232,16 @@ overrides it:
       to a callback, the feed and the keys as parameters so the tests inject
       theirs.
     - The app's version is a parameter; `cargo_crate_version!()` here would be
-      the backend's.
+      the engine's.
     - Dependency, as the guide has it plus `signatures`:
       `self_update = { version = "1.3", default-features = false, features =
       ["ureq", "rustls", "github", "archive-tar", "compression-tar-gz",
       "archive-zip", "compression-zip-deflate", "checksums", "signatures"] }`.
-    - Check with `cargo tree` what the dependency adds. The backend's
+    - Check with `cargo tree` what the dependency adds. The engine's
       `reqwest` deliberately uses rustls with `ring`; if `self_update` brings
       `aws-lc-sys` or a second TLS stack that breaks a platform build, record
       it and decide between the guide's `ureq` and `self_update`'s `reqwest`
-      feature with the backend's client (`reqwest_client`).
+      feature with the engine's client (`reqwest_client`).
     - The key and the feed: `include_bytes!` of
       `crates/app/packaging/update.pub`, and `minodisk/handpic`. With
       `HANDPIC_UPDATE_TEST_REPO` set at build time: the test verifying key and
@@ -261,7 +261,7 @@ overrides it:
 
 - [x] Step 4: The app's update flow: the launch check, the Updates page, the notice and the restart
   - Done when:
-    - The native app checks at launch on a background task. Not under
+    - The app checks at launch on a background task. Not under
       `--auto`, not in a debug build, and not within one hour of the last
       automatic check.
     - For a portable or tarball install it downloads, verifies and installs
@@ -283,11 +283,11 @@ overrides it:
     - `mise run ci:local` passes locally and the PR's GitHub checks pass.
   - Implementation approach (as far as it is known; omit if unknown):
     - Assumes Step 3 is merged.
-    - There is no menu bar in the native app; the Updates page is "the menu
+    - There is no menu bar in the app; the Updates page is "the menu
       item" of the plan's wording (see Trade-offs).
     - Follow the app's split: a pure model in `crates/app/src/update.rs`
       (as `cache.rs` is to the Cache page), the page in `settingsmodal.rs` /
-      `settingsview.rs`, and the backend's events through the view's existing
+      `settingsview.rs`, and the engine's events through the view's existing
       channel (`scan::Event`), as `Event::Perf` and `Event::Mcp` arrive.
     - Restart with GPUI's `cx.restart()`: it relaunches once the process has
       exited and reaches `App::on_app_quit`. Do not use
@@ -339,7 +339,7 @@ overrides it:
     - The setup is spawned detached and must outlive the app's process.
     - Decide where in the quit it is spawned so both `on_app_quit` drains have
       finished.
-    - Staging folder: under the native app's cache folder (`datadir.rs`).
+    - Staging folder: under the app's cache folder (`datadir.rs`).
     - `AppId` never changes; the per-user install needs no elevation.
 
 - [x] Step 6: Update a `Handpic.app`: the whole bundle staged and swapped
@@ -399,7 +399,7 @@ overrides it:
       - where the staged `.app` comes from;
       - the setup at quit;
       - the relaunch.
-    - `docs/humans/usage.md` and `usage.ja.md` describe the native update flow
+    - `docs/humans/usage.md` and `usage.ja.md` describe the app's update flow
       and its policy: automatic download and install, per install type, the
       deb notice, the project key, and that prereleases only reach
       prerelease installs.
@@ -422,7 +422,7 @@ overrides it:
       are named in the hand-over to sub-milestone 4; do not mark them
       measured from CI output.
     - The remove-tauri plan (`../20261118-remove-tauri/plan.md`, Step 5)
-      rewrites the same "Updating" section and says the native app has no
+      rewrites the same "Updating" section and says the app has no
       updater. Whichever lands second edits the other's text.
     - A fix found by a row goes into this step's PR only when it is small;
       otherwise add a step to this plan.
@@ -482,7 +482,7 @@ overrides it:
     also delete anything the user put in that folder, and `MoveAll` over the
     tarball's three files.
 - **Where "Check for Updates" lives.**
-  - Planned: an `Updates` page in the settings modal, since the native app
+  - Planned: an `Updates` page in the settings modal, since the app
     has no menu bar.
   - Alternatives: an item in the title bar, or a keymap action. Neither
     exists as a pattern for a rarely used action.

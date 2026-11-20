@@ -17,7 +17,7 @@ The Rust toolchains come from `mise install`.
 workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
 `mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
 the repository root never sees it. It depends on `crates/core` and
-`crates/engine`, the GUI-free libraries of the root workspace, so a backend
+`crates/engine`, the GUI-free libraries of the root workspace, so an engine
 change is checked by both `mise run ci` and `mise run app:check` (or, as
 the agents do, by `mise run ci:local` and the PR's checks; see
 [Checks](#checks)).
@@ -69,8 +69,8 @@ the formatting check of the crate is part of `mise run lint`.
   `actionlint`, and a bash test runs when its script changed. A Rust change runs the `cargo fmt` check
   of its workspace and `cargo clippy -p` / `cargo test -p` of only the changed
   root packages (`handpic-core`, `handpic-engine`, `handpic-cli`; the root
-  `Cargo.toml` / `Cargo.lock` count as all three), the native clippy for a
-  `crates/app`, `crates/core` or `crates/engine` change, and the native
+  `Cargo.toml` / `Cargo.lock` count as all three), the app clippy for a
+  `crates/app`, `crates/core` or `crates/engine` change, and the app
   tests for a `crates/app` change. A change to `mise.toml` or
   `.shellcheckrc`, or a missing merge base, runs every check. It prints what it
   selected and what it left out. It runs on this platform only and does not

@@ -4,7 +4,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# notices.sh — copies the license notices every package of the native app
+# notices.sh — copies the license notices every package of the app
 # ships into the given folder, so each platform carries the same set.
 #
 # Usage: notices.sh <licenses-dir>

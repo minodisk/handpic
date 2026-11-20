@@ -2,7 +2,7 @@
 //! confirmation dialog's text and flow, which keys and clicks it takes, and
 //! what the pane says during the run and once it comes back, and what an
 //! undo of a run brings back into the open folder. A port of the Tauri app's
-//! `trash.ts`; the window draws the dialog and runs the backend's
+//! `trash.ts`; the window draws the dialog and runs the engine's
 //! `trash::trash_listed`, `trash::delete_listed`, `trash::undo_run` or
 //! `trash::redo_run`.
 
@@ -166,7 +166,7 @@ pub fn restored_status(restored: &Restored, what: What, count: usize) -> String 
 }
 
 /// The restored files that sit directly in `open_dir`, not yet in `all`.
-/// The backend spells them canonically (with the verbatim prefix on
+/// The engine spells them canonically (with the verbatim prefix on
 /// Windows), as the listing spells `all`, while `open_dir` may lack it.
 pub fn restored_into(
     open_dir: &str,
@@ -186,7 +186,7 @@ pub fn restored_into(
         .collect()
 }
 
-/// Whether the backend still holds a run it refused to undo or redo: any
+/// Whether the engine still holds a run it refused to undo or redo: any
 /// failure but its "no longer" answers leaves the run undoable or redoable
 /// later.
 pub fn still_held(err: &str) -> bool {

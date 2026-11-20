@@ -1,4 +1,4 @@
-# Learnings: the native app's update flow
+# Learnings: the app's update flow
 
 ## Step 1: version mapping and the `Package` version input
 
@@ -103,13 +103,13 @@
 
 - `self_update` resolved to 1.3.3 (edition 2024, `rust-version` 1.88). With
   the guide's features plus `signatures` it brings `ureq` 3.4 on its `_ring`
-  rustls feature, the same `rustls` 0.23 the backend's `reqwest` uses, and
+  rustls feature, the same `rustls` 0.23 the engine's `reqwest` uses, and
   no `aws-lc-sys` on any target (`cargo tree --target all -i aws-lc-sys`
   prints nothing, in the root workspace and in `crates/app`). So the
   guide's `ureq` stays; `reqwest_client` was not needed. It does add a
   second HTTP client (`ureq` next to `reqwest`), about 350 lock entries in
   `crates/app/Cargo.lock` and 700 lines in the root one.
-- `crates/app/Cargo.lock` must be updated with the backend's new
+- `crates/app/Cargo.lock` must be updated with the engine's new
   dependencies too (`cargo fetch` in `crates/app`), or `Package`'s
   `cargo build --release --locked` fails; the plan's file list named only
   the root lock.
@@ -151,11 +151,11 @@
   page shows one.
 - Deviation from the guide's snippet beyond the plan's list: none new. The
   version is a parameter rather than `cargo_crate_version!()` (that would
-  be the backend's), as the plan said. No request timeout is set (the
+  be the engine's), as the plan said. No request timeout is set (the
   guide sets none); see the deferred issue below.
 - `source()` logs `update: feed <owner>/<repo>, test|production key`;
   `HANDPIC_UPDATE_TEST_REPO` is read with `option_env!` while compiling
-  the backend, which `Package` does in the same build as the app.
+  the engine, which `Package` does in the same build as the app.
 - The fake GitHub API is a `TcpListener` thread per test serving the
   listing, `/releases/tags/v<version>` and each asset with
   `Connection: close`; `ureq` reads plain `http` on loopback without any
@@ -201,7 +201,7 @@
   none of substance. The guide's "let the user defer the restart" holds
   (nothing restarts without `Restart Now`); its "tell the user when a new
   version is ready" is the pane's note naming `Restart Now` on the Updates
-  page, as the native app has no notification for it; the reported version
+  page, as the app has no notification for it; the reported version
   is the running one (`CARGO_PKG_VERSION`) until the new process starts.
 - The MCP companion exposes the state in `get_status` (`update`); the
   coverage table excludes the Updates page with that reason.

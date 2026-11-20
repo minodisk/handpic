@@ -1,4 +1,4 @@
-//! The native app's update engine: which install the running executable
+//! The app's updater: which install the running executable
 //! belongs to (`detect`), the release a feed offers it under the prerelease
 //! policy (`check`, `offered`), the install of a portable ZIP or tarball
 //! update and the swap of a whole `Handpic.app` through `self_update`

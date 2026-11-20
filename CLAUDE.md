@@ -75,21 +75,24 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
-`crates/engine` (`handpic-engine`, the GUI-free backend the app depends on,
+`crates/engine` (`handpic-engine`, the GUI-free engine the app depends on, which holds the
+stateful machinery the app drives (the index, the scan passes, the sidecar writer,
+the watchers, the trash runs, the MCP server) against `handpic-core`'s
+stateless parsing and analysis,
 a root-workspace member that `crates/app` uses by path and so compiled twice
 like `handpic-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
 and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 `docs/agents/photolab.md`), `src/shortcuts.rs` the keymap: the default keys
-and the user's overrides, persisted in the `shortcuts` key, `src/store.rs` the native app's settings store (one key / JSON-value SQLite file, seeded once when new, never deleted or recreated), `src/index.rs` the SQLite folder index,
+and the user's overrides, persisted in the `shortcuts` key, `src/store.rs` the app's settings store (one key / JSON-value SQLite file, seeded once when new, never deleted or recreated), `src/index.rs` the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
 and the files shown in the preview in the separate `views` table (kept by
 eviction, dropped by Clear Cache), which gives the ranking its negatives
 (a viewed file left unflagged) and spares a folder holding a viewed file or
 a reject from the 30-day eviction, not from the size cap or Clear Cache,
 and in the separate `folder_counts` table each folder's file count as the
-native app's tree last listed it, keyed by the tree's spelling of the path
+app's tree last listed it, keyed by the tree's spelling of the path
 (`set_folder_counts`, `folder_counts`, `rename_folder_counts`,
 `prune_folder_counts`, which drops the rows under a listed folder outside
 the child folders it keeps; kept by the eviction, emptied by Clear Cache),
@@ -147,7 +150,7 @@ on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
 the switch, which starts the download on an enable with the model not in
 place and cancels it on a disable, the leftover part files removed at
 start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), `src/update.rs` the native app's update engine on
+handed to a callback), `src/update.rs` the app's updater on
 `self_update` (`detect`, the `InstallKind` from the executable's path:
 portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app` (`app_bundle`), tarball
 under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,
@@ -168,7 +171,7 @@ folder, checked the same way and extracted, and `run_setup`, which starts it
 detached with `setup_args`, silent, `/WAITPID` of the quitting app and
 `/RELAUNCH` on `Restart Now`, the switches `handpic.iss` reads), `src/mcp.rs` the MCP companion's server (`Mcp`: the
 loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
-tools, or every tool after `with_all_tools` (the native app's), plus
+tools, or every tool after `with_all_tools` (the app's), plus
 `screenshot` after `with_screenshot` (its reply built by `screenshot_reply`), started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
@@ -274,7 +277,7 @@ menus and the dialogs read with the theme (`cx.theme()`, `roles`), the
 judgment, label band and over-the-photo colors staying fixed, and
 `SCROLLBAR_TRACK`, the scrollbar track's 16 px the tree's rows and the meta
 pane's body keep clear, `src/settings.rs`
-reads the backend's settings store, a new one seeded once from a Tauri
+reads the engine's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
@@ -327,7 +330,7 @@ its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occ
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
 holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpEnabled` switch (`Let MCP clients connect`), which starts and stops the server live, the server's URL in a read-only `Input` and its state (`mcp_status`), and its `mcpAllowDestructive` switch, both switches only the user flips, the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`, and the Updates page's running version and install kind, its phase, `Check for Updates`, `Restart Now` and `Open Release Page`,
-`src/update.rs` that Updates page's pure parts and the update flow (`Updates`: the phases `Idle`, `Checking`, `Available`, `Downloading`, `Verifying`, `ReadyToRestart` and `Failed` set around the backend's `update::check` and `update::install`, which the window runs on threads of their own, their answers arriving as `scan::Event::Update`; a portable or tarball install downloaded, verified and installed without asking, an Inno Setup install's setup staged by `update::stage_setup` and kept in `Staged`, any other kind given the release page; the version this process installed never checked or installed again; `launch_checks`, a release build's launch check, not under `--auto` and at most once an hour by the store's `updateCheckedAt`; the texts, the pane's restart notice and the `update` state `get_status` reports), whose `Restart Now` the window runs as GPUI's `cx.restart()` on the executable the launch found, after the quit handlers' drains, or, on an Inno Setup install, as `cx.quit()` with `relaunch` set, a last quit handler starting the staged setup on every quit (`update::run_setup`), the staging folder cleared at launch,
+`src/update.rs` that Updates page's pure parts and the update flow (`Updates`: the phases `Idle`, `Checking`, `Available`, `Downloading`, `Verifying`, `ReadyToRestart` and `Failed` set around the engine's `update::check` and `update::install`, which the window runs on threads of their own, their answers arriving as `scan::Event::Update`; a portable or tarball install downloaded, verified and installed without asking, an Inno Setup install's setup staged by `update::stage_setup` and kept in `Staged`, any other kind given the release page; the version this process installed never checked or installed again; `launch_checks`, a release build's launch check, not under `--auto` and at most once an hour by the store's `updateCheckedAt`; the texts, the pane's restart notice and the `update` state `get_status` reports), whose `Restart Now` the window runs as GPUI's `cx.restart()` on the executable the launch found, after the quit handlers' drains, or, on an Inno Setup install, as `cx.quit()` with `relaunch` set, a last quit handler starting the staged setup on every quit (`update::run_setup`), the staging folder cleared at launch,
 `src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close, or an MCP confirm run or held without asking, `confirmed`), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
 `keys.ts`'s `keyName`), gives a key name's keystroke back for `Kbd` to draw
@@ -335,7 +338,7 @@ holding the Sidecar page's format radios and label names (`Input` fields, the Li
 `src/judgment.rs` one file's judgment (`State`: stars, flag, label, from an
 `IndexedFile`) and what a judgment key makes of it (`Command`, `apply`,
 `label_known`, `advances_after`, `should_advance`, a port of the Tauri `judge` and `advance.ts`)
-and `store`, the `ratings` row then the backend's sidecar `Writer`, which the
+and `store`, the `ratings` row then the engine's sidecar `Writer`, which the
 window spawns at startup and drains in `App::on_app_quit`, `src/history.rs`
 the undo and redo of the judgments and the moves to the Trash (`History`, a
 port of `undo.ts`'s bounded stack, its `Entry` a judgment `Batch` or a
@@ -378,7 +381,7 @@ file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
 an open or a re-listing and narrowed by `retain` on a `refilter`; off under
 `--no-prefetch`), `src/mcp.rs` the MCP
-companion's server (the backend's `Mcp` with all its tools and the tree's home directory on a tokio runtime of its own on one
+companion's server (the engine's `Mcp` with all its tools and the tree's home directory on a tokio runtime of its own on one
 `mcp` thread, `Control`, which spawns them on the first switch on of `mcpEnabled` and keeps them for the session, running each switch in order and sending its `McpState` as `scan::Event::McpState`, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit;
 `with_screenshot` only in a build with the `screenshot` cargo feature, which
@@ -395,7 +398,7 @@ over a snapshot of the view: the strip's selection, its targets as
 (`burstOf`, each frame's sharpness from the `Facts`), the coverage table
 (`Coverage`: every keymap action, right-click item, menu item, folder
 operation and settings page mapped to its tool, to a tool refused with
-`not_in_native` until the feature lands (compare, the `recommended` sort,
+`not_in_app` until the feature lands (compare, the `recommended` sort,
 the Genre filter, `rename_file`, `refit_ranking`, the AI switch) or to the
 reason it has none, tested against the keymap's actions),
 `set_judgment`'s changes, one undo
@@ -441,7 +444,7 @@ refused while a folder operation runs), and `Busy`, which refuses every request 
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
 (`Latest`, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
-(`Dwell`), and `src/resync.rs` when a change the backend's folder watcher
+(`Dwell`), and `src/resync.rs` when a change the engine's folder watcher
 (`watch::Watch`, its callback sending into the same channel) reports
 re-lists the open folder (`Resync`: at once when idle, else once the listing
 or scan under way ends, a burst collapsing into one), the current file
@@ -455,20 +458,20 @@ landing where `filter::anchor_after_filter` puts it, the strip keeping the same 
 answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
 (one judgment in flight, unknown eyes cached, a clear dropping the answers
 issued before it, and the latest ticket's id in a shared atomic the
-backend's `current` check reads, so a newer request or a clear supersedes the
+engine's `current` check reads, so a newer request or a clear supersedes the
 running judgment), `src/facemesh.rs` the port of `facemesh.ts` (MediaPipe's
 face parts outline and iris edges, `mesh_edges`, `mesh_points`), and
 `src/overlay.rs` the
 `f` overlay: the toggle, the current file's `Focus` read through the index's
 read-only connection (again when a pass 1 or pass 2 message names the file),
 the current RAW file's faces detected and its eyes judged once its image is
-shown through the backend's `ondemand::read_faces` / `read_eyes` (one `eyes`
+shown through the engine's `ondemand::read_faces` / `read_eyes` (one `eyes`
 timing line per judgment, the file current by then asked for once one
 settles; both cleared on every listing), drawn only on the current file's own
 image, and the painting of the AF mark, the face boxes with their landmark
 dots, the judged face's mesh and the upright labels over the upright image's
 bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
-a port of `meta.ts`'s `metaGroups` over the backend's `exif::Metadata`, which
+a port of `meta.ts`'s `metaGroups` over the engine's `exif::Metadata`, which
 `load` builds next to the preview: the `EXIF` and `Maker note` groups, the
 latter also carrying the index's AF point and frame (`af_rows`) after
 `AF tracking`, and an `Analysis` group (`analysis`) of every value pass 1 and
@@ -501,9 +504,9 @@ listing no longer holds (`prune_keep`), on their way to that table in push
 order), the
 drawn `rows`, and the path spelling `ancestors_within`, `respell` and
 `relation` compare by, case ignored on Windows and macOS), which the window
-draws as a `uniform_list`, fills from the backend's `folders`, expands
+draws as a `uniform_list`, fills from the engine's `folders`, expands
 down to the open folder on every open, keeps following the disk through the
-backend's `treewatch` on its expanded, drawn folders (`watched_folders`) and
+engine's `treewatch` on its expanded, drawn folders (`watched_folders`) and
 re-reads the roots when the window becomes active, and its keyboard (the
 cursor's `step`, `tree_key`'s Space / Enter, the type-ahead's
 `append_typed` / `type_ahead`, and `collapse_all`), which the tree takes on a
@@ -533,7 +536,7 @@ the window opens as a gpui-component `Dialog` in `Root`'s layer through
 `src/modal.rs` (`Modal`, the open and close that follow a flow after the
 current update, the shell with the component's own closing, backdrop and
 animations off, and `backdrop`, the dimmed window the view draws under it
-that keeps a press from moving the focus) and runs through the backend's `trash::trash_listed` /
+that keeps a press from moving the focus) and runs through the engine's `trash::trash_listed` /
 `trash::delete_listed` on a background task, undoing a run with
 `trash::undo_run` and redoing it with `trash::redo_run`, `src/idle.rs` the gate holding
 a confirmed run, or a run's undo or redo, for the end of the listing or scan under way (`IdleGate`, one
@@ -564,14 +567,14 @@ release ends;
 only the photo, the fit view and the 1:1 placeholder and crop, is drawn with
 the image sprite's grayscale flag, the overlays keeping their colors),
 `src/perf.rs` the performance overlay's data (`Perf`, a port of `perf.ts`:
-the backend's `perf::Sample`s stamped on arrival and the per-switch
+the engine's `perf::Sample`s stamped on arrival and the per-switch
 `timing::Stages` of the last `WINDOW`, recording only while on, the latency
 axis maximum never below `LATENCY_FLOOR` and the read axis maximum never
 below `READ_FLOOR_BPS`; `latency_start`, the key else the selection change),
-`src/perfgraph.rs` the overlay on `d` (`Overlay`: the backend's
+`src/perfgraph.rs` the overlay on `d` (`Overlay`: the engine's
 `perf::Sampler`, whose samples reach the view as `Event::Perf`, and a 500 ms
 redraw, both only while shown; the pure layout, `x_of`, `y_of`, `stack` over
-the native `page` line's stages and `shown`; `paint`, a port of `drawPerf`
+the `page` line's stages and `shown`; `paint`, a port of `drawPerf`
 as a 120 px band along the bottom of the preview canvas over the fit view
 and the 1:1 crop alike), `src/progress.rs` the window's one progress indicator
 (`fraction`, a port of `progress.ts`'s `progressWidth`, and `shown`, a Move to

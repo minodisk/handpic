@@ -241,7 +241,7 @@ pub fn read(reader: Arc<Mutex<Index>>, path: String, ticket: u64, cx: &mut Conte
     .detach();
 }
 
-/// Detect `path`'s faces through the backend on the background executor and
+/// Detect `path`'s faces through the engine on the background executor and
 /// keep them by path; a failure is logged and kept as no faces. The view
 /// repaints only when `path` is still current.
 pub fn detect(path: String, token: u64, cx: &mut Context<Handpic>) {
@@ -266,7 +266,7 @@ pub fn detect(path: String, token: u64, cx: &mut Context<Handpic>) {
     .detach();
 }
 
-/// Judge `path`'s eyes through the backend on the background executor and
+/// Judge `path`'s eyes through the engine on the background executor and
 /// log one line of stage timings; a failure is logged and kept as unknown
 /// eyes. Once it settles the file current by then is asked for, so a held
 /// key never queues a judgment per file passed.

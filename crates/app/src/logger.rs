@@ -16,7 +16,7 @@ pub const LOG_FILE: &str = "Handpic.log";
 /// the file anew, as its `RotationStrategy::KeepOne` did.
 pub const MAX_FILE_SIZE: u64 = 1_000_000;
 
-/// Writes `[target][LEVEL] message` lines to stderr, so the backend's
+/// Writes `[target][LEVEL] message` lines to stderr, so the engine's
 /// `scan extract` lines and warnings are visible, and the same records as
 /// `[YYYY-MM-DD][HH:MM:SS][target][LEVEL] message` (UTC) to `Handpic.log`.
 /// `RUST_LOG=debug` (or `trace`) adds this crate's own lines of that level,

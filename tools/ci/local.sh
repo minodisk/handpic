@@ -27,7 +27,7 @@ set -o nounset
 # `app` job and `[tasks."app:check"]` use it.
 app_rust="rust@1.98.1"
 
-# Whether this host is Windows, where the native app's `screenshot` feature
+# Whether this host is Windows, where the app's `screenshot` feature
 # build is linted too (`uname -s`, overridable through CI_LOCAL_UNAME so the
 # tests can pin it).
 case "${CI_LOCAL_UNAME:-$(uname -s)}" in

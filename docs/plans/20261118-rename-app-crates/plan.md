@@ -269,7 +269,7 @@ and minus binary files.
     - Commit and PR title:
       `refactor(engine): rename crates/backend to crates/engine`.
 
-- [ ] Step 4: Sweep the prose and the two leftover identifiers ("the native app" → "the app", "the backend" → "the engine")
+- [x] Step 4: Sweep the prose and the two leftover identifiers ("the native app" → "the app", "the backend" → "the engine")
   - Done when:
     - In the live files, "the native app" and its variants ("the native
       crate", "the native tests", "the native lock", "Handpic's native app",
@@ -351,3 +351,4 @@ and minus binary files.
 (2026-11-19) Step 1 complete
 (2026-11-19) Step 2 complete
 (2026-11-20) Step 3 complete
+(2026-11-21) Step 4 complete

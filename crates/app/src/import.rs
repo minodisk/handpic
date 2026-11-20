@@ -1,6 +1,6 @@
 //! The folder tree's `Import…`, kept pure: the dialog's text and the flow
 //! from the menu item through the preview to the run's end. A port of the
-//! Tauri app's `import.ts`; the window runs the backend's `import`.
+//! Tauri app's `import.ts`; the window runs the engine's `import`.
 
 use handpic_engine::import::{Preview, Ran};
 

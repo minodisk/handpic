@@ -1906,7 +1906,7 @@ impl Handpic {
     }
 
     /// Restore the run `entry` from the Trash on a background task; it stays
-    /// on the history until the backend answers. False when another step is
+    /// on the history until the engine answers. False when another step is
     /// out or the entry is no longer on top, as nothing then runs.
     fn undo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
         if self.trash_step.is_some() || !self.undo.on_top(entry.id, false) {
@@ -2015,7 +2015,7 @@ impl Handpic {
 
     /// Move what the undo of `entry` brought back to the Trash again, with
     /// no dialog, as a new run; it stays on the redo history until the
-    /// backend answers. False when another step or a run is out or the entry
+    /// engine answers. False when another step or a run is out or the entry
     /// is no longer on top, as nothing then runs.
     fn redo_trash(&mut self, entry: TrashEntry, cx: &mut Context<Self>) -> bool {
         if self.trash_step.is_some() || self.trashing.is_some() || !self.undo.on_top(entry.id, true)
@@ -3705,7 +3705,7 @@ impl Handpic {
     }
 
     /// Resolve a keystroke through the keymap. `home`, `end` and `q` are the
-    /// native app's own keys, `ctrl+,` (`meta+,` on macOS) opens the settings,
+    /// app's own keys, `ctrl+,` (`meta+,` on macOS) opens the settings,
     /// and `escape` while a menu is open; an action not handled yet is only
     /// logged. Nothing gets through while the settings are open. While the
     /// tree has the keyboard it takes the key first, and of the rest only
