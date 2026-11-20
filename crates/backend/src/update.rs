@@ -872,7 +872,7 @@ mod tests {
             ]
         );
         assert_eq!(setup_args(42, true).last().unwrap(), RELAUNCH_SWITCH);
-        let iss = include_str!("../../native/packaging/windows/handpic.iss");
+        let iss = include_str!("../../app/packaging/windows/handpic.iss");
         assert!(iss.contains("{param:WAITPID|0}"));
         assert!(iss.contains(&format!("'{RELAUNCH_SWITCH}'")));
     }
