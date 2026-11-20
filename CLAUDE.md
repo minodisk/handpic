@@ -76,7 +76,7 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
 `crates/backend` (`handpic-backend`, the GUI-free backend the app depends on,
-a root-workspace member that `crates/native` uses by path and so compiled twice
+a root-workspace member that `crates/app` uses by path and so compiled twice
 like `handpic-core`, whose `src/exif.rs` is the shooting-settings display
 formatting shared by the meta pane (`Metadata`, `metadata`, `read_metadata`) and the filter menu, `src/photolab.rs` the
 PhotoLab database lookup that gives a fresh `.dop` the registered image's Source
@@ -152,7 +152,7 @@ handed to a callback), `src/update.rs` the native app's update engine on
 portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app`, tarball
 under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,
 the build's feed and trusted zipsign key, `minodisk/handpic` with
-`crates/native/packaging/update.pub`, or with `HANDPIC_UPDATE_TEST_REPO` set
+`crates/app/packaging/update.pub`, or with `HANDPIC_UPDATE_TEST_REPO` set
 at build time that repository and the test key; `check`, the release
 `offered` to the running version, newer by SemVer and with a prerelease
 part only for a prerelease install, each request bounded by `CHECK_TIMEOUT`;
@@ -190,12 +190,12 @@ run over `handpic_core::sequence` (`preview`, `run`, with a cancel flag and a
 `(done, total)` callback), neither touching the index, `src/text.rs` the
 `SCAN_RUNNING` message and `format_bytes` / `SIZE_BASE`, and `src/diagnostics.rs` the panic hook and the `invariant!` helper, which put
 those failures in `Handpic.log` under greppable prefixes (see
-`docs/agents/app-log.md`)), `crates/native` (`handpic-native`)
+`docs/agents/app-log.md`)), `crates/app` (`handpic-app`)
 is the desktop app, built on GPUI, a separate Cargo workspace with its own
 `Cargo.lock` and Rust toolchain that uses `handpic-core` and `handpic-backend`, takes GPUI and
 gpui-component through the one `gpui-kit` umbrella crate (`gpui_kit::*` is GPUI,
 `gpui_kit::component` gpui-component, started by `gpui_kit::init` and
-`gpui_kit::open_window`, see `docs/agents/native-app.md`); its `build.rs`
+`gpui_kit::open_window`, see `docs/agents/app.md`); its `build.rs`
 embeds `icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
@@ -206,12 +206,12 @@ listener-free overlay and truncated before the sides, and at its right end
 a gear `Button` whose click opens the settings as `ctrl+,` does, its press
 kept from the bar's window drag) in place of the OS title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
-`dev.minodisk.handpic.desktop` the `native:bundle:macos` (`Handpic.app` under
+`dev.minodisk.handpic.desktop` the `app:bundle:macos` (`Handpic.app` under
 `target/<profile>/`, its `Info.plist` given the version and
-`Contents/Resources/licenses/` the notices) and `native:install:linux` (the release binary, the
+`Contents/Resources/licenses/` the notices) and `app:install:linux` (the release binary, the
 `.desktop` file and the icon under `~/.local`) mise tasks use, and
 `NOTICE-gpui`, the GPUI crates' Apache-2.0 notice, `update.pub`, the
-updater's 32-byte zipsign verifying key that `mise run native:keygen` writes
+updater's 32-byte zipsign verifying key that `mise run app:keygen` writes
 (its private key kept by the user outside the repository), and `test/`, a
 checked-in test key pair no released build trusts; the manual
 `.github/workflows/package.yml` (`Package`, `workflow_dispatch` only) builds the
@@ -220,22 +220,22 @@ release binary per platform and packages it with the scripts of
 the license notices every package ships into one `licenses/` folder;
 `macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg` and the
 updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
-`mise run native:package:macos`; `windows.sh`, the per-user Inno Setup
+`mise run app:package:macos`; `windows.sh`, the per-user Inno Setup
 `Handpic-<version>-windows-x64-setup.exe` from `packaging/windows/handpic.iss`
 (`AppId` `dev.minodisk.handpic`, for good) and the portable
 `Handpic-<version>-windows-x64.zip`, and the updater's
 `Handpic-<version>-windows-x64-setup.exe.zip` holding the setup, also
-`mise run native:package:windows`;
+`mise run app:package:windows`;
 `linux.sh`, the `Handpic-<version>-linux-x64.tar.gz`, beside it
 `packaging/linux/install.sh` (the per-user install of that tarball under
 `~/.local` after a SHA-256 check, adapted from gpui-kit's guide) and
 `handpic_<version>_amd64.deb` from the `packaging/linux/control` template
 (`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
-`mise run native:package:linux`; `sign.sh`, the zipsign 0.2.2 signature of
-those four updater archives in place, also `mise run native:sign`, run only
+`mise run app:package:linux`; `sign.sh`, the zipsign 0.2.2 signature of
+those four updater archives in place, also `mise run app:sign`, run only
 with the `update_test_repo` input (`owner/name`), which signs with the test
 key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
-and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/native`'s `src/datadir.rs` places
+and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/app`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
 `--index <path>`) and its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and holds the product's identifiers (`IDENTIFIER`, the
@@ -251,7 +251,7 @@ mode `NEUTRAL`; `resolve`, System following the OS appearance) and that
 mode's chosen theme: Neutral, mapped to the app's shadcn/ui Neutral dark or
 light tokens, its own `DARK` / `LIGHT` palettes, `title_bar` and
 `title_bar_border` included, or one of gpui-kit's theme files at the 0.9.1
-release, vendored unchanged under `crates/native/themes/` with their
+release, vendored unchanged under `crates/app/themes/` with their
 `LICENSE`, embedded and parsed into `ThemeConfig`s (`names`, each mode's
 list) and installed unmapped through `Theme`'s `light_theme` / `dark_theme`
 slots and `Theme::change` (`apply`, at startup, on a choice
@@ -375,7 +375,7 @@ companion's server (the backend's `Mcp` with all its tools and the tree's home d
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit;
 `with_screenshot` only in a build with the `screenshot` cargo feature, which
 turns on GPUI's `test-support` through a direct `gpui-pre-platform` dependency,
-`mise run native:dev:screenshot`), `src/screenshot.rs` that feature's capture
+`mise run app:dev:screenshot`), `src/screenshot.rs` that feature's capture
 (`capture`, the window's last drawn frame through `Window::render_to_image`,
 which the view's `screenshot` takes after the next drawn frame or as it is
 after `SCREENSHOT_FRAME_WAIT`, ahead of `companion::answer` and so whatever the
@@ -608,7 +608,7 @@ test-only `src/uitest.rs` both call (`Ui`, the view opened on GPUI's
 `wait_until`, a bounded real-time wait for the app's own threads; its drop
 quitting the app and removing the folder, and the UI tests).
 
-The `.ts` files a `crates/native` module is called a port of (`sort.ts`,
+The `.ts` files a `crates/app` module is called a port of (`sort.ts`,
 `filter.ts`, `focus.ts` and the rest), and the Tauri commands some are ported
 from, were the removed Tauri app's frontend and commands; they are in git
 history.

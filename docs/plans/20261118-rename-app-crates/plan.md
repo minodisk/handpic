@@ -128,7 +128,7 @@ and minus binary files.
     - Commit and PR title:
       `refactor(native): remove the legacy .native index migration`.
 
-- [ ] Step 2: Rename `crates/native` to `crates/app` (package `handpic-app`, mise `app:*`, CI job `app`, guide `app.md`)
+- [x] Step 2: Rename `crates/native` to `crates/app` (package `handpic-app`, mise `app:*`, CI job `app`, guide `app.md`)
   - Done when:
     - `crates/app` holds the crate; `crates/native` no longer exists in the
       tree. The root `Cargo.toml` excludes `crates/app`; `.gitignore` ignores
@@ -349,3 +349,4 @@ and minus binary files.
 ## Progress
 
 (2026-11-19) Step 1 complete
+(2026-11-19) Step 2 complete

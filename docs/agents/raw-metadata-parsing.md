@@ -90,7 +90,7 @@ shot) and IFD1 (a 160x120 thumbnail); the SubIFD is the raw data. Recent
 bodies add IFD2, the full-size JPEG. `arw::parse` picks the largest JPEG in
 the chain and the SubIFDs, and when that one is smaller than the preview by
 byte length (the thumbnail is a few KB against a 300-900 KB preview) it takes
-the preview as `full` instead, so the 1:1 view (`zoom::read` in `crates/native`, through
+the preview as `full` instead, so the 1:1 view (`zoom::read` in `crates/app`, through
 `partial::decode_focus_crop`) crops the
 preview, as on ORF. `Embedded` carries no pixel size, so the comparison is by
 bytes. A preview-only file (no other JPEG) keeps `full` at `None`, and the DNG

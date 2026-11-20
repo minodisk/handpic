@@ -111,7 +111,7 @@ pane showing the pager's current index (option (a)); the status line's
 
 ### A/B latency measurement: not needed
 
-Per [native-app.md](../../../agents/native-app.md)'s "A same-session A/B gates
+Per [native-app.md](../../../agents/app.md)'s "A same-session A/B gates
 only work on the page path", this plan is on the off-page-path side:
 
 - The EXIF groups are built only when the entries are read (the open, a

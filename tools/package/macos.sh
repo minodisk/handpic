@@ -4,8 +4,8 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# macos.sh — packages the Handpic.app `mise run native:bundle:macos` laid out
-# under crates/native/target/release for this Mac's architecture, signed ad
+# macos.sh — packages the Handpic.app `mise run app:bundle:macos` laid out
+# under crates/app/target/release for this Mac's architecture, signed ad
 # hoc (no Developer ID, no notarization): a DMG, the app beside an
 # /Applications link, for people, and a tarball holding Handpic.app, for the
 # updater (sign.sh signs it). Prints their paths. It builds nothing.
@@ -17,7 +17,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # The executable's name.
 binary="handpic"
 
-release="${root}/crates/native/target/release"
+release="${root}/crates/app/target/release"
 app="${release}/Handpic.app"
 version="$(bash "${root}/tools/package/version.sh")"
 arch="$(uname -m)"
@@ -25,7 +25,7 @@ dmg="${release}/Handpic-${version}-macos-${arch}.dmg"
 tarball="${release}/Handpic-${version}-macos-${arch}.tar.gz"
 
 if [[ ! -x "${app}/Contents/MacOS/${binary}" ]]; then
-	echo "macos.sh: no ${app}; run \`mise run native:bundle:macos\` first." >&2
+	echo "macos.sh: no ${app}; run \`mise run app:bundle:macos\` first." >&2
 	exit 1
 fi
 

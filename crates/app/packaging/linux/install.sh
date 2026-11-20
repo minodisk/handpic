@@ -3,7 +3,7 @@
 # Handpic-<version>-linux-x64.tar.gz: the binary to ~/.local/bin, the desktop
 # entry (its Exec rewritten to the binary's absolute path) to
 # ~/.local/share/applications and the icon to the hicolor theme under
-# ~/.local/share, the same layout as `mise run native:install:linux`. The
+# ~/.local/share, the same layout as `mise run app:install:linux`. The
 # whole archive is checked against the given SHA-256 before anything changes,
 # and an unsafe or unexpected entry refuses the install. Needs Python 3, not
 # root. Take the digest from a trusted channel (the release's SHA256SUMS).

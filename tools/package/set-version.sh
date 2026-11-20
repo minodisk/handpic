@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 # set-version.sh — writes the given version to `[package].version` of
-# crates/native/Cargo.toml and to the crate's entry in crates/native/Cargo.lock,
+# crates/app/Cargo.toml and to the crate's entry in crates/app/Cargo.lock,
 # so `cargo build --release --locked` still passes and the binary carries it.
 # The version is refused as version.sh refuses one.
 #
@@ -13,11 +13,11 @@ set -o nounset
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 version="${1:?usage: set-version.sh <version>}"
-manifest="${root}/crates/native/Cargo.toml"
-lock="${root}/crates/native/Cargo.lock"
+manifest="${root}/crates/app/Cargo.toml"
+lock="${root}/crates/app/Cargo.lock"
 
 # The crate's name, whose Cargo.lock entry carries the version.
-crate="handpic-native"
+crate="handpic-app"
 
 bash "${root}/tools/package/version.sh" semver "${version}" >/dev/null
 

@@ -179,14 +179,14 @@ mod tests {
         c.finish().unwrap()
     }
 
-    /// `GOOD_FULL_EYE_SHARP` in `crates/native/src/mark.rs` is this figure:
+    /// `GOOD_FULL_EYE_SHARP` in `crates/app/src/mark.rs` is this figure:
     /// update it with the threshold.
     #[test]
     fn the_threshold_is_the_figure_the_ui_cuts_good_at() {
         assert_eq!(SOFT_BELOW, 0.162);
     }
 
-    /// `LOW_FULL_EYE_SHARP` in `crates/native/src/mark.rs` is this figure:
+    /// `LOW_FULL_EYE_SHARP` in `crates/app/src/mark.rs` is this figure:
     /// update it with the threshold.
     #[test]
     fn the_low_threshold_is_the_figure_the_ui_cuts_low_at() {

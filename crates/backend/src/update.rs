@@ -25,9 +25,9 @@ pub const INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 
 /// The production verifying key, whose private key the maintainer keeps
 /// outside the repository.
-const PRODUCTION_KEY: VerifyingKey = *include_bytes!("../../native/packaging/update.pub");
+const PRODUCTION_KEY: VerifyingKey = *include_bytes!("../../app/packaging/update.pub");
 /// The checked-in test key a `HANDPIC_UPDATE_TEST_REPO` build trusts instead.
-const TEST_KEY: VerifyingKey = *include_bytes!("../../native/packaging/test/update.pub");
+const TEST_KEY: VerifyingKey = *include_bytes!("../../app/packaging/test/update.pub");
 
 /// Who installed the running executable, and so who updates it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

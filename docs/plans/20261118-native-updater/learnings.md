@@ -28,7 +28,7 @@
   program a fixed single-quoted string.
 - The "Set the version" step runs after `actions/cache`, so the cache key is
   the checked-in `Cargo.lock`'s hash and a versioned run still hits the
-  cache; only `handpic-native` itself rebuilds.
+  cache; only `handpic-app` itself rebuilds.
 - Inno Setup is not installed on this machine, so the `.iss` change
   (`VersionInfoVersion={#FileVersion}`) was first compiled on the `Package`
   runs.
@@ -48,8 +48,8 @@
 ## Step 2: the updater's assets and the signing tooling
 
 - The production key pair is not generated here: the user runs `mise run
-  native:keygen <private-key>` and checks in the
-  `crates/native/packaging/update.pub` it writes, so that Done-when item and
+  app:keygen <private-key>` and checks in the
+  `crates/app/packaging/update.pub` it writes, so that Done-when item and
   the Step 2 checkbox stay open until then. Nothing in this step reads
   `update.pub` (the test key signs); Step 3's `include_bytes!` will.
 - zipsign 0.2.2 (`mise exec cargo:zipsign@0.2.2`, about 10 s to build here)
@@ -66,12 +66,12 @@
   eol=lf`, 32 random bytes hold no NUL about 88 % of the time and git would
   treat them as text.
 - zipsign is a task tool (`tools = { "cargo:zipsign" = "0.2.2" }` on
-  `native:sign` and `native:keygen`), not a `[tools]` entry, so
+  `app:sign` and `app:keygen`), not a `[tools]` entry, so
   `mise-action` and every developer's `mise install` do not build it; it is
-  built on the first `mise run native:sign` with the `[tools]` Rust.
+  built on the first `mise run app:sign` with the `[tools]` Rust.
   `sign.sh` itself refuses another `zipsign --version`, so the pin holds when
   it is run outside mise too.
-- `mise run native:sign -- a b` hands `a b` to the task's `"$@"` (the `--`
+- `mise run app:sign -- a b` hands `a b` to the task's `"$@"` (the `--`
   is dropped); a task's relative paths resolve against the repository root.
 - Signing runs in each platform leg right after packaging and before the
   checks, so the checks and the uploads see the signed bytes; `sign.sh`
@@ -105,12 +105,12 @@
   the guide's features plus `signatures` it brings `ureq` 3.4 on its `_ring`
   rustls feature, the same `rustls` 0.23 the backend's `reqwest` uses, and
   no `aws-lc-sys` on any target (`cargo tree --target all -i aws-lc-sys`
-  prints nothing, in the root workspace and in `crates/native`). So the
+  prints nothing, in the root workspace and in `crates/app`). So the
   guide's `ureq` stays; `reqwest_client` was not needed. It does add a
   second HTTP client (`ureq` next to `reqwest`), about 350 lock entries in
-  `crates/native/Cargo.lock` and 700 lines in the root one.
-- `crates/native/Cargo.lock` must be updated with the backend's new
-  dependencies too (`cargo fetch` in `crates/native`), or `Package`'s
+  `crates/app/Cargo.lock` and 700 lines in the root one.
+- `crates/app/Cargo.lock` must be updated with the backend's new
+  dependencies too (`cargo fetch` in `crates/app`), or `Package`'s
   `cargo build --release --locked` fails; the plan's file list named only
   the root lock.
 - 1.3.3 differs from older `self_update` docs: `build()` returns the
@@ -228,8 +228,8 @@
   install nothing. These are Step 7's rows; the Step 4 checkbox was ticked on
   the unit tests, the local checks and the Windows restart-drain
   measurement. Basis: Step 4 implementation; files
-  `crates/native/src/update.rs`, `crates/native/src/main.rs`.
+  `crates/app/src/update.rs`, `crates/app/src/main.rs`.
 - The page's click paths (the three buttons, `Check for Updates` disabled
   while busy) were not driven headless; the hand check belongs with the
   pending manual check above. Basis: Step 4 implementation;
-  `crates/native/src/settingsview.rs`.
+  `crates/app/src/settingsview.rs`.

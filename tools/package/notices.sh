@@ -14,9 +14,9 @@ dest="${1:?usage: notices.sh <licenses-dir>}"
 
 # Each notice's source in the repository and its name in the folder.
 notices=(
-	"crates/native/packaging/NOTICE-gpui:NOTICE-gpui"
-	"crates/native/LICENSE-lucide:LICENSE-lucide"
-	"crates/native/themes/LICENSE:LICENSE-themes"
+	"crates/app/packaging/NOTICE-gpui:NOTICE-gpui"
+	"crates/app/LICENSE-lucide:LICENSE-lucide"
+	"crates/app/themes/LICENSE:LICENSE-themes"
 	"crates/core/models/LICENSE:LICENSE-yunet"
 	"crates/core/models/LICENSE-mediapipe:LICENSE-mediapipe"
 	"crates/core/models/LICENSE-siglip2:LICENSE-siglip2"

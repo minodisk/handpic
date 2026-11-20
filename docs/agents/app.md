@@ -1,6 +1,6 @@
-# Working on `crates/native`
+# Working on `crates/app`
 
-Read this before touching the GPUI app in `crates/native`. It lists what the
+Read this before touching the GPUI app in `crates/app`. It lists what the
 port has met so far, each with the reason.
 
 The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something here,
@@ -30,11 +30,11 @@ requirements `Cargo.lock` holds. Its re-exports, read from 0.9.1's
 `use gpui_kit::*` glob; no crate is named `gpui` any more. `gpui_kit::actions!`
 derives through `$crate::Action`, so the test module's `actions!` needs no
 `gpui` alias. Zed pins Rust 1.98.1 at that commit, and so does
-`crates/native/mise.toml`; the published crates declare no `rust-version`.
+`crates/app/mise.toml`; the published crates declare no `rust-version`.
 The plans: [gpui-component-dep](../plans/_archived/20261114-gpui-component-dep/plan.md),
 then [native-gpui-kit](../plans/_archived/20261116-native-gpui-kit/plan.md).
 
-`crates/native/Cargo.toml` carries the guide's `[profile.dev.package]` block
+`crates/app/Cargo.toml` carries the guide's `[profile.dev.package]` block
 (`opt-level = 3` for `gpui-pre`, `gpui-component`, `gpui-kit`,
 `gpui-kit-assets`, `gpui-pre-platform`, `rustybuzz`, `taffy` and
 `ttf-parser`), so a `cargo run` debug build renders at a usable speed at the
@@ -44,7 +44,7 @@ cost of a longer cold build.
   is a `gpui-kit` bump (one exact pin) in one deliberate chore PR, which
   checks in the lock diff that `gpui-pre` and gpui-component moved with it,
   and records the API changes met at the bump here. A `gpui-component` bump
-  (through `gpui-kit`) also copies `crates/native/themes/` again from the
+  (through `gpui-kit`) also copies `crates/app/themes/` again from the
   new release's `themes/` folder and updates the commit in its `LICENSE`,
   so the files match the schema of the pinned crate.
 - Rule: the `gpui-fast` feature stays off.
@@ -87,7 +87,7 @@ Mellifluous and Molokai do), so `apply` sets `theme.shadow = true` before
 `change`; otherwise Neutral chosen after Molokai would keep the shadow off.
 `highlight` is not reset, since the app draws no code view. The shipped themes are
 gpui-kit's 21 theme files at the 0.9.1 release, copied unchanged into
-`crates/native/themes/` (with its `LICENSE`), embedded with `include_str!`
+`crates/app/themes/` (with its `LICENSE`), embedded with `include_str!`
 and parsed once into `ThemeConfig`s (`serde_json` over `ThemeSet`); the app
 never registers them (`ThemeRegistry::load_themes_from_str` would make
 gpui-component's registry observer reload the registered theme over the
@@ -311,16 +311,16 @@ sizes, the empty state's `0.9rem`); 13 px would have shrunk them all. Its
 (`LICENSE-APACHE`, Copyright Longbridge; GitHub shows NOASSERTION only for the
 file name), and `gpui-kit-assets` embeds Lucide (ISC).
 
-The shipped themes under `crates/native/themes/` are copied unchanged from
+The shipped themes under `crates/app/themes/` are copied unchanged from
 gpui-kit's `themes/` at tag v0.9.1 (commit `39ab849a`), under the same
 Apache-2.0; their `LICENSE` names that source, each file's own `author` and
 `url` (the color scheme it adapts) and carries the license text.
 
 `tools/package/notices.sh <dir>` copies the set every package ships into one
-`licenses/` folder: `crates/native/packaging/NOTICE-gpui` (the GPUI crates'
+`licenses/` folder: `crates/app/packaging/NOTICE-gpui` (the GPUI crates'
 copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
 `gpui-pre-reqwest`), and the Apache-2.0 text of
-their `LICENSE-APACHE`), `crates/native/LICENSE-lucide`, the themes' `LICENSE`
+their `LICENSE-APACHE`), `crates/app/LICENSE-lucide`, the themes' `LICENSE`
 as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
 `LICENSE-mediapipe` and `LICENSE-siglip2`. The repository has no project
 `LICENSE` file, so none is shipped.
@@ -334,7 +334,7 @@ as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
 
 Per Zed's `script/linux`: `libfontconfig-dev`, `libwayland-dev`,
 `libx11-xcb-dev`, `libxkbcommon-x11-dev`, `libvulkan1`, plus a Vulkan-capable
-driver at run time. The `native` CI job's Linux leg installs exactly these.
+driver at run time. The `app` CI job's Linux leg installs exactly these.
 At run time wgpu falls back to GL through `libEGL.so.1` when no Vulkan
 adapter is found (see the deb's `Depends` rule under "Packaging").
 Since the switch to `gpui-kit` the X11 and Wayland backends are compiled (its
@@ -355,12 +355,12 @@ compiled when the app starts instead. `macos-latest` is arm64, where
 - Rule: `runtime_shaders` comes with `gpui-kit` and cannot be turned off from
   the app's manifest; do not add a build-time Metal step.
 
-### The `native` CI job runs on all three platforms (Inferred)
+### The `app` CI job runs on all three platforms (Inferred)
 
 It is a matrix over `windows-latest`, `ubuntu-latest` and `macos-latest` with
 `fail-fast` off, each leg running the same `mise exec rust@1.98.1 -- cargo
 clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
-`$USERPROFILE/nasm` to `PATH` itself. Nothing under `crates/native/src` is
+`$USERPROFILE/nasm` to `PATH` itself. Nothing under `crates/app/src` is
 `cfg(windows)`-only, and `tree.rs`'s path helpers work on strings, so its
 `C:\` and UNC test paths do not depend on the host's `std::path`.
 
@@ -369,25 +369,25 @@ clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
   or the same `cfg`.
 
 The Windows leg alone also runs `cargo clippy --all-targets --features
-screenshot -- -D warnings`, as do `mise run native:check` and `mise run
-ci:local` (its `clippy native screenshot` check, selected wherever `clippy
+screenshot -- -D warnings`, as do `mise run app:check` and `mise run
+ci:local` (its `clippy app screenshot` check, selected wherever `clippy
 native` is) on a Windows host. Windows is where the `screenshot` tool was
 checked live, Linux's `render_to_image` is not implemented, and the macOS leg
 already compiles a second variant of the app for its bundle step. The feature
 turns on `test-support` in a direct `gpui-pre-platform` dependency, the same
 crate and feature the UI tests' dev-dependency turns on (see "The main view
 opens on GPUI's test platform"), so the default `clippy --all-targets` already
-builds the GPUI crates that way and this run only re-checks `handpic-native`.
+builds the GPUI crates that way and this run only re-checks `handpic-app`.
 
 - Rule: keep the feature command string identical in `ci.yml`,
-  `tools/ci/local.sh` and `native:check`.
+  `tools/ci/local.sh` and `app:check`.
 
 ### Without NASM, mozjpeg silently loses SIMD (Measured)
 
 `mozjpeg-sys`'s build script runs `nasm -v`, prints a `cargo:warning` and
 continues without SIMD when that fails, and cargo hides build-script warnings
 of non-path dependencies. RAF decode measured about 99 ms without SIMD and
-46 ms with it. `crates/native/build.rs` therefore fails the build, and its own
+46 ms with it. `crates/app/build.rs` therefore fails the build, and its own
 `cargo:warning` is the only place the SIMD state is visible.
 
 ### winget's NASM is per-user and not on `PATH` (Hit)
@@ -413,8 +413,8 @@ Source: [the native-app-icon plan](../plans/_archived/20261114-native-app-icon/p
 
 `gpui-pre-windows` 0.3.12's `load_icon` loads `LoadImageW(module, PCWSTR(1),
 IMAGE_ICON, ..)` into the window class's `hIcon`, and a failed load silently
-leaves the generic icon. `crates/native/build.rs` therefore embeds
-`crates/native/icons/icon.ico` with `winresource`'s `set_icon`, which writes
+leaves the generic icon. `crates/app/build.rs` therefore embeds
+`crates/app/icons/icon.ico` with `winresource`'s `set_icon`, which writes
 ID `1`, on a Windows target only (`CARGO_CFG_TARGET_OS`; the crate is a
 `cfg(windows)` build-dependency), before the NASM check's early returns. The
 icon is referenced by path from `CARGO_MANIFEST_DIR`. Explorer shows the exe's first icon group, so the one
@@ -426,14 +426,14 @@ succeeds.
 - Rule: never set a manifest in the app's resource. `gpui-pre-platform` turns
   on `gpui-pre`'s `windows-manifest` feature, whose build script already
   embeds `1 RT_MANIFEST`; a second one is a duplicate resource at link time.
-- Rule: the icons live in `crates/native/icons/`, so a change to one selects
+- Rule: the icons live in `crates/app/icons/`, so a change to one selects
   the native checks in `mise run ci:local` like any change in the crate.
 
 ### Linux matches the window to its `.desktop` file by `IDENTIFIER` (Inferred)
 
 The window opens with `app_id: Some(IDENTIFIER)`. Wayland matches a
 toplevel's `app_id` to the `.desktop` file's base name, so the file is
-`crates/native/packaging/linux/dev.minodisk.handpic.desktop`. On X11,
+`crates/app/packaging/linux/dev.minodisk.handpic.desktop`. On X11,
 `gpui-pre-linux`'s `set_app_id` writes `WM_CLASS` as `IDENTIFIER` for both the
 instance and the class, so `StartupWMClass` is `IDENTIFIER` too. The default
 `set_app_id` is a no-op on Windows and macOS. `Exec=handpic` is static,
@@ -441,9 +441,9 @@ so `~/.local/bin` must be on the session's `PATH` for the install task's copy;
 the packaged copies' `Exec` is absolute (see "The `Package` workflow builds
 the distributables").
 
-`mise run native:install:linux` builds the release binary and installs it to
+`mise run app:install:linux` builds the release binary and installs it to
 `~/.local/bin/handpic`, the `.desktop` file to
-`~/.local/share/applications/` and `crates/native/icons/128x128@2x.png` (256 x
+`~/.local/share/applications/` and `crates/app/icons/128x128@2x.png` (256 x
 256 px) to `~/.local/share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`.
 
 - Rule: in a `mise.toml` `run = """..."""` (a TOML basic string), a `\` at the
@@ -454,14 +454,14 @@ the distributables").
 
 ### macOS gets `Handpic.app` from a mise task (Inferred)
 
-`mise run native:bundle:macos [profile]` (release by default) builds and lays
-out `crates/native/target/<profile>/Handpic.app` with the checked-in
-`crates/native/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
-`crates/native/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
+`mise run app:bundle:macos [profile]` (release by default) builds and lays
+out `crates/app/target/<profile>/Handpic.app` with the checked-in
+`crates/app/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
+`crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
 numeric form `tools/package/version.sh numeric` prints into the copied
 `Info.plist`'s `CFBundleShortVersionString` and `CFBundleVersion` (`plutil
 -replace`; the checked-in file keeps `0.0.0`) and copies the notices into
-`Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `native`
+`Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `app`
 CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
 executable and the `.icns` present).
 
@@ -469,7 +469,7 @@ executable and the `.icns` present).
   one the Tauri app had, which the native app replaced. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
-- Rule: the `native` CI job's macOS leg runs `mise run native:bundle:macos
+- Rule: the `app` CI job's macOS leg runs `mise run app:bundle:macos
   debug` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
@@ -483,12 +483,12 @@ executable and the `.icns` present).
 no release touched) builds each platform's packages and uploads each as a
 workflow artifact, then a `checksums` job uploads one `SHA256SUMS` over all
 of them. Each leg builds with `mise exec rust@1.98.1 -- cargo build --release
---locked` in `crates/native`, as the `native` CI job runs cargo, and then
+--locked` in `crates/app`, as the `app` CI job runs cargo, and then
 packages the built `target/release` binary with a script under
 `tools/package/`, which builds nothing.
 
 - `version.sh [form] [version]` prints `[package].version` of
-  `crates/native/Cargo.toml` (`0.0.0` until release-please owns it), or the
+  `crates/app/Cargo.toml` (`0.0.0` until release-please owns it), or the
   version given, in the form a package format takes, and refuses a version
   that is not `x.y.z` or `x.y.z-<prerelease>` (the prerelease dot-separated
   alphanumeric identifiers, no `-`, which the deb form could not carry):
@@ -503,8 +503,8 @@ packages the built `target/release` binary with a script under
   `semver` is the default. The deb's file name keeps the SemVer string
   (`handpic_2.0.0-rc.1_amd64.deb`); only the control field uses `~`, so a
   prerelease sorts before its release.
-- `set-version.sh <version>` writes a version to `crates/native/Cargo.toml`
-  and to the crate's entry in `crates/native/Cargo.lock`, so `cargo build
+- `set-version.sh <version>` writes a version to `crates/app/Cargo.toml`
+  and to the crate's entry in `crates/app/Cargo.lock`, so `cargo build
   --locked` still passes and the binary (on Windows, the exe's
   `ProductVersion`, which `winresource` takes from `CARGO_PKG_VERSION`)
   carries it. The workflow's optional `version` input runs it before the
@@ -515,10 +515,10 @@ packages the built `target/release` binary with a script under
   notarization), stages it with `ditto` (not `cp -R`, so the ad hoc
   signature's extended attributes survive the copy) beside an
   `/Applications` link and writes
-  `crates/native/target/release/Handpic-<version>-macos-<arch>.dmg`
+  `crates/app/target/release/Handpic-<version>-macos-<arch>.dmg`
   (`hdiutil create -format UDZO`, `<arch>` from `uname -m`). The workflow
   runs it on `macos-latest` (arm64) and `macos-15-intel` (x86_64), after
-  `mise run native:bundle:macos`, and checks the DMG (`hdiutil verify`, then
+  `mise run app:bundle:macos`, and checks the DMG (`hdiutil verify`, then
   attached: the signature, the executable's architecture, both version
   fields numeric and equal to the `numeric` form, and the notices). It also
   writes `Handpic-<version>-macos-<arch>.tar.gz`, the staged `Handpic.app`
@@ -526,13 +526,13 @@ packages the built `target/release` binary with a script under
   entries; the workflow checks it holds nothing else and that the extracted
   bundle passes `codesign --verify --strict` and has the runner's
   architecture.
-- `mise run native:package:macos` is the same locally on a Mac: the bundle
+- `mise run app:package:macos` is the same locally on a Mac: the bundle
   task (its release build included), then `macos.sh`.
-- `windows.sh` compiles `crates/native/packaging/windows/handpic.iss` with
+- `windows.sh` compiles `crates/app/packaging/windows/handpic.iss` with
   Inno Setup 6's `ISCC.exe` (found on `PATH`, else in its per-user and
   machine-wide install folders, else it fails with the `winget install
   JRSoftware.InnoSetup` hint) into
-  `crates/native/target/release/Handpic-<version>-windows-x64-setup.exe`,
+  `crates/app/target/release/Handpic-<version>-windows-x64-setup.exe`,
   passing the version (`AppVersion`, the SemVer form, and `FileVersion`,
   the `windows` form the `.iss` sets as `VersionInfoVersion`, which Inno
   derives from `AppVersion` only when that is numeric), the executable's name
@@ -542,7 +542,7 @@ packages the built `target/release` binary with a script under
   none). The setup installs per user (`PrivilegesRequired=lowest`,
   `{autopf}\Handpic`, which is `%LOCALAPPDATA%\Programs\Handpic`), adds a
   Start menu shortcut (`{autoprograms}`) and takes its icon from
-  `crates/native/icons/icon.ico`, read in place. The workflow's `windows` leg
+  `crates/app/icons/icon.ico`, read in place. The workflow's `windows` leg
   runs it on `windows-latest`, checks the setup's file version is the
   `windows` form, then installs the setup silently
   (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`), checks the exe under
@@ -554,30 +554,30 @@ packages the built `target/release` binary with a script under
   ZIP's root, for the updater; the workflow checks `Expand-Archive` gives that
   one file with the setup's digest. `windows-latest` ships Inno Setup 6.7.1 with
   `iscc` on `PATH` (Chocolatey's shim), so the workflow installs nothing.
-  `mise run native:package:windows` is the release build plus `windows.sh`
+  `mise run app:package:windows` is the release build plus `windows.sh`
   locally.
 - `linux.sh` (x86_64 only, needs `dpkg-dev`) writes three files under
-  `crates/native/target/release`:
+  `crates/app/target/release`:
   - `Handpic-<version>-linux-x64.tar.gz`, one `Handpic/` folder with
     `bin/handpic`, the checked-in desktop entry under
-    `share/applications/`, `crates/native/icons/128x128@2x.png` as
+    `share/applications/`, `crates/app/icons/128x128@2x.png` as
     `share/icons/hicolor/256x256/apps/dev.minodisk.handpic.png`, and
     `licenses/`;
-  - `install.sh`, a copy of `crates/native/packaging/linux/install.sh`
+  - `install.sh`, a copy of `crates/app/packaging/linux/install.sh`
     (adapted from gpui-kit's guide, Apache-2.0, said in its header): `sh
     install.sh ARCHIVE EXPECTED_SHA256` reads the whole archive against the
     digest before anything changes, refuses an entry outside `Handpic/`, a
     link or a duplicate, and installs per user (Python 3, no root) into
-    `native:install:linux`'s layout, the desktop entry's `Exec` rewritten to
+    `app:install:linux`'s layout, the desktop entry's `Exec` rewritten to
     the quoted absolute `~/.local/bin/handpic`;
   - `handpic_<version>_amd64.deb` (`Package: handpic`), built by `dpkg-deb
     --root-owner-group --build` from `usr/lib/handpic/handpic`, the
     desktop entry with `Exec=/usr/lib/handpic/handpic`, the icon, and
     the notices under `usr/share/doc/handpic/`, its `DEBIAN/control` from the
-    `crates/native/packaging/linux/control` template (the `deb` form of the
+    `crates/app/packaging/linux/control` template (the `deb` form of the
     version, installed size, `Depends`).
 
-  The workflow's `linux` leg runs it on `ubuntu-latest` after the `native`
+  The workflow's `linux` leg runs it on `ubuntu-latest` after the `app`
   CI job's apt list, prints the binary's `NEEDED` entries, the sonames it
   names and the image's glibc, runs `install.sh` under a throwaway `HOME`
   and checks the binary, the desktop entry (absolute `Exec`, `Icon`,
@@ -586,14 +586,14 @@ packages the built `target/release` binary with a script under
   the `deb` form and that `dpkg --compare-versions` puts `2.0.0~rc.2` before
   `2.0.0~rc.10` before `2.0.0`, checks the `Depends`,
   and installs and removes the deb with `apt-get`. Nothing is launched: the
-  runner has no display and no GPU. `mise run native:package:linux` is the
+  runner has no display and no GPU. `mise run app:package:linux` is the
   release build plus `linux.sh` locally.
 - `sign.sh <private-key> <verifying-key> <archive>...` signs the four
   archives the updater installs (the portable ZIP, the setup ZIP, the Linux
   and the macOS tarballs) in place with zipsign 0.2.2, then runs `zipsign
   verify` on each with the verifying key, so a key pair that does not match
   fails at signing. A `.zip` gets its signature before its data, a `.tar.gz`
-  as a gzip member after it. `mise run native:sign -- <args>` runs it with
+  as a gzip member after it. `mise run app:sign -- <args>` runs it with
   the pinned zipsign (`cargo:zipsign`, a task tool, so nothing else installs
   it); the script refuses another zipsign version. The DMG, the setup `.exe`,
   `install.sh` and the deb are installed by people, not the app, and stay
@@ -601,16 +601,16 @@ packages the built `target/release` binary with a script under
 - The workflow's optional `update_test_repo` input (`owner/name`) makes a
   test build: each leg sets `HANDPIC_UPDATE_TEST_REPO` for the build (unset
   otherwise) and signs its archives with the test key pair checked in under
-  `crates/native/packaging/test/` (its README says no released build trusts
+  `crates/app/packaging/test/` (its README says no released build trusts
   it), before the checks, so the checks and the uploads see the signed
   bytes. Without the input nothing is signed; sub-milestone 4's `release.yml`
   signs with the production key. The `checksums` job computes `SHA256SUMS`
   over the downloaded artifacts, so after signing, and installs the
   tarball with `install.sh` and the digest `SHA256SUMS` names.
-- `mise run native:keygen <private-key>` generates the production key pair
+- `mise run app:keygen <private-key>` generates the production key pair
   (`zipsign gen-key`): the private key to the given path, refused inside the
   repository, and the 32-byte verifying key to
-  `crates/native/packaging/update.pub`, which is checked in. zipsign refuses
+  `crates/app/packaging/update.pub`, which is checked in. zipsign refuses
   to overwrite either file.
 
 - Rule: zipsign binds a signature to the file's name (its default
@@ -654,27 +654,27 @@ packages the built `target/release` binary with a script under
   left to sub-milestone 4's real-device check.
 - Rule: the one desktop entry is the checked-in
   `dev.minodisk.handpic.desktop` with the bare `Exec=handpic`
-  (`datadir.rs` tests it, and `native:install:linux` installs it as is); the
+  (`datadir.rs` tests it, and `app:install:linux` installs it as is); the
   packaged copies get an absolute `Exec`, `linux.sh` writing the deb's and
   `install.sh` the tarball install's.
 
-- Rule: `native:bundle:macos` stays the one place that lays out
+- Rule: `app:bundle:macos` stays the one place that lays out
   `Handpic.app`; `macos.sh` only signs and packages it.
 - Rule: the executable's name is one `binary` variable per script
   (`handpic`).
 - Rule: the workflow's cargo cache is keyed by `matrix.os`, not `runner.os`:
   both macOS runners report `macOS` but build for different architectures.
 
-### `mise run native:watch` rebuilds and restarts the app (Inferred)
+### `mise run app:watch` rebuilds and restarts the app (Inferred)
 
-`mise run native:watch [-- <folder>]` runs the GPUI app under watchexec, which
+`mise run app:watch [-- <folder>]` runs the GPUI app under watchexec, which
 the task's own `tools` installs next to rust, so the top-level `[tools]` (and
-every CI job) stays without it. An edit under `crates/native`, `crates/core` or
+every CI job) stays without it. An edit under `crates/app`, `crates/core` or
 `crates/backend` stops the app, rebuilds and relaunches it. Measured in
 `docs/plans/_archived/20261115-native-watch/learnings.md`.
 
 - Rule: the task watches the crate's inputs by name (`src`, `build.rs`,
-  `Cargo.toml`, `../core`, `../backend`), not `.`, so `crates/native/target`,
+  `Cargo.toml`, `../core`, `../backend`), not `.`, so `crates/app/target`,
   whose `.fingerprint` holds `.json`, never triggers a restart. Keep it that
   way when you edit the task.
 - Rule: the watchexec line is the script's last line and runs with
@@ -741,19 +741,19 @@ for the backend target. Source:
 
 ### The backend is compiled twice (Inferred)
 
-`crates/backend` is a member of the root workspace, and `crates/native`, a
+`crates/backend` is a member of the root workspace, and `crates/app`, a
 separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
 as it does `handpic-core`. A dependency added to the backend also lands in
-`crates/native/Cargo.lock`, and clippy lints the backend only from the root.
+`crates/app/Cargo.lock`, and clippy lints the backend only from the root.
 
 - Rule: a backend change needs both workspaces checked. `mise run ci` runs
   only `lint` and `test` of the root workspace, so it never covers
-  `crates/native`. The agents run `mise run ci:local` locally
+  `crates/app`. The agents run `mise run ci:local` locally
   (`tools/ci/local.sh`), which checks only the changed crates: for a
   `crates/core` or `crates/backend` change, clippy and the tests of that root
-  package plus the native clippy; for a `crates/native` change (the app's
+  package plus the native clippy; for a `crates/app` change (the app's
   identifier, `datadir`, `logger`, `settings` and the rest), the native clippy
-  and tests. The PR's `test` and `native` jobs, on all three platforms, run
+  and tests. The PR's `test` and `app` jobs, on all three platforms, run
   the rest: the root workspace's other crates and the native tests a backend
   change can break. Neither full task is run locally as a gate.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
@@ -767,12 +767,12 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   each), because three separate cold calls for every check at once took 594 s,
   at the Bash tool's 600 s limit, against 382 s in one call. Cold wall times:
   Markdown only under 10 s, `crates/cli` 66 s,
-  `crates/native` 154 s, `crates/backend` 199 s, `crates/core` 265 s. Source:
+  `crates/app` 154 s, `crates/backend` 199 s, `crates/core` 265 s. Source:
   `docs/plans/_archived/20261114-light-local-ci/learnings.md`, Step 1.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
   backend, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
-- Rule: `mise run native:check` runs clippy and tests but does not build
+- Rule: `mise run app:check` runs clippy and tests but does not build
   `handpic.exe`. Run `cargo build` before launching the exe, or you run a
   stale binary. A still-running older `handpic.exe` locks
   `target/debug/handpic.exe` and `cargo build` fails with `os error 5`;
@@ -782,13 +782,13 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
   direct call; the mise tasks find it on their own. Source:
   `docs/plans/_archived/20261115-native-scrollbars/learnings.md`, Step 1.
-- Rule: the native crate's binary target is `handpic`, not `handpic-native`
+- Rule: the native crate's binary target is `handpic`, not `handpic-app`
   (the package name); run its unit tests with `cargo test --bin handpic` in
-  `crates/native`. To get a color's luminance in `crates/native`, call
+  `crates/app`. To get a color's luminance in `crates/app`, call
   `Hsla::to_rgb()` (gpui-pre's `color.rs`) on the `gpui_kit` re-export; the
   method needs no import. Source:
   `docs/plans/_archived/20261118-preview-theme-background/learnings.md`, Step 1.
-- Rule: `crates/native/Cargo.lock` resolves its own versions (`notify` 8.2.2
+- Rule: `crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
   The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
@@ -1049,14 +1049,14 @@ self.tools)]` handler reads. A tool only the native app answers is a second
 `#[tool_router(router = native_router)]` block, so the seven-tool server
 never lists it.
 
-`screenshot` is listed only in a build with `crates/native`'s `screenshot`
+`screenshot` is listed only in a build with `crates/app`'s `screenshot`
 cargo feature, where `mcp.rs` calls `with_screenshot` after `with_all_tools`
 (which replaces the router and would drop it). Without the feature nothing of
 it is compiled in and `tools/list` is the native app's 35 tools. `mcp_request` takes
 `screenshot` before `companion::answer`, so `READS`, `Busy` and the coverage
 table never see it and it is answered with the settings, a dialog or a rename
 open; the reply goes through the backend's `screenshot_reply`. Run it with
-`mise run native:dev:screenshot`; a feature build is not the shipped binary,
+`mise run app:dev:screenshot`; a feature build is not the shipped binary,
 so take no timing from it.
 
 The native tools run what their keys run: `key_down` and `mcp_request` both
@@ -1777,7 +1777,7 @@ and the tree's `folder` and `folder-open`, a path in none of them with
   the Tauri frontend's `icons.ts` did), add its SVG and path constants and its
   entry in `SVGS`, and name it in the header comment, with any
   Feather-derived base (the list in `LICENSE-lucide`). The full notice is
-  `crates/native/LICENSE-lucide`, first copied from the Tauri app's.
+  `crates/app/LICENSE-lucide`, first copied from the Tauri app's.
 - Rule: GPUI keeps one `AssetSource` per application. Other sources (here
   `Catalog` and `gpui_kit::assets::Assets`) are composed with `Icons`, in the
   order own derivatives, then the catalog selection, then `Assets`, never
@@ -2536,7 +2536,7 @@ render target's size.
 Measured in a debug build on a 5058x1440 maximized window: the capture about
 300 ms (two frames and the unoptimized BGRA-to-RGBA loop), the whole call
 360-430 ms at the default 1568 and 620-720 ms at 4096, within the bridge's
-5 s. Unoptimized, `imageops::resize` instantiated in `handpic-native` and the
+5 s. Unoptimized, `imageops::resize` instantiated in `handpic-app` and the
 PNG encode took 4.1 s at 4096; the resize now goes through `DynamicImage`
 (compiled in the optimized `image` crate) and the encoding crates are in
 `[profile.dev.package]`.
@@ -2658,7 +2658,7 @@ generated preview has none), the MCP companion's transport, or timings.
 
 `cx.defer` from the paint closure runs after the frame's `draw()` and
 `present()`, which is the stamp the spike's timings used. It is a workaround
-and may change with a GPUI bump. `crates/native` follows that pattern: the
+and may change with a GPUI bump. `crates/app` follows that pattern: the
 paint closure stamps `paint_started` and `paint_finished`, then the deferred
 callback stamps `presented`, prints the `page` line and releases the retired
 images with `cx.drop_image`. Doing the release earlier than that deferred
@@ -2809,7 +2809,7 @@ they overflow.
   every press on it; `theme.rs`'s `SCROLLBAR_TRACK` is that width, with a
   test against the pinned `Scrollbar::width()`. gpui-base also reads a
   theme's own `scrollbar` track width (`themed_track_width`, falling back to
-  `WIDTH`); none of the vendored themes under `crates/native/themes/` sets
+  `WIDTH`); none of the vendored themes under `crates/app/themes/` sets
   one, so 16 px holds for every shipped theme, and a theme vendored later
   that sets one would break `SCROLLBAR_TRACK`'s assumption. The tree's rows, the meta
   pane's body, the dialog bodies and the strip's cells keep their content
@@ -3262,7 +3262,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   bar must keep presses off the empty preview's "click here" message,
   which opens the folder picker. Source:
   [learnings](../plans/_archived/20261117-native-title-bar-settings/learnings.md), Step 1.
-- Rule: the icon is `crates/native/icons/64x64.png`, served by `Icons` under
+- Rule: the icon is `crates/app/icons/64x64.png`, served by `Icons` under
   `icons::APP` (`icons/app.png`) as one more arm of `load` and `list` (the
   PNG is bytes, `SVGS` a table of `&str`). gpui's `img` loads a non-URI
   string from the `AssetSource` and sniffs the format; no dependency is
@@ -3919,7 +3919,7 @@ change would (through `Resync`). The roots are read again whenever the
 window becomes active (`observe_window_activation`, once the first read has
 answered); `add_roots` skips the roots already shown.
 
-- Measured (a throwaway test against `crates/native/Cargo.lock`'s `notify`
+- Measured (a throwaway test against `crates/app/Cargo.lock`'s `notify`
   8.2.2 on Windows): `set` of one folder took 0.4-0.6 ms, a collapse
   (`unwatch` then `settle`) 0.1-0.3 ms, five collapse / expand rounds each
   stopped and resumed the events (none for a change while collapsed, one
@@ -4352,7 +4352,7 @@ holding the `TreeWatch` lock across the move) around the disk work, and puts
 the watcher back when the rename fails or the split leaves the folder.
 
 - Measured (`datefolder::watch_release`, a test in this crate so it runs on
-  `crates/native/Cargo.lock`'s `notify` 8.2.2, on Windows): with the open
+  `crates/app/Cargo.lock`'s `notify` 8.2.2, on Windows): with the open
   folder's watcher on a folder and tree watches on it, its parent and its
   subfolder, a plain `std::fs::rename` of the folder fails; `rename_folder`
   renames it, a `watch::set` on the new path then reports a file written

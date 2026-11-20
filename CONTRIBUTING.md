@@ -7,18 +7,18 @@ Prerequisites:
 - **macOS**: Xcode Command Line Tools (`xcode-select --install`).
 - **Windows**: MSVC Build Tools.
 - **Linux**: the development packages GPUI links against (fontconfig,
-  Wayland, X11 and xkbcommon) and a Vulkan loader; the `native` job of
+  Wayland, X11 and xkbcommon) and a Vulkan loader; the `app` job of
   [the CI workflow](./.github/workflows/ci.yml) lists them for Ubuntu.
 - **All**: NASM on x86 and x86_64 (below).
 
 The Rust toolchains come from `mise install`.
 
-`crates/native` is the desktop app, built on GPUI. It is a separate Cargo
+`crates/app` is the desktop app, built on GPUI. It is a separate Cargo
 workspace with its own `Cargo.lock` and its own toolchain, Rust 1.98.1 (the
 `mise.toml` next to it), which is what Zed's GPUI tracks. A `cargo` run from
 the repository root never sees it. It depends on `crates/core` and
 `crates/backend`, the GUI-free libraries of the root workspace, so a backend
-change is checked by both `mise run ci` and `mise run native:check` (or, as
+change is checked by both `mise run ci` and `mise run app:check` (or, as
 the agents do, by `mise run ci:local` and the PR's checks; see
 [Checks](#checks)).
 
@@ -37,19 +37,19 @@ instead of 46 ms.
   whose timings do not matter.
 
 ```sh
-mise run native:dev                # debug build; fast to compile, slow at runtime
-mise run native:dev:screenshot     # debug build with the MCP `screenshot` tool (not for timings)
-mise run native:watch              # debug build, rebuilt and restarted on a source change
-mise run native:release            # optimized build; the only one to take timings from
-mise run native:check              # clippy and the tests
+mise run app:dev                # debug build; fast to compile, slow at runtime
+mise run app:dev:screenshot     # debug build with the MCP `screenshot` tool (not for timings)
+mise run app:watch              # debug build, rebuilt and restarted on a source change
+mise run app:release            # optimized build; the only one to take timings from
+mise run app:check              # clippy and the tests
 ```
 
 **Any timing measurement has to come from the optimized build**
-(`native:release`), because the numbers in
+(`app:release`), because the numbers in
 [docs/humans/performance.md](./docs/humans/performance.md) are all optimized
 ones and a debug build is not comparable to them.
 
-`mise run ci` does not run `native:check` (CI has a `native` job for it); only
+`mise run ci` does not run `app:check` (CI has an `app` job for it); only
 the formatting check of the crate is part of `mise run lint`.
 
 ## Checks
@@ -70,12 +70,12 @@ the formatting check of the crate is part of `mise run lint`.
   of its workspace and `cargo clippy -p` / `cargo test -p` of only the changed
   root packages (`handpic-core`, `handpic-backend`, `handpic-cli`; the root
   `Cargo.toml` / `Cargo.lock` count as all three), the native clippy for a
-  `crates/native`, `crates/core` or `crates/backend` change, and the native
-  tests for a `crates/native` change. A change to `mise.toml` or
+  `crates/app`, `crates/core` or `crates/backend` change, and the native
+  tests for a `crates/app` change. A change to `mise.toml` or
   `.shellcheckrc`, or a missing merge base, runs every check. It prints what it
   selected and what it left out. It runs on this platform only and does not
   test the crates that depend on a changed one: the PR's `lint`, `test` (three
-  platforms) and `native` jobs cover those.
+  platforms) and `app` jobs cover those.
 
 ## Adding a Lightroom label preset language
 

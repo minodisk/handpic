@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 # linux.sh — packages the release binary cargo built under
-# crates/native/target/release for x86_64 Linux: a tarball (one Handpic/
+# crates/app/target/release for x86_64 Linux: a tarball (one Handpic/
 # folder: bin/, the desktop entry and the icon under share/, and licenses/),
 # the install.sh that installs it per user, and a .deb (the binary under
 # /usr/lib/handpic, its Depends from dpkg-shlibdeps). Prints their paths. It
@@ -19,14 +19,14 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 binary="handpic"
 identifier="dev.minodisk.handpic"
 
-packaging="${root}/crates/native/packaging/linux"
-release="${root}/crates/native/target/release"
+packaging="${root}/crates/app/packaging/linux"
+release="${root}/crates/app/target/release"
 version="$(bash "${root}/tools/package/version.sh")"
 deb_version="$(bash "${root}/tools/package/version.sh" deb)"
 tarball="${release}/Handpic-${version}-linux-x64.tar.gz"
 installer="${release}/install.sh"
 deb="${release}/handpic_${version}_amd64.deb"
-icon="${root}/crates/native/icons/128x128@2x.png"
+icon="${root}/crates/app/icons/128x128@2x.png"
 icon_path="share/icons/hicolor/256x256/apps/${identifier}.png"
 desktop_path="share/applications/${identifier}.desktop"
 

@@ -215,7 +215,7 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   bottom-left, above the file name, filling in as the pass runs: a smiling
   face (Lucide's `scan-face`) on a good frame and the same face with its mouth
   turned down on a gray one, both ISC license,
-  text in `crates/native/LICENSE-lucide`; white frames get none. It is a
+  text in `crates/app/LICENSE-lucide`; white frames get none. It is a
   cue, not a verdict: AF on a person in the
   background gives a sharp face and a false good, and the back of a
   head or an upturned face finds no face and stays white. The mark also

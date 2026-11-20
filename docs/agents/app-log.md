@@ -5,7 +5,7 @@ the only trace a session leaves: stderr is not captured in a bundled app, so
 anything that matters is written here, and the failures an agent most needs
 carry a fixed, greppable prefix (`panic:`, `invariant:`).
 
-The log is written by `crates/native/src/logger.rs`; the prefixed lines come
+The log is written by `crates/app/src/logger.rs`; the prefixed lines come
 from `crates/backend/src/diagnostics.rs` (the panic hook and the `invariant!`
 macro).
 
@@ -22,9 +22,9 @@ macro).
   honors `$XDG_DATA_HOME`), the shape of Tauri's `app_log_dir`, which the
   earlier app used.
 - `--log <path>` names the file instead; every debug or hand-check run passes
-  it (see `native-app.md`). A file that cannot be opened is reported once on
+  it (see `app.md`). A file that cannot be opened is reported once on
   stderr and the app runs with stderr only.
-- The same lines also go to stderr, which only a `mise run native:dev`
+- The same lines also go to stderr, which only a `mise run app:dev`
   terminal shows.
 
 ## Size and rotation
@@ -50,7 +50,7 @@ the restart cannot be recovered; ask for a reproduction.
   the GPU).
 - The native crate is bin-only, so its crate name, and with it the `target` and
   `CARGO_CRATE_NAME` the logger's own-lines filter uses, comes from
-  `[[bin]].name` (`handpic`), not from the package name (`handpic-native`).
+  `[[bin]].name` (`handpic`), not from the package name (`handpic-app`).
   `handpic` is also a string prefix of `handpic_backend` and `handpic_core`, so
   `logger.rs`'s `is_own` matches the target exactly or as a `handpic::` module
   path. A plain `starts_with` let the backend's debug lines through under
@@ -130,7 +130,7 @@ broken assumption. A normal session produces none. The checks:
 
 | Name                         | Where                                                                              | Details                                  | Means                                                                                                    |
 | ---------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `scan progress within total` | `Scan::start`'s pass 1 and pass 2 progress callbacks in `crates/native/src/scan.rs` | `dir=... scan_id=... done=... total=...` | a pass reported more files done than it was given; the status line's `scanning` / `analyzing` counts overflow |
+| `scan progress within total` | `Scan::start`'s pass 1 and pass 2 progress callbacks in `crates/app/src/scan.rs` | `dir=... scan_id=... done=... total=...` | a pass reported more files done than it was given; the status line's `scanning` / `analyzing` counts overflow |
 
 The check logs under `handpic::scan`. The checks are not exhaustive, so no
 `invariant:` line proves nothing broke.

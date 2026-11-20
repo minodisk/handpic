@@ -5,7 +5,7 @@ set -o pipefail
 set -o nounset
 
 # version.sh — prints the native app's version, `[package].version` of
-# crates/native/Cargo.toml (or the version given), in the form a package
+# crates/app/Cargo.toml (or the version given), in the form a package
 # format takes:
 #
 #   semver   2.0.0     2.0.0-rc.1   every file name, Inno AppVersion, the binary
@@ -20,7 +20,7 @@ set -o nounset
 # Usage: version.sh [semver|numeric|windows|deb] [<version>]
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-manifest="${root}/crates/native/Cargo.toml"
+manifest="${root}/crates/app/Cargo.toml"
 form="${1:-semver}"
 
 if [[ $# -ge 2 ]]; then

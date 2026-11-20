@@ -29,7 +29,7 @@ catalog does not have: the filled star, the filled square and the frowning
 `scan-face`. The filter menu's leads and the strip's face focus icon look as
 they do today.
 
-Read [native-app.md](../../../agents/native-app.md) first, in particular "The
+Read [native-app.md](../../../agents/app.md) first, in particular "The
 icons are Lucide SVGs served by one `AssetSource`" and "A canvas paints an
 icon with `paint_svg`".
 

@@ -30,7 +30,7 @@ The status text and the `Sort ▾` / `Filter ▾` buttons with their popovers
 opening above them keep working.
 
 The user confirmed reversing the rule recorded in
-[native-app.md](../../../agents/native-app.md), "The status row stays a plain
+[native-app.md](../../../agents/app.md), "The status row stays a plain
 `div`, not gpui-component's `StatusBar`" (PR #1072), chose the component's
 defaults over keeping today's look, and chose the circle over the top-edge
 bar. This plan rewrites both sections of that guide.
