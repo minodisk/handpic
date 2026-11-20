@@ -17,7 +17,9 @@ Each claim is tagged **Source** (read from the named source on 2026-11-16) or
 here comes from running a packaging tool, `self_update` or an update; no
 packaging or updater code was written. The exceptions are the items tagged
 **Measured**, rewritten by the gpui-packaging plan
-(`../20261117-gpui-packaging/plan.md`) from its `Package` runs.
+(`../20261117-gpui-packaging/plan.md`) from its `Package` runs, and by the
+native-updater plan (`../20261118-native-updater/plan.md`) from its tests
+and its rehearsal on a test feed (the section below).
 
 ## The user's decision (2026-11-16)
 
@@ -119,7 +121,13 @@ not read line by line; the packaging sub-milestone reads them.
 
 - **Source** (docs.rs feature list, 2026-11-16). `self_update` is at 1.3.3
   and has a `signatures` feature depending on `zipsign-api` 0.2.2.
-- **Unverified.** How it signs and verifies, and where the key lives.
+- **Source** (the native-updater plan, `../20261118-native-updater/plan.md`,
+  Steps 2 and 3). zipsign 0.2.2 signs a `.zip` (the signature before its
+  data) and a `.tar.gz` (a gzip member after it) with an ed25519 key, bound
+  to the file's name; `self_update`'s `verifying_keys` checks it after the
+  `SHA256SUMS` digest and before extraction. The verifying key is built into
+  the app (`crates/app/packaging/update.pub`, or the test key of a
+  `HANDPIC_UPDATE_TEST_REPO` build); the private key stays with the user.
 
 ## The decision
 
@@ -226,18 +234,67 @@ The gpui-kit-aligned layout per platform, with the user's answers of
   - No check, or a manual-only check, on a deb install: a deb user would not
     learn of a new version.
 
+## The update flow on a test feed (2026-11-21)
+
+The rehearsal of the rc.1 to rc.2 update, Step 7 of the native-updater plan,
+with the test key instead of the production one. `Package` runs 44769330982
+(`version=2.0.0-rc.1`) and 44769335894 (`version=2.0.0-rc.2`), both with
+`update_test_repo=minodisk/handpic-update-test` and green on the first try,
+were published by `tools/package/test-release.sh` as GitHub prereleases of
+the public scratch repository `minodisk/handpic-update-test`, the feed both
+builds read. A stable build for the same feed (`1.99.0`: the branch's source
+with `set-version.sh 1.99.0` and `HANDPIC_UPDATE_TEST_REPO` set, built
+locally with `cargo build --release --locked`) was not published.
+
+Machine: the only one at hand, a Windows 11 Home 10.0.26200 x64 PC, the
+account a member of Administrators running with its UAC-filtered
+(non-elevated) token, UAC on. Every copy ran with its own `--settings`,
+`--index`, `--log` and `--mcp-port` (the MCP companion seeded on through
+`--import-settings`), so each launch checked, and its state was read from
+the log, the executable's `ProductVersion`, the `HKCU` uninstall entry and
+the MCP `get_status` `update` object. A quit was the window's close
+(`CloseMainWindow`), which runs the same quit handlers as `q`.
+
+| Install      | Check                                                                                           | Result |
+| ------------ | ----------------------------------------------------------------------------------------------- | ------ |
+| Portable ZIP | rc.1 updates to rc.2 while running                                                              | **Measured** (2026-11-21, the PC above). rc.1 unpacked with `Expand-Archive` logged `install Portable`, was offered `2.0.0-rc.2` and installed it 4 s after launch without a click. `handpic.exe` read `2.0.0-rc.2` while rc.1 still ran (`self_replace` left `.handpic.<random>.__relocated__.exe` and `.__selfdelete__.exe` beside it, the latter running as a helper), `get_status` said `ready_to_restart` with target `2.0.0-rc.2`, and the pane's note named `Restart Now`. |
+| Portable ZIP | `Restart Now` relaunches rc.2; the judgments made just before the restart are in the sidecars   | **Pending the user's check**, **Unverified** until then and deferred to the rc dry run: it needs a click on `Restart Now`, which no agent makes. A judgment set over MCP after the install (4 stars, Green) was in `x1.xmp` at once, so the writer works in the copy updated in place, and the drains on a quit were logged on every copy below. |
+| Inno Setup   | rc.1 downloads in the background                                                                | **Measured** (2026-11-21, the PC above). rc.1 installed by its setup (`/VERYSILENT`, exit 0 in 2 s) logged `install Inno`, staged `Handpic-2.0.0-rc.2-windows-x64-setup.exe` in `%LOCALAPPDATA%\dev.minodisk.handpic\update` 2 s after the offer, and `get_status` said `ready_to_restart` ("installs when Handpic quits"). |
+| Inno Setup   | a plain quit installs rc.2 without a prompt                                                     | **Measured** (2026-11-21, the PC above). After the three drain lines the quit logged `update setup … relaunch=false started=Ok(())`; the installed exe and the uninstall entry's `DisplayVersion` read `2.0.0-rc.2` 2 s later, unattended, and no Handpic process ran 15 s after that. The staging folder was gone at the next launch. |
+| Inno Setup   | `Restart Now` relaunches rc.2                                                                   | **Pending the user's check**, **Unverified** until then and deferred to the rc dry run: it needs a click on `Restart Now`, which no agent makes. |
+| Inno Setup   | no SmartScreen or UAC prompt for a standard user                                                | **Measured** for this account's non-elevated token: both silent installs and the upgrade at quit finished unattended in about 2 s (a prompt would have held them), and the staged setup carries no `Zone.Identifier` stream (no Mark of the Web, which SmartScreen keys on). **Unverified**: a standard (non-administrator) account, and someone watching the screen during `Restart Now`; left to the rc dry run. |
+| `.app`       | rc.1 in `/Applications` swaps to rc.2 and reopens; from the DMG or Downloads it fails with the move message; Gatekeeper and the folder-access grants after the swap | **Unverified**: no macOS machine at hand. Deferred to the rc dry run. The swap and its refusals are the engine's tests, the real `codesign` one on the `test` job's macOS leg. |
+| Tarball      | rc.1 from `install.sh` updates to rc.2 and relaunches                                           | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
+| deb          | rc.1 shows the notice and opens the release page; nothing is installed                          | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
+| Any          | a stable build on the same feed is not offered an rc                                            | **Measured** (2026-11-21, the PC above). The local `1.99.0` build as a portable copy, with `v2.0.0-rc.2` on the feed, logged `offered None`, and `get_status` said `idle`, "Handpic is up to date." |
+| Any          | offline at launch leaves the app usable                                                         | **Measured** (2026-11-21, the PC above), offline simulated by `HTTPS_PROXY` / `HTTP_PROXY` naming a closed loopback port (`ureq` reads them). rc.1 portable logged `check failed: TransportError … (os error 10061)` 2 s after launch, `get_status` said `failed` with that message, a pick set over MCP was written to the sidecar, the exe stayed rc.1, and the quit drained as usual. |
+| Any          | a tampered asset installs nothing                                                               | **Measured** (2026-11-21, the PC above). A `v2.0.0-rc.3` prerelease of rc.2's portable ZIP and setup ZIP, renamed and one byte flipped in each, with a recomputed `SHA256SUMS` (so only the signature could catch it), was published for the test and deleted after it. rc.1 portable failed with `SignatureError: no matching key/signature pair found` and its exe stayed byte for byte the same; the Inno install (rc.2 by then) failed with the same error on the setup ZIP, the staging folder was removed, and its quit started no setup. A wrong digest, a missing asset and an unsigned archive are the engine's tests. |
+
 ## Unverified
 
 To be checked in the sub-milestone that needs each one.
 
-- **Unverified.** How the running app knows its install type (portable, Inno
-  Setup, DMG, deb), which "do not switch owners" requires, and, for answer 7,
-  whether a deb install only notifies.
-- **Unverified.** `self_update`'s asset-name and target matching, the
-  binary's path in the archive, and whether the portable archives count as
-  single-binary once the license notices ship beside the binary.
-- **Unverified.** Whether replacing the running exe works on Windows for the
-  portable copy.
+- **Source** (the native-updater plan, Step 3; `crates/engine/src/update.rs`,
+  `detect`). The install type is read from the executable's path: an
+  `unins000.exe` beside it is Inno Setup, else a `licenses/` folder beside it
+  is the portable ZIP; `<x>.app/Contents/MacOS/<exe>` is a `.app`;
+  `/usr/lib/handpic/<exe>` the deb; `<…>/.local/bin/<exe>` the tarball;
+  anything else (a `cargo run` or `target/` binary) unknown. A deb or unknown
+  install stops at `Available` with `Open Release Page` and installs nothing
+  (unit-tested). **Unverified**: on a real deb install (the deb row of the
+  plan's Step 7, deferred to the rc dry run).
+- **Source** (the native-updater plan, Step 3). The asset is matched by its
+  exact name through `asset_matcher` (`Handpic-<version>-windows-x64.zip`,
+  `Handpic-<version>-linux-x64.tar.gz`), which replaces `self_update`'s
+  target matching, with the release pinned by `release_tag("v<version>")`;
+  the executable is `bin_path_in_archive` `Handpic/<exe>` in the ZIP and
+  `Handpic/bin/<exe>` in the tarball. Only the executable is replaced: the
+  ZIP's `licenses/` and the tarball's icon and desktop entry stay as first
+  installed (the plan's deviation 6 from gpui-kit's guide).
+- **Measured** (2026-11-21, the test feed above). Replacing the running exe
+  works on Windows for the portable copy: `self_update` (`self_replace`)
+  installed rc.2 over the running rc.1. **Pending the user's check**: the
+  relaunch by `Restart Now`.
 - **Unverified.** The executable's name in a release (`riffle-native` today
   in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
 - **Measured** (2026-11-17, the gpui-packaging plan). The version source is
@@ -304,21 +361,40 @@ To be checked in the sub-milestone that needs each one.
   installs nothing. **Unverified**: the hosted runner runs elevated, so the
   absence of a UAC prompt for a standard user, at the install and at a
   silent upgrade, is for a real machine (sub-milestone 4's gate).
-- **Unverified.** Whether the setup started at quit outlives the app's
-  process and replaces the exe once it has exited (file locks, Inno's
-  close-applications handling).
-- **Unverified.** How `Restart Now` relaunches the app after a silent setup
-  run.
-- **Unverified.** Whether SmartScreen warns on a setup `.exe` the app
-  downloaded itself.
-- **Unverified.** Where the staged `.app` comes from on macOS: the DMG
-  mounted, or an archive of the `.app` published beside it. The updater
-  sub-milestone chooses, and the packaging adds the asset it needs.
+- **Measured** (the native-updater plan, Step 5, `Package` run 44547625174
+  on `windows-latest`). The setup started at quit gets the exe unlocked by a
+  `[Code]` wait, not the Restart Manager: the app passes `/WAITPID=<its pid>`
+  and `InitializeSetup` waits for that process (at most 60 s) before
+  installing; the upgrade over a stand-in holding the exe open waited for it
+  and exited 0. The app starts the setup detached from an `on_app_quit`
+  handler registered after the judgment and settings drains.
+- **Measured** (the same run). The relaunch after a silent setup run belongs
+  to the setup: `Restart Now` adds `/RELAUNCH`, which turns on a `[Run]`
+  entry starting the installed app; without it (a plain quit, or a setup
+  run by hand) nothing starts. For a portable, tarball or `.app` install
+  `Restart Now` is GPUI's `cx.restart()` after the drains, towards the path
+  read at launch (the bundle for a `.app`).
+- **Measured** (2026-11-21, the test feed above). The setup `.exe` the app
+  downloads carries no Mark of the Web and ran at quit unattended; a
+  standard account is left to the rc dry run.
+- **Source** (the native-updater plan, Steps 2 and 6). The staged `.app`
+  comes from `Handpic-<version>-macos-<arch>.tar.gz`, the ad hoc signed
+  `Handpic.app` alone, zipsign-signed, published beside the DMG; the DMG is
+  for people only. `self_update`'s bundle mode extracts it beside the
+  installed bundle, `codesign --verify --strict` checks it, and the two are
+  swapped by renames.
 - **Unverified.** Whether the `.app` swap works where the app is installed:
   a standard user's `/Applications`, or an app run from the DMG or from
-  Downloads under App Translocation.
+  Downloads under App Translocation (where the engine refuses with the move
+  message, unit-tested). No macOS machine was at hand for the test feed;
+  deferred to the rc dry run.
 - **Unverified.** Whether Gatekeeper quarantines the swapped ad hoc bundle,
   and whether the folder-access grants survive a swap to a bundle with
-  another ad hoc signature.
-- **Unverified.** Which archive formats `zipsign` signs, and what verifies
-  the setup `.exe` and the `.app` download with the project's key.
+  another ad hoc signature. Deferred to the rc dry run with the row above.
+- **Source** (the native-updater plan, Steps 2, 5 and 6). zipsign signs only
+  `.zip` and `.tar.gz`, so the setup `.exe` ships inside a signed
+  `Handpic-<version>-windows-x64-setup.exe.zip`, checked by
+  `self_update::verify_signature`, and the `.app` inside the signed macOS
+  tarball, checked by `self_update`'s bundle mode. The DMG, the setup `.exe`,
+  `install.sh` and the deb are for people and covered by `SHA256SUMS`
+  only.

@@ -242,7 +242,9 @@ updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 those four updater archives in place, also `mise run app:sign`, run only
 with the `update_test_repo` input (`owner/name`), which signs with the test
 key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
-and one `SHA256SUMS`, computed after signing, as workflow artifacts; `crates/app`'s `src/datadir.rs` places
+and one `SHA256SUMS`, computed after signing, as workflow artifacts
+(`test-release.sh` publishes such a test run's artifacts as a release of the
+scratch repository it names, never `minodisk/handpic`); `crates/app`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
 `--index <path>`), its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and an Inno Setup install's update staging at

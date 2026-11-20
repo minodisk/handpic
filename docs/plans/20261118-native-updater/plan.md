@@ -371,7 +371,7 @@ overrides it:
     - The ad hoc signature differs per build. Whether the folder-access
       grants survive the swap is a manual check of Step 7, not a gate here.
 
-- [ ] Step 7: Verify every path on a test feed, record the results and write the user docs
+- [x] Step 7: Verify every path on a test feed, record the results and write the user docs
   - Done when:
     - `tools/package/test-release.sh` publishes the artifacts of a `Package`
       run as a release of a scratch repository (a prerelease when the version

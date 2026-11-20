@@ -39,18 +39,19 @@ if [[ "$(printf '%s' "${repo}" | tr '[:upper:]' '[:lower:]')" == "minodisk/handp
 fi
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-dist="$(mktemp -d)"
-trap 'rm -rf "${dist}"' EXIT
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+dist="${work}/dist"
+mkdir "${dist}"
 
-# Each artifact is downloaded into a folder of its own name.
-gh run download "${run}" --repo minodisk/handpic --dir "${dist}"
+# Each artifact is downloaded into a folder named as the file it holds.
+gh run download "${run}" --repo minodisk/handpic --dir "${work}/artifacts"
 files=()
-for folder in "${dist}"/*/; do
+for folder in "${work}"/artifacts/*/; do
 	for file in "${folder}"*; do
 		mv "${file}" "${dist}/"
 		files+=("$(basename "${file}")")
 	done
-	rmdir "${folder}"
 done
 
 zips=("${dist}"/Handpic-*-windows-x64.zip)
