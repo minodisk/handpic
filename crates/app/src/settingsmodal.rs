@@ -66,7 +66,7 @@ pub fn label_texts(names: &LabelNames) -> [&str; 5] {
     ]
 }
 
-/// The five fields' texts normalized as the backend stores them: trimmed, a
+/// The five fields' texts normalized as the engine stores them: trimmed, a
 /// blank one the English default (`sidecar::label_names_setting`).
 pub fn label_names_of(texts: [&str; 5]) -> LabelNames {
     let value: serde_json::Map<String, serde_json::Value> = LABEL_COLORS
@@ -210,7 +210,7 @@ pub const ALLOW_DESTRUCTIVE_LABEL: &str =
     "Let MCP clients run destructive operations without asking";
 pub const ALLOW_DESTRUCTIVE_NOTE: &str = "When on, an MCP client can move photos to the Trash, redo a move to the Trash and run the folder operations (rewriting or deleting sidecars, sequencing, importing, renaming) once it has shown you the preview, without the app's dialog. When off, those calls open the app's dialog for you to confirm. Delete Permanently always asks you. MCP clients cannot change this setting.";
 
-/// The native app's own keys, which `key_down` takes before the keymap, so a
+/// The app's own keys, which `key_down` takes before the keymap, so a
 /// binding to one would never fire. `escape` cannot be captured (it cancels)
 /// and `ctrl+,` / `meta+,` the keymap refuses as a menu accelerator.
 pub const APP_KEYS: [&str; 3] = ["home", "end", "q"];
@@ -225,7 +225,7 @@ pub enum Edit {
 }
 
 /// Applies `edit` to `keymap`, or gives the message of its refusal, leaving
-/// `keymap` as it was: the backend's, or one of `APP_KEYS` added.
+/// `keymap` as it was: the engine's, or one of `APP_KEYS` added.
 pub fn edit(keymap: &mut Keymap, edit: Edit) -> Result<(), String> {
     match edit {
         Edit::Add(_, key) if APP_KEYS.contains(&key.as_str()) => {
@@ -381,7 +381,7 @@ pub enum Tab {
     Updates,
 }
 
-/// The pages in the Tauri order, less the Debug one, then the native app's
+/// The pages in the Tauri order, less the Debug one, then the app's
 /// own Appearance and Updates.
 pub const TABS: [Tab; 8] = [
     Tab::Sidecar,

@@ -82,19 +82,42 @@
   (its plan Step 3 title and approach, its learnings' Step 3 heading and
   three mentions).
 
+## Step 4: Sweep the prose and the two leftover identifiers
+
+- A scripted first pass over the live files took the exact phrases ("the
+  native app", "Handpic's native app", "the native crate / tests / lock /
+  clippy / checks / workspace / deb", "the backend('s)" not followed by `s` or
+  `-`, "a backend change", and the `todo.md` heading prefixes `Native:`,
+  `Native app:`, `Native app docs:` and `Backend:`, which became `App:`,
+  `App docs:` and `Engine:`). `\s+` in the pattern crosses a plain line break
+  but not a comment prefix (`//!`, `///`, `#`) or a Rust string continuation
+  (`\` + newline), so those splits were left by the pass and fixed by hand
+  from the `git grep -nIwiE 'native|backend'` list.
+- The Step 2 leftover tokens had escaped in three ways the earlier greps could
+  not see: a check name broken across a line (`` `clippy `` / `` native` `` in
+  `docs/agents/app.md`), Windows paths with backslashes
+  (`crates\native\target\debug\handpic.exe` in five `todo.md` checks), and
+  text merged after Step 2 (`todo.md`'s `crates/native/src/main.rs` from the
+  latency A/B, and `mise run native:run` back in two pending checks). All
+  fixed; the `native:run` ones now say `mise run app:dev`.
+- Two `todo.md` items cite another item by its heading
+  (`### Native: real-device checks of the folder tree, ...` and "Native:
+  real-device checks of the f focus mark, ..."); they were updated with the
+  heading prefix. No fragment link anywhere targets a heading that holds
+  `native` or `backend`, so retitling `app.md`'s "Backend" headings broke no
+  link.
+- Left on purpose: plan folder names (`native-*`, `gpui-backend-crate`), the
+  `riffle-native` executable told as history, `self_update`'s github backend,
+  graphics / Wayland / freedesktop backends, OS-native menus and dialogs,
+  `ModalKey::Native`, `decode.rs`'s `native` variable, "Native resolution" in
+  `faces.rs`, the job fixtures of `wait-pr-actionable.test.sh`, "Backend
+  measurement" of the Tauri-era jpeg-view-only learnings, and the
+  `NATIVE_INSTRUCTIONS` constant in `crates/engine/src/mcp.rs` (not one of the
+  two identifiers the plan names, and not a `-w` hit).
+- The MCP tool descriptions in `crates/engine/src/mcp.rs` that said "the native
+  app does not have ..." now say "the app" / "Handpic"; they are sent to the
+  client, not persisted.
+
 ## Deferred issues (todo candidates)
 
-- `mise run app:run` (formerly `native:run`) names no mise task. Basis: Step 2's
-  leftover check (`native:[a-z]`). The pending manual checks in `todo.md` that
-  say "`mise run app:run` or the built binary" / "or a debug build" should say
-  `mise run app:dev`. Files: `todo.md` (the GPUI grayscale and title-bar folder
-  name checks).
-- "the update engine" still names `update.rs` outside the updater plan, which
-  collides with the crate now called `engine`: `CLAUDE.md` ("`src/update.rs`
-  the native app's update engine"), the module docs of
-  `crates/engine/src/update.rs` ("The native app's update engine") and
-  `crates/app/src/update.rs` ("the engine reports"), and `docs/agents/app.md`
-  ("backend's `update.rs` is the engine. The engine reports no phase"). Basis:
-  Step 3's rewording, which the plan scoped to the in-flight updater plan.
-  Step 4's prose sweep ("the backend" → "the engine") should call that module
-  "the updater" there so the two uses do not read as one.
+- None from Step 4.

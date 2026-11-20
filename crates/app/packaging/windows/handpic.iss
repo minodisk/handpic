@@ -1,4 +1,4 @@
-; handpic.iss: the per-user Inno Setup installer of the native app, compiled by
+; handpic.iss: the per-user Inno Setup installer of the app, compiled by
 ; tools/package/windows.sh, which passes these defines:
 ;   AppVersion  the version, tools/package/version.sh's SemVer form
 ;   FileVersion the version's Windows form (x.y.z.0), which Inno cannot

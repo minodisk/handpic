@@ -19,7 +19,7 @@ jobs:
   # GITHUB_TOKEN-authored PRs do not.
   #
   # No job builds or publishes anything: the Tauri build left with the Tauri
-  # app, and releases are suspended until the native release flow lands, so a
+  # app, and releases are suspended until the app's release flow lands, so a
   # merged release PR leaves a draft release with no assets.
   release-please:
     if: github.event_name == 'push'

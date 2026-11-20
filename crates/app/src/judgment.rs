@@ -446,7 +446,7 @@ mod tests {
         }
     }
 
-    // `advance.test.ts`'s `shouldAdvance` cases; Compare is not in the native
+    // `advance.test.ts`'s `shouldAdvance` cases; Compare is not in the
     // app.
 
     #[test]

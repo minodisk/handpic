@@ -209,7 +209,7 @@ impl<T: Pixels> Ring<T> {
         not(test),
         expect(
             dead_code,
-            reason = "the native app has no rename, trash or delete yet; the plans adding them call it"
+            reason = "the app has no rename, trash or delete yet; the plans adding them call it"
         )
     )]
     pub fn forget(&mut self, paths: &[String]) -> Vec<T> {

@@ -12,7 +12,7 @@ use std::{
 
 use handpic_engine::ondemand::EyesJudgment;
 
-/// What `request` hands out: the id the backend's `current` check
+/// What `request` hands out: the id the engine's `current` check
 /// supersedes older requests by, and the generation the answer is settled
 /// against.
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +68,7 @@ impl EyesCache {
     /// dropped, since the file may have changed since, and leaves a judgment
     /// started after the clear in flight. It is kept by path, so an answer
     /// for a file paged away from still saves a judgment when it is shown
-    /// again. `None` (a judgment the backend stopped as superseded) frees the
+    /// again. `None` (a judgment the engine stopped as superseded) frees the
     /// slot without caching anything; `Some(None)` caches unknown eyes.
     pub fn settle(
         &mut self,

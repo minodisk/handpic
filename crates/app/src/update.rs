@@ -1,8 +1,8 @@
 //! The update flow, kept pure: the launch check's throttle, the phases of
 //! one check and the install it leads to, the Updates page's texts and
 //! buttons per install kind, and the state `get_status` reports. The window
-//! runs the backend's `update::check` and `update::install` on a thread of
-//! their own and hands their answers here as `Message`s; the engine reports
+//! runs the engine's `update::check` and `update::install` on a thread of
+//! their own and hands their answers here as `Message`s; the updater reports
 //! no phase itself, so the phases are set around the two calls. An Inno
 //! Setup install's "installed" is its setup staged (`update::stage_setup`),
 //! which the quit runs (`Staged`); a `.app` install's is its bundle swapped.

@@ -1,5 +1,5 @@
 //! The strip's order, a port of `sort.ts`. `Name` compares base names by
-//! `natord`, the native order since port Step 2, not the Tauri plain compare.
+//! `natord`, the app's order since port Step 2, not the Tauri plain compare.
 
 use std::cmp::Ordering;
 

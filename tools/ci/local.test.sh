@@ -156,7 +156,7 @@ expect none "mise.toml" "${every}"
 expect none ".shellcheckrc
 docs/a.md" "${every}"
 
-# --- Windows: the native app's screenshot feature build ----------------------
+# --- Windows: the app's screenshot feature build ----------------------
 uname=MINGW64_NT-10.0-26200
 expect none "crates/app/src/x.rs" "fmt app
 clippy app

@@ -4,7 +4,7 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# version.sh — prints the native app's version, `[package].version` of
+# version.sh — prints the app's version, `[package].version` of
 # crates/app/Cargo.toml (or the version given), in the form a package
 # format takes:
 #

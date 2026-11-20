@@ -50,12 +50,12 @@ the restart cannot be recovered; ask for a reproduction.
   the GPU). A log written by a build before the crate was renamed to
   `handpic-engine` carries the same targets with `backend` in place of
   `engine`.
-- The native crate is bin-only, so its crate name, and with it the `target` and
+- The app crate is bin-only, so its crate name, and with it the `target` and
   `CARGO_CRATE_NAME` the logger's own-lines filter uses, comes from
   `[[bin]].name` (`handpic`), not from the package name (`handpic-app`).
   `handpic` is also a string prefix of `handpic_engine` and `handpic_core`, so
   `logger.rs`'s `is_own` matches the target exactly or as a `handpic::` module
-  path. A plain `starts_with` let the backend's debug lines through under
+  path. A plain `starts_with` let the engine's debug lines through under
   `RUST_LOG=debug`. Renaming the binary changes every target, so recheck that
   filter and its test. Source:
   `docs/plans/_archived/20261118-remove-tauri/learnings.md`, Step 2.
@@ -66,7 +66,7 @@ the restart cannot be recovered; ask for a reproduction.
 
 - `INFO` and above in every build.
 - `RUST_LOG=debug` (or `trace`) adds `handpic`'s lines of that level only, not
-  the backend's or GPUI's.
+  the engine's or GPUI's.
 
 ## Timing lines
 

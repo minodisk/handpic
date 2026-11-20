@@ -307,7 +307,7 @@ pub fn delete(
 /// in `runs` (its id in the summary) and clear the judgments of the RAWs
 /// that lost a sidecar in `index`, so a closed folder does not keep them
 /// until its next open. Does not check for a scan: the caller refuses a
-/// running scan and holds that refusal across the call (the native app's
+/// running scan and holds that refusal across the call (the app's
 /// idle gate), and drains the sidecar writer first, since a judgment still in
 /// its debounce window would mint a sidecar right after the delete.
 pub fn delete_run(

@@ -1,6 +1,6 @@
 //! The folder tree's `Sequence JPEG Timestamps…`, kept pure: the dialog's
 //! text and the flow from the menu item through the dialog to the run's end.
-//! A port of the Tauri app's `sequence.ts`; the window runs the backend's
+//! A port of the Tauri app's `sequence.ts`; the window runs the engine's
 //! `sequence`.
 
 use handpic_engine::sequence::{Failure, Preview, Ran, Row};

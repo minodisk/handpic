@@ -98,7 +98,7 @@ pub enum Event {
     /// not list its files: the scan is over.
     FacesDone {
         scan: u64,
-        #[expect(dead_code, reason = "the backend's `scan faces:` line reports it")]
+        #[expect(dead_code, reason = "the engine's `scan faces:` line reports it")]
         summary: ScanSummary,
     },
     /// The folder watcher saw the folder change; the canonical path.

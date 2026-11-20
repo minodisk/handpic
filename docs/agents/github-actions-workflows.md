@@ -47,7 +47,7 @@ token lacks the `workflow` scope.
 GitHub lists a workflow, and `gh workflow run` accepts it, only once its file
 is on the default branch; after that, `gh workflow run <file> --ref <branch>`
 runs the file as the branch has it. `.github/workflows/package.yml` (the
-native app's `Package` workflow, see
+app's `Package` workflow, see
 [`app.md`](./app.md#the-package-workflow-builds-the-distributables-inferred))
 is `workflow_dispatch` only, so the PR that adds it cannot dispatch it.
 

@@ -14,7 +14,7 @@ and Step 1's [learnings](../plans/20261109-gpui-port/learnings.md).
 
 ### GPUI is the `gpui-pre` snapshot `gpui-kit` pins (Inferred)
 
-The native crate depends on one GUI crate, the `gpui-kit` umbrella crate at
+The app crate depends on one GUI crate, the `gpui-kit` umbrella crate at
 `=0.9.1` (default features `component` and `assets`), as the GPUI Kit guides
 (<https://gpui-kit.com/docs/installation/>) have it. `gpui-kit` 0.9.1 pins
 `gpui-pre` and `gpui-pre-platform` at `=0.3.12`, a snapshot of Zed's GPUI at
@@ -40,7 +40,7 @@ then [native-gpui-kit](../plans/_archived/20261116-native-gpui-kit/plan.md).
 `ttf-parser`), so a `cargo run` debug build renders at a usable speed at the
 cost of a longer cold build.
 
-- Rule: the native crate never picks a GPUI version of its own. An upgrade
+- Rule: the app crate never picks a GPUI version of its own. An upgrade
   is a `gpui-kit` bump (one exact pin) in one deliberate chore PR, which
   checks in the lock diff that `gpui-pre` and gpui-component moved with it,
   and records the API changes met at the bump here. A `gpui-component` bump
@@ -371,7 +371,7 @@ clippy` / `cargo test`; only the Windows leg adds `setup-nasm`'s
 The Windows leg alone also runs `cargo clippy --all-targets --features
 screenshot -- -D warnings`, as do `mise run app:check` and `mise run
 ci:local` (its `clippy app screenshot` check, selected wherever `clippy
-native` is) on a Windows host. Windows is where the `screenshot` tool was
+app` is) on a Windows host. Windows is where the `screenshot` tool was
 checked live, Linux's `render_to_image` is not implemented, and the macOS leg
 already compiles a second variant of the app for its bundle step. The feature
 turns on `test-support` in a direct `gpui-pre-platform` dependency, the same
@@ -427,7 +427,7 @@ succeeds.
   on `gpui-pre`'s `windows-manifest` feature, whose build script already
   embeds `1 RT_MANIFEST`; a second one is a duplicate resource at link time.
 - Rule: the icons live in `crates/app/icons/`, so a change to one selects
-  the native checks in `mise run ci:local` like any change in the crate.
+  the app checks in `mise run ci:local` like any change in the crate.
 
 ### Linux matches the window to its `.desktop` file by `IDENTIFIER` (Inferred)
 
@@ -466,7 +466,7 @@ CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
 executable and the `.icns` present).
 
 - Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`, the
-  one the Tauri app had, which the native app replaced. `datadir.rs`'s
+  one the Tauri app had, which the app replaced. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
 - Rule: the `app` CI job's macOS leg runs `mise run app:bundle:macos
@@ -654,7 +654,7 @@ packages the built `target/release` binary with a script under
   The deb and the tarball need glibc 2.39 or later (Ubuntu 24.04, Debian
   13); an older distribution needs an older build image.
 - Rule: the deb's `Package` is `handpic`. The Tauri v1.10.0 deb was
-  `Package: riffle` (read from `Riffle_1.10.0_amd64.deb`), so the native deb
+  `Package: riffle` (read from `Riffle_1.10.0_amd64.deb`), so the app deb
   does not upgrade it in place; `Conflicts` / `Replaces` against `riffle` is
   left to sub-milestone 4's real-device check.
 - Rule: the one desktop entry is the checked-in
@@ -693,17 +693,17 @@ every CI job) stays without it. An edit under `crates/app`, `crates/core` or
 - Pending manual check: Ctrl+C in the terminal stops watchexec, `cargo` and
   the app, and the window repaints after a restart.
 
-## Backend
+## Engine
 
-### The backend names no event and no `AppHandle` (Inferred)
+### The engine names no event and no `AppHandle` (Inferred)
 
 `handpic-engine` knows no GUI, so it reports through callbacks (it served the
-Tauri app and the native app alike until the Tauri app was removed):
+Tauri app and the app alike until the Tauri app was removed):
 `watch::Watch::spawn` takes `on_changed`, and `watch::set` / `release_under`
 take the `&Watch`; the tree's watcher is
 `treewatch::TreeWatch::spawn(on_changed)`, `TreeWatch::set(dirs)` and
 `treewatch::with_released(&TreeWatch, ..)`. The app owns what a report
-becomes (the native app sends it into the view's event channel). The trash
+becomes (the app sends it into the view's event channel). The trash
 bodies (`trash::trash_listed`, `delete_listed`, `undo_run`, `redo_run`) take
 the `&Runs` and a `progress(done, total)` callback; the app keeps the writer
 flush, the scan guard, the progress report and the log line around them.
@@ -713,21 +713,21 @@ The folder operations' bodies take their state the same way:
 `&Runs`), `datefolder::plan_of` the optional index, and
 `foldersidecars::delete_run` the index and the `&Runs`. None of them checks
 for a scan or drains the sidecar writer: the Tauri app's wrappers flushed the
-writer and held a `Scans` lock across the call, and the native app guards the
+writer and held a `Scans` lock across the call, and the app guards the
 call with its own gate.
 The MCP companion's server (`mcp::Mcp`) takes a `Bridge` built over a send
 callback and returns each switch's `McpState`. The server
 spawns its tasks with a bare `tokio::spawn`, so `Mcp::switch` and `Mcp::stop`
-must run inside a tokio runtime: the native app's `mcp.rs` owns a current-thread
+must run inside a tokio runtime: the app's `mcp.rs` owns a current-thread
 runtime on its one `mcp` thread, which runs the switch, waits for the quit's
 signal and runs the stop. `Mcp::with_port` binds another port than
-`MCP_PORT`, for the native `--mcp-port`.
+`MCP_PORT`, for the app's `--mcp-port`.
 
 The CPU and disk sampler and the AI model's state follow the same seam.
 `perf::Sampler::start(on_sample)` takes an
 `impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
 (stopping needs no callback); the callback returns a `Result` so the warn-once
-on a failed report stays in the backend (`perf sample report failed: ...`,
+on a failed report stays in the engine (`perf sample report failed: ...`,
 target `handpic_engine::perf`). `ai::Ai` is a cloneable `Arc` over the
 status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
 `Ai::new`, so the download thread holds a clone of the `Ai` itself and
@@ -735,37 +735,37 @@ reports progress and the final state through that callback; `switch` also
 returns the state. The `on_state` callback returns nothing because the Tauri
 app always ignored its report errors. The download's and the server's
 `log` lines sit under `handpic_engine::ai` / `handpic_engine::mcp`, so grep
-for the backend target. Source:
+for the engine target. Source:
 `docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
 
 - Rule: never add a GUI crate, an event name or an app handle to
   `crates/engine`; take a callback or the state itself.
-- Rule: a backend body that changes a folder on disk leaves the scan check to
+- Rule: an engine body that changes a folder on disk leaves the scan check to
   its caller and says so in its doc comment; call it only with the caller's
   refusal of a running scan held across the call.
 
-### The backend is compiled twice (Inferred)
+### The engine is compiled twice (Inferred)
 
 `crates/engine` is a member of the root workspace, and `crates/app`, a
 separate workspace with its own `Cargo.lock` and Rust 1.98.1, uses it by path,
-as it does `handpic-core`. A dependency added to the backend also lands in
-`crates/app/Cargo.lock`, and clippy lints the backend only from the root.
+as it does `handpic-core`. A dependency added to the engine also lands in
+`crates/app/Cargo.lock`, and clippy lints the engine only from the root.
 
-- Rule: a backend change needs both workspaces checked. `mise run ci` runs
+- Rule: an engine change needs both workspaces checked. `mise run ci` runs
   only `lint` and `test` of the root workspace, so it never covers
   `crates/app`. The agents run `mise run ci:local` locally
   (`tools/ci/local.sh`), which checks only the changed crates: for a
   `crates/core` or `crates/engine` change, clippy and the tests of that root
-  package plus the native clippy; for a `crates/app` change (the app's
-  identifier, `datadir`, `logger`, `settings` and the rest), the native clippy
+  package plus the app clippy; for a `crates/app` change (the app's
+  identifier, `datadir`, `logger`, `settings` and the rest), the app clippy
   and tests. The PR's `test` and `app` jobs, on all three platforms, run
-  the rest: the root workspace's other crates and the native tests a backend
+  the rest: the root workspace's other crates and the app tests an engine
   change can break. Neither full task is run locally as a gate.
 - Rule: do not cap `ci:local` with `--jobs` and do not reach for the full root
   workspace to be safe. `cargo clippy -p` / `cargo test -p` of `handpic-core`,
   `handpic-engine` or `handpic-cli` compiled 161 / 317 / 169 crates against
   537 for the Tauri app's package, measured while it was in the workspace. The
-  largest check's process-tree peak was 5.5 GB (the native test) and a cold
+  largest check's process-tree peak was 5.5 GB (the app test) and a cold
   `crates/core` change peaked at 3.3 GB, so the earlier out-of-memory kills
   came from the full root workspace, not from `ci:local`. The selected root
   packages go to one `cargo clippy` and one `cargo test` call (a `--package`
@@ -775,7 +775,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   `crates/app` 154 s, `crates/engine` 199 s, `crates/core` 265 s. Source:
   `docs/plans/_archived/20261114-light-local-ci/learnings.md`, Step 1.
 - Rule: `#[cfg(test)]` does not cross a crate boundary. When code moves into the
-  backend, a helper the app's tests still use (for example `Index::row_flags`)
+  engine, a helper the app's tests still use (for example `Index::row_flags`)
   must lose its `#[cfg(test)]` or be copied into the app's test module.
 - Rule: `mise run app:check` runs clippy and tests but does not build
   `handpic.exe`. Run `cargo build` before launching the exe, or you run a
@@ -787,7 +787,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   `~/.cargo/bin` (`PATH="$HOME/.cargo/bin:$PATH" cargo test -p ...`) for a
   direct call; the mise tasks find it on their own. Source:
   `docs/plans/_archived/20261115-native-scrollbars/learnings.md`, Step 1.
-- Rule: the native crate's binary target is `handpic`, not `handpic-app`
+- Rule: the app crate's binary target is `handpic`, not `handpic-app`
   (the package name); run its unit tests with `cargo test --bin handpic` in
   `crates/app`. To get a color's luminance in `crates/app`, call
   `Hsla::to_rgb()` (gpui-pre's `color.rs`) on the `gpui_kit` re-export; the
@@ -801,7 +801,7 @@ as it does `handpic-core`. A dependency added to the backend also lands in
   folder rename's release path (see "A folder rename releases the watches,
   then follows in the tree and reopens").
 
-### The pieces both apps needed live in the backend (Inferred)
+### The pieces both apps needed live in the engine (Inferred)
 
 The folder-open sidecar pass (`sidecar::reconcile_of`, with `SidecarError`
 and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
@@ -809,16 +809,16 @@ and `MAX_SIDECAR_BYTES`), the meta pane's formatting (`exif::Metadata` and
 (`sidecar::label_names_setting` / `label_names_value`), the metadata and
 preview reads (`exif::read_metadata`, `ondemand::read_preview`) and the stored
 `mcpEnabled` value (`mcp::mcp_enabled_setting`) moved out of the Tauri
-app's commands into the backend so the native app could call them. The
-native app's view-only rule is `viewonly.rs`, a port of the Tauri
+app's commands into the engine so the app could call them. The
+app's view-only rule is `viewonly.rs`, a port of the Tauri
 frontend's `viewonly.ts`. The folder tree's listing (`folders::roots(home)`,
 `list(dir)`, `REVEAL_LABEL`, `is_hidden`) moved the same way; the home
 directory is the caller's, and the reveal itself is the app's (GPUI's
 `App::reveal_path`).
 
-### The settings live in the native app's own store, seeded once (Inferred)
+### The settings live in the app's own store, seeded once (Inferred)
 
-`settings.rs` reads the native app's settings store
+`settings.rs` reads the app's settings store
 (`handpic_engine::store`): one SQLite file, one `settings` table of
 `key TEXT PRIMARY KEY` / `value TEXT NOT NULL` (JSON), WAL, the schema
 version in `user_version`. It is `--settings <path>`, else
@@ -826,7 +826,7 @@ version in `user_version`. It is `--settings <path>`, else
 (`datadir::settings_path`), next to where the Tauri app kept its
 `settings.json`. The
 values (`sidecarFormat`, `labelNames`, `shortcuts`, `autoAdvance`,
-`sortOrder`, `filter`, `lastFolder`, `windowBounds`) go through the one `from_values` with the backend's
+`sortOrder`, `filter`, `lastFolder`, `windowBounds`) go through the one `from_values` with the engine's
 rules (`SidecarFormat::from_setting`, `sidecar::label_names_setting`,
 `Keymap::from_overrides`, `autoAdvance` on unless a boolean says off,
 `SortKey::from_setting`, the Tauri `parse_sort_order` with `recommended` read
@@ -878,7 +878,7 @@ barrier gives the drain for free.
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
   test JSON when it needs seeded values, or it opens and seeds the user's real
   store; and `--log` with a file in the test folder, or it appends to the
-  native app's own `Handpic.log`.
+  app's own `Handpic.log`.
 
 ### The folder open reads the sidecars before pass 1 (Measured)
 
@@ -949,7 +949,7 @@ the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
 
 ### The selection is keyed by path and ends every `refilter` (Inferred)
 
-`selection.rs` is `selection.ts` over the native `judgment` types: a
+`selection.rs` is `selection.ts` over the app's `judgment` types: a
 `Selection { selected, anchor }` of listed paths, the current file always a
 member. The view holds one; `set_selection` hands its paths to the strip
 (`Strip::set_selected`, indices through the strip's `index_of`), which paints
@@ -1026,9 +1026,9 @@ keeps a state only when its `enabled` is the switch in force (a late answer
 of an earlier flip is dropped) and hands it with the port to the MCP page,
 which shows the URL read-only and the state (`settingsmodal::mcp_status`:
 stopped, starting, running or the bind error). A bind failure keeps the
-switch and the stored value on, as the backend's rule has it, so the next
+switch and the stored value on, as the engine's rule has it, so the next
 launch tries again; the app runs on. A reply to a call whose server stopped
-finds no waiter in the `Bridge` and is dropped. The backend's `Bridge` send callback
+finds no waiter in the `Bridge` and is dropped. The engine's `Bridge` send callback
 only puts the request into the view's channel as `scan::Event::Mcp`; the
 view's `mcp_request` builds a `companion::View` snapshot, `companion::answer`
 returns the action or the refusal, the view applies it (`focus_on(Move::To(..))`
@@ -1041,30 +1041,30 @@ with the file selected alone for `show_photo` or with
 
 The tool list is the host's. `Mcp::new` lists the seven companion tools with
 the Tauri `INSTRUCTIONS`, which is what the Tauri app served;
-`Mcp::with_all_tools` (the native app's) adds the `native_router` tools
+`Mcp::with_all_tools` (the app's) adds the `app_router` tools
 (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
 `set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
 `set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
 `sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
 `rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`,
-`refit_ranking`) and the native
+`refit_ranking`) and the app's
 instructions, through a `ToolRouter` field the `#[tool_handler(router =
-self.tools)]` handler reads. A tool only the native app answers is a second
-`#[tool_router(router = native_router)]` block, so the seven-tool server
+self.tools)]` handler reads. A tool only the app answers is a second
+`#[tool_router(router = app_router)]` block, so the seven-tool server
 never lists it.
 
 `screenshot` is listed only in a build with `crates/app`'s `screenshot`
 cargo feature, where `mcp.rs` calls `with_screenshot` after `with_all_tools`
 (which replaces the router and would drop it). Without the feature nothing of
-it is compiled in and `tools/list` is the native app's 35 tools. `mcp_request` takes
+it is compiled in and `tools/list` is the app's 35 tools. `mcp_request` takes
 `screenshot` before `companion::answer`, so `READS`, `Busy` and the coverage
 table never see it and it is answered with the settings, a dialog or a rename
-open; the reply goes through the backend's `screenshot_reply`. Run it with
+open; the reply goes through the engine's `screenshot_reply`. Run it with
 `mise run app:dev:screenshot`; a feature build is not the shipped binary,
 so take no timing from it.
 
-The native tools run what their keys run: `key_down` and `mcp_request` both
+The app's tools run what their keys run: `key_down` and `mcp_request` both
 call `perform` with a `companion::Key` (`Key::of_action` names the keymap
 actions; Home and End are `First` and `Last`), so a key and its tool cannot
 drift. `navigate` and `select_all` need a shown photo, `reject_rest` a current
@@ -1086,7 +1086,7 @@ where `filter::anchor_after_filter` puts it. A `set_filter` section given
 replaces its checks, one left out keeps them, and `reset` is the menu's
 `Reset` click first; the `Output` items need the folder's export answer and
 an EXIF label one of the folder's groups (`get_view`'s `filter_offers`).
-`set_sort` refuses `recommended` (`not_in_native`, below) and a view-only
+`set_sort` refuses `recommended` (`not_in_app`, below) and a view-only
 folder, whose Sort menu is disabled; `get_view.sort` there reports `capture`,
 the order in force (`viewonly::sort_for`). `set_panes` goes through
 `change_panels` (the tree's keyboard handed back from a hidden left pane, a
@@ -1100,11 +1100,11 @@ key's hold because its key-up may never arrive, leave a latch on. The pane width
 tool: they are pointer-only geometry, like the window's.
 
 The folder tools act as the tree does. `list_folders` never reaches the view:
-the backend answers it on the blocking pool with `folders::roots`, from the
-home directory the native app gives `Mcp::with_home` (`dirs::home_dir()`, the
+the engine answers it on the blocking pool with `folders::roots`, from the
+home directory the app gives `Mcp::with_home` (`dirs::home_dir()`, the
 tree's), or `folders::list` of one absolute folder (its `raw_count` as
 `photo_count`). `open_folder` takes an absolute path to a folder, checked in
-the backend (a file is refused, not opened by its parent as a drop is: a
+the engine (a file is refused, not opened by its parent as a drop is: a
 client has `list_folders`), and runs `open_from_tree`, so an open is deferred
 while a run is in flight (`deferred_open`, `get_status`'s `opening`) and
 refused with `rename::RENAMING` while that folder is being renamed
@@ -1163,7 +1163,7 @@ each operation's tool and what its dialog says.
 
 `rewrite_sidecars`, `delete_sidecars` and `sequence_timestamps` are the
 folder tree menu's `Rewrite Sidecars from Index…`, `Delete Sidecars…` and
-`Sequence JPEG Timestamps…` on an absolute folder (checked in the backend),
+`Sequence JPEG Timestamps…` on an absolute folder (checked in the engine),
 `Op::Folder(FolderOp, Option<Dialog>)`. They are refused while another
 folder flow (`FolderOps::busy`) or an MCP-confirmed trash run is under way.
 A sidecar start without `confirm` is refused with `HELD_REFUSAL` while the
@@ -1233,7 +1233,7 @@ needs the copies reads `get_view` again, or calls `wait_for_idle` once more,
 before trusting the listing.
 
 `rename_folder` is the tree's inline `Rename…` with the name given: the
-backend checks the folder and the name with `rename::folder_target`
+engine checks the folder and the name with `rename::folder_target`
 (`check_name`, a root, a name already taken), the companion refuses an
 unchanged name (`rename::confirm_name`) and a rename while an import runs
 (`RENAME_REFUSED`). While `mcpAllowDestructive` is on it is an
@@ -1264,7 +1264,7 @@ at once when idle; otherwise the view keeps the call's id in `idle_waiters`
 and answers it from an `observe_self` callback (registered from a task, once
 the entity exists), which runs after every `cx.notify()` and replies to every
 waiter once `Status::idle`, or from a timer at `timeout_ms` with the status as
-it is. The backend caps the wait at 55 s (`IDLE_WAIT_MAX`, 30 s by default)
+it is. The engine caps the wait at 55 s (`IDLE_WAIT_MAX`, 30 s by default)
 and waits `BRIDGE_TIMEOUT` longer than that through `Bridge::call_within`.
 
 The settings tools answer from `Settings` and change it the settings
@@ -1287,7 +1287,7 @@ while the format, after the call's own switch, writes no XMP (the modal hides
 them), `label_names` with `label_language`, a key the keymap does not spell
 as `keys::key_name` names a keystroke (one key after the modifiers in their
 order), and an import root that is not an absolute folder (checked in the
-backend). `set_settings` is refused while a folder operation runs
+engine). `set_settings` is refused while a folder operation runs
 (`FolderOps::busy`), as `key_down` keeps the modal shut then.
 `mcpAllowDestructive` is never set over MCP: `SettingsArgs` has no such field
 (`deny_unknown_fields`), and the companion refuses it should it arrive.
@@ -1303,7 +1303,7 @@ settings closed (an MCP call opened it; `key_down` drops keys then too), or an i
 (`FolderOps::editing`, not `rename_owns_keys`, which also disarms the slow
 click). `get_view` still answers, so `get_photo` and `get_preview`, which
 resolve their path through it, keep working. `get_photo`, `get_preview` and
-`list_folders` never reach the view: the backend reads them on tokio's
+`list_folders` never reach the view: the engine reads them on tokio's
 blocking pool, the photo reads against the index's read-only connection,
 outside `ReadSlots`, as in the Tauri app.
 
@@ -1332,9 +1332,9 @@ test compares with `Keymap::defaults()`; `context_coverage`,
 without its entry; and `OTHER`, the rest. A test asks the companion for every
 tool the table names and fails on `unknown request`.
 
-The features the Tauri app had and the native app does not have yet keep
-their tools (D6), refused with one message, `not_in_native`'s "`<feature>` is
-not implemented in Handpic's native app yet", which a test checks for each:
+The features the Tauri app had and the app does not have yet keep
+their tools (D6), refused with one message, `not_in_app`'s "`<feature>` is
+not implemented in Handpic yet", which a test checks for each:
 compare (`set_view`'s `compare`), the recommended sort (`set_sort`'s
 `recommended`), the Genre filter (`set_filter`'s `genres`), file rename
 (`rename_file`), the personal ranking (`refit_ranking`) and the AI switch
@@ -1544,7 +1544,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   A menu change, and only a menu change, anchors on it while no file is
   current, so `Reset` or unchecking the item lands on the file shown before
   the list emptied, else on its `anchor_after_filter` neighbour, else on the
-  first file. This is a native improvement: the Tauri `refilter` landed on the
+  first file. This is an improvement of the app: the Tauri `refilter` landed on the
   first file there.
 
 ### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
@@ -1664,7 +1664,7 @@ dimmed, shows capture order and keeps the stored key.
 
 - Rule: every filter section starts with a `Row::Heading` right after its
   separator (no hover, no click handler, no check slot); `Reset` sits above
-  the first separator without one. Four headings are the native menu's own,
+  the first separator without one. Four headings are the app menu's own,
   as the Tauri `#filter-menu` had none there: `Flag`, `Rating`,
   `Color label` and `Orientation`. The sort menu has no heading.
 - Rule: the leads are drawn per kind in `main.rs`'s `menu_row`: the flags
@@ -1817,7 +1817,7 @@ file while the settings are shown. While closed the view's `render` returns
 `Empty`. Under the title row (the `×`) and over the status line, the body is
 one gpui-component `setting::Settings` element, rebuilt on every render,
 with eight `SettingPage`s, Sidecar, Culling, Keyboard Shortcuts, Cache,
-Import and MCP (no Debug), then Appearance and Updates, the native app's own, in a `relative` `flex_1` slot holding an
+Import and MCP (no Debug), then Appearance and Updates, the app's own, in a `relative` `flex_1` slot holding an
 `absolute` `inset_0` `div`, since `Settings` is an `h_resizable` that fills
 its parent. Every open starts on Sidecar and `open` focuses the box's own
 handle with `window.focus`.
@@ -2048,7 +2048,7 @@ not open.
 ### The update flow runs on threads of its own and restarts through GPUI (Measured)
 
 `update.rs` is the pure model, as `cache.rs` is to the Cache page; the
-backend's `update.rs` is the engine. The engine reports no phase, since
+engine's `update.rs` is the updater. The updater reports no phase, since
 `self_update`'s `update()` downloads, verifies and installs in one blocking
 call, so `Updates` sets the phases (`Idle`, `Checking`, `Available`,
 `Downloading`, `Verifying`, `ReadyToRestart`, `Failed`, gpui-kit's guide's)
@@ -2081,7 +2081,7 @@ call.
   way and a `.app` install its whole bundle swapped (both below). Every other
   kind, the deb and an unknown copy (a `cargo run`, a `target/` binary),
   stops at `Available` with `Open Release Page` (`cx.open_url`).
-- Rule: the Inno Setup install's setup. The backend's `stage_setup`
+- Rule: the Inno Setup install's setup. The engine's `stage_setup`
   downloads `Handpic-<version>-windows-x64-setup.exe.zip` of the pinned
   release into `datadir::update_staging` (`update` in the `<IDENTIFIER>`
   folder under the cache dir, emptied first), checks it against
@@ -2097,7 +2097,7 @@ call.
   setup replaces it. The staging folder of an Inno Setup install is removed
   at launch (a failure, such as the relaunching setup still running from it,
   is logged and left to the next launch).
-- Rule: the `.app` install's bundle. The backend's `install` takes the
+- Rule: the `.app` install's bundle. The engine's `install` takes the
   bundle from the executable's path (`app_bundle`, the `<x>.app` of
   `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
   mode (`bundle_path_in_archive("Handpic.app")`, `bundle_install_path`, no
@@ -2118,7 +2118,7 @@ call.
   translocation check (only on its default path) does not run; hence the
   engine's.
 - Rule: the timeouts. The check's requests are bounded by `CHECK_TIMEOUT`
-  (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the backend's: a
+  (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the engine's: a
   stalled connection fails into `Failed` rather than holding `Checking` and
   so every later check. `ureq`'s per-call timeout is global, the body's read
   included, hence the long one for the download.
@@ -2146,9 +2146,9 @@ call.
 ### The keymap is edited in the modal and replaced whole (Inferred)
 
 The Keyboard Shortcuts page groups `Keymap::bindings()` by the area an action
-acts on, the native page's own grouping (the backend's `DEFAULTS` order is
+acts on, the app page's own grouping (the engine's `DEFAULTS` order is
 unchanged): `settingsmodal::shortcut_group` gives each action one
-`ShortcutGroup`, an action it does not know (one the backend gained later)
+`ShortcutGroup`, an action it does not know (one the engine gained later)
 falling back to `General` so no row leaves the page, and the page draws one
 `SettingGroup` titled `ShortcutGroup::title` per `SHORTCUT_GROUPS` entry, in
 that order (`Filmstrip`, `Judgment`, `Preview`, `Panes`, `General`), each
@@ -2172,7 +2172,7 @@ sentence and the status line's refusals are text and keep the keymap's
 spelling (`settingsmodal::display_key`), so the two spellings differ. The view
 edits its own copy of the keymap, read from the window on every open, through
 `settingsmodal::edit` (`Keymap::add` / `remove` / `reset` / `reset_all`); a
-refusal shows the backend's message on the status line and leaves the copy
+refusal shows the engine's message on the status line and leaves the copy
 as it was, a success emits `Change::Keymap`, on which the window replaces
 `settings.keymap` and `bindings` (`Bindings::new`) and writes
 `Keymap::overrides()` under `shortcuts`, deleting the key when there are none
@@ -2202,7 +2202,7 @@ as it was, a success emits `Change::Keymap`, on which the window replaces
 - Rule: `settingsmodal::APP_KEYS` (`home`, `end`, `q`) are refused with
   `"<key>" is taken by this app`: `key_down` takes them before the keymap, so
   a binding would never fire. `escape` cannot be captured (it cancels) and
-  `ctrl+,` / `meta+,` the backend refuses as a menu accelerator. The folder
+  `ctrl+,` / `meta+,` the engine refuses as a menu accelerator. The folder
   tree's keys (Up / Down, Home / End, Enter, Space, Escape, type-ahead) are not
   refused: they are taken only while the tree has the keyboard, when the
   keymap's photo actions are swallowed anyway (`treekeys.rs`).
@@ -2224,7 +2224,7 @@ thread, and does nothing when a later click superseded it, so back-to-back
 switches end persisted as the radio shows (the Tauri `AppSwitchLock` got the
 same by re-checking the current format inside the lock). Otherwise it drains the judgment stores
 (`judgment::Queue::drain`: a store queued before the switch carries the old
-format and must reach the writer before its flush) and runs the backend's
+format and must reach the writer before its flush) and runs the engine's
 `sidecar::switch_to`: the writer's flush (`sidecar::DRAIN_TIMEOUT`),
 `sidecarFormat` persisted through `Settings::writes`, `Index::reset_sidecars`.
 The Tauri `switch_format` called the same `switch_to` after its own state
@@ -2256,14 +2256,14 @@ folder is not re-listed.
 
 ### The Import page stores a root and a valid pattern, nothing reads them yet (Inferred)
 
-`Settings` reads `importRoot` and `importPattern` with the backend's
+`Settings` reads `importRoot` and `importPattern` with the engine's
 `import::root_setting` / `pattern_setting` (an invalid stored pattern reads as
 `%Y/%F`). The Import page shows the root in a read-only field with `Choose…`
 (one `InputGroup`, see "The settings modal is its own entity"), the
 `importsettings.ts` texts (`settingsmodal::IMPORT_NOTE`, `root_note`,
 `IMPORT_PATTERN_EXAMPLES`, `IMPORT_SPECIFIERS`), the pattern in a
 `Input` field and the example line, `import::today_example` (the
-native crate has no `chrono`), recomputed on the field's every
+app crate has no `chrono`), recomputed on the field's every
 `InputEvent::Change` (and after an example button's `set_value`), so with no
 debounce; a refusal shows in the error color. A
 commit (Enter, blur, Escape then close) or an example button goes through
@@ -2282,7 +2282,7 @@ invalid one leaves the stored one and shows its reason.
   check is pending in `../plans/20261113-gpui-settings/learnings.md`.
   `Import…` itself is port Step 8's.
 
-### The native app's index (Inferred)
+### The app's index (Inferred)
 
 The index lives at `<dirs::cache_dir()>/dev.minodisk.handpic/index.sqlite`;
 `--index <path>` overrides it. The folder is named after the Handpic
@@ -2296,7 +2296,7 @@ An index an earlier build kept under another folder is not picked up; pass
 - Rule: `reconcile` drops every row of the folder it was not given, so it
   always gets the whole listing; `--size` / `--max` narrow only what is shown.
 - Rule: on Windows `canonicalize` gives `\\?\D:\...`, and every index key and
-  listed path in the native app carries that prefix, as in the Tauri app. Key
+  listed path in the app carries that prefix, as in the Tauri app. Key
   anything compared with the index or the scan's `ready` paths (strip cells,
   thumbnails, the watcher's owner string) on `FileStat.path.to_string_lossy()`
   or the canonical `PathBuf`, never on a path rebuilt from the user's argument.
@@ -2490,9 +2490,9 @@ non-empty batch's file names go to the log as `scan faces first:`.
   waiting for its end keeps a burst of changes from restarting it over and
   over.
 
-### The backend logs through `log`, printed by `logger.rs` (Hit)
+### The engine logs through `log`, printed by `logger.rs` (Hit)
 
-Without a logger the backend's `scan extract` lines went nowhere. `logger.rs`
+Without a logger the engine's `scan extract` lines went nowhere. `logger.rs`
 prints `[target][LEVEL] message` to stderr at `Info`, which also shows GPUI's
 own lines (the UI font, the GPU, and an `ERROR` for the missing DXGI debug
 interface on a machine without the Graphics Tools, which is harmless).
@@ -2501,18 +2501,18 @@ as `key: <name> action=…` for every keystroke, and not GPUI's.
 
 `logger.rs` also writes each line, as
 `[YYYY-MM-DD][HH:MM:SS][target][LEVEL] message` in UTC, to a `Handpic.log`
-under the native app's own folder, or to `--log <path>` (see
+under the app's own folder, or to `--log <path>` (see
 `app-log.md`'s "Size and rotation"), with one `write` per line on a
 `Mutex<File>` opened for append and the size kept in memory; past 1 MB it
 starts anew as the Tauri app's did: `File::create` (truncate) and a replaced
 handle, never `set_len` or a remove on the open file, because on Windows a
 file open for append cannot be truncated by `set_len` and a remove while the
 handle is open can leave the name pending deletion. The timestamp is a
-hand-written civil-from-days, not `chrono` / `time`, so the native lock does not
+hand-written civil-from-days, not `chrono` / `time`, so the app lock does not
 grow (turning on the features a direct dependency needs could pull further
 crates in). `Handpic::start` destructures `Args` exhaustively, so a new flag
 needs a `name: _` there too. `main` installs it once the arguments
-are parsed and the backend's panic hook right after it. The `page` / `zoom`
+are parsed and the engine's panic hook right after it. The `page` / `zoom`
 timing lines stay `println!` to stdout.
 
 ## GPUI
@@ -2539,7 +2539,7 @@ GPU.
 A large downscale (a RAF fit to a 1600 px window) may alias. Not settled: one
 captured 1:1 crop of a 4416x2944 RAF fit view, a clapboard wall without fine
 repeating texture, shows no moire, but no comparison with the Tauri app or a
-hard-case image has been made. Three native-side RAF frames showed no moire;
+hard-case image has been made. Three app-side RAF frames showed no moire;
 the comparison with the Tauri app was left pending (see the pending manual check in
 the gpui-port plan's `learnings.md`).
 
@@ -2973,7 +2973,7 @@ its action, built at startup and again on every Keyboard Shortcuts edit
 (`self.bindings` replaced, the lookup still one `HashMap` read). The window's handler, past the tree's gate while
 the tree has the keyboard ("The tree takes the keyboard through one flag in
 the view"), takes `home`, `end` and `q`
-literally first (the native app's own keys, bound to no action), then the
+literally first (the app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
 `judgment::Command::from_action`, `undo` / `redo` to `history::Undo`,
@@ -3101,7 +3101,7 @@ auto-repeated press calls no `cx.notify()`.
 ### The performance overlay is a band painted last in the preview canvas (Inferred)
 
 `d` (the keymap's `performance`) toggles `perfgraph.rs`'s `Overlay`. Showing
-it starts recording in `perf.rs`'s `Perf`, the backend's `perf::Sampler`,
+it starts recording in `perf.rs`'s `Perf`, the engine's `perf::Sampler`,
 whose thread only sends `Event::Perf` into the view's one channel (the
 sample is stamped with `Instant::now()` when the view takes it, as the Tauri
 listener stamped `performance.now()`), and a 500 ms `cx.notify()` loop held as
@@ -3114,7 +3114,7 @@ neither view and takes no input.
 
 A switch's latency point is completed in the same `cx.defer` as the `page`
 line, from the same `timing::Stages`, its value `keypress_to_pixels` and its
-bar the eight native stages stacked (they do not sum to the value, see
+bar the eight `page` stages stacked (they do not sum to the value, see
 "`keypressToPixels` differs from the Tauri app's"). A page no key or strip
 click turned (an open, a refilter, a re-listing) starts at `switched`, the
 time `request` was last called, and is built only while the overlay is on;
@@ -3179,7 +3179,7 @@ choosing the circle.
   by passing its `(done, total)` as `shown`'s `folder_op` argument, `None`
   today, from the state its own progress messages update.
 - The trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress
-  callback in the backend (`trash::undo_run`, `foldersidecars`), so the
+  callback in the engine (`trash::undo_run`, `foldersidecars`), so the
   circle shows nothing for them. A new operation needs a `(done, total)`
   callback before it can feed it.
 
@@ -3543,7 +3543,7 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
 The root `div` of the window's `render` takes the drop
 (`on_drop::<ExternalPaths>`, `drop_paths`), a port of the Tauri
 `tauri://drag-drop` listener and `dropped_dir`, whose pure rules are in
-`dropped.rs` (copied, since the native crate did not depend on the Tauri
+`dropped.rs` (copied, since the app crate did not depend on the Tauri
 crate). One dropped folder opens through `open(path, None, None)`, as
 a click in the tree does; one dropped file, of any kind, opens its parent
 folder, the file not selected; no path, several paths, or a path that is
@@ -3706,11 +3706,11 @@ strip needed one because `uniform_list` is vertical only.
   `folder_counts` table alone, never `files`) on `background_spawn` under
   `index::lock` of the reader, never touching a folder on disk, and replace
   the tree's map whole. They are read at startup and after `folder_renamed` /
-  `date_folder_ran`, whose backend calls moved the rows (a rename's) or wrote
+  `date_folder_ran`, whose engine calls moved the rows (a rename's) or wrote
   them (a split's date folders, not listed yet); a write does not re-read,
   since a listed node shows its own count. The `count_reads` counter drops an
   answer older than the latest read.
-- Rule: the backend keeps the `folder_counts` rows in step with a move, in the
+- Rule: the engine keeps the `folder_counts` rows in step with a move, in the
   same call that moves the index rows. `rename::rename_folder` chains
   `Index::rename_folder_counts(old, new)` (`rename_dir`'s delete-under-`new`
   then `substr` update, on this table alone) after `rename_dir` under the same
@@ -3971,11 +3971,11 @@ answered); `add_roots` skips the roots already shown.
   ~500 ms after a change once expanded again), and renaming the folder's
   parent after the last collapse succeeded, so the handle was released. The
   `configure` that queued behind `Unwatch` (`shared-crates.md`) does not stall
-  here. `TreeWatch` is a backend test, which cannot run from the native
+  here. `TreeWatch` is an engine test, which cannot run from the app
   workspace (a path dependency with dev-dependencies is not testable there),
   hence the throwaway.
 - Rule: on Windows a watch pins its folder's ancestors against a rename;
-  the folder rename and the date split go through the backend's
+  the folder rename and the date split go through the engine's
   `rename::rename_folder` / `datefolder::split_folder`, which call
   `with_released` (see "A folder rename releases the watches, then follows in
   the tree and reopens").
@@ -4209,7 +4209,7 @@ what a key does (`key`); the focus itself is GPUI's.
 
 ### A trash or delete goes through the gate, and nothing lists under it (Inferred)
 
-The native app has no `Scans` lock; one view thread decides when a listing
+The app has no `Scans` lock; one view thread decides when a listing
 starts, so the guard is `idle::IdleGate` plus `resync.rs`. A confirmed run
 asks the gate with "busy" being `Resync::busy` (a listing or its scan under
 way) or a run in flight: idle, it runs at once on `background_spawn`
@@ -4260,7 +4260,7 @@ leaves it there.
   listing or scan is under way and drained at `finished`, but it never
   cancels the scan (`cancels_scan` is false for those labels). The gate's
   slot is the `Held` enum (`Run`, `Undo`, `Redo`) in `main.rs`.
-- Rule: the entry stays on its history until the backend answers
+- Rule: the entry stays on its history until the engine answers
   (`trash_step` names the one out, and every undo or redo key does nothing
   meanwhile); a drained step runs only while its entry is still on top
   (`Undo::on_top`), and entries are removed by id (`remove_trash`), not
@@ -4275,7 +4275,7 @@ leaves it there.
   them, and a tree open meanwhile waits in `deferred_open`.
 - Rule: when the open folder is one of the run's `dirs` (`opens_target`),
   the restored files directly in it (`restored_into`, compared through
-  `context::shown_path` as the backend spells them canonically) join `all` at
+  `context::shown_path` as the engine spells them canonically) join `all` at
   once and `refilter` runs, so a second undo already reaches their
   judgments, and the folder is re-listed with the current file and the
   selection kept. Otherwise only a change seen meanwhile re-lists.
@@ -4387,10 +4387,10 @@ the backdrop's condition and the gate's `Held` variant.
 ### A folder rename releases the watches, then follows in the tree and reopens (Measured)
 
 `Rename by Capture Date…` (`datefolder.rs`, run from `folderops.rs`) renames
-a folder to its one capture date through the backend's `rename_folder`, or
+a folder to its one capture date through the engine's `rename_folder`, or
 splits it into one sibling folder per date through `split_folder`, both on
 `background_spawn` with the view's `Watch`, `TreeWatch`, write index and
-`Runs` in a `rename::Context`. The backend releases the open folder's watcher
+`Runs` in a `rename::Context`. The engine releases the open folder's watcher
 (`watch::release_under`, whose `settle` waits for notify's server to close the
 handle) and the tree watches on the folder and under it (`with_released`,
 holding the `TreeWatch` lock across the move) around the disk work, and puts
@@ -4406,7 +4406,7 @@ the watcher back when the rename fails or the split leaves the folder.
   about 0.5 s.
 - Measured (a PowerShell check on Windows 11, NTFS): any open handle to a
   file inside a folder refuses the folder's rename, `FILE_SHARE_DELETE` or
-  not. The native app's reads inside the open folder (the preview, a
+  not. The app's reads inside the open folder (the preview, a
   prefetch, the on-demand faces and eyes, the 1:1 crop) open, read and close
   the file, with no memory map, and the scan is refused before the run by
   the scan rule below, so the window is a read in flight at the moment of
@@ -4423,7 +4423,7 @@ the watcher back when the rename fails or the split leaves the folder.
   everything under it with their state, the tree's open row and cursor
   follow (`tree::rebase` over the tree's spelling), the trash runs of both
   histories follow (`Undo::map_trash_dirs` over the canonical paths, which is
-  how a run's `dirs` and `Handpic::dir` are spelled; the backend's
+  how a run's `dirs` and `Handpic::dir` are spelled; the engine's
   `Runs::rename_dir` already moved the recorded runs), and the tree's watched
   set is handed over afresh. When the open folder is the renamed one or under
   it, it is reopened under the new path as a tree click opens it; the
@@ -4435,7 +4435,7 @@ the watcher back when the rename fails or the split leaves the folder.
 - Rule: a split re-lists the parent in the tree (`tree_refresh`, which also
   hands the watched set over again, since the split released the tree
   watches under the folder). When the split folder was the open one it is
-  re-listed if it remains (its watcher put back by the backend), else the
+  re-listed if it remains (its watcher put back by the engine), else the
   first date folder opens; a folder the tree asked for during the run opens
   instead. A file that failed to move goes to the notes as `<name>: could
   not move: <message>`.
@@ -4486,7 +4486,7 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   on the pending row discards it; an import under way refuses it, when
   confirmed and again when it drains.
 - Rule: the run is the date rename's: in flight with `Resync::hold`, the
-  stores and the writer drained, the backend's `rename_folder` with the
+  stores and the writer drained, the engine's `rename_folder` with the
   canonical path computed before and after, then `folder_renamed`; a refusal
   (an invalid name, an existing entry) goes to the status. Until it settles
   the folder and everything under it is refused for an open from the tree
@@ -4612,7 +4612,7 @@ pager's latency.
   orient, prefetch, the 1:1 view), the thumbnails (their read, decode and the
   scan that makes them), or background work that runs while paging (scan
   passes, watchers, folder reads on the open). Dialogs, context menus, file
-  operations, the settings UI, code moves into the backend and fixes off the
+  operations, the settings UI, code moves into the engine and fixes off the
   page path need no A/B. When in doubt, the plan says which side it is on and
   why.
 

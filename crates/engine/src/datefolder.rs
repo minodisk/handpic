@@ -363,7 +363,7 @@ pub enum Ran {
 
 /// Split the canonical `dir` (spelled `caller` by the caller) along `plan`.
 /// Does not check for a scan: the caller refuses a running scan and holds
-/// that refusal across the call (the native app's idle gate), and drains the
+/// that refusal across the call (the app's idle gate), and drains the
 /// sidecar writer first, so a sidecar a pending judgment has just written
 /// moves too.
 /// The open folder's watcher and the tree watches on `dir` and under it are

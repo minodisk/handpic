@@ -17,7 +17,7 @@ pub enum Decision {
 }
 
 /// The decision a key makes on a live edit: Enter confirms, Escape cancels,
-/// and every other key (`None`) is the input's own. The native editor takes
+/// and every other key (`None`) is the input's own. The GPUI editor takes
 /// Enter (`PressEnter`, or the lost focus) and Escape (a key listener over
 /// the input) in `folderops.rs`, so this stays a model of that rule.
 #[cfg(test)]

@@ -71,7 +71,7 @@ pub struct Batch {
     pub judged: Vec<Judged>,
 }
 
-/// One run to the Trash, undone by restoring it: the backend's `run_id`,
+/// One run to the Trash, undone by restoring it: the engine's `run_id`,
 /// the RAWs (or JPEGs, or the sidecars of a `Delete Sidecars…` run) it moved,
 /// what they were, and the folders it ran in. `id` names the entry, as a
 /// batch's does.
@@ -91,7 +91,7 @@ pub enum Entry {
     Trash(TrashEntry),
 }
 
-/// The redo entry of the undone run `entry`: the backend keeps only the
+/// The redo entry of the undone run `entry`: the engine keeps only the
 /// files that came back, so it counts those alone (the RAWs, or the sidecars
 /// of a sidecar run), and there is nothing to redo when none came back.
 pub fn undone_trash(entry: &TrashEntry, restored: &Restored) -> Option<TrashEntry> {
