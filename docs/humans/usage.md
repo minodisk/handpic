@@ -14,7 +14,7 @@ pages through their embedded previews, rotated by each file's Orientation. With 
 viewer shows a prompt in its center; click it to open the folder picker.
 The settings open with `CmdOrCtrl+,` or the gear at the right end of the
 title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
-`Cache`, `Import`, `MCP`, `Appearance`) with a search field; `Escape` or its
+`Cache`, `Import`, `MCP`, `Appearance`, `Updates`) with a search field; `Escape` or its
 `×` closes it. `q` quits.
 
 - **Folders**: the left pane is a folder tree rooted at the home folder and
@@ -1053,8 +1053,8 @@ above. Two examples:
 
 ## Installing
 
-Packaged builds of the current app are not released yet, and it has no
-updater yet. Until they come, build it from source as
+Packaged builds of the current app are not released yet. Until they come,
+build it from source as
 [CONTRIBUTING.md](../../CONTRIBUTING.md) describes. The packages on the
 [Releases page](https://github.com/minodisk/handpic/releases) (up to 1.10.0,
 when Handpic was still called Riffle) are of the earlier app this one
@@ -1077,3 +1077,54 @@ What a new install picks up from an earlier one:
 - **The folder index**: it is a cache, kept in `index.sqlite` under
   `dev.minodisk.handpic` in the OS's cache folder, and a new install builds
   it again as folders are opened.
+
+## Updating
+
+A packaged copy of Handpic updates itself from the project's releases on
+GitHub (none is published yet, see above). A copy built from source is not
+updated: it only says when a newer version exists.
+
+- **When it checks**: at launch, at most once an hour (the time of the last
+  check is kept with the settings), and whenever you press
+  `Check for Updates` on the settings' `Updates` page. The page shows the
+  running version, how this copy was installed, and where the update stands:
+  checking, downloading with its percentage, verifying, ready to restart, or
+  failed with the reason. A failed check or download leaves Handpic as it
+  was; press `Check for Updates` to try again.
+- **Without asking**: when a newer version is offered, Handpic downloads,
+  verifies and installs it on its own, then waits for a restart. The pane's
+  notes and the `Updates` page say so, and `Restart Now` on that page
+  restarts into the new version. Nothing restarts by itself, and a restart
+  quits as any quit does, so every judgment is in its sidecar before the
+  new version starts.
+- **By how it was installed**:
+  - **Windows, the portable ZIP**: `handpic.exe` in its folder is replaced
+    while Handpic runs, and `Restart Now` starts the new one. Only the
+    executable is replaced; the `licenses` folder stays as you unpacked it.
+  - **Windows, the installer**: the new version's setup is downloaded in the
+    background and runs silently when Handpic quits, for your user only and
+    without an administrator prompt. `Restart Now` quits, lets it install and
+    starts the new version; a plain quit installs it and starts nothing.
+  - **macOS, `Handpic.app`**: the whole app is replaced, never a file inside
+    it. The new app is unpacked next to the old one and its signature
+    checked before the two are swapped, and `Restart Now` opens it. This
+    needs `Handpic.app` in a folder you can write to, such as
+    `/Applications`: opened from the disk image, or straight from Downloads,
+    the update fails with a message to move it to `/Applications`.
+  - **Linux, the `.tar.gz` installed with `install.sh`**:
+    `~/.local/bin/handpic` is replaced, as for the portable ZIP; the icon
+    and the desktop entry stay as installed.
+  - **Linux, the `.deb`**: nothing is installed. The `Updates` page says
+    which version is available, and `Open Release Page` opens its release,
+    whose `.deb` you install as the first one
+    (`sudo apt install ./handpic_<version>_amd64.deb`).
+- **Verification**: every download Handpic installs is checked against the
+  release's `SHA256SUMS` and against a signature made with the project's own
+  key, whose public half is built into Handpic. A download failing either
+  check is not installed. Handpic is not signed by Apple or Microsoft, so
+  this key is what shows that an update comes from the project.
+- **Prereleases**: a version with a prerelease part, such as `2.0.0-rc.1`,
+  is offered only to a copy that is a prerelease itself. A prerelease copy is
+  offered every newer version, later prereleases and the final release alike,
+  and once it has updated to a final release it gets final releases only. A
+  copy of a final release is never offered a prerelease.

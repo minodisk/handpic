@@ -338,6 +338,80 @@
   notarized" replacement is the ad hoc `codesign --verify --strict` plus the
   zipsign key (the plan's deviation 2). No new deviation.
 
+## Step 7: the test feed, the results and the user docs
+
+- The scratch repository is `minodisk/handpic-update-test`, created public
+  with only a README (`gh repo create --public --add-readme`) on the user's
+  approval; a tag needs a commit, so an empty repository would not take a
+  release. Nothing was published to `minodisk/handpic`, and
+  `test-release.sh` refuses it (any letter case).
+- `gh run download` puts each artifact in a folder named as the file it
+  holds, so moving the files up into the same folder failed on the first
+  run (`mv: cannot overwrite directory … with non-directory`); the script
+  now downloads into `artifacts/` and gathers into `dist/`.
+- `Package` runs 44769330982 (rc.1) and 44769335894 (rc.2) on the branch
+  were green on the first try; the `hdiutil` "No space left on device" flake
+  did not recur. rc.2 finished first, the `macos-15-intel` leg of rc.1
+  queued longest, as in Step 1.
+- The stable build of the "Any" row was a local release build (`1.99.0`,
+  `set-version.sh` on a `git archive` export under
+  `D:\handpic-update-e2e\src`, `HANDPIC_UPDATE_TEST_REPO` set), 6 minutes
+  with `-j 12`, rather than a third `Package` run; the user's instruction
+  named two runs.
+- Every test copy ran with its own `--settings`, `--index`, `--log` and
+  `--mcp-port`, seeded through `--import-settings` with
+  `{"mcpEnabled": true}`, so each launch checked (no `updateCheckedAt`) and
+  `get_status`'s `update` object could be read over HTTP. A quit was
+  `Process.CloseMainWindow` on the copy's own PID (`on_window_closed` quits,
+  and the drains logged as for `q`); killing by image name was refused by the
+  harness, rightly, as the user may run their own Handpic.
+- Offline was simulated with `HTTPS_PROXY=http://127.0.0.1:9`: `ureq` 3's
+  default config reads the proxy variables (`Proxy::try_from_env`), so the
+  check failed fast with `os error 10061`. A real network cut was not tried.
+- The tampered-asset row used a short-lived `v2.0.0-rc.3` prerelease: rc.2's
+  two Windows archives renamed to rc.3 and one byte flipped in each, with a
+  recomputed `SHA256SUMS` in the CI's two-space format (`sha256sum` in Git
+  Bash writes ` *name`, rewritten before the upload). Both failed on the
+  zipsign signature and changed nothing; the release was deleted with
+  `--cleanup-tag` before rc.1 was published, so later checks saw rc.2 as the
+  newest.
+- `self_update` on Windows leaves `.handpic.<random>.__relocated__.exe` and
+  `.__selfdelete__.exe` beside the portable exe while the old process runs,
+  the latter a running helper that removes them after the exit. They were
+  gone after `Restart Now` (the user's check below).
+- The setup runs as a downgrade too: rc.1's setup over the rc.2 install
+  exited 0 and left rc.1, which is how the Inno `Restart Now` check was set
+  up again after the plain-quit row.
+- Tripped up: piping the MCP client's output through a second Python in Git
+  Bash garbled the Japanese OS error (the server's bytes were valid UTF-8);
+  read JSON from a file instead.
+- Against gpui-kit's guide (<https://gpui-kit.com/docs/auto-update/>), its
+  "Test the release path" section, beyond the plan's six deviations:
+  - It asks for tests "on clean machines or VMs for every supported OS".
+    This rehearsal ran on the developer's Windows PC only; macOS and Linux
+    and clean machines are left to the rc dry run.
+  - Its matrix rows "a release published mid-install", "interrupted install,
+    failed relaunch, or downgrade" (a recovery path restoring a launchable
+    version) were not exercised. The engine does not claim a rollback beyond
+    what `self_update` does (the bundle mode's restore of the old `.app`);
+    no retained known-good version exists for the portable or Inno paths.
+  - Its "read-only destinations, file locks" row is covered for the `.app`
+    by the engine's tests and for the Inno setup by the `/WAITPID` check in
+    `Package`, not by a hands-on run here.
+
+- The user's `Restart Now` runs (see the Step 7 pending manual check below)
+  showed that the relaunch does not carry the original command-line
+  arguments: the relaunched processes' command lines held only the exe path,
+  so a test run started with `--log`, `--index` or `--settings` comes back on
+  the default data folders. Harmless for users, who pass none.
+- Hit in the same runs: both relaunches opened a console window streaming
+  the log. The Windows release `handpic.exe` is a console-subsystem binary
+  (PE Subsystem 3; `crates/app/src/main.rs` has no `windows_subsystem`
+  attribute), so any launch from Explorer or the Start menu shows it; the
+  earlier runs missed it because they were started from a shell. Not the
+  updater's doing; fixed in a separate PR that must land before the release
+  PR #928 (recorded in the gpui-port plan's Step 10, sub-milestone 4).
+
 ## Deferred issues (todo candidates)
 
 - No request timeout on the update check or download
@@ -393,3 +467,41 @@
   job's `macos-latest` leg). Basis: Step 6
   implementation; files `crates/engine/src/update.rs`,
   `crates/app/src/main.rs`.
+- Pending manual check (Step 7, Windows, this PC; the user's): the two
+  `Restart Now` rows. Prepared on 2026-11-21 and left running:
+  (1) the portable rc.1 at `D:\handpic-update-e2e\portable\Handpic\handpic.exe`
+  (already replaced by rc.2 on disk, its log
+  `D:\handpic-update-e2e\portable\data\Handpic.log`, folder
+  `D:\handpic-update-e2e\photos-portable`): set a judgment with a key (say
+  `3`) and at once open the settings' `Updates` page and click
+  `Restart Now`; expected the three `quit:` drain lines, a new process
+  logging `update: version 2.0.0-rc.2`, the judgment in that file's `.xmp`,
+  and the `__relocated__` / `__selfdelete__` files gone. (2) the Inno Setup
+  rc.1 install (`%LOCALAPPDATA%\Programs\Handpic`, log
+  `D:\handpic-update-e2e\inno-restart\data\Handpic.log`) with rc.2's
+  setup staged: click `Restart Now`; expected `relaunch=true`, no UAC or
+  SmartScreen prompt, the exe's `ProductVersion` `2.0.0-rc.2` and a
+  Handpic window back (started by the setup without flags, so on the user's
+  own settings and index). Record the result in
+  `docs/plans/20261109-gpui-port/packaging-updater.md`'s test-feed table;
+  then uninstall (`unins000.exe /VERYSILENT`) and remove
+  `D:\handpic-update-e2e`. The Step 7 checkbox was ticked on the other
+  criteria. Basis: Step 7 rehearsal; files `crates/app/src/main.rs`,
+  `crates/engine/src/update.rs`. Done by the user on 2026-11-21 (Windows 11
+  Home 10.0.26200, non-elevated token, rc.1 to rc.2 on
+  `minodisk/handpic-update-test`), both rows **Measured** in
+  `packaging-updater.md`: (1) the portable copy drained (scan, judgment
+  stores and sidecar writer, settings, MCP) and the relaunched process
+  started in the same second as `2.0.0-rc.2`, the rating pressed just before
+  in the `.xmp` (`xmp:Rating="4"`), no `__relocated__` / `__selfdelete__`
+  file left; (2) the Inno Setup install logged `quit: update setup
+  …\update\Handpic-2.0.0-rc.2-windows-x64-setup.exe relaunch=true
+  started=Ok(())`, became `2.0.0-rc.2` and came back about 2 s after the
+  quit, with no UAC and no SmartScreen prompt. Not a todo.
+- Deferred to the rc dry run (sub-milestone 4): the `.app`, tarball and deb
+  rows of the test-feed table (no macOS or Linux machine at hand), the
+  standard-account UAC / SmartScreen check, a real network cut rather than a
+  proxy, and the gpui-kit matrix rows not exercised (mid-install publish,
+  interrupted install, failed relaunch). The Step 6 and Step 4 pending
+  manual checks above fold into these. Basis: Step 7 rehearsal; file
+  `docs/plans/20261109-gpui-port/packaging-updater.md`.

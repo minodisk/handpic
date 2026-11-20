@@ -424,7 +424,15 @@ them; their contents are deliberately coarse.
        verified with the project-owned key, its mechanism for the setup
        `.exe` and the `.app` chosen here, adding to the packaging any asset
        it needs; and a restart to finish after the sidecar drain. It
-       replaces `tauri-plugin-updater` and reads no `latest.json`.
+       replaces `tauri-plugin-updater` and reads no `latest.json`. Done
+       through `../20261118-native-updater/plan.md`: the engine's
+       `update.rs` and the app's Updates page, zipsign signatures of the
+       four updater archives (the portable ZIP, the Linux tarball, the
+       macOS tarball holding `Handpic.app`, the setup ZIP holding the setup
+       `.exe`), the checked-in production verifying key
+       (`crates/app/packaging/update.pub`) and a test key pair, and an
+       rc.1 to rc.2 rehearsal on a scratch feed recorded in
+       [`packaging-updater.md`](./packaging-updater.md).
     4. `release.yml` builds and attaches the native artifacts, `SHA256SUMS`
        and the signatures the updater verifies, with the signing secret, and
        no `latest.json` of any kind, the frozen legacy copy included. With
@@ -434,9 +442,29 @@ them; their contents are deliberately coarse.
        skill's text, `CONTRIBUTING.md`'s stats note and
        `release-please-config.json`'s version files. Before the first native
        release is published: a real-device install, an update from N to N+1
-       and an uninstall per format, and the reinstall notice in the first
-       native release's notes. v1.10.0 is the last Tauri release, and no
-       release is cut from `main` before this sub-milestone.
+       and an uninstall per format, the reinstall notice in the first
+       native release's notes, and the Windows `handpic.exe` built as a GUI
+       binary (the update rehearsal's **Hit**: the release build is a
+       console-subsystem binary, so a launch from Explorer, the Start menu
+       or `Restart Now` opens a console window streaming the log; fixed in
+       its own PR, which lands before the release PR #928). v1.10.0 is the
+       last Tauri release, and no
+       release is cut from `main` before this sub-milestone. From
+       sub-milestone 3, `release.yml` must:
+       - sign the four updater archives with the production key
+         (`tools/package/sign.sh`, the private key as a repository secret,
+         verified against `crates/app/packaging/update.pub`), never
+         renaming a signed file;
+       - compute `SHA256SUMS` after signing;
+       - attach the two assets sub-milestone 3 added,
+         `Handpic-<version>-macos-<arch>.tar.gz` and
+         `Handpic-<version>-windows-x64-setup.exe.zip`;
+       - publish `rc.N` versions as GitHub prereleases;
+       - be followed by the end-to-end rc.1 to rc.2 dry run on real devices
+         from the real repository, which also covers the rows the scratch
+         feed left **Unverified** in
+         [`packaging-updater.md`](./packaging-updater.md) (the `.app`, the
+         tarball and the deb rows, for want of a macOS or Linux machine).
     5. Merge the native crate into the root workspace: one `Cargo.lock`, the
        root toolchain bumped, the patches moved to the root, one `notify`
        version (deciding the `todo.md` item on whether `configure` still

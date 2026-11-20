@@ -607,6 +607,23 @@ packages the built `target/release` binary with a script under
   signs with the production key. The `checksums` job computes `SHA256SUMS`
   over the downloaded artifacts, so after signing, and installs the
   tarball with `install.sh` and the digest `SHA256SUMS` names.
+- `test-release.sh <run-id> <owner/name>` publishes the artifacts of a
+  `Package` run made with `update_test_repo` as the release `v<version>` of
+  that scratch repository, the test feed such a build updates from
+  (`minodisk/handpic-update-test`, public, holding only a README; the plan
+  `docs/plans/20261118-native-updater/` made it). It downloads the run's
+  artifacts with `gh run download`, reads the version from the portable
+  ZIP's name, checks every file with `sha256sum --check` against the run's
+  `SHA256SUMS`, and uploads them as they are (never renamed, so the zipsign
+  signatures still verify), as a GitHub prerelease when the version has a
+  prerelease part. It refuses `minodisk/handpic`: a test build trusts the
+  test key and never goes on the real feed. A tester packages two versions,
+  N and N+1 (`gh workflow run package.yml --ref <branch> -f
+  version=2.0.0-rc.1 -f update_test_repo=minodisk/handpic-update-test`,
+  then `rc.2`), publishes both, installs N and lets it find N+1. The feed
+  lists every release of the repository, so delete a test release that
+  should no longer be offered (`gh release delete v<version> --repo <owner/name>
+  --cleanup-tag`).
 - `mise run app:keygen <private-key>` generates the production key pair
   (`zipsign gen-key`): the private key to the given path, refused inside the
   repository, and the 32-byte verifying key to
@@ -2135,8 +2152,18 @@ call.
   `cx.restart()` towards `whoami.exe` on an empty folder): `quit: scan
   stopped`, `quit: judgment stores drained=true sidecar writer
   drained=true` and `quit: settings writes drained=true` were logged after
-  the restart and the process exited 0. The relaunch of an updated
-  executable is a check of the plan's Step 7.
+  the restart and the process exited 0. The updates themselves were
+  rehearsed on a test feed (`tools/package/test-release.sh`) on Windows 11
+  on 2026-11-21: a portable rc.1 replaced its running exe with rc.2, an Inno
+  Setup rc.1 staged the rc.2 setup and a plain quit installed it, a stable
+  build was not offered the rc, an unreachable feed left the app usable,
+  and a tampered asset installed nothing. `Restart Now` relaunched both the
+  portable and the Inno Setup copy as rc.2 after the drains, the judgment
+  pressed just before it in the sidecar. The relaunch drops the original
+  command-line arguments, so a test run started with `--log`, `--index` or
+  `--settings` comes back on the default data folders. The macOS and Linux
+  rows are recorded as unverified in
+  `docs/plans/20261109-gpui-port/packaging-updater.md`.
 - Rule: MCP. `get_status` carries the state (`update`: the version, the
   install kind, the phase, the target version, the percent, the message and
   the release page, and whether the build trusts the test feed and key);
