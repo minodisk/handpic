@@ -205,3 +205,5 @@ tooling stays on the local-only branch `measure/tauri-latency-ab`.
   only, so table layout is a review matter.
 
 ## Progress
+
+- (2026-11-20) Step 1 complete
