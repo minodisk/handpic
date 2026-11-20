@@ -645,6 +645,10 @@ struct Handpic {
     updates: update::Updates,
     update_source: Arc<handpic_backend::update::Source>,
     update_exe: Option<PathBuf>,
+    /// An Inno Setup install's staging folder and the setup staged there,
+    /// which the last quit handler starts.
+    update_staging: Option<PathBuf>,
+    update_staged: Arc<Mutex<update::Staged>>,
     heading: Heading,
     /// `None` while `image` is.
     screen: Option<OnScreen>,
@@ -847,10 +851,41 @@ impl Handpic {
             updates.version,
             updates.kind
         );
+        let update_staging = (updates.kind == handpic_backend::update::InstallKind::Inno)
+            .then(|| datadir::update_staging(dirs::cache_dir().as_deref()))
+            .flatten();
+        if let Some(dir) = update_staging.as_deref()
+            && dir.exists()
+            && let Err(e) = std::fs::remove_dir_all(dir)
+        {
+            log::warn!("update: stale staging {} not cleared: {e}", dir.display());
+        }
+        // Registered after the judgment and settings drains, so the setup
+        // starts once both have run.
+        let update_staged = Arc::new(Mutex::new(update::Staged::default()));
+        {
+            let staged = update_staged.clone();
+            App::on_app_quit(cx, move |_| {
+                let staged = std::mem::take(&mut *staged.lock().unwrap());
+                if let Some(setup) = staged.setup {
+                    let started =
+                        handpic_backend::update::run_setup(&setup, process::id(), staged.relaunch);
+                    log::info!(
+                        "quit: update setup {} relaunch={} started={started:?}",
+                        setup.display(),
+                        staged.relaunch
+                    );
+                }
+                async {}
+            })
+            .detach();
+        }
         Self {
             updates,
             update_source,
             update_exe,
+            update_staging,
+            update_staged,
             mcp: mcp::Control::new(
                 settings.mcp_enabled,
                 mcp_port,
@@ -2568,6 +2603,10 @@ impl Handpic {
     }
 
     fn install_update(&mut self, offer: handpic_backend::update::Offer) {
+        if self.updates.kind == handpic_backend::update::InstallKind::Inno {
+            self.stage_setup(offer);
+            return;
+        }
         let Some(exe) = self.update_exe.clone() else {
             let _ = self
                 .events
@@ -2607,12 +2646,68 @@ impl Handpic {
         });
     }
 
+    /// An Inno Setup install's update: the setup downloaded, verified and
+    /// extracted into the staging folder, handed to the quit handler.
+    fn stage_setup(&mut self, offer: handpic_backend::update::Offer) {
+        let Some(dir) = self.update_staging.clone() else {
+            let _ = self
+                .events
+                .unbounded_send(Event::Update(update::Message::Installed(Err(
+                    "no cache folder to stage the setup in".into(),
+                ))));
+            return;
+        };
+        let (source, version, events, staged) = (
+            self.update_source.clone(),
+            self.updates.version.clone(),
+            self.events.clone(),
+            self.update_staged.clone(),
+        );
+        log::info!(
+            "update: staging the {} setup in {}",
+            offer.version,
+            dir.display()
+        );
+        thread::spawn(move || {
+            let progress = {
+                let events = events.clone();
+                let last = AtomicU64::new(u64::MAX);
+                move |done, total| {
+                    let step = update::progress_step(done, total);
+                    if last.swap(step, Ordering::Relaxed) != step
+                        || total.is_some_and(|total| done >= total)
+                    {
+                        let _ = events
+                            .unbounded_send(Event::Update(update::Message::Progress(done, total)));
+                    }
+                }
+            };
+            let installed =
+                handpic_backend::update::stage_setup(&source, &offer, &dir, &version, progress)
+                    .map(|setup| {
+                        log::info!("update: setup staged at {}", setup.display());
+                        staged.lock().unwrap().setup = Some(setup);
+                    });
+            let _ = events.unbounded_send(Event::Update(update::Message::Installed(installed)));
+        });
+    }
+
     /// `Restart Now`: GPUI's restart, which quits through the quit handlers
     /// (the scan's stop, the judgment stores', the sidecar writer's and the
     /// settings writes' drains) and relaunches the executable the launch
-    /// found once this process has exited.
+    /// found once this process has exited. An Inno Setup install quits
+    /// instead, its staged setup started by the last quit handler with the
+    /// relaunch asked for.
     fn restart_now(&mut self, cx: &mut Context<Self>) {
         if !self.updates.shows_restart() {
+            return;
+        }
+        // The setup relaunches the app once installed; a GPUI restart would
+        // start the old exe in its way.
+        if self.updates.kind == handpic_backend::update::InstallKind::Inno {
+            log::info!("update: quitting for the setup to install and relaunch");
+            self.update_staged.lock().unwrap().relaunch = true;
+            cx.quit();
             return;
         }
         if let Some(exe) = self.update_exe.clone() {

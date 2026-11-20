@@ -629,9 +629,14 @@ packages the built `target/release` binary with a script under
   by it, so a changed `AppId` installs a second copy instead of upgrading.
 - Rule: under Git Bash, `ISCC.exe`'s `/`-options need `MSYS_NO_PATHCONV=1`
   (and `MSYS2_ARG_CONV_EXCL='*'`), or MSYS rewrites them as paths.
-- Rule: the setup has no close-applications handling or relaunch yet; the
-  updater (sub-milestone 3 of the gpui-port plan's Step 10) adds what it
-  needs.
+- Rule: the setup's two updater switches, read in its `[Code]`:
+  `/WAITPID=<pid>` makes `InitializeSetup` wait (at most 60 s) for that
+  process to exit before anything is installed, so the quitting app's exe is
+  no longer in use; `/RELAUNCH` turns on the `[Run]` entry that starts the
+  installed app at the end. A setup run by hand passes neither and starts
+  nothing. The Restart Manager settings are Inno's defaults. The `windows`
+  leg checks both: an upgrade with `/WAITPID` of a stand-in holding the exe
+  open waits for it, starts nothing, and one with `/RELAUNCH` starts the app.
 - Rule: the deb's `Depends` is `dpkg-shlibdeps`'s over the built binary plus
   what GPUI opens at run time, never a copied list. Measured on
   `ubuntu-latest` (Ubuntu 24.04.5, glibc 2.39; `Package` runs 44096260804 and
@@ -2070,10 +2075,26 @@ call.
 - Rule: who installs. A portable ZIP or a tarball install is downloaded,
   verified and installed without asking (the plan's recorded policy, against
   the guide's consent step), then `ReadyToRestart`, with the pane's note
-  naming `Restart Now`. Every other kind, the deb and an unknown copy (a
-  `cargo run`, a `target/` binary) and, until their own steps, the Inno
-  Setup and `.app` installs, stops at `Available` with `Open Release Page`
-  (`cx.open_url`).
+  naming `Restart Now`. An Inno Setup install gets its setup staged the same
+  way (below). Every other kind, the deb and an unknown copy (a `cargo run`,
+  a `target/` binary) and, until its own step, the `.app` install, stops at
+  `Available` with `Open Release Page` (`cx.open_url`).
+- Rule: the Inno Setup install's setup. The backend's `stage_setup`
+  downloads `Handpic-<version>-windows-x64-setup.exe.zip` of the pinned
+  release into `datadir::update_staging` (`update` in the `<IDENTIFIER>`
+  folder under the cache dir, emptied first), checks it against
+  `SHA256SUMS` and with `self_update::verify_signature`, refusing an empty
+  key list (with which that function passes anything), and extracts the
+  setup; any failure removes the folder. `ReadyToRestart` then means
+  "staged". The view keeps the setup's path in `update::Staged`, shared with
+  an `on_app_quit` handler registered after the judgment and settings drains
+  (GPUI calls the handlers in registration order), which starts it detached
+  (`run_setup`: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /WAITPID=<pid>`)
+  on every quit. `Restart Now` sets `relaunch` (adding `/RELAUNCH`) and calls
+  `cx.quit()`, not `cx.restart()`, which would start the old exe while the
+  setup replaces it. The staging folder of an Inno Setup install is removed
+  at launch (a failure, such as the relaunching setup still running from it,
+  is logged and left to the next launch).
 - Rule: the timeouts. The check's requests are bounded by `CHECK_TIMEOUT`
   (30 s) and the install's by `INSTALL_TIMEOUT` (10 min), the backend's: a
   stalled connection fails into `Failed` rather than holding `Checking` and

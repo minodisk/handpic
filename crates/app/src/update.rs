@@ -3,7 +3,11 @@
 //! buttons per install kind, and the state `get_status` reports. The window
 //! runs the backend's `update::check` and `update::install` on a thread of
 //! their own and hands their answers here as `Message`s; the engine reports
-//! no phase itself, so the phases are set around the two calls.
+//! no phase itself, so the phases are set around the two calls. An Inno
+//! Setup install's "installed" is its setup staged (`update::stage_setup`),
+//! which the quit runs (`Staged`).
+
+use std::path::PathBuf;
 
 use handpic_backend::update::{InstallKind, Offer};
 use serde_json::{Value, json};
@@ -30,9 +34,20 @@ pub fn launch_checks(release_build: bool, auto: bool, last: Option<u64>, now: u6
 }
 
 /// Whether the app installs an update itself for `kind`. The others get the
-/// release page (the Inno Setup and `.app` installs until their steps land).
+/// release page (the `.app` install until its step lands).
 pub fn installs(kind: InstallKind) -> bool {
-    matches!(kind, InstallKind::Portable | InstallKind::Tarball)
+    matches!(
+        kind,
+        InstallKind::Portable | InstallKind::Tarball | InstallKind::Inno
+    )
+}
+
+/// An Inno Setup install's staged setup, shared with the quit handler that
+/// starts it once the drains have run; `relaunch` is `Restart Now`'s.
+#[derive(Debug, Default)]
+pub struct Staged {
+    pub setup: Option<PathBuf>,
+    pub relaunch: bool,
 }
 
 pub fn kind_label(kind: InstallKind) -> &'static str {
@@ -267,6 +282,10 @@ impl Updates {
                 format!("Downloading Handpic {version}\u{2026}")
             }
             Phase::Verifying(version) => format!("Verifying Handpic {version}\u{2026}"),
+            Phase::ReadyToRestart(version) if self.kind == InstallKind::Inno => format!(
+                "Handpic {version} is downloaded and installs when Handpic quits. Restart to \
+                 finish now."
+            ),
             Phase::ReadyToRestart(version) => {
                 format!("Handpic {version} is installed. Restart to finish.")
             }
@@ -277,6 +296,10 @@ impl Updates {
     /// The pane's note while an installed update waits for the restart.
     pub fn notice(&self) -> Option<String> {
         match &self.phase {
+            Phase::ReadyToRestart(version) if self.kind == InstallKind::Inno => Some(format!(
+                "Handpic {version} installs when Handpic quits, or now with {RESTART_LABEL} on \
+                 the Updates page of the settings."
+            )),
             Phase::ReadyToRestart(version) => Some(format!(
                 "Handpic {version} is installed. Restart to finish: {RESTART_LABEL} on the \
                  Updates page of the settings."
@@ -367,8 +390,12 @@ mod tests {
     }
 
     #[test]
-    fn a_portable_or_tarball_install_downloads_verifies_and_waits_for_the_restart() {
-        for kind in [InstallKind::Portable, InstallKind::Tarball] {
+    fn a_portable_tarball_or_inno_install_downloads_verifies_and_waits_for_the_restart() {
+        for kind in [
+            InstallKind::Portable,
+            InstallKind::Tarball,
+            InstallKind::Inno,
+        ] {
             let mut updates = checking(kind);
             assert_eq!(updates.status_text(), "Checking for updates\u{2026}");
             assert_eq!(
@@ -386,14 +413,34 @@ mod tests {
             assert!(updates.busy() && !updates.can_check());
             updates.apply(Message::Installed(Ok(())));
             assert_eq!(updates.phase(), &Phase::ReadyToRestart("2.0.0".into()));
-            assert_eq!(
-                updates.status_text(),
-                "Handpic 2.0.0 is installed. Restart to finish."
-            );
             assert!(updates.shows_restart());
             assert!(updates.notice().is_some());
             assert_eq!(updates.release_page(), None);
         }
+    }
+
+    #[test]
+    fn an_inno_install_says_its_setup_runs_at_quit() {
+        let ready = |kind| {
+            let mut updates = checking(kind);
+            updates.apply(Message::Checked(Ok(Some(offer("2.0.0")))));
+            updates.apply(Message::Installed(Ok(())));
+            updates
+        };
+        assert_eq!(
+            ready(InstallKind::Portable).status_text(),
+            "Handpic 2.0.0 is installed. Restart to finish."
+        );
+        let inno = ready(InstallKind::Inno);
+        assert_eq!(
+            inno.status_text(),
+            "Handpic 2.0.0 is downloaded and installs when Handpic quits. Restart to finish now."
+        );
+        assert!(
+            inno.notice()
+                .unwrap()
+                .contains("installs when Handpic quits")
+        );
     }
 
     #[test]
@@ -422,12 +469,7 @@ mod tests {
 
     #[test]
     fn a_deb_or_unknown_install_gets_the_release_page_and_installs_nothing() {
-        for kind in [
-            InstallKind::Deb,
-            InstallKind::Unknown,
-            InstallKind::Inno,
-            InstallKind::App,
-        ] {
+        for kind in [InstallKind::Deb, InstallKind::Unknown, InstallKind::App] {
             let mut updates = checking(kind);
             assert_eq!(
                 updates.apply(Message::Checked(Ok(Some(offer("2.0.0"))))),

@@ -42,3 +42,51 @@ Source: "{#LicensesDir}\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Handpic"; Filename: "{app}\{#Binary}"
+
+; The app's updater runs this setup as the app quits, with /WAITPID=<pid> (the
+; quitting app, waited for before anything is installed, so its exe is not in
+; use) and, on Restart Now, /RELAUNCH, which starts the installed app at the
+; end. A setup run by hand passes neither and starts nothing.
+[Run]
+Filename: "{app}\{#Binary}"; Flags: nowait; Check: RelaunchAsked
+
+[Code]
+const
+  SYNCHRONIZE = $00100000;
+  // At most this long; a hung app is then left to the Restart Manager.
+  WaitForAppMs = 60000;
+
+function OpenProcess(dwDesiredAccess: DWORD; bInheritHandle: BOOL; dwProcessId: DWORD): THandle;
+  external 'OpenProcess@kernel32.dll stdcall';
+function WaitForSingleObject(hHandle: THandle; dwMilliseconds: DWORD): DWORD;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function CloseHandle(hObject: THandle): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+function InitializeSetup(): Boolean;
+var
+  Pid: DWORD;
+  Process: THandle;
+begin
+  Pid := StrToIntDef(ExpandConstant('{param:WAITPID|0}'), 0);
+  if Pid <> 0 then
+  begin
+    Process := OpenProcess(SYNCHRONIZE, False, Pid);
+    if Process <> 0 then
+    begin
+      WaitForSingleObject(Process, WaitForAppMs);
+      CloseHandle(Process);
+    end;
+  end;
+  Result := True;
+end;
+
+function RelaunchAsked(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/RELAUNCH') = 0 then
+      Result := True;
+end;

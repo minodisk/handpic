@@ -1,17 +1,19 @@
 //! The native app's update engine: which install the running executable
 //! belongs to (`detect`), the release a feed offers it under the prerelease
-//! policy (`check`, `offered`), and the install of a portable ZIP or tarball
-//! update through `self_update` (`install`), every archive checked against
-//! the release's `SHA256SUMS` and its zipsign signature before anything is
-//! replaced. The feed and the trusted keys are parameters (`Source`); a
+//! policy (`check`, `offered`), the install of a portable ZIP or tarball
+//! update through `self_update` (`install`), and an Inno Setup install's
+//! setup staged (`stage_setup`) and started at quit (`run_setup`), every
+//! archive checked against the release's `SHA256SUMS` and its zipsign
+//! signature before anything is replaced or run. The feed and the trusted keys are parameters (`Source`); a
 //! build's own are `source()`'s. Blocking: the caller runs it on a worker.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use self_update::backends::github;
 use self_update::VerifyingKey;
 use semver::Version;
+use sha2::{Digest, Sha256};
 
 /// The release asset whose digests every download is checked against.
 const SUMS: &str = "SHA256SUMS";
@@ -236,15 +238,153 @@ pub fn install(
     Ok(())
 }
 
+/// The setup ZIP an Inno Setup install updates from and the setup's file
+/// name inside it.
+fn setup_asset(version: &str) -> (String, String) {
+    let setup = format!("Handpic-{version}-windows-x64-setup.exe");
+    (format!("{setup}.zip"), setup)
+}
+
+/// Download the setup of `offer`'s release, pinned by its tag, into `dir`
+/// (emptied first), check the ZIP against the release's `SHA256SUMS` and its
+/// zipsign signature against `source`'s keys, and extract the setup: its
+/// path. Every `Err` leaves `dir` removed, so nothing is there to run.
+/// `progress` is the ZIP's download, as `install`'s.
+pub fn stage_setup(
+    source: &Source,
+    offer: &Offer,
+    dir: &Path,
+    current: &str,
+    progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
+) -> Result<PathBuf, String> {
+    let _ = std::fs::remove_dir_all(dir);
+    let staged = stage(source, offer, dir, current, progress);
+    if staged.is_err() {
+        let _ = std::fs::remove_dir_all(dir);
+    }
+    staged
+}
+
+fn stage(
+    source: &Source,
+    offer: &Offer,
+    dir: &Path,
+    current: &str,
+    progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
+) -> Result<PathBuf, String> {
+    // `verify_signature` passes anything when given no key.
+    if source.keys.is_empty() {
+        return Err("no trusted key to verify the setup with".to_string());
+    }
+    let (zip_name, setup_name) = setup_asset(&offer.version);
+    let tag = format!("v{}", offer.version);
+    let release = configure(source, current)
+        .bin_name("handpic")
+        .timeout(CHECK_TIMEOUT)
+        .build()
+        .and_then(|update| update.get_release_version(&tag))
+        .map_err(|e| e.to_string())?;
+    let asset = |name: &str| {
+        release
+            .assets()
+            .iter()
+            .find(|a| a.name() == name)
+            .ok_or_else(|| format!("release {tag} has no {name}"))
+    };
+    let (sums_asset, zip_asset) = (asset(SUMS)?, asset(&zip_name)?);
+    let download = |url: &str, timeout: Duration| {
+        let mut download = self_update::Download::from_url(url);
+        download
+            .request_header(
+                self_update::http::header::ACCEPT,
+                "application/octet-stream",
+            )
+            .timeout(timeout);
+        download
+    };
+    let mut sums = Vec::new();
+    download(sums_asset.download_url(), CHECK_TIMEOUT)
+        .download_to(&mut sums)
+        .map_err(|e| format!("{SUMS}: {e}"))?;
+    let expected =
+        match self_update::Checksum::from_sums_file(&String::from_utf8_lossy(&sums), &zip_name)
+            .map_err(|e| e.to_string())?
+        {
+            self_update::Checksum::Sha256(hex) => hex.trim().to_ascii_lowercase(),
+            _ => return Err(format!("{SUMS}: {zip_name} has no SHA-256 digest")),
+        };
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let zip = dir.join(&zip_name);
+    let file = std::fs::File::create(&zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    download(zip_asset.download_url(), INSTALL_TIMEOUT)
+        .progress_callback(progress)
+        .download_to(file)
+        .map_err(|e| format!("{zip_name}: {e}"))?;
+    let bytes = std::fs::read(&zip).map_err(|e| format!("{}: {e}", zip.display()))?;
+    let actual: String = Sha256::digest(&bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    if actual != expected {
+        return Err(format!(
+            "{zip_name}: checksum mismatch, expected {expected}, got {actual}"
+        ));
+    }
+    self_update::verify_signature(&zip, &source.keys)
+        .map_err(|e| format!("{zip_name}: signature: {e}"))?;
+    self_update::Extract::from_source(&zip)
+        .extract_file(dir, &setup_name)
+        .map_err(|e| format!("{zip_name}: {e}"))?;
+    Ok(dir.join(setup_name))
+}
+
+/// The switch `handpic.iss` reads to start the app once installed.
+const RELAUNCH_SWITCH: &str = "/RELAUNCH";
+
+/// The setup's command line: silent, without a reboot, waiting for the
+/// process `pid` (the quitting app) to exit before it installs (`handpic.iss`'s
+/// `/WAITPID`), and with `relaunch` starting the installed app at its end.
+pub fn setup_args(pid: u32, relaunch: bool) -> Vec<String> {
+    let mut args: Vec<String> = ["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    args.push(format!("/WAITPID={pid}"));
+    if relaunch {
+        args.push(RELAUNCH_SWITCH.to_string());
+    }
+    args
+}
+
+/// Start the staged `setup` detached, so it outlives the app that quits
+/// right after: `setup_args` of `pid` and `relaunch`.
+pub fn run_setup(setup: &Path, pid: u32, relaunch: bool) -> std::io::Result<()> {
+    let mut command = std::process::Command::new(setup);
+    command
+        .args(setup_args(pid, relaunch))
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    if let Some(dir) = setup.parent() {
+        command.current_dir(dir);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        command.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    command.spawn().map(drop)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use std::io::{BufRead, BufReader, Cursor, Write};
     use std::net::TcpListener;
-    use std::path::PathBuf;
     use std::sync::Arc;
 
-    use sha2::{Digest, Sha256};
     use zipsign_api::SigningKey;
 
     use super::*;
@@ -617,6 +757,124 @@ mod tests {
             assert!(install(&source, &offer("2.0.0"), kind, &exe, "1.0.0", |_, _| {}).is_err());
             assert_eq!(std::fs::read(&exe).unwrap(), OLD);
         }
+    }
+
+    const SETUP: &str = "Handpic-2.0.0-windows-x64-setup.exe";
+    const SETUP_ZIP: &str = "Handpic-2.0.0-windows-x64-setup.exe.zip";
+
+    fn setup_archive(signer: Option<&SigningKey>) -> (String, Vec<u8>) {
+        let archive = zip_of(SETUP, NEW);
+        let bytes = match signer {
+            Some(key) => signed(SETUP_ZIP, &archive, key),
+            None => archive,
+        };
+        (SETUP_ZIP.to_string(), bytes)
+    }
+
+    /// Stage the 2.0.0 setup the feed of `assets` holds into a temp folder,
+    /// trusting `key(1)`; the result and the staging folder.
+    fn stage_from(
+        name: &str,
+        assets: Vec<(String, Vec<u8>)>,
+    ) -> (Result<PathBuf, String>, PathBuf) {
+        let mut r = release("2.0.0");
+        r.assets = assets;
+        let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
+        let dir = temp_dir(name).join("update");
+        let result = stage_setup(&source, &offer("2.0.0"), &dir, "1.0.0", |_, _| {});
+        (result, dir)
+    }
+
+    #[test]
+    fn a_signed_setup_zip_is_downloaded_checked_and_extracted() {
+        let archive = setup_archive(Some(&key(1)));
+        let size = archive.1.len() as u64;
+        let mut r = release("2.0.0");
+        r.assets = with_sums(archive);
+        let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
+        let dir = temp_dir("setup").join("update");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("stale.exe"), OLD).unwrap();
+        let last = Arc::new(std::sync::Mutex::new(None));
+        let seen = last.clone();
+        let setup = stage_setup(
+            &source,
+            &offer("2.0.0"),
+            &dir,
+            "1.0.0",
+            move |done, total| *seen.lock().unwrap() = Some((done, total)),
+        )
+        .unwrap();
+        assert_eq!(setup, dir.join(SETUP));
+        assert_eq!(std::fs::read(&setup).unwrap(), NEW);
+        assert!(!dir.join("stale.exe").exists());
+        assert_eq!(*last.lock().unwrap(), Some((size, Some(size))));
+    }
+
+    #[test]
+    fn a_setup_failing_a_check_leaves_nothing_to_run() {
+        let cases = [
+            (
+                "setup-digest",
+                vec![
+                    sums(SETUP_ZIP, b"other bytes"),
+                    setup_archive(Some(&key(1))),
+                ],
+                "checksum",
+            ),
+            (
+                "setup-unsigned",
+                with_sums(setup_archive(None)),
+                "signature",
+            ),
+            (
+                "setup-foreign",
+                with_sums(setup_archive(Some(&key(2)))),
+                "signature",
+            ),
+            ("setup-nosums", vec![setup_archive(Some(&key(1)))], SUMS),
+            (
+                "setup-missing",
+                with_sums(portable_archive(Some(&key(1)))),
+                SETUP_ZIP,
+            ),
+        ];
+        for (name, assets, reason) in cases {
+            let (result, dir) = stage_from(name, assets);
+            let error = result.unwrap_err();
+            assert!(
+                error.to_lowercase().contains(&reason.to_lowercase()),
+                "{name}: {error}"
+            );
+            assert!(!dir.exists(), "{name}");
+        }
+    }
+
+    #[test]
+    fn a_setup_is_not_staged_without_a_trusted_key() {
+        let mut r = release("2.0.0");
+        r.assets = with_sums(setup_archive(None));
+        let source = source(serve(vec![r]), vec![]);
+        let dir = temp_dir("setup-nokey").join("update");
+        assert!(stage_setup(&source, &offer("2.0.0"), &dir, "1.0.0", |_, _| {}).is_err());
+        assert!(!dir.exists());
+    }
+
+    #[test]
+    fn the_setup_runs_silently_waits_for_the_app_and_relaunches_on_request() {
+        assert_eq!(
+            setup_args(42, false),
+            [
+                "/VERYSILENT",
+                "/SUPPRESSMSGBOXES",
+                "/NORESTART",
+                "/WAITPID=42"
+            ]
+        );
+        assert_eq!(setup_args(42, true).last().unwrap(), RELAUNCH_SWITCH);
+        let iss = include_str!("../../app/packaging/windows/handpic.iss");
+        assert!(iss.contains("{param:WAITPID|0}"));
+        assert!(iss.contains(&format!("'{RELAUNCH_SWITCH}'")));
     }
 
     #[test]

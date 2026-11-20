@@ -265,6 +265,7 @@ jobs:
       # entry and the silent runs, not the absence of a UAC prompt.
       - name: Check the setup and the ZIPs
         shell: pwsh
+        timeout-minutes: 15
         env:
           VERSION: ${{ steps.version.outputs.version }}
           WINDOWS_VERSION: ${{ steps.version.outputs.windows }}
@@ -279,8 +280,12 @@ jobs:
           Write-Output "setup file version $fileVersion"
           if ($fileVersion -ne $env:WINDOWS_VERSION) { throw "setup file version $fileVersion" }
           $silent = '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
-          function Invoke-Silent($exe, $what) {
-            $p = Start-Process -FilePath $exe -ArgumentList $silent -Wait -PassThru
+          # Not -Wait: it waits for every descendant too, so a setup that
+          # relaunches the app would never return while the app runs.
+          function Invoke-Silent($exe, $what, $more = @()) {
+            $p = Start-Process -FilePath $exe -ArgumentList ($silent + $more) -PassThru
+            $null = $p.Handle
+            if (-not $p.WaitForExit(300000)) { throw "$what did not finish in 300 s" }
             if ($p.ExitCode -ne 0) { throw "$what exited with $($p.ExitCode)" }
           }
           $app = Join-Path $env:LOCALAPPDATA 'Programs\Handpic'
@@ -301,10 +306,48 @@ jobs:
             foreach ($k in $machineKeys) { if (Test-Path $k) { throw "machine-wide entry $k" } }
             if (-not (Test-Path $shortcut)) { throw "no $shortcut" }
           }
+          # A launch of the installed app: its process, or its log written since.
+          $log = Join-Path $env:LOCALAPPDATA 'dev.minodisk.handpic\logs\Handpic.log'
+          function Get-Apps {
+            @(Get-CimInstance Win32_Process -Filter "Name = 'handpic.exe'" | Where-Object { $_.ExecutablePath -eq $exe })
+          }
+          function Test-Launched($since) {
+            ((Get-Apps).Count -gt 0) -or ((Test-Path $log) -and (Get-Item $log).LastWriteTime -ge $since)
+          }
           Invoke-Silent $setup 'the install'
           Assert-Installed
-          Invoke-Silent $setup 'the upgrade'
+          # The upgrade the updater runs at quit (/WAITPID, no /RELAUNCH). A
+          # stand-in for the quitting app holds the exe open for reading only, as
+          # a running image is; the setup waits for its pid. The holder ending
+          # its whole hold with 0 (not closed by the Restart Manager) and the
+          # setup not finishing before it show the wait.
+          $hold = 8
+          $holder = Start-Process -FilePath pwsh -PassThru -ArgumentList '-NoProfile', '-Command',
+            "`$f = [IO.File]::Open('$exe', 'Open', 'Read', 'Read'); Start-Sleep -Seconds $hold; `$f.Close()"
+          $null = $holder.Handle
+          Start-Sleep -Seconds 2
+          $started = Get-Date
+          Invoke-Silent $setup 'the upgrade at quit' @("/WAITPID=$($holder.Id)")
+          $elapsed = ((Get-Date) - $started).TotalSeconds
+          if (-not $holder.WaitForExit(60000)) { throw 'the holder did not exit in 60 s' }
+          Write-Output "the upgrade at quit took $elapsed s; the holder exited with $($holder.ExitCode)"
+          if ($holder.ExitCode -ne 0) { throw "the holder exited with $($holder.ExitCode)" }
+          if ($elapsed -lt $hold - 3) { throw "the setup did not wait for the holder ($elapsed s)" }
           Assert-Installed
+          Start-Sleep -Seconds 10
+          if (Test-Launched $started) { throw 'the setup without /RELAUNCH started the app' }
+          # Restart Now's run: /RELAUNCH starts the installed app at the end.
+          $started = Get-Date
+          Invoke-Silent $setup 'the upgrade with the relaunch' @('/RELAUNCH')
+          Assert-Installed
+          $launched = $false
+          for ($i = 0; $i -lt 30 -and -not $launched; $i++) {
+            Start-Sleep -Seconds 1
+            $launched = Test-Launched $started
+          }
+          Get-Apps | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+          if (-not $launched) { throw 'the setup with /RELAUNCH did not start the app' }
+          Start-Sleep -Seconds 2
           Get-ChildItem $app
           Invoke-Silent (Join-Path $app 'unins000.exe') 'the uninstall'
           # The uninstaller hands over to a copy of itself in %TEMP%.

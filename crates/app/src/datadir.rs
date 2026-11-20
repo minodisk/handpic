@@ -14,6 +14,13 @@ pub fn index_path(flag: Option<PathBuf>, cache: Option<&Path>) -> Option<PathBuf
     flag.or_else(|| cache.map(|cache| cache.join(IDENTIFIER).join(INDEX_FILE)))
 }
 
+/// The folder an Inno Setup install's update setup is staged in, `update`
+/// in the `<IDENTIFIER>` folder under `cache`, whatever `--index` says;
+/// cleared at launch.
+pub fn update_staging(cache: Option<&Path>) -> Option<PathBuf> {
+    cache.map(|cache| cache.join(IDENTIFIER).join("update"))
+}
+
 /// The settings store: `flag` when given, else `settings.sqlite` in the
 /// `<IDENTIFIER>` folder under `config`, next to where the Tauri app kept its
 /// `settings.json`; `None` when neither is known.
@@ -23,7 +30,7 @@ pub fn settings_path(flag: Option<PathBuf>, config: Option<&Path>) -> Option<Pat
 
 #[cfg(test)]
 mod tests {
-    use super::{IDENTIFIER, index_path, settings_path};
+    use super::{IDENTIFIER, index_path, settings_path, update_staging};
     use std::path::{Path, PathBuf};
 
     #[test]
@@ -68,6 +75,15 @@ mod tests {
             )
         );
         assert_eq!(index_path(None, None), None);
+    }
+
+    #[test]
+    fn the_update_staging_is_beside_the_index() {
+        assert_eq!(
+            update_staging(Some(Path::new("C:/cache"))),
+            Some(Path::new("C:/cache").join(IDENTIFIER).join("update"))
+        );
+        assert_eq!(update_staging(None), None);
     }
 
     fn packaging(file: &str) -> String {
