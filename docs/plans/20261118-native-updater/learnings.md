@@ -314,11 +314,13 @@
   verifier is a `fn` parameter of the private `install_app`, so the swap
   tests run on every platform with stub verifiers (accepting, and rejecting
   as a failed codesign would), and a `#[cfg(target_os = "macos")]` test runs
-  the real `codesign_check`: a bundle of `/usr/bin/true` with a minimal
-  `Info.plist`, `codesign --force --sign -`, archived with `tar`'s
-  `append_dir_all`, swaps in and still verifies; the same bundle with a byte
-  appended to its `Info.plist` after signing is refused and the old bundle
-  stays.
+  the real `codesign_check`: it asserts that a bundle of `/usr/bin/true`
+  with a minimal `Info.plist`, `codesign --force --sign -`, archived with
+  `tar`'s `append_dir_all`, swaps in and still verifies, and that the same
+  bundle with a byte appended to its `Info.plist` after signing is refused
+  and the old bundle stays. It is compiled and run only on macOS, so it was
+  not run locally (Windows) and first runs on the `test` job's
+  `macos-latest` leg of the PR's checks.
 - Deviation from the plan's Done-when wording: it says "the macOS leg of the
   `app` job runs the bundle test", but the engine and its tests are in
   `crates/backend`, a root-workspace member, so `cargo test` of the `test`
@@ -387,6 +389,7 @@
   nothing. Also record whether Gatekeeper prompts after the swap and whether
   the folder-access grants survive it. This is Step 7's `.app` row; the Step
   6 checkbox was ticked on the automated criteria (the swap tests on every
-  platform, the real `codesign` test on the macOS CI leg). Basis: Step 6
+  platform; the real `codesign` test runs on the PR's checks, the `test`
+  job's `macos-latest` leg). Basis: Step 6
   implementation; files `crates/backend/src/update.rs`,
   `crates/app/src/main.rs`.
