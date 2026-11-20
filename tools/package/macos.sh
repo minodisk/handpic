@@ -37,8 +37,14 @@ trap 'rm -rf "${stage}"' EXIT
 ditto "${app}" "${stage}/Handpic.app"
 ln -s /Applications "${stage}/Applications"
 
+# hdiutil's own size estimate for -srcfolder can come up short and fail with
+# "No space left on device", so size the image from the stage with headroom:
+# 20 % plus 20 MB.
+stage_kb="$(du -sk "${stage}" | cut -f1)"
+size_kb=$((stage_kb + stage_kb / 5 + 20 * 1024))
+
 rm -f "${dmg}"
-hdiutil create -volname Handpic -srcfolder "${stage}" -ov -format UDZO "${dmg}" >&2
+hdiutil create -volname Handpic -srcfolder "${stage}" -size "${size_kb}k" -ov -format UDZO "${dmg}" >&2
 
 # COPYFILE_DISABLE keeps bsdtar from adding `._` entries for extended
 # attributes.

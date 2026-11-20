@@ -5427,6 +5427,7 @@ impl Handpic {
             self.pager.current(),
             self.files.len(),
             self.filter.is_active().then_some(self.all.len()),
+            self.selection.selected.len(),
         ) {
             row = row.right(position);
         }

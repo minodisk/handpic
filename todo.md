@@ -426,18 +426,6 @@ Files: `.claude/agents/pr-runner.md`
 
 - [ ] On the next real `/pr` run, read the `pr-runner` subagent transcript (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that every `.claude/skills/**/scripts` call, especially `wait-pr-actionable.sh`, has exactly the text in its code block with no pipe, `tail`, redirect, `; echo exit=$?`, `${PIPESTATUS[...]}` or chaining, and that none waited long before starting or was moved to the background after the script finished. If a decorated call appears, strengthen the wording in `.claude/agents/pr-runner.md` §4.
 
-### Agents: `merger.md`'s post-merge paragraph calls backgrounding "impossible"
-
-#### Background
-
-The `agent-foreground-rationale` plan replaced the inaccurate "a subagent exits the moment its turn ends" rationale in the agent files. It left `merger.md`'s post-merge paragraph alone to keep the change surgical. That paragraph still says backgrounding is "impossible for the same reason as step 1". With the corrected reason, backgrounding is ruled out (the foreground run keeps the exit code observable to branch on), not impossible. Plan: `docs/plans/_archived/20261007-agent-foreground-rationale/plan.md`
-
-Files: `.claude/agents/merger.md`
-
-#### TODO
-
-- [ ] Reword the post-merge paragraph so it no longer calls backgrounding "impossible". Its wording should agree with step 1 and with `pr-runner.md` §4.
-
 ### Core: SIGMA fp L strip thumbnails have over ten times the pixels of other bodies'
 
 SIGMA fp L DNGs have no strip JPEG at or above `PREVIEW_MIN_WIDTH` (1600)
@@ -1338,16 +1326,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 - [ ] On Windows, run the native app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, a folder of test copies open, the settings closed. (1) Call `clear_cache`: expect the "Clear the index cache?" dialog over the dimmed main window with Clear focused; click Clear: `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache" and the folder is scanned again; call it again and press Escape: idle, nothing cleared, and the main window takes keys again. (2) Call `set_overlays {"grayscale": true}`: the photo turns gray and stays gray after clicking the tree and switching to another window and back; press and release `g`: it turns back to color.
 
-### Native: an empty lens string lists a blank `Lens` item in the filter's EXIF groups
-
-#### Background
-
-Found by `native-mcp-everything` Step 2's end-to-end check: `get_view.filter_offers.exif.lens` listed `""` for a folder where a compact camera's ARW (`DSC-HX95` / `DSC-HX99`) reports an empty lens string, so the Filter menu presumably draws a blank `Lens` item too. `exif::exif_key` takes `Exif.lens` as is. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/exif.rs` (`exif_key`).
-
-#### TODO
-
-- [ ] Check whether the backend's `exif` reader should give `None` for an empty string, or `exif_key` should skip it. Done when an empty lens string produces no `Lens` item in the filter menu and in `get_view`'s `filter_offers`.
-
 ### Agents: `local-review-runner` returns before its reviewer finishes, and `pr-runner` aborts on a transient `api.github.com` outage
 
 #### Background
@@ -1358,14 +1336,6 @@ Seen by the orchestrating session of `native-mcp-everything` (plan: `docs/plans/
 
 - [ ] Make `local-review-runner` wait for the reviewer's result or detect a background launch. Done when a run never returns before the reviewer has.
 - [ ] Make `pr-runner` retry network errors for longer before counting a `pr_status_failure`. Done when a short `api.github.com` outage does not abort a run.
-
-### Native: the status line omits the Tauri ` · N selected` suffix for a multi-selection
-
-`gpui-tree-trash` Step 5 wired the multi-selection, but the status line does not show the Tauri position's ` · N selected` suffix (`renderMeta` in `main.ts`); the Done-when did not ask for it. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. Files: `crates/app/src/main.rs` (`status`).
-
-#### TODO
-
-- [ ] Add the ` · N selected` suffix to the native status line when more than one file is selected.
 
 ### Native: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
 
@@ -2271,16 +2241,6 @@ Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools
 - [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run app:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
 - [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run app:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
 
-### Package: the macOS DMG step fails with `hdiutil: create failed - No space left on device`
-
-Run 44081604694 (the arm64 leg on `macos-latest`) failed in `tools/package/macos.sh` with `hdiutil: create failed - No space left on device` while copying the binary into the image; re-running the job went green. It is not only a flake: Package run https://github.com/minodisk/handpic/actions/runs/44126142482 (dispatched for the remove-tauri plan's Step 1) failed the same way on both macOS jobs, twice, on a cached-build run of about 4 minutes, while the cold-build run 44121201413 on equivalent packaging files succeeded. `macos.sh` (around line 39) runs `hdiutil create -volname Handpic -srcfolder "${stage}" -ov -format UDZO "${dmg}"` with no `-size`, so `hdiutil` sizes the image from `-srcfolder` and the auto-sized image is too small. Plans: `docs/plans/_archived/20261117-gpui-packaging/plan.md`, `docs/plans/20261118-remove-tauri/plan.md` (Step 1).
-
-Files: `tools/package/macos.sh`, `.github/workflows/package.yml`.
-
-#### TODO
-
-- [ ] Give `hdiutil create` an explicit `-size` with headroom (from `du` of the stage plus a margin), or create a read-write image and `hdiutil convert` it to UDZO. Done when a `Package` run with a warm cache produces both DMGs.
-
 ### Native: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
 
 The native deb is `Package: handpic`. The shipped Tauri deb (v1.10.0) is `Package: riffle`, so both can be installed side by side, and the native deb does not upgrade it in place. The removed Tauri app's `tauri.conf.json` on `main` had `linux.deb.replaces` / `conflicts` `["riffle"]`, never released. Separately, `tools/package/linux.sh` adds `libvulkan1` and `libwayland-client0` to `dpkg-shlibdeps`'s result but not `libegl1`, which wgpu's GL fallback opens when no Vulkan adapter is found. A desktop normally has it, but a machine without Vulkan would need it. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md` ("The deb does not upgrade a Riffle deb in place" risk and Step 3's `Depends` measurement).
@@ -2327,18 +2287,6 @@ Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/a
 #### TODO
 
 - [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/app/icons/` reads Handpic and the derivation is written down.
-
----
-
-### Native: the issue template says `Help > Open Log Folder`, which the native app does not have
-
-`.github/ISSUE_TEMPLATE/os.yml` tells the reporter that `Help > Open Log Folder` opens the log folder. Nothing under `crates/app/src` names it, because only the Tauri app had it. `docs/agents/app-log.md`'s "Where the file is" bullets say the same. Found by the remove-tauri plan's Step 3 while checking the template's log paths, which are correct. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `.github/ISSUE_TEMPLATE/os.yml`, `docs/agents/app-log.md`.
-
-#### TODO
-
-- [ ] Either add an equivalent to the native app (a way to open the log folder) or drop the sentence from the template and from `app-log.md`.
 
 ---
 

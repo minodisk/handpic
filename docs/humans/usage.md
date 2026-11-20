@@ -109,7 +109,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   holds the `Sort ▾` and `Filter ▾` menus at its right end; dragging the
   header's top edge sets the strip's height, remembered across launches. The
   status row along the window's bottom shows the position, `n / N`, followed
-  while a filter is on by how many files the folder lists in parentheses.
+  while a filter is on by how many files the folder lists in parentheses and,
+  while more than one file is selected, by `· K selected`.
   Hovering a cell's name band shows its color label's name, and hovering a
   cell whose file failed to scan shows the error. While a folder is scanned (`scanning N / M`, then
   `analyzing N / M`), the scan takes the shown file and the strip's visible

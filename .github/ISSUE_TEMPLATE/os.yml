@@ -32,7 +32,7 @@ body:
     attributes:
       label: Handpic.log
       description: |
-        Paste the contents of `Handpic.log` or attach the file. `Help > Open Log Folder` opens the folder, or find it at:
+        Paste the contents of `Handpic.log` or attach the file. Find it at:
         - Windows: `%LOCALAPPDATA%\dev.minodisk.handpic\logs\`
         - macOS: `~/Library/Logs/dev.minodisk.handpic/`
         - Linux: `~/.local/share/dev.minodisk.handpic/logs/`

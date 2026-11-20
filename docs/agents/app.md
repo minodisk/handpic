@@ -1623,7 +1623,9 @@ current file's name and shooting settings live in the meta pane only, which
 holds only the shown photo's details. The position (`pager::position`) is
 `n / shown` (`3 / 120`), and while `FilterState::is_active` the listing
 `all`'s count follows in parentheses (`3 / 80 (120)`, also `3 / 120 (120)`
-when the filter hides nothing), mirroring the lit `Filter ▾`. It shows
+when the filter hides nothing), mirroring the lit `Filter ▾`, and while
+more than one file is selected ` · K selected` follows (`3 / 80 (120) · 4
+selected`), as the Tauri `renderMeta`. It shows
 whenever `files` is non-empty, from the listing on, not only once a preview
 has arrived, and not at all with no shown file (the pager's index is 0 on an
 empty list, so a bare format would print `1 / 0`). The position stays in the

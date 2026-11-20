@@ -217,8 +217,9 @@ default `MAX_WAIT` is 1800 seconds (30 minutes), which the Bash tool's
 foreground execution (whose default timeout can be as low as 120 s, and 600 s
 at most even with `timeout: 600000`) would kill, leaving the exit code
 unobservable. Tick it off in the foreground in 240-second slices with
-`timeout: 600000` and express the total wait with the counter (backgrounding is
-impossible for the same reason as step 1).
+`timeout: 600000` and express the total wait with the counter (do not
+background it, for the same reason as step 1: the foreground run is what lets
+the counters tick and keeps the exit code observable to branch on).
 
 **If the harness nonetheless reports that a command was moved to the
 background, do not improvise `sleep` / `until` polling or any other waiting
