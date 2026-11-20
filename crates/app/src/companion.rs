@@ -1,5 +1,5 @@
 //! The answering side of the MCP companion, a port of `companion.ts` over a
-//! snapshot of the view, extended with the native app's own tools: the
+//! snapshot of the view, extended with the app's own tools: the
 //! moves, Select All, Reject Rest, undo and redo, each the `Key` its keymap
 //! action runs, and the sort, the filter, the panes and the overlays, each
 //! set to a given state rather than toggled, and the folder tree's opens,
@@ -29,8 +29,8 @@
 //! coverage table (`coverage`, compiled for its tests: `KEYMAP`,
 //! `context_coverage`, `menu_coverage`, `folder_op_coverage`,
 //! `page_coverage` and `OTHER`) maps
-//! every user-facing action to its tool, to a tool refused until the native
-//! app has the feature (`not_in_native`: compare, the recommended sort, the
+//! every user-facing action to its tool, to a tool refused until the
+//! app has the feature (`not_in_app`: compare, the recommended sort, the
 //! Genre filter, file rename, the ranking and the AI switch), or to the
 //! reason it has none.
 
@@ -77,15 +77,15 @@ use crate::{
     viewonly,
 };
 
-/// The features of the Tauri app the native app does not have yet, each
-/// with its tool, which refuses with `not_in_native` (D6).
+/// The features of the Tauri app the app does not have yet, each
+/// with its tool, which refuses with `not_in_app` (D6).
 const COMPARE: &str = "compare";
 const RECOMMENDED: &str = "the recommended sort";
 const GENRE: &str = "the Genre filter";
 const FILE_RENAME: &str = "file rename";
 const RANKING: &str = "the personal ranking";
 const AI_SWITCH: &str = "the AI switch";
-/// The tools whose whole call is a feature not in the native app yet.
+/// The tools whose whole call is a feature not in the app yet.
 const UNPORTED_TOOLS: [(&str, &str); 2] =
     [("rename_file", FILE_RENAME), ("refit_ranking", RANKING)];
 const CLEAR_RUNNING: &str = "a Clear Cache is under way in Handpic; try again once it ends";
@@ -93,13 +93,13 @@ const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
 const VIEW_ONLY_REFUSAL: &str = "culling does not apply to a JPEG folder";
 
-/// The one refusal of a feature the native app does not have yet.
-pub fn not_in_native(feature: &str) -> String {
-    format!("{feature} is not implemented in Handpic's native app yet")
+/// The one refusal of a feature the app does not have yet.
+pub fn not_in_app(feature: &str) -> String {
+    format!("{feature} is not implemented in Handpic yet")
 }
 
 /// The coverage table: how an MCP client reaches every user-facing action
-/// of the native app. Only its tests read it, which keep it complete.
+/// of the app. Only its tests read it, which keep it complete.
 #[cfg(test)]
 pub mod coverage {
     use super::{AI_SWITCH, COMPARE, FILE_RENAME, FolderOp, GENRE, RANKING, RECOMMENDED};
@@ -109,13 +109,13 @@ pub mod coverage {
         settingsmodal::Tab,
     };
 
-    /// How an MCP client reaches one user-facing action of the native app.
+    /// How an MCP client reaches one user-facing action of the app.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum Coverage {
         /// The tool that performs it.
         Tool(&'static str),
-        /// The tool that refuses it with `not_in_native(feature)` until the
-        /// native app has the feature (D6), then performs it.
+        /// The tool that refuses it with `not_in_app(feature)` until the
+        /// app has the feature (D6), then performs it.
         NotImplemented {
             tool: &'static str,
             feature: &'static str,
@@ -236,7 +236,7 @@ pub mod coverage {
     }
 
     /// The actions outside the keymap, the menus and the settings pages, and
-    /// the features the native app does not have yet.
+    /// the features the app does not have yet.
     pub const OTHER: &[(&str, Coverage)] = &[
         ("a click on a strip cell", Coverage::Tool("show_photo")),
         (
@@ -977,7 +977,7 @@ pub struct Change {
 /// before it replies with `get_view`, or the refusal's message.
 pub fn answer(kind: &str, args: &Value, view: &View) -> Result<Option<Action>, String> {
     if let Some((_, feature)) = UNPORTED_TOOLS.iter().find(|(tool, _)| *tool == kind) {
-        return Err(not_in_native(feature));
+        return Err(not_in_app(feature));
     }
     if !READS.contains(&kind)
         && kind != CANCEL
@@ -1290,7 +1290,7 @@ fn folder_operation(view: &View, args: &Value, tool: &str) -> Result<Action, Str
 }
 
 /// `rename_folder`, the tree's `Rename…` of the folder `path` to `name`,
-/// whose name the backend checked (`rename::folder_target`), refused while
+/// whose name the engine checked (`rename::folder_target`), refused while
 /// an import runs. Without `confirm`, it previews while
 /// `mcpAllowDestructive` is on, else opens the tree's inline rename on the
 /// folder's row with `name` filled in; with it, the rename a preview's `id`
@@ -1593,7 +1593,7 @@ fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
         return Err(NOTHING_SHOWN.into());
     }
     if mode == "compare" {
-        return Err(not_in_native(COMPARE));
+        return Err(not_in_app(COMPARE));
     }
     Ok(((mode == "zoom") != view.zoomed).then_some(Action::ToggleZoom))
 }
@@ -1605,7 +1605,7 @@ fn set_sort(view: &View, by: &Value) -> Result<Option<Action>, String> {
         Some("name") => SortKey::Name,
         Some("capture") => SortKey::Capture,
         Some("rating") => SortKey::Rating,
-        Some("recommended") => return Err(not_in_native(RECOMMENDED)),
+        Some("recommended") => return Err(not_in_app(RECOMMENDED)),
         _ => return Err("by must be one of name, capture, rating".into()),
     };
     if view.view_only {
@@ -1828,7 +1828,7 @@ fn toggles(from: &FilterState, to: &FilterState) -> Vec<menu::Action> {
 /// first when it asks for one.
 fn set_filter(view: &View, args: &Value) -> Result<Option<Action>, String> {
     if given_field(args, "genres").is_some() {
-        return Err(not_in_native(GENRE));
+        return Err(not_in_app(GENRE));
     }
     let wanted = wanted_filter(view, args)?;
     if wanted == *view.filter {
@@ -2178,7 +2178,7 @@ fn set_settings(view: &View, args: &Value) -> Result<Option<Action>, String> {
         return Err(ALLOW_DESTRUCTIVE_REFUSAL.into());
     }
     if args.get("ai_enabled").is_some() {
-        return Err(not_in_native(AI_SWITCH));
+        return Err(not_in_app(AI_SWITCH));
     }
     if view.folder_op {
         return Err(FOLDER_OP_REFUSAL.into());
@@ -2369,7 +2369,7 @@ mod tests {
             Coverage, KEYMAP, OTHER, context_coverage, folder_op_coverage, menu_coverage,
             page_coverage,
         },
-        get_settings, get_status, get_view, not_in_native, previewed, started, tree_reply,
+        get_settings, get_status, get_view, not_in_app, previewed, started, tree_reply,
     };
     use crate::{
         burst::BurstMember,
@@ -3087,7 +3087,7 @@ mod tests {
         let files = paths(&["/d/a", "/d/b"]);
         assert_eq!(
             ask("set_view", json!({ "mode": "compare" }), &view(&files)),
-            Err("compare is not implemented in Handpic's native app yet".into())
+            Err("compare is not implemented in Handpic yet".into())
         );
     }
 
@@ -3366,7 +3366,7 @@ mod tests {
         assert_eq!(ask("set_sort", json!({ "by": "name" }), &view), Ok(None));
         assert_eq!(
             ask("set_sort", json!({ "by": "recommended" }), &view),
-            Err("the recommended sort is not implemented in Handpic's native app yet".into())
+            Err("the recommended sort is not implemented in Handpic yet".into())
         );
         assert_eq!(
             ask("set_sort", json!({ "by": "size" }), &view),
@@ -3752,7 +3752,7 @@ mod tests {
     }
 
     #[test]
-    fn every_feature_not_in_the_native_app_is_refused_with_the_shared_message() {
+    fn every_feature_not_in_the_app_is_refused_with_the_shared_message() {
         let files = paths(&["/d/a", "/d/b"]);
         let view = view(&files);
         let calls = [
@@ -3792,18 +3792,18 @@ mod tests {
         called.sort();
         assert_eq!(listed, called);
         for (feature, tool, args) in calls {
-            let refusal = format!("{feature} is not implemented in Handpic's native app yet");
-            assert_eq!(not_in_native(feature), refusal);
+            let refusal = format!("{feature} is not implemented in Handpic yet");
+            assert_eq!(not_in_app(feature), refusal);
             assert_eq!(ask(tool, args, &view), Err(refusal), "{tool}");
         }
-        // A whole tool not in the native app is refused even while busy.
+        // A whole tool not in the app is refused even while busy.
         let busy = View {
             busy: Some(Busy::Settings),
             ..view
         };
         assert_eq!(
             ask("refit_ranking", json!({}), &busy),
-            Err(not_in_native("the personal ranking"))
+            Err(not_in_app("the personal ranking"))
         );
     }
 

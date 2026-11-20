@@ -6,7 +6,7 @@
 //! caller's tokio runtime, so `Mcp::switch` and `Mcp::stop` must run inside
 //! one. The tools a server lists are its host's: the seven companion tools by
 //! default (what the removed Tauri app listed), all of them after
-//! `Mcp::with_all_tools` (the native app), and `screenshot` only after
+//! `Mcp::with_all_tools` (the app), and `screenshot` only after
 //! `Mcp::with_screenshot`.
 
 use std::collections::HashMap;
@@ -73,7 +73,7 @@ picks / rejects and color labels the same way the user's keys do, so the app's u
 sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
 Suggest judgments and explain them; write them only when the user asks you to.";
 
-/// The native app's instructions, over the whole tool set.
+/// The app's instructions, over the whole tool set.
 const NATIVE_INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (Sony \
 ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. This server \
 connects you to the running app, and every action the user takes in it has a tool here, so you \
@@ -99,7 +99,7 @@ operations, and is refused otherwise. \
 call that changes anything is refused while the user has Handpic's settings, a dialog or a \
 folder rename open; try again once they are done. Compare, the recommended sort, the Genre \
 filter, file rename, the personal ranking and the AI switch have their tools or values but \
-are refused: the native app does not have them yet. Suggest judgments and explain them; write \
+are refused: the app does not have them yet. Suggest judgments and explain them; write \
 them only when the user asks you to.";
 
 type Reply = Result<Value, String>;
@@ -449,7 +449,7 @@ pub enum SortBy {
 #[schemars(crate = "rmcp::schemars")]
 pub struct SortArgs {
     /// `name`, `capture` (capture time) or `rating`; `recommended` is not in
-    /// the native app yet.
+    /// the app yet.
     by: SortBy,
 }
 
@@ -561,7 +561,7 @@ pub struct FilterArgs {
     /// The EXIF sections to set; a section left out keeps its checks.
     #[serde(skip_serializing_if = "Option::is_none")]
     exif: Option<ExifArgs>,
-    /// The `Genre` items; not in the native app yet.
+    /// The `Genre` items; not in the app yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     genres: Option<Vec<String>>,
 }
@@ -916,7 +916,7 @@ pub struct SettingsArgs {
     /// The theme's mode and the light and dark themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     theme: Option<ThemeArgs>,
-    /// The AI features' switch; not in the native app yet.
+    /// The AI features' switch; not in the app yet.
     #[serde(skip_serializing_if = "Option::is_none")]
     ai_enabled: Option<bool>,
 }
@@ -1202,8 +1202,8 @@ impl Companion {
     }
 }
 
-/// The tools only the native app lists.
-#[tool_router(router = native_router)]
+/// The tools only the app lists.
+#[tool_router(router = app_router)]
 impl Companion {
     #[tool(
         description = "Move Handpic's current photo as the paging keys do: `previous` / `next` \
@@ -1259,7 +1259,7 @@ impl Companion {
 
     #[tool(
         description = "Set the filmstrip's order, as the Sort menu does, keeping the current \
-        photo: `name`, `capture` or `rating` (`recommended` is refused: the native app does \
+        photo: `name`, `capture` or `rating` (`recommended` is refused: the app does \
         not have it yet). Remembered for the next launch. A JPEG-only folder stays in capture \
         order and refuses it. Returns the new view, as `get_view` \
         does (its `sort`)."
@@ -1273,7 +1273,7 @@ impl Companion {
         replaces its checks (an empty list unchecks it), a section left out keeps them, and \
         `reset` unchecks everything first. Within a section any checked item passes; across \
         sections all must. The output and EXIF sections take only what `get_view`'s \
-        `filter_offers` lists for the open folder; `genres` is refused (the native app does \
+        `filter_offers` lists for the open folder; `genres` is refused (the app does \
         not have the Genre section yet). The current photo stays when the filter still shows \
         it, else the nearest shown one becomes current. Returns the new view, as \
         `get_view` does (its `filter`)."
@@ -1544,8 +1544,8 @@ impl Companion {
         names apply only while the format writes XMP; a shortcut edit refuses a key bound to \
         another action, one of the app's own keys or an action's last key; an invalid import \
         pattern is refused; the theme applies at once. Remembered for the next launch. \
-        `mcp_allow_destructive` cannot be set here, and `ai_enabled` is refused (the native \
-        app does not have the AI features yet). Refused while a folder operation runs. \
+        `mcp_allow_destructive` cannot be set here, and `ai_enabled` is refused (the app \
+        does not have the AI features yet). Refused while a folder operation runs. \
         Returns the settings, as `get_settings` does."
     )]
     async fn set_settings(&self, Parameters(args): Parameters<SettingsArgs>) -> CallToolResult {
@@ -1570,8 +1570,8 @@ impl Companion {
     }
 
     #[tool(
-        description = "Rename a photo of the open folder with its sidecars. Refused: Handpic's \
-        native app does not have file rename yet."
+        description = "Rename a photo of the open folder with its sidecars. Refused: Handpic \
+        does not have file rename yet."
     )]
     async fn rename_file(&self, Parameters(args): Parameters<RenameFileArgs>) -> CallToolResult {
         match serde_json::to_value(args) {
@@ -1582,7 +1582,7 @@ impl Companion {
 
     #[tool(
         description = "Refit the personal best-shot ranking on the user's judgments. Refused: \
-        Handpic's native app does not have the ranking yet."
+        Handpic does not have the ranking yet."
     )]
     async fn refit_ranking(&self) -> CallToolResult {
         self.view_call("refit_ranking").await
@@ -1657,17 +1657,17 @@ impl Mcp {
     }
 
     /// The server listing every tool, with the instructions over them: the
-    /// native app's. The removed Tauri app listed the seven.
+    /// app's. The removed Tauri app listed the seven.
     pub fn with_all_tools(self) -> Self {
         let companion = Companion {
-            tools: Companion::tool_router() + Companion::native_router(),
+            tools: Companion::tool_router() + Companion::app_router(),
             instructions: NATIVE_INSTRUCTIONS,
             ..self.companion
         };
         Mcp { companion, ..self }
     }
 
-    /// The server also listing `screenshot`, which the native app answers
+    /// The server also listing `screenshot`, which the app answers
     /// only in a build with its `screenshot` feature.
     pub fn with_screenshot(self) -> Self {
         let companion = Companion {
@@ -2049,7 +2049,7 @@ mod tests {
     }
 
     #[test]
-    fn all_tools_lists_the_native_apps_full_set() {
+    fn all_tools_lists_the_apps_full_set() {
         let mcp = Mcp::new(Bridge::new(|_| Ok(())), None)
             .with_all_tools()
             .with_port(1);
