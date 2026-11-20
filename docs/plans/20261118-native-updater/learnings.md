@@ -323,7 +323,7 @@
   `macos-latest` leg of the PR's checks.
 - Deviation from the plan's Done-when wording: it says "the macOS leg of the
   `app` job runs the bundle test", but the engine and its tests are in
-  `crates/backend`, a root-workspace member, so `cargo test` of the `test`
+  `crates/engine`, a root-workspace member, so `cargo test` of the `test`
   job's `macos-latest` leg runs them (the `app` job tests `crates/app`'s own
   crate only). No CI change was needed.
 - The restart: GPUI 0.3.12's macOS `restart` runs `open <path>` after the
@@ -377,7 +377,7 @@
   ZIP on the feed should end in `Failed` with nothing staged. This is Step
   7's Inno Setup row; the checkbox was ticked on the automated criteria.
   Basis: Step 5 implementation; files `crates/app/src/main.rs`,
-  `crates/backend/src/update.rs`.
+  `crates/engine/src/update.rs`.
 - Pending manual check (Step 6, macOS, a `Handpic.app` of a test build
   packaged with `update_test_repo`): with a newer release on the test feed,
   an older `Handpic.app` in `/Applications` should go `Checking` to
@@ -391,5 +391,5 @@
   6 checkbox was ticked on the automated criteria (the swap tests on every
   platform; the real `codesign` test runs on the PR's checks, the `test`
   job's `macos-latest` leg). Basis: Step 6
-  implementation; files `crates/backend/src/update.rs`,
+  implementation; files `crates/engine/src/update.rs`,
   `crates/app/src/main.rs`.

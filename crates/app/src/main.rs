@@ -2714,10 +2714,10 @@ impl Handpic {
         // GPUI's macOS restart `open`s the path: the bundle, whose path the
         // swap kept, not the executable inside it.
         let target = match self.updates.kind {
-            handpic_backend::update::InstallKind::App => self
+            handpic_engine::update::InstallKind::App => self
                 .update_exe
                 .as_deref()
-                .and_then(handpic_backend::update::app_bundle)
+                .and_then(handpic_engine::update::app_bundle)
                 .map(Path::to_path_buf),
             _ => self.update_exe.clone(),
         };
