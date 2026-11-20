@@ -77,8 +77,8 @@ use crate::{
     viewonly,
 };
 
-/// The features of the Tauri app the app does not have yet, each
-/// with its tool, which refuses with `not_in_app` (D6).
+/// The Tauri app's features Handpic does not have yet, each with its
+/// tool, which refuses with `not_in_app` (D6).
 const COMPARE: &str = "compare";
 const RECOMMENDED: &str = "the recommended sort";
 const GENRE: &str = "the Genre filter";

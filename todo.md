@@ -1083,7 +1083,7 @@ Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- carg
 
 ### App: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
 
-`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` was 144x144 (its `style.css`'s `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the native strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/strip.rs` (`Geometry`), `crates/app/src/main.rs` (`paint_strip`).
+`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` was 144x144 (its `style.css`'s `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the app's strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/strip.rs` (`Geometry`), `crates/app/src/main.rs` (`paint_strip`).
 
 #### TODO
 

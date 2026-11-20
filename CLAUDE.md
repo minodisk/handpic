@@ -75,8 +75,8 @@ benchmark CLI, including the `scan` folder-extraction benchmark, the
 `copybench` timing of the import's copy pipeline and the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
 centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
-`crates/engine` (`handpic-engine`, the GUI-free engine the app depends on: the
-stateful machinery it drives (the index, the scan passes, the sidecar writer,
+`crates/engine` (`handpic-engine`, the GUI-free engine the app depends on, which holds the
+stateful machinery the app drives (the index, the scan passes, the sidecar writer,
 the watchers, the trash runs, the MCP server) against `handpic-core`'s
 stateless parsing and analysis,
 a root-workspace member that `crates/app` uses by path and so compiled twice
