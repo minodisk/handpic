@@ -371,9 +371,13 @@ To be checked in the sub-milestone that needs each one.
 - **Measured** (the same run). The relaunch after a silent setup run belongs
   to the setup: `Restart Now` adds `/RELAUNCH`, which turns on a `[Run]`
   entry starting the installed app; without it (a plain quit, or a setup
-  run by hand) nothing starts. For a portable, tarball or `.app` install
+  run by hand) nothing starts.
+- **Source** (`crates/app/src/main.rs`'s `Restart Now`,
+  `crates/engine/src/update.rs`). For a portable, tarball or `.app` install
   `Restart Now` is GPUI's `cx.restart()` after the drains, towards the path
-  read at launch (the bundle for a `.app`).
+  read at launch (the bundle for a `.app`). No run measured it: the relaunch
+  of an updated executable is pending the user's check for the portable and
+  unverified for the tarball and the `.app`, as the test-feed table records.
 - **Measured** (2026-11-21, the test feed above). The setup `.exe` the app
   downloads carries no Mark of the Web and ran at quit unattended; a
   standard account is left to the rc dry run.
