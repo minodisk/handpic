@@ -2325,3 +2325,21 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 - [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
 
 ---
+
+### App: real-device checks of the update flow on macOS, Linux and a standard Windows account (native-updater)
+
+The `native-updater` feature gave the app a launch check, an Updates page, and an update path per install kind (`self_update` for the portable ZIP and the tarball, the staged setup for Inno Setup, a staged swap of the whole bundle for a `.app`, and a notice with the release page for a deb). CI and the engine's tests cover the updater against a fake GitHub API (the policy table, a ZIP and a `.tar.gz` update, a bundle swap in a temp folder, every digest and signature failure, the setup's staging and both verifications) and, for Inno Setup, a `/WAITPID` and `/RELAUNCH` upgrade on the Windows runner. On the developer's Windows PC the portable ZIP and Inno Setup rows were measured from rc.1 to rc.2 on the test feed `minodisk/handpic-update-test`. Never exercised: the `.app`, tarball and deb paths on a real machine (no macOS or Linux machine was at hand), the real `codesign` swap outside CI, a standard Windows account (the PC's token was non-elevated but the hosted runner is elevated), a real network cut (offline was simulated with `HTTPS_PROXY=http://127.0.0.1:9`), and the gpui-kit matrix rows "a release published mid-install" and "interrupted install, failed relaunch, or downgrade". These fold into the end-to-end rc.1 to rc.2 dry run of sub-milestone 4 with the production key. Test builds come from a `Package` run with `update_test_repo` set and `tools/package/test-release.sh` (see `docs/agents/app.md`). Plan: `docs/plans/_archived/20261118-native-updater/plan.md`.
+
+Files: `crates/engine/src/update.rs`, `crates/app/src/update.rs`, `crates/app/src/main.rs`, `crates/app/src/settingsview.rs`, `tools/package/test-release.sh`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
+
+#### TODO
+
+- [ ] On macOS, with an rc.1 `Handpic.app` in `/Applications` and rc.2 on the test feed, launch it. Expect the Updates page to go `Checking`, `Downloading`, `Verifying`, `ReadyToRestart` without a click, only `Handpic.app` left in `/Applications`, and `Restart Now` to log the three `quit:` drain lines and reopen the bundle as rc.2. Record whether Gatekeeper prompts after the swap and whether the folder-access grants survive it.
+- [ ] On macOS, open the same rc.1 build from the mounted DMG or from `~/Downloads` (translocated). Expect `Failed` with the "move Handpic.app to /Applications" message and nothing changed.
+- [ ] On Linux, with an rc.1 tarball install from `install.sh` and rc.2 on the test feed, launch it. Expect the same phases without a click, the pane's note, and `Restart Now` to log the three `quit:` drain lines and come back as rc.2 (through the path read at launch, not the ` (deleted)` one). A second launch within the hour must not check (`updateCheckedAt`).
+- [ ] On Linux, with an rc.1 deb install (`/usr/lib/handpic`), launch it. Expect the notice with `Open Release Page`, which opens the release in the browser, and nothing installed.
+- [ ] On Windows, as a standard (non-admin) user, with an rc.1 Inno Setup install and rc.2 staged, quit plainly and then use `Restart Now`. Expect no UAC and no SmartScreen prompt, rc.2 installed, and a relaunch only after `Restart Now`.
+- [ ] On any platform, cut the network for real (disable the adapter) at launch and on `Check for Updates`. Expect the app to stay usable and `Failed` to be retryable. On the Updates page, check that `Check for Updates` is disabled while a check runs and that `Open Release Page` opens the browser (the page's click paths were never driven).
+- [ ] On a real machine, try the rows the rehearsal skipped: publish a release while an install is downloading, interrupt an install, and a failed relaunch, and note what is left launchable (the engine claims no rollback beyond the `.app` bundle mode's restore of the old bundle).
+
+---

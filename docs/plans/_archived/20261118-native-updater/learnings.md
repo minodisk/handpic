@@ -505,3 +505,13 @@
   interrupted install, failed relaunch). The Step 6 and Step 4 pending
   manual checks above fold into these. Basis: Step 7 rehearsal; file
   `docs/plans/20261109-gpui-port/packaging-updater.md`.
+- Windows release `handpic.exe` is a console-subsystem binary (record only,
+  from the wrap-up). Change: build it with the windows subsystem
+  (`windows_subsystem` in `crates/app/src/main.rs`, release builds only), then
+  add a `docs/agents/app.md` rule on it, including how debug builds and
+  `--auto` keep their log output visible. Why: every launch from Explorer, the
+  Start menu or an update's relaunch opens a console window. Done when: a
+  release build launched from Explorer shows no console, the log still reaches
+  `Handpic.log`, and the fix is merged before release PR #928. Already tracked
+  as a release requirement in `docs/plans/20261109-gpui-port/plan.md` Step 10
+  and being fixed in a separate PR, so not filed in `todo.md`.
