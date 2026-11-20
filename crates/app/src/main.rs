@@ -2682,12 +2682,13 @@ impl Handpic {
                     }
                 }
             };
-            let installed =
-                handpic_engine::update::stage_setup(&source, &offer, &dir, &version, progress)
-                    .map(|setup| {
-                        log::info!("update: setup staged at {}", setup.display());
-                        staged.lock().unwrap().setup = Some(setup);
-                    });
+            let installed = handpic_engine::update::stage_setup(
+                &source, &offer, &dir, &version, progress,
+            )
+            .map(|setup| {
+                log::info!("update: setup staged at {}", setup.display());
+                staged.lock().unwrap().setup = Some(setup);
+            });
             let _ = events.unbounded_send(Event::Update(update::Message::Installed(installed)));
         });
     }
