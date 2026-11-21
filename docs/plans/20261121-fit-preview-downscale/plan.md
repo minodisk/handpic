@@ -138,3 +138,5 @@ Taken with the recommended option at approval (2026-11-21):
 - **Prefetch cap.** `PREFETCH_PIXEL_CAP` stays 32 MP but now counts decoded pixels, so neighbours that were too large to share it (whole JPEGs of a view-only folder) fit. Lowering the cap is not part of this plan.
 
 ## Progress
+
+(2026-11-21) Step 1 complete
