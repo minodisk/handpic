@@ -58,8 +58,9 @@
   reached the first DWM composition after its page was pended (pended to
   screen always 17.4-37.6 ms), while 47 % (ARW) and 34 % (RAF) of B's did.
   The earliest any B page reached the screen was 7.95 ms (ARW) / 9.01 ms
-  (RAF) after it was pended, so a frame presented in roughly the last half of
-  a refresh still misses that vblank (inferred). That is why the in-app
+  (RAF) after it was pended, so a page pended in the last 8-9 ms of a refresh
+  still misses that vblank (the smallest toDwm of a first-composition press,
+  5.34 / 6.40 ms, bounds the presented side). That is why the in-app
   `keypressToPixels` drop (about 8.6-9.3 ms) overstates the screen gain.
 - `screengap.py`'s per-press pairing gets a weak aligned r on B ARW
   (0.12-0.35): with the wait gone, `keypressToPixels` spreads over only a

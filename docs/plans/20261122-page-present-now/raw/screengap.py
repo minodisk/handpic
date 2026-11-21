@@ -7,7 +7,9 @@ the 12 used runs, and prints p50 / p95 per run and the median of the three
 runs. `pended` is the time from the page pended (`notified`, before
 `frameWait`) to the DWM present; `first` is the share of presses whose
 `pended` is at most one refresh, i.e. that reached the screen at the first
-DWM composition after the page was pended.
+DWM composition after the page was pended. Per run it also prints the min and
+max of `pended`, the counts at <= 1, (1, 2] and > 2 refreshes, and the smallest
+toDwm of the first-composition presses (the presented-side bound).
 
 Usage: python screengap.py <out dir>
 """
@@ -46,7 +48,7 @@ def corr(x, y):
 for folder, apps in USED.items():
     for app, slots in apps.items():
         print(f"\n## {folder} {'A (before)' if app == 'A' else 'B (after)'}")
-        per, firsts = [], []
+        per, firsts, allp, alld = [], [], [], []
         for slot in slots:
             name = f"{folder}-{slot}"
             rows, scr = pages(name), screen(name)
@@ -67,7 +69,19 @@ for folder, apps in USED.items():
             neg = sum(g < 0 for g in m["gap"])
             print(name, " ".join(f"{k}={pct(v, .5):.2f}/{pct(v, .95):.2f}" for k, v in m.items()),
                   f"first={first}/60 min_gap={min(m['gap']):.2f} neg={neg} r={c0:.2f} r_shift={c1:.2f},{c2:.2f}")
+            pe = m["pended"]
+            n1 = sum(v <= REFRESH for v in pe); n2 = sum(REFRESH < v <= 2 * REFRESH for v in pe)
+            n3 = sum(v > 2 * REFRESH for v in pe)
+            fd = [d for d, v in zip(m["toDwm"], pe) if v <= REFRESH]
+            print(f"  pended min={min(pe):.2f} max={max(pe):.2f} le1={n1} 1to2={n2} gt2={n3}"
+                  + (f" first_toDwm_min={min(fd):.2f}" if fd else ""))
+            allp.extend(pe); alld.extend(fd)
             per.append(m)
         print("median", " ".join(
             f"{k}={statistics.median(pct(m[k], .5) for m in per):.2f}/{statistics.median(pct(m[k], .95) for m in per):.2f}"
             for k in per[0]), f"first={sum(firsts)}/{60 * len(firsts)}")
+        print(f"all {len(allp)} presses: pended min={min(allp):.2f} max={max(allp):.2f}"
+              f" le1={sum(v <= REFRESH for v in allp)}"
+              f" 1to2={sum(REFRESH < v <= 2 * REFRESH for v in allp)}"
+              f" gt2={sum(v > 2 * REFRESH for v in allp)}"
+              + (f" first_toDwm_min={min(alld):.2f}" if alld else ""))

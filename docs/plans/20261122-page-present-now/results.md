@@ -302,11 +302,15 @@ of presses.
   23-26 ms against A's 15 ms on ARW).
 - **The earliest a B page reached the screen was about 8 ms after it was
   pended** (smallest pended 7.95 ms on ARW, 9.01 ms on RAF over the 180
-  presses each). Inferred, not measured: a frame has to be presented some
-  8-9 ms before the vblank for DWM to compose it at that vblank, so a page
-  pended in the last half of a refresh still misses it; on RAF the larger
-  texture upload after `present` (the fit-preview-downscale record) widens
-  that window, which fits RAF's smaller share (34 % against 47 %).
+  presses each). In terms of what was measured: a page pended in the last
+  8-9 ms of a refresh did not make that vblank. The presented side is
+  tighter than that, since `frameWait`, `paint` and `present` take about
+  2.6-2.7 ms after the page is pended: the smallest toDwm among the presses
+  that made the first composition was 5.34 ms on ARW and 6.40 ms on RAF
+  (`raw/screengap.txt`), so a frame presented in the last 5-6 ms of a
+  refresh is the one that misses. Inferred, not measured, is why: on RAF the
+  larger texture upload after `present` (the fit-preview-downscale record)
+  widens that window, which fits RAF's smaller share (34 % against 47 %).
 
 ## Reading
 
