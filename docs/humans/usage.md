@@ -1026,9 +1026,8 @@ same path as the judgment keys: fields it is not given keep each photo's own
 value, the strip updates at once, the change is one step for the undo key,
 and the sidecar is written as a key press writes it. Auto-advance does not
 apply to it. The server's instructions ask the assistant to suggest
-judgments and to write them only when you ask. Asking for compare, the
-`recommended` sort, the genre filter, a file rename, a ranking refit or the
-AI switch is refused: this app does not have them.
+judgments and to write them only when you ask. Asking for compare or a file
+rename is refused: this app does not have them.
 
 Any client that speaks MCP over Streamable HTTP connects to the endpoint
 above. Two examples:

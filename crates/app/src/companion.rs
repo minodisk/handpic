@@ -30,8 +30,7 @@
 //! `context_coverage`, `menu_coverage`, `folder_op_coverage`,
 //! `page_coverage` and `OTHER`) maps
 //! every user-facing action to its tool, to a tool refused until the
-//! app has the feature (`not_in_app`: compare, the recommended sort, the
-//! Genre filter, file rename, the ranking and the AI switch), or to the
+//! app has the feature (`not_in_app`: compare and file rename), or to the
 //! reason it has none.
 
 use std::{
@@ -80,14 +79,9 @@ use crate::{
 /// The Tauri app's features Handpic does not have yet, each with its
 /// tool, which refuses with `not_in_app` (D6).
 const COMPARE: &str = "compare";
-const RECOMMENDED: &str = "the recommended sort";
-const GENRE: &str = "the Genre filter";
 const FILE_RENAME: &str = "file rename";
-const RANKING: &str = "the personal ranking";
-const AI_SWITCH: &str = "the AI switch";
 /// The tools whose whole call is a feature not in the app yet.
-const UNPORTED_TOOLS: [(&str, &str); 2] =
-    [("rename_file", FILE_RENAME), ("refit_ranking", RANKING)];
+const UNPORTED_TOOLS: [(&str, &str); 1] = [("rename_file", FILE_RENAME)];
 const CLEAR_RUNNING: &str = "a Clear Cache is under way in Handpic; try again once it ends";
 const NOTHING_SHOWN: &str = "no photo is shown in Handpic";
 /// `viewonly.ts`'s `VIEW_ONLY_REFUSAL`.
@@ -102,7 +96,7 @@ pub fn not_in_app(feature: &str) -> String {
 /// of the app. Only its tests read it, which keep it complete.
 #[cfg(test)]
 pub mod coverage {
-    use super::{AI_SWITCH, COMPARE, FILE_RENAME, FolderOp, GENRE, RANKING, RECOMMENDED};
+    use super::{COMPARE, FILE_RENAME, FolderOp};
     use crate::{
         context,
         menu::{self, Toggle},
@@ -254,38 +248,10 @@ pub mod coverage {
         ),
         ("a dialog's Cancel", Coverage::Tool("cancel_operation")),
         (
-            "the recommended sort",
-            Coverage::NotImplemented {
-                tool: "set_sort",
-                feature: RECOMMENDED,
-            },
-        ),
-        (
-            "the Genre filter",
-            Coverage::NotImplemented {
-                tool: "set_filter",
-                feature: GENRE,
-            },
-        ),
-        (
             "a photo's rename",
             Coverage::NotImplemented {
                 tool: "rename_file",
                 feature: FILE_RENAME,
-            },
-        ),
-        (
-            "the ranking's refit",
-            Coverage::NotImplemented {
-                tool: "refit_ranking",
-                feature: RANKING,
-            },
-        ),
-        (
-            "the AI switch",
-            Coverage::NotImplemented {
-                tool: "set_settings",
-                feature: AI_SWITCH,
             },
         ),
         (
@@ -1605,7 +1571,6 @@ fn set_sort(view: &View, by: &Value) -> Result<Option<Action>, String> {
         Some("name") => SortKey::Name,
         Some("capture") => SortKey::Capture,
         Some("rating") => SortKey::Rating,
-        Some("recommended") => return Err(not_in_app(RECOMMENDED)),
         _ => return Err("by must be one of name, capture, rating".into()),
     };
     if view.view_only {
@@ -1827,9 +1792,6 @@ fn toggles(from: &FilterState, to: &FilterState) -> Vec<menu::Action> {
 /// The menu clicks that check what `args` asks for, the menu's `Reset`
 /// first when it asks for one.
 fn set_filter(view: &View, args: &Value) -> Result<Option<Action>, String> {
-    if given_field(args, "genres").is_some() {
-        return Err(not_in_app(GENRE));
-    }
     let wanted = wanted_filter(view, args)?;
     if wanted == *view.filter {
         return Ok(None);
@@ -2176,9 +2138,6 @@ fn wanted_theme(current: theme::Setting, args: &Value) -> Result<theme::Setting,
 fn set_settings(view: &View, args: &Value) -> Result<Option<Action>, String> {
     if args.get("mcp_allow_destructive").is_some() {
         return Err(ALLOW_DESTRUCTIVE_REFUSAL.into());
-    }
-    if args.get("ai_enabled").is_some() {
-        return Err(not_in_app(AI_SWITCH));
     }
     if view.folder_op {
         return Err(FOLDER_OP_REFUSAL.into());
@@ -3366,7 +3325,7 @@ mod tests {
         assert_eq!(ask("set_sort", json!({ "by": "name" }), &view), Ok(None));
         assert_eq!(
             ask("set_sort", json!({ "by": "recommended" }), &view),
-            Err("the recommended sort is not implemented in Handpic yet".into())
+            Err("by must be one of name, capture, rating".into())
         );
         assert_eq!(
             ask("set_sort", json!({ "by": "size" }), &view),
@@ -3758,25 +3717,9 @@ mod tests {
         let calls = [
             ("compare", "set_view", json!({ "mode": "compare" })),
             (
-                "the recommended sort",
-                "set_sort",
-                json!({ "by": "recommended" }),
-            ),
-            (
-                "the Genre filter",
-                "set_filter",
-                json!({ "genres": ["Landscape"] }),
-            ),
-            (
                 "file rename",
                 "rename_file",
                 json!({ "path": "/d/a", "name": "b" }),
-            ),
-            ("the personal ranking", "refit_ranking", json!({})),
-            (
-                "the AI switch",
-                "set_settings",
-                json!({ "ai_enabled": true }),
             ),
         ];
         let mut listed: Vec<(&str, &str)> = covered()
@@ -3802,8 +3745,8 @@ mod tests {
             ..view
         };
         assert_eq!(
-            ask("refit_ranking", json!({}), &busy),
-            Err(not_in_app("the personal ranking"))
+            ask("rename_file", json!({ "path": "/d/a", "name": "b" }), &busy),
+            Err(not_in_app("file rename"))
         );
     }
 

@@ -97,9 +97,8 @@ A `redo` that moves files to the trash again runs only while the user allows des
 operations, and is refused otherwise. \
 `cancel_operation` cancels what the user's Cancel would. Run them only when the user asks. A \
 call that changes anything is refused while the user has Handpic's settings, a dialog or a \
-folder rename open; try again once they are done. Compare, the recommended sort, the Genre \
-filter, file rename, the personal ranking and the AI switch have their tools or values but \
-are refused: the app does not have them yet. Suggest judgments and explain them; write \
+folder rename open; try again once they are done. Compare and file rename have their tools \
+but are refused: the app does not have them yet. Suggest judgments and explain them; write \
 them only when the user asks you to.";
 
 type Reply = Result<Value, String>;
@@ -442,14 +441,12 @@ pub enum SortBy {
     Name,
     Capture,
     Rating,
-    Recommended,
 }
 
 #[derive(Debug, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct SortArgs {
-    /// `name`, `capture` (capture time) or `rating`; `recommended` is not in
-    /// the app yet.
+    /// `name`, `capture` (capture time) or `rating`.
     by: SortBy,
 }
 
@@ -561,9 +558,6 @@ pub struct FilterArgs {
     /// The EXIF sections to set; a section left out keeps its checks.
     #[serde(skip_serializing_if = "Option::is_none")]
     exif: Option<ExifArgs>,
-    /// The `Genre` items; not in the app yet.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    genres: Option<Vec<String>>,
 }
 
 /// The `set_filter` request for the main window, with only the sections
@@ -580,7 +574,7 @@ fn filter(args: FilterArgs) -> Result<Value, String> {
     if request.as_object().is_none_or(|o| o.is_empty()) {
         return Err(
             "set reset or at least one of flags, stars, labels, orientations, face_focus, \
-            eyes, output, exif, genres"
+            eyes, output, exif"
                 .into(),
         );
     }
@@ -916,9 +910,6 @@ pub struct SettingsArgs {
     /// The theme's mode and the light and dark themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     theme: Option<ThemeArgs>,
-    /// The AI features' switch; not in the app yet.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ai_enabled: Option<bool>,
 }
 
 /// The `set_settings` request: at least one setting, the import root an
@@ -930,7 +921,7 @@ fn settings(args: SettingsArgs) -> Reply {
     switches(
         args,
         "sidecar_format, label_names, label_language, auto_advance, shortcuts, import_root, \
-        import_pattern, theme, ai_enabled",
+        import_pattern, theme",
     )
 }
 
@@ -1259,9 +1250,8 @@ impl Companion {
 
     #[tool(
         description = "Set the filmstrip's order, as the Sort menu does, keeping the current \
-        photo: `name`, `capture` or `rating` (`recommended` is refused: the app does \
-        not have it yet). Remembered for the next launch. A JPEG-only folder stays in capture \
-        order and refuses it. Returns the new view, as `get_view` \
+        photo: `name`, `capture` or `rating`. Remembered for the next launch. A JPEG-only \
+        folder stays in capture order and refuses it. Returns the new view, as `get_view` \
         does (its `sort`)."
     )]
     async fn set_sort(&self, Parameters(args): Parameters<SortArgs>) -> CallToolResult {
@@ -1273,9 +1263,8 @@ impl Companion {
         replaces its checks (an empty list unchecks it), a section left out keeps them, and \
         `reset` unchecks everything first. Within a section any checked item passes; across \
         sections all must. The output and EXIF sections take only what `get_view`'s \
-        `filter_offers` lists for the open folder; `genres` is refused (the app does \
-        not have the Genre section yet). The current photo stays when the filter still shows \
-        it, else the nearest shown one becomes current. Returns the new view, as \
+        `filter_offers` lists for the open folder. The current photo stays when the filter \
+        still shows it, else the nearest shown one becomes current. Returns the new view, as \
         `get_view` does (its `filter`)."
     )]
     async fn set_filter(&self, Parameters(args): Parameters<FilterArgs>) -> CallToolResult {
@@ -1544,8 +1533,7 @@ impl Companion {
         names apply only while the format writes XMP; a shortcut edit refuses a key bound to \
         another action, one of the app's own keys or an action's last key; an invalid import \
         pattern is refused; the theme applies at once. Remembered for the next launch. \
-        `mcp_allow_destructive` cannot be set here, and `ai_enabled` is refused (the app \
-        does not have the AI features yet). Refused while a folder operation runs. \
+        `mcp_allow_destructive` cannot be set here. Refused while a folder operation runs. \
         Returns the settings, as `get_settings` does."
     )]
     async fn set_settings(&self, Parameters(args): Parameters<SettingsArgs>) -> CallToolResult {
@@ -1578,14 +1566,6 @@ impl Companion {
             Ok(request) => tool_result(self.bridge.call("rename_file", request).await),
             Err(e) => CallToolResult::error(vec![ContentBlock::text(e.to_string())]),
         }
-    }
-
-    #[tool(
-        description = "Refit the personal best-shot ranking on the user's judgments. Refused: \
-        Handpic does not have the ranking yet."
-    )]
-    async fn refit_ranking(&self) -> CallToolResult {
-        self.view_call("refit_ranking").await
     }
 }
 
@@ -2069,7 +2049,6 @@ mod tests {
                 "navigate",
                 "open_folder",
                 "redo",
-                "refit_ranking",
                 "reject_rest",
                 "rename_by_capture_date",
                 "rename_file",
@@ -2116,6 +2095,7 @@ mod tests {
         let args: SortArgs = serde_json::from_value(json!({ "by": "capture" })).unwrap();
         assert_eq!(json!({ "by": args.by }), json!({ "by": "capture" }));
         assert!(serde_json::from_value::<SortArgs>(json!({ "by": "size" })).is_err());
+        assert!(serde_json::from_value::<SortArgs>(json!({ "by": "recommended" })).is_err());
     }
 
     fn filter_args(value: Value) -> Result<Value, String> {
@@ -2176,15 +2156,17 @@ mod tests {
     }
 
     #[test]
+    fn the_removed_ai_values_are_unknown_fields() {
+        assert!(filter_args(json!({ "genres": ["Landscape"] }))
+            .unwrap_err()
+            .contains("unknown field `genres`"));
+        assert!(settings_args(json!({ "ai_enabled": true }))
+            .unwrap_err()
+            .contains("unknown field `ai_enabled`"));
+    }
+
+    #[test]
     fn the_unported_features_reach_the_view_to_be_refused() {
-        assert_eq!(
-            filter_args(json!({ "genres": ["Landscape"] })),
-            Ok(json!({ "genres": ["Landscape"] }))
-        );
-        assert_eq!(
-            settings_args(json!({ "ai_enabled": true })),
-            Ok(json!({ "ai_enabled": true }))
-        );
         let args: RenameFileArgs =
             serde_json::from_value(json!({ "path": "/d/a.ARW", "name": "b.ARW" })).unwrap();
         assert_eq!(
