@@ -28,6 +28,9 @@ Median of the three runs' p50 / p95, in ms:
   difference. The two apps' `keypressToPixels` do not share an endpoint;
   [In-app endpoints, aligned](#in-app-endpoints-aligned) compares them where
   they do.
+- For GPUI that last column is the toDwm part, from the `present` stamp to the
+  DWM present, not the time from the image painted to the screen; see
+  [Painted to screen, per press](#painted-to-screen-per-press).
 
 The raw output is beside this file:
 
@@ -39,6 +42,9 @@ The raw output is beside this file:
 - [raw/endpoints.py](raw/endpoints.py) and its output
   [raw/endpoints.txt](raw/endpoints.txt), the aligned in-app endpoints;
   `endpoints.py` is byte-identical to the 20261120 A/B's;
+- [raw/screengap.py](raw/screengap.py) and its output
+  [raw/screengap.txt](raw/screengap.txt), the per-press painted-to-screen
+  gap;
 - the drivers: [raw/run-ab.ps1](raw/run-ab.ps1) (the main pass),
   [raw/redo-raf-b3.ps1](raw/redo-raf-b3.ps1) and
   [raw/redo-raf-a3.ps1](raw/redo-raf-a3.ps1) (the two redos).
@@ -311,6 +317,109 @@ durations, and its percentiles are of the per-press differences; the
 20261120 A/B's caveats on the aligned endpoints apply unchanged. The
 `screen` column remains the fair end-to-end comparison.
 
+## Painted to screen, per press
+
+The last column of the header table is a difference of medians. Here the
+time from the image painted to the screen is taken press by press, from the
+same per-press CSVs and `page` lines, with no new measurement. Every number
+below is [raw/screengap.txt](raw/screengap.txt)'s, the output of
+[raw/screengap.py](raw/screengap.py) over the 12 used runs.
+
+- **Pairing**: press i of each used run's latprobe CSV (`settled_ms`, the
+  `screen` column) is paired with the i-th `page` line carrying
+  `keypressToPixels` of that run's log (GPUI's stdout, Tauri's app log).
+- **painted**: as in [In-app endpoints, aligned](#in-app-endpoints-aligned).
+  GPUI: `keypressToPixels - frameWait - present`. Tauri: `keypressToPixels`.
+- **gap**: `screen` - painted, per press.
+- GPUI's parts of the gap: `frameWait`, `present`, and **toDwm**
+  (`screen - keypressToPixels`, from the `present` stamp to the DWM present).
+  Tauri's: **afterFrame2** (`screen - frame2`).
+
+The pairing check:
+
+- Every used run has 60 presses in its CSV and 60 such `page` lines.
+- Pearson r of `screen` against `keypressToPixels`, aligned, is 0.91-1.00 in
+  every run except Tauri ARW's, 0.29-0.53 (see
+  [Caveats, per press](#caveats-per-press)). Shifted by one press either way
+  it is -0.28 to 0.25.
+- No press has a negative gap; the smallest gap is 5.14 ms (`RAF-B3-try5`).
+
+Cells are `p50 / p95` in ms. Runs 1, 2 and 3 are the same slots as in the
+tables above.
+
+### ARW, GPUI, per press
+
+| Run | gap | frameWait | present | toDwm |
+|---|---|---|---|---|
+| 1 | 25.85 / 31.96 | 10.23 / 16.86 | 0.48 / 0.99 | 14.59 / 15.18 |
+| 2 | 24.80 / 31.50 | 9.53 / 16.87 | 0.47 / 0.93 | 14.51 / 15.16 |
+| 3 | 26.06 / 31.70 | 10.91 / 16.90 | 0.47 / 0.79 | 14.59 / 15.18 |
+| **median of 3** | **25.85 / 31.70** | **10.23 / 16.87** | **0.47 / 0.93** | **14.59 / 15.18** |
+
+### ARW, Tauri, per press
+
+| Run | gap | afterFrame2 |
+|---|---|---|
+| 1 | 29.73 / 42.29 | 1.73 / 18.39 |
+| 2 | 28.31 / 45.79 | 1.66 / 18.29 |
+| 3 | 27.76 / 36.59 | 1.69 / 18.16 |
+| **median of 3** | **28.31 / 42.29** | **1.69 / 18.29** |
+
+### RAF, GPUI, per press
+
+| Run | gap | frameWait | present | toDwm |
+|---|---|---|---|---|
+| 1 | 22.76 / 31.99 | 7.55 / 16.90 | 0.40 / 0.51 | 14.75 / 24.15 |
+| 2 | 23.50 / 31.94 | 6.35 / 16.62 | 0.39 / 0.54 | 14.79 / 25.67 |
+| 3 | 24.76 / 32.41 | 7.89 / 16.74 | 0.39 / 0.56 | 14.68 / 25.14 |
+| **median of 3** | **23.50 / 31.99** | **7.55 / 16.74** | **0.39 / 0.54** | **14.75 / 25.14** |
+
+### RAF, Tauri, per press
+
+| Run | gap | afterFrame2 |
+|---|---|---|
+| 1 | 9.35 / 22.76 | 8.28 / 20.34 |
+| 2 | 8.54 / 20.70 | 7.56 / 17.81 |
+| 3 | 8.74 / 20.73 | 7.80 / 19.93 |
+| **median of 3** | **8.74 / 20.73** | **7.80 / 19.93** |
+
+### Reading, per press
+
+- **The per-press gaps are close to the median-difference estimates.**
+  `screen` minus painted of the median cells is 25.55 (ARW GPUI), 24.29 (RAF
+  GPUI), 27.35 (ARW Tauri) and 11.75 ms (RAF Tauri) at p50; per press the
+  gap's p50 is 25.85, 23.50, 28.31 and 8.74 ms. RAF Tauri differs most, by
+  3.01 ms.
+- **GPUI's gap is a vsync wait plus about one refresh.** On both formats the
+  gap's p50 (25.85 ARW, 23.50 RAF) is made of `frameWait` (10.23, 7.55),
+  `present` (under 0.5 ms) and toDwm (14.59, 14.75), the last close to one
+  16.9 ms refresh (its p95 is 15.18 on ARW; on RAF 25.14, some presses
+  waiting one refresh more).
+- **The cause of GPUI's gap.** GPUI draws a notified window only when its
+  vsync thread's next tick invalidates it, so the painted image first waits
+  for that tick (`frameWait`); the frame is then presented right after that
+  vblank, and DWM composes it at the next one (toDwm).
+- **Why RAF GPUI's gap is longer than RAF Tauri's.** Tauri's long RAF draw
+  ends where a frame is already due (`frame1` 0.10 ms after
+  `keypressToPixels` in the median cells above), and DWM shows it 7.80 ms
+  after `frame2` at p50, so its gap is under one refresh (8.74). GPUI waits
+  for its vsync tick first and then for one more vblank, 23.50 ms. On ARW,
+  Tauri's frame goes through two animation frames after the draw (`frame2`
+  24.50 ms after `keypressToPixels` in the median cells, afterFrame2 1.69),
+  so its gap (28.31) is about GPUI's (25.85).
+
+### Caveats, per press
+
+- Input delivery is inside the gap of both apps: `screen` counts from the
+  injected keypress and the in-app stages from the app's key event, and
+  painted is an in-app time.
+- Percentiles do not add up across the parts: the gap's p50 is not the sum
+  of its parts' p50s, nor its p95 of their p95s.
+- Tauri ARW's low r comes from `screen`'s quantization to the 16.9 ms refresh
+  against a narrow spread of `keypressToPixels` (17.60-25.50 ms from p50 to
+  p95 in the per-run table above), not from a misaligned pairing: the
+  shifted r is no higher, and no gap is negative.
+
 ## Compared with the 20261120 A/B
 
 An observation across sessions, not a measured difference: that record says
@@ -376,3 +485,8 @@ On the local-only branch `measure/tauri-latency-ab` at `1e97309e` (on
    this record stay in the measurement worktree's `out\20261121` folder.
 6. The tables: `python tools\latprobe\summarize.py out\20261121`.
 7. The aligned in-app endpoints: `python raw\endpoints.py out\20261121`.
+8. The per-press painted-to-screen gap:
+   `python raw\screengap.py out\20261121`. It hard-codes the 12 used runs
+   (`USED`) and reads their per-press CSVs and app logs, which stay in the
+   measurement worktree's `out\20261121` folder, as the caveat on
+   reproducibility says.
