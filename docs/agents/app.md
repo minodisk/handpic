@@ -510,6 +510,13 @@ packages the built `target/release` binary with a script under
   carries it. The workflow's optional `version` input runs it before the
   build (`gh workflow run package.yml --ref <branch> -f version=2.0.0-rc.1`);
   a tester runs it for local N and N+1 builds.
+  The version rule it and `version.sh` share: `x.y.z` without leading zeros,
+  and an optional prerelease of dot-separated alphanumeric identifiers. `-`
+  inside the prerelease and build metadata (`+...`) are refused: a `-` in a deb
+  upstream version reads as the revision separator, so `2.0.0~rc-1` would not
+  mean what the control file intended. `version.sh [form] [version]` maps a
+  given version too, so the workflow's deb ordering check goes through the
+  script, not hand-written `~` forms.
 - `macos.sh` signs the laid-out `Handpic.app` ad hoc (`codesign --force
   --sign -`, then `codesign --verify --strict`; no Developer ID, no
   notarization), stages it with `ditto` (not `cp -R`, so the ad hoc
@@ -654,6 +661,11 @@ packages the built `target/release` binary with a script under
   nothing. The Restart Manager settings are Inno's defaults. The `windows`
   leg checks both: an upgrade with `/WAITPID` of a stand-in holding the exe
   open waits for it, starts nothing, and one with `/RELAUNCH` starts the app.
+  A CI step that runs the setup with `/RELAUNCH` must not wait with pwsh 7's
+  `Start-Process -Wait`: that waits for the whole process tree, so it never
+  returns while the relaunched Handpic runs (one run hung for 40 minutes).
+  `Invoke-Silent` starts the setup with `-PassThru` and waits on its own
+  handle (`WaitForExit` with a bound), and the step has `timeout-minutes`.
 - Rule: the deb's `Depends` is `dpkg-shlibdeps`'s over the built binary plus
   what GPUI opens at run time, never a copied list. Measured on
   `ubuntu-latest` (Ubuntu 24.04.5, glibc 2.39; `Package` runs 44096260804 and
@@ -2106,6 +2118,13 @@ call.
   way and a `.app` install its whole bundle swapped (both below). Every other
   kind, the deb and an unknown copy (a `cargo run`, a `target/` binary),
   stops at `Available` with `Open Release Page` (`cx.open_url`).
+  The kind comes from the executable's path only (`update::detect`): an
+  `unins000.exe` beside it is Inno Setup, checked before a `licenses/` folder
+  beside it, which is the portable ZIP (the installer writes `licenses/` too);
+  `<x>.app/Contents/MacOS/<exe>` is a `.app`, `/usr/lib/handpic/<exe>` the deb,
+  `<...>/.local/bin/<exe>` the tarball, else unknown. So a `cargo run` or
+  `target/release` binary is unknown and never installs. The registry's
+  uninstall entry is not used, since it cannot tell a moved install apart.
 - Rule: the Inno Setup install's setup. The engine's `stage_setup`
   downloads `Handpic-<version>-windows-x64-setup.exe.zip` of the pinned
   release into `datadir::update_staging` (`update` in the `<IDENTIFIER>`
@@ -2147,6 +2166,13 @@ call.
   stalled connection fails into `Failed` rather than holding `Checking` and
   so every later check. `ureq`'s per-call timeout is global, the body's read
   included, hence the long one for the download.
+  To rehearse an offline launch, set `HTTPS_PROXY=http://127.0.0.1:9`
+  on the copy under test: `ureq` 3 reads the proxy variables, so the check
+  fails fast (`os error 10061`). A real network cut was not tried. Test copies
+  get their own `--settings`, `--index`, `--log` and `--mcp-port` (seeded with
+  `--import-settings` of `{"mcpEnabled": true}` so `get_status` shows the
+  `update` object), and are quit with `Process.CloseMainWindow` on their own
+  PID, never by image name, which could hit the user's own Handpic.
 - Rule: the restart. `Restart Now` calls `cx.set_restart_path` with the
   executable `current_exe` gave at launch (on Linux it names the replaced
   file with a ` (deleted)` suffix after the update), or for a `.app` install
