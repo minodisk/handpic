@@ -27,7 +27,7 @@ That change was measured GPUI against GPUI only (#1201,
 Tauri vs GPUI comparison reads now is recorded nowhere, and numbers from
 different sessions are not comparable on this machine.
 
-The same-session re-run is done (2026-11-21 23:35 to 2026-11-22 00:14 local).
+The same-session re-run is done (2026-11-21 23:35 to 2026-11-22 00:11 local).
 This plan records it: a `results.md` with the screen and in-app numbers, the
 conditions and the one out-of-order substitution, and the raw output and the
 scripts used beside it. No app code changes.
@@ -197,3 +197,5 @@ scripts used beside it. No app code changes.
   p95 (73.04 against 72.83), and `results.md` gives both.
 
 ## Progress
+
+- (2026-11-22) Step 1 complete
