@@ -26,3 +26,28 @@
   `#[tool_router]` blocks stay separate. `with_screenshot` adds its router to
   whatever `tools` holds, so with no `with_all_tools` left to replace the
   router afterward the call order note in `docs/agents/app.md` went.
+
+## Step 3
+
+- The v27 drop is `DROP TABLE IF EXISTS embeddings` under
+  `(20..27).contains(&version)`. `IF EXISTS` because a failed migration
+  rebuilds the index and loses dirty ratings; dropping the table also drops
+  its `embeddings_dir` index.
+- Of the migration fixtures, only the v19 one ran `DROP TABLE embeddings;`
+  (the older ones relied on the table coming back through
+  `CREATE TABLE IF NOT EXISTS`). It became the v26 test. The v20-v25 fixtures
+  now re-create the table from the test constant `OLD_EMBEDDINGS` and assert
+  through `has_embeddings` (`sqlite_master`, table and index) that `open`
+  drops it; `a_fresh_index_has_no_embeddings_table` covers a new index.
+- `with_suffix` and `lock` stay: `index.rs` itself uses them (`open`'s
+  `-wal` / `-shm` cleanup, the scan passes), not only `ai.rs`. No engine
+  dev-dependency was `ai.rs`'s alone.
+- `reqwest` and `rustls` stay in both lock files as transitive dependencies
+  (`self_update`, `rmcp`); the regenerated lock files only lost the two names
+  in `handpic-engine`'s dependency list.
+- `RANK_DIRS` became `KEPT_DIRS`. The eviction test that asserted
+  `rank_dirs()` was empty after `clear` now counts `KEPT_DIRS` rows directly.
+- The deleted `shared-crates.md` section "The third pass" also held two
+  bullets unrelated to the embeddings: `output::outputs_in`'s never-guess rule
+  and the `views` dwell / table / test-fixture facts. Both moved into
+  sections of their own, the `views` one without the ranking.

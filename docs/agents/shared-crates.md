@@ -68,7 +68,7 @@ let a rescan index a half-moved folder.
   rows and leaves `views`, so an unwritten judgment of a folder still on disk
   is not lost. `forget_dir` is for a folder removed from disk. It drops every
   row of exactly that `dir` (`files`, `ratings` including dirty ones,
-  `embeddings`, `views`, `folders`), and touches neither subfolders nor prefix
+  `views`, `folders`), and touches neither subfolders nor prefix
   siblings such as `photos2`.
 - `Index::move_file` leaves the old folder's `folders.last_viewed` naming a
   file now elsewhere. That is harmless, because the app resumes at it only
@@ -361,9 +361,8 @@ test restore's `restored` list for it, not just that the files return.
 - The strip's move checks each path's parent against `dir` in
   `trash::groups_of` and reports any other as a `Failure` without moving it.
   That keeps a sidecar from going to the Trash with a same-stem file of
-  another folder. It moves no index rows, so it need not stop the embedding
-  pass: the third pass skips a vanished file, and the next rescan's
-  reconcile drops the gone rows.
+  another folder. It moves no index rows: the next rescan's reconcile drops
+  the gone rows.
 - Once the engine has recorded the run, the app must keep its undo entry
   even if the open folder changed meanwhile; only the strip refresh is
   conditional on the open folder being the run's folder.
@@ -807,10 +806,9 @@ of at least 5) and `run_faces_scan` `Priority::Lowest`
 
 Every scan read goes through one process-wide `handpic_core::scan::ReadSlots`
 (the app's, built with `scan::READ_SLOTS`): at most 2 workers are inside a
-file read at once, on any of the three passes, while decoding and the models
+file read at once, on either pass, while decoding and the models
 stay on each pass's threads (`scan_threads()` for pass 1, `faces_threads()`,
-an eighth of the cores, for pass 2 and `embed_threads()`, a quarter, for
-pass 3). The app's preview read holds `pause()`, so no worker starts a new
+an eighth of the cores, for pass 2). The app's preview read holds `pause()`, so no worker starts a new
 read while it is held. Pass 2's
 workers also wait out a held pause at their stage boundaries (after the read,
 the decode, YuNet, the face mesh, the sharpness score and the full-size read;
@@ -937,135 +935,49 @@ can repeat with the app or the CLI.
 - Source: `docs/humans/performance.md` before the remove-tauri plan
   (`docs/plans/20261118-remove-tauri/plan.md`, Step 5).
 
-### The third pass: `embeddings` is its own table, and the pass is not "scanning" (Inferred)
+### `output::outputs_in` feeds a destructive filter, so it never guesses (Inferred)
 
-`index::run_embed_scan` embeds each RAW file's preview with the SigLIP 2 model
-(`handpic_core::embed`) into the `embeddings` table and reports its progress
-(`done`, `total`). It shares the scan's cancel flag and `ScanFocus`, at
-`Priority::Lowest`, on `embed_threads()`. It runs only when `aiEnabled` is on,
-the model file is in place and `embeddings_missing` lists something; a
-JPEG-only (view-only) folder never lists anything. Only the earlier app ran it
-(and the ranking below); the app runs passes 1 and 2 only (a
-`todo.md` item covers this engine code).
+The `No output` filter section can be piped straight into `Move to Trash…`,
+so a wrong `no` trashes a file that has an export. `output.rs` therefore does
+not reuse `read_listing` or `listing::is_file`, which swallow per-entry
+errors (`entries.flatten()`, `kind` returning `None`); it propagates every
+read error. A missing `dir` is `Ok(None)`, any other failure to read it is
+`Err`, and a dangling symlink named `Output` is `Err`. The app turns an `Err`
+into "no answer" and shows the failure as a note, so an unreadable export
+folder never fails the folder open. Known over-matches (`X_1.jpg` also counts
+for `X.DNG`; any extension counts) are accepted because they only keep a file
+out of `No output`. The symlink tests are `#[cfg(unix)]`, so Windows does not
+run them.
 
-- **A table of its own.** `write_batch` does `INSERT OR REPLACE` of whole
-  `files` rows, so a column on `files` would be wiped by every first-pass
-  rewrite. `embeddings(path, dir, size, mtime_ns, version, vec)` carries a
-  `dir` column (not in the plan's sketch) so `evict_folder`, `rename_dir`
-  and `reconcile` treat it like `files` and `ratings`. A row is valid while
-  `version` is `EMBED_VERSION` and `size` / `mtime_ns` match the `files`
-  row; `vec` is little-endian f32. `NULL` marks a file that could not be
-  embedded, which is not retried until its stat or the version moves.
-  `reconcile` drops the embeddings of files gone or changed. A row
-  re-extracted for an `EXTRACTOR_VERSION` bump keeps its embedding. Bump
-  `EMBED_VERSION` (`crates/core/src/embed.rs`) on any change to the model,
-  its preprocessing or its input decode.
-- **Not scanning.** The pass may embed for minutes after pass 2 ends, so an
-  app must not treat it as a scan: the operations held for a scan's end
-  (trash, renames, Clear Cache) run while it goes on, and the pass is
-  canceled before a clear or a rename deletes or moves rows. A batch already
-  in flight can still land after them. `evict` and `clear` drop the
-  embeddings of any `dir` without a `folders` row (`drop_stray_embeddings`),
-  and `reconcile` drops a renamed file's old path, but that does not cover
-  everything: a late batch under a folder whose `folders` row survives a
-  clear (it has dirty ratings) stays, and so does the old path after a file
-  rename until the next reconcile. The deferred guarded insert in
-  `write_embeddings` (see `learnings.md` of the plan) would close this.
-- **The model is downloaded, not bundled** (the plan's Decision 1).
-  `ai::Ai`'s switch downloads `embed::MODEL_URL` on a plain thread through
-  `reqwest::blocking` when `aiEnabled` turns on and the file is missing.
-  Each `install` call writes its own `MODEL_FILE.part-{n}` file (a shared
-  name let a canceled download delete the new one's file; leftover
-  `MODEL_FILE.part*` files are removed at start), checks `MODEL_SIZE` and
-  `MODEL_SHA256`, and only then renames the file into place. Each `AiState`
-  goes to a callback. reqwest is built with `rustls-no-provider`, so `fetch`
-  installs rustls' `ring` provider first when none is set. Its blocking
-  reads time out after 30 s without data, not on the whole 378 MB.
-- **Genres are derived, not stored.** `handpic_core::genre::genres_of` scores
-  a folder's valid embeddings (`Index::embeddings`) on every call, so a new
-  genre data file never needs a rescan; a file without a valid embedding
-  counts as `Unknown`.
-- **`output::outputs_in(dir, files)` feeds a destructive filter, so it never
-  guesses.** The `No output` filter section can be piped straight into
-  `Move to Trash…`, so a wrong `no` trashes a file that has an export.
-  `output.rs` therefore does not reuse `read_listing` or `listing::is_file`,
-  which swallow per-entry errors (`entries.flatten()`, `kind` returning
-  `None`); it propagates every read error. A missing `dir` is `Ok(None)`, any
-  other failure to read it is `Err`, and a dangling symlink named `Output` is
-  `Err`. The app turns an `Err` into "no answer" and shows the failure as a
-  note, so an unreadable export folder never fails the folder open. Known
-  over-matches (`X_1.jpg` also counts for `X.DNG`; any extension counts) are
-  accepted because they only keep a file out of `No output`. The symlink
-  tests are `#[cfg(unix)]`, so Windows does not run them.
-  Source: `docs/plans/_archived/20261106-filter-by-output/learnings.md`, Step 1 and Step 2.
-- **The ranking is derived too; only its weights are stored.**
-  `Index::rank_rows` reads every `files` row of a folder with its flag,
-  capture time, the pass-2 values when the row is at `FACES_VERSION`, and the
-  valid embedding, and `handpic_core::rank::rank` ranks each burst on every
-  call. `rank.rs` forms the bursts as the app's `burst.rs` does (capture
-  order, 1000 ms gap). The shared weights and the per-genre offsets
-  (`offsets`, one 44-vector per top-level genre of `genre::top_level`;
-  `rank` adds the burst's `genre::of_burst` offset, none for `Unknown`;
-  `Weights::of` itself ignores `genre::UNKNOWN`, so a `Weights` that carries
-  an `Unknown` key still ranks unknown bursts with the shared weights) were
-  stored by the earlier app; without them the prior
-  (`crates/core/ranking/siglip2.json`, written by the plan's
-  `rank_prior.py`, no offsets) ranks. `rank::fit` refits on
-  `Index::rank_dirs` (the folders holding a `views` row or a reject,
-  `RANK_DIRS`). The fit keeps the prior's PCA basis and standardization and
-  pulls the weights toward the prior's at the prior's own `1 / (2 C)`, and
-  each genre's offset toward zero at `OFFSET_SHRINK` times that, so a genre
-  with few judgments ranks as the shared weights do; the stored weights are
-  44 plus 44 per genre, not a basis. `evict`'s 30-day age rule skips a
-  folder `RANK_DIRS` lists (its rows are the fit's training data; the one
-  SQL fragment keeps the exemption and the training set from drifting
-  apart) while its size cap does not, and `clear` drops everything. A
-  pick-only folder is not read (no negative to pair against) and so not
-  spared.
-- **`views` feeds the fit per file.** The app records a file as viewed once
-  its decoded preview has stayed on screen for `VIEW_DWELL_MS` (500 ms; the
+- Source: `docs/plans/_archived/20261106-filter-by-output/learnings.md`, Step 1 and Step 2.
+
+### `views`: a file counts once its preview stayed on screen, and it spares its folder from the age rule (Inferred)
+
+- **What counts as a view.** The app records a file as viewed once its
+  decoded preview has stayed on screen for `VIEW_DWELL_MS` (500 ms; the
   app's `viewed.rs` `Dwell`), measured from the paint, not from the page
   turn: the preview read and decode take 10-100 ms and a held key repeats
   every ~30 ms, so a clock started at the turn would count frames whose image
   never reached the screen. A failed preview does not count: the user saw an
-  error, not the photo, and such a file has no embedding to rank. Nor do
-  strip thumbnails or a view-only folder. `Index::rank_rows` joins `views`,
-  so `RankRow.viewed` becomes `Labeled.viewed`: an unflagged frame is a
-  negative (weight 1) only when its file was viewed, a reject
-  (`REJECT_WEIGHT`) whether viewed or not, and an unflagged unviewed frame is
-  ignored. This replaced the folder-level `Culling Finished` mark (schema
-  v21 / v22, dropped at v23), which let one unviewed frame keep a whole
-  folder out and a hand-set mark count frames never shown. `views` is its
-  own table, not a `files` column, because `reconcile` deletes and pass 1
-  `INSERT OR REPLACE`s a `files` row on any size / mtime /
+  error, not the photo. Nor do strip thumbnails or a view-only folder.
+- **Its own table.** `views` is not a `files` column, because `reconcile`
+  deletes and pass 1 `INSERT OR REPLACE`s a `files` row on any size / mtime /
   `EXTRACTOR_VERSION` change; it survives eviction, `rename_dir` /
-  `rename_file` carry it, and only `clear` drops it. Since it is never
-  pruned, a viewed folder is spared by the age rule for good; the size cap
-  and `clear` still reclaim it. Test fixtures for this: `Index::set_rating`
-  always writes `dirty = 1` and `evict_folder` keeps dirty `ratings` rows, so
-  a reject the eviction may drop needs a clean `ratings` row inserted with
-  SQL; `Index::clear` only walks `folders` rows, so a `write_batch` without a
-  `folders` row (no `reconcile` / `set_opened_at`) survives a `clear`; and to
-  show that eviction keeps `views`, evict through the size cap
-  (`max_bytes: 0`), since the age rule now spares a folder holding a `views`
-  row.
-- **Threads: a quarter of the cores** (`embed_threads()`), not pass 1's
-  `scan_threads()` (Measured; pass 2 runs on fewer still, an eighth,
-  `faces_threads()`, since the GPUI port measured it costing paging +9.4 ms
-  on ARW and +89 ms on RAF at `scan_threads()` and +13 ms on RAF at a
-  quarter, see `app.md`). Priority does not keep the viewer's reads
-  fast against 22 busy workers on 24 logical cores: shared physical cores
-  (SMT) and an all-core clock do not care about thread priority. On
-  `2026-09-19` (2134 ARW), a preview read + full decode on a
-  normal-priority thread took a median 10 ms idle and 27-34 ms during pass 2
-  on 22 threads. During pass 3 it took 33 ms on 22 threads (41 s for the
-  pass), 22 ms on 11 (56 s) and 15 ms on 6 (70 s). Memory does not set the
-  count: the model's load sets the process peak (745-812 MB in that run),
-  and the workers' buffers add about 220 MB from 1 to 24 threads
-  (`handpic-cli embed`). The harness, the ignored test
-  `embed_pass_on_a_real_folder`, was in the earlier app's crate and left with it.
-- Source: [image-embeddings learnings](../plans/_archived/20261012-image-embeddings/learnings.md),
-  Step 3.
+  `rename_file` carry it, and only `clear` drops it. It replaced the
+  folder-level `Culling Finished` mark (schema v21 / v22, dropped at v23).
+- **The age rule spares it.** `evict`'s 30-day age rule skips a folder
+  holding a `views` row or a reject (`KEPT_DIRS`), while its size cap does
+  not, and `clear` drops everything. Since `views` is never pruned, a viewed
+  folder is spared by the age rule for good. A pick-only folder is not
+  spared.
+- **Test fixtures.** `Index::set_rating` always writes `dirty = 1` and
+  `evict_folder` keeps dirty `ratings` rows, so a reject the eviction may drop
+  needs a clean `ratings` row inserted with SQL; `Index::clear` only walks
+  `folders` rows, so a `write_batch` without a `folders` row (no `reconcile` /
+  `set_opened_at`) survives a `clear`; and to show that eviction keeps
+  `views`, evict through the size cap (`max_bytes: 0`), since the age rule
+  spares a folder holding a `views` row.
+- Source: `docs/plans/_archived/20261014-per-file-viewed-ranking/learnings.md`.
 
 ### `crates/core`, `crates/engine` and `crates/cli` are on Rust edition 2021: no `if ... && let` chains (Hit)
 
@@ -1473,7 +1385,7 @@ Confirm unix-only coverage on CI, not locally on Windows.
 
 `Index::entries` and `Index::entry` (`INDEXED_FILE`, `FROM files LEFT JOIN
 ratings USING (path)`) read judgments through `files`, which only a folder
-scan fills in, as does `rank_rows`. A unit test that calls `write_batch` (or a
+scan fills in. A unit test that calls `write_batch` (or a
 sidecar format switch, `sidecar::switch_to`) and then reads the rating back
 must first call `index::stat` to populate that row, otherwise the read
 returns nothing regardless of whether the write succeeded.
