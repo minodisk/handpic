@@ -1929,7 +1929,8 @@ not open.
   the page's `WAITING_NOTE` and drains it (`drain_clear`, the guard
   `ClearFlow::idle`) at every idle point once nothing else started (nor a
   trash or folder dialog is up): `finished`, and the ends that need no
-  listing: a trash run's (`trashed`), a trash undo's (`restored`, one into
+  listing: a trash run's with no folder open (`trashed`, a tree
+  folder's Delete Sidecars; with a folder open it re-lists), a trash undo's (`restored`, one into
   another folder lists nothing), a sidecar rewrite's (`sidecars_ran`) and a
   folder run's that reopens nothing (`settle_folder_run`, a failed rename
   among them). The confirmation is a

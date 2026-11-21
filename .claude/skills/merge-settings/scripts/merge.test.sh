@@ -4,11 +4,6 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
-# A caller that exports GIT_DIR / GIT_WORK_TREE (a git hook around
-# `mise run ci`, say) would point every git call below at the repository they
-# name, so the worktree case's commit and `worktree add` would land there.
-unset GIT_DIR GIT_WORK_TREE
-
 # Tests for merge.js --write.
 #
 # Exclusions screen only incoming entries, a run with nothing to add leaves
@@ -18,6 +13,11 @@ unset GIT_DIR GIT_WORK_TREE
 # git worktree.
 #
 # Run it directly, or via `mise run ci`.
+
+# A caller that exports GIT_DIR / GIT_WORK_TREE (a git hook around
+# `mise run ci`, say) would point every git call below at the repository they
+# name, so the worktree case's commit and `worktree add` would land there.
+unset GIT_DIR GIT_WORK_TREE
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="${script_dir}/merge.js"
