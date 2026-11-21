@@ -1137,13 +1137,13 @@ settings store holds it true, and on every flip of the MCP page's
 `Let MCP clients connect` (`Change::McpEnabled`, which `apply_setting` writes
 to the store, clearing `mcp_pending` and `mcp_folder` on an off as the
 destructive switch's off does). The first switch on builds a tokio
-current-thread runtime on one named `mcp` thread over an `Mcp` built
-`with_all_tools` (on `MCP_PORT`, 41917, or `--mcp-port`; `0` binds a free
-port, which the state reports) and registers the quit handler once; the
-thread stays for the session, runs each switch's `Mcp::switch` in order,
-logs its `mcp: McpState` line and sends the state as `scan::Event::McpState`,
-and on the quit handler's command runs `Mcp::stop` (logged as `quit: MCP
-server stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). Off at launch, there
+current-thread runtime on one named `mcp` thread over an `Mcp` (on
+`MCP_PORT`, 41917, or `--mcp-port`; `0` binds a free port, which the state
+reports) and registers the quit handler once; the thread stays for the
+session, runs each switch's `Mcp::switch` in order, logs its `mcp: McpState`
+line and sends the state as `scan::Event::McpState`, and on the quit
+handler's command runs `Mcp::stop` (logged as `quit: MCP server
+stopped=<bool> in <ms>ms`, at most `STOP_WAIT`). Off at launch, there
 is no runtime, no thread and no server until the first switch on. The view
 keeps a state only when its `enabled` is the switch in force (a late answer
 of an earlier flip is dropped) and hands it with the port to the MCP page,
@@ -1162,28 +1162,27 @@ with the file selected alone for `show_photo` or with
 `tree_toggle` or `folder_action`, `files_action`'s reveal, or
 `apply_setting`) and replies through `Mcp::reply`.
 
-The tool list is the host's. `Mcp::new` lists the seven companion tools with
-the Tauri `INSTRUCTIONS`, which is what the Tauri app served;
-`Mcp::with_all_tools` (the app's) adds the `app_router` tools
-(`navigate`, `select_all`, `reject_rest`, `undo`, `redo`, `set_sort`,
-`set_filter`, `set_panes`, `set_overlays`, `list_folders`, `open_folder`,
-`tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
-`set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
-`sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
-`rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`) and the
-app's instructions, through a `ToolRouter` field the `#[tool_handler(router =
-self.tools)]` handler reads. A tool only the app answers is a second
-`#[tool_router(router = app_router)]` block, so the seven-tool server
-never lists it.
+`Mcp::new` lists every tool: the seven companion tools of the first
+`#[tool_router]` block (`get_photo`, `get_preview`, `get_view`,
+`select_photos`, `set_judgment`, `set_view`, `show_photo`) and the
+`app_router` tools (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`,
+`set_sort`, `set_filter`, `set_panes`, `set_overlays`, `list_folders`,
+`open_folder`, `tree_folder`, `reveal`, `get_status`, `wait_for_idle`,
+`get_settings`, `set_settings`, `trash_photos`, `rewrite_sidecars`,
+`delete_sidecars`, `sequence_timestamps`, `import_folder`,
+`rename_by_capture_date`, `rename_folder`, `cancel_operation`, `clear_cache`,
+`rename_file`), with `INSTRUCTIONS`, through a `ToolRouter` field the
+`#[tool_handler(router = self.tools)]` handler reads. The removed Tauri app
+listed only the seven, with instructions of their own; that mode went with the
+AI features.
 
-`screenshot` is listed only in a build with `crates/app`'s `screenshot`
-cargo feature, where `mcp.rs` calls `with_screenshot` after `with_all_tools`
-(which replaces the router and would drop it). Without the feature nothing of
-it is compiled in and `tools/list` is the app's 34 tools. `mcp_request` takes
-`screenshot` before `companion::answer`, so `READS`, `Busy` and the coverage
-table never see it and it is answered with the settings, a dialog or a rename
-open; the reply goes through the engine's `screenshot_reply`. Run it with
-`mise run app:dev:screenshot`; a feature build is not the shipped binary,
+`screenshot` is listed only in a build with `crates/app`'s `screenshot` cargo
+feature, where `mcp.rs` calls `with_screenshot`. Without the feature nothing
+of it is compiled in and `tools/list` is the app's 34 tools. `mcp_request`
+takes `screenshot` before `companion::answer`, so `READS`, `Busy` and the
+coverage table never see it and it is answered with the settings, a dialog or
+a rename open; the reply goes through the engine's `screenshot_reply`. Run it
+with `mise run app:dev:screenshot`; a feature build is not the shipped binary,
 so take no timing from it.
 
 The app's tools run what their keys run: `key_down` and `mcp_request` both

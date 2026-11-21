@@ -170,8 +170,7 @@ an Inno Setup install's setup ZIP of that release downloaded into a staging
 folder, checked the same way and extracted, and `run_setup`, which starts it
 detached with `setup_args`, silent, `/WAITPID` of the quitting app and
 `/RELAUNCH` on `Restart Now`, the switches `handpic.iss` reads), `src/mcp.rs` the MCP companion's server (`Mcp`: the
-loopback Streamable HTTP endpoint on `MCP_PORT` with the seven companion
-tools, or every tool after `with_all_tools` (the app's), plus
+loopback Streamable HTTP endpoint on `MCP_PORT` with every tool, plus
 `screenshot` after `with_screenshot` (its reply built by `screenshot_reply`), started,
 stopped and switched on the caller's tokio runtime, each switch returning its
 `McpState`; `Bridge`, which hands each tool's `Request` to the app's send
