@@ -1,0 +1,40 @@
+
+## ARW A (before)
+ARW-A1-try4 gap=25.65/31.80 frameWait=10.30/16.87 present=0.46/0.85 toDwm=14.55/15.10 pended=26.04/32.24 first=0/60 min_gap=17.07 neg=0 r=0.99 r_shift=0.08,0.04
+  pended min=17.51 max=32.34 le1=0 1to2=60 gt2=0
+ARW-A2-try4 gap=25.23/31.64 frameWait=10.50/16.85 present=0.49/0.85 toDwm=14.48/15.17 pended=25.67/32.07 first=0/60 min_gap=17.71 neg=0 r=1.00 r_shift=0.11,0.11
+  pended min=18.14 max=34.47 le1=0 1to2=59 gt2=1
+ARW-A3-try4 gap=25.70/31.68 frameWait=10.61/16.83 present=0.46/0.88 toDwm=14.55/15.25 pended=26.09/32.08 first=0/60 min_gap=17.33 neg=0 r=1.00 r_shift=0.19,0.20
+  pended min=17.68 max=32.40 le1=0 1to2=60 gt2=0
+median gap=25.65/31.68 frameWait=10.50/16.85 present=0.46/0.85 toDwm=14.55/15.17 pended=26.04/32.08 first=0/180
+all 180 presses: pended min=17.51 max=34.47 le1=0 1to2=179 gt2=1
+
+## ARW B (after)
+ARW-B1-try1 gap=18.04/26.35 frameWait=1.74/2.34 present=0.46/1.16 toDwm=15.31/24.03 pended=18.54/26.85 first=27/60 min_gap=9.36 neg=0 r=0.19 r_shift=-0.03,0.17
+  pended min=9.73 max=27.59 le1=27 1to2=33 gt2=0 first_toDwm_min=6.92
+ARW-B2-try1 gap=17.44/25.76 frameWait=1.75/2.05 present=0.46/0.85 toDwm=14.94/23.36 pended=17.81/26.08 first=28/60 min_gap=7.47 neg=0 r=0.35 r_shift=0.04,0.12
+  pended min=7.95 max=34.81 le1=28 1to2=31 gt2=1 first_toDwm_min=5.34
+ARW-B3-try1 gap=17.62/25.36 frameWait=1.74/2.11 present=0.46/0.89 toDwm=15.03/23.01 pended=18.05/26.17 first=29/60 min_gap=8.72 neg=0 r=0.12 r_shift=-0.02,0.07
+  pended min=9.07 max=26.45 le1=29 1to2=31 gt2=0 first_toDwm_min=6.59
+median gap=17.62/25.76 frameWait=1.74/2.11 present=0.46/0.89 toDwm=15.03/23.36 pended=18.05/26.17 first=84/180
+all 180 presses: pended min=7.95 max=34.81 le1=84 1to2=95 gt2=1 first_toDwm_min=5.34
+
+## RAF A (before)
+RAF-A1-try2 gap=26.04/31.65 frameWait=9.29/16.67 present=0.41/0.57 toDwm=14.67/23.27 pended=26.28/32.39 first=0/60 min_gap=16.68 neg=0 r=0.92 r_shift=-0.29,-0.29
+  pended min=17.52 max=37.61 le1=0 1to2=59 gt2=1
+RAF-A2-try5 gap=25.49/31.85 frameWait=9.22/16.76 present=0.39/0.52 toDwm=14.72/23.08 pended=26.36/32.55 first=0/60 min_gap=16.57 neg=0 r=0.94 r_shift=-0.03,0.16
+  pended min=17.36 max=34.54 le1=0 1to2=59 gt2=1
+RAF-A3-try1 gap=24.37/31.73 frameWait=8.73/16.54 present=0.40/0.54 toDwm=14.73/19.16 pended=25.09/32.46 first=0/60 min_gap=16.71 neg=0 r=0.97 r_shift=-0.06,-0.02
+  pended min=17.58 max=33.23 le1=0 1to2=60 gt2=0
+median gap=25.49/31.73 frameWait=9.22/16.67 present=0.40/0.54 toDwm=14.72/23.08 pended=26.28/32.46 first=0/180
+all 180 presses: pended min=17.36 max=37.61 le1=0 1to2=178 gt2=2
+
+## RAF B (after)
+RAF-B1-try7 gap=19.24/27.99 frameWait=1.56/2.06 present=0.39/0.54 toDwm=17.42/26.01 pended=20.03/28.71 first=21/60 min_gap=8.81 neg=0 r=0.80 r_shift=0.01,-0.06
+  pended min=9.01 max=30.37 le1=21 1to2=39 gt2=0 first_toDwm_min=6.40
+RAF-B2-try1 gap=20.30/27.91 frameWait=1.55/1.87 present=0.38/0.46 toDwm=18.13/25.97 pended=21.01/28.62 first=19/60 min_gap=9.90 neg=0 r=0.76 r_shift=-0.07,-0.04
+  pended min=10.09 max=30.02 le1=19 1to2=41 gt2=0 first_toDwm_min=7.66
+RAF-B3-try1 gap=18.18/27.09 frameWait=1.54/1.89 present=0.39/0.58 toDwm=16.10/25.15 pended=19.24/27.92 first=21/60 min_gap=9.12 neg=0 r=0.79 r_shift=-0.13,-0.08
+  pended min=9.31 max=28.55 le1=21 1to2=39 gt2=0 first_toDwm_min=6.80
+median gap=19.24/27.91 frameWait=1.55/1.89 present=0.39/0.54 toDwm=17.42/25.97 pended=20.03/28.62 first=61/180
+all 180 presses: pended min=9.01 max=30.37 le1=61 1to2=119 gt2=0 first_toDwm_min=6.40

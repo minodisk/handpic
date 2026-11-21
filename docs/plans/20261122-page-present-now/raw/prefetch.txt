@@ -1,0 +1,8 @@
+ARW-prefetch-A source=prefetch n=57 frameWait=9.91/17.41 keypressToPixels=10.90/18.30
+ARW-prefetch-A source=read n=2 frameWait=2.71/2.71 keypressToPixels=14.11/14.11
+ARW-prefetch-B source=prefetch n=57 frameWait=1.85/2.81 keypressToPixels=2.86/3.97
+ARW-prefetch-B source=read n=2 frameWait=1.94/1.94 keypressToPixels=11.90/11.90
+RAF-prefetch-A source=prefetch n=57 frameWait=11.82/17.02 keypressToPixels=13.11/18.60
+RAF-prefetch-A source=read n=2 frameWait=13.49/13.49 keypressToPixels=49.43/49.43
+RAF-prefetch-B source=prefetch n=57 frameWait=1.73/2.62 keypressToPixels=2.99/4.13
+RAF-prefetch-B source=read n=2 frameWait=1.58/1.58 keypressToPixels=38.06/38.06
