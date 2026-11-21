@@ -1,40 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
     <clipPath id="photo"><rect x="144" y="267" width="736" height="491"/></clipPath>
-    <clipPath id="keep"><rect x="-2000" y="-1000" width="2000" height="2000" transform="translate(216.47 329.28) rotate(40.00)"/></clipPath>
     <filter id="holeglow" x="-50%" y="-50%" width="200%" height="200%">
       <feMorphology operator="dilate" radius="1"/>
       <feGaussianBlur stdDeviation="2.5"/>
-    </filter>
-    <clipPath id="stickerclip"><circle cx="178" cy="297" r="54"/></clipPath>
-    <filter id="innerglow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="1.5"/>
-    </filter>
-    <filter id="flapshadow" x="-50%" y="-50%" width="200%" height="200%">
-      <feDropShadow dx="1.5" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.35"/>
     </filter>
   </defs>
   <rect x="100" y="100" width="824" height="824" rx="185" fill="#141416"/>
   <image href="photo.png" x="144" y="267" width="736" height="491" preserveAspectRatio="xMidYMid slice" clip-path="url(#photo)"/>
   <g fill="#fff" opacity="0.07" filter="url(#holeglow)"><rect x="144.00" y="203" width="38" height="54" rx="4"/><rect x="221.56" y="203" width="38" height="54" rx="4"/><rect x="299.11" y="203" width="38" height="54" rx="4"/><rect x="376.67" y="203" width="38" height="54" rx="4"/><rect x="454.22" y="203" width="38" height="54" rx="4"/><rect x="531.78" y="203" width="38" height="54" rx="4"/><rect x="609.33" y="203" width="38" height="54" rx="4"/><rect x="686.89" y="203" width="38" height="54" rx="4"/><rect x="764.44" y="203" width="38" height="54" rx="4"/><rect x="842.00" y="203" width="38" height="54" rx="4"/><rect x="144.00" y="768" width="38" height="54" rx="4"/><rect x="221.56" y="768" width="38" height="54" rx="4"/><rect x="299.11" y="768" width="38" height="54" rx="4"/><rect x="376.67" y="768" width="38" height="54" rx="4"/><rect x="454.22" y="768" width="38" height="54" rx="4"/><rect x="531.78" y="768" width="38" height="54" rx="4"/><rect x="609.33" y="768" width="38" height="54" rx="4"/><rect x="686.89" y="768" width="38" height="54" rx="4"/><rect x="764.44" y="768" width="38" height="54" rx="4"/><rect x="842.00" y="768" width="38" height="54" rx="4"/></g>
   <rect x="144.00" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="221.56" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="299.11" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="376.67" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="454.22" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="531.78" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="609.33" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="686.89" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="764.44" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="842.00" y="203" width="38" height="54" rx="4" fill="#000"/><rect x="144.00" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="221.56" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="299.11" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="376.67" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="454.22" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="531.78" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="609.33" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="686.89" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="764.44" y="768" width="38" height="54" rx="4" fill="#000"/><rect x="842.00" y="768" width="38" height="54" rx="4" fill="#000"/>
-  <g font-family="'DIN Condensed'" font-weight="700" font-size="26" letter-spacing="1" fill="#fff" color="#fff" text-anchor="middle" opacity="0.07" filter="url(#holeglow)">
-    <text x="512.0" y="194.0">RIFFLE 60FPS CULLER</text>
-    <text x="512.0" y="849.2">12</text>
-    <text x="799.0" y="846.7" font-size="18.7">12A</text>
+  <g font-family="Barlow Condensed" font-weight="700" font-size="26.8" letter-spacing="-0.4" fill="#fff" color="#fff" text-anchor="middle" opacity="0.07" filter="url(#holeglow)">
+    <text x="512.0" y="194.0">HANDPIC 60FPS CULLER</text>
+    <text x="512.0" y="849.2" letter-spacing="0.1">12</text>
+    <text x="799.0" y="846.7" font-size="19.3" letter-spacing="0.1">12A</text>
     <polygon points="759.5,835.8 759.5,844.4 781.1,840.1" fill="currentColor"/>
   </g>
-  <g font-family="'DIN Condensed'" font-weight="700" font-size="26" letter-spacing="1" fill="#f2f2f2" color="#f2f2f2" text-anchor="middle">
-    <text x="512.0" y="194.0">RIFFLE 60FPS CULLER</text>
-    <text x="512.0" y="849.2">12</text>
-    <text x="799.0" y="846.7" font-size="18.7">12A</text>
+  <g font-family="Barlow Condensed" font-weight="700" font-size="26.8" letter-spacing="-0.4" fill="#f2f2f2" color="#f2f2f2" text-anchor="middle">
+    <text x="512.0" y="194.0">HANDPIC 60FPS CULLER</text>
+    <text x="512.0" y="849.2" letter-spacing="0.1">12</text>
+    <text x="799.0" y="846.7" font-size="19.3" letter-spacing="0.1">12A</text>
     <polygon points="759.5,835.8 759.5,844.4 781.1,840.1" fill="currentColor"/>
-  </g>
-  <g>
-    <g clip-path="url(#keep)">
-      <circle cx="178" cy="297" r="54" fill="#5cbe58"/>
-      <circle cx="178" cy="297" r="54" fill="none" stroke="#fff" stroke-opacity="0.3" stroke-width="4" filter="url(#innerglow)" clip-path="url(#stickerclip)"/>
-    </g>
-    <circle cx="254.94" cy="361.56" r="54" fill="#e6ebe3" clip-path="url(#keep)" filter="url(#flapshadow)"/>
   </g>
 </svg>

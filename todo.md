@@ -74,26 +74,6 @@ A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to p
 
 - [ ] Retake the deep-row measurement on the app's 1:1 view, then decide between crop prefetch and a DCT-scaled placeholder.
 
-### Docs: consider a guide for verifying Pillow pixel edits
-
-`app-icon-enlarge-marks` hit two Pillow pitfalls while verifying an in-place
-pixel edit to `crates/app/icons/source.png`: (1) `Image.getbbox()` defaults to
-`alpha_only=True` on RGBA images (Pillow >= 9.5), so a "no difference" check
-built on `ImageChops.difference(...).getbbox()` can silently pass while the
-RGB channels differ — use `getbbox(alpha_only=False)` or a per-pixel scan;
-(2) measuring a resized/pasted mark inside the padded crop box that produced
-it clips the bbox and understates the mark's size — the measurement window
-must be wider than the source crop.
-
-#### TODO
-
-- [ ] The next time a plan does Pillow-based pixel verification, check whether
-      it hits the same two pitfalls. If it does, write
-      `docs/agents/verifying-pixel-edits.md` (or a section in an existing
-      guide such as `shared-crates.md`) covering both, linking
-      `docs/plans/_archived/20260921-app-icon-enlarge-marks/learnings.md` for
-      the concrete numbers. If it does not recur, drop this item.
-
 ### App: the macOS / Linux manual checks for Move to Trash are still open
 
 The strip's `Move to Trash…` moves files through the engine's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the app checks in `### App: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/engine/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.
@@ -2201,18 +2181,6 @@ Files: `crates/engine/src/ai.rs`, `crates/engine/src/index.rs`, `crates/engine/s
 #### TODO
 
 - [ ] Decide, with the user, whether the app gets pass 3, the Genre filter and the ranking (and plan that), or whether this code goes. Done when either a plan wires it into `crates/app` or a change removes it with its tests and docs.
-
-### Icon: the app icon still reads RIFFLE
-
-#### Background
-
-The artwork's edge print says `RIFFLE 60FPS CULLER`: `tools/macos/app-icon/gen.py` and its `icon.svg` draw it, and the rendered icons in `crates/app/icons/` (`source.png`, `icon.ico`, `icon.icns`, `64x64.png`, `128x128@2x.png`) carry it. The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) left it: `gen.py` needs macOS, and the step that derived `icon.ico` / `icon.icns` / the PNG sizes from `source.png` (`tauri icon`) left with the Tauri app, so no checked-in command derives them any more.
-
-Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/app/icons/`.
-
-#### TODO
-
-- [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/app/icons/` reads Handpic and the derivation is written down.
 
 ---
 
