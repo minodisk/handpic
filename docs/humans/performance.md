@@ -819,6 +819,13 @@ the keypress to the presented frame. A page not asked for by a key (a strip
 click or a folder open) prints nothing. Quitting with `q` (or at the end of `--auto N`) prints a summary table of
 the stages, and `--auto N` pages through N files on a timer and quits.
 
+On Windows, a release build opens no console of its own, so its standard
+output reaches the terminal only through a pipe or a file. Run
+`mise run app:release -- <folder> --auto N | cat` in Git Bash,
+`mise run app:release -- <folder> --auto N | Out-Host` in PowerShell or
+`mise run app:release -- <folder> --auto N > timing.txt` in cmd; without
+that the lines are lost.
+
 ## The 1:1 focus check path
 
 The read and decode of one zoom keypress, on one α7 V ARW (Orientation 8,

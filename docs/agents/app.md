@@ -429,6 +429,81 @@ succeeds.
 - Rule: the icons live in `crates/app/icons/`, so a change to one selects
   the app checks in `mise run ci:local` like any change in the crate.
 
+### A Windows release build is a GUI-subsystem binary (Measured)
+
+Source: [the windows-gui-subsystem plan](../plans/_archived/20261121-windows-gui-subsystem/plan.md).
+
+`crates/app/src/main.rs` starts with
+`#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`,
+so a release build's PE `Subsystem` is 2 (GUI) and a launch from Explorer,
+the Start menu or an updater relaunch opens no console window. A debug build
+(`mise run app:dev`, `cargo test`) has no attribute and stays a console
+binary (3), so its terminal keeps the log lines and the timing output.
+`not(debug_assertions)` is the repository's meaning of "release build" (`main`
+passes `!cfg!(debug_assertions)` to the update flow) and `[profile.release]`
+does not turn debug assertions on.
+
+Read the field with
+`$b=[IO.File]::ReadAllBytes($exe); $o=[BitConverter]::ToInt32($b,0x3c); [BitConverter]::ToUInt16($b,$o+0x5c)`
+(the UInt16 at `e_lfanew + 0x5c`). Measured on Windows 11 with rust 1.98.1:
+the release exe reads 2 and the debug exe 3. Started by `Start-Process`, the
+debug exe gets a `conhost.exe` child and `AttachConsole` to it succeeds; the
+release exe has neither, and its `--log` file holds the launch's lines
+(`settings:`, the scan lines of the opened folder).
+
+When checking for a console, look at the launched process's own children
+(`Get-CimInstance Win32_Process` on its PID, and `AttachConsole(pid)`). Do not
+compare system-wide `conhost.exe` counts before and after the launch, because
+unrelated processes create conhosts all the time and the check gives false
+positives. To read a terminal's output in a test, open a new window per case
+and dump `$host.UI.RawUI.GetBufferContents`. Use a classic `conhost.exe`
+window for `mise run` cases, because under the default ConPTY terminal the
+buffer read came back blank or out of range.
+
+A GUI process started with no std handles gets null handles, which std
+treats as a sink: `println!`, `eprintln!` and `writeln!(io::stderr(), ..)`
+return normally. A panic there (provoked in a throwaway build, on a spawned
+thread and on the main thread) left both `panic:` lines in the log and exited
+101 with no secondary failure. `logger.rs` still writes stderr with `let _ =
+writeln!(io::stderr(), ..)`, not `eprintln!`, because a stderr inherited as a
+pipe whose reader has gone makes `eprintln!` panic, and the panic hook calls
+the logger.
+
+What a launch of the release exe from a terminal shows (`page` lines and the
+quit summary of `--auto 5`, measured on Windows 11):
+
+| Launch                                                           | Reaches the terminal                                      |
+| ---------------------------------------------------------------- | --------------------------------------------------------- |
+| `handpic.exe` from Git Bash in mintty                            | yes, stdout and stderr                                    |
+| `mise run app:release` from Git Bash in mintty                   | no; yes with `\| cat` or `> file`                         |
+| `mise run app:release` from PowerShell / cmd (conhost or ConPTY) | no; yes with `\| Out-Host` (PowerShell) or `> file` (cmd) |
+| `mise run app:release` from Git Bash running in a console        | no                                                        |
+| `handpic.exe` from PowerShell 5.1, unredirected                  | no; the prompt returns at once                            |
+| `handpic.exe ... > file` from PowerShell 5.1                     | no; the prompt returns at once and the file is empty      |
+| `handpic.exe ... \| Out-Host` from PowerShell 5.1                | yes; PowerShell waits for the exit                        |
+| `handpic.exe` from cmd, unredirected                             | no                                                        |
+| `handpic.exe ... > file` from cmd                                | yes                                                       |
+| A pipe all the way (an agent's shell tool, CI)                   | yes                                                       |
+
+Wherever a console is the std handle (mise and cargo hand theirs down, as
+does Git Bash in a console window rather than mintty), the GUI process's
+writes are lost; a pipe or a file carries them. Under mintty the direct
+launch gets pipes, but through `mise` the output is lost too, presumably
+because mise, a console program, is given a pseudo console whose handles
+reach `handpic.exe` through cargo. `Handpic.log` holds every log line in
+every case; only the `println!` timing output and the usage error have
+nowhere else to go.
+
+- Rule: for timing on Windows, run `mise run app:release -- <folder>
+  --auto N | cat` in Git Bash, `| Out-Host` in PowerShell or `> file` in
+  cmd. A debug build keeps its console but is no use for timing.
+- Rule: the usage error (`eprintln!` + `process::exit(2)`) keeps its exit
+  code; its text shows only where stderr is a pipe or a file.
+- Rule: nothing in CI reads the release exe's console (the `Package`
+  workflow's Windows check finds the relaunched app by its process or the
+  log file's mtime), and the app starts no console child on Windows (the only
+  `Command::new` there is the detached Inno Setup setup).
+
 ### Linux matches the window to its `.desktop` file by `IDENTIFIER` (Inferred)
 
 The window opens with `app_id: Some(IDENTIFIER)`. Wayland matches a
@@ -2573,7 +2648,11 @@ non-empty batch's file names go to the log as `scan faces first:`.
 Without a logger the engine's `scan extract` lines went nowhere. `logger.rs`
 prints `[target][LEVEL] message` to stderr at `Info`, which also shows GPUI's
 own lines (the UI font, the GPU, and an `ERROR` for the missing DXGI debug
-interface on a machine without the Graphics Tools, which is harmless).
+interface on a machine without the Graphics Tools, which is harmless). A
+Windows release build is a GUI-subsystem binary and has no stderr unless it
+is redirected to a pipe or a file (see "A Windows release build is a
+GUI-subsystem binary"); its writes go nowhere and `Handpic.log` is the only
+record.
 `RUST_LOG=debug` (or `trace`) adds this crate's own lines of that level, such
 as `key: <name> action=…` for every keystroke, and not GPUI's.
 
@@ -2591,7 +2670,9 @@ grow (turning on the features a direct dependency needs could pull further
 crates in). `Handpic::start` destructures `Args` exhaustively, so a new flag
 needs a `name: _` there too. `main` installs it once the arguments
 are parsed and the engine's panic hook right after it. The `page` / `zoom`
-timing lines stay `println!` to stdout.
+timing lines stay `println!` to stdout. The logger's own stderr writes are
+`let _ = writeln!(io::stderr(), ..)`, so a missing or broken stderr never
+panics it.
 
 ## GPUI
 

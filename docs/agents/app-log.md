@@ -23,9 +23,12 @@ macro).
   earlier app used.
 - `--log <path>` names the file instead; every debug or hand-check run passes
   it (see `app.md`). A file that cannot be opened is reported once on
-  stderr and the app runs with stderr only.
+  stderr and the app runs with stderr only, which on a Windows release build
+  means no log at all unless stderr is redirected.
 - The same lines also go to stderr, which only a `mise run app:dev`
-  terminal shows.
+  terminal shows. A Windows release build is a GUI-subsystem binary with no
+  stderr unless it is redirected to a pipe or a file (see `app.md`'s "A
+  Windows release build is a GUI-subsystem binary").
 
 ## Size and rotation
 
@@ -102,7 +105,8 @@ panic: thread=<name or unnamed> location=<file>:<line>:<col> payload=<text>
 - Written by the panic hook, installed in `main` right after the logger and
   before the window opens, for a panic on any thread (main, a background
   task, a rayon worker, the sidecar writer), so a startup panic is logged
-  too. The default stderr message still follows.
+  too. The default stderr message still follows, which a Windows release
+  build launched without a redirect writes nowhere.
 - `location=unknown` when the panic carried no location;
   `payload=<non-string payload>` when the payload was neither `&str` nor
   `String`. Newlines in the payload are collapsed to spaces.

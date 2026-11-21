@@ -2268,6 +2268,19 @@ Files: `crates/engine/src/update.rs`, `crates/app/src/update.rs`, `crates/app/sr
 - [ ] On any platform, cut the network for real (disable the adapter) at launch and on `Check for Updates`. Expect the app to stay usable and `Failed` to be retryable. On the Updates page, check that `Check for Updates` is disabled while a check runs and that `Open Release Page` opens the browser (the page's click paths were never driven).
 - [ ] On a real machine, try the rows the rehearsal skipped: publish a release while an install is downloading, interrupt an install, and a failed relaunch, and note what is left launchable (the engine claims no rollback beyond the `.app` bundle mode's restore of the old bundle).
 
+### App: real-device checks of the Windows GUI-subsystem release build (windows-gui-subsystem)
+
+#### Background
+
+The windows-gui-subsystem feature builds the Windows release `handpic.exe` for the GUI subsystem (`#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]` in `main.rs`), so a launch from Explorer, the Start menu or an updater relaunch opens no terminal. The automated checks passed. The PE `Subsystem` field reads 2 on the release exe and 3 on the debug exe. A `Start-Process` launch had no `conhost.exe` child and `AttachConsole` failed. The `--log` file held the launch's lines, and a provoked panic left its `panic:` line and exited 101. Two checks were never exercised. One is a real double-click in Explorer. The other is PowerShell 7 (`pwsh`), which isn't installed on the measuring machine, so only Windows PowerShell 5.1 was measured. Plan: `docs/plans/_archived/20261121-windows-gui-subsystem/plan.md`.
+
+Files: `crates/app/src/main.rs`, `crates/app/src/logger.rs`, `docs/agents/app.md`, `docs/agents/app-log.md`, `docs/humans/performance.md`, `docs/humans/performance.ja.md`
+
+#### TODO
+
+- [ ] On Windows, double-click `crates/app/target/release/handpic.exe` (or the installed Handpic from the Start menu) in Explorer. Expected: no console window appears next to the Handpic window.
+- [ ] On Windows with PowerShell 7 (`pwsh`), run `handpic.exe ... > file` on the release build. Expected: record whether the file captures the release build's stdout (the `page` lines and quit summary). Windows PowerShell 5.1 does not: the prompt returns at once and the file stays empty. If `pwsh` captures it, add it to the table in `docs/agents/app.md` and to the Windows paragraph of `docs/humans/performance.md` / `.ja.md`.
+
 ---
 
 ### App: a held Clear Cache is not drained when a trash or folder dialog that was up at its idle point is canceled
