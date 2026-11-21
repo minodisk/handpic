@@ -180,6 +180,9 @@ struct Held {
     image: Arc<RenderImage>,
     jpeg_kb: usize,
     px: (u32, u32),
+    /// The source preview's upright size, which the fit view's geometry
+    /// reads, whatever size `image` was decoded at.
+    upright: (u32, u32),
     orientation: u16,
     meta: Metadata,
     focus: Option<FocusLocation>,
@@ -187,7 +190,8 @@ struct Held {
 
 impl prefetch::Pixels for Held {
     fn pixels(&self) -> u64 {
-        u64::from(self.px.0) * u64::from(self.px.1)
+        let size = self.image.size(0);
+        u64::from(size.width.0 as u32) * u64::from(size.height.0 as u32)
     }
 }
 
@@ -197,6 +201,7 @@ struct OnScreen {
     path: String,
     jpeg_kb: usize,
     px: (u32, u32),
+    upright: (u32, u32),
     orientation: u16,
     focus: Option<FocusLocation>,
     /// Off once a re-listing may have changed the file's bytes.
@@ -250,6 +255,7 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
             image,
             jpeg_kb: jpeg.len() / 1024,
             px: (w, h),
+            upright: (upright_w, upright_h),
             orientation: arw.orientation,
             meta,
             focus: arw.shot.focus,
@@ -4672,6 +4678,7 @@ impl Handpic {
             image,
             jpeg_kb,
             px,
+            upright,
             orientation,
             meta,
             focus,
@@ -4686,6 +4693,7 @@ impl Handpic {
             path: path.clone(),
             jpeg_kb,
             px,
+            upright,
             orientation,
             focus,
             keepable: true,
@@ -4700,6 +4708,7 @@ impl Handpic {
                         image: old,
                         jpeg_kb: screen.jpeg_kb,
                         px: screen.px,
+                        upright: screen.upright,
                         orientation: screen.orientation,
                         meta: *meta,
                         focus: screen.focus,
@@ -4820,17 +4829,15 @@ impl Handpic {
         }
         let crop = self.zoom.crop();
         let preview = self.zoom.preview().filter(|_| self.zoom.placeholder_fits());
-        let placeholder =
-            self.image
-                .clone()
-                .zip(preview)
-                .and_then(|(image, (focus, orientation))| {
-                    let s = image.size(0);
-                    let preview = (s.width.0 as u32, s.height.0 as u32);
-                    let rect =
-                        zoom::placeholder(preview, orientation, focus?, crop.map(|c| c.full))?;
-                    Some((image, rect))
-                });
+        let placeholder = self
+            .image
+            .clone()
+            .zip(self.screen.as_ref().map(|s| s.upright))
+            .zip(preview)
+            .and_then(|((image, upright), (focus, orientation))| {
+                let rect = zoom::placeholder(upright, orientation, focus?, crop.map(|c| c.full))?;
+                Some((image, rect))
+            });
         Some(zoom::Paint {
             placeholder,
             crop: crop.map(|c| (c.image.clone(), c.point)),
@@ -6002,7 +6009,10 @@ impl Render for Handpic {
         }
         self.strip_bar
             .sync(self.strip.offset(), self.strip.content_width());
-        let image = self.image.clone();
+        let image = self
+            .image
+            .clone()
+            .zip(self.screen.as_ref().map(|s| s.upright));
         let retired = self.retired.clone();
         let pending = self.pending.clone();
         let hold = self.hold.clone();
@@ -6156,8 +6166,8 @@ impl Render for Handpic {
                                                     want = zoom_paint.paint(bounds, window).map(
                                                         |(image, size)| (View::Crop, image, size),
                                                     );
-                                                } else if let Some(image) = image {
-                                                    let fit = fit_centered(&image, bounds);
+                                                } else if let Some((image, upright)) = image {
+                                                    let fit = fit_in(upright, bounds);
                                                     if let Err(e) = window.paint_image(
                                                         fit,
                                                         fit,
@@ -7196,7 +7206,15 @@ fn path_strings(paths: &[PathBuf]) -> Vec<String> {
 
 fn fit_centered(image: &RenderImage, bounds: Bounds<Pixels>) -> Bounds<Pixels> {
     let image_size = image.size(0);
-    let (iw, ih) = (image_size.width.0 as f32, image_size.height.0 as f32);
+    fit_in(
+        (image_size.width.0 as u32, image_size.height.0 as u32),
+        bounds,
+    )
+}
+
+/// An image of `source` pixels fitted into `bounds`, centered.
+fn fit_in(source: (u32, u32), bounds: Bounds<Pixels>) -> Bounds<Pixels> {
+    let (iw, ih) = (source.0 as f32, source.1 as f32);
     let scale = (f32::from(bounds.size.width) / iw).min(f32::from(bounds.size.height) / ih);
     let fit = size(px(iw * scale), px(ih * scale));
     let origin = bounds.origin
@@ -7400,6 +7418,18 @@ mod tests {
             keymap.bindings_for_input(&[Keystroke::parse(key).unwrap()], &stack);
         assert!(!pending);
         bindings.len()
+    }
+
+    #[test]
+    fn fit_in_centers_the_source_aspect_in_the_bounds() {
+        let near = |a: Pixels, b: f32| (f32::from(a) - b).abs() < 0.01;
+        let bounds = Bounds::new(point(px(10.), px(20.)), size(px(1000.), px(500.)));
+        let fit = fit_in((4416, 2944), bounds);
+        assert!(near(fit.size.width, 750.) && near(fit.size.height, 500.));
+        assert!(near(fit.origin.x, 135.) && near(fit.origin.y, 20.));
+        let fit = fit_in((1080, 1616), bounds);
+        assert!(near(fit.size.width, 334.158) && near(fit.size.height, 500.));
+        assert!(near(fit.origin.x, 342.921) && near(fit.origin.y, 20.));
     }
 
     #[test]
