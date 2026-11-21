@@ -21,7 +21,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 The Windows release `handpic.exe` is a console-subsystem binary (PE
 `Subsystem` = 3), so every launch from Explorer, the Start menu or an updater
 relaunch opens a terminal that streams the log lines. The updater rehearsal
-([native-updater plan](../_archived/20261118-native-updater/plan.md), Step 7) showed it
+([native-updater plan](../20261118-native-updater/plan.md), Step 7) showed it
 on each relaunch of rc.2, portable ZIP and Inno Setup alike. Once this is
 done, a Windows release build is a GUI-subsystem binary that opens no console,
 while debug builds keep theirs and `Handpic.log` keeps every line. This must
@@ -141,3 +141,5 @@ Accepted consequences:
   is the normal behaviour of a Windows GUI app.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete

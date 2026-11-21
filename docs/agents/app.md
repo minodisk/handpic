@@ -451,6 +451,15 @@ debug exe gets a `conhost.exe` child and `AttachConsole` to it succeeds; the
 release exe has neither, and its `--log` file holds the launch's lines
 (`settings:`, the scan lines of the opened folder).
 
+When checking for a console, look at the launched process's own children
+(`Get-CimInstance Win32_Process` on its PID, and `AttachConsole(pid)`). Do not
+compare system-wide `conhost.exe` counts before and after the launch, because
+unrelated processes create conhosts all the time and the check gives false
+positives. To read a terminal's output in a test, open a new window per case
+and dump `$host.UI.RawUI.GetBufferContents`. Use a classic `conhost.exe`
+window for `mise run` cases, because under the default ConPTY terminal the
+buffer read came back blank or out of range.
+
 A GUI process started with no std handles gets null handles, which std
 treats as a sink: `println!`, `eprintln!` and `writeln!(io::stderr(), ..)`
 return normally. A panic there (provoked in a throwaway build, on a spawned
