@@ -33,7 +33,8 @@ impl Log for Logger {
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            eprintln!(
+            let _ = writeln!(
+                io::stderr(),
                 "[{}][{}] {}",
                 record.target(),
                 record.level(),
@@ -81,12 +82,19 @@ pub fn install(flag: Option<PathBuf>) {
         Some(path) => match Sink::open(&path, MAX_FILE_SIZE) {
             Ok(sink) => Some(Mutex::new(sink)),
             Err(e) => {
-                eprintln!("cannot open the log file {}: {e}", path.display());
+                let _ = writeln!(
+                    io::stderr(),
+                    "cannot open the log file {}: {e}",
+                    path.display()
+                );
                 None
             }
         },
         None => {
-            eprintln!("no log file: the local data folder is unknown");
+            let _ = writeln!(
+                io::stderr(),
+                "no log file: the local data folder is unknown"
+            );
             None
         }
     };

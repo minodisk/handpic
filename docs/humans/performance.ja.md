@@ -402,6 +402,8 @@ Handpic は自分のスキャンの時間をログに書くので、これらの
 
 ページごとのレイテンシーはログではなく出力に書きます。Handpic をターミナルから起動すると、キーによるページ送りのたびに `page wait=… read=… decode=… orient=… hop=… frameWait=… paint=… present=… keypressToPixels=… jpegKB=… px=WxH orientation=… source=… file=…` の行を標準出力に書きます（等倍の切り出しでは `zoom read=… decode=… orient=… keypressToPixels=…` の行）。`wait` はキーから読み込みの要求まで、`read`、`decode`、`orient` はプレビューの読み込み（スキャンの読み込みの一時停止を含みます）、デコード、正立への回転（先読み済みのプレビューである `source=prefetch` ではすべて 0）、`hop` はウィンドウへの受け渡し、`frameWait` は次のフレームまでの待ち、`paint` は描画、`present` はフレームの提示で、`keypressToPixels` はキー入力から提示されたフレームまでです。キーによらないページ（ストリップのクリックやフォルダーを開いたとき）は何も書きません。`q` での終了時（または `--auto N` の終了時）には段階ごとの要約の表を書き、`--auto N` はタイマーで N ファイルを送って終了します。
 
+Windows のリリースビルドは自分のコンソールを開かないため、標準出力はパイプかファイルを通したときだけターミナルに届きます。Git Bash では `mise run app:release -- <folder> --auto N | cat`、PowerShell では `mise run app:release -- <folder> --auto N | Out-Host`、cmd では `mise run app:release -- <folder> --auto N > timing.txt` のように実行してください。そうしないと、これらの行は失われます。
+
 ## 等倍ピントチェックの経路
 
 1 回のズームのキー入力の読み込みとデコードを、Apple Silicon Mac で、α7 V の ARW 1 つ（Orientation 8、`JpgFromRaw` 7008x4672 ベースライン 4:2:2、5.76MB）で計測しました。**実際のファイル 1 つ、ウォームなページキャッシュ、プロセス内、リリースビルド、n=20、中央値です。** CLI とアプリの両方が呼ぶ関数に対して計測しています。正立への回転と描画は含みません。アプリはそれらを `zoom` の行として書き出します（上の「自分のフォルダーで計測する」を参照）が、エンドツーエンドの数字はまだここに記録していません。
