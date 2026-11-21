@@ -14,16 +14,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 - [ ] On Windows (Git Bash), run `mise run app:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `handpic.exe` all to exit (none left in Task Manager) and the prompt to return.
 - [ ] On Windows (Git Bash), run `mise run app:watch`, save a `.rs` file under `crates/app/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
 
-### App docs: correct the stale "only the settings modal and the tree's inline rename draw from gpui-component" text
-
-#### Background
-
-The `native-status-bar-decision` plan (`docs/plans/_archived/20261115-native-status-bar-decision/plan.md`) left the neighbouring sections of `docs/agents/app.md` untouched, and `native-status-bar` then rewrote its status-row sections (the sentence "only the settings modal and the tree's inline rename draw from it" went with them). One piece of text is still out of date since the gpui-component adoption work (dialogs, tooltips and scrollbars now draw from gpui-component too): the heading "gpui-component is initialized; the settings modal and the tree's inline rename draw from it". The heading is at about line 71 of `docs/agents/app.md`. Other places refer to the section by its exact heading name, for example the mention "table in "gpui-component is initialized"" near line 3227 of the same file. The native-progress-bar-reason feature fixed the same stale claim in the progress bar section's sentence and left the heading alone on purpose. Plan: `docs/plans/_archived/20261115-native-progress-bar-reason/plan.md`. Files: `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Reword the "gpui-component is initialized; ..." heading so it names the dialogs, tooltips and scrollbars as well, or make it generic. Update every quoted-title reference to the old heading name, found with `rg -n 'gpui-component is initialized' docs CLAUDE.md` (one is near `docs/agents/app.md:3227`), and check that `mise run lint` (lychee) still passes.
-
 ### Core: the `.dop` reader ignores a picked PhotoLab virtual copy
 
 Found in `burst-keep-score` Step 1 (the inventory, `docs/plans/_archived/20261008-burst-keep-score/data.md`). `dop::read_flag` (`crates/core/src/dop.rs`, `locate`) reads only the first `Items` entry, so it returns `None` for 199 frames of `2026-06-05` and 228 of `2026-09-13-b` whose virtual copy (a later item) is picked in PhotoLab. Riffle shows those frames unflagged, so the strip's filter does not count them as picked. Whether Riffle should read any item's flag, and which item it writes, is a product decision.
@@ -920,18 +910,6 @@ Files: `crates/engine/src/datefolder.rs` (`move_plan`), `crates/engine/src/renam
 
 - [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
 
-### Agents: `pr-runner.md` and `merger.md` say only `wait` / `review_required` are seen on an exit 2
-
-#### Background
-
-The `pr-wait-blocked-grace` plan (`docs/plans/_archived/20261118-pr-wait-blocked-grace/plan.md`) made `.claude/skills/pr/scripts/wait-pr-actionable.sh` return `blocked` only after it has persisted for a grace period (`BLOCKED_GRACE`, 60 s). A timeout that lands inside the grace now exits 2 with `ACTION=blocked` as the last output. `.claude/agents/pr-runner.md` (around the "Waiting on `wait` / `review_required`" sentence in §4) and `.claude/agents/merger.md` (the sentence on `wait` / `review_required` and the exit-2 handling) still name only those two ACTIONs as the ones observed on a timeout. The handling is already right: pr-runner's "Otherwise increment `wait_timeouts` and re-run" and merger's "increment `pr_wait_timeouts` and re-run" treat it as ordinary waiting. Only the sentence is stale. The plan left it out of scope.
-
-Files: `.claude/agents/pr-runner.md`, `.claude/agents/merger.md`.
-
-#### TODO
-
-- [ ] Reword the sentence in both files to say that `blocked` can also be the last ACTION of an exit 2 (a timeout inside the grace) and is handled as ordinary waiting. Do not change the call lines or the handling.
-
 ### Agents: `test (ubuntu-latest)` hangs on docs-only commits
 
 #### Background
@@ -1104,16 +1082,6 @@ The `tauri-gpui-latency-ab` same-session A/B measured both apps against one exte
 #### TODO
 
 - [ ] Find where the extra ~34 ms on RAF goes (for example a GPU-side timestamp or a PresentMon trace of the GPUI process on the RAF folder, compared with the ARW folder), and decide whether the in-app `present` stamp should move to match the DWM present. Until then, treat the in-app RAF `keypressToPixels` (p50 67.51 ms) as under-reporting what the screen shows (`screen` p50 115.46 ms).
-
-### Agents: `GIT_DIR` / `GIT_WORK_TREE` exported around `mise run ci` leak into `merge.test.sh` and write to the real repository
-
-#### Background
-
-`gpui-zoom-peaking` Step 2 Phase B: after the repository folder was renamed, a worktree's `.git` pointed at a stale path, and a session worked around it by exporting `GIT_DIR` / `GIT_WORK_TREE`. That leaked into `mise run ci`, where the merge-settings skill's `merge.test.sh` runs `git -C <tmp> init`, `commit` and `worktree add`; they landed in the real repository (an empty `init` commit, a branch `other`, a worktree entry `hooks-other`). The fix was `git worktree repair <worktree>` from the renamed repository. Plan: `docs/plans/_archived/20261110-gpui-zoom-peaking/plan.md`. Files: the merge-settings skill's `merge.test.sh`, `CLAUDE.md` (Development section).
-
-#### TODO
-
-- [ ] Either add a line to `CLAUDE.md`'s Development section ("never export `GIT_DIR` / `GIT_WORK_TREE` around `mise run ci`"), or make `merge.test.sh` unset both variables (fixing the cause). Done when the line is in `CLAUDE.md`, or the test script unsets them and a test shows it cannot touch the outer repository.
 
 ### App: private bytes grow while `→` is held in the 1:1 view
 
@@ -1489,16 +1457,6 @@ Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/s
 - [ ] On Windows, confirm a long status text does not push the circle or the buttons out and that an error text is still readable in the muted color.
 - [ ] On macOS and Linux, repeat the menu, scan and Move to Trash checks above when at hand.
 
-### App: Sequence JPEG Timestamps and Import do not feed the progress bar
-
-`gpui-progress-bars` made the GPUI app's progress indicator take a folder operation's `(done, total)` through `progress::shown`'s `folder_op` argument, but `main.rs`'s `progress_circle` passes `None`, so Sequence and Import still show only their pane note. Both already have `(done, total)` callbacks. The folder-dialogs plan (`docs/plans/20261113-gpui-folder-dialogs/plan.md`) wires the dialogs themselves. Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
-
-Files: `crates/app/src/progress.rs`, `crates/app/src/main.rs`, `crates/app/src/sequence.rs`, `crates/app/src/import.rs`.
-
-#### TODO
-
-- [ ] Pass each run's `(done, total)` into `progress::shown`'s `folder_op` input, and clear it where the run ends, is canceled or is stopped by a re-listing.
-
 ### App: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
 
 `gpui-progress-bars` feeds the bar from the scan and from Move to Trash / Delete Permanently / trash redo. `trash::undo_run` takes no progress callback, and neither do the Rewrite Sidecars from Index and Delete Sidecars runs, so the bar shows nothing for them (`redo_run` has one and already feeds the bar). Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
@@ -1534,16 +1492,6 @@ Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `cra
 - [ ] On Windows, open the settings modal (`ctrl+,`) and drop a folder over it. Expect nothing to open (the occluded layer swallows the drop).
 - [ ] On Windows, drag a folder into the window and back out without dropping. Expect the outline to clear.
 - [ ] Record the results in `learnings.md` and turn the "Not verified in the running app" bullet of "A folder dropped onto the window opens, a later drop winning" in `docs/agents/app.md` into a Measured one.
-
-### App: make the settings writer close its store on drop (flaky seed reload test)
-
-#### Background
-
-`settings::tests::a_second_load_does_not_reread_a_changed_seed` in `crates/app/src/settings.rs` failed on the Windows CI job of PR #1052 (unrelated to that PR's change): the test reopened the settings store while the previous `Writes` still held it. The CI fix only added a retry in the test, with no production change. The cleaner fix is for `Writes` to close its store when dropped, so the test needs no retry.
-
-#### TODO
-
-- [ ] Make `Writes` in `crates/app/src/settings.rs` close its store on drop, and remove the retry from `a_second_load_does_not_reread_a_changed_seed`. Done when the test passes on Windows without the retry.
 
 ### App: real-device checks of the filter menu's icons and headings (gpui-filter-menu-icons)
 
@@ -2039,16 +1987,6 @@ Files: `crates/app/src/icons.rs`.
 - [ ] On Windows, run `mise run app:dev` and open the status row's `Filter ▾` menu. Confirm the star rows (outlined and filled), the label squares (outlined and filled), the orientation rectangles (vertical, horizontal) and the `Face focus` faces (smiling and frowning) look as they did on `main`. Then, with a folder open and pass 2 finished, confirm the strip's face focus icon on a good frame and on a low frame looks as before. Expected: no visible change.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
 
-### Docs: the gpui-port plan's Progress entries link plan folders that have since been archived
-
-#### Background
-
-`docs/plans/20261109-gpui-port/plan.md` (Progress section) has an entry for sub-milestone 1 on 2026-11-14 that links `../20261114-gpui-ci-packaging/plan.md`. Its 2026-11-16 re-decision entry links `../20261116-gpui-packaging-redecision/plan.md`. Both folders are archived under `../_archived/`, or will be once their wrap-up runs. The gpui-packaging-answers plan fixed the stale path only in the lead of `packaging-updater.md`. It left these Progress entries as history, as its "Trade-offs and risks" says. Plan: `docs/plans/_archived/20261116-gpui-packaging-answers/plan.md`. Files: `docs/plans/20261109-gpui-port/plan.md`.
-
-#### TODO
-
-- [ ] Retarget the two Progress links to `../_archived/20261114-gpui-ci-packaging/plan.md` and `../_archived/20261116-gpui-packaging-redecision/plan.md` (check the folders' actual names under `_archived/` first), then run `mise run lint` (lychee) to confirm the links resolve.
-
 ### App: real-device check of the folder tree rows drawn as ListItems (native-tree-listitem)
 
 #### Background
@@ -2165,18 +2103,6 @@ Files: `crates/app/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, 
   2. Press `Clear Cache`: `Clear the index cache?` opens over the settings with the dimmed backdrop, focus on `Clear`. Press Escape: only the dialog closes, the settings stay open, nothing is cleared (size unchanged), and Tab still walks the settings' controls.
   3. Press `Clear Cache` again and confirm with Enter: the log has `index cleared: EvictSummary { … }`; the size shrinks; the open folder is listed again and pass 1 / pass 2 refill thumbnails, the meta pane and the filter facts, the current file staying put; the tree's cached counts of unlisted folders disappear.
   4. Open a large unscanned folder and, while `scanning` runs, press `Clear Cache`: the note `The cache is cleared as soon as the running scan finishes.` shows, then the dialog opens by itself when the scan ends. Repeat and close the settings while waiting: no dialog at the scan's end.
-
-### App: a held Clear Cache misses idle points that do not pass through `finished`
-
-#### Background
-
-The `native-clear-cache` feature drains a held Clear Cache only in `Handpic::finished` (`crates/app/src/main.rs`). A view that goes idle without a listing ending, for example after a trash undo into another folder (`restored`) or a failed rename (`settle_folder_run`), leaves the clear held while the Cache page still says it clears when the scan finishes. It stays held until the user presses `Clear Cache` again (the local review's round 1 fix made that second press ask at once). Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
-
-Files: `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] Drain the held clear at those idle points too. Done when a held clear asks by itself after a trash undo into another folder and after a failed rename, with a test of the pure part where possible.
 
 ### App: real-device check of the strip position in the status bar
 

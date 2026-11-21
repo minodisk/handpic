@@ -125,6 +125,16 @@ impl ClearFlow {
         }
     }
 
+    /// An idle point of the view: a held clear goes on unless the view is
+    /// `busy` or another dialog is `up`, in which case it waits for the next
+    /// one. `None` when nothing goes on.
+    pub fn idle(&mut self, busy: bool, up: bool) -> Option<Next> {
+        if !self.waiting() || busy || up {
+            return None;
+        }
+        Some(self.drain())
+    }
+
     /// The dialog's `Clear`: run now, or wait when the view became busy
     /// while it was up.
     pub fn confirm(&mut self, busy: bool) -> Next {
@@ -257,6 +267,23 @@ mod tests {
         flow.press(false);
         assert_eq!(flow.confirmed(false), Next::Wait);
         assert!(flow.asking());
+    }
+
+    #[test]
+    fn an_idle_point_goes_on_with_a_held_clear_only_when_nothing_else_is_up() {
+        let mut flow = ClearFlow::default();
+        assert_eq!(flow.idle(false, false), None);
+        flow.press(true);
+        assert_eq!(flow.idle(true, false), None);
+        assert_eq!(flow.idle(false, true), None);
+        assert!(flow.waiting());
+        assert_eq!(flow.idle(false, false), Some(Next::Ask));
+        assert!(flow.asking());
+        assert_eq!(flow.idle(false, false), None);
+        let mut flow = ClearFlow::default();
+        flow.confirmed(true);
+        assert_eq!(flow.idle(false, false), Some(Next::Run));
+        assert!(flow.running());
     }
 
     #[test]

@@ -682,7 +682,7 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 9: the AI features (pass 3, genres, the ranking, the recommended mark and sort, `aiEnabled`) dropped from the port by the user's decision
 - (2026-11-14) Step 8: the folder tree, the strip's selection and its right-click menu, through `../_archived/20261113-gpui-tree-trash/plan.md`; the folder operation dialogs remain
 - (2026-11-14) Step 9: the settings modal (the native store, the persisted filter and sort, the Sidecar, Culling, Keyboard Shortcuts and Import tabs), through `../20261113-gpui-settings/plan.md`; the Cache tab, the first-launch format dialog and a macOS `Settings…` menu item remain, and the AI features are not ported by the user's decision (Step 9 stays open)
-- (2026-11-14) Step 10, sub-milestone 1: the `native` CI job on three platforms and the packaging / updater decision, through `../20261114-gpui-ci-packaging/plan.md` (Step 10 stays open)
+- (2026-11-14) Step 10, sub-milestone 1: the `native` CI job on three platforms and the packaging / updater decision, through `../_archived/20261114-gpui-ci-packaging/plan.md` (Step 10 stays open)
 - (2026-11-14) Step 9: the performance overlay (`d`), through [the gpui-perf-overlay plan](../_archived/20261114-gpui-perf-overlay/plan.md) (Step 9 stays open)
 - (2026-11-14) Step 9: the burst grouping, the strip's bands and badges and the four burst moves, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
 - (2026-11-14) Step 9: `rejectRest` with its undo and the MCP companion's `burst`, through `../20261114-gpui-bursts/plan.md` (Step 9 stays open)
@@ -691,6 +691,6 @@ summary and `cx.quit()` when N presses are done.
 - (2026-11-14) Step 8: the preview area's empty state, through `../20261114-gpui-empty-state/plan.md` (Step 8 stays open)
 - (2026-11-14) Step 8: a folder or a file dropped onto the window opens its folder, with the drag outline, through `../_archived/20261114-gpui-folder-drop/plan.md`
 - (2026-11-14) Step 8 complete: the folder tree and the strip's menu (`../_archived/20261113-gpui-tree-trash/plan.md`), the empty state, folder drag-and-drop (`../_archived/20261114-gpui-folder-drop/plan.md`) and the folder operation dialogs (`../_archived/20261113-gpui-folder-dialogs/plan.md`) have all landed
-- (2026-11-16) Step 10: the packaging / updater decision redone along gpui-kit's guides after the user dropped the update path from Tauri installs, through `../20261116-gpui-packaging-redecision/plan.md` (Step 10 stays open)
+- (2026-11-16) Step 10: the packaging / updater decision redone along gpui-kit's guides after the user dropped the update path from Tauri installs, through `../_archived/20261116-gpui-packaging-redecision/plan.md` (Step 10 stays open)
 - (2026-11-16) Step 10: the open questions of the packaging / updater record answered by the user and recorded, through `../_archived/20261116-gpui-packaging-answers/plan.md` (Step 10 stays open)
 - (2026-11-17) Step 10, sub-milestone 2: the native app packaged by the manual `Package` workflow (DMGs for arm64 and x86_64, the per-user Inno Setup setup `.exe`, the Windows ZIP, the Linux `.tar.gz` with `install.sh`, the `.deb` and `SHA256SUMS`), through `../20261117-gpui-packaging/plan.md` (Step 10 stays open)

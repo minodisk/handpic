@@ -82,7 +82,11 @@ your own conversation** (not as shell variables). Branch on the exit code.
 | `conflict` / `check_failed` / `changes_requested` / `draft` / `behind` / `blocked` / `closed` | Return `NOT_READY` with the ACTION                      |
 
 `wait` / `review_required` do not appear in the table because the script waits
-on them internally (they are only observed as exit 2, on a timeout).
+on them internally (they are only observed as exit 2, on a timeout). `blocked`
+is also the last ACTION of an exit 2 when the timeout falls inside
+`BLOCKED_GRACE` (60 s) before the script returns it; that is handled as
+ordinary waiting (increment `pr_wait_timeouts` and re-run), not by this
+table.
 
 **Do not try to resolve a `NOT_READY` yourself.** Conflict resolution, CI
 fixing, and review handling all belong to `pr-runner`. The caller either re-runs

@@ -1822,6 +1822,7 @@ impl Handpic {
             self.resync.open();
             self.relist(cx);
         }
+        self.drain_clear(cx);
         cx.notify();
     }
 
@@ -2010,6 +2011,7 @@ impl Handpic {
             self.resync.open();
             self.relist(cx);
         }
+        self.drain_clear(cx);
         cx.notify();
     }
 
@@ -2934,15 +2936,13 @@ impl Handpic {
 
     /// The view is idle: a held clear goes on, unless another dialog is up,
     /// in which case it waits for the next idle point.
-    fn drain_clear(&mut self, cx: &mut Context<Self>) {
-        if !self.clear.waiting()
-            || self.clear_busy()
-            || self.trash.busy()
-            || self.folderops.dialog_open()
-        {
+    pub(crate) fn drain_clear(&mut self, cx: &mut Context<Self>) {
+        let busy = self.clear_busy();
+        let up = self.trash.busy() || self.folderops.dialog_open();
+        let Some(next) = self.clear.idle(busy, up) else {
             return;
-        }
-        if self.clear.drain() == cache::Next::Run {
+        };
+        if next == cache::Next::Run {
             self.run_clear(cx);
         }
         self.follow_clear(cx);
@@ -5474,7 +5474,9 @@ impl Handpic {
     fn progress_circle(&self, cx: &App) -> Option<ProgressCircle> {
         let (done, total) = progress::shown(
             self.trashing.map(|(_, done, total)| (done, total)),
-            None,
+            self.folderops
+                .sequence_progress()
+                .or(self.folderops.import_progress()),
             self.scan_status.running(),
         )?;
         Some(

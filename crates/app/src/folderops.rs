@@ -576,6 +576,7 @@ impl Handpic {
         } else if self.resync.finished() {
             self.relist(cx);
         }
+        self.drain_clear(cx);
         cx.notify();
     }
 
@@ -1393,6 +1394,7 @@ impl Handpic {
         } else if self.resync.finished() {
             self.relist(cx);
         }
+        self.drain_clear(cx);
     }
 
     /// A message of a folder operation's run; one of an ended run is
