@@ -1167,21 +1167,22 @@ with the file selected alone for `show_photo` or with
 `select_photos`, `set_judgment`, `set_view`, `show_photo`) and the
 `app_router` tools (`navigate`, `select_all`, `reject_rest`, `undo`, `redo`,
 `set_sort`, `set_filter`, `set_panes`, `set_overlays`, `list_folders`,
-`open_folder`, `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
-`set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
-`sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
-`rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`), with
-`INSTRUCTIONS`, through a `ToolRouter` field the `#[tool_handler(router =
-self.tools)]` handler reads. The removed Tauri app listed only the seven,
-with instructions of their own; that mode went with the AI features.
+`open_folder`, `tree_folder`, `reveal`, `get_status`, `wait_for_idle`,
+`get_settings`, `set_settings`, `trash_photos`, `rewrite_sidecars`,
+`delete_sidecars`, `sequence_timestamps`, `import_folder`,
+`rename_by_capture_date`, `rename_folder`, `cancel_operation`, `clear_cache`,
+`rename_file`), with `INSTRUCTIONS`, through a `ToolRouter` field the
+`#[tool_handler(router = self.tools)]` handler reads. The removed Tauri app
+listed only the seven, with instructions of their own; that mode went with the
+AI features.
 
-`screenshot` is listed only in a build with `crates/app`'s `screenshot`
-cargo feature, where `mcp.rs` calls `with_screenshot`. Without the feature
-nothing of it is compiled in and `tools/list` is the app's 34 tools.
-`mcp_request` takes `screenshot` before `companion::answer`, so `READS`,
-`Busy` and the coverage table never see it and it is answered with the
-settings, a dialog or a rename open; the reply goes through the engine's `screenshot_reply`. Run it with
-`mise run app:dev:screenshot`; a feature build is not the shipped binary,
+`screenshot` is listed only in a build with `crates/app`'s `screenshot` cargo
+feature, where `mcp.rs` calls `with_screenshot`. Without the feature nothing
+of it is compiled in and `tools/list` is the app's 34 tools. `mcp_request`
+takes `screenshot` before `companion::answer`, so `READS`, `Busy` and the
+coverage table never see it and it is answered with the settings, a dialog or
+a rename open; the reply goes through the engine's `screenshot_reply`. Run it
+with `mise run app:dev:screenshot`; a feature build is not the shipped binary,
 so take no timing from it.
 
 The app's tools run what their keys run: `key_down` and `mcp_request` both
