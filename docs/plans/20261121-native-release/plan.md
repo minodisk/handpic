@@ -91,7 +91,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
 
 ## Steps
 
-- [ ] Step 1: Let release-please own the app's version
+- [x] Step 1: Let release-please own the app's version
   - Done when:
     - `release-please-config.json`'s `extra-files` also name
       `crates/app/Cargo.toml` (`$.package.version`) and
@@ -488,3 +488,5 @@ as recommended (A).
     `--latest=false`.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete
