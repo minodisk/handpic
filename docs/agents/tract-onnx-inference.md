@@ -2,9 +2,9 @@
 
 Read this before touching `crates/core/src/faces.rs` (the YuNet face / eye
 detector), `crates/core/src/eyes.rs` (the MediaPipe Face Landmarker v2 face
-mesh that judges closed eyes), `crates/core/src/embed.rs` (the SigLIP 2
-image embedding) or adding another ONNX model to `crates/core`. It lists what loading
-and running a model through `tract-onnx` 0.23 took here, each with the reason.
+mesh that judges closed eyes) or adding another ONNX model to `crates/core`.
+It lists what loading and running a model through `tract-onnx` 0.23 took
+here, each with the reason.
 
 The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
@@ -58,11 +58,12 @@ list of labels when one is missing.
 and runs without it, and the binary and the build are smaller. Check a
 new model's ops load with this setting before turning the defaults back on.
 
-- The four embedding candidates of the image-embeddings plan (SigLIP 2,
-  OpenCLIP, TinyCLIP, MobileCLIP) load with it too: their exports use plain
-  `MatMul` / `Softmax` / `Erf` and either `LayerNormalization` or its
-  decomposed form. Only ORT's fused `Attention` / `MultiHeadAttention` ops
-  need `tract-transformers`, so pick plain exports (Measured).
+- Vision transformers load with it too: the four image-embedding candidates
+  of the image-embeddings plan (SigLIP 2, OpenCLIP, TinyCLIP, MobileCLIP)
+  did, their exports using plain `MatMul` / `Softmax` / `Erf` and either
+  `LayerNormalization` or its decomposed form. Only ORT's fused `Attention` /
+  `MultiHeadAttention` ops need `tract-transformers`, so pick plain exports
+  (Measured).
 - Quantized exports are another matter (Hit). onnx-community's SigLIP 2
   fp16 export fails to translate (the head `Gemm`: `expected 1,768,F16 got
   1,768,F32`), and its int8 export fails analysis (`ConvInteger`: `Impossible
@@ -71,17 +72,16 @@ new model's ops load with this setting before turning the defaults back on.
   0.64 against FP32). Weight-only re-exports (float16 or per-channel int8
   initializers widened by `Cast` / `DequantizeLinear`) load and are
   accurate, but tract re-widens those weights on every run, at 2x to 5x
-  FP32's cost. So the app runs the FP32 file. Source:
+  FP32's cost. So run a model's FP32 file. Source:
   [image-embeddings models.md](../plans/_archived/20261012-image-embeddings/models.md).
 - Load a large model with `model_for_path`, not `model_for_read` on the bytes
   (Measured). `model_for_read` copies the bytes into a `Vec` of its own
   before decoding, so the caller's bytes, that copy, the parsed protobuf and
   the optimized plan's weights are alive together. `model_for_path` maps the
-  file instead. On the 378 MB SigLIP 2 file the process peak went from
+  file instead. On a 378 MB SigLIP 2 file the process peak went from
   1145-1161 MB to 773 MB, with the same plan build time (538 ms) and the same
-  395 MB after the load. `embed::Model::load_path` is that path.
-  `include_bytes!` is no help either: the static's pages plus `load`'s copy
-  left 774 MB after the load. Source:
+  395 MB after the load. `include_bytes!` is no help either: the static's
+  pages plus a loader's copy of them left 774 MB after the load. Source:
   [image-embeddings learnings](../plans/_archived/20261012-image-embeddings/learnings.md),
   Step 3.
 - Object detectors load too, but the transformer heads cost too much (Measured).
@@ -289,35 +289,6 @@ and a labeled set, not only whether it loads.
   1, 2 and 4.
 - Source: [closed-eyes-detection learnings](../plans/_archived/20261007-closed-eyes-detection/learnings.md),
   Steps 1 and 2.
-
-### The image embedding: RGB NCHW, PIL's resampling, a DCT-scaled decode (Measured)
-
-`embed.rs` runs SigLIP 2 ViT-B/32 @256 (`embed::SHIPPED`): input fact
-`[1, 3, 256, 256]` (channels first, like YuNet), RGB, values
-`(x / 255 - 0.5) / 0.5`, the upright image stretched to 256x256 without a
-crop, output by the outlet label `pooler_output` (768-d), L2-normalized. The
-other candidates' contracts are in `embed::SPECS` (CLIP mean / std, a short
-side resize and a center crop for OpenCLIP and TinyCLIP).
-
-- Every candidate's Python processor resizes through PIL, so `resample`
-  reimplements PIL's `precompute_coeffs` (the kernel widened by the
-  downscale factor, each pass rounded to 8 bits). With it the vectors match
-  onnxruntime + PIL at cosine 0.999997 or better. A plain bilinear resize is
-  not an error, it only lowers that cosine, so check a new model against a
-  Python reference on real images, not only whether it loads.
-- The input is the preview decoded at the DCT scale nearest 404 px
-  (`embed::embed_preview`, `decode::decode_upright_near`), not the index's
-  404 px thumbnail. The thumbnail's q80 4:2:0 re-encode moved the SigLIP 2
-  vector to cosine 0.96 of the full preview's (top-5 neighbor agreement 0.52
-  within one folder). The scaled decode keeps 0.998 (0.84) and decodes in
-  9 ms against 26 ms for the full preview.
-- The file is not bundled. The app downloads it on the first enable (the
-  engine's `ai.rs`) and builds the plan in `embed::shared`, whose `OnceLock`
-  keeps a failed build for good like `faces.rs`'s, so it is called only once the
-  file is in place (`AppAi::model_if_enabled`). Once built, the plan stays
-  resident (about 395 MB) for the rest of the process.
-- Source: [image-embeddings models.md](../plans/_archived/20261012-image-embeddings/models.md)
-  and the plan's Decision 1.
 
 ### An embedded model only weighs on the binaries that call it (Measured)
 

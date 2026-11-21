@@ -43,25 +43,9 @@ from lapse (orders a folder's JPEGs by capture time and writes copies with
 unique `DateTimeOriginal` seconds into `<folder>-sequenced/`), `src/copy.rs`
 the import's file copy (one sequential reader thread feeding one writer
 thread through a bounded channel of buffers, each file written under
-`TEMP_SUFFIX`, renamed into place and never overwriting), `src/embed.rs`
-the SigLIP 2 image embedding of a preview (decoded near 404 px, 768-d,
-L2-normalized; the model is downloaded, not bundled, its pinned URL, size and
-SHA-256 here and its Apache-2.0 notice in `crates/core/models/LICENSE-siglip2`,
-one plan shared through `embed::shared`, `EMBED_VERSION` naming the model and
-its preprocessing), `src/genre.rs` the genre labels of an embedding (a cosine
-per label against the text vectors and per-label calibrated thresholds of
-`crates/core/genres/siglip2.json`, written offline by the image-embeddings
-plan's `genre_vectors.py`, a sub-genre bringing its parent, `Unknown` when
-none clears; `of_burst` the genre of a burst, the top-level label on for the
-most of its frames, which the ranking keeps an offset per), `src/rank.rs` the personal best-shot ranking (the bursts as
-`burst.ts` forms them, a pairwise logistic over each frame's embedding
-projected to 32 whitened PCA dimensions, the pass-2 values and its position
-in the burst, the prior in `crates/core/ranking/siglip2.json` written offline
-by the plan's `rank_prior.py`, `fit` refitting the shared weights on the
-user's judgments pulled toward the prior's plus one offset per top-level genre
-pulled toward zero `OFFSET_SHRINK` times harder, `rank` the place, the score
-and the reasons of each frame within its burst by the shared weights plus its
-burst's genre offset), `src/scan.rs` the folder scan's worker pool and passes,
+`TEMP_SUFFIX`, renamed into place and never overwriting), `src/resample.rs`
+PIL's bilinear and bicubic resampling, which `fullsharp.rs` resizes its eye
+crops through, `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
 holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
 sharpness of the judged face on the full-size embedded JPEG (a crop around each

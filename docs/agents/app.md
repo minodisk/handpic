@@ -321,8 +321,8 @@ Apache-2.0; their `LICENSE` names that source, each file's own `author` and
 copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
 `gpui-pre-reqwest`), and the Apache-2.0 text of
 their `LICENSE-APACHE`), `crates/app/LICENSE-lucide`, the themes' `LICENSE`
-as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`,
-`LICENSE-mediapipe` and `LICENSE-siglip2`. The repository has no project
+as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`
+and `LICENSE-mediapipe`. The repository has no project
 `LICENSE` file, so none is shipped.
 
 - Rule: every package gets its notices from `notices.sh`, never a list of

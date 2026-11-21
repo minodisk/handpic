@@ -2,7 +2,6 @@ use anyhow::{anyhow, bail, Result};
 use handpic_core::candidate;
 use handpic_core::copy;
 use handpic_core::decode::{apply_orientation, decode_rgb, decode_upright_near};
-use handpic_core::embed;
 use handpic_core::eyes;
 use handpic_core::faces;
 use handpic_core::partial;
@@ -91,7 +90,6 @@ fn main() -> Result<()> {
             check(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
         }
         Some("facechoice") => facechoice::run(&args[1..]),
-        Some("embed") => embed_cmd(&args[1..]),
         Some("previews") => previews(&parse_previews(&args[1..])?),
         Some("copybench") => match &args[1..] {
             [src, dst, rest @ ..] if rest.len() <= 2 => copybench(
@@ -102,12 +100,8 @@ fn main() -> Result<()> {
             ),
             _ => bail!("usage: {COPYBENCH_USAGE}"),
         },
-        Some("embed-compare") => match &args[1..] {
-            [a, b] => embed_compare(Path::new(a), Path::new(b)),
-            _ => bail!("usage: {EMBED_COMPARE_USAGE}"),
-        },
         _ => bail!(
-            "usage: handpic-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       handpic-cli crop <file.ARW> <out.png> [size]\n       handpic-cli scan <dir> [threads]\n       handpic-cli detect <dir|file>... [threads]\n       handpic-cli eyecrops <dir|file>... <out-dir>\n       handpic-cli eyes <dir|file>...\n       handpic-cli features <dir>... [threads]\n       handpic-cli check <dir>... [threads]\n       {}\n       {EMBED_USAGE}\n       {EMBED_COMPARE_USAGE}\n       {PREVIEWS_USAGE}
+            "usage: handpic-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       handpic-cli crop <file.ARW> <out.png> [size]\n       handpic-cli scan <dir> [threads]\n       handpic-cli detect <dir|file>... [threads]\n       handpic-cli eyecrops <dir|file>... <out-dir>\n       handpic-cli eyes <dir|file>...\n       handpic-cli features <dir>... [threads]\n       handpic-cli check <dir>... [threads]\n       {}\n       {PREVIEWS_USAGE}
        {COPYBENCH_USAGE}",
             facechoice::USAGE
         ),
@@ -592,221 +586,6 @@ fn features(dirs: &[PathBuf], threads: Option<usize>) -> Result<()> {
     Ok(())
 }
 
-const EMBED_USAGE: &str = "handpic-cli embed <model.onnx> <siglip2|openclip|tinyclip|mobileclip> <dir|file>... [threads] [--thumb | --near <px>] [--out <out.tsv>] [--previews <dir>]";
-const EMBED_COMPARE_USAGE: &str = "handpic-cli embed-compare <a.tsv> <b.tsv>";
-/// The neighbors `embed-compare` checks for retrieval agreement.
-const EMBED_TOP_K: usize = 5;
-
-/// Embed every RAW file given or in the folders given with the ONNX model at
-/// the path given and the candidate spec named (`embed::SPECS`): the full
-/// preview, or with `--thumb` the index's thumbnail (`scan::extract`, the
-/// 404-px q80 JPEG) decoded again, or with `--near` the preview decoded at
-/// the DCT scale nearest that long edge (`decode::decode_upright_near`), with
-/// no re-encode. Prints `path\tvec...` per file (to
-/// `--out` when given), then the plan build time, the warm ms per image
-/// (decode, and embed: preprocessing plus inference), the wall time per image
-/// and the peak working set. `--previews` also writes each file's preview
-/// JPEG and a `list.tsv` of `path\tjpeg\torientation` for `ref_embed.py`.
-fn embed_cmd(args: &[String]) -> Result<()> {
-    let mut thumb = false;
-    let mut near = None;
-    let mut out = None;
-    let mut previews = None;
-    let mut rest = Vec::new();
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--thumb" => thumb = true,
-            "--near" => {
-                near = Some(
-                    it.next()
-                        .ok_or(anyhow!("--near needs a long edge"))?
-                        .parse()?,
-                )
-            }
-            "--out" => {
-                out = Some(PathBuf::from(
-                    it.next().ok_or(anyhow!("--out needs a path"))?,
-                ))
-            }
-            "--previews" => {
-                previews = Some(PathBuf::from(
-                    it.next().ok_or(anyhow!("--previews needs a folder"))?,
-                ))
-            }
-            _ => rest.push(a.as_str()),
-        }
-    }
-    let threads = match rest.last().map(|t| t.parse::<usize>()) {
-        Some(Ok(n)) => {
-            rest.pop();
-            n
-        }
-        _ => 1,
-    };
-    if threads == 0 {
-        bail!("threads must be at least 1");
-    }
-    if thumb && near.is_some() {
-        bail!("--thumb and --near are exclusive");
-    }
-    if previews.is_some() && (thumb || near.is_some()) {
-        bail!("--previews writes the full previews; drop --thumb / --near");
-    }
-    let [model_path, spec_name, inputs @ ..] = rest.as_slice() else {
-        bail!("usage: {EMBED_USAGE}");
-    };
-    if inputs.is_empty() {
-        bail!("usage: {EMBED_USAGE}");
-    }
-    let spec = embed::spec(spec_name).ok_or_else(|| anyhow!("unknown spec {spec_name}"))?;
-    let paths = raw_paths(&inputs.iter().map(PathBuf::from).collect::<Vec<_>>())?;
-    if let Some(dir) = &previews {
-        // Previews are named by file stem in one folder, so a repeat would overwrite.
-        let mut stems = std::collections::HashSet::new();
-        for p in &paths {
-            let stem = p
-                .file_stem()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string();
-            if !stems.insert(stem) {
-                bail!(
-                    "{}: another input has the same file name; --previews needs unique stems",
-                    p.display()
-                );
-            }
-        }
-        std::fs::create_dir_all(dir)?;
-    }
-
-    let bytes = std::fs::read(model_path)?;
-    let t = Instant::now();
-    let model = embed::Model::load(&bytes, spec)?;
-    let build = t.elapsed();
-    drop(bytes);
-    let loaded = working_set().map(|w| w.1);
-    let load = |p: &Path| -> Result<(Vec<u8>, usize, usize, u16)> {
-        if thumb {
-            let entry = scan::extract(p).map_err(|e| anyhow!("{e}"))?;
-            let (rgb, w, h) = decode_rgb(&entry.thumbnail)?;
-            Ok((rgb, w, h, entry.orientation))
-        } else {
-            let (a, jpeg) = reader::read_preview(p)?;
-            if let Some(edge) = near {
-                let up = decode_upright_near(&jpeg, a.orientation, edge)?;
-                return Ok((up.rgb, up.width, up.height, 1));
-            }
-            let (rgb, w, h) = decode_rgb(&jpeg)?;
-            Ok((rgb, w, h, a.orientation))
-        }
-    };
-    // Warm the plan outside the timing.
-    let (rgb, w, h, o) = load(&paths[0])?;
-    let t = Instant::now();
-    embed::embed_with(&model, &rgb, w, h, o)?;
-    let first = t.elapsed();
-
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(threads)
-        .build()?;
-    // The load's peak hides the run's, so sample the working set during it.
-    let done = AtomicBool::new(false);
-    let (results, total, running): (Vec<Result<Embedded>>, _, _) = std::thread::scope(|s| {
-        let sampler = s.spawn(|| {
-            let mut max = 0;
-            while !done.load(std::sync::atomic::Ordering::Relaxed) {
-                max = max.max(working_set().map_or(0, |w| w.1));
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            max
-        });
-        let start = Instant::now();
-        let results = pool.install(|| {
-            use rayon::prelude::*;
-            paths
-                .par_iter()
-                .map(|p| {
-                    let t = Instant::now();
-                    let (rgb, w, h, o) = load(p)?;
-                    let decode = t.elapsed().as_secs_f64() * 1000.0;
-                    let t = Instant::now();
-                    let v = embed::embed_with(&model, &rgb, w, h, o)?;
-                    Ok((v, decode, t.elapsed().as_secs_f64() * 1000.0, o))
-                })
-                .collect()
-        });
-        let total = start.elapsed();
-        done.store(true, std::sync::atomic::Ordering::Relaxed);
-        (results, total, sampler.join().unwrap_or(0))
-    });
-
-    let mut lines = String::new();
-    let mut list = String::new();
-    let (mut decode, mut embedded, mut failed) = (Vec::new(), Vec::new(), 0);
-    for (p, r) in paths.iter().zip(results) {
-        match r {
-            Ok((v, d, e, o)) => {
-                lines.push_str(&embed_line(&p.to_string_lossy(), &v));
-                lines.push('\n');
-                if let Some(dir) = &previews {
-                    // Written here, after the timed run, so the I/O stays out of its numbers.
-                    let stem = p.file_stem().unwrap_or_default().to_string_lossy();
-                    std::fs::write(dir.join(format!("{stem}.jpg")), reader::read_preview(p)?.1)?;
-                    list.push_str(&format!(
-                        "{}\t{}\t{o}\n",
-                        p.display(),
-                        dir.join(format!("{stem}.jpg")).display()
-                    ));
-                }
-                decode.push(d);
-                embedded.push(e);
-            }
-            Err(e) => {
-                failed += 1;
-                eprintln!("{}: {e:#}", p.display());
-            }
-        }
-    }
-    match &out {
-        Some(path) => std::fs::write(path, &lines)?,
-        None => print!("{lines}"),
-    }
-    if let Some(dir) = &previews {
-        std::fs::write(dir.join("list.tsv"), list)?;
-    }
-    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
-    let input = match (thumb, near) {
-        (true, _) => "thumb".to_string(),
-        (_, Some(edge)) => format!("preview near {edge} px"),
-        _ => "preview".to_string(),
-    };
-    let summary = format!(
-        "{} {} files ({} input), {threads} threads, {failed} failed\nplan build {:.0} ms, first embed {:.0} ms\nwarm per image: decode {:.1} ms, embed {:.1} ms (mean)\nwall {:.2} s, {:.1} ms/image\nworking set after load {}, during the run up to {:.0} MB, peak {}",
-        spec.name,
-        paths.len(),
-        input,
-        build.as_secs_f64() * 1000.0,
-        first.as_secs_f64() * 1000.0,
-        mean(&decode),
-        mean(&embedded),
-        total.as_secs_f64(),
-        total.as_secs_f64() * 1000.0 / paths.len() as f64,
-        loaded.map_or("-".into(), |b| format!("{:.0} MB", b as f64 / 1e6)),
-        running as f64 / 1e6,
-        working_set().map_or("-".into(), |w| format!("{:.0} MB", w.0 as f64 / 1e6)),
-    );
-    if out.is_some() {
-        println!("{summary}");
-    } else {
-        eprintln!("{summary}");
-    }
-    if failed > 0 {
-        bail!("{failed} file(s) failed");
-    }
-    Ok(())
-}
-
 const PREVIEWS_USAGE: &str = "handpic-cli previews <out-dir> <dir|file>... --near <px> [threads]";
 /// The JPEG quality `previews` re-encodes at.
 const PREVIEWS_QUALITY: u8 = 92;
@@ -862,9 +641,9 @@ fn parse_previews(args: &[String]) -> Result<PreviewsArgs> {
 }
 
 /// Write every RAW file's preview, decoded at the DCT scale nearest
-/// `--near` and turned upright (`decode::decode_upright_near`, the embedding's
-/// input), as a JPEG to `<out-dir>/<folder>/<stem>.jpg`, `<folder>` being the
-/// RAW file's folder name, and a `list.tsv` of `path\tjpeg\twidth\theight`.
+/// `--near` and turned upright (`decode::decode_upright_near`), as a JPEG to
+/// `<out-dir>/<folder>/<stem>.jpg`, `<folder>` being the RAW file's folder
+/// name, and a `list.tsv` of `path\tjpeg\twidth\theight`.
 fn previews(a: &PreviewsArgs) -> Result<()> {
     let paths = raw_paths(&a.inputs)?;
     let target = |p: &Path| {
@@ -939,161 +718,6 @@ fn previews(a: &PreviewsArgs) -> Result<()> {
         bail!("{failed} file(s) failed");
     }
     Ok(())
-}
-
-/// One file's vector, decode ms, embed ms and the orientation it was fed with.
-type Embedded = (Vec<f32>, f64, f64, u16);
-
-/// One `embed` TSV line: the path, then each component.
-fn embed_line(path: &str, v: &[f32]) -> String {
-    let mut line = path.to_string();
-    for x in v {
-        line.push_str(&format!("\t{x}"));
-    }
-    line
-}
-
-/// Parse an `embed` TSV (or `ref_embed.py`'s) into `(path, vector)` rows.
-fn parse_embeddings(text: &str) -> Result<Vec<(String, Vec<f32>)>> {
-    text.lines()
-        .filter(|l| !l.is_empty())
-        .map(|l| {
-            let mut cols = l.split('\t');
-            let path = cols.next().unwrap_or_default().to_string();
-            let v = cols
-                .map(|c| c.parse::<f32>())
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| anyhow!("{path}: {e}"))?;
-            Ok((path, v))
-        })
-        .collect()
-}
-
-fn dot(a: &[f32], b: &[f32]) -> f64 {
-    a.iter()
-        .zip(b)
-        .map(|(x, y)| f64::from(*x) * f64::from(*y))
-        .sum()
-}
-
-/// The indices of the `k` rows nearest row `i` by dot product, itself excluded.
-fn top_k(rows: &[&[f32]], i: usize, k: usize) -> Vec<usize> {
-    let mut sims: Vec<(usize, f64)> = (0..rows.len())
-        .filter(|&j| j != i)
-        .map(|j| (j, dot(rows[i], rows[j])))
-        .collect();
-    sims.sort_by(|a, b| b.1.total_cmp(&a.1));
-    sims.into_iter().take(k).map(|(j, _)| j).collect()
-}
-
-/// The per-file cosines of the paths both dumps hold, and the mean share of
-/// each file's `k` nearest neighbors within `a` that are also among its `k`
-/// nearest within `b`.
-fn compare_embeddings(
-    a: &[(String, Vec<f32>)],
-    b: &[(String, Vec<f32>)],
-    k: usize,
-) -> Result<(Vec<(String, f64)>, f64)> {
-    let bs: std::collections::HashMap<&str, &[f32]> =
-        b.iter().map(|(p, v)| (p.as_str(), v.as_slice())).collect();
-    let pairs: Vec<(&str, &[f32], &[f32])> = a
-        .iter()
-        .filter_map(|(p, v)| bs.get(p.as_str()).map(|w| (p.as_str(), v.as_slice(), *w)))
-        .collect();
-    if let Some((p, v, w)) = pairs.iter().find(|(_, v, w)| v.len() != w.len()) {
-        bail!("{p}: vectors differ in length ({} vs {})", v.len(), w.len());
-    }
-    if let Some((p, v, _)) = pairs.iter().find(|(_, v, _)| v.len() != pairs[0].1.len()) {
-        bail!(
-            "{p}: row length {} differs from the first row's {}",
-            v.len(),
-            pairs[0].1.len()
-        );
-    }
-    if pairs.len() <= k {
-        bail!("{} common paths; need more than {k}", pairs.len());
-    }
-    let cosines = pairs
-        .iter()
-        .map(|(p, v, w)| {
-            let cos = dot(v, w) / (dot(v, v) * dot(w, w)).sqrt();
-            (p.to_string(), cos)
-        })
-        .collect();
-    let norm = |v: &[f32]| {
-        let n = dot(v, v).sqrt() as f32;
-        v.iter().map(|x| x / n).collect::<Vec<f32>>()
-    };
-    let na: Vec<Vec<f32>> = pairs.iter().map(|(_, v, _)| norm(v)).collect();
-    let nb: Vec<Vec<f32>> = pairs.iter().map(|(_, _, w)| norm(w)).collect();
-    let ra: Vec<&[f32]> = na.iter().map(Vec::as_slice).collect();
-    let rb: Vec<&[f32]> = nb.iter().map(Vec::as_slice).collect();
-    let agreement = (0..pairs.len())
-        .map(|i| {
-            let ta = top_k(&ra, i, k);
-            let tb = top_k(&rb, i, k);
-            ta.iter().filter(|j| tb.contains(j)).count() as f64 / k as f64
-        })
-        .sum::<f64>()
-        / pairs.len() as f64;
-    Ok((cosines, agreement))
-}
-
-/// Print the per-file cosine between two `embed` dumps of the same files,
-/// its min and mean, and the top-`EMBED_TOP_K` retrieval agreement.
-fn embed_compare(a: &Path, b: &Path) -> Result<()> {
-    let a = parse_embeddings(&std::fs::read_to_string(a)?)?;
-    let b = parse_embeddings(&std::fs::read_to_string(b)?)?;
-    let (cosines, agreement) = compare_embeddings(&a, &b, EMBED_TOP_K)?;
-    for (p, c) in &cosines {
-        println!("{p}\t{c:.6}");
-    }
-    let min = cosines.iter().map(|c| c.1).fold(f64::INFINITY, f64::min);
-    let mean = cosines.iter().map(|c| c.1).sum::<f64>() / cosines.len() as f64;
-    println!(
-        "{} common files: cosine min {min:.6} mean {mean:.6}, top-{EMBED_TOP_K} agreement {agreement:.3}",
-        cosines.len()
-    );
-    Ok(())
-}
-
-/// The process's peak and current working set in bytes, where the OS
-/// reports them.
-#[cfg(windows)]
-fn working_set() -> Option<(usize, usize)> {
-    #[repr(C)]
-    struct Counters {
-        cb: u32,
-        page_fault_count: u32,
-        peak_working_set_size: usize,
-        working_set_size: usize,
-        quota_peak_paged_pool_usage: usize,
-        quota_paged_pool_usage: usize,
-        quota_peak_non_paged_pool_usage: usize,
-        quota_non_paged_pool_usage: usize,
-        pagefile_usage: usize,
-        peak_pagefile_usage: usize,
-    }
-    #[link(name = "kernel32")]
-    extern "system" {
-        fn GetCurrentProcess() -> isize;
-        fn K32GetProcessMemoryInfo(process: isize, counters: *mut Counters, cb: u32) -> i32;
-    }
-    let cb = std::mem::size_of::<Counters>() as u32;
-    let mut c = std::mem::MaybeUninit::<Counters>::zeroed();
-    // SAFETY: `c` is a zeroed PROCESS_MEMORY_COUNTERS of size `cb`, and the
-    // pseudo handle of the current process needs no closing.
-    let ok = unsafe { K32GetProcessMemoryInfo(GetCurrentProcess(), c.as_mut_ptr(), cb) };
-    // SAFETY: zeroed is a valid value of every field, and the call filled it on success.
-    (ok != 0).then(|| {
-        let c = unsafe { c.assume_init() };
-        (c.peak_working_set_size, c.working_set_size)
-    })
-}
-
-#[cfg(not(windows))]
-fn working_set() -> Option<(usize, usize)> {
-    None
 }
 
 /// The flag column of one sidecar: `-` when it does not exist, `err` when it
@@ -1822,33 +1446,6 @@ mod tests {
         ] {
             assert!(parse_previews(&args(bad)).is_err(), "{bad}");
         }
-    }
-
-    #[test]
-    fn embed_lines_round_trip_and_compare_by_path() {
-        let a: Vec<(String, Vec<f32>)> = (0..7)
-            .map(|i| {
-                let t = i as f32 * 0.3;
-                (format!("f{i}"), vec![t.cos(), t.sin()])
-            })
-            .collect();
-        let text: String = a.iter().map(|(p, v)| embed_line(p, v) + "\n").collect();
-        assert_eq!(parse_embeddings(&text).unwrap(), a);
-        // The same files in another order, one scaled: every cosine is 1 and
-        // the neighbors agree.
-        let mut b = a.clone();
-        b.reverse();
-        b[0].1 = b[0].1.iter().map(|x| x * 2.0).collect();
-        let (cosines, agreement) = compare_embeddings(&a, &b, 2).unwrap();
-        assert_eq!(cosines.len(), 7);
-        assert!(cosines.iter().all(|(_, c)| (c - 1.0).abs() < 1e-6));
-        assert_eq!(agreement, 1.0);
-        // Too few common paths for k.
-        assert!(compare_embeddings(&a[..2], &b, 2).is_err());
-        // Vectors of different lengths are an error, not a truncated cosine.
-        let mut c = a.clone();
-        c[3].1.push(0.5);
-        assert!(compare_embeddings(&a, &c, 2).is_err());
     }
 
     #[test]
