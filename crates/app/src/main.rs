@@ -41,6 +41,7 @@ mod peaking;
 mod perf;
 mod perfgraph;
 mod prefetch;
+mod presentnow;
 mod progress;
 mod rename;
 mod resync;
@@ -522,6 +523,8 @@ struct Handpic {
     size_reads: u64,
     /// The main window, which an import's end checks and notifies from.
     window: AnyWindowHandle,
+    /// The main window's paint, processed at once after a keyed page.
+    present_now: presentnow::PresentNow,
     /// A confirmed run, or a run's undo or redo, held for the listing or
     /// scan under way; in flight while one runs, which no listing or scan
     /// starts under.
@@ -1000,6 +1003,7 @@ impl Handpic {
             cache_buttons: [cx.focus_handle(), cx.focus_handle()],
             size_reads: 0,
             window: window.window_handle(),
+            present_now: presentnow::PresentNow::of(window),
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
@@ -4494,7 +4498,11 @@ impl Handpic {
             file: file_name(&self.files[index]),
         });
         self.show_current(index, held, cx);
-        self.pend_page(page, keyed);
+        if self.pend_page(page, keyed) {
+            // After the key's dispatch has unwound, outside any update.
+            let present_now = self.present_now;
+            cx.spawn(async move |_, _| present_now.paint()).detach();
+        }
         self.request_prefetch(cx);
     }
 
@@ -4590,16 +4598,19 @@ impl Handpic {
                 .background_spawn(async move { guarded(|| load(&path, &slots, canvas)) })
                 .await;
             let received = Instant::now();
-            this.update(cx, |this, cx| {
+            let keyed = this.update(cx, |this, cx| {
                 if order != this.order {
                     if let Ok(loaded) = loaded {
                         this.retire(Some(loaded.held.image));
                     }
-                    return;
+                    return None;
                 }
-                this.loaded(index, loaded, received, cx);
-            })
-            .ok();
+                this.loaded(index, loaded, received, cx)
+                    .then_some(this.present_now)
+            });
+            if let Ok(Some(present_now)) = keyed {
+                present_now.paint();
+            }
         })
         .detach();
     }
@@ -4610,7 +4621,7 @@ impl Handpic {
         result: Result<Loaded, String>,
         received: Instant,
         cx: &mut Context<Self>,
-    ) {
+    ) -> bool {
         let shown = match &self.shown {
             Some((at, Shown::Read(_))) => *at,
             _ => None,
@@ -4624,14 +4635,14 @@ impl Handpic {
                     Err(_) => {}
                 }
                 self.send(next, received, cx);
-                return;
+                return false;
             }
             Finished::Dropped => {
                 if let Ok(loaded) = result {
                     self.retire(Some(loaded.held.image));
                 }
                 self.request_prefetch(cx);
-                return;
+                return false;
             }
         }
         let key = self.key.take();
@@ -4664,8 +4675,9 @@ impl Handpic {
                 });
                 self.show_current(index, held, cx);
                 self.hold.hold(paused);
-                self.pend_page(page, keyed);
+                let keyed = self.pend_page(page, keyed);
                 self.request_prefetch(cx);
+                keyed
             }
             Err(e) => {
                 self.fail(&format!("{name}: {e}"));
@@ -4675,6 +4687,7 @@ impl Handpic {
                 self.clear_image();
                 self.marks.show(None);
                 cx.notify();
+                false
             }
         }
     }
@@ -4692,11 +4705,12 @@ impl Handpic {
     }
 
     /// The keyed page the next presented frame completes, notified now.
-    fn pend_page(&self, page: Option<Page>, keyed: bool) {
-        if let Some(mut page) = page {
-            page.notified = Instant::now();
-            *self.pending.borrow_mut() = Some((page, keyed));
-        }
+    /// Whether a keyed page was pended, whose paint to process at once.
+    fn pend_page(&self, page: Option<Page>, keyed: bool) -> bool {
+        let Some(mut page) = page else { return false };
+        page.notified = Instant::now();
+        *self.pending.borrow_mut() = Some((page, keyed));
+        keyed
     }
 
     /// Draw another file's result on the way to the current one: the frame,

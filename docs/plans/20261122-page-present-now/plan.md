@@ -63,7 +63,7 @@ fix rests on, and measures the fix with the external ruler.
     - Follow the existing sections' conventions: cells `p50 / p95` in ms, run rows 1-3 then a bold median-of-3 row, links relative to the record's folder.
     - `screengap.py` hard-codes the 12 used runs (`USED`); it reads the per-press CSVs and logs that stay in the measurement worktree's `out\20261121`, which the record's caveat on reproducibility already covers. Say so next to the reproduction line.
 
-- [ ] Step 2: Process the paint at once after a keyed page is pended (Windows only)
+- [x] Step 2: Process the paint at once after a keyed page is pended (Windows only)
   - Done when:
     - On Windows, after a keyed page's result is pended and notified, the window's `WM_PAINT` is processed at once through `RedrawWindow(hwnd, None, None, RDW_INVALIDATE | RDW_UPDATENOW)`, on both keyed page paths: the read result (`send` / `loaded`) and the prefetch hit (`show_held`).
     - A release build run from a terminal (`mise run app:release -- <folder>`) prints `page` lines whose `frameWait` is near zero on keyed page turns, with `source=read` (`--no-prefetch`) and with `source=prefetch` alike, and holding an arrow key through a folder neither panics nor leaves a stale image on screen. `Handpic.log` has no panic line (see `docs/agents/app-log.md`).
