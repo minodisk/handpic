@@ -3979,8 +3979,11 @@ strip needed one because `uniform_list` is vertical only.
   expand. A click on the open row's name without a modifier stops at the
   name (the slow click below); with Ctrl / Cmd / Shift it reaches the row and
   toggles. An open refused by `refuse_renaming` collapses nothing.
-  Double-clicks are not special-cased. Inferred, not yet observed in the
-  running app.
+  Double-clicks are not special-cased. Seen (2026-11-22, Windows 11) for the
+  clicks that were run: a collapsed and an expanded row that is not open
+  open (the expanded one left collapsed), the open row's icon and count
+  toggle it without a re-list, and its name arms the slow click. Not seen: a
+  click on an open leaf row or on the open row's indent.
 - Rule: tree nodes are keyed by the tree's own spelling (the root's, then one
   separator per level), never by the canonical `\\?\` path the index uses.
   The open folder's row is found with `tree::relation`, case ignored on
@@ -4017,8 +4020,14 @@ strip needed one because `uniform_list` is vertical only.
   width. The padding is on the list, not the pane, so the scrollbar stays at
   the pane's edge. The row's right padding is `SCROLLBAR_TRACK` less that
   inset (12 px), so its content ends clear of the bar's track; its hover and
-  selected fill still runs to 4 px from the edge, under the thumb. Inferred from the gpui-pre 0.3.12 and taffy sources, not
-  yet observed in the running app.
+  selected fill still runs to 4 px from the edge, under the thumb. The cause
+  is inferred from the gpui-pre 0.3.12 and taffy sources. Measured
+  (2026-11-22, Windows 11): a long name ends in an ellipsis inside the pane
+  at depths 2 to 4, the count stays whole next to a short and a truncated
+  name, the cursor ring, hover and open-row highlights span the pane less
+  the inset with rounded corners, and the vertical scrollbar sits at the
+  pane's right edge. Not yet observed: a drag of the scrollbar's thumb, a
+  click on a row's inset edge and a long pending name.
 - Rule: a row shows its file count, expanded or collapsed, whenever it is
   above zero, from one of two sources drawn the same. The listed count
   (`Node::raw_count`) is the last `read_dir` of the folder: an expand, a
@@ -4032,7 +4041,12 @@ strip needed one because `uniform_list` is vertical only.
   folder never counted shows nothing. Since the key is the tree's spelling, a
   folder reached through a mapped drive, a symlink or a junction keeps its
   count across restarts; one folder reached through two spellings has a row
-  for each. Inferred, not yet observed in the running app.
+  for each. Measured (2026-11-22, Windows 11): the listed count, the cached
+  counts after a restart, a folder renamed in the app keeping its count, a
+  folder renamed outside the app and a new folder of an old name showing
+  none until listed, and a folder never listed showing none. Not yet
+  observed: a folder reached through a mapped drive, a symlink or a
+  junction, and an index upgraded from before the table.
 - Rule: every count the tree learns from disk is written to `folder_counts`
   under the tree node's path, the string handed to `folders::list`: each
   successful listing through `tree_listed` (an expand, `Refresh`, a tree
@@ -4497,6 +4511,13 @@ mouse listeners were the smaller change.
   meanwhile and marks and reports a folder that fails, going on with the
   rest. `Collapse All` is `Tree::collapse_all`. The watch set follows through
   `tree_changed`.
+- Seen on Windows 11 on 2026-11-22: a click on a row does not itself move the
+  cursor, which follows an open (`tree_cursor = tree_open`) and the arrow
+  keys, so a click on the open row's icon or count toggles it and leaves the
+  cursor where it was; `enter` opens the cursor's folder and the tree keeps
+  the keyboard; Right / Left page the strip with the ring on the cursor;
+  `3`, `p`, `shift+arrowleft`, `alt+arrowleft` and `ctrl+z` are swallowed and
+  `q` does not quit; `escape` and `toggleLeft` remove the ring.
 
 ### The trash dialog is a component `Dialog`, its focus in GPUI (Inferred)
 
@@ -4568,6 +4589,12 @@ what a key does (`key`); the focus itself is GPUI's.
 - Rule: the dialog gives the focus back on close to what had it when it
   opened, the app view's handle; the tree's keyboard is a flag in the view
   (`tree_keys`), which the dialog never touches.
+- Seen on Windows 11 on 2026-11-22: in the delete dialog `enter` and `space`
+  on `Delete Permanently` do nothing and one click deletes; a double-click on
+  the strip menu's `Delete Permanently…` opens the dialog and deletes
+  nothing; a double-click on the dialog's own button deletes on its first
+  click, since the double-click `confirms_delete` refuses is only the rest of
+  the one that opened the dialog.
 
 ### A trash or delete goes through the gate, and nothing lists under it (Inferred)
 
@@ -4866,9 +4893,19 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   never cancel the scan; `Move to Trash` and `Delete Permanently` are held
   and cancel it; `Rename by Capture Date…` is refused with `SCAN_RUNNING`;
   `Sequence JPEG Timestamps…` and `Import…` ignore the scan.
-- Not verified headless: the editor, its keys, the IME in it and the held
-  rename; the hand check is pending in
-  `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+- Seen on Windows 11 on 2026-11-22: a held rename's row showed `◷ Later`
+  muted and italic with `Renames when the scan finishes` on hover, the pane
+  said `Rename…: waiting for the scan to finish` and the scan was not
+  canceled; typing the real name back and opening another folder each
+  canceled it with `Rename… was canceled`. One held rename of two failed
+  when it ran as pass 2 ended, with `Access denied (os error 5)` (pending in
+  `todo.md`); the other, and the failed one run again by hand, succeeded.
+- Seen on Windows 11 on 2026-11-22: a single click on the open row's name
+  opened the field after about 0.5 s; a double-click, a click followed by Up
+  and two clicks about 280 ms apart opened none; two clicks about 480 ms
+  apart did open it, borderline with the 500 ms system double-click time.
+- Not verified in the running app: the IME in the editor and a rename
+  during an import run; the hand checks are pending in `todo.md`.
 
 ### An import's end posts a system-only notification while inactive (Inferred)
 
