@@ -198,3 +198,9 @@ derived icon file.
   byte-identical. The contact sheet is the check.
 
 ## Progress
+
+- 2026-11-21 Step 1 done: the generator moved to `tools/app-icon/`, the SVG
+  is rendered with resvg, and the ICO / ICNS are written by hand. The title's
+  `TRACK = -0.4` leaves it about 13% wider than the old render instead of
+  matching its width (matching needs about -1.1 and cramps the letters); the
+  judgment call is recorded in `learnings.md`.

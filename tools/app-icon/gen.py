@@ -57,9 +57,11 @@ hstep = (PW - HW) / (HOLES - 1)
 top_hy = PY - HGAP_Y - HH
 bot_hy = PY + PH + HGAP_Y
 
-# Edge print. FS lays it out; TEXT_FS, TRACK (the title) and NUM_TRACK (12
-# and 12A) size and space the glyphs so Barlow Condensed matches the cap height
-# and width of the DIN Condensed the icon was first drawn in.
+# Edge print. FS lays it out. TEXT_FS matches the cap height of the DIN
+# Condensed the icon was first drawn in, and NUM_TRACK matches the width of its
+# numerals (12 and 12A). TRACK (the title) is set by eye, a little wider than
+# the old title (about -1.1 would match it), because matching would cramp the
+# letters; see learnings.md.
 INK = "#f2f2f2"
 FONT = "Barlow Condensed"
 FS = 26
