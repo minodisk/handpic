@@ -1,15 +1,20 @@
 name: Package
 
 # Builds the app's (crates/app) distributables and uploads them as
-# this run's artifacts. Manual only, and it touches no release: attaching them
-# to one is release.yml's business. A dispatch runs the workflow file of the
-# chosen ref, so `gh workflow run package.yml --ref <branch>` packages a branch.
+# this run's artifacts. It touches no release: attaching them to one is
+# release.yml's business, which calls this workflow (workflow_call) as its
+# build. A dispatch runs the workflow file of the chosen ref, so
+# `gh workflow run package.yml --ref <branch>` packages a branch.
 # `-f version=<x.y.z[-prerelease]>` packages that version instead of
 # crates/app/Cargo.toml's, which set-version.sh writes before the build.
 # `-f update_test_repo=<owner/name>` makes a test build: the build gets
 # HANDPIC_UPDATE_TEST_REPO and the updater's four archives are signed with the
-# checked-in test key (crates/app/packaging/test/). Without it nothing is
-# signed; release.yml signs with the production key.
+# checked-in test key (crates/app/packaging/test/). Without it a dispatch signs
+# nothing. Only a caller can ask for the production signature
+# (`sign_production`, an input a dispatch does not have, since
+# secrets.UPDATE_SIGNING_KEY would resolve on a dispatch too): each leg then
+# signs its archives with the UPDATE_SIGNING_KEY secret through
+# sign-production.sh, before its checks.
 on:
   workflow_dispatch:
     inputs:
@@ -23,6 +28,21 @@ on:
         required: false
         default: ""
         type: string
+  workflow_call:
+    inputs:
+      version:
+        description: The version to package (x.y.z or x.y.z-<prerelease>)
+        required: true
+        type: string
+      sign_production:
+        description: Sign the updater's archives with the production key (the UPDATE_SIGNING_KEY secret)
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      UPDATE_SIGNING_KEY:
+        description: The production zipsign private key, base64-encoded
+        required: false
 
 permissions:
   contents: read
@@ -120,6 +140,15 @@ jobs:
         run: |
           mise run app:sign -- crates/app/packaging/test/update.key crates/app/packaging/test/update.pub \
             "crates/app/target/release/Handpic-$VERSION-macos-$ARCH.tar.gz"
+
+      - name: Sign the tarball with the production key
+        if: inputs.sign_production
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: bash tools/package/sign-production.sh "crates/app/target/release/Handpic-$VERSION-macos-$ARCH.tar.gz"
 
       - name: Check the DMG
         shell: bash
@@ -259,6 +288,17 @@ jobs:
         run: |
           release=crates/app/target/release
           mise run app:sign -- crates/app/packaging/test/update.key crates/app/packaging/test/update.pub \
+            "$release/Handpic-$VERSION-windows-x64.zip" "$release/Handpic-$VERSION-windows-x64-setup.exe.zip"
+
+      - name: Sign the ZIPs with the production key
+        if: inputs.sign_production
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          release=crates/app/target/release
+          bash tools/package/sign-production.sh \
             "$release/Handpic-$VERSION-windows-x64.zip" "$release/Handpic-$VERSION-windows-x64-setup.exe.zip"
 
       # The runner is elevated, so this proves the per-user location, the HKCU
@@ -469,6 +509,14 @@ jobs:
         run: |
           mise run app:sign -- crates/app/packaging/test/update.key crates/app/packaging/test/update.pub \
             "crates/app/target/release/Handpic-$VERSION-linux-x64.tar.gz"
+
+      - name: Sign the tarball with the production key
+        if: inputs.sign_production
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash tools/package/sign-production.sh "crates/app/target/release/Handpic-$VERSION-linux-x64.tar.gz"
 
       # What the binary links and what it opens at run time, and the image's
       # glibc, which the deb's Depends follows.

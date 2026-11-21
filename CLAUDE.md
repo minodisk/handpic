@@ -223,8 +223,9 @@ kept from the bar's window drag) in place of the OS title bar, and
 `NOTICE-gpui`, the GPUI crates' Apache-2.0 notice, `update.pub`, the
 updater's 32-byte zipsign verifying key that `mise run app:keygen` writes
 (its private key kept by the user outside the repository), and `test/`, a
-checked-in test key pair no released build trusts; the manual
-`.github/workflows/package.yml` (`Package`, `workflow_dispatch` only) builds the
+checked-in test key pair no released build trusts;
+`.github/workflows/package.yml` (`Package`, dispatched by hand or called by
+`release.yml` through `workflow_call`) builds the
 release binary per platform and packages it with the scripts of
 `tools/package/` (`version.sh`, the crate's `[package].version`; `notices.sh`,
 the license notices every package ships into one `licenses/` folder;
@@ -242,12 +243,23 @@ updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 `handpic_<version>_amd64.deb` from the `packaging/linux/control` template
 (`Depends` from `dpkg-shlibdeps` plus `libvulkan1` and `libwayland-client0`), also
 `mise run app:package:linux`; `sign.sh`, the zipsign 0.2.2 signature of
-those four updater archives in place, also `mise run app:sign`, run only
-with the `update_test_repo` input (`owner/name`), which signs with the test
-key and gives the build `HANDPIC_UPDATE_TEST_REPO`), uploading each package
+those four updater archives in place, also `mise run app:sign`, run with the
+test key under a dispatch's `update_test_repo` input (`owner/name`), which
+also gives the build `HANDPIC_UPDATE_TEST_REPO`, or, under a caller's
+`sign_production` input, through `sign-production.sh` with the production
+key from the `UPDATE_SIGNING_KEY` secret (base64) against `update.pub`;
+`assets.sh`, the eleven asset names of a release), uploading each package
 and one `SHA256SUMS`, computed after signing, as workflow artifacts
 (`test-release.sh` publishes such a test run's artifacts as a release of the
-scratch repository it names, never `minodisk/handpic`); `crates/app`'s `src/datadir.rs` places
+scratch repository it names, never `minodisk/handpic`);
+`.github/workflows/release.yml` (`Release`) runs release-please on every push
+to `main` and publishes a release of `minodisk/handpic` with those eleven
+assets: a release candidate dispatched with a prerelease `version` input
+(published as a GitHub prerelease, never latest, only from `main`; a dispatch
+on another ref publishes nothing), or the final release when a merged release
+PR makes release-please's draft, published once every asset is attached,
+both behind a `guard` job that checks the version and the secret before the
+build; `crates/app`'s `src/datadir.rs` places
 its index at `<cache dir>/<IDENTIFIER>/index.sqlite` (or
 `--index <path>`), its settings store at `<config dir>/<IDENTIFIER>/settings.sqlite`
 (or `--settings <path>`) and an Inno Setup install's update staging at

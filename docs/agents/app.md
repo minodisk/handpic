@@ -554,8 +554,9 @@ executable and the `.icns` present).
 
 ### The `Package` workflow builds the distributables (Inferred)
 
-`.github/workflows/package.yml` (`workflow_dispatch` only, `contents: read`,
-no release touched) builds each platform's packages and uploads each as a
+`.github/workflows/package.yml` (dispatched by hand, or called by
+`release.yml` through `workflow_call`; `contents: read`, no release touched)
+builds each platform's packages and uploads each as a
 workflow artifact, then a `checksums` job uploads one `SHA256SUMS` over all
 of them. Each leg builds with `mise exec rust@1.98.1 -- cargo build --release
 --locked` in `crates/app`, as the `app` CI job runs cargo, and then
@@ -685,8 +686,16 @@ packages the built `target/release` binary with a script under
   otherwise) and signs its archives with the test key pair checked in under
   `crates/app/packaging/test/` (its README says no released build trusts
   it), before the checks, so the checks and the uploads see the signed
-  bytes. Without the input nothing is signed; sub-milestone 4's `release.yml`
-  signs with the production key. The `checksums` job computes `SHA256SUMS`
+  bytes. Without the input a dispatch signs nothing. The production
+  signature is only for a caller: `release.yml` calls the workflow with
+  `sign_production: true` and the `UPDATE_SIGNING_KEY` secret, and each leg
+  then runs `sign-production.sh` on its archives at the same place, before
+  its checks. `sign_production` is a `workflow_call` input a dispatch does
+  not have, because `secrets.UPDATE_SIGNING_KEY` resolves to the repository
+  secret on a direct dispatch too; gating on the secret's presence would let
+  any dispatch sign with the production key. A dispatch's `version` and
+  `update_test_repo` behave as before; a caller has no `update_test_repo`.
+  The `checksums` job computes `SHA256SUMS`
   over the downloaded artifacts, so after signing, and installs the
   tarball with `install.sh` and the digest `SHA256SUMS` names.
 - `test-release.sh <run-id> <owner/name>` publishes the artifacts of a
@@ -773,6 +782,78 @@ packages the built `target/release` binary with a script under
   (`handpic`).
 - Rule: the workflow's cargo cache is keyed by `matrix.os`, not `runner.os`:
   both macOS runners report `macOS` but build for different architectures.
+
+### The `Release` workflow publishes a release (Inferred)
+
+`.github/workflows/release.yml` runs `release-please` on every push to
+`main` and builds, signs and publishes a release of `minodisk/handpic` with
+the eleven assets `tools/package/assets.sh <version>` lists (the two DMGs,
+the two macOS tarballs, the setup, the setup ZIP, the portable ZIP, the
+Linux tarball, `install.sh`, the deb and `SHA256SUMS`; no `latest.json`),
+the names `crates/engine/src/update.rs` asks for. It has two ways in:
+
+- **A release candidate**, by hand: `gh workflow run release.yml --ref main
+  -f version=2.0.0-rc.1`. The version must have a prerelease part (a stable
+  one is refused: it is cut by merging the release PR), and on `main` the
+  release `v<version>` and the tag must not exist yet. The version is
+  written only in the runner's checkout (`set-version.sh`, inside the
+  build); nothing is committed, `CHANGELOG.md` and the manifest stay as they
+  are, and release-please is not involved. `gh release create` creates the
+  tag `v<version>` at the dispatched commit and a GitHub **prerelease** with
+  `--latest=false`, so `/releases/latest` does not move; with files it
+  uploads to a draft and publishes at the end, so the candidate is never
+  visible half-attached.
+- **The final release**, by merging the release PR: when `release-please`
+  reports `release_created`, the tag's version is built, the assets are
+  uploaded to the draft release `release-please` made (`--clobber`, so a
+  re-run replaces them), and the draft is published (`--draft=false
+  --latest`) only after every asset is attached. A failed build leaves a
+  draft, which neither the updater nor `/releases/latest` sees. This path
+  first runs at the real release; it restores the draft-then-publish shape
+  of the pre-removal Tauri workflow (#364).
+
+The jobs, shared by both ways in:
+
+1. `guard` (`ubuntu-latest`, minutes) resolves the version and whether the
+   run publishes, and fails before any build on a version the run may not
+   build or publish, or on an `UPDATE_SIGNING_KEY` secret that is empty,
+   does not decode to a 64-byte key, or does not match
+   `crates/app/packaging/update.pub`, each with a message that names the
+   secret. It proves the key by signing a scratch `.tar.gz` with
+   `sign-production.sh`, the path every leg signs through. On the final
+   path it also asserts that `crates/app/Cargo.toml`'s version (written by
+   the release PR) equals the tag's, because the updater pins `v<version>`
+   and the asset names carry it; the build then writes the same version
+   again (`set-version.sh` is idempotent).
+2. `build` calls `package.yml` with the version, `sign_production: true` and
+   the secret, so the four updater archives are signed with the production
+   key in their own legs and `SHA256SUMS` is computed after signing.
+3. `publish` (only when the run publishes) downloads the artifacts, checks
+   that they are exactly `assets.sh`'s eleven, that `SHA256SUMS` names the
+   other ten and that `sha256sum --check --strict` passes, and uploads them
+   unrenamed (zipsign binds a signature to the file's name).
+
+A dispatch on any ref but `main` (`gh workflow run release.yml --ref
+<branch> -f version=2.0.0-rc.0`) runs the guard and the build, uploads the
+signed packages and `SHA256SUMS` as workflow artifacts, and creates no tag
+and no release. A dispatch has its own concurrency group per version, so a
+candidate's build of about 75 minutes neither queues the pushes'
+`release-please` runs nor another candidate.
+
+- Rule: the secret `UPDATE_SIGNING_KEY` is the 64-byte zipsign private key
+  that `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
+  <private-key>`), set by the user on the secret's page on github.com or
+  piped to `gh secret set UPDATE_SIGNING_KEY` after checking it is
+  non-empty. No agent reads, copies or asks for the key. `gh secret list`
+  cannot tell an empty secret from a set one
+  ([`github-actions-workflows.md`](./github-actions-workflows.md#an-empty-secret-looks-set-in-gh-secret-list-hit)),
+  which is what the guard is for.
+- Rule: the key reaches a job only through `env` on the one step that signs;
+  `sign-production.sh` decodes it into a `mktemp -d` folder under `umask
+  077`, signs through `mise run app:sign` and removes the folder on exit. It
+  never prints the key.
+- Rule: `assets.sh` is the one list of a release's asset names; a new or
+  renamed package changes it with the packaging script.
 
 ### `mise run app:watch` rebuilds and restarts the app (Inferred)
 
