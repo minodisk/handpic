@@ -240,7 +240,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
       `tools/package/`, `docs/agents/app.md`,
       `docs/agents/github-actions-workflows.md`, `CLAUDE.md`.
 
-- [ ] Step 3: Verify a published release, and describe how to cut one
+- [x] Step 3: Verify a published release, and describe how to cut one
   - Done when:
     - `.claude/skills/release/scripts/verify-release.sh <tag>` checks the
       native release:
@@ -492,3 +492,4 @@ as recommended (A).
 
 - (2026-11-21) Step 1 complete
 - (2026-11-21) Step 2 complete
+- (2026-11-21) Step 3 complete

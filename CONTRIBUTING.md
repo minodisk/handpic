@@ -117,11 +117,17 @@ and a README (no code, no CI). `downloads.csv` has the columns
 `date,tag,asset,download_count`: one row per asset of every release
 (prereleases and drafts included) per day, dated in UTC. The counts are the
 cumulative totals GitHub reports, so the downloads of a period are the
-difference between two dated rows. Every asset keeps its own row, so the
-Tauri releases' installers (`.dmg`, `-setup.exe`, `.msi`, `.AppImage`, `.deb`, `.rpm`) can be
-told apart from the updater-only artifacts (`latest.json`, `.app.tar.gz`) and
-the `.sig` files; on Windows the updater fetches the same `-setup.exe` users
-install from, so that count covers both.
+difference between two dated rows. Every asset keeps its own row, so what
+people download can be told apart from what only the updater fetches. In
+the app's releases (2.0.0 on), people download the `.dmg`, the
+`-setup.exe`, `install.sh` and the `.deb`; only the updater fetches the
+macOS `.tar.gz` and the `-setup.exe.zip`; and both fetch the portable
+`-windows-x64.zip` and the Linux `-linux-x64.tar.gz`, so those counts mix
+the two (`SHA256SUMS` is fetched by both as well). In the Tauri releases (up
+to 1.10.0) people downloaded the installers (`.dmg`, `-setup.exe`, `.msi`,
+`.AppImage`, `.deb`, `.rpm`), the updater fetched `latest.json`, the
+`.app.tar.gz` and the `.sig` files, and on Windows the same `-setup.exe`
+users install from, so that count covers both.
 
 The other files come from the repository's traffic and metadata, which GitHub
 keeps for 14 days at most:
