@@ -3,10 +3,10 @@
 Measured 2026-11-21 23:35 to 2026-11-22 00:11 local (the app logs stamp it in
 UTC, 2026-11-21 14:35:43 to 15:11:15), both apps in one session, alternating,
 against the external ruler of
-[the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md).
+[the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md).
 GPUI is `main` with the fit view decoding a preview at the smallest `n/8` DCT
 scale that covers the canvas (#1192, #1196), which
-[the fit-preview-downscale record](../_archived/20261121-fit-preview-downscale/results.md)
+[the fit-preview-downscale record](../20261121-fit-preview-downscale/results.md)
 measured GPUI against GPUI only.
 
 **Verdict: measured to the screen, the GPUI app turns a page faster than the
@@ -48,14 +48,14 @@ The per-press CSVs and the app logs stay in the measurement worktree's
 
 ## What each number measures
 
-As in [the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
+As in [the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
 `screen` is the keypress to the DWM present of the frame the patch at the
 window's client center settles on, taken outside the app; GPUI's
 `keypressToPixels` ends at its `present` stamp, after `frameWait`; Tauri's
 ends at the return of the canvas `drawImage`, and its `frame1` / `frame2` are
 the first and the nested second `requestAnimationFrame` callback after the
 draw. The aligned endpoints are those of
-[the latency-ab-inapp-endpoints plan](../_archived/20261121-latency-ab-inapp-endpoints/plan.md).
+[the latency-ab-inapp-endpoints plan](../20261121-latency-ab-inapp-endpoints/plan.md).
 
 ## Measurement conditions
 
