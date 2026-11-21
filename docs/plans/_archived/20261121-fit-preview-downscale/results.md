@@ -3,7 +3,7 @@
 Measured 2026-11-21, 16:30-17:10 local (the app logs stamp it in UTC,
 07:30:08 to 08:10:32), both builds in one session, alternating, against the
 external ruler of
-[the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md).
+[the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md).
 
 **Verdict: the target is met.** On RAF, B's `screen` minus
 `keypressToPixels` p50 is 15.09 ms, at the ARW level of the same session
@@ -43,7 +43,7 @@ app logs were kept in the session's scratch folder only.
 
 ## What each number measures
 
-As in [the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
+As in [the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
 
 - `screen`: from the `SendInput` of the Right key to the DWM present of the
   first frame from which the patch at the window's client center holds the
