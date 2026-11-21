@@ -109,10 +109,71 @@
     `UPDATE_SIGNING_KEY`, or tag / release protection rules, would be the
     stronger guarantees.
 
+## Step 3: Verify a published release, and describe how to cut one
+
+### Step 1's post-merge check, after Step 2's merge
+
+- PR #1202 (`feat(release): …`, 762d70f5) merged. Its Release run on
+  `main`, 44895914551, updated the release-please branch (to e435bd62), and
+  PR #928 now changes `crates/app/Cargo.toml` (`handpic-app` 0.0.0 → 2.0.0)
+  and `crates/app/Cargo.lock` (`handpic-app` 0.0.0 → 2.0.0, `handpic-core`
+  and `handpic-engine` 1.10.0 → 2.0.0). This confirms the inference from
+  Step 1: release-please rewrites an open release PR only when its
+  changelog changes, so the `chore` merge of #1195 left it alone and the
+  `feat` merge of #1202 brought the app's files in. #928 was not touched.
+- #928's CI run on that head, 44895983568, was still running when this was
+  written; the main session adds its result.
+- That run 44895914551 was the new `release.yml`'s first push on `main`:
+  only `release-please` ran; `guard`, `build` and `publish` were skipped
+  (no `release_created`), as intended.
+
+### The verify script
+
+- `verify-release.sh <tag> [<owner/name> [<verifying-key>]]` takes the
+  asset list from `tools/package/assets.sh` (which also refuses a tag that
+  is not `v<semver>`, exit 2), downloads the attached ones of the eleven
+  into a `mktemp -d` folder under their release names, and needs zipsign
+  0.2.2 on `PATH` (exit 2 otherwise), run as `mise exec
+  cargo:zipsign@0.2.2 -- bash .claude/skills/release/scripts/verify-release.sh
+  …`. No mise task was added. It reads with `gh --jq`, so it no longer
+  needs `jq`.
+- "The four updater archives" in the plan counts the four kinds (one per
+  build leg: macOS, Windows setup, Windows portable, Linux); they are five
+  files, since macOS has two architectures. The script verifies every
+  `.zip` and `.tar.gz` of the list, which is exactly those five.
+- Besides `sha256sum --check`, it also checks that `SHA256SUMS` names the
+  ten other assets (the `publish` job's check), since `--check` alone
+  passes a file the sums leave out.
+- zipsign prints `OK` on stdout for each good file; the script sends
+  zipsign's and `sha256sum`'s output to stderr so stdout is only the
+  `ok` / `missing` lines and the status.
+- Run on 2026-11-21 (read-only against GitHub):
+  - `mise exec cargo:zipsign@0.2.2 -- bash
+    .claude/skills/release/scripts/verify-release.sh v2.0.0-rc.2
+    minodisk/handpic-update-test crates/app/packaging/test/update.pub`:
+    every line `ok` (published, prerelease flag true for 2.0.0-rc.2, the
+    eleven assets, SHA256SUMS names the ten others, `sha256sum --check`,
+    `zipsign` on the five archives), `STATUS=ok`, exit 0.
+  - The same release with the default (production) `update.pub`: the five
+    `zipsign` lines `missing`, `STATUS=incomplete`, exit 1, so the key is
+    really checked.
+  - `verify-release.sh v1.10.0` (`minodisk/handpic`): `ok` published and
+    `ok` prerelease flag false for 1.10.0; `missing` all eleven assets,
+    `missing  no other asset (found …)` for `latest.json` and each of the
+    16 Riffle files, `missing  sha256sum --check (no SHA256SUMS)` and the
+    five `zipsign` lines; `STATUS=incomplete`, exit 1.
+  - Without zipsign on `PATH`: "needs zipsign 0.2.2 on PATH", exit 2. A tag
+    `vfoo`: exit 2.
+- The skill's "Releases are suspended" section stays (until Step 5) but no
+  longer calls the rest of the skill and the script stale; the rest now
+  describes the native flow and has a "Cutting a release candidate"
+  section. The runbook is `docs/agents/app.md`'s "The release runbook".
+
 ## Deferred issues (todo candidates)
 
-- **Pending post-merge check (Step 1's last Done-when), still open after
-  Step 1's merge** (see "After the merge" above: #928 "remained the same"
+- **Done for the files (2026-11-21, after #1202's merge; see Step 3
+  above), #928's CI result added by the main session. Was pending post-merge
+  check (Step 1's last Done-when), still open after Step 1's merge** (see "After the merge" above: #928 "remained the same"
   on the `chore` merge). After the next `feat` / `fix` commit on `main`
   (Step 2's PR or an earlier one), check that release-please has updated PR #928 (do not merge,
   close or hand-edit it) so its diff sets `crates/app/Cargo.toml` and the

@@ -855,6 +855,36 @@ candidate's build of about 75 minutes neither queues the pushes'
 - Rule: `assets.sh` is the one list of a release's asset names; a new or
   renamed package changes it with the packaging script.
 
+### The release runbook (Inferred)
+
+Each of these is the user's call; an agent runs one only when asked.
+
+- **Cut a release candidate.** `gh workflow run release.yml --ref main -f
+  version=<x.y.z-rc.N>`, the next unused candidate. It takes about 75
+  minutes; follow it with `gh run watch`. The result is the prerelease
+  `v<version>` at the dispatched commit.
+- **Cut the final release.** Merge the release PR (`chore(main): release
+  x.y.z`) through `/release`, never by hand. Its push to `main` tags it,
+  makes the draft, builds, signs, uploads and publishes it (see above).
+  If the build fails, the draft stays; re-run the failed jobs of that run.
+- **Verify a release.** `mise exec cargo:zipsign@0.2.2 -- bash
+  .claude/skills/release/scripts/verify-release.sh v<version>` checks it is
+  published, its prerelease flag agrees with the version, exactly
+  `assets.sh`'s eleven assets are attached (no `latest.json`), they pass
+  `sha256sum --check` against its `SHA256SUMS`, and the updater's five
+  archives (the two macOS `.tar.gz`, the setup ZIP, the portable ZIP and
+  the Linux `.tar.gz`) pass `zipsign verify` with `update.pub`, downloaded
+  under their release names. It prints `ok` / `missing` lines and
+  `STATUS=ok|incomplete` (exit 0 / 1; 2 when the release cannot be read or
+  zipsign 0.2.2 is not on `PATH`, which `mise exec` provides). Optional
+  arguments name another repository and verifying key: `verify-release.sh
+  v2.0.0-rc.2 minodisk/handpic-update-test
+  crates/app/packaging/test/update.pub` reported `STATUS=ok` on 2026-11-21,
+  and `v1.10.0` of `minodisk/handpic`, a Tauri release, `STATUS=incomplete`.
+- **Delete a release candidate.** `gh release delete v<version>
+  --cleanup-tag --yes` removes the prerelease and its tag. Never delete a
+  final release this way: installs pin its tag.
+
 ### `mise run app:watch` rebuilds and restarts the app (Inferred)
 
 `mise run app:watch [-- <folder>]` runs the GPUI app under watchexec, which
