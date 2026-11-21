@@ -916,6 +916,12 @@ already queued), so the store is closed when the drop returns and a second
 open of the same file, which Windows refuses while the first is open,
 succeeds at once.
 
+- Rule: the shared `Writer` keeps its sender in an `Option` so its `Drop`
+  can drop the sender before joining the thread; joining with the sender
+  still alive hangs forever. A change to its ownership must keep that order.
+  The settings tests repeated 20 times on Windows without a failure after the
+  change
+  (`docs/plans/_archived/20261121-todo-seven-small-fixes/learnings.md`, item 6).
 - Rule: every debug or hand-check run passes `--settings` with a test store
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
   test JSON when it needs seeded values, or it opens and seeds the user's real

@@ -140,3 +140,5 @@ it), and `merge.test.sh` writes to the real repository when `GIT_DIR` /
       `shellcheck -x` clean.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete

@@ -2269,3 +2269,15 @@ Files: `crates/engine/src/update.rs`, `crates/app/src/update.rs`, `crates/app/sr
 - [ ] On a real machine, try the rows the rehearsal skipped: publish a release while an install is downloading, interrupt an install, and a failed relaunch, and note what is left launchable (the engine claims no rollback beyond the `.app` bundle mode's restore of the old bundle).
 
 ---
+
+### App: a held Clear Cache is not drained when a trash or folder dialog that was up at its idle point is canceled
+
+#### Background
+
+Found auditing the idle points for the `todo-seven-small-fixes` plan (item 5, held Clear Cache). `drain_clear` returns early while `trash.busy()` or `folderops.dialog_open()`. The dialogs' Cancel / Escape paths (`follow_trash`, `follow_folder_dialog`) do not call it. A Clear Cache held when its idle point came while such a dialog was up therefore waits for the next listing's `finished`, or for the user's next press, which asks at once. Files: `crates/app/src/main.rs` (`drain_clear`, `follow_trash`), `crates/app/src/folderops.rs` (`follow_folder_dialog`). Source: `docs/plans/_archived/20261121-todo-seven-small-fixes/learnings.md` (Deferred issues).
+
+#### TODO
+
+- [ ] Call `drain_clear` at the end of the trash dialog's cancel path (`follow_trash`) and of `follow_folder_dialog`'s cancel path, and check that a held clear asks once the dialog closes. Cover the guard with a test (`ClearFlow::idle` in `crates/app/src/cache.rs`, or a UI test in `src/uitest.rs`) and update the `drain_clear` paragraph of `docs/agents/app.md` (around line 1886).
+
+---
