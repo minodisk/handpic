@@ -803,18 +803,6 @@ Files: `crates/core/src/copy.rs`.
 
 - [ ] Replace the final `fs::rename` with a no-replace rename on Windows, Linux and macOS, and keep the failing-job message `exists: ...`. Done when a unit test that creates the destination between the check and the rename (through a hook or a stub) leaves the existing file untouched on the platform CI runs.
 
-### App: real-device check of the chunked Move to Trash on Windows (trash-over-scan Step 4)
-
-#### Background
-
-`trash-over-scan` Step 4 moves files to the Trash in chunks of 100 on Windows (`run_chunked`), measured at about 7 ms a file against 200 ms per-file (see `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`). Tests use a fake mover and the bench used copies; the real app path was never exercised, and a locked file in a real chunk is covered only by the fake mover and the bench probe. Basis: `docs/plans/_archived/20261106-trash-over-scan/plan.md`.
-Files: `crates/engine/src/trash.rs` (`run_chunked`, `move_chunk`, `trash_listed`, `redo_run`), `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] On Windows, in a test folder of copies, move 500+ files with the app. Expect the move to take about 7 ms a file, near `trash-bench.md` (a large gap means the app adds a cost the bench did not have). Expect the status count to go up in steps of 100. Undo restores all, each sidecar with its RAW. Redo moves them again.
-- [ ] On Windows, hold one file open, then move a selection around it. Expect that file listed as a failure with its sidecars left, and the rest moved and restored by Undo.
-
 ### Engine: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
 
 #### Background
@@ -830,25 +818,23 @@ Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
 
 #### Background
 
-After `trash-over-scan` Step 4 chunked the move, an Undo (`trash::undo_run`) is still per-item, one shell operation each. Not timed, but if an operation costs what a move did (about 200 ms), an Undo of a large move takes far longer than the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
+After `trash-over-scan` Step 4 chunked the move, an Undo (`trash::undo_run`) is still per-item, one shell operation each. Timed in the app on Windows 11 on 2026-11-21: an Undo of a 605-file move took 85.6 s (141 ms a file) against 2.4 s for the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
 Files: `crates/engine/src/trash.rs` (`restore`, `undo_run`).
 
 #### TODO
 
-- [ ] Time Undo of a 500+ file move on Windows.
-- [ ] If slow, restore in chunks while keeping the RAW-before-sidecar and never-overwrite rules.
+- [ ] Restore in chunks while keeping the RAW-before-sidecar and never-overwrite rules (the baseline to beat: 85.6 s for 605 files, 141 ms a file, against 2.4 s for the move).
 
 ### Engine: Delete Permanently cannot remove a read-only file on some platforms
 
 #### Background
 
-From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. Not tried.
+From `trash-over-scan` Step 5. A read-only file (a camera's protect flag) goes to the Trash but may fail `remove_file`, depending on the platform. It is then listed as a failure and stays, which is safe, but the user has no way to delete it from Riffle. On Windows 11 on 2026-11-21, `Delete Permanently…` removed a read-only (`attrib +r`) ARW without an error; macOS and Linux are not tried.
 Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 #### TODO
 
-- [ ] On Windows, delete a read-only file with `Delete Permanently…` and see whether it fails.
-- [ ] If it fails, decide whether to clear the read-only flag first or leave it.
+- [ ] On macOS and Linux, delete a read-only file with `Delete Permanently…` and see whether it fails. If it fails, decide whether to clear the read-only flag first or leave it.
 
 ### Core: split the disk read from `hevc::to_jpeg` so a read slot covers the read alone
 
@@ -979,19 +965,6 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 - [ ] On Windows, fit view: open a folder in the app (`mise run app:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
 - [ ] On Windows, 1:1 view: on a folder whose crop read outlasts the key repeat (RAF, ARW), press `z`, then hold `→`. Expected: the 1:1 view flips through crops during the hold (skipping some files) instead of staying on the first one until release. No crop is ever drawn over another file's scaled preview. On release the current file's crop is shown. A single press while zoomed goes old crop, new crop. `z` off / on on the same file reuses its crop with no new `zoom` line, and a `z` press prints one `zoom` line.
 
-### App: real-device checks of the meta pane, the judgment keys, the sidecar writes and undo / redo
-
-`gpui-judgments` added the meta pane, the view-only JPEG folder, the strip's judgment marks, the judgment keys through the keymap, the index and sidecar writes and undo / redo to the GPUI app (`crates/app`). Each step's checkbox was ticked on its automated criteria (unit tests, `--auto` runs); nobody has watched the running window or pressed the keys by hand, and the window close button's writer drain has not been seen. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/meta.rs`, `crates/app/src/viewonly.rs`, `crates/app/src/strip.rs`, `crates/app/src/keys.rs`, `crates/app/src/judgment.rs`, `crates/app/src/history.rs`, `crates/app/src/settings.rs`.
-
-Windows only. Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` in `crates/app` and run `target\debug\handpic.exe <folder> --index D:\Photos\tests\20261110-gpui-judgments\index\<new name>.sqlite --settings D:\Photos\tests\20261110-gpui-judgments\index\<new name>-settings.sqlite [--import-settings <file>]`, a fresh index and settings store file name for every run (the settings store is seeded from the `--import-settings` JSON only when new). Work only on the copies under `D:\Photos\tests\20261110-gpui-judgments\` (or the read-only test folders named below), and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`. The settings files are in `D:\Photos\tests\20261110-gpui-judgments\settings\` (`xmp.json`, `both.json`, `rot.json` = `{"sidecarFormat":"xmp","labelNames":{"red":"Rot"}}`, `default.json` = `{}`). Check each sidecar with `cat`.
-
-#### TODO
-
-- [ ] Meta pane (Step 2). (1) Open `D:\Photos\tests\20261108-gpui-compare\ARW` with `--index ...\index\manual-arw.sqlite`: a 220 px pane right of the preview shows the file name, `n / 20`, an `EXIF` group (Aperture, Shutter, ISO, Focal length, Exposure, Camera, Lens, Captured, each present in the file) and a `Maker note` group for a Sony file; the arrow keys update it with the preview; no notes line. (2) Open `D:\Photos\tests\2026-09-28-gui-check-jpeg` with `--index ...\index\manual-jpeg.sqlite`: `EXIF` rows only, no `Maker note` group, and `JPEG folder: view only` at the bottom of the pane. (3) Optionally, on a copy holding a corrupt file, the pane shows the file name and the error alone.
-- [ ] Strip marks and key names (Step 3). With `RUST_LOG=debug` set, open `D:\Photos\tests\20261110-gpui-judgments\read\lr-check-4-lightroom-desktop` with `--import-settings ...\settings\xmp.json` (and a fresh `--settings` store). Once pass 1 ends: L1005036 three gold stars at the image box's top-right, a green dot at its top-left and a yellow name band; L1005037-40 four to one stars; L1005041 a green dot; L1005043 a red dot and the cell dimmed; L1005044 a red name band. The star glyph renders (font fallback) and reads over a bright thumbnail. Repeat with `both.json` and another fresh index: the `.dop` is newer for most files, so the marks follow `reconcile_of`'s newest-wins pick. In the same run press Shift+X, Ctrl+Alt+1, Ctrl+Alt+0, Ctrl+Z, Ctrl+Shift+Z, `1`, `x`, Shift+1 and the arrows, and read the `[handpic][DEBUG] key: <name> action=...` lines on stderr: `shift+x` -> `rejectRest`, `ctrl+alt+1` -> `red`, `ctrl+alt+0` -> `clearlabel`, `ctrl+z` -> `undo`, `ctrl+shift+z` -> `redo`, `1` -> `rate1`, `x` -> `reject`, Shift+1 -> `!` with no action, the arrows page; note whether Ctrl+Alt+digit reaches the window at all (on a layout with AltGr it is AltGr+digit). Nothing is written: afterwards `ls -l --time-style=full-iso *.xmp *.dop` in the folder still matches `D:\Photos\tests\20261110-gpui-judgments\read\sidecars-before.txt`. Record the key names that arrived in `docs/agents/app.md`'s "Every keystroke goes through the keymap" section.
-- [ ] Sidecar writes (Step 4), on the copies in `D:\Photos\tests\20261110-gpui-judgments\write\` (four ARWs each, no sidecars; three JPEGs in `jpeg`). (1) `write\xmp`, `xmp.json`: on a file press `3`, go back (auto-advance moves on), `p`, back, `Ctrl+Alt+1`: within a second `<stem>.xmp` holds `xmp:Rating="3"`, `xmpDM:good="True"`, `photoshop:LabelColor="red"`, `xmp:Label="Red"`; then `0`, `u`, `Ctrl+Alt+0`: `Rating="0"`, no `good`, no label; on another file mash `1` `2` `3` within 300 ms: one mtime change, `Rating="3"`. (2) `write\both`, `both.json`: the same keys give `<stem>.xmp` and `<name>.dop` holding `Rating = 3`, `ShouldProcess = 0` (PhotoLab's pick) and `ColorLabel = "Red"`, random Uuids unless PhotoLab has the copy registered. (3) `write\rot`, `rot.json`: `Ctrl+Alt+1` writes `xmp:Label="Rot"`. (4) `write\crash`, `xmp.json`: press `4` and `taskkill /F /IM handpic.exe` within 300 ms (inside the debounce); reopen with the same `--index`: stderr shows `scan sidecars: ... dirty=1` and the sidecar gets `Rating="4"`. (5) `write\drain`, `xmp.json`: press `5` and `q` at once: stderr ends with `quit: sidecar writer drained=true` and the sidecar holds `5`; repeat closing the window with its close button instead of `q`: the same line, the same `5`. (6) `write\advance`, `default.json`: `3` moves to the next file; on the last file `3` stays; `Ctrl+Alt+2` stays on the file; the arrows still wrap. (7) `write\jpeg`, `xmp.json`: `3` does nothing (no stars, the view stays) and no file appears next to the JPEGs. No failure line in the pane's notes throughout. Record what was seen, the window close button's drain above all, in `docs/agents/app.md`'s "The writer drains in `App::on_app_quit`" section.
-- [ ] Undo / redo (Step 5), on `D:\Photos\tests\20261110-gpui-judgments\undo\` (`DSC-RX0M2_sony_rx0_ii_40.arw`, `DSC-RX0_DSC00009.ARW`, `DSC-RX0_sony_rx0_07.arw`, `DSC-RX100M2_DSC00416.ARW`, no sidecars) with `--import-settings ...\settings\xmp.json` (and a fresh `--settings` store); wait for pass 1 to end and press `Home`. (1) `3` on file 1: three stars on its cell, the view moves to file 2; `p` on file 2: a green dot, the view moves to file 3; after a second file 1's `.xmp` holds `xmp:Rating="3"` and file 2's `xmpDM:good="True"`. (2) `Ctrl+Z`: file 2's dot goes, the view is on file 2, the notes say `Undid DSC-RX0_DSC00009.ARW`, its `.xmp` loses `good` within a second. (3) `Ctrl+Z` again: the view is back on file 1, its stars go, the note says `Undid DSC-RX0M2_sony_rx0_ii_40.arw`, its `.xmp` holds `Rating="0"`. (4) `Ctrl+Shift+Z`: file 1's stars come back (`Rating="3"`), the note says `Redid ...`. (5) A new key (`1` on any file), then `Ctrl+Shift+Z`: nothing changes, no note. (6) Quit with `q`, reopen with a new `--index`: `Ctrl+Z` does nothing; open `D:\Photos\tests\20261110-gpui-judgments\write\jpeg` the same way: `Ctrl+Z` does nothing there either. Record what was seen in `docs/agents/app.md`'s "A judgment goes view, row, writer" section.
-
 ### Core: `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit` hits its 1 s bound under parallel load
 
 During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 1 s wall-clock bound under parallel load; run alone it took 0.38 s. The bound measures the machine's load as much as the cancel. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md`. Files: `crates/core/src/scan.rs` (the test, around line 1441).
@@ -1098,76 +1071,26 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, Move to Trash… and Delete Permanently… (Step 7). Ten or so ARWs, some with `.xmp` and `.dop`, in `...\trash\`; a few hundred in `...\trash-large\`. On `...\trash` after the scan, `Move to Trash…` on a RAW with both sidecars: dialog `Move to Trash` / `Move 1 file to the Trash?`, `tab` moves the outline between `Move to Trash` and `Cancel`, `enter` confirms; the three files are in the Recycle Bin, the strip moves to the neighbour, the pane says `Moved 1 file to the Trash`, the log has `trash: moved=1 failed=0 run_id=Some(..)`. Three selected: `Move 3 files to the Trash?`, `escape` / `Cancel` move nothing. `Delete Permanently…`: `Cancel` outlined; `tab` to the delete button, then `enter` and `space` and a double-click do nothing, one click deletes (files and sidecars gone, not in the Recycle Bin, pane `Deleted 1 file`, an earlier judgment on it no longer undoable). With the dialog open `q`, judgment keys, `ctrl+,` and clicks on the tree, strip and status menus do nothing. On `...\trash-large` with a fresh `--index`, during pass 1 pick `Move to Trash…` and confirm: the dialog closes at once, the pane says `Move to Trash: waiting for the scan to finish`, the scan ends early, `moving to Trash 0 / 1` shows briefly, the file goes, the folder re-lists and the scan resumes. Repeat but open another test folder from the tree before the scan ends: nothing is moved and the waiting note goes.
 - [ ] On Windows, Trash undo and redo (Step 8). One ARW with `.xmp` and `.dop` in `...\undo\a\`, a few in `...\undo\b\`. Rate it three stars, trash it, `Ctrl+Z`: `Restored 1 file from the Trash`, the RAW and both sidecars are back (gone from the Recycle Bin), the strip shows it with three stars, current file and selection unmoved. `Ctrl+Shift+Z`: `moving to Trash 0 / 1` briefly, the files are in the Recycle Bin again, `Moved 1 file to the Trash`; `Ctrl+Z` brings them back again. Rate, trash, `Ctrl+Z` twice: file back, then the rating undone (`Undid <name>`). Trash in `a`, open `b`, `Ctrl+Z`: the file is back in `a` in Explorer, `b`'s strip unchanged, reopening `a` lists it. During a scan trash a file then `Ctrl+Z` while the re-listing's scan runs: `Undo Move to Trash: waiting for the scan to finish`, the scan is not canceled, the restore runs at its end. `Ctrl+Z` twice quickly: one `trash: undo of run` log line. `Delete Permanently…` then `Ctrl+Z`: nothing comes back. Empty the file from the Recycle Bin by hand, then `Ctrl+Z`: `Restored 0 files from the Trash, 1 failed`, the notes say `could not restore from the Trash: not in the Trash (emptied or restored by hand)`, nothing left to redo.
 
-### App: real-device check of `open_folder` deferred by a run and refused during a rename over MCP
+### App: real-device check of `open_folder` refused during a rename over MCP
 
 #### Background
 
-`native-mcp-everything` Step 3 added the `open_folder` tool, which goes through the UI's own code (`open_from_tree` → `open`'s `deferred_open`, and `refuse_renaming`). Unit tests cover the rules. Neither state was reached end to end, because each needs the user's input. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/main.rs` (`mcp_request`, `open_from_tree`), `crates/app/src/companion.rs`.
+`native-mcp-everything` Step 3 added the `open_folder` tool, which goes through the UI's own code (`open_from_tree` → `open`'s `deferred_open`, and `refuse_renaming`). Unit tests cover the rules. The deferred open was seen on Windows 11 on 2026-11-21: during a Move to Trash of 605 files, `open_folder` called mid-run at 100 / 605 set `opening` with `idle: false`, then `wait_for_idle` returned with the folder open. The refusal during a rename was not reached. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/main.rs` (`mcp_request`, `open_from_tree`), `crates/app/src/companion.rs`.
 
 #### TODO
 
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, with a folder of test copies open. (1) Start a Move to Trash of a few files and, while its run is in flight, call `open_folder` on another folder: expect `opening` set to it and `idle: false` in the reply, then `wait_for_idle` returning with that folder open. (2) Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
+- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
 
-### App: real-device check of the MCP busy guard's wiring (settings, trash dialog, folder dialog, inline rename)
+### App: the pane's error list keeps an earlier Move to Trash failure after later operations finish
 
 #### Background
 
-`native-mcp-everything` Step 1 made every MCP request but the reads refuse while the settings modal, the trash dialog or a folder dialog is open or an inline rename is under way. The refusal rules are unit-tested (`a_busy_view_refuses_every_request_but_get_view` in `crates/app/src/companion.rs`). The `busy` value that `mcp_request` builds was never exercised end to end, since opening those states needs the user's input. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/main.rs` (`mcp_request`, `key_down`), `crates/app/src/companion.rs`.
+Seen on Windows 11 on 2026-11-21: after a Move to Trash listed a failure, `get_status`'s `errors` (the pane's notes, `pane_errors`) still held that line after later operations had finished.
+Files: `crates/app/src/main.rs` (`pane_errors`), `crates/app/src/companion.rs` (`Status`).
 
 #### TODO
 
-- [ ] On Windows (or any platform), run the app with MCP on a test port as `docs/agents/app.md` prescribes. Open the settings (`ctrl+,`) and call `navigate {"to":"next"}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_view` still answers. Repeat with the strip's `Move to Trash…` dialog open, a folder menu dialog (e.g. `Delete Sidecars…`) open, and a folder's inline rename open, each expecting its own message.
-
-### App: real-device checks of the MCP settings page and a live theme change over MCP
-
-#### Background
-
-`native-mcp-everything` Step 4 added the MCP page with the `mcpAllowDestructive` switch to the settings modal and the `get_settings` / `set_settings` tools. The switch's rule and store key are unit-tested (`settings.rs`, `settingsmodal.rs`'s tab order) and the `set_settings` writes were checked end to end. The page itself and the repaint of a live theme change were never seen on screen. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/settingsview.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/settings.rs`, `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. (1) Open the settings (`ctrl+,`), pick the MCP page between Import and Appearance, flip "Let MCP clients run destructive operations without asking" on, close, and call `get_settings`: expect `mcp_allow_destructive: true` and `mcpAllowDestructive` `true` in the store; reopen the page: the switch shows on. (2) Open the settings and call `set_settings {"auto_advance":false}`: expect `Handpic's settings are open; try again once the user closes them`, while `get_settings` still answers.
-
-### App: real-device check of Move to Trash over MCP with `mcpAllowDestructive` off, and the redo refusal
-
-#### Background
-
-`native-mcp-everything` Step 5 added `trash_photos`, `undo` and `redo` for trash runs over MCP. The request rules are unit-tested in `crates/app/src/companion.rs`, and the dialog path was seen end to end for a delete only. A click on the Move to Trash dialog, the undo and the redo refusal were not exercised. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/companion.rs`, `crates/app/src/main.rs` (`confirm_trash`, `run_trash`, `step_trash`), `crates/app/src/trash.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, with `mcpAllowDestructive` off and a folder of test copies open. (1) Call `trash_photos` on one photo: expect `awaiting_confirmation` and the Move to Trash dialog with its run button focused; click Move to Trash: `wait_for_idle` returns `finished` "Moved 1 file to the Trash". (2) Call `undo`: the file comes back; call `redo`: expect the refusal starting "the next redo moves files to the Trash again without a dialog". (3) Open the delete dialog over MCP, click Delete Permanently once: the file is deleted and `get_status` reports `Delete Permanently` `finished`; open it again and press Cancel: `wait_for_idle` returns idle with nothing deleted.
-
-### App: real-device check of a folder operation confirmed in the app's dialog after an MCP call (Rewrite Sidecars, Delete Sidecars, Sequence)
-
-#### Background
-
-`native-mcp-everything` Step 6 added `rewrite_sidecars`, `delete_sidecars`, `sequence_timestamps` and `cancel_operation`. The dialog path was opened and canceled over MCP end to end, but a click on a dialog's run button needs the user. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/folderops.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/sequence.rs`, `crates/app/src/companion.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, with a folder of test copies holding judged photos and their `.xmp`. Call `delete_sidecars {"path": <folder>}`, wait for the Delete Sidecars dialog, click Move to Trash: expect `wait_for_idle` to return `finished` "Moved N sidecars to the Trash" and the `.xmp` files gone. Repeat with `rewrite_sidecars` (click Rewrite: `finished` "Rewrote the sidecars of N files in <folder>") and `sequence_timestamps` (click Run: the `-sequenced` folder written and revealed).
-
-### App: real-device check of Import, Rename by Capture Date and the folder rename confirmed in the app after an MCP call
-
-#### Background
-
-`native-mcp-everything` Step 7 added `import_folder`, `rename_by_capture_date` and `rename_folder`. The grant-off paths were opened and canceled over MCP end to end (`get_status` reported each dialog's content and the rename field awaiting). The dialogs, the prefilled rename field and a confirm need the user. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/folderops.rs`, `crates/app/src/import.rs`, `crates/app/src/datefolder.rs`, `crates/app/src/rename.rs`, `crates/app/src/companion.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, `importRoot` set to a scratch folder, the test folder outside any hidden folder. (1) `import_folder` on a folder of test copies: the Import dialog shows; click Run: `wait_for_idle` returns `finished` "Imported N files ...". (2) `rename_by_capture_date` on a folder of one date: click Run, the folder becomes `YYYY-MM-DD`. (3) `rename_folder {"path": <a drawn folder>, "name": "x"}`: the tree's row turns into a field holding `x`, selected; press Enter: `wait_for_idle` returns `Rename…` `finished` and the row (and the open folder, when it was that one) follows; repeat and press Escape: nothing renamed, `idle` true.
-- [ ] On Windows, with `mcpAllowDestructive` on, confirm an `import_folder` preview and, while it runs, right-click the source folder's `Import…`: the dialog comes back running with Cancel enabled.
-
-### App: real-device check of the Clear Cache dialog opened over MCP, and the grayscale latch on screen
-
-#### Background
-
-`native-mcp-everything` Step 8 added `clear_cache` (opening the Clear Cache dialog) and `set_overlays`' `grayscale`. Both were checked over MCP end to end (`get_status` reported the dialog awaiting, the busy refusals held, and `get_view` the grayscale), but no window capture was taken. Plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`. Files: `crates/app/src/companion.rs`, `crates/app/src/cache.rs`, `crates/app/src/grayscale.rs`, `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes, `mcpAllowDestructive` off, a folder of test copies open, the settings closed. (1) Call `clear_cache`: expect the "Clear the index cache?" dialog over the dimmed main window with Clear focused; click Clear: `wait_for_idle` returns `Clear Cache` `finished` "Cleared the index cache" and the folder is scanned again; call it again and press Escape: idle, nothing cleared, and the main window takes keys again. (2) Call `set_overlays {"grayscale": true}`: the photo turns gray and stays gray after clicking the tree and switching to another window and back; press and release `g`: it turns back to color.
+- [ ] Decide whether a new run clears the earlier run's failure lines, and apply it.
 
 ### Agents: `local-review-runner` returns before its reviewer finishes, and `pr-runner` aborts on a transient `api.github.com` outage
 
@@ -1398,6 +1321,17 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, with a dialog open, a click on the tree or the strip does nothing and no key reaches the strip. With a request waiting during a scan, opening another folder drops the waiting note and opens no dialog. Pressing `Ctrl+,` while the preview is under way does not open the settings modal.
 - [ ] Record the results in the archived `learnings.md`.
 
+### App: Rewrite Sidecars from Index reported "4 files not in the index (skipped)" in a fully scanned folder
+
+#### Background
+
+Seen on Windows 11 on 2026-11-21: the preview's row said `4 files not in the index (skipped)` in a folder whose scan had finished; those files had no `ratings` row. The engine counts `skipped` as the listed RAW files less the rows it will write.
+Files: `crates/app/src/sidecars.rs` (the row's text), `crates/engine/src/foldersidecars.rs` (`targets`, `preview`).
+
+#### TODO
+
+- [ ] Check whether the wording matches what is counted (a scanned file without a judgment is in the index), and reword the row or change the count.
+
 ### App: real-device checks of Sequence JPEG Timestamps… (gpui-folder-dialogs Step 4)
 
 #### Background
@@ -1429,6 +1363,17 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, `Import…` on `import-src` again. Expect `Nothing left to copy: every dated file is already there.` with `Run` dimmed. Then replace one copied file in `import-dst` with a different-size file of the same name and re-open the dialog. Expect it under `Already at the destination with another size, not copied:`.
 - [ ] On Windows, quit, delete `settings-step5.sqlite`, relaunch with `--import-settings ...\settings-step5-noroot.json`. Expect `Import…` to show `the destination folder is not set (Settings > Import)` with `Run` dimmed. `step5.log` holds one `import: files=… bytes=… mb_per_s=…` line per run.
 - [ ] Record the results in the archived `learnings.md`.
+
+### App: the Import dialog's `Source:` line shows the Windows verbatim prefix
+
+#### Background
+
+Seen on Windows 11 on 2026-11-21: an import started over MCP (`import_folder`) with an index-keyed path showed `Source: \\?\D:\...` in the dialog; its destination row did not carry the prefix. The line is built from `preview.source` as is; the Sequence dialog's `Source:` line is built from `dir` the same way. `context.rs`'s `shown_path` strips the prefix for display elsewhere.
+Files: `crates/app/src/folderops.rs` (the `Source:` lines), `crates/app/src/context.rs` (`shown_path`), `crates/engine/src/import.rs`.
+
+#### TODO
+
+- [ ] Check whether the tree's right-click `Import…` shows the prefix too, and strip it for display with `shown_path`.
 
 ### App: real-device checks of Rename by Capture Date… and the folder-rename aftermath (gpui-folder-dialogs Step 6)
 
@@ -1635,6 +1580,17 @@ Files: `crates/app/src/main.rs` (`tree_key_down`), `crates/app/src/treekeys.rs`,
   - Press Space on a collapsed folder with subfolders: it expands. Press Space again: it collapses. Press Space on a folder listed empty: nothing happens and no type-ahead jump occurs.
   - Press Enter: the cursor's folder opens.
   - Press Shift+Left or Alt+Left: nothing happens (swallowed).
+
+### App: `ctrl+,` does not open the settings while the folder tree holds the keyboard
+
+#### Background
+
+Seen on Windows 11 on 2026-11-21: after a click on a tree row, or after an inline rename, `ctrl+,` does nothing; after Escape it opens the settings. The title bar's gear button opens them throughout. The tree's gate lets through only `TREE_PASSTHROUGH`.
+Files: `crates/app/src/treekeys.rs` (`TREE_PASSTHROUGH`, `tree_gate`), `crates/app/src/main.rs` (`key_down`).
+
+#### TODO
+
+- [ ] Decide whether `ctrl+,` should pass the tree's gate; if so, let it through and pin it in `treekeys.rs`'s test.
 
 ### App: real-device check of the meta pane's `Analysis` group and the AF rows in `Maker note`
 

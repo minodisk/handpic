@@ -1112,6 +1112,13 @@ so a judgment lost to a crash inside the 300 ms debounce is written on the
 next open (checked on the real exe by seeding a dirty row into a test index:
 the reopen logged `dirty=1` and the `.xmp` got `xmp:Rating="4"`).
 
+The undo / redo hand check passed on Windows 11 on 2026-11-21 on a folder of
+four ARWs: `Ctrl+Z` twice walked back with the notes `Undid
+DSC-RX0_DSC00009.ARW` and `Undid DSC-RX0M2_sony_rx0_ii_40.arw`, each `.xmp`
+following within a second; `Ctrl+Shift+Z` gave `Redid ...` and the stars
+back; a new key then `Ctrl+Shift+Z` did nothing; after `q` and a new index
+`Ctrl+Z` did nothing, and nothing in the JPEG folder either.
+
 - Rule: the view keeps `seen` (the paths the index last returned an entry for,
   which make the label known) apart from `judgments`, and `touched` (the
   paths judged since the open), whose state a later `entries` read, such as
@@ -1185,8 +1192,27 @@ future. GPUI gives the returned futures only `SHUTDOWN_TIMEOUT` (200 ms), but
 the handler is called synchronously from `App::shutdown`, which on Windows
 runs once the message loop ends, after `cx.quit()` (`q`, `--auto`) and after
 `on_window_closed`'s `cx.quit()` alike. An `--auto 1` run logged `quit: sidecar
-writer drained=true` after its summary; the window-close path and a key
-inside the debounce are the user's hand check.
+writer drained=true` after its summary. On Windows 11 on 2026-11-21, `5` then
+`q` at once (inside the debounce) logged `quit: judgment stores drained=true
+sidecar writer drained=true` and the sidecar held `Rating="5"`; closing with
+the title bar's close button gave the same line and value.
+
+The other sidecar writes seen in that run (`xmp.json` unless named):
+
+- `3` / `p` / `Ctrl+Alt+1` gave `xmp:Rating="3"`, `xmpDM:good="True"`,
+  `photoshop:LabelColor="red"`, `xmp:Label="Red"`; `0` / `u` / `Ctrl+Alt+0`
+  gave `Rating="0"`, no `good` and no label (`0` does not auto-advance).
+- `1`, `2`, `4` within about 150 ms on the last file gave one mtime change
+  and the final value.
+- With `both`, the `.xmp` and the `.arw.dop` held `Rating = 3`,
+  `ShouldProcess = 0`, `ColorLabel = "Red"` and random Uuids; with
+  `rot.json`, `xmp:Label="Rot"`.
+- `4` then a forced kill by PID within about 100 ms left no sidecar; the
+  reopen on the same index logged `scan sidecars: ... dirty=1` and wrote
+  `Rating="4"`.
+- Auto-advance: `3` moves on and stays on the last file, `Ctrl+Alt+2` stays,
+  the arrows wrap both ways. In a JPEG folder `3` does nothing and writes no
+  file.
 
 The same handler first stops the running scan, before the drains: the view
 holds its scan in a `scan::Running` (an `Arc<Mutex<Option<Scan>>>`) whose
@@ -3214,8 +3240,14 @@ that `match`, not as a literal key: a literal `"e"` arm placed after the action
 arms never fires with the default keymap, because the catch-all
 `(_, Some(action))` arm takes the key first.
 
-Read from `gpui_windows` at the pinned rev, not yet seen in the running app
-(the pending manual check in the gpui-judgments plan's `learnings.md`):
+Seen in the running app on Windows 11 on 2026-11-21 under `RUST_LOG=debug`
+(the `key: <name> action=...` lines): `shift+x` -> `rejectRest`,
+`ctrl+alt+1` -> `red`, `ctrl+alt+0` -> `clearlabel`, `ctrl+z` -> `undo`,
+`ctrl+shift+z` -> `redo`, `1` -> `rate1`, `x` -> `reject`, Shift+1 -> `!`
+with no action, `arrowright` -> `next`, `arrowleft` -> `previous`.
+Ctrl+Alt+digit reached the window. That layout has no AltGr, so the AZERTY
+and AltGr parts below are still as read from `gpui_windows` at the pinned
+rev, not seen:
 
 - A shifted letter arrives as the lower-case letter with `shift` set
   (`shift+x`). A shifted digit or punctuation key arrives as the character it
