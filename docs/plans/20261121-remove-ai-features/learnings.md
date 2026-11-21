@@ -51,3 +51,19 @@
   bullets unrelated to the embeddings: `output::outputs_in`'s never-guess rule
   and the `views` dwell / table / test-fixture facts. Both moved into
   sections of their own, the `views` one without the ranking.
+
+## Step 4
+
+- PIL's resampling went to its own `pub mod resample` rather than private in
+  `fullsharp.rs`: the PIL-coefficient test exercises `Filter::Bilinear`,
+  which nothing else uses, so a private enum would have needed the variant
+  dropped (and the test changed) to pass clippy's dead-code check. `Filter`
+  and the two functions were moved byte for byte; `resample` stays
+  `pub(crate)`.
+- No core or CLI dependency went (`working_set`, `dot` and `top_k` were the
+  embedding commands' alone and went with them; the CLI's other imports all
+  have other users), so neither lock file changed.
+- Python run from a Bash heredoc here saw `\\` collapsed to `\`, so a
+  replacement of the CLI's usage string (which holds literal `\n`) silently
+  matched nothing; a script file written with the Write tool, or the Edit
+  tool, did it.

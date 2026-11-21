@@ -194,7 +194,7 @@ their offline Python scripts stay untouched, as do the live plan folders,
         `run_embed_scan` clause, "the second and third lower still", and the
         `src/ai.rs` clause.
 
-- [ ] Step 4: Remove the core's embedding, genre and ranking modules, their
+- [x] Step 4: Remove the core's embedding, genre and ranking modules, their
       data and the CLI's embedding commands
   - Done when:
     - `crates/core/src/embed.rs`, `genre.rs`, `rank.rs`,
@@ -365,3 +365,7 @@ The user approved these with the plan (2026-11-21):
   is at schema v27, which drops `embeddings` from a v20-v26 database without a
   `VACUUM`, and the eviction's spare rule lives on as `KEPT_DIRS`. `reqwest`
   and `rustls` left `handpic-engine`'s dependencies.
+- Step 4 (2026-11-21): removed `handpic_core::{embed, genre, rank}`,
+  `scan::embed_all`, the `genres/` and `ranking/` data, `LICENSE-siglip2` and
+  the CLI's `embed` / `embed-compare`; PIL's resampling moved verbatim into
+  `crates/core/src/resample.rs`, so `fullsharp.rs`'s values do not change.

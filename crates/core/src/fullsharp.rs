@@ -10,8 +10,8 @@
 //! (`full_all.py`'s `met`): numpy's `gradient` and `percentile`, PIL's bicubic.
 
 use crate::candidate::luma;
-use crate::embed::{resample, Filter};
 use crate::partial::{decode_crop, jpeg_width};
+use crate::resample::{resample, Filter};
 
 /// The frame score below which the eyes are soft at full size. Chosen by
 /// blind review of Good frames sorted by the score on three folders of one
