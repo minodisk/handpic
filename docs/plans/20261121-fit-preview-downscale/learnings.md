@@ -108,7 +108,7 @@ each), before = `066b48ad` (main), after = this step; one run each, p50 / p95.
   so waiting on the driver worked as `until [ $(wc -l < runs.txt) -ge N ]`
   loops kept under that. A plain `sleep` is refused.
 - Python heredocs through Git Bash mangled backslashes in a Windows path
-  (`	` became a tab, `6` an octal escape) when writing `todo.md`;
+  (`\t` became a tab, `\202` in `\20261108` an octal escape) when writing `todo.md`;
   building the path with `chr(92)` in a script file fixed it.
 
 ## Deferred issues (todo candidates)

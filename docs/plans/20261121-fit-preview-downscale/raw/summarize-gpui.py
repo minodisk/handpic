@@ -1,7 +1,8 @@
-"""Summarize a run-ab.ps1 output folder: per-run p50 / p95 of every stage and
-of the external `screen` latency, then the median of each app's p50s.
+"""Summarize a run-ab-gpui.ps1 output folder: per-run p50 / p95 of every stage
+and of the external `screen` latency, then the medians of the p50s and of the
+p95s for each build (A / B).
 
-Usage: python summarize.py <out dir>
+Usage: python summarize-gpui.py <out dir>
 Percentiles: sorted index n / 2 and n * 0.95, as the native app's summary.
 """
 
