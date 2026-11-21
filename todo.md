@@ -2202,18 +2202,6 @@ Files: `crates/engine/src/ai.rs`, `crates/engine/src/index.rs`, `crates/engine/s
 
 - [ ] Decide, with the user, whether the app gets pass 3, the Genre filter and the ranking (and plan that), or whether this code goes. Done when either a plan wires it into `crates/app` or a change removes it with its tests and docs.
 
-### Icon: the app icon still reads RIFFLE
-
-#### Background
-
-The artwork's edge print says `RIFFLE 60FPS CULLER`: `tools/macos/app-icon/gen.py` and its `icon.svg` draw it, and the rendered icons in `crates/app/icons/` (`source.png`, `icon.ico`, `icon.icns`, `64x64.png`, `128x128@2x.png`) carry it. The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) left it: `gen.py` needs macOS, and the step that derived `icon.ico` / `icon.icns` / the PNG sizes from `source.png` (`tauri icon`) left with the Tauri app, so no checked-in command derives them any more.
-
-Files: `tools/macos/app-icon/gen.py`, `tools/macos/app-icon/icon.svg`, `crates/app/icons/`.
-
-#### TODO
-
-- [ ] On macOS, change the edge print to Handpic in `gen.py` / `icon.svg`, render `source.png`, and derive `icon.ico`, `icon.icns`, `64x64.png` and `128x128@2x.png` from it with a documented command (add one to the repository if none fits). Done when every icon in `crates/app/icons/` reads Handpic and the derivation is written down.
-
 ---
 
 ### App: the keymap's `compare` action is bound to `v` and listed, but does nothing
