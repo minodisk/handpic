@@ -3270,6 +3270,11 @@ that `match`, not as a literal key: a literal `"e"` arm placed after the action
 arms never fires with the default keymap, because the catch-all
 `(_, Some(action))` arm takes the key first.
 
+The Keyboard Shortcuts capture saw the same names on Windows 11 on
+2026-11-21: Shift+1 arrived as `!` and was added as a key; Ctrl+Alt+1
+arrived as `ctrl+alt+1` and was refused with `"ctrl+alt+1" is bound to red`;
+Tab arrived as `tab` and was refused with `"tab" is bound to toggleSides`.
+
 Seen in the running app on Windows 11 on 2026-11-21 under `RUST_LOG=debug`
 (the `key: <name> action=...` lines): `shift+x` -> `rejectRest`,
 `ctrl+alt+1` -> `red`, `ctrl+alt+0` -> `clearlabel`, `ctrl+z` -> `undo`,
@@ -3818,8 +3823,17 @@ the clamp are both needed.
   display opened at the default; an unknown UUID opened on the display the
   bounds intersect. `--auto 1` left both keys unchanged, and a renamed
   remembered folder opened nothing.
-- Not seen yet: a quit with `q`, a snapped window, a second monitor (with a
-  different scale factor), and the taskbar docked at the top or left (the
+- Measured (2026-11-21, Windows 11, one 5120x1440 display, a test store): a
+  moved and resized window quit with `q` reopened at the same bounds; a
+  window snapped with Win+Left reopened on-screen at its restore bounds; with
+  the taskbar docked left (62 px) a moved window reopened without drifting;
+  after paging to `_DSC1495` (position 4) a relaunch without arguments
+  revealed the folder in the tree at that file with the same index, and a
+  folder argument overrode it; `--auto 3` opened at 1616x1008 outer
+  (1600x1000 client), vertically centered and 93 px right of the display's
+  center with the taskbar docked left (the pending question in `todo.md`).
+- Not seen yet: a second monitor (with a different scale factor), and the
+  taskbar docked at the top (the
   restore bounds are in workspace coordinates there, the clamp compares them
   with the display's screen coordinates): the pending check in
   `../plans/20261114-gpui-session-restore/learnings.md`. macOS and Linux are
@@ -3841,10 +3855,10 @@ multiple: false`) and, in a `cx.spawn`, opens the chosen folder through
 - Rule: `open` runs while the tree has the keyboard (`TREE_PASSTHROUGH`) and
   not while the settings, the trash dialog or a folder dialog is open, since
   `key_down` returns before the keymap then.
-- Not verified in the running app: whether a second `open` while the picker
-  is up shows a second dialog, and whether the window's focus returns to the
-  photo when it closes (the pending hand check in
-  `../plans/20261114-gpui-pane-toggles/learnings.md`).
+- Seen (2026-11-21, Windows 11): a second `ctrl+o` while the picker is up
+  opens no second dialog (one `#32770` window; the main window is disabled
+  while the dialog is up), a cancel changes nothing, and after a pick the
+  folder opens and the keys work at once without a click.
 
 ### The preview area says why it shows no photo (Inferred)
 
