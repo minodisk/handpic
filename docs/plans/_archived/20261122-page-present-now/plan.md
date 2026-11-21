@@ -21,7 +21,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 On Windows, a keyed page turn in the GPUI app reaches the screen about one
 display refresh later than it has to. The per-press analysis of the
 2026-11-22 Tauri vs GPUI re-run
-([results](../_archived/20261122-tauri-gpui-latency-ab-rerun/results.md))
+([results](../20261122-tauri-gpui-latency-ab-rerun/results.md))
 puts the time from the image painted to the DWM present at 25.85 / 31.70 ms
 (ARW) and 23.50 / 31.99 ms (RAF) at p50 / p95, of which `frameWait` is
 10.23 / 16.87 and 7.55 / 16.74 ms and the stretch from the in-app `present`
@@ -90,7 +90,7 @@ fix rests on, and measures the fix with the external ruler.
 - [x] Step 3: Measure keypress to the screen before and after, and record the result
   - Done when:
     - A same-session A/B of two GPUI release builds, A = `main` before Step 2 and B = `main` after it, has been run with the external ruler (`tools/latprobe` of the local-only branch `measure/tauri-latency-ab`, in the worktree `C:\Users\daisu\.herdr\worktrees\handpic\tauri-latency-ab`), alternating A B A B A B, three used runs per app per folder, window 1600x1000 at (100,100), prefetch off, on the ARW and RAF folders under `D:\Photos\tests\20261108-gpui-compare`. Manual verification: it needs the interactive desktop and an idle machine.
-    - `results.md` in this plan's folder records, in the form of [the fit-preview-downscale record](../_archived/20261121-fit-preview-downscale/results.md): the verdict, the conditions and attempts, per-run and median-of-3 tables of `screen` and the `keypressToPixels` stages (`frameWait`, `paint`, `present` among them), the per-press painted-to-screen breakdown (gap, `frameWait`, `present`, toDwm) for A and B, the pairing check, caveats and reproduction. `raw/` beside it holds the drivers, `runs.txt`, the summaries and the per-press script with its output.
+    - `results.md` in this plan's folder records, in the form of [the fit-preview-downscale record](../20261121-fit-preview-downscale/results.md): the verdict, the conditions and attempts, per-run and median-of-3 tables of `screen` and the `keypressToPixels` stages (`frameWait`, `paint`, `present` among them), the per-press painted-to-screen breakdown (gap, `frameWait`, `present`, toDwm) for A and B, the pairing check, caveats and reproduction. `raw/` beside it holds the drivers, `runs.txt`, the summaries and the per-press script with its output.
     - The record states whether B's `frameWait` dropped to about zero and by how much `screen` moved at p50 and p95 on each folder, and what share of presses gained a whole refresh.
     - The record also gives the in-app `frameWait` of keyed `source=prefetch` pages for B (a short run with prefetch on; the ruler itself runs with prefetch off).
     - `docs/agents/app.md`'s rules that quote `frameWait` ranges for reading an A/B (around its "check every run's `frameWait` p50" rule) are brought in line with the measured behavior, and `docs/humans/performance.md` / `performance.ja.md` are updated together if a number they quote changed.
