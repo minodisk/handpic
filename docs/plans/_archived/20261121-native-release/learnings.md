@@ -305,3 +305,15 @@
   feed can serve the boxes in place of the test feed. Basis: plan.md
   Step 4's Done-when on `todo.md`; left to the wrap-up because this step
   does not edit `todo.md`. Files: `todo.md`.
+- **Deferred judgment (wrap-up, from Step 2's accepted risks): protect the
+  `UPDATE_SIGNING_KEY` secret from branch dispatches.** A branch dispatch of
+  `release.yml` signs unreviewed branch code with the production key, and
+  the "never publishes from a non-`main` ref" check lives in that branch's
+  own workflow. Decide whether to move the secret into a protected GitHub
+  environment restricted to `main`, or to add tag / release protection
+  rules; a `main`-only environment would make branch dry runs (like run
+  44884797276) need the test key instead. Done when the decision is
+  recorded and the matching Rule in `docs/agents/app.md` ("a branch
+  dispatch … runs that branch's `release.yml` with the production key") is
+  updated or removed. Files: `.github/workflows/release.yml`, the repository
+  settings, `docs/agents/app.md`.

@@ -1939,15 +1939,17 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 
 ### App: real-device checks of the packages the Package workflow builds (gpui-packaging)
 
-The `gpui-packaging` feature added the manual `Package` workflow and `tools/package/` scripts. CI covers building, `hdiutil verify` and `codesign --verify` of the DMGs, the silent install, upgrade and uninstall of the setup `.exe` on an elevated runner, `install.sh` under a throwaway `HOME` (including the wrong-digest refusal), and `apt` installing and removing the `.deb`. Never exercised: the local mise package tasks on a real machine, a launch from any package, Gatekeeper's first-launch prompt, the absence of a UAC prompt for a standard Windows user (the hosted runner is elevated), the Start menu entry, the desktop menu entry and window icon matching on Wayland and X11, and the Vulkan-less GL fallback. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`.
+The `gpui-packaging` feature added the manual `Package` workflow and `tools/package/` scripts. CI covers building, `hdiutil verify` and `codesign --verify` of the DMGs, the silent install, upgrade and uninstall of the setup `.exe` on an elevated runner, `install.sh` under a throwaway `HOME` (including the wrong-digest refusal), and `apt` installing and removing the `.deb`. Never exercised: the local mise package tasks on a real machine, a launch from any package, Gatekeeper's first-launch prompt, the absence of a UAC prompt for a standard Windows user (the hosted runner is elevated), the Start menu entry, the desktop menu entry and window icon matching on Wayland and X11, and the Vulkan-less GL fallback. Plan: `docs/plans/_archived/20261117-gpui-packaging/plan.md`. The native-release Step 5 install docs (`README.md`, `docs/humans/usage.md` and the `.ja.md` pairs) were written without a macOS or Linux machine. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
 
-Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools/package/linux.sh`, `crates/app/packaging/windows/handpic.iss`, `crates/app/packaging/linux/install.sh`, `crates/app/packaging/linux/control`.
+Files: `mise.toml`, `tools/package/macos.sh`, `tools/package/windows.sh`, `tools/package/linux.sh`, `crates/app/packaging/windows/handpic.iss`, `crates/app/packaging/linux/install.sh`, `crates/app/packaging/linux/control`, `README.md`, `README.ja.md`, `docs/humans/usage.md`, `docs/humans/usage.ja.md`.
 
 #### TODO
 
 - [ ] On macOS, run `mise run app:package:macos`. Expect `crates/app/target/release/Handpic-0.0.0-macos-<arch>.dmg`. Open it, drag `Handpic.app` to `Applications` and start it. Gatekeeper asks for the ad hoc signed app's first launch to be allowed under System Settings, Privacy & Security. Expect the app to start.
 - [ ] On Windows, install Inno Setup 6 (`winget install JRSoftware.InnoSetup`), then run `mise run app:package:windows`. Expect `crates/app/target/release/Handpic-0.0.0-windows-x64-setup.exe` and `Handpic-0.0.0-windows-x64.zip`. As a standard (non-admin) user, run the setup. Expect no UAC prompt, the app under `%LOCALAPPDATA%\Programs\Handpic`, and a Start menu entry `Handpic` that starts it. Run the setup again silently (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) and expect no prompt. Uninstall from Settings, Apps.
 - [ ] On Linux x86_64 with `dpkg-dev` and the GPUI apt list installed, run `mise run app:package:linux`. Expect `crates/app/target/release/Handpic-0.0.0-linux-x64.tar.gz`, `install.sh` and `handpic_0.0.0_amd64.deb`. Run `sh install.sh <tarball> <its sha256sum>`, then start Handpic from the desktop menu on a Wayland and an X11 session. Expect the window to show the Handpic icon (matched by `dev.minodisk.handpic`). Install the deb with `sudo apt install ./handpic_0.0.0_amd64.deb`, start it from the menu, and remove it with `sudo apt remove handpic`. If a machine without a Vulkan driver is at hand, check that the app still starts (wgpu's GL fallback through `libEGL`).
+- [ ] On a Mac with macOS 15 or later, download the latest release's `Handpic-<version>-macos-arm64.dmg` with a browser, drag `Handpic.app` to `/Applications` and open it. Expect Gatekeeper to block it, and System Settings, Privacy & Security, Open Anyway to let it start, as `README.md` / `docs/humans/usage.md` "Installing" (and their Japanese pairs) say.
+- [ ] On Linux, run the `install.sh` command of the usage guide against a release's `SHA256SUMS`. Expect `~/.local/bin/handpic` to start from the desktop menu.
 
 ### App: decide the Linux deb's `Conflicts` / `Replaces: riffle` and whether it depends on `libegl1`
 
@@ -2012,7 +2014,7 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 ### App: real-device checks of the update flow on macOS, Linux and a standard Windows account (native-updater)
 
-The `native-updater` feature gave the app a launch check, an Updates page, and an update path per install kind (`self_update` for the portable ZIP and the tarball, the staged setup for Inno Setup, a staged swap of the whole bundle for a `.app`, and a notice with the release page for a deb). CI and the engine's tests cover the updater against a fake GitHub API (the policy table, a ZIP and a `.tar.gz` update, a bundle swap in a temp folder, every digest and signature failure, the setup's staging and both verifications) and, for Inno Setup, a `/WAITPID` and `/RELAUNCH` upgrade on the Windows runner. On the developer's Windows PC the portable ZIP and Inno Setup rows were measured from rc.1 to rc.2 on the test feed `minodisk/handpic-update-test`. Never exercised: the `.app`, tarball and deb paths on a real machine (no macOS or Linux machine was at hand), the real `codesign` swap outside CI, a standard Windows account (the PC's token was non-elevated but the hosted runner is elevated), a real network cut (offline was simulated with `HTTPS_PROXY=http://127.0.0.1:9`), and the gpui-kit matrix rows "a release published mid-install" and "interrupted install, failed relaunch, or downgrade". These fold into the end-to-end rc.1 to rc.2 dry run of sub-milestone 4 with the production key. Test builds come from a `Package` run with `update_test_repo` set and `tools/package/test-release.sh` (see `docs/agents/app.md`). Plan: `docs/plans/_archived/20261118-native-updater/plan.md`.
+The `native-updater` feature gave the app a launch check, an Updates page, and an update path per install kind (`self_update` for the portable ZIP and the tarball, the staged setup for Inno Setup, a staged swap of the whole bundle for a `.app`, and a notice with the release page for a deb). CI and the engine's tests cover the updater against a fake GitHub API (the policy table, a ZIP and a `.tar.gz` update, a bundle swap in a temp folder, every digest and signature failure, the setup's staging and both verifications) and, for Inno Setup, a `/WAITPID` and `/RELAUNCH` upgrade on the Windows runner. On the developer's Windows PC the portable ZIP and Inno Setup rows were measured from rc.1 to rc.2 on the test feed `minodisk/handpic-update-test`. Never exercised: the `.app`, tarball and deb paths on a real machine (no macOS or Linux machine was at hand), the real `codesign` swap outside CI, a standard Windows account (the PC's token was non-elevated but the hosted runner is elevated), a real network cut (offline was simulated with `HTTPS_PROXY=http://127.0.0.1:9`), and the gpui-kit matrix rows "a release published mid-install" and "interrupted install, failed relaunch, or downgrade". The dry run with the production key on the real feed `minodisk/handpic` (2026-11-21, the native-release plan's Step 4, `v2.0.0-rc.1` and `v2.0.0-rc.2` kept as prereleases) measured the portable ZIP and Inno Setup rows again on the same Windows PC and answered none of the boxes below, which stay open (no macOS or Linux machine; the standard account, the real network cut and the skipped matrix rows were not run). See "The rc dry run on the real feed" in `docs/plans/20261109-gpui-port/packaging-updater.md`. The rcs on the real feed can serve these boxes in place of the test feed. Test builds come from a `Package` run with `update_test_repo` set and `tools/package/test-release.sh` (see `docs/agents/app.md`). Plan: `docs/plans/_archived/20261118-native-updater/plan.md`.
 
 Files: `crates/engine/src/update.rs`, `crates/app/src/update.rs`, `crates/app/src/main.rs`, `crates/app/src/settingsview.rs`, `tools/package/test-release.sh`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
 
@@ -2050,5 +2052,47 @@ Found auditing the idle points for the `todo-seven-small-fixes` plan (item 5, he
 #### TODO
 
 - [ ] Call `drain_clear` at the end of the trash dialog's cancel path (`follow_trash`) and of `follow_folder_dialog`'s cancel path, and check that a held clear asks once the dialog closes. Cover the guard with a test (`ClearFlow::idle` in `crates/app/src/cache.rs`, or a UI test in `src/uitest.rs`) and update the `drain_clear` paragraph of `docs/agents/app.md` (around line 1886).
+
+---
+
+### App: real-device check of Handpic installed beside Riffle 1.10.0 on Windows (native-release)
+
+#### Background
+
+The native-release rc dry run (`v2.0.0-rc.1` / `v2.0.0-rc.2` on `minodisk/handpic`, 2026-11-21) measured the portable ZIP and Inno Setup rows on one Windows PC. Only the coexistence of the two installs was seen. Never exercised: what the two uninstall entries and Start menu shortcuts look like with Riffle 1.10.0 installed and used, and the first launch's settings seeding from Riffle's `settings.json`. The user left the row Unverified. CI and the `settings.rs` tests cover the import. Plan: `docs/plans/_archived/20261121-native-release/plan.md`. Record: "The rc dry run on the real feed" in `docs/plans/20261109-gpui-port/packaging-updater.md`.
+
+Files: `crates/app/src/settings.rs`, `crates/app/packaging/windows/handpic.iss`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
+
+#### TODO
+
+- [ ] On Windows with Riffle 1.10.0 installed and used (a `settings.json` holding non-default settings), install Handpic from `Handpic-2.0.0-rc.1-windows-x64-setup.exe` (or a later release). Expect two uninstall entries and two Start menu shortcuts, each removable on its own, and Handpic's first launch to seed its settings from Riffle's `settings.json` (the sidecar format, the keymap and the other keys `settings.rs` imports).
+
+---
+
+### App: the Inno Setup uninstaller leaves the update staging folder (native-release)
+
+#### Background
+
+Observed in the native-release rc dry run (2026-11-21): after an uninstall from Settings, Apps, the staging folder `<cache dir>\dev.minodisk.handpic\update` still held the staged rc.2 setup and its ZIP. Only the next launch of an install clears it, and after an uninstall there is none. The index, settings and logs are kept by design; the staging folder is not user data. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
+
+Files: `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs` (`update_staging`), `docs/agents/app.md`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
+
+#### TODO
+
+- [ ] Have the uninstaller delete the staging folder (an `[UninstallDelete]` entry in `handpic.iss`), and check on Windows that an uninstall after a staged update leaves no `update` folder and keeps the index and settings. Record the result in the rc dry run section of `packaging-updater.md`, and drop the "has no `[UninstallDelete]`" clause from the Inno Setup rule in `docs/agents/app.md`.
+
+---
+
+### Release: decide whether to protect `UPDATE_SIGNING_KEY` from branch dispatches (native-release)
+
+#### Background
+
+A branch dispatch of `release.yml` signs unreviewed branch code with the production key, and the "never publishes from a non-`main` ref" check lives in that branch's own workflow (accepted risks of native-release Step 2). Options: move the secret into a protected GitHub environment restricted to `main` (branch dry runs like run 44884797276 would then need the test key), or add tag / release protection rules. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
+
+Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/app.md`.
+
+#### TODO
+
+- [ ] Decide and record the choice. Done when the matching Rule in `docs/agents/app.md` ("a branch dispatch ... runs that branch's `release.yml` with the production key") is updated or removed.
 
 ---

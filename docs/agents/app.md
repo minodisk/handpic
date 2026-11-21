@@ -854,6 +854,14 @@ candidate's build of about 75 minutes neither queues the pushes'
   never prints the key.
 - Rule: `assets.sh` is the one list of a release's asset names; a new or
   renamed package changes it with the packaging script.
+- Rule: a branch dispatch (`--ref <branch> -f version=…`) runs that branch's
+  `release.yml` with the production key, so unreviewed branch code signs
+  archives (only workflow artifacts, nothing published). "Never publishes
+  from a non-`main` ref" holds only for the workflow code on `main`: a branch
+  could change the check. A protected environment holding
+  `UPDATE_SIGNING_KEY`, or tag / release protection rules, would be the
+  stronger guarantee. Accepted risk, not a finding; it needs the user's
+  call before such a branch dispatch.
 
 ### The release runbook (Inferred)
 
@@ -867,6 +875,17 @@ Each of these is the user's call; an agent runs one only when asked.
   x.y.z`) through `/release`, never by hand. Its push to `main` tags it,
   makes the draft, builds, signs, uploads and publishes it (see above).
   If the build fails, the draft stays; re-run the failed jobs of that run.
+- **Expect the release PR to lag a `chore` merge.** release-please rewrites
+  an open release PR only when its changelog changes. A `chore` commit on
+  `main` leaves it "remained the same", so a change to the files it bumps
+  (for example `crates/app/Cargo.toml` and `crates/app/Cargo.lock` after
+  `release-please-config.json` gained them) shows up in the PR only after the
+  next `feat` / `fix` merge. Check the PR's diff after that merge, not the
+  `chore` one. Release candidates (prereleases) are ignored by release-please
+  and leave the PR as it was, so they can stay on the feed. Never merge,
+  close or hand-edit the release PR to force it. Measured in
+  `docs/plans/_archived/20261121-native-release/learnings.md` (Step 1 and
+  Step 3).
 - **Verify a release.** `mise exec cargo:zipsign@0.2.2 -- bash
   .claude/skills/release/scripts/verify-release.sh v<version>` checks it is
   published, its prerelease flag agrees with the version, exactly
@@ -2358,7 +2377,10 @@ call.
   `cx.quit()`, not `cx.restart()`, which would start the old exe while the
   setup replaces it. The staging folder of an Inno Setup install is removed
   at launch (a failure, such as the relaunching setup still running from it,
-  is logged and left to the next launch).
+  is logged and left to the next launch). Only a launch clears it, so after
+  an uninstall from Settings → Apps the staged setup and its ZIP stay in
+  `<cache dir>\<IDENTIFIER>\update` (Observed 2026-11-21, rc.2);
+  `handpic.iss` has no `[UninstallDelete]` for it yet.
 - Rule: the `.app` install's bundle. The engine's `install` takes the
   bundle from the executable's path (`app_bundle`, the `<x>.app` of
   `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
