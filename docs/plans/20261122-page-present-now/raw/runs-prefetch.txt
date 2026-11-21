@@ -1,0 +1,4 @@
+ARW-prefetch-A before=3 exit=0
+ARW-prefetch-B before=4 exit=0
+RAF-prefetch-A before=15 exit=0
+RAF-prefetch-B before=1 exit=0

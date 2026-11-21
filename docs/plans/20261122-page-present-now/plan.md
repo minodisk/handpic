@@ -87,7 +87,7 @@ fix rests on, and measures the fix with the external ruler.
       - The paint hold (`hold.rs`, `PaintHold`) and the retired images still release on the frame that now comes earlier.
       - `--auto N` still completes and prints its summary.
 
-- [ ] Step 3: Measure keypress to the screen before and after, and record the result
+- [x] Step 3: Measure keypress to the screen before and after, and record the result
   - Done when:
     - A same-session A/B of two GPUI release builds, A = `main` before Step 2 and B = `main` after it, has been run with the external ruler (`tools/latprobe` of the local-only branch `measure/tauri-latency-ab`, in the worktree `C:\Users\daisu\.herdr\worktrees\handpic\tauri-latency-ab`), alternating A B A B A B, three used runs per app per folder, window 1600x1000 at (100,100), prefetch off, on the ARW and RAF folders under `D:\Photos\tests\20261108-gpui-compare`. Manual verification: it needs the interactive desktop and an idle machine.
     - `results.md` in this plan's folder records, in the form of [the fit-preview-downscale record](../_archived/20261121-fit-preview-downscale/results.md): the verdict, the conditions and attempts, per-run and median-of-3 tables of `screen` and the `keypressToPixels` stages (`frameWait`, `paint`, `present` among them), the per-press painted-to-screen breakdown (gap, `frameWait`, `present`, toDwm) for A and B, the pairing check, caveats and reproduction. `raw/` beside it holds the drivers, `runs.txt`, the summaries and the per-press script with its output.

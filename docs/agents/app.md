@@ -5009,6 +5009,15 @@ about the same (ARW prefetch 9.0-11.1 to 3.0-3.1 ms, RAF read 46.1-50.4 to
 canvas's paint closure stamps `paint_started`: A's smallest `frameWait`
 was 1.6-4.4 ms too. One `page` line per press, no panic, and holding an
 arrow key (135 presses at about 30 Hz) ended on the current file's image.
+On the external ruler (same-session A/B of `main` before and after,
+`--no-prefetch`, three runs each, 60 presses), `frameWait` p50 went from
+8.7-10.6 to 1.5-1.8 ms and `screen` p50 from 33.51 to 25.10 ms on ARW and
+from 60.99 to 56.14 ms on RAF. The gain is a whole refresh or nothing per
+press: 47 % (ARW) and 34 % (RAF) of B's presses reached the first DWM
+composition after the page was pended, none of A's. No B page reached the
+screen sooner than 7.95 ms after it was pended, so a page pended late in a
+refresh still misses that vblank (inferred; see
+[the plan's results](../plans/20261122-page-present-now/results.md)).
 
 - Rule: never call `paint` inside an update, `cx.defer` or `window.defer`.
   The `App` is still borrowed there, and GPUI's frame callback touches it
@@ -5016,7 +5025,12 @@ arrow key (135 presses at about 30 Hz) ended on the current file's image.
   Call it from a foreground task's body with no update on the stack.
 - Rule: a `page` run on Windows whose `frameWait` p50 is back at 6-10 ms means
   the immediate paint did not happen (a GPUI upgrade, an inactive or
-  throttled window), not noise.
+  throttled window), not noise. Expect 1.5-2 ms at p50 and under 3 ms at
+  p95, read and prefetch pages alike.
+- Rule: `keypressToPixels` overstates a keyed page's on-screen gain on
+  Windows. Only the presses that now make an earlier DWM composition show it
+  on screen, so an A/B whose in-app gain is a few ms needs the external
+  ruler before it is called a screen gain.
 - Only keyed pages ask: strip clicks, folder opens, stale frames of a held
   key and the 1:1 crop still wait for the tick.
 
@@ -5114,7 +5128,10 @@ move; `present`'s p95 rose from about 0.2 to 0.55-0.85 ms on ARW. See
 
 - Rule: compare against a binary built in the same session, alternating; the
   pre-strip pager's ARW p50 was 3.5 ms lower in this session than the pager's
-  in the port's Step 3 session, and `frameWait`'s p50 ranges over 6-10 ms across runs of one binary.
+  in the port's Step 3 session, and `frameWait`'s p50 ranged over 6-10 ms across runs of one binary
+  (before keyed pages painted at once on Windows; since then 1.5-2 ms on
+  Windows; the old spread still applies to a build before #1219, and other
+  platforms were not measured).
 
 ### Pass 2 costs paging nothing once it yields and runs small (Measured)
 
@@ -5127,8 +5144,9 @@ the scan's pause from its read until its image is painted. The median p50
 it was +9.44 / +88.86 ms: `decode` about doubled and `paint` grew 4-6x.
 See [the plan's results](../plans/_archived/20261110-gpui-focus-marks/results.md).
 
-- Rule: check every run's `frameWait` p50 before reading an A/B. One session
-  ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
+- Rule: check every run's `frameWait` p50 before reading an A/B: about
+  1.5-2 ms for a keyed page on Windows, 6-10 ms for a build before #1219.
+  One session ran at 120-145 ms (presents at about 4 Hz) once the user left the machine
   and the display slept. Hold `SetThreadExecutionState(ES_CONTINUOUS |
   ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` from a helper process for the
   session; that changes no power setting.

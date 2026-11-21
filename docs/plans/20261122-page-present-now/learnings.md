@@ -46,3 +46,55 @@
   the app's logger keeps only this crate's debug lines and drops GPUI's
   backend ones. One `page` line per press and no panic are the evidence that
   no nested draw happened on the page.
+
+## Step 3
+
+- The ruler A/B ran in one session (2026-11-22 03:42-04:31 local): A
+  `c57ec2ff`, B `6809229f`, `--no-prefetch`, 1600x1000 at (100,100), ARW and
+  RAF, A B A B A B. Every B run's `frameWait` p50 was 1.54-1.75 ms (A
+  8.73-10.61). `screen` p50 / p95 moved -8.41 / -7.52 ms on ARW and
+  -4.85 / -3.46 ms on RAF. See `results.md`.
+- The gain is all or nothing per press, as the plan expected: no A press
+  reached the first DWM composition after its page was pended (pended to
+  screen always 17.4-37.6 ms), while 47 % (ARW) and 34 % (RAF) of B's did.
+  The earliest any B page reached the screen was 7.95 ms (ARW) / 9.01 ms
+  (RAF) after it was pended, so a frame presented in roughly the last half of
+  a refresh still misses that vblank (inferred). That is why the in-app
+  `keypressToPixels` drop (about 8.6-9.3 ms) overstates the screen gain.
+- `screengap.py`'s per-press pairing gets a weak aligned r on B ARW
+  (0.12-0.35): with the wait gone, `keypressToPixels` spreads over only a
+  few ms against `screen`'s 16.9 ms quantization, the same effect as the
+  re-run's Tauri ARW. The shifted r stayed near zero and no gap was negative,
+  so the pairing holds.
+- Two background processes (Amazon Photos and another session's Python) each
+  held about a core, so the 15 % load gate discarded 20 of 32 attempts and
+  left `RAF-B1` and `RAF-A2` empty after 4 tries. `raw/redo-slots.ps1`
+  (the driver with named slots from try 5 on) filled them afterwards.
+- `powershell -File` does not parse `'a','b'` into a `[string[]]`; pass an
+  array parameter through `-Command "& script.ps1 -Slots 'a','b'"`.
+- The driver now holds `SetThreadExecutionState(ES_CONTINUOUS |
+  ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED)` itself (`[uint32]2147483651`;
+  a hex string cast to `[uint32]` overflows as an `int32` first).
+- Building B right after A into the same `CARGO_TARGET_DIR` took 37 s
+  instead of 3.5 min; only the workspace crates rebuilt.
+- `docs/humans/performance.md` / `.ja.md` quote no number this step changed
+  (their `frameWait` description already says about 2 ms since Step 2), so
+  they are unchanged.
+
+## Deferred issues (todo candidates)
+
+- `docs/agents/app.md`, "`keypressToPixels` does not include the texture
+  upload": its rule calls "the about 15 ms between `present` and the DWM
+  present" the floor for any image size. With keyed pages painted at once on
+  Windows that stretch (toDwm) now depends on the phase at which the frame is
+  presented: p50 15.03 / 17.42 ms but p95 23.36 / 25.97 ms on ARW / RAF, and
+  no longer a floor. Basis: Step 3's per-press tables
+  (`docs/plans/20261122-page-present-now/results.md`). Out of Step 3's scope
+  (which covers the `frameWait` rules only).
+- Wrap-up: `docs/agents/app.md` links `../plans/20261122-page-present-now/results.md`;
+  the link must follow the plan folder when it moves to `_archived`.
+- The ruler measured only the read path (`--no-prefetch`). The on-screen gain
+  of the prefetch hit (`show_held`), the everyday path, is unmeasured; its
+  in-app `frameWait` is 1.7-1.9 ms at p50 for B. A second ruler pass with
+  prefetch on would settle it (the plan's trade-offs name it). Basis:
+  `docs/plans/20261122-page-present-now/results.md`, "Caveats".
