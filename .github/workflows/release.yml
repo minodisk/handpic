@@ -1,31 +1,206 @@
 name: Release
 
+# Two ways in, sharing the guard, the build (package.yml, signing with the
+# production key) and the publish:
+# - A release candidate: `gh workflow run release.yml --ref main -f
+#   version=2.0.0-rc.1`. The version must have a prerelease part. Only a run
+#   on main publishes, as a GitHub prerelease never marked latest, tagged
+#   v<version> at the dispatched commit; a dispatch on another ref builds and
+#   signs, uploads the workflow artifacts and creates no tag and no release.
+# - The final release: a merged release PR, for which the release-please job
+#   reports release_created. The tag's version is built, the assets are
+#   uploaded to the draft release-please made, and the draft is published only
+#   once every asset is attached; a failed build leaves a draft.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: A release candidate's version (x.y.z-<prerelease>, e.g. 2.0.0-rc.1); published as a prerelease only from main
+        required: true
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
 
+# A release candidate has its own group, so it neither queues behind nor
+# holds up release-please on pushes to main, and two candidates build in
+# parallel.
 concurrency:
-  group: release-${{ github.ref }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-candidate-{0}', inputs.version) || format('release-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
   # Opens or updates the release PR, and creates the tag and a draft GitHub
   # release when that PR is merged. The PAT makes the release PR trigger ci.yml, which
   # GITHUB_TOKEN-authored PRs do not.
-  #
-  # No job builds or publishes anything: the Tauri build left with the Tauri
-  # app, and releases are suspended until the app's release flow lands, so a
-  # merged release PR leaves a draft release with no assets.
   release-please:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - id: release
         uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+
+  # Fails before any build of about 75 minutes: on a version the run may not
+  # build or publish, and on an UPDATE_SIGNING_KEY secret that is empty, does
+  # not decode to a 64-byte key or does not match update.pub (proved by
+  # signing a scratch archive the way each leg signs its own).
+  guard:
+    needs: release-please
+    if: >-
+      !cancelled() && (github.event_name == 'workflow_dispatch' ||
+      needs.release-please.outputs.release_created == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the version
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [[ "$EVENT" == workflow_dispatch ]]; then
+            version="$INPUT_VERSION"
+            bash tools/package/version.sh semver "$version" >/dev/null
+            if [[ "$version" != *-* ]]; then
+              echo "version: $version has no prerelease part; a stable release is cut by merging the release PR" >&2
+              exit 1
+            fi
+            publish=false
+            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
+              publish=true
+              releases="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"
+              if grep -qxF "v$version" <<<"$releases"; then
+                echo "version: the release v$version exists already" >&2
+                exit 1
+              fi
+              if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+                echo "version: the tag v$version exists already" >&2
+                exit 1
+              fi
+            else
+              echo "Dispatched on $GITHUB_REF, not main: nothing is published."
+            fi
+          else
+            version="${TAG#v}"
+            bash tools/package/version.sh semver "$version" >/dev/null
+            # The updater pins v<version> and the asset names carry it, so the
+            # checked-in version the release PR wrote must be the tag's.
+            checked_in="$(bash tools/package/version.sh)"
+            if [[ "$checked_in" != "$version" ]]; then
+              echo "version: crates/app/Cargo.toml reads $checked_in, not the tag's $version" >&2
+              exit 1
+            fi
+            publish=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "version $version, publish $publish"
+
+      - uses: jdx/mise-action@v2
+        with:
+          version: 2026.9.0
+
+      - name: Check the signing key
+        shell: bash
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          scratch="$RUNNER_TEMP/guard"
+          mkdir "$scratch"
+          echo guard > "$scratch/guard.txt"
+          tar -czf "$scratch/guard.tar.gz" -C "$scratch" guard.txt
+          bash tools/package/sign-production.sh "$scratch/guard.tar.gz"
+
+  build:
+    needs: guard
+    if: ${{ !cancelled() && needs.guard.result == 'success' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/package.yml
+    with:
+      version: ${{ needs.guard.outputs.version }}
+      sign_production: true
+    secrets:
+      UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+
+  # Checks the artifact set is exactly the eleven assets (tools/package/assets.sh)
+  # and passes `sha256sum --check`, then uploads the files unrenamed (zipsign
+  # binds each signature to the file's name). A release candidate goes up
+  # through `gh release create`, which uploads to a draft and publishes it at
+  # the end; the final release's assets go to release-please's draft, which
+  # is published only after every one is attached.
+  publish:
+    needs: [release-please, guard, build]
+    if: >-
+      !cancelled() && needs.build.result == 'success' &&
+      needs.guard.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/dist
+          merge-multiple: true
+
+      - name: Check the assets
+        shell: bash
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          DIST: ${{ runner.temp }}/dist
+        run: |
+          expected="$(bash tools/package/assets.sh "$VERSION" | LC_ALL=C sort)"
+          diff <(echo "$expected") <(find "$DIST" -mindepth 1 -maxdepth 1 -printf '%P\n' | LC_ALL=C sort)
+          diff <(grep -vx SHA256SUMS <<<"$expected") \
+            <(awk '{ name = $2; sub(/^\*/, "", name); print name }' "$DIST/SHA256SUMS" | LC_ALL=C sort)
+          (cd "$DIST" && sha256sum --check --strict SHA256SUMS)
+
+      - name: Publish the release candidate
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.guard.outputs.version }}
+          DIST: ${{ runner.temp }}/dist
+        run: |
+          gh release create "v$VERSION" "$DIST"/* \
+            --target "$GITHUB_SHA" \
+            --title "v$VERSION" \
+            --notes "Handpic $VERSION, a release candidate for testing, built from $GITHUB_SHA. An install of a stable release is never offered it." \
+            --prerelease \
+            --latest=false
+
+      - name: Publish the final release
+        if: github.event_name == 'push'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+          DIST: ${{ runner.temp }}/dist
+        run: |
+          gh release upload "$TAG" "$DIST"/* --clobber
+          gh release edit "$TAG" --draft=false --latest

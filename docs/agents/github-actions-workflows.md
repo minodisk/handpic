@@ -40,6 +40,30 @@ token lacks the `workflow` scope.
 - Rule: run `gh auth refresh -h github.com -s workflow` once before pushing
   a workflow change.
 
+### A dispatchable reusable workflow sees the repository secrets too (Inferred)
+
+`package.yml` is both `workflow_dispatch` and `workflow_call`. On a direct
+dispatch, `secrets.<NAME>` resolves to the repository secret of that name,
+not to nothing, so a step gated on the secret being present would sign with
+the production key on any dispatch.
+
+- Rule: gate what a secret enables on an input declared only under
+  `workflow_call` (`sign_production`), which a dispatch cannot pass
+  (`gh workflow run` refuses an undeclared input). Hand the secret through
+  `env` to the one step that needs it, never through `GITHUB_ENV`.
+
+### Prove a signing secret before the long build (Inferred)
+
+A release build takes about 75 minutes, so an empty or wrong
+`UPDATE_SIGNING_KEY` found by the legs' signing steps would cost that much.
+`release.yml`'s `guard` job signs a scratch archive with the same script the
+legs use (`tools/package/sign-production.sh`), which fails, naming the
+secret, on an empty value, a value that is not base64 or not 64 bytes, and a
+key that does not match `update.pub`.
+
+- Rule: a workflow that needs a secret's content to be right checks it in a
+  first job the build `needs`, by doing what the build will do with it.
+
 ## A manual workflow
 
 ### A `workflow_dispatch` workflow is dispatchable only from the default branch (Inferred)
@@ -57,6 +81,41 @@ is `workflow_dispatch` only, so the PR that adds it cannot dispatch it.
   inspect that run and its
   artifacts, and remove the trigger before the merge. A later change to the
   workflow runs with `gh workflow run package.yml --ref <branch>`.
+
+### A new dispatch input works on a branch once the workflow is dispatchable (Measured)
+
+`release.yml` was already `workflow_dispatch` on `main` with no inputs. Its
+branch version added a required `version` input, and `gh workflow run
+release.yml --ref native-release-step-2 -f version=2.0.0-rc.0` was accepted
+(run 44880572048): the inputs come from the file at the dispatched ref, not
+from the default branch's.
+
+- Rule: no temporary trigger is needed to dispatch a branch's change to a
+  workflow that `main` already dispatches, even with new inputs.
+
+## Job conditions
+
+### A job after a skipped one needs a status function in its `if` (Inferred)
+
+On a dispatch of `release.yml`, `release-please` (push only) is skipped.
+A job whose `needs` include a skipped job, directly or through another job,
+is skipped too under the implicit `success()`, even when its direct
+dependency succeeded.
+
+- Rule: give such a job `!cancelled() && needs.<job>.result == 'success'`
+  (or the output it depends on) instead of a bare condition, as `guard`,
+  `build` and `publish` do. In YAML, start the expression with `${{` or use
+  a folded scalar (`>-`): a plain scalar starting with `!` is a tag.
+
+### `cmd | grep -q` under `pipefail` can report "not found" (Inferred)
+
+GitHub's `shell: bash` runs `bash -eo pipefail`. `grep -q` exits at the
+first match, the writer can then die of `SIGPIPE`, and the pipeline fails,
+so `if gh release list ... | grep -q v1` reads as "no such release" when
+there is one.
+
+- Rule: put the command's output in a variable first, then `grep -q` it
+  (`grep -qxF "$name" <<<"$list"`).
 
 ## Linting
 
