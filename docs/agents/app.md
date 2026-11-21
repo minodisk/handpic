@@ -3270,6 +3270,11 @@ that `match`, not as a literal key: a literal `"e"` arm placed after the action
 arms never fires with the default keymap, because the catch-all
 `(_, Some(action))` arm takes the key first.
 
+The Keyboard Shortcuts capture saw the same names on Windows 11 on
+2026-11-21: Shift+1 arrived as `!` and was added as a key; Ctrl+Alt+1
+arrived as `ctrl+alt+1` and was refused with `"ctrl+alt+1" is bound to red`;
+Tab arrived as `tab` and was refused with `"tab" is bound to toggleSides`.
+
 Seen in the running app on Windows 11 on 2026-11-21 under `RUST_LOG=debug`
 (the `key: <name> action=...` lines): `shift+x` -> `rejectRest`,
 `ctrl+alt+1` -> `red`, `ctrl+alt+0` -> `clearlabel`, `ctrl+z` -> `undo`,
@@ -3278,11 +3283,6 @@ with no action, `arrowright` -> `next`, `arrowleft` -> `previous`.
 Ctrl+Alt+digit reached the window. That layout has no AltGr, so the AZERTY
 and AltGr parts below are still as read from `gpui_windows` at the pinned
 rev, not seen:
-
-The Keyboard Shortcuts capture saw the same names on Windows 11 on
-2026-11-21: Shift+1 arrived as `!` and was added as a key; Ctrl+Alt+1
-arrived as `ctrl+alt+1` and was refused with `"ctrl+alt+1" is bound to red`;
-Tab arrived as `tab` and was refused with `"tab" is bound to toggleSides`.
 
 - A shifted letter arrives as the lower-case letter with `shift` set
   (`shift+x`). A shifted digit or punctuation key arrives as the character it
