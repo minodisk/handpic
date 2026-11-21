@@ -3,7 +3,7 @@
 Measured 2026-11-22, 03:42-04:31 local (the app logs stamp it in UTC,
 2026-11-21 18:42:44 to 19:31:35), both builds in one session, alternating,
 against the external ruler of
-[the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md).
+[the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md).
 
 **Verdict: the keyed page reaches the screen sooner, by one whole refresh on
 about half the presses.** B's `frameWait` dropped from 9-11 ms to 1.5-1.8 ms
@@ -53,7 +53,7 @@ branch `measure/tauri-latency-ab`), as with the earlier records.
 
 ## What each number measures
 
-As in [the Tauri vs GPUI A/B](../_archived/20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
+As in [the Tauri vs GPUI A/B](../20261120-tauri-gpui-latency-ab/results.md#what-each-number-measures):
 
 - `screen`: from the `SendInput` of the Right key to the DWM present of the
   first frame from which the patch at the window's client center holds the
@@ -222,7 +222,7 @@ One `--auto 59` run per build and folder, `page` lines split by `source`
 ## Painted to screen, per press
 
 As in the re-run record's
-[per-press section](../_archived/20261122-tauri-gpui-latency-ab-rerun/results.md#painted-to-screen-per-press),
+[per-press section](../20261122-tauri-gpui-latency-ab-rerun/results.md#painted-to-screen-per-press),
 with both builds on its GPUI branch: press i of each used run's latprobe CSV
 (`settled_ms`) is paired with the i-th `page` line carrying
 `keypressToPixels` of that run's stdout. painted = `keypressToPixels -

@@ -99,3 +99,8 @@
   in-app `frameWait` is 1.7-1.9 ms at p50 for B. A second ruler pass with
   prefetch on would settle it (the plan's trade-offs name it). Basis:
   `docs/plans/20261122-page-present-now/results.md`, "Caveats".
+  Change: a second same-session ruler A/B (A `c57ec2ff`, B `6809229f`, ARW
+  and RAF, A B A B A B) with prefetch on, comparing `screen` p50 / p95 and the
+  share of presses reaching the first DWM composition. Done when the result is
+  in `docs/agents/app.md`'s immediate-paint section and its "`--no-prefetch`,
+  three runs each" qualifier is kept or dropped accordingly.
