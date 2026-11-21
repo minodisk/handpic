@@ -262,10 +262,10 @@ the MCP `get_status` `update` object. A quit was the window's close
 | Inno Setup   | rc.1 downloads in the background                                                                | **Measured** (2026-11-21, the PC above). rc.1 installed by its setup (`/VERYSILENT`, exit 0 in 2 s) logged `install Inno`, staged `Handpic-2.0.0-rc.2-windows-x64-setup.exe` in `%LOCALAPPDATA%\dev.minodisk.handpic\update` 2 s after the offer, and `get_status` said `ready_to_restart` ("installs when Handpic quits"). |
 | Inno Setup   | a plain quit installs rc.2 without a prompt                                                     | **Measured** (2026-11-21, the PC above). After the three drain lines the quit logged `update setup … relaunch=false started=Ok(())`; the installed exe and the uninstall entry's `DisplayVersion` read `2.0.0-rc.2` 2 s later, unattended, and no Handpic process ran 15 s after that. The staging folder was gone at the next launch. |
 | Inno Setup   | `Restart Now` relaunches rc.2                                                                   | **Measured** (2026-11-21, the PC above, the user's click). The last quit handler logged `quit: update setup …\update\Handpic-2.0.0-rc.2-windows-x64-setup.exe relaunch=true started=Ok(())`; the installed exe read `2.0.0-rc.2` and the app came back about 2 s after the quit, with no UAC and no SmartScreen prompt. |
-| Inno Setup   | no SmartScreen or UAC prompt for a standard user                                                | **Measured** for this account's non-elevated token: both silent installs and the upgrade at quit finished unattended in about 2 s (a prompt would have held them), and the staged setup carries no `Zone.Identifier` stream (no Mark of the Web, which SmartScreen keys on). The user watched the screen during `Restart Now`: no prompt appeared. **Unverified**: a standard (non-administrator) account; left to the rc dry run. |
-| `.app`       | rc.1 in `/Applications` swaps to rc.2 and reopens; from the DMG or Downloads it fails with the move message; Gatekeeper and the folder-access grants after the swap | **Unverified**: no macOS machine at hand. Deferred to the rc dry run. The swap and its refusals are the engine's tests, the real `codesign` one on the `test` job's macOS leg. |
-| Tarball      | rc.1 from `install.sh` updates to rc.2 and relaunches                                           | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
-| deb          | rc.1 shows the notice and opens the release page; nothing is installed                          | **Unverified**: no Linux machine at hand. Deferred to the rc dry run. |
+| Inno Setup   | no SmartScreen or UAC prompt for a standard user                                                | **Measured** for this account's non-elevated token: both silent installs and the upgrade at quit finished unattended in about 2 s (a prompt would have held them), and the staged setup carries no `Zone.Identifier` stream (no Mark of the Web, which SmartScreen keys on). The user watched the screen during `Restart Now`: no prompt appeared. **Unverified**: a standard (non-administrator) account; the rc dry run below did not run it either. |
+| `.app`       | rc.1 in `/Applications` swaps to rc.2 and reopens; from the DMG or Downloads it fails with the move message; Gatekeeper and the folder-access grants after the swap | **Unverified**: no macOS machine at hand, for the rc dry run below either. The swap and its refusals are the engine's tests, the real `codesign` one on the `test` job's macOS leg. |
+| Tarball      | rc.1 from `install.sh` updates to rc.2 and relaunches                                           | **Unverified**: no Linux machine at hand, for the rc dry run below either. |
+| deb          | rc.1 shows the notice and opens the release page; nothing is installed                          | **Unverified**: no Linux machine at hand, for the rc dry run below either. |
 | Any          | a stable build on the same feed is not offered an rc                                            | **Measured** (2026-11-21, the PC above). The local `1.99.0` build as a portable copy, with `v2.0.0-rc.2` on the feed, logged `offered None`, and `get_status` said `idle`, "Handpic is up to date." |
 | Any          | offline at launch leaves the app usable                                                         | **Measured** (2026-11-21, the PC above), offline simulated by `HTTPS_PROXY` / `HTTP_PROXY` naming a closed loopback port (`ureq` reads them). rc.1 portable logged `check failed: TransportError … (os error 10061)` 2 s after launch, `get_status` said `failed` with that message, a pick set over MCP was written to the sidecar, the exe stayed rc.1, and the quit drained as usual. |
 | Any          | a tampered asset installs nothing                                                               | **Measured** (2026-11-21, the PC above). A `v2.0.0-rc.3` prerelease of rc.2's portable ZIP and setup ZIP, renamed and one byte flipped in each, with a recomputed `SHA256SUMS` (so only the signature could catch it), was published for the test and deleted after it. rc.1 portable failed with `SignatureError: no matching key/signature pair found` and its exe stayed byte for byte the same; the Inno install (rc.2 by then) failed with the same error on the setup ZIP, the staging folder was removed, and its quit started no setup. A wrong digest, a missing asset and an unsigned archive are the engine's tests. |
@@ -283,7 +283,52 @@ Two more things the `Restart Now` runs showed:
   The updater does not cause it: any launch from Explorer or the Start menu
   shows it, and the earlier runs missed it because they were started from a
   shell. Fixed in a separate PR, which must land before the release PR
-  #928.
+  #928. **Measured** fixed by PR #1194 (the GUI-subsystem build): the rc dry
+  run below saw no console window on either relaunch.
+
+The rc dry run below repeated the portable ZIP and Inno Setup rows on the
+real feed with the production key. It did not answer the standard account
+row or the `.app`, tarball and deb rows, which stay **Unverified** there too.
+
+## The rc dry run on the real feed (2026-11-21)
+
+Step 4 of [the native-release plan](../20261121-native-release/plan.md): the
+rc.1 to rc.2 update from `minodisk/handpic` itself, signed with the
+production key. `release.yml` was dispatched twice on `main` at 1cad6de8:
+`version=2.0.0-rc.1` (run 44902391073) and `version=2.0.0-rc.2` (run
+44902393356). Every job of both runs succeeded, and they published
+`v2.0.0-rc.1` at 12:31:18Z and `v2.0.0-rc.2` at 12:31:37Z as GitHub
+prereleases. `verify-release.sh` reported `STATUS=ok` for both: the eleven
+assets, `SHA256SUMS`, and zipsign on the five archives against the production
+`update.pub`. `/releases/latest` stayed `v1.10.0`. Both prereleases are
+**kept** (the plan's cleanup option A). They are deleted with `gh release
+delete v<version> --cleanup-tag` once the macOS and Linux rows are measured
+or 2.0.0 is published and verified.
+
+Machine: the same Windows 11 Home 10.0.26200 x64 PC as the test feed, the
+account a member of Administrators running with its non-elevated token, UAC
+on. The method was the test feed's: state was read from the log, the
+executable's `ProductVersion` and the `HKCU` uninstall entry. A relaunched
+copy runs on the default data folders. Times are UTC.
+
+| Install or subject           | Check                                                                                                                       | Result |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Feed                         | Before any rc build: a local stable build reads the real release list, old Tauri releases included, and logs `offered None` | **Measured** (2026-11-21, the PC above). A local `1.99.0` build (`set-version.sh 1.99.0`, `cargo build --release --locked`, no `HANDPIC_UPDATE_TEST_REPO`) launched at 12:07:35 and logged `update: feed minodisk/handpic, production key`, `update: version 1.99.0 install Unknown`, `update: checking 1.99.0` and `update: offered None`, with no check failure. The feed held the 28 Tauri-era releases `v0.1.0` to `v1.10.0`, latest `v1.10.0`, and no `v2` tag. |
+| Feed                         | After the rcs are out: `/releases/latest` is still `v1.10.0`; the stable build is offered nothing; a `2.0.0-rc.0` build is offered an rc | **Measured** (2026-11-21 12:34, the PC above). `/releases/latest` was `v1.10.0`. The same `1.99.0` build logged `update: offered None`. A local `2.0.0-rc.0` build logged `offered Some("2.0.0-rc.2")`, the newest rc, since both were out by then. It is install kind unknown, so it stops at `Available` with the release page; that phase is inferred from the log, not read through MCP. |
+| release-please               | With the rc tags on `main`, the next push to `main` leaves PR #928's title and changelog as they were                      | **Measured** (2026-11-21). Four pushes to `main` after the rc tags (#1210 to #1213) ran `release.yml` successfully (the last, run 44925852274). release-please logged `Found release for path ., v1.10.0`, so it ignored the rc prereleases, and `PR https://github.com/minodisk/handpic/pull/928 remained the same`. #928 is still `chore(main): release 2.0.0` with the changelog `v1.10.0...v2.0.0`. |
+| Portable ZIP                 | rc.1 from the release updates to rc.2 while running; `Restart Now` relaunches rc.2 with no console window; a judgment made just before is in the sidecar | **Measured** (2026-11-21 14:11 to 14:12, the PC above, the user's click). rc.1's ZIP was fetched with `gh release download` and matched `SHA256SUMS`. It carries no Mark of the Web, so SmartScreen was not measured for the ZIP. rc.1 logged `version 2.0.0-rc.1 install Portable`, was offered `2.0.0-rc.2`, logged `installing 2.0.0-rc.2 over …handpic.exe` and `update: installed` 3 s later. Rating 3 was pressed, then `Restart Now`. The `.xmp` held `xmp:Rating="3"` before the quit, and every quit drain reported true. The relaunch logged `version 2.0.0-rc.2 install Portable`, and the exe's `ProductVersion` read `2.0.0-rc.2`. The folder held only `handpic.exe` and `licenses`, with no `self_replace` leftovers. No console window opened on the relaunch (the user watched). The relaunched rc.2 did not check, since `updateCheckedAt` was within the hour, as designed. |
+| Inno Setup                   | rc.1's setup downloaded and installed by hand (the SmartScreen prompt); rc.2 staged in the background; `Restart Now` relaunches rc.2 with no console window | **Measured** (2026-11-21 14:34 to 14:35, the PC above, the user's clicks). rc.1's setup was fetched with `gh` and matched `SHA256SUMS`. A `Zone.Identifier` stream with `ZoneId=3` was added to stand in for a browser download, and SmartScreen prompted, as expected for an unsigned setup. It installed per user to `%LOCALAPPDATA%\Programs\Handpic`, beside the Tauri 1.10.0 install in `%LOCALAPPDATA%\Handpic`, and the two installs coexisted. rc.1 logged `version 2.0.0-rc.1 install Inno`. `Check for Updates` was offered `2.0.0-rc.2` and staged the setup in 2 s under `<cache>\dev.minodisk.handpic\update`. On `Restart Now` every drain reported true, then `update setup … relaunch=true started=Ok(())`. The app came back 3 s later as `version 2.0.0-rc.2 install Inno`, and the exe and the uninstall entry's `DisplayVersion` read `2.0.0-rc.2`. The staging folder was cleared at that launch. No console window opened. |
+| Inno Setup                   | A plain quit installs the staged rc.2                                                                                       | **Measured** (2026-11-21 16:16 to 16:17, the PC above). rc.1's setup was installed over rc.2, a downgrade, without a prompt. Its launch check was offered `2.0.0-rc.2` and staged it in 1 s. The window was closed with its `×`. Every drain reported true, then `update setup … relaunch=false started=Ok(())`, and nothing relaunched. 13 s later the exe and the uninstall entry read `2.0.0-rc.2`. The staged setup stays in the staging folder until the next launch clears it, as designed. |
+| Inno Setup                   | Uninstall from Settings removes it                                                                                          | **Measured** (2026-11-21 about 16:20, the PC above, the user's hands). Settings → Apps removed the install folder, the uninstall entry and the Start menu shortcut. It kept `index.sqlite`, `settings.sqlite` and the logs, user data kept by design. It also kept the staging folder with the rc.2 setup and its ZIP: the uninstaller does not clear it. |
+| Inno Setup, standard account | The same quit and `Restart Now` on a standard (non-administrator) account: no UAC and no SmartScreen prompt                  | **Unverified**: not run. Only the administrator account's non-elevated token was used, as on the test feed. |
+| Windows, beside Riffle       | rc.1's setup beside Riffle 1.10.0: the two uninstall entries and shortcuts, and the settings seeded from the earlier install | **Unverified**: only the coexistence of the two installs was seen (the Inno Setup row). Their uninstall entries and shortcuts side by side, and the seeding of the settings from the Tauri install, were not checked. |
+| Any                          | The network cut for real at launch and on `Check for Updates`; the button disabled during a check; `Open Release Page` opens the browser | **Unverified**: not run. Offline stays measured only as the test feed's `HTTPS_PROXY` simulation, and the Updates page's click paths offline were not driven. |
+| `.app`                       | The swap in `/Applications`, the refusal from the DMG or Downloads, Gatekeeper and the folder-access grants                 | **Unverified**: no macOS machine at hand. |
+| Tarball                      | rc.1 from `install.sh` updates to rc.2 and relaunches                                                                       | **Unverified**: no Linux machine at hand. |
+| deb                          | rc.1 shows the notice and opens the release page; the `Conflicts` / `Replaces: riffle` question                             | **Unverified**: no Linux machine at hand. |
+
+A tampered release was not published on the real repository. That row stays
+**Measured** on the test feed above and covered by the engine's tests.
 
 ## Unverified
 
@@ -297,7 +342,9 @@ To be checked in the sub-milestone that needs each one.
   anything else (a `cargo run` or `target/` binary) unknown. A deb or unknown
   install stops at `Available` with `Open Release Page` and installs nothing
   (unit-tested). **Unverified**: on a real deb install (the deb row of the
-  plan's Step 7, deferred to the rc dry run).
+  plan's Step 7; the rc dry run had no Linux machine either). **Measured**
+  (2026-11-21, the rc dry run): a local `target/` binary on the real feed
+  logged `install Unknown` and was offered an rc without installing it.
 - **Source** (the native-updater plan, Step 3). The asset is matched by its
   exact name through `asset_matcher` (`Handpic-<version>-windows-x64.zip`,
   `Handpic-<version>-linux-x64.tar.gz`), which replaces `self_update`'s
@@ -310,8 +357,13 @@ To be checked in the sub-milestone that needs each one.
   works on Windows for the portable copy: `self_update` (`self_replace`)
   installed rc.2 over the running rc.1, and `Restart Now` relaunched it as
   rc.2 with the `self_replace` leftovers gone.
-- **Unverified.** The executable's name in a release (`riffle-native` today
-  in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
+- **Measured** (2026-11-21, the rc dry run, the Windows PC). The executable's
+  name in a release is `handpic`: `crates/app/Cargo.toml` names the bin
+  `handpic`, no `riffle-native` is left under `crates/app/packaging` or in
+  `datadir.rs`, and the portable ZIP's folder held only `handpic.exe` and
+  `licenses`, so the Windows ZIP and setup ship `handpic.exe`.
+  **Unverified**: the `.app`, the tarball and the deb (the run had no macOS
+  or Linux machine).
 - **Measured** (2026-11-17, the gpui-packaging plan). The version source is
   `[package].version` of `crates/native/Cargo.toml`, which
   `tools/package/version.sh` prints and every package and file name carries
@@ -323,8 +375,10 @@ To be checked in the sub-milestone that needs each one.
   (`$.package.version`) and `crates/app/Cargo.lock` (the entries without a
   `source`: `handpic-app`, `handpic-core` and `handpic-engine`) beside the
   root crates and lock, so the release PR sets the app's version with
-  theirs. **Unverified**: release-please's update of PR #928 with those
-  files, observed at the start of that plan's Step 2.
+  theirs. **Measured** (2026-11-21, that plan's Step 3 learnings): after the
+  `feat` merge of #1202, PR #928 set those files to `2.0.0` and its CI run
+  44895983568 passed. The rc dry run above then saw #928 left as it was by
+  the pushes after the rc tags.
 - **Measured** (2026-11-17, the gpui-packaging plan's Step 3, `Package` run
   44096260804 on `ubuntu-latest`). The `.desktop` file's `Exec`: the
   checked-in file keeps the bare `Exec=riffle-native` (`datadir.rs` tests
@@ -349,7 +403,11 @@ To be checked in the sub-milestone that needs each one.
   platform: the Inno Setup install next to the NSIS / MSI one, with its
   uninstall entry and shortcuts; a leftover `Riffle.app`; an
   AppImage file and an rpm package of the Tauri app, formats now dropped,
-  left for the user to remove.
+  left for the user to remove. **Measured** (2026-11-21, the rc dry run, the
+  Windows PC): the Inno Setup install in `%LOCALAPPDATA%\Programs\Handpic`
+  coexisted with the Tauri 1.10.0 install in `%LOCALAPPDATA%\Handpic`. The
+  two uninstall entries and shortcuts side by side were not recorded, and
+  the macOS and Linux cases were not run.
 - **Measured** (2026-11-17, the gpui-packaging plan's Step 3). The deb's
   `Package` name against the Tauri deb's: the native deb is `handpic`, while
   the shipped Tauri v1.10.0 deb is `Package: riffle` (its control file, read
@@ -358,11 +416,12 @@ To be checked in the sub-milestone that needs each one.
   `riffle`). So `apt` does not upgrade a Riffle install in place; a
   hand-installed native deb sits beside it. **Unverified**: whether the
   native deb should declare `Conflicts` / `Replaces: riffle`, left to
-  sub-milestone 4's real-device check.
+  sub-milestone 4's real-device check. Not answered by the rc dry run (no
+  Linux machine).
 - **Unverified.** That the native app picks up the Tauri install's data.
   **Source** (`CLAUDE.md`): `settings.rs` seeds its store from the Tauri
   `settings.json`, and the index is the native app's own. Not checked on a
-  real install.
+  real install; the rc dry run did not check it either.
 - **Measured** (2026-11-17, the gpui-packaging plan's Step 2, `Package` run
   44077941693 on `windows-latest`). `PrivilegesRequired=lowest` with
   `DefaultDirName={autopf}\Handpic` installs to
@@ -380,7 +439,9 @@ To be checked in the sub-milestone that needs each one.
   `ISCC.exe` on `PATH` as Chocolatey's `iscc` shim, so the workflow
   installs nothing. **Unverified**: the hosted runner runs elevated, so the
   absence of a UAC prompt for a standard user, at the install and at a
-  silent upgrade, is for a real machine (sub-milestone 4's gate).
+  silent upgrade, is for a real machine (sub-milestone 4's gate). The rc
+  dry run used an administrator account's non-elevated token only, so a
+  standard account stays unverified.
 - **Measured** (the native-updater plan, Step 5, `Package` run 44547625174
   on `windows-latest`). The setup started at quit gets the exe unlocked by a
   `[Code]` wait, not the Restart Manager: the app passes `/WAITPID=<its pid>`
@@ -396,11 +457,12 @@ To be checked in the sub-milestone that needs each one.
   `crates/engine/src/update.rs`). For a portable, tarball or `.app` install
   `Restart Now` is GPUI's `cx.restart()` after the drains, towards the path
   read at launch (the bundle for a `.app`). Measured for the portable copy
-  on 2026-11-21 (the test-feed table); unverified for the tarball and the
-  `.app`.
+  on 2026-11-21 (the test-feed table, and again in the rc dry run with the
+  production key); unverified for the tarball and the `.app`.
 - **Measured** (2026-11-21, the test feed above). The setup `.exe` the app
-  downloads carries no Mark of the Web and ran at quit unattended; a
-  standard account is left to the rc dry run.
+  downloads carries no Mark of the Web and ran at quit unattended. The rc
+  dry run saw the same on the real feed. A standard account was not run
+  there either and stays unverified.
 - **Source** (the native-updater plan, Steps 2 and 6). The staged `.app`
   comes from `Handpic-<version>-macos-<arch>.tar.gz`, the ad hoc signed
   `Handpic.app` alone, zipsign-signed, published beside the DMG; the DMG is
@@ -410,11 +472,12 @@ To be checked in the sub-milestone that needs each one.
 - **Unverified.** Whether the `.app` swap works where the app is installed:
   a standard user's `/Applications`, or an app run from the DMG or from
   Downloads under App Translocation (where the engine refuses with the move
-  message, unit-tested). No macOS machine was at hand for the test feed;
-  deferred to the rc dry run.
+  message, unit-tested). No macOS machine was at hand for the test feed or
+  for the rc dry run.
 - **Unverified.** Whether Gatekeeper quarantines the swapped ad hoc bundle,
   and whether the folder-access grants survive a swap to a bundle with
-  another ad hoc signature. Deferred to the rc dry run with the row above.
+  another ad hoc signature. Not answered by the rc dry run (no macOS
+  machine), with the row above.
 - **Source** (the native-updater plan, Steps 2, 5 and 6). zipsign signs only
   `.zip` and `.tar.gz`, so the setup `.exe` ships inside a signed
   `Handpic-<version>-windows-x64-setup.exe.zip`, checked by

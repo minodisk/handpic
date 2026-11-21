@@ -65,23 +65,28 @@ exact name. A release carries these and no `latest.json`:
 
 ### What remains before PR #928 can be merged
 
-Kept current by Step 4 and Step 5; the list as known at planning time:
+Kept current by Step 4 and Step 5; the list as of Step 4 (2026-11-21):
 
-1. The Windows `handpic.exe` built as a GUI-subsystem binary. It is a separate
-   PR outside this plan, not on `main` at planning time
-   (`crates/app/src/main.rs` sets no `windows_subsystem`).
-2. Steps 1 to 3 of this plan merged and the `UPDATE_SIGNING_KEY` secret
-   registered by the user.
-3. The rc dry run of Step 4, its Windows rows **Measured**.
+1. Done: the Windows `handpic.exe` built as a GUI-subsystem binary (PR
+   #1194, on `main`). The rc dry run saw no console window on a relaunch.
+2. Done: Steps 1 to 3 of this plan merged and the `UPDATE_SIGNING_KEY`
+   secret registered by the user.
+3. Done: the rc dry run of Step 4. Its portable ZIP, Inno Setup, feed and
+   release-please rows are **Measured**. The standard account, beside-Riffle
+   and real network cut rows are **Unverified** (not run). `v2.0.0-rc.1` and
+   `v2.0.0-rc.2` are kept as prereleases (cleanup option A).
 4. The macOS `.app`, the Linux tarball and the deb rows. Only a Windows PC is
    at hand, so they stay **Unverified** unless a machine turns up. The
    gpui-port plan asks for a real-device install, update and uninstall per
    format before the first release, so shipping 2.0.0 with these rows
-   unverified needs the user's explicit decision.
+   unverified needs the user's explicit decision. Still open after Step 4,
+   with the Windows rows it left **Unverified** (a standard account, beside
+   Riffle, a real network cut).
 5. Step 5 merged: the install docs, the reinstall notice for the first
    release's notes, and the `/release` skill no longer suspended.
-6. PR #928 itself green after release-please has added `crates/app`'s version
-   files to it (Step 1).
+6. Done: PR #928 itself green after release-please has added `crates/app`'s
+   version files to it (Step 1; CI run 44895983568). The rc tags left it as
+   it was (Step 4).
 7. Accepted risk: the release-please path of `release.yml` (upload to the
    draft, then publish) first runs at the real release. See "Trade-offs and
    risks".
@@ -290,7 +295,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
     - The skill keeps `disable-model-invocation: true` and the rule that no
       agent merges the release PR on its own.
 
-- [ ] Step 4: The rc.1 to rc.2 dry run on `minodisk/handpic` with the production key, recorded
+- [x] Step 4: The rc.1 to rc.2 dry run on `minodisk/handpic` with the production key, recorded
   - Done when:
     - `v2.0.0-rc.1` and `v2.0.0-rc.2` were published as prereleases of
       `minodisk/handpic` by `release.yml` dispatched on `main`, and
@@ -493,3 +498,4 @@ as recommended (A).
 - (2026-11-21) Step 1 complete
 - (2026-11-21) Step 2 complete
 - (2026-11-21) Step 3 complete
+- (2026-11-22) Step 4 complete

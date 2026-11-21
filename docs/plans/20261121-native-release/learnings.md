@@ -169,6 +169,30 @@
   describes the native flow and has a "Cutting a release candidate"
   section. The runbook is `docs/agents/app.md`'s "The release runbook".
 
+## Step 4: The rc.1 to rc.2 dry run on the real feed
+
+- `v2.0.0-rc.1` (run 44902391073) and `v2.0.0-rc.2` (run 44902393356) were
+  dispatched on `main` at 1cad6de8, green on the first try, and published as
+  prereleases. `verify-release.sh` reported `STATUS=ok` for both with the
+  production key. The full record is "The rc dry run on the real feed" in
+  `../20261109-gpui-port/packaging-updater.md`.
+- The plan's second Feed row expected a `2.0.0-rc.0` build to be offered
+  `2.0.0-rc.1`. Both rcs were out before that row was run, so it was offered
+  `2.0.0-rc.2`, the newest. That is the intended policy, and the row was
+  recorded as measured with that wording.
+- release-please ignored the rc prereleases (`Found release for path .,
+  v1.10.0`) and left #928 as it was over four pushes, so the plan's inference
+  holds and the rcs are kept (cleanup option A).
+- A browser download was stood in for by adding a `Zone.Identifier` stream
+  (`ZoneId=3`) to the setup fetched with `gh`. SmartScreen then prompted.
+  The portable ZIP got no such stream, so SmartScreen was not measured for
+  it.
+- The user decided to record the standard account, beside-Riffle and real
+  network cut rows as **Unverified** rather than measure them now.
+- None of the boxes of the `todo.md` item on the update flow's real-device
+  checks was answered, so none is to be ticked; the text change is left to
+  the wrap-up (see the deferred issues below).
+
 ## Deferred issues (todo candidates)
 
 - **Done (2026-11-21, after #1202's merge; see Step 3 above; #928's CI run
@@ -206,3 +230,44 @@
   Record the run id here. Step 2's checkbox stays unticked until then.
   Basis: plan.md Step 2's Done-when. Files: `.github/workflows/release.yml`,
   `.github/workflows/package.yml`.
+- **Observed in Step 4: the Inno Setup uninstaller leaves the update staging
+  folder.** After an uninstall from Settings → Apps (2026-11-21), the
+  staging folder `<cache dir>\dev.minodisk.handpic\update` still held the
+  staged rc.2 setup and its ZIP. Only the next launch of an install clears
+  it, and after an uninstall there is none. The index, settings and logs
+  are kept by design; the staging folder is not user data. Candidate: have
+  the uninstaller delete it (an `[UninstallDelete]` entry). Basis: the rc
+  dry run's Inno Setup uninstall row. Files:
+  `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs`
+  (`update_staging`), `docs/plans/20261109-gpui-port/packaging-updater.md`.
+- **Pending manual check (Step 4, left Unverified by the user's decision):
+  Handpic beside Riffle 1.10.0 on Windows.** With Riffle 1.10.0 installed
+  and used (a `settings.json` holding non-default settings), install
+  Handpic from `Handpic-2.0.0-rc.1-windows-x64-setup.exe` (or a later
+  release) on Windows. Expect two uninstall entries and two Start menu
+  shortcuts, each removable on its own, and Handpic's first launch to seed
+  its settings from Riffle's `settings.json` (the sidecar format, the
+  keymap and the other keys `settings.rs` imports). Basis: the plan's
+  "Windows, beside Riffle" row; only the coexistence of the two installs
+  was seen. Files: `crates/app/src/settings.rs`,
+  `docs/plans/20261109-gpui-port/packaging-updater.md`. Step 4's checkbox
+  was ticked on the automated and measured criteria; the standard account
+  and real network cut rows are already the `todo.md` item "App:
+  real-device checks of the update flow on macOS, Linux and a standard
+  Windows account (native-updater)".
+- **For the wrap-up: point the `todo.md` item at this run (Step 4's
+  Done-when).** The item "App: real-device checks of the update flow on
+  macOS, Linux and a standard Windows account (native-updater)" gets no box
+  ticked (the run answered none of them), and its background replaces
+  "These fold into the end-to-end rc.1 to rc.2 dry run of sub-milestone 4
+  with the production key." with: the dry run with the production key on
+  the real feed `minodisk/handpic` (2026-11-21, the native-release plan's
+  Step 4, `v2.0.0-rc.1` and `v2.0.0-rc.2` kept as prereleases) measured
+  the portable ZIP and Inno Setup rows again on the same Windows PC and
+  answered none of the boxes, which stay open (no macOS or Linux machine;
+  the standard account, the real network cut and the skipped matrix rows
+  not run); see "The rc dry run on the real feed" in
+  `docs/plans/20261109-gpui-port/packaging-updater.md`; the rcs on the real
+  feed can serve the boxes in place of the test feed. Basis: plan.md
+  Step 4's Done-when on `todo.md`; left to the wrap-up because this step
+  does not edit `todo.md`. Files: `todo.md`.

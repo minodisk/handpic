@@ -465,6 +465,25 @@ them; their contents are deliberately coarse.
          feed left **Unverified** in
          [`packaging-updater.md`](./packaging-updater.md) (the `.app`, the
          tarball and the deb rows, for want of a macOS or Linux machine).
+
+       The workflow and the dry run are done through
+       [the native-release plan](../20261121-native-release/plan.md):
+       `release.yml` builds, signs with the production key and publishes,
+       `verify-release.sh` checks a native release, and `v2.0.0-rc.1` to
+       `v2.0.0-rc.2` ran on the real feed on Windows, recorded in
+       [`packaging-updater.md`](./packaging-updater.md) ("The rc dry run on
+       the real feed"). What remains before PR #928 can be merged (as of
+       2026-11-21; that plan's list is the current one):
+       - the macOS `.app`, the Linux tarball and the deb rows, and the
+         Windows standard account, beside-Riffle and real network cut rows,
+         all **Unverified**; shipping 2.0.0 with them is the user's
+         decision;
+       - that plan's Step 5: the install docs, the reinstall notice for the
+         first release's notes, and the `/release` skill no longer
+         suspended;
+       - the accepted risk that `release.yml`'s release-please path (upload
+         to the draft, then publish) first runs at the real release;
+       - the user's `/release`.
     5. Merge the native crate into the root workspace: one `Cargo.lock`, the
        root toolchain bumped, the patches moved to the root, one `notify`
        version (deciding the `todo.md` item on whether `configure` still
