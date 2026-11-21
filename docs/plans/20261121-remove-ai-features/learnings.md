@@ -67,3 +67,29 @@
   replacement of the CLI's usage string (which holds literal `\n`) silently
   matched nothing; a script file written with the Write tool, or the Edit
   tool, did it.
+
+## Step 5
+
+- The acceptance grep (`rg -i 'embed|genre|rank_|siglip|aiEnabled'` outside
+  `docs/plans/` and `CHANGELOG.md`) also matched three leftovers not in the
+  plan's list: `docs/agents/app-log.md`'s `scan embed` timing label (the
+  engine no longer logs it) and the two `docs/agents/app.md` rules. The AI
+  toggle rule keeps the fact that a seeded store holds the retired key, but
+  names it as the AI switch's key rather than `aiEnabled`.
+- The hits left on purpose: embedded previews, JPEGs and resources (the
+  themes, `build.rs`'s `embed_icon`, the i18n files), `pose.rs`'s `rank_one`
+  matrix, the index's v20 / v27 history comment, `OLD_EMBEDDINGS` and its
+  migration tests, the engine test that `genres` is an unknown `set_filter`
+  field, `filter.rs` / `menu.rs`'s notes that the `Genre` section was not
+  ported, the general tract findings and their archived sources in
+  `tract-onnx-inference.md` (Decisions), a `shared-crates.md` source link to
+  the archived image-embeddings plan, and `todo.md`'s kept items' paths to
+  archived plans.
+- `local.test.sh`'s `crates/core/genres/old.py` fixture became
+  `crates/core/models/old.onnx`: any non-`.rs` path under `crates/core/`
+  selects the same handpic-core clippy / test without `fmt root`, so the
+  expectation is unchanged (42 cases pass).
+- `todo.md`'s deletions ran by heading, each section up to the next `###` or
+  `---`; the "decide the fate" item sat right before a `---`, which now
+  separates the title bar item from the `compare` one.
+

@@ -2154,9 +2154,9 @@ not open.
 - Rule: a page scrolls in the component's `list` of its groups, with the
   theme's scrollbar in the `ScrollbarMode::Always` `apply` sets (shown
   whenever the list overflows). Nothing scrolls a focused row into view.
-- Rule: no AI toggle. The user decided on 2026-11-14 not to port the AI
-  features (`aiEnabled` with the model download, pass 3, genres, the ranking,
-  `recommended`); a seeded `aiEnabled` key stays in the store, unread.
+- Rule: no AI toggle. The user decided on 2026-11-14 not to port the Tauri
+  app's AI features and on 2026-11-21 to remove them; the AI switch's key in a
+  store seeded from the Tauri app stays there, unread.
 - Not verified headless (mouse clicks and the modal's keys cannot be driven
   by `--auto`): the clicks, the occlusion, the focus cycle and the keyboard
   click. All are read from GPUI's `window.rs`, `div.rs` and `tab_stop.rs` at
@@ -4833,8 +4833,8 @@ pager's latency.
 
 - Rule: a port plan includes the A/B latency gate only when it touches
   rendering (per-frame drawing, overlays, new drawn parts such as the status
-  row, the strip's marks, the pane, menus' buttons), AI (pass 3 embeddings,
-  genres, the ranking, the face and eye models), the preview (read, decode,
+  row, the strip's marks, the pane, menus' buttons), the face and eye models,
+  the preview (read, decode,
   orient, prefetch, the 1:1 view), the thumbnails (their read, decode and the
   scan that makes them), or background work that runs while paging (scan
   passes, watchers, folder reads on the open). Dialogs, context menus, file
