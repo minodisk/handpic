@@ -247,7 +247,7 @@ their offline Python scripts stay untouched, as do the live plan folders,
       - `CLAUDE.md`: the core `src/embed.rs`, `src/genre.rs` and `src/rank.rs`
         clauses.
 
-- [ ] Step 5: Clean up `todo.md` and sweep the remaining mentions
+- [x] Step 5: Clean up `todo.md` and sweep the remaining mentions
   - Done when:
     - `todo.md` no longer holds these items:
       - "Core: the ranking's pull toward the prior is untested for one to
@@ -369,3 +369,8 @@ The user approved these with the plan (2026-11-21):
   `scan::embed_all`, the `genres/` and `ranking/` data, `LICENSE-siglip2` and
   the CLI's `embed` / `embed-compare`; PIL's resampling moved verbatim into
   `crates/core/src/resample.rs`, so `fullsharp.rs`'s values do not change.
+- Step 5 (2026-11-21): dropped the eleven AI and evaluation items from
+  `todo.md`, kept the scan item's post-read cancel part under a new title,
+  deleted `crates/core/tests/detector_tract.rs`, and swept the last mentions
+  (`docs/agents/app.md`'s AI toggle and latency-gate rules, `app-log.md`'s
+  `scan embed` timing line, `local.test.sh`'s `crates/core/genres/` fixture).

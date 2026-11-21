@@ -708,93 +708,6 @@ The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidec
 - [ ] Decide whether a newly added default should yield to an existing override, or whether the drop should be logged at `warn` (or both).
 - [ ] Implement the chosen behavior with a Rust test covering an old store that binds the new default's key to another action.
 
-### Core: the ranking's pull toward the prior is untested for one to three culled folders
-
-#### Background
-
-`rank.rs` `fit` shrinks toward the built-in prior with tau = 1/(2C) = 5 in total. A single culled folder (about 70 scorable bursts) may outweigh that several times over, and the one measured move (0.300) came from 1602 bursts. Found in the `image-embeddings` Step 7 local review. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/core/src/rank.rs`, `docs/plans/_archived/20261012-image-embeddings/ranking.md`.
-
-#### TODO
-
-- [ ] Refit from the prior on 1, 3 and 5 culled folders, compare the held-out weighted AUC with the prior's, and pick the strength (for example tau scaled by the prior's burst count).
-
-### Core: the ranking's reject weight and confidence levels are choices, not fits
-
-#### Background
-
-`REJECT_WEIGHT` = 2 (`crates/core/src/rank.rs`) is a choice: the 58 explicit rejects (3 scorable bursts) in the author's data cannot measure how much stronger a reject should count than a frame merely not chosen. The Tauri app's confidence levels (`none` / `low` under 300 bursts / `medium` under 1000 / `high`, its `rank.rs`'s `confidence`, removed with it) were read off Step 2's learning curve of the author's own folders, where the prior already is the user's taste. For another photographer the prior is someone else's, and the levels say nothing about how far the fit has moved from it. Found in `image-embeddings` Step 7 (`ranking.md`). Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`.
-
-#### TODO
-
-- [ ] Revisit `REJECT_WEIGHT` once a user's data holds enough explicit rejects to measure it.
-- [ ] If the app shows a ranking confidence, base it on how far the fit has moved from the prior, not only on the burst count.
-
-### Core: portrait bursts lean negative under the per-genre ranking offsets
-
-#### Background
-
-The `genre-ranking-offsets` feature kept per-genre offsets on the shared ranking weights (`OFFSET_SHRINK` 30). No genre shows a significant gain. In the offline evaluation, portrait bursts (57) have a paired difference of -0.024 [-0.067, +0.003]; the technical-only shape's is significantly negative at -0.058 [-0.115, -0.016]. Unknown also leans negative, with an interval that includes zero. The plan's bar has no per-genre condition, so this did not fail it, but with only 57 portrait bursts it should be re-checked once more non-sports judgments have accumulated. Basis: `docs/plans/_archived/20261014-genre-ranking-offsets/offsets.md`. Files: `crates/core/src/rank.rs`, `docs/plans/_archived/20261014-genre-ranking-offsets/genre_offsets.py`.
-
-#### TODO
-
-- [ ] Once more non-sports judgments have accumulated, take a fresh app dump and re-run `genre_offsets.py` (it needs the scikit-learn venv, e.g. `D:\Photos\tests\.venv-eval\Scripts\python.exe` (the old `%TEMP%\embedvenv` was wiped on 2026-10-19); the run takes about 50 minutes on 20 workers and prints only at the end). If portrait's (or Unknown's) paired difference stays negative with an interval that excludes zero, raise `OFFSET_SHRINK` or drop the offsets for that genre; otherwise leave it as is.
-
-### Engine: the AI model's footprint (resident plan, kept 378 MB file, 190 MB fp16 option)
-
-#### Background
-
-Three leftovers from `image-embeddings` Step 3. (1) `embed::shared` keeps the SigLIP 2 plan (about 395 MB of working set) in a `OnceLock` for the rest of the process once one pass has run, even with `aiEnabled` off. Dropping it would cost the ~0.5 s build and the 773 MB load peak again on the next folder. (2) Turning AI off keeps `models/siglip2-base-patch32-256/vision_model.onnx` (378 MB) in the local data dir, and a cut download restarts from zero (no HTTP range resume). (3) tract runs the weight-only fp16 re-export (190 MB, `weight_only.py`) at 2-5x FP32's cost because it re-widens the weights on every run. Widening the float16 initializers in the ONNX protobuf before tract builds the plan (`tract_onnx::onnx().proto_model_for_read`, then `model_for_proto_model`) might give the smaller download at FP32 speed. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `crates/core/src/embed.rs` (`shared`), `crates/engine/src/ai.rs`, `docs/plans/_archived/20261012-image-embeddings/weight_only.py`, `docs/plans/_archived/20261012-image-embeddings/models.md`.
-
-#### TODO
-
-- [ ] Revisit dropping the plan after a pass if memory becomes a complaint.
-- [ ] Add a "remove the model" action next to the AI switch (the app has none yet), and consider HTTP range resume for the download.
-- [ ] Try widening the fp16 initializers before the plan is built, and measure ms/image against the FP32 file (129 ms on one thread).
-
-### Core: soccer and macro genres need labeled positives to come back
-
-#### Background
-
-Decision 4 of `image-embeddings` dropped soccer, macro and other from the genre list: the labels hold no soccer or macro frame, so no threshold could be set or justified. Plan: `docs/plans/_archived/20261012-image-embeddings/plan.md`. Files: `docs/plans/_archived/20261012-image-embeddings/genres.md`, `crates/core/genres/`.
-
-#### TODO
-
-- [ ] Label frames from a soccer game and from a macro session, add them to `genre_prompts.json`, then re-run `genre_vectors.py` and `genre_calibrate.py`.
-
-### Core: keep or remove the ignored `detector_tract.rs` test left by ball-game-ranking-features
-
-#### Background
-
-The ball-game-ranking-features plan added `crates/core/tests/detector_tract.rs` in Step 3 as the check that a detector can ship. It is an `#[ignore]` test that reads `HANDPIC_DETECTOR_ONNX`, `HANDPIC_DETECTOR_INPUT` and `HANDPIC_DETECTOR_TENSORS`. Step 4 was meant to remove it or keep it as its seed, but Decision 1 (no detector ships) dropped Step 4. The test costs nothing in CI because it is ignored. It is the load / cost / box-agreement harness a later detector would reuse. Related: `docs/plans/_archived/20261014-ball-game-ranking-features/plan.md`, `docs/plans/_archived/20261014-ball-game-ranking-features/detect_eval.py` (`--tensors` / `--compare`).
-
-#### TODO
-
-- [ ] Decide whether to keep `crates/core/tests/detector_tract.rs` as the reusable harness or delete it. If kept, say in the file's header comment what it is for.
-
-### Core: a plan to drop the genre from the personal ranking (scope decision pending)
-
-#### Background
-
-The `folder-wide-ranking-eval` feature re-measured the ranking folder-wide. Its Decision 1 (part 4) applied the pre-registered rule "keep the genre only when `+genre cols` or `+genre off` passes on either base". No genre comparison passed (bars met: 1, 3, 2 and 2 of 5). The shipped per-genre offsets (`W0+off` against `W0`) read +0.003 frame AUC, -0.7 points R-precision and -0.000 within-burst wAUC, so removing them changes nothing visible. The `reject-filter-eval` feature's Decision 2 (item 3) re-read the same question on a bottom-oriented, recall-constrained criterion (`RN@95`, the share of non-picks removed while keeping 95% of the picks) and confirms the drop. None of the four genre comparisons passes the comparison bar: `F0+ctx +genre cols` -0.7 points (p = 0.6159), `F0+ctx +genre off` +0.8 (p = 0.1498), `W0 +genre cols` +1.0 (p = 0.0640, 1 of 3 bars), `W0+off` +0.8 (p = 0.3110). The genre labels alone remove 7.2% of the non-picks at 95% pick recall, against 5.8% for random. The evidence is from one photographer's library, where 1,439 of 1,801 scorable bursts are sports. Decision 1 leaves the scope to the user: (a) ranking only, which the plan recommends, or (b) the whole feature. The `rank.rs` part touches `fit`, which another session owns, so this waits for that session to finish. Basis: `docs/plans/_archived/20261015-folder-wide-ranking-eval/plan.md` (Decision 1, parts 4-5), `docs/plans/_archived/20261015-folder-wide-ranking-eval/folderwide.md`, and `docs/plans/_archived/20261016-reject-filter-eval/plan.md` (Decision 2, item 3). Files: `crates/core/src/rank.rs`, `crates/core/src/genre.rs`, `crates/core/genres/siglip2.json`.
-
-#### TODO
-
-- [ ] Ask the user to choose the scope: (a) ranking only, or (b) the whole feature.
-- [ ] After the session owning `rank.rs`'s `fit` is done, write and run a plan for the chosen scope.
-  - (a) Remove `Weights.offsets`, `OFFSET_SHRINK` and the `of_burst` lookup in `fit` / `rank`. Keep `genre.rs` and `siglip2.json`.
-  - (b) Do (a), and also remove `genre.rs`, `crates/core/genres/siglip2.json` and their docs (`CLAUDE.md`, `README.md` / `README.ja.md`, the usage docs). The embedding stays, because the ranking needs it.
-- [ ] When this lands, delete `### Core: portrait bursts lean negative under the per-genre ranking offsets`, whose premise goes with the offsets.
-
-### Core: the shipped ranking weights score single frames at chance
-
-#### Background
-
-The `folder-wide-ranking-eval` feature found that the within-burst weights do not carry over to single frames. Held out, `W0` reads singles AUC 0.508, against 0.611 for `F0+ctx` (13 folders with at least 5 single picks and 5 single non-picks). This is a reading aid, not a bar. The app ranks only within bursts today, so nothing shows it. If a later plan ranks or marks singles (a folder-wide "best" view), it should not reuse the within-burst weights as they are. Basis: `docs/plans/_archived/20261015-folder-wide-ranking-eval/folderwide.md`. Files: `crates/core/src/rank.rs`.
-
-#### TODO
-
-- [ ] Before any feature ranks or marks single frames, fit or evaluate a separate model for them (the pointwise `F0+ctx` shape reads 0.611) instead of reusing the within-burst weights.
-
 ### Agents: the archived plan scripts' import paths broke when their folders moved
 
 #### Background
@@ -814,24 +727,6 @@ PR #827 linked `../20261015-similar-scene-groups/plan.md`; PR #826 archived that
 #### TODO
 
 - [ ] Put the rule in the chosen place: link only archived or stable plan targets from a plan, and re-run `mise run lint` after rebasing onto the latest main when a linked plan may move. Done when the procedure tells the author to re-run lint after rebasing onto a main where plans moved.
-
-### Core: re-run the reject-filter evaluation once enough in-app rejects and views exist
-
-#### Background
-
-The `reject-filter-eval` feature measured the personal ranking, its cues and a few rule filters as a bottom filter (drop the clearly bad photos while keeping about 95% of the picks). It recommended no app change. The best filter, `G0` (gradient boosting on the `F0+ctx` columns), removed 16.8% of the non-picks at a label-free cut that kept 94.7% of the picks, against the pre-registered 25% floor. Its oracle cut removed 22.0%, also below the floor. Its pass of the comparison bar against the shipped weights also depended on a per-fold weight rescale that the pre-registration did not fix. The evaluation could not say whether a removed frame was bad: every non-pick counted as a negative, including fine-but-redundant frames, and only 58 explicit rejects in 3 folders were known to be bad. The conditions that would change the answer are:
-- Explicit rejects and `views` rows (a viewed file left unflagged) accumulating in the app, so a filter can be measured and trained on "bad" rather than "unpicked".
-- More folders and more photographers than the 27 folders, mostly basketball, of one photographer.
-- `G0`'s weight scale pre-registered, or tuned in the inner CV, before it is read again.
-- A calibrated label-free threshold (for example one learned on each fold's training folders) to close part of the 5-point gap between the label-free and oracle cuts. It cannot pass the bar alone on this data.
-The `bad-photo-labels` feature later labeled 1,200 sampled frames for badness (plan: `docs/plans/_archived/20261017-bad-photo-labels/plan.md`, Decision). 5.52% of the dump is bad, about 94% of the non-picks are not bad, and no filter or dedicated model met its bar (best `R0` at q5: `BR` 19.3%, `P` 23.1%). So the non-pick criterion overstated the bad share about fifteenfold, and a re-run on in-app rejects would measure a different, smaller set of frames than that dump's non-picks.
-The `discard-labels` feature measured the same premise for the "OK to discard?" question (plan: `docs/plans/_archived/20261018-discard-labels/plan.md`, Decision, item 1). 51.7% [44.9, 59.0] of the dump's non-picks are OK to discard, so "non-pick = negative" overstates it about twofold. It also misses the other way: 24.4% [8.6, 42.8] of the sampled picks (12 of 39) are OK to discard, so the picks are not a clean "keep" class. A re-run that treats unflagged or viewed-unflagged frames as negatives inherits both errors.
-The `discard-retarget` feature (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision) re-read the premise from the other side: training on the discard labels instead of on picks (`D0`) did not give a better bottom cut than `G0`, partly because 24.4% of the sampled picks are themselves labeled `discard`. A re-run on in-app rejects therefore should not expect the pick-versus-non-pick target to be the main limit.
-Basis: `docs/plans/_archived/20261016-reject-filter-eval/plan.md` (Decision 2, item 4) and `docs/plans/_archived/20261016-reject-filter-eval/reject.md`. Files: `docs/plans/_archived/20261016-reject-filter-eval/rejectfilter.py`, `docs/plans/_archived/20261016-reject-filter-eval/rejectablate.py`, `crates/core/src/rank.rs`.
-
-#### TODO
-
-- [ ] When the app's explicit rejects and `views` rows have accumulated (the user judges when), write a plan that re-runs the evaluation with those as the negatives, reusing `rejectfilter.py`, `rejectablate.py` and the `bad-photo-labels` `badfilter.py` bars (worth-a-filter `NL` <= 5%, `BR` >= 50%, `P` >= 50%). It must pre-register `G0`'s weight scale and a label-free threshold calibration before reading any score, and start from the finding that a bad-photo bar is far from met on the 80 labeled bad frames.
 
 ### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
 
@@ -861,22 +756,6 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 #### TODO
 
 - [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
-
-### Core: decide whether `G0` as-is at per-folder q5-q10, sorted last, is worth shipping
-
-#### Background
-
-The `discard-retarget` feature (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision, "Facts the user may weigh") found no new model that beats `G0` and recommended nothing. Under the looser bar the user chose (`RR` <= 25% with the stratified 97.5% quantile <= 35%, `PL` <= 5%, removed share >= 4.5%, `DP` 2.5% quantile above the 48.45% base rate), the existing `G0` itself meets all of those conditions at q5 and q10: `RR` 17.3% [11.3, 24.0] and 23.7% [18.7, 28.7], `PL` 0.68% and 2.10%, removed 4.92% and 9.87%. It was only a reference there, so the "beats `G0`" condition could not apply to it. That leaves a separate question this plan did not answer: is `G0` at q5-q10, sorted last (not hidden), worth shipping as it is? A yes needs its own pre-registered question and bars, and a fresh blind confirmation round. The looser bar was chosen after `G0`'s numbers on these 600 labels were read, and `discard-labels` found automation bias (unblinded 70 of 71 against the blind `RR@5` of 17.3%). Left to the user as a question only; no app work follows from the plan.
-
-The `model-search` feature (plan: `docs/plans/_archived/20261020-model-search/plan.md`, Decision, "Facts the user may weigh") read `G0` on its 600 fresh labels. q5 again meets conditions 1-4: `RR` 23.5 [15.7, 30.9], cluster 97.5% 34.9, `PL` 0.68%, removed 4.53%, `DP` 2.5% 69.1 above the 42.31% base rate. q10 fails `RR` (30.1 [23.7, 35.8]). The strata were cut for the model-search winner, so this is a reading, not the pre-registered confirmation round this item asks for.
-
-The `discard-model` feature found that the plain `ef` cue beats the learned `LR/T`, a cue to weigh against shipping `G0`. The question of shipping `ef` / `ef-fill` sorted last has since been closed: no sort-to-last, and the `Face focus` filter's `Low` item is the shipped form (plan: `docs/plans/_archived/20261107-face-focus-tiers/plan.md`).
-
-Files: `docs/plans/_archived/20261019-discard-retarget/plan.md`, `docs/plans/_archived/20261019-discard-retarget/retarget.md`, `docs/plans/_archived/20261020-model-search/modelsearch.md`, `crates/core/src/rank.rs`.
-
-#### TODO
-
-- [ ] Ask the user: is the existing `G0` at per-folder q5-q10, sorted last (not hidden), worth shipping as it is? If no, delete this item. If yes, write a plan that pre-registers the question and its bars and starts with a fresh blind confirmation round (candidates and controls mixed and unmarked, about 3 s per frame, 600 frames about 30 minutes). Run the offline Python with `D:\Photos\tests\.venv-eval\Scripts\python.exe -I -B` (the old `%TEMP%\embedvenv` was wiped).
 
 ### Engine: a split moves a shared sidecar with whichever RAW moves first
 
@@ -987,15 +866,14 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] Put an unopened RAW folder on the NVMe, close the app and measure the preview read during pass 1 at caps 22 and 2 on cold data (a new harness, or the app's `page` timing lines). Done when `docs/agents/shared-crates.md`'s read cap section has the numbers and the cap is confirmed or changed.
 
-### Core: test the scan's read slot in `embed_all` and the post-read cancel check
+### Core: test the scan's post-read cancel check
 
 #### Background
 
-`embed_all`'s per-file closure needs a loaded SigLIP model, which the tests lack, so its `ReadSlots::acquire` is checked only by reading the code. `a_file_canceled_mid_pipeline_is_not_delivered` now stops at `acquire` returning `None`, because nothing can set the flag during the read without a hook in `read_preview`, so the first post-read cancel check in `extract_unless` and `extract_analysis_unless` is untested. File: `crates/core/src/scan.rs`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`.
+`a_file_canceled_mid_pipeline_is_not_delivered` stops at `ReadSlots::acquire` returning `None`, because nothing can set the flag during the read without a hook in `read_preview`, so the first post-read cancel check in `extract_unless` and `extract_analysis_unless` is untested. File: `crates/core/src/scan.rs`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`.
 
 #### TODO
 
-- [ ] Add a test seam (a stub embedder or an injectable closure), and a test that holds the single permit and shows `embed_all` delivers nothing until it is dropped.
 - [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
@@ -2186,18 +2064,6 @@ Files: `crates/app/src/main.rs` (the title bar in `impl Render for Riffle`, `TIT
 #### TODO
 
 - [ ] On Windows 11 (`mise run app:dev` or a debug build of `crates/app`), open a folder. Expect "Handpic" next to the icon to be visibly smaller than before (14 px) with the icon still 16 px. Expect the folder's name to be centered on the whole window width at the same size as "Handpic", and to disappear with no folder open. Then narrow the window: expect a long name to be truncated with an ellipsis before it reaches "Handpic" or the gear. If 160 px a side of `TITLE_NAME_MARGIN` looks wrong, tune it. Press and drag starting on the name: expect the window to move. Double-click on the name: expect the window to maximize. Expect the minimize / maximize / close controls and the gear to still take their clicks. If the drag over the name does not move the window, fall back to a third `TitleBar` child as the plan says. Also open another folder, rename the open folder and run `Rename by Capture Date…` on it: expect the name to follow.
-
-### Engine: decide the fate of the engine code only the Tauri app reached
-
-#### Background
-
-The remove-tauri plan (`docs/plans/20261118-remove-tauri/plan.md`, Trade-offs) removed the Tauri app but left the engine and core code only it called, since the AI features are more likely to be wired into the app than deleted. Nothing in `crates/app` calls it today: `handpic_engine::ai` (the `aiEnabled` switch and the model download), `index::run_embed_scan` with the `embeddings` table, `Index::rank_rows` / `rank_dirs`, `handpic_core::rank`, `genre` and `embed`, and the seven-tool default mode of `mcp::Mcp` (`Mcp::new`; the app uses `with_all_tools`). The app refuses the matching MCP tools with `not_in_app` (the `recommended` sort, the Genre filter, `refit_ranking`, the AI switch). What this code needs, and what it got wrong, is in `docs/agents/shared-crates.md` ("The third pass").
-
-Files: `crates/engine/src/ai.rs`, `crates/engine/src/index.rs`, `crates/engine/src/mcp.rs`, `crates/core/src/rank.rs`, `crates/core/src/genre.rs`, `crates/core/src/embed.rs`, `crates/app/src/companion.rs`.
-
-#### TODO
-
-- [ ] Decide, with the user, whether the app gets pass 3, the Genre filter and the ranking (and plan that), or whether this code goes. Done when either a plan wires it into `crates/app` or a change removes it with its tests and docs.
 
 ---
 

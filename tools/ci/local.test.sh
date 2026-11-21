@@ -76,7 +76,7 @@ expect moved "docs/a.md
 docs/b.md" "lychee"
 expect moved "docs/old.md
 docs/new.md" "lychee"
-expect moved "crates/core/genres/old.py" "lychee
+expect moved "crates/core/models/old.onnx" "lychee
 clippy handpic-core
 test handpic-core
 clippy app"

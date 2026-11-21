@@ -75,7 +75,7 @@ the restart cannot be recovered; ask for a reproduction.
 
 Many `INFO` lines are timing lines, `<label>: key=value ... in <N>ms`:
 `scan list`, `scan reconcile`, `scan sidecars` (`handpic::scan`), `scan
-extract`, `scan faces`, `scan embed` (`handpic_engine::index`) and `import`
+extract`, `scan faces` (`handpic_engine::index`) and `import`
 (one line per run with its throughput). They describe performance, not
 failures.
 
