@@ -317,9 +317,14 @@ To be checked in the sub-milestone that needs each one.
   `tools/package/version.sh` prints and every package and file name carries
   (the copied `Info.plist`'s two version fields, the setup's `AppVersion`,
   the deb's `Version`); the checked-in `Info.plist` stays `0.0.0`. It is
-  `0.0.0` in every `Package` run. **Unverified**: `release-please-config.json`
-  bumps neither `crates/native/Cargo.toml` nor `crates/native/Cargo.lock`
-  yet; wiring them is sub-milestone 4's.
+  `0.0.0` in every `Package` run.
+- **Source** (`release-please-config.json`, the native-release plan's
+  Step 1). Its `extra-files` name `crates/app/Cargo.toml`
+  (`$.package.version`) and `crates/app/Cargo.lock` (the entries without a
+  `source`: `handpic-app`, `handpic-core` and `handpic-engine`) beside the
+  root crates and lock, so the release PR sets the app's version with
+  theirs. **Unverified**: release-please's update of PR #928 with those
+  files, observed at the start of that plan's Step 2.
 - **Measured** (2026-11-17, the gpui-packaging plan's Step 3, `Package` run
   44096260804 on `ubuntu-latest`). The `.desktop` file's `Exec`: the
   checked-in file keeps the bare `Exec=riffle-native` (`datadir.rs` tests
