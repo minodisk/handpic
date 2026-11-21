@@ -46,7 +46,7 @@ fix rests on, and measures the fix with the external ruler.
 
 ## Steps
 
-- [ ] Step 1: Record the per-press painted-to-screen analysis in the archived re-run record (docs only)
+- [x] Step 1: Record the per-press painted-to-screen analysis in the archived re-run record (docs only)
   - Done when:
     - `docs/plans/_archived/20261122-tauri-gpui-latency-ab-rerun/raw/` holds `screengap.py` and `screengap.txt`, copied unchanged from the session scratchpad (`C:/Users/daisu/AppData/Local/Temp/claude/203cdbc2a3441aed/aadfa88c-bb15-4953-9275-fa7805d95db8/scratchpad/screengap.py` and `screengap.txt`; if the scratchpad is gone, `screengap.txt` is regenerated with `python raw\screengap.py out\20261121` in the measurement worktree and must equal the numbers below).
     - `results.md` of that record has a section `## Painted to screen, per press`, after `## In-app endpoints, aligned` (after its `### Reading, aligned`) and before `## Compared with the 20261120 A/B`, containing:

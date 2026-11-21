@@ -1,0 +1,24 @@
+
+## ARW GPUI
+ARW-A1-try1 gap=25.85/31.96 frameWait=10.23/16.86 present=0.48/0.99 toDwm=14.59/15.18 min_gap=17.10 neg=0 r=0.92 r_shift=0.25,0.19
+ARW-A2-try1 gap=24.80/31.50 frameWait=9.53/16.87 present=0.47/0.93 toDwm=14.51/15.16 min_gap=17.13 neg=0 r=1.00 r_shift=0.21,0.21
+ARW-A3-try1 gap=26.06/31.70 frameWait=10.91/16.90 present=0.47/0.79 toDwm=14.59/15.18 min_gap=18.09 neg=0 r=1.00 r_shift=0.09,0.09
+median gap=25.85/31.70 frameWait=10.23/16.87 present=0.47/0.93 toDwm=14.59/15.18
+
+## ARW Tauri
+ARW-B1-try2 gap=29.73/42.29 afterFrame2=1.73/18.39 min_gap=14.02 neg=0 r=0.42 r_shift=-0.11,-0.15
+ARW-B2-try1 gap=28.31/45.79 afterFrame2=1.66/18.29 min_gap=11.79 neg=0 r=0.29 r_shift=-0.10,-0.21
+ARW-B3-try4 gap=27.76/36.59 afterFrame2=1.69/18.16 min_gap=17.74 neg=0 r=0.53 r_shift=-0.21,-0.28
+median gap=28.31/42.29 afterFrame2=1.69/18.29
+
+## RAF GPUI
+RAF-A1-try3 gap=22.76/31.99 frameWait=7.55/16.90 present=0.40/0.51 toDwm=14.75/24.15 min_gap=16.25 neg=0 r=0.96 r_shift=-0.04,-0.04
+RAF-A2-try1 gap=23.50/31.94 frameWait=6.35/16.62 present=0.39/0.54 toDwm=14.79/25.67 min_gap=16.09 neg=0 r=0.95 r_shift=-0.11,-0.06
+RAF-A3-try2 gap=24.76/32.41 frameWait=7.89/16.74 present=0.39/0.56 toDwm=14.68/25.14 min_gap=16.42 neg=0 r=0.91 r_shift=-0.07,-0.03
+median gap=23.50/31.99 frameWait=7.55/16.74 present=0.39/0.54 toDwm=14.75/25.14
+
+## RAF Tauri
+RAF-B1-try1 gap=9.35/22.76 afterFrame2=8.28/20.34 min_gap=7.12 neg=0 r=0.95 r_shift=-0.10,-0.13
+RAF-B2-try3 gap=8.54/20.70 afterFrame2=7.56/17.81 min_gap=6.96 neg=0 r=0.97 r_shift=-0.07,-0.06
+RAF-B3-try5 gap=8.74/20.73 afterFrame2=7.80/19.93 min_gap=5.14 neg=0 r=0.96 r_shift=-0.11,-0.20
+median gap=8.74/20.73 afterFrame2=7.80/19.93
