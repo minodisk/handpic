@@ -88,15 +88,14 @@ and master Item Uuids so PhotoLab does not import it as a virtual copy (see
 and the user's overrides, persisted in the `shortcuts` key, `src/store.rs` the app's settings store (one key / JSON-value SQLite file, seeded once when new, never deleted or recreated), `src/index.rs` the SQLite folder index,
 which also keeps each folder's last viewed file in `folders.last_viewed`
 and the files shown in the preview in the separate `views` table (kept by
-eviction, dropped by Clear Cache), which gives the ranking its negatives
-(a viewed file left unflagged) and spares a folder holding a viewed file or
+eviction, dropped by Clear Cache), which spares a folder holding a viewed file or
 a reject from the 30-day eviction, not from the size cap or Clear Cache,
 and in the separate `folder_counts` table each folder's file count as the
 app's tree last listed it, keyed by the tree's spelling of the path
 (`set_folder_counts`, `folder_counts`, `rename_folder_counts`,
 `prune_folder_counts`, which drops the rows under a listed folder outside
 the child folders it keeps; kept by the eviction, emptied by Clear Cache),
-re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in three
+re-extracting rows written by an older `EXTRACTOR_VERSION` and filled in two
 passes on the one scan task: `run_scan` (thumbnail, metadata), then
 `run_faces_scan`, which runs the face cue (YuNet, then the face mesh on the face nearest the AF point) and fills the `sharpness` /
 `faces_extractor` columns with the sharpness score, the `eyes_ear` / `pose_yaw` / `pose_pitch` /
@@ -104,12 +103,8 @@ passes on the one scan task: `run_scan` (thumbnail, metadata), then
 from that same mesh, and, on every frame whose cue judged a face, the
 `full_eye_sharp` column with the sharpness of its eyes on the full JPEG (a
 second read; none when the file holds no JPEG larger than the preview), and streams them as `faces-progress` /
-`faces-done` events, then, when the `aiEnabled` setting is on and its model
-downloaded, `run_embed_scan`, which stores each RAW file's image embedding in
-the separate `embeddings` table (valid while `EMBED_VERSION` and the file's
-size / mtime match) and streams `embed-progress` / `embed-done`, without
-counting as scanning; the passes run on worker threads below normal OS
-priority (the second and third lower still) and take the on-screen files first
+`faces-done` events; the passes run on worker threads below normal OS
+priority (the second lower still) and take the on-screen files first
 through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 `sidecarFormat` key of the settings store, a switch's drain, persist and index reset (`switch_to`), next to the configurable
@@ -146,11 +141,7 @@ whose `start` runs one thread that hands a `Sample` every 500 ms to a callback:
 Handpic's process CPU and the system's, each 0–100 %, Handpic's read
 throughput in bytes per second and the system's disk busy time, 0–100 %, PDH
 on Windows, `/sys/block` on Linux, `None` on macOS; `stop` only signals it),
-`src/ai.rs` the `aiEnabled` state and the embedding model's download (`Ai`:
-the switch, which starts the download on an enable with the model not in
-place and cancels it on a disable, the leftover part files removed at
-start, `fetch` and `install` with the size and SHA-256 check, each `AiState`
-handed to a callback), `src/update.rs` the app's updater on
+`src/update.rs` the app's updater on
 `self_update` (`detect`, the `InstallKind` from the executable's path:
 portable ZIP, Inno Setup by the `unins000.exe` beside it, `.app` (`app_bundle`), tarball
 under `~/.local/bin`, deb under `/usr/lib/handpic`, else unknown; `source`,

@@ -125,7 +125,7 @@ their offline Python scripts stay untouched, as do the live plan folders,
         tools, or every tool after `with_all_tools`") and the app `src/mcp.rs`
         clause.
 
-- [ ] Step 3: Remove the engine's AI code: the `aiEnabled` switch, pass 3, the
+- [x] Step 3: Remove the engine's AI code: the `aiEnabled` switch, pass 3, the
       `embeddings` table and the ranking's index readers
   - Done when:
     - `crates/engine/src/ai.rs` is gone, with `pub mod ai`.
@@ -360,3 +360,8 @@ The user approved these with the plan (2026-11-21):
   `INSTRUCTIONS` (the former `NATIVE_INSTRUCTIONS`); `Mcp::with_all_tools`,
   `Companion::seven` and the Tauri instructions are gone, and
   `with_screenshot` still adds `screenshot` only when called.
+- Step 3 (2026-11-21): removed `handpic_engine::ai`, pass 3
+  (`run_embed_scan`) and the index's embedding and ranking readers; the index
+  is at schema v27, which drops `embeddings` from a v20-v26 database without a
+  `VACUUM`, and the eviction's spare rule lives on as `KEPT_DIRS`. `reqwest`
+  and `rustls` left `handpic-engine`'s dependencies.

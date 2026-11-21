@@ -827,19 +827,13 @@ runtime on its one `mcp` thread, which runs the switch, waits for the quit's
 signal and runs the stop. `Mcp::with_port` binds another port than
 `MCP_PORT`, for the app's `--mcp-port`.
 
-The CPU and disk sampler and the AI model's state follow the same seam.
+The CPU and disk sampler follows the same seam.
 `perf::Sampler::start(on_sample)` takes an
 `impl FnMut(Sample) -> Result<(), E: Display>` and has a separate `stop()`
 (stopping needs no callback); the callback returns a `Result` so the warn-once
 on a failed report stays in the engine (`perf sample report failed: ...`,
-target `handpic_engine::perf`). `ai::Ai` is a cloneable `Arc` over the
-status, the model path and an `on_state: Fn(AiState) + Send + Sync` given to
-`Ai::new`, so the download thread holds a clone of the `Ai` itself and
-reports progress and the final state through that callback; `switch` also
-returns the state. The `on_state` callback returns nothing because the Tauri
-app always ignored its report errors. The download's and the server's
-`log` lines sit under `handpic_engine::ai` / `handpic_engine::mcp`, so grep
-for the engine target. Source:
+target `handpic_engine::perf`). The server's `log` lines sit under
+`handpic_engine::mcp`, so grep for the engine target. Source:
 `docs/plans/_archived/20261113-gpui-companions/learnings.md`, Steps 2 to 4.
 
 - Rule: never add a GUI crate, an event name or an app handle to
