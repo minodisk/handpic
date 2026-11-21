@@ -73,3 +73,5 @@ one PR.
 - Headings are from `main`; if one no longer matches (main moved since), find the item by its text and note it in `learnings.md` rather than skipping it.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete
