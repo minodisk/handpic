@@ -118,7 +118,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
     - Also rewrite the "release-please bumps neither …" **Unverified** line
       of `../20261109-gpui-port/packaging-updater.md`.
 
-- [ ] Step 2: `release.yml` builds, signs and publishes; `package.yml` becomes its reusable build
+- [x] Step 2: `release.yml` builds, signs and publishes; `package.yml` becomes its reusable build
   - Done when:
     - `package.yml` can be called by another workflow (`workflow_call`) as
       well as dispatched. Called with the production signing asked for, each
@@ -233,7 +233,8 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
       #364), whose draft-then-publish shape it restores.
     - The stale `TAURI_SIGNING_PRIVATE_KEY` and
       `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets are the user's to delete.
-      Mention them in the PR; do not touch them.
+      Mention them in the PR; do not touch them. (Deleted on 2026-11-21 at
+      the user's request.)
     - Files: `.github/workflows/release.yml`,
       `.github/workflows/package.yml`, possibly one new script under
       `tools/package/`, `docs/agents/app.md`,

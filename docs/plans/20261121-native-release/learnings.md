@@ -83,8 +83,31 @@
   and no tag or release `v2.0.0-rc.0` exists. This meets the Done-when "A
   run with the secret empty or missing was seen to fail at the guard".
 - The stale `TAURI_SIGNING_PRIVATE_KEY` and
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets are still listed by `gh
-  secret list`; they are the user's to delete (mention in the PR).
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets were deleted on
+  2026-11-21 by the main agent at the user's request; no workflow
+  referenced them.
+- The user registered the `UPDATE_SIGNING_KEY` repository secret on
+  2026-11-21 (08:25:08Z) with `base64 -w0 <key> | gh secret set` after
+  checking the value was non-empty. No agent read the key.
+- The green branch run: run 44884797276 (`gh workflow run release.yml --ref
+  native-release-step-2 -f version=2.0.0-rc.0`) concluded success. `guard`
+  succeeded (the production key signed a scratch `.tar.gz` and matched
+  `update.pub`), and `build / windows`, `build / linux`, `build / macos`
+  (`macos-15-intel`, x86_64), `build / macos` (`macos-latest`, arm64) and
+  `build / checksums` all succeeded; `release-please` and `publish` were
+  skipped. Afterwards `gh release view v2.0.0-rc.0` reported "release not
+  found" and `git ls-remote --tags origin v2.0.0-rc.0` was empty: nothing
+  was published. With this the remaining Done-when items are met and Step
+  2's checkbox is ticked.
+- Accepted risks from the local review (not findings):
+  - A branch dispatch signs unreviewed branch code with the production key.
+    Its output is only workflow artifacts and nothing is published, but the
+    signed archives exist.
+  - "Never publishes from a non-`main` ref" holds only for the workflow code
+    on `main`: a branch dispatch runs that branch's `release.yml`, so a
+    branch could change the check. A protected environment holding
+    `UPDATE_SIGNING_KEY`, or tag / release protection rules, would be the
+    stronger guarantees.
 
 ## Deferred issues (todo candidates)
 
@@ -102,7 +125,8 @@
   `release-please-config.json`, `crates/app/Cargo.toml`,
   `crates/app/Cargo.lock`. Step 1's checkbox was ticked on the other,
   pre-merge criteria.
-- **Pending (Step 2's Done-when): the `UPDATE_SIGNING_KEY` secret.** The
+- **Done (2026-11-21, registered 08:25:08Z by the user; see Step 2 above).
+  Was pending (Step 2's Done-when): the `UPDATE_SIGNING_KEY` secret.** The
   user registers the repository secret: the 64-byte private key
   `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
   <private-key>`), pasted on the secret's page on github.com or piped to
@@ -110,8 +134,9 @@
   agent reads, copies or asks for the key. Basis: plan.md Step 2's
   Done-when and "Manual user step: the secret". Files:
   `.github/workflows/release.yml`, `tools/package/sign-production.sh`.
-- **Pending (Step 2's Done-when): the green branch run.** After the secret
-  is registered, dispatch `gh workflow run release.yml --ref
+- **Done (2026-11-21, run 44884797276 green, nothing published; see Step 2
+  above). Was pending (Step 2's Done-when): the green branch run.** After
+  the secret is registered, dispatch `gh workflow run release.yml --ref
   native-release-step-2 -f version=2.0.0-rc.0` and check that it is green:
   the guard passes, each leg's "with the production key" signing step ran
   (the four archives signed and verified against `update.pub`), the
