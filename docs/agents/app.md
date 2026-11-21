@@ -3230,11 +3230,23 @@ settles, so the ring's entry is read again rather than painted upscaled.
   change. `present` and `clear_image` bump `refit`, so a page turn or a clear
   supersedes the re-read in flight, as `order` does a re-listing.
 - Rule: a smaller canvas reads nothing; an image larger than needed serves.
+  `scale_for` must return 8 for a zero canvas before its search, because
+  `serves` is true for any size on an unknown canvas and the search would
+  otherwise pick 1/8 for a read before the first paint.
 - Rule: the 1:1 placeholder is the fit image drawn into the rectangle
   `zoom::placeholder` gives from the source's upright size, so it is softer
   for a large preview but placed as before; the crop is `zoom.rs`'s own read.
   The fit view's peaking layer is keyed by the image id, so a re-read image
   gets its edges recomputed.
+- Rule: expect the decode gain from the scale only on a large preview. On the
+  RAF compare folder, 3/8 cut the decode about a third (49 to 34 ms p50)
+  because the entropy decode does not shrink with the output. A 6/8 decode of
+  an ARW (1616x1080 to 1212x810) was no faster (no SIMD IDCT at 6/8, 7.0 vs
+  7.6 ms p50, within noise). The gain that matters is the texture upload:
+  `screen` minus `keypressToPixels` fell from 47 to 15 ms p50 on RAF. Judge
+  the change by that A/B ruler, not by `decode` alone
+  (`../plans/_archived/20261121-fit-preview-downscale/learnings.md`, Steps 2
+  and 3).
 
 ### Peaking runs off the main thread, one job at a time (Measured)
 
