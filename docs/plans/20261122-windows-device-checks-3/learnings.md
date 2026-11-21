@@ -123,6 +123,7 @@ file in it changed.
   - gpui-tree-trash Step 2: the meta pane switching to `b` (the results name the strip, preview and status only). Step 2's "the expander of `b`" point was dropped as obsolete: native-tree-no-chevron removed the expander, and the ListItem item's click points cover the row click.
   - Step 6: a press on the preview or `escape` closing the strip's menu (the results saw them close the tree's menu, not the strip's).
   - Step 7: "the dialog closes at once" for the held run, kept with the short-lived notes.
+  - Step 8: `moving to Trash 0 / 1` on the redo (the results record only `Moved 1 file to the Trash`), the strip showing three stars after the restore (the results checked the `.xmp`), and reopening `a` listing the file after the cross-folder undo (the results saw the file back in undo\a). Step 5: the focus staying after a Ctrl-click on a middle cell (the results say only that it dropped out). These are held in the new "rest of Trash undo / redo (Steps 5 and 8)" box.
   - Inline rename: the slow-click box's "a single click on a root opens it as before" (only another folder was clicked) stays as a box of its own; the held-rename box's "the rename plus reopen when it ends" moved into the new Access denied item's TODO ("every held rename succeeds and reopens the folder under its new name").
   - File counts: deleting a counted folder outside the app (only the outside rename was run) stays in the Windows box.
   - ListItems: a click on the open row's indent (only its icon and count were clicked) stays in the box.
