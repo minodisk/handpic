@@ -68,7 +68,7 @@ now apply to the crates.io `gpui-pre` crates' dependencies on them (Zed at
   app); moving them belongs to the workspace merge, which re-checks the root
   lock's users of both crates first.
 
-### gpui-component is initialized; the settings modal and the tree's inline rename draw from it (Inferred)
+### gpui-component is initialized; the app's controls draw from it (Inferred)
 
 `gpui-component` 0.9.1 (through `gpui-kit`) is compiled on all three platforms.
 `gpui_kit::init(cx)`, which with the `component` feature is exactly
@@ -909,8 +909,19 @@ stands, as in the Tauri app. `App::on_app_quit` drains them (`drain`, at most
 the index opened (`quit: settings writes drained=…`). One thread with a
 channel was taken over `viewed.rs`'s `Latest`: a `Latest` per key would need
 one per key and a way to wait for them all on quit, where the channel's
-barrier gives the drain for free.
+barrier gives the drain for free. The clones of one `Writes` share the
+queue and the thread behind one `Arc`; the last clone's drop closes the
+queue and joins the thread (no bound: the thread only finishes the writes
+already queued), so the store is closed when the drop returns and a second
+open of the same file, which Windows refuses while the first is open,
+succeeds at once.
 
+- Rule: the shared `Writer` keeps its sender in an `Option` so its `Drop`
+  can drop the sender before joining the thread; joining with the sender
+  still alive hangs forever. A change to its ownership must keep that order.
+  The settings tests repeated 20 times on Windows without a failure after the
+  change
+  (`docs/plans/_archived/20261121-todo-seven-small-fixes/learnings.md`, item 6).
 - Rule: every debug or hand-check run passes `--settings` with a test store
   (a fresh `.sqlite` path in the test folder), and `--import-settings` with a
   test JSON when it needs seeded values, or it opens and seeds the user's real
@@ -1921,8 +1932,14 @@ not open.
   `Change::ClearCache`; the window's `ClearFlow` (one slot of its own, not
   the idle gate, whose request would replace a held trash or rename) asks at
   once, or, while `resync.busy() || gate.in_flight()`, holds the press with
-  the page's `WAITING_NOTE` and drains it in `finished` once nothing else
-  started (nor a trash or folder dialog is up). The confirmation is a
+  the page's `WAITING_NOTE` and drains it (`drain_clear`, the guard
+  `ClearFlow::idle`) at every idle point once nothing else started (nor a
+  trash or folder dialog is up): `finished`, and the ends that need no
+  listing: a trash run's with no folder open (`trashed`, a tree
+  folder's Delete Sidecars; with a folder open it re-lists), a trash undo's (`restored`, one into
+  another folder lists nothing), a sidecar rewrite's (`sidecars_ran`) and a
+  folder run's that reopens nothing (`settle_folder_run`, a failed rename
+  among them). The confirmation is a
   component `Dialog` through `modal.rs`, the first one opened from inside
   the settings: its keys reach `clear_key_down` in the footer's capture
   phase, so Escape cancels the dialog, not the settings, and the component
@@ -3227,18 +3244,22 @@ choosing the circle.
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
 - Rule: the circle adds no `notify` or timer of its own; it is redrawn by the
-  notifies the scan's `Progress` / `FacesProgress` and the trash's
-  `TrashProgress` already make, and it goes wherever `scan_status.clear()`
-  and `trashing = None` do. Its value's transition does request animation
+  notifies the scan's `Progress` / `FacesProgress`, the trash's
+  `TrashProgress` and the folder runs' `SequenceProgress` / `ImportProgress`
+  already make, and it goes wherever `scan_status.clear()`,
+  `trashing = None` and the folder runs' ends do. Its value's transition does request animation
   frames for 180 ms after each change. Not yet observed: whether the drop
   from pass 1's full ring to pass 2's empty one reads well, and whether the
   extra frames slow paging during a scan (the hand check is pending in
   `../plans/20261115-native-status-bar/learnings.md`).
 - Rule: do not zero `duration_normal` to stop the animation: the dialogs read
   it too.
-- Another operation with a count (Sequence JPEG Timestamps, Import) feeds it
-  by passing its `(done, total)` as `shown`'s `folder_op` argument, `None`
-  today, from the state its own progress messages update.
+- Sequence JPEG Timestamps and Import feed it through `shown`'s `folder_op`
+  argument: `FolderOps`' `sequence_progress()`, else `import_progress()`
+  (the order `status_of` uses), set to `(0, 0)` at the run's start, updated
+  by `folder_op_message` and cleared in `sequence_ran` / `import_ran`, which
+  every end, a cancel included, passes through; no re-listing stops either
+  run.
 - The trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress
   callback in the engine (`trash::undo_run`, `foldersidecars`), so the
   circle shows nothing for them. A new operation needs a `(done, total)`

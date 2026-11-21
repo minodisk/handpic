@@ -14,6 +14,11 @@ set -o nounset
 #
 # Run it directly, or via `mise run ci`.
 
+# A caller that exports GIT_DIR / GIT_WORK_TREE (a git hook around
+# `mise run ci`, say) would point every git call below at the repository they
+# name, so the worktree case's commit and `worktree add` would land there.
+unset GIT_DIR GIT_WORK_TREE
+
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 target="${script_dir}/merge.js"
 
@@ -107,6 +112,28 @@ printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"comma
 output=$(cd "${dir}" && node "${target}" --write 2>&1) || fail "hooks from another worktree" "merge.js exited non-zero: ${output}"
 if ! grep -q '"PreToolUse"' "${dir}/.claude/settings.json"; then
 	fail "hooks from another worktree" "hooks block from the other worktree was not written: ${output}"
+fi
+
+# The whole script again with GIT_DIR / GIT_WORK_TREE exported at a decoy
+# repository, which must come out untouched. MERGE_TEST_NESTED keeps the
+# nested run from recursing.
+function decoy_state() {
+	git -C "$1" rev-parse HEAD
+	git -C "$1" for-each-ref
+	git -C "$1" worktree list --porcelain
+}
+
+if [[ -z "${MERGE_TEST_NESTED:-}" ]]; then
+	cases=$((cases + 1))
+	decoy="${work_root}/decoy"
+	git init -q "${decoy}"
+	git -C "${decoy}" -c user.name=t -c user.email=t@example.com commit -q --allow-empty -m init
+	before="$(decoy_state "${decoy}")"
+	output=$(MERGE_TEST_NESTED=1 GIT_DIR="${decoy}/.git" GIT_WORK_TREE="${decoy}" bash "${BASH_SOURCE[0]}" 2>&1) ||
+		fail "exported GIT_DIR / GIT_WORK_TREE" "the nested run exited non-zero: ${output}"
+	if [[ "$(decoy_state "${decoy}")" != "${before}" ]]; then
+		fail "exported GIT_DIR / GIT_WORK_TREE" "the repository they name changed"
+	fi
 fi
 
 if [[ "${failures}" -gt 0 ]]; then

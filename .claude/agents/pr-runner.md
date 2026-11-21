@@ -176,7 +176,10 @@ returning (most likely a lingering child holding the pipe open) until it hit
 the 600 s timeout and was moved to the background, and the bare re-run
 returned in 2 s. The exit code is already in the Bash tool result, so
 `; echo exit=$?` adds nothing. Waiting on `wait` / `review_required` (checks
-in progress, waiting on the approver) is shut inside the script.
+in progress, waiting on the approver) is shut inside the script, and so is a
+fresh `blocked`: the script returns it with exit 0 only once it has lasted
+`BLOCKED_GRACE` (60 s), so a timeout inside that grace exits 2 with
+`ACTION=blocked` as the last output, which is ordinary waiting.
 
 Handle the exit code as follows.
 
@@ -337,7 +340,10 @@ script skips by default a reviewer who already reviewed the current head).
 
 `wait` / `review_required` do not appear in this table because
 `wait-pr-actionable.sh` waits on them internally (they are only observed as
-exit 2, on a timeout).
+exit 2, on a timeout). `blocked` is also the last ACTION of an exit 2 when the
+timeout falls inside `BLOCKED_GRACE` (60 s) before the script returns it; that
+is handled as ordinary waiting (increment `wait_timeouts` and re-run), not by
+this table.
 
 ### When returning `blocked`, do not assume branch protection
 

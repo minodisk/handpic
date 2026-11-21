@@ -7,7 +7,7 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::mpsc,
+    sync::{Arc, mpsc},
     thread,
     time::Duration,
 };
@@ -88,15 +88,32 @@ enum Write {
 /// write is logged and the in-memory value stands, as in the Tauri app.
 #[derive(Clone)]
 pub struct Writes {
+    writer: Option<Arc<Writer>>,
+}
+
+/// The queue and the thread behind every clone of one `Writes`. The last
+/// clone's drop closes the queue and waits for the thread, so the store is
+/// closed when it returns.
+struct Writer {
     jobs: Option<mpsc::Sender<Write>>,
+    thread: Option<thread::JoinHandle<()>>,
+}
+
+impl Drop for Writer {
+    fn drop(&mut self) {
+        drop(self.jobs.take());
+        if let Some(thread) = self.thread.take() {
+            thread.join().ok();
+        }
+    }
 }
 
 impl Writes {
     /// The writer of `store`; without one every write is a no-op.
     fn spawn(store: Option<Store>) -> Self {
-        let jobs = store.map(|store| {
+        let writer = store.map(|store| {
             let (jobs, queued) = mpsc::channel::<Write>();
-            thread::Builder::new()
+            let thread = thread::Builder::new()
                 .name("settings-store".into())
                 .spawn(move || {
                     for job in queued {
@@ -120,14 +137,21 @@ impl Writes {
                     }
                 })
                 .expect("spawn the settings store thread");
-            jobs
+            Arc::new(Writer {
+                jobs: Some(jobs),
+                thread: Some(thread),
+            })
         });
-        Self { jobs }
+        Self { writer }
     }
 
     /// Whether the store opened, so the writes land.
     pub fn is_open(&self) -> bool {
-        self.jobs.is_some()
+        self.writer.is_some()
+    }
+
+    fn jobs(&self) -> Option<&mpsc::Sender<Write>> {
+        self.writer.as_ref().and_then(|writer| writer.jobs.as_ref())
     }
 
     pub fn set(&self, key: &str, value: Value) {
@@ -150,7 +174,7 @@ impl Writes {
     }
 
     fn send(&self, write: Write) {
-        if let Some(jobs) = &self.jobs {
+        if let Some(jobs) = self.jobs() {
             jobs.send(write).ok();
         }
     }
@@ -159,7 +183,7 @@ impl Writes {
     /// `false` when the wait timed out or the thread is gone; `true` without
     /// a store.
     pub fn drain(&self, timeout: Duration) -> bool {
-        let Some(jobs) = &self.jobs else {
+        let Some(jobs) = self.jobs() else {
             return true;
         };
         let (done, reached) = mpsc::channel();
@@ -701,16 +725,7 @@ mod tests {
         write(&json, r#"{"sidecarFormat":"both"}"#);
         drop(load_from(Some(store.clone()), Some(&json), None));
         write(&json, r#"{"sidecarFormat":"dop"}"#);
-        // The first load's writer thread closes the store a moment after the
-        // drop, and Windows refuses a second open until then.
-        let mut format = SidecarFormat::Xmp;
-        for _ in 0..50 {
-            format = load_from(Some(store.clone()), Some(&json), None).format;
-            if format == SidecarFormat::Both {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        let format = load_from(Some(store), Some(&json), None).format;
         assert_eq!(format, SidecarFormat::Both);
     }
 
