@@ -205,7 +205,7 @@
   notes' first line). `release.yml`'s publish job only flips `--draft=false`
   and leaves the notes, so a notice in the draft survives the publish.
 - The notice keeps `<version>` placeholders in its table; the script fills
-  them from the tag, so the checked-in text stays version-free.
+  them from the tag, so the table follows the tag (the opening paragraph still names 2.0.0).
 - The install docs' macOS first-launch text (Open Anyway on macOS 15 and
   later, right-click Open earlier, `xattr`) is the Tauri-era README's,
   carried over; no Mac was at hand to recheck it for the ad hoc signed
