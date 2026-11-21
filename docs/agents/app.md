@@ -5017,7 +5017,7 @@ press: 47 % (ARW) and 34 % (RAF) of B's presses reached the first DWM
 composition after the page was pended, none of A's. No B page reached the
 screen sooner than 7.95 ms after it was pended, so a page pended late in a
 refresh still misses that vblank (inferred; see
-[the plan's results](../plans/20261122-page-present-now/results.md)).
+[the plan's results](../plans/_archived/20261122-page-present-now/results.md)).
 
 - Rule: never call `paint` inside an update, `cx.defer` or `window.defer`.
   The `App` is still borrowed there, and GPUI's frame callback touches it
@@ -5050,8 +5050,13 @@ external ruler, three runs each, `--no-prefetch`; see
 
 - Rule: never hand GPUI an image much larger than it draws on the page path.
   The upload's cost is invisible to every in-app stage and shows only on an
-  external ruler; the about 15 ms between `present` and the DWM present is
-  the floor for any image size.
+  external ruler; the about 15 ms between `present` and the DWM present was
+  the floor for any image size while a page waited for the vsync tick. Since
+  keyed pages paint at once on Windows (#1219) that stretch depends on the
+  phase at which the frame is presented: on the external ruler p50 15.03 /
+  17.42 ms but p95 23.36 / 25.97 ms (ARW / RAF), so it is no longer a floor
+  ([the plan's results](../plans/_archived/20261122-page-present-now/results.md),
+  per-press tables).
 
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 
