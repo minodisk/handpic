@@ -431,7 +431,7 @@ succeeds.
 
 ### A Windows release build is a GUI-subsystem binary (Measured)
 
-Source: [the windows-gui-subsystem plan](../plans/20261121-windows-gui-subsystem/plan.md).
+Source: [the windows-gui-subsystem plan](../plans/_archived/20261121-windows-gui-subsystem/plan.md).
 
 `crates/app/src/main.rs` starts with
 `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]`,
