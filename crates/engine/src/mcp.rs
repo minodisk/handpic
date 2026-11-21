@@ -4,9 +4,7 @@
 //! state and the judgments the tools read and drive are the app's, reached
 //! through the `Bridge`'s send callback; the server's tasks run on the
 //! caller's tokio runtime, so `Mcp::switch` and `Mcp::stop` must run inside
-//! one. The tools a server lists are its host's: the seven companion tools by
-//! default (what the removed Tauri app listed), all of them after
-//! `Mcp::with_all_tools` (the app), and `screenshot` only after
+//! one. A server lists every tool, and `screenshot` only after
 //! `Mcp::with_screenshot`.
 
 use std::collections::HashMap;
@@ -64,17 +62,8 @@ const SCREENSHOT_LONG_EDGE_MAX: u32 = 4096;
 /// How long `stop` waits for open connections to close before it drops them.
 const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
-const INSTRUCTIONS: &str = "Handpic is a desktop app the user culls Sony ARW and Leica DNG \
-photos with. This server connects you to the running app so you can assist while they cull: \
-read what Handpic is showing (the current photo, the selection, its burst, the sharpness \
-score, the AF point, the shooting settings and the current stars, pick / reject flag and \
-color label), look at a small copy of a photo's preview, move the view, and record stars, \
-picks / rejects and color labels the same way the user's keys do, so the app's undo and \
-sidecar files stay consistent. Nothing here can move a file to the trash or delete it. \
-Suggest judgments and explain them; write them only when the user asks you to.";
-
-/// The app's instructions, over the whole tool set.
-const NATIVE_INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (Sony \
+/// The instructions over the whole tool set.
+const INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (Sony \
 ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. This server \
 connects you to the running app, and every action the user takes in it has a tool here, so you \
 can assist while they cull or drive it on their behalf: read what Handpic is showing (the \
@@ -1013,12 +1002,12 @@ impl Companion {
         resolve(&view, path)
     }
 
-    /// The seven companion tools and the instructions over them.
-    fn seven(bridge: Arc<Bridge>, index: Option<Arc<Mutex<Index>>>) -> Self {
+    /// Every tool and the instructions over them.
+    fn new(bridge: Arc<Bridge>, index: Option<Arc<Mutex<Index>>>) -> Self {
         Companion {
             bridge,
             index,
-            tools: Self::tool_router(),
+            tools: Self::tool_router() + Self::app_router(),
             instructions: INSTRUCTIONS,
             home: None,
         }
@@ -1626,7 +1615,7 @@ impl Mcp {
     pub fn new(bridge: Bridge, index: Option<Arc<Mutex<Index>>>) -> Self {
         Mcp {
             status: Default::default(),
-            companion: Companion::seven(Arc::new(bridge), index),
+            companion: Companion::new(Arc::new(bridge), index),
             port: MCP_PORT,
         }
     }
@@ -1634,17 +1623,6 @@ impl Mcp {
     /// The server listening on `port` instead of `MCP_PORT`.
     pub fn with_port(self, port: u16) -> Self {
         Mcp { port, ..self }
-    }
-
-    /// The server listing every tool, with the instructions over them: the
-    /// app's. The removed Tauri app listed the seven.
-    pub fn with_all_tools(self) -> Self {
-        let companion = Companion {
-            tools: Companion::tool_router() + Companion::app_router(),
-            instructions: NATIVE_INSTRUCTIONS,
-            ..self.companion
-        };
-        Mcp { companion, ..self }
     }
 
     /// The server also listing `screenshot`, which the app answers
@@ -1805,7 +1783,7 @@ mod tests {
     const INITIALIZE: &str = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#;
 
     fn silent() -> Companion {
-        Companion::seven(Arc::new(Bridge::new(|_| Ok(()))), None)
+        Companion::new(Arc::new(Bridge::new(|_| Ok(()))), None)
     }
 
     fn initialize(origin: Option<&str>) -> Request<Body> {
@@ -2008,31 +1986,8 @@ mod tests {
     }
 
     #[test]
-    fn the_tools_are_exactly_the_seven_companion_tools() {
-        let mcp = Mcp::new(Bridge::new(|_| Ok(())), None).with_port(1);
-        assert_eq!(
-            names(&mcp.companion),
-            [
-                "get_photo",
-                "get_preview",
-                "get_view",
-                "select_photos",
-                "set_judgment",
-                "set_view",
-                "show_photo"
-            ]
-        );
-        assert_eq!(
-            mcp.companion.get_info().instructions.as_deref(),
-            Some(INSTRUCTIONS)
-        );
-    }
-
-    #[test]
     fn all_tools_lists_the_apps_full_set() {
-        let mcp = Mcp::new(Bridge::new(|_| Ok(())), None)
-            .with_all_tools()
-            .with_port(1);
+        let mcp = Mcp::new(Bridge::new(|_| Ok(())), None).with_port(1);
         assert_eq!(
             names(&mcp.companion),
             [
@@ -2075,7 +2030,7 @@ mod tests {
         assert_eq!(mcp.port, 1);
         assert_eq!(
             mcp.companion.get_info().instructions.as_deref(),
-            Some(NATIVE_INSTRUCTIONS)
+            Some(INSTRUCTIONS)
         );
     }
 
@@ -2572,25 +2527,19 @@ mod tests {
 
     #[test]
     fn screenshot_is_listed_only_after_with_screenshot() {
-        let seven = Mcp::new(Bridge::new(|_| Ok(())), None);
-        assert!(!names(&seven.companion).contains(&"screenshot".to_string()));
-        let all = Mcp::new(Bridge::new(|_| Ok(())), None).with_all_tools();
+        let all = Mcp::new(Bridge::new(|_| Ok(())), None);
         let all_names = names(&all.companion);
         assert!(!all_names.contains(&"screenshot".to_string()));
 
-        let with = Mcp::new(Bridge::new(|_| Ok(())), None)
-            .with_all_tools()
-            .with_screenshot();
+        let with = Mcp::new(Bridge::new(|_| Ok(())), None).with_screenshot();
         let mut expected = all_names;
         expected.push("screenshot".to_string());
         expected.sort();
         assert_eq!(names(&with.companion), expected);
         assert_eq!(
             with.companion.get_info().instructions.as_deref(),
-            Some(NATIVE_INSTRUCTIONS)
+            Some(INSTRUCTIONS)
         );
-        let seven_with = Mcp::new(Bridge::new(|_| Ok(())), None).with_screenshot();
-        assert_eq!(names(&seven_with.companion).len(), 8);
     }
 
     #[test]

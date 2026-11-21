@@ -92,7 +92,7 @@ their offline Python scripts stay untouched, as do the live plan folders,
       - `docs/humans/usage.md` near line 1030 and the matching sentence in
         `docs/humans/usage.ja.md` (line 181).
 
-- [ ] Step 2: Remove the seven-tool default mode of the MCP server
+- [x] Step 2: Remove the seven-tool default mode of the MCP server
   - Done when:
     - `Mcp::new` lists the app's whole tool set with the app's instructions.
     - `Mcp::with_all_tools`, `Companion::seven` and the Tauri `INSTRUCTIONS`
@@ -356,3 +356,7 @@ The user approved these with the plan (2026-11-21):
   `FilterArgs.genres` and `SettingsArgs.ai_enabled` from the engine's MCP
   server, and the four `not_in_app` features and their Coverage rows from the
   app's companion; the docs name only compare and file rename as refused.
+- Step 2 (2026-11-21): `Mcp::new` now lists every tool with the one
+  `INSTRUCTIONS` (the former `NATIVE_INSTRUCTIONS`); `Mcp::with_all_tools`,
+  `Companion::seven` and the Tauri instructions are gone, and
+  `with_screenshot` still adds `screenshot` only when called.

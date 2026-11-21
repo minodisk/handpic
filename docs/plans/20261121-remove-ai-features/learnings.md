@@ -18,3 +18,11 @@
   `recommended` rule near the settings store and the latency-gate rule
   (Step 5). The stored `sortOrder` `recommended` notes in `docs/agents/app.md`
   stay (Decisions).
+
+## Step 2
+
+- `Companion::seven` was also the test helper `silent()`'s constructor, so it
+  became `Companion::new`, building `tool_router() + app_router()`; the two
+  `#[tool_router]` blocks stay separate. `with_screenshot` adds its router to
+  whatever `tools` holds, so with no `with_all_tools` left to replace the
+  router afterward the call order note in `docs/agents/app.md` went.

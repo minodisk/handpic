@@ -1,6 +1,5 @@
 //! The MCP companion's server, the engine's `mcp::Mcp` with every tool
-//! (`with_all_tools`, and `with_screenshot` in a build with the `screenshot`
-//! feature) and the tree's home directory (`with_home`), on a tokio runtime
+//! (and `with_screenshot` in a build with the `screenshot` feature) and the tree's home directory (`with_home`), on a tokio runtime
 //! of its own on one named thread, spawned on the first switch on of
 //! `mcpEnabled` and kept for the session, which runs each switch in order
 //! and sends the state it returns as `Event::McpState`. A tool call reaches
@@ -119,7 +118,6 @@ impl Control {
                 .map_err(|_| "Handpic's main window is not open".to_string())
         });
         let mcp = Mcp::new(bridge, self.index.clone())
-            .with_all_tools()
             .with_home(dirs::home_dir())
             .with_port(self.port);
         #[cfg(feature = "screenshot")]
