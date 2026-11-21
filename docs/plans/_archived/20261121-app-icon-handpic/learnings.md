@@ -43,3 +43,10 @@
   body's anti-aliased outline, so the default `getbbox()` would not have
   silently passed anyway.)
 - `git mv tools/macos/app-icon tools/app-icon` left no `tools/macos/`.
+
+## Deferred issues (todo candidates)
+
+- Close `todo.md`'s "Docs: consider a guide for verifying Pillow pixel
+  edits": its own rule drops it when the two pitfalls do not recur, and they
+  did not here (see Step 1). Resolved in this wrap-up by deleting the item;
+  no `docs/agents/verifying-pixel-edits.md` is written.
