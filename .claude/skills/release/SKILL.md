@@ -12,17 +12,49 @@ disable-model-invocation: true
 /release 57   → the same, for PR 57
 ```
 
-## Releases are suspended
+## The first native release (2.0.0)
 
-Releases are suspended until the first native release's gate opens (Step 5
-of the native-release plan, `docs/plans/20261121-native-release/plan.md`,
-after the rc dry run on the real feed). `.github/workflows/release.yml`
-builds, signs and publishes the app's release, but the install docs, the
-reinstall notice and the dry run are not in place yet. **`/release` stops
-here**: tell the user that releases are suspended until the first native
-release's gate opens, and do not merge the release PR. The rest of this
-skill describes the native release as it will run once the suspension is
-lifted.
+2.0.0 is the first release of the native app (`crates/app`), and the first
+release `release.yml` publishes from the release PR. Until it is published
+and verified, a `/release` whose PR title reads `2.0.0` also runs this
+checklist (step 1) and prepends the reinstall notice (step 2). The list is
+the native-release plan's "What remains before PR #928 can be merged"
+(`docs/plans/20261121-native-release/plan.md`, archived under
+`docs/plans/_archived/` once that plan is done), as of 2026-11-22:
+
+1. Done: the Windows `handpic.exe` is a GUI-subsystem binary (PR #1194).
+2. Done: `release.yml` builds, signs with the production key and publishes;
+   the `UPDATE_SIGNING_KEY` secret is registered.
+3. Done: the rc dry run on the real feed (`v2.0.0-rc.1` to `v2.0.0-rc.2`,
+   both kept as prereleases). **Measured** on one Windows PC: the portable
+   ZIP and the Inno Setup update, the feed and release-please leaving the
+   release PR alone. The Inno setup is unsigned and SmartScreen prompts for
+   it, as the install docs say.
+4. **Unverified**, shipping with them is the user's decision:
+   - the macOS `.app` (install, the swap in `/Applications`, the refusal
+     from the DMG or Downloads, Gatekeeper and the folder-access grants);
+   - the Linux `.tar.gz` with `install.sh` (install and update) and the
+     `.deb` (install, the release-page notice, `Conflicts` / `Replaces:
+     riffle`);
+   - on Windows: a standard (non-administrator) account, the uninstall
+     entries and shortcuts of an install beside Riffle's, and a real network
+     cut during a download.
+
+   No macOS or Linux machine was at hand; those rows rest on the engine's
+   tests and CI. The record is
+   `docs/plans/20261109-gpui-port/packaging-updater.md`, "The rc dry run on
+   the real feed".
+5. Done: the install docs (`README.md`, `docs/humans/usage.md` and their
+   Japanese pairs), the reinstall notice
+   ([`references/reinstall-notice.md`](./references/reinstall-notice.md))
+   and this checklist in place of the suspension.
+6. PR #928 green: step 1's check state.
+7. Accepted risk: the release-please path of `release.yml` (upload to the
+   draft, then publish) runs for the first time at this release. A failure
+   leaves a draft that neither the updater nor `/releases/latest` sees.
+
+After 2.0.0 is published and verified, the rc releases can be deleted
+(`gh release delete v2.0.0-rc.N --cleanup-tag`), only when the user asks.
 
 The release PR (branch `release-please--branches--main`, title
 `chore(main): release X.Y.Z`) is the human gate described in
@@ -82,6 +114,11 @@ release-please wrote them), and the check state.
 mergeable: report the state and point at `/pr <number>`. Do not fix anything
 here.
 
+For 2.0.0, also report the checklist of
+[the first native release](#the-first-native-release-200), naming every
+**Unverified** row, and ask with `AskUserQuestion` whether to ship with them
+unverified. Stop without merging unless the user says to ship.
+
 Otherwise continue straight to step 2. The user already approved by typing
 `/release`; do not ask again.
 
@@ -96,6 +133,20 @@ Approved: yes (the user approved shipping this release by invoking /release; thi
 
 Skip the approval judgment and go from the merge through post-merge waiting, main sync, and branch cleanup. Post-merge includes the Release workflow: release-please tags the release and makes a draft, then the guard, the four platform builds (signing the updater's archives) and the publish run, which takes about 75 minutes.")
 ```
+
+For 2.0.0, add this to the prompt, so the reinstall notice is in the draft's
+notes while the build runs, before the workflow publishes it:
+
+```
+Right after the merge, before waiting for the post-merge runs, run once in the foreground with timeout 600000:
+bash .claude/skills/release/scripts/prepend-notice.sh v2.0.0
+It waits for release-please's draft and prepends the reinstall notice to its notes. Report its STATUS line in your return.
+```
+
+`STATUS=ok` or `already` means the notice is in. For `published`, `missing`
+or no STATUS line, tell the user that the notice is not in the notes and
+that it can be prepended by hand with `gh release edit v2.0.0 --notes-file`
+(the notes of a published release can still be edited).
 
 Do not specify `model`. Branch on the return value as `/merge` does
 ([`../merge/SKILL.md`](../merge/SKILL.md) § 2). Only `MERGED` continues to

@@ -1052,12 +1052,63 @@ above. Two examples:
 
 ## Installing
 
-Packaged builds of the current app are not released yet. Until they come,
-build it from source as
-[CONTRIBUTING.md](../../CONTRIBUTING.md) describes. The packages on the
-[Releases page](https://github.com/minodisk/handpic/releases) (up to 1.10.0,
-when Handpic was still called Riffle) are of the earlier app this one
-replaced, and they do not update to it.
+Handpic's packages are on the
+[Releases page](https://github.com/minodisk/handpic/releases), from 2.0.0
+on. Take the files of the latest release; each release also carries
+`SHA256SUMS`, the SHA-256 digest of every file in it. To build Handpic from
+source instead, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
+- **macOS**: `Handpic-<version>-macos-arm64.dmg` for Apple Silicon,
+  `Handpic-<version>-macos-x86_64.dmg` for Intel. Open the disk image and
+  drag `Handpic.app` onto `Applications`. Keep it in `/Applications`, or
+  another folder you can write to: an update replaces the whole app, which
+  it cannot do in the disk image or in Downloads.
+- **Windows, the installer**: `Handpic-<version>-windows-x64-setup.exe`.
+  It installs for your user only, into `%LOCALAPPDATA%\Programs\Handpic`,
+  without an administrator prompt.
+- **Windows, the portable ZIP**: `Handpic-<version>-windows-x64.zip`.
+  Unpack it into a folder you can write to and run `handpic.exe`, keeping
+  the `licenses` folder beside it.
+- **Linux, the `.tar.gz`**: download `Handpic-<version>-linux-x64.tar.gz`,
+  `install.sh` and `SHA256SUMS` of the same release into one folder and run
+  there:
+
+  ```sh
+  sh install.sh Handpic-<version>-linux-x64.tar.gz \
+    "$(awk '$2 == "Handpic-<version>-linux-x64.tar.gz" { print $1 }' SHA256SUMS)"
+  ```
+
+  `install.sh` checks the archive against that digest before it changes
+  anything, then installs `~/.local/bin/handpic`, the desktop entry and the
+  icon under `~/.local/share` for your user. It needs Python 3, not root.
+- **Linux, the `.deb`**: `handpic_<version>_amd64.deb`, installed with
+  `sudo apt install ./handpic_<version>_amd64.deb`. It does not update
+  itself (see [Updating](#updating)).
+
+Handpic is not signed by Apple or Microsoft (no notarization, no
+Authenticode), so the first launch needs one extra step:
+
+- **macOS**: Gatekeeper blocks the first launch. On macOS 15 and later,
+  after that blocked attempt, open System Settings → Privacy & Security →
+  Open Anyway. On macOS 14 and earlier, right-click `Handpic.app` → Open. On
+  any version you can instead run
+  `xattr -d com.apple.quarantine /Applications/Handpic.app`.
+- **Windows**: SmartScreen warns about the setup, or about `handpic.exe`
+  unpacked from a downloaded ZIP. Choose More info → Run anyway.
+- **Linux**: nothing extra.
+
+**Release candidates**: a version such as `2.0.0-rc.1` is a GitHub
+prerelease, published for testing and never marked as the latest release.
+A copy installed from a final release is never offered one; install a
+release candidate only to test it (see "Prereleases" under
+[Updating](#updating)).
+
+### From the earlier app
+
+The earlier app (up to 1.10.0, when Handpic was still called Riffle) does
+not update to this one. Install Handpic as above. The two are separate
+installs, and the earlier one stays until you remove it the way you
+installed it; on Windows the installer's Handpic sits beside it.
 
 What a new install picks up from an earlier one:
 
@@ -1080,8 +1131,8 @@ What a new install picks up from an earlier one:
 ## Updating
 
 A packaged copy of Handpic updates itself from the project's releases on
-GitHub (none is published yet, see above). A copy built from source is not
-updated: it only says when a newer version exists.
+GitHub. A copy built from source is not updated: it only says when a newer
+version exists.
 
 - **When it checks**: at launch, at most once an hour (the time of the last
   check is kept with the settings), and whenever you press

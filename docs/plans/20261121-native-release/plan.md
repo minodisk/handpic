@@ -65,7 +65,9 @@ exact name. A release carries these and no `latest.json`:
 
 ### What remains before PR #928 can be merged
 
-Kept current by Step 4 and Step 5; the list as of Step 4 (2026-11-21):
+Kept current by Step 4 and Step 5; the list as of Step 5 (2026-11-22). The
+`release` skill's first-native-release checklist carries it on once this
+plan is archived:
 
 1. Done: the Windows `handpic.exe` built as a GUI-subsystem binary (PR
    #1194, on `main`). The rc dry run saw no console window on a relaunch.
@@ -82,8 +84,10 @@ Kept current by Step 4 and Step 5; the list as of Step 4 (2026-11-21):
    unverified needs the user's explicit decision. Still open after Step 4,
    with the Windows rows it left **Unverified** (a standard account, beside
    Riffle, a real network cut).
-5. Step 5 merged: the install docs, the reinstall notice for the first
-   release's notes, and the `/release` skill no longer suspended.
+5. Done: Step 5, the install docs, the reinstall notice for the first
+   release's notes (`.claude/skills/release/references/reinstall-notice.md`,
+   prepended to the draft by `/release` while the build runs), and the
+   `/release` skill no longer suspended, with the checklist in its place.
 6. Done: PR #928 itself green after release-please has added `crates/app`'s
    version files to it (Step 1; CI run 44895983568). The rc tags left it as
    it was (Step 4).
@@ -362,7 +366,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
     - A change to `.github/**` in this PR, if a row forces one, needs the
       user's approval at merge.
 
-- [ ] Step 5: Open the release gate: the install docs, the reinstall notice and the `/release` skill
+- [x] Step 5: Open the release gate: the install docs, the reinstall notice and the `/release` skill
   - Done when:
     - `README.md` / `README.ja.md` "Install" and `docs/humans/usage.md` /
       `usage.ja.md` "Installing" and "Updating" describe the packaged
