@@ -88,7 +88,7 @@ driver power settings are out of scope.
     - Every image given up (the replaced on-screen image, ring entries dropped for scale) goes through `retire`, so `cx.drop_image` releases its texture.
     - Measure during implementation: the RAF `decode` stage at the reduced scale (libjpeg-turbo has SIMD IDCTs only for some scales), and `--auto 60` on the ARW and RAF compare folders before and after, to see that no stage regressed.
     - Check the scaled image by eye for quality at 3/8, 4/8 and 6/8. GPUI samples the texture bilinearly and the remaining minification is under 2x.
-- [ ] Step 3: Measure keypress to the screen with the A/B ruler and record the result
+- [x] Step 3: Measure keypress to the screen with the A/B ruler and record the result
   - Done when:
     - A same-session A/B of two GPUI release builds, A = `main` before Step 2 and B = `main` after it, is run with the procedure of `docs/plans/_archived/20261120-tauri-gpui-latency-ab/results.md` (manual verification; it needs the interactive desktop and an idle machine):
       1. Build both `crates/app` release binaries. Build the ruler with `cargo build --release` in `tools/latprobe` on the local-only branch `measure/tauri-latency-ab` (`1e97309e`).

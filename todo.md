@@ -1077,11 +1077,28 @@ In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW co
 
 ### App: the in-app `keypressToPixels` stops about 48 ms before the DWM present on 4416x2944 RAF previews
 
-The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeds the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). So on the large image the in-app `present` stamp precedes the frame reaching the DWM by about 34 ms more than on ARW. A hypothesis, not a finding: the large texture's upload or sampling on the GPU. Nothing in the data separates it from other causes. The plan did not follow it up, and the measurement tooling stays on the local-only branch `measure/tauri-latency-ab`. Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it). Files: `crates/app/src/main.rs` (`present`).
+The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeded the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it).
+
+Cause, found by a follow-up investigation: GPUI (`gpui-pre-windows` 0.3.12, `directx_atlas.rs`) uploads a new image's whole texture with `UpdateSubresource` on its first paint, 52 MB for the RAF preview, and `Present(0, 0)` does not wait for it. With the GPU and its PCIe link idle between page turns, the upload took about 33 ms and the frame missed two DWM compositions. `fit-preview-downscale` made the fit view decode the preview at the smallest `n/8` DCT scale that covers the canvas (`crates/app/src/fitscale.rs`), so a RAF page uploads about 1656x1104. Its Step 3 same-session A/B (`docs/plans/20261121-fit-preview-downscale/results.md`): RAF `screen` minus `keypressToPixels` p50 47.02 ms before, 15.09 ms after, against 14.36 / 14.92 ms on ARW; RAF `screen` p50 112.60 to 64.94 ms. Files: `crates/app/src/main.rs` (`load`, `present`), `crates/app/src/fitscale.rs`.
 
 #### TODO
 
-- [ ] Find where the extra ~34 ms on RAF goes (for example a GPU-side timestamp or a PresentMon trace of the GPUI process on the RAF folder, compared with the ARW folder), and decide whether the in-app `present` stamp should move to match the DWM present. Until then, treat the in-app RAF `keypressToPixels` (p50 67.51 ms) as under-reporting what the screen shows (`screen` p50 115.46 ms).
+- [x] Find where the extra ~34 ms on RAF goes, and decide whether the in-app `present` stamp should move to match the DWM present. Done: the GPU upload of the full-size texture; with the fit view decoded at about the drawn size the RAF gap is at the ARW level (15.09 against 14.92 ms in the same session), so the stamp stays where it is. The in-app RAF `keypressToPixels` (p50 49.85 ms) now trails `screen` (64.94 ms) by the same ~15 ms as ARW.
+
+### App: by-eye checks of the scaled fit-view decode (fit-preview-downscale)
+
+#### Background
+
+`fit-preview-downscale` made the fit view decode the preview JPEG at the smallest `n/8` DCT scale that covers the preview canvas in device pixels (Step 2, `crates/app/src/fitscale.rs`), re-reading the current file after a debounce when the canvas grows (`refit`, `refitted`, `fit_settled` in `crates/app/src/main.rs`). Steps 2 and 3 were ticked on their automated criteria (unit tests, `--auto` runs, the Step 3 latency A/B, which checked the `page` lines' `decoded=` sizes). Nobody has looked at the window: the image quality at each scale, the sharpening after a resize, and the overlays and the 1:1 view over the smaller image are unverified. Plan: `docs/plans/20261121-fit-preview-downscale/plan.md`. Files: `crates/app/src/main.rs`, `crates/app/src/fitscale.rs`, `crates/app/src/peaking.rs`, `crates/app/src/zoom.rs`.
+
+#### TODO
+
+- [ ] On Windows, a release build on `D:\Photos\tests\20261108-gpui-compare\RAF` with prefetch on, run from a terminal so the `page` lines show. Page through it, resizing the window so the `page` line's `decoded=` shows 3/8, 4/8 and 6/8 of `px=`. Expect no visible softness or aliasing against a `main` build from before `d3794643` at the same window size.
+- [ ] Same folder: press `z`. Expect the placeholder at the same place and size as before `d3794643` (softer), then the crop; page while zoomed and expect each page's placeholder then crop.
+- [ ] Same folder: `e` in the fit view and at 1:1 shows the peaking layer; after a resize settles, the fit layer recomputes on the sharpened image.
+- [ ] Same folder: hold `g`. Expect the photo in grayscale in the fit view and at 1:1, the overlays in color.
+- [ ] Same folder: `f`. Expect the face boxes, the landmark dots and the AF mark where a build from before `d3794643` puts them.
+- [ ] Same folder: enlarge the window, hide the side panes (`toggleSides`) and drag the strip down. Expect the image soft for at most about 150 ms plus a decode, then sharp, with no flash, no meta pane flicker and the `f` marks kept.
 
 ### App: private bytes grow while `→` is held in the 1:1 view
 
