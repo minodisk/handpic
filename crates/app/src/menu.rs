@@ -5,8 +5,8 @@
 //! the rating, the labels and the orientation), the rating rows run from 5
 //! stars down to the unrated, and the labels and orientations lead with
 //! their own shapes. The `Face focus` `?` help is left out (the user's
-//! decision), the `Recommended` sort and the `Genre` section are port Step
-//! 9's. The EXIF
+//! decision), and so are the `Recommended` sort and the `Genre` section,
+//! whose ranking and genre labels were removed. The EXIF
 //! sections come last, one per group the folder has (`exif::groups_of`), an
 //! item keyed by its group and label rather than its row, as the groups can
 //! be rebuilt between the frame that drew the menu and the click.

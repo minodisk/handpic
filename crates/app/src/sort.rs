@@ -16,9 +16,8 @@ impl SortKey {
         match value {
             Some("capture") => Self::Capture,
             Some("rating") => Self::Rating,
-            // The ranking's order is port Step 9's; until then a stored
-            // `recommended` is capture order, the Tauri `sortInForce` while
-            // the ranking is off.
+            // A legacy value from the Tauri app, whose ranking was removed:
+            // capture order, its `sortInForce` while the ranking was off.
             Some("recommended") => Self::Capture,
             _ => Self::Name,
         }
@@ -92,7 +91,7 @@ pub fn order_files(
     rows.into_iter().map(|(path, _)| path.clone()).collect()
 }
 
-/// `sort.test.ts`, less its two `recommended` cases (port Step 9's).
+/// `sort.test.ts`, less its two `recommended` cases.
 #[cfg(test)]
 mod tests {
     use super::{SortFacts, SortKey, order_files};

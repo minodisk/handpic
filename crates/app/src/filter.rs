@@ -9,8 +9,8 @@
 //! `Output` item. An EXIF group's checked labels match the file's label in
 //! that group (`exif::exif_key`), a file without one failing it; the EXIF
 //! checks are per session and dropped when their label leaves the folder.
-//!
-//! The `Genre` section is port Step 9's (the ranking) and is not here yet.
+//! The Tauri app's `Genre` section is not ported: the genre labels were
+//! removed.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
@@ -475,7 +475,7 @@ impl KeptAnchor {
 
 #[cfg(test)]
 mod tests {
-    //! `filter.test.ts`, less the `Genre` section's six cases (port Step 9).
+    //! `filter.test.ts`, less the `Genre` section's six cases.
     //! `toStored` is `FilterState::stored`, written by `Stored::setting`,
     //! which the round trip below reads back. A `Face focus` state the Tauri
     //! cases leave `undefined` is `mark::af_eye_state(None)`, `Neutral`.

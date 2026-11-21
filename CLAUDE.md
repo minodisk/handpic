@@ -303,7 +303,7 @@ and `burst_frame_step`, the `burstPrevious` / `burstNext` and
 `reject_rest`, the `rejectRest` changes: the current file's other burst
 members over `all` not rejected yet, stars and label kept),
 `src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
-`filter.ts` less the genres: flags, stars, labels,
+`filter.ts`: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
 `src/exif.rs` builds (a port of `exif.ts`); `Stored`, the
 `filter_setting` rule over the stored `filter`, and back (`stored`,
@@ -406,8 +406,7 @@ over a snapshot of the view: the strip's selection, its targets as
 (`burstOf`, each frame's sharpness from the `Facts`), the coverage table
 (`Coverage`: every keymap action, right-click item, menu item, folder
 operation and settings page mapped to its tool, to a tool refused with
-`not_in_app` until the feature lands (compare, the `recommended` sort,
-the Genre filter, `rename_file`, `refit_ranking`, the AI switch) or to the
+`not_in_app` until the feature lands (compare, `rename_file`) or to the
 reason it has none, tested against the keymap's actions),
 `set_judgment`'s changes, one undo
 entry through the judgment keys' view, row and writer path, the `Key` a

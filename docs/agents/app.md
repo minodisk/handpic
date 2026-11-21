@@ -1170,9 +1170,8 @@ the Tauri `INSTRUCTIONS`, which is what the Tauri app served;
 `tree_folder`, `reveal`, `get_status`, `wait_for_idle`, `get_settings`,
 `set_settings`, `trash_photos`, `rewrite_sidecars`, `delete_sidecars`,
 `sequence_timestamps`, `import_folder`, `rename_by_capture_date`,
-`rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`,
-`refit_ranking`) and the app's
-instructions, through a `ToolRouter` field the `#[tool_handler(router =
+`rename_folder`, `cancel_operation`, `clear_cache`, `rename_file`) and the
+app's instructions, through a `ToolRouter` field the `#[tool_handler(router =
 self.tools)]` handler reads. A tool only the app answers is a second
 `#[tool_router(router = app_router)]` block, so the seven-tool server
 never lists it.
@@ -1180,7 +1179,7 @@ never lists it.
 `screenshot` is listed only in a build with `crates/app`'s `screenshot`
 cargo feature, where `mcp.rs` calls `with_screenshot` after `with_all_tools`
 (which replaces the router and would drop it). Without the feature nothing of
-it is compiled in and `tools/list` is the app's 35 tools. `mcp_request` takes
+it is compiled in and `tools/list` is the app's 34 tools. `mcp_request` takes
 `screenshot` before `companion::answer`, so `READS`, `Busy` and the coverage
 table never see it and it is answered with the settings, a dialog or a rename
 open; the reply goes through the engine's `screenshot_reply`. Run it with
@@ -1209,7 +1208,7 @@ where `filter::anchor_after_filter` puts it. A `set_filter` section given
 replaces its checks, one left out keeps them, and `reset` is the menu's
 `Reset` click first; the `Output` items need the folder's export answer and
 an EXIF label one of the folder's groups (`get_view`'s `filter_offers`).
-`set_sort` refuses `recommended` (`not_in_app`, below) and a view-only
+`set_sort` refuses a view-only
 folder, whose Sort menu is disabled; `get_view.sort` there reports `capture`,
 the order in force (`viewonly::sort_for`). `set_panes` goes through
 `change_panels` (the tree's keyboard handed back from a hidden left pane, a
@@ -1458,11 +1457,8 @@ tool the table names and fails on `unknown request`.
 The features the Tauri app had and the app does not have yet keep
 their tools (D6), refused with one message, `not_in_app`'s "`<feature>` is
 not implemented in Handpic yet", which a test checks for each:
-compare (`set_view`'s `compare`), the recommended sort (`set_sort`'s
-`recommended`), the Genre filter (`set_filter`'s `genres`), file rename
-(`rename_file`), the personal ranking (`refit_ranking`) and the AI switch
-(`set_settings`' `ai_enabled`). `rename_file` and `refit_ranking` are refused
-before the busy guard (`UNPORTED_TOOLS`). When a feature lands, its tool or
+compare (`set_view`'s `compare`) and file rename (`rename_file`).
+`rename_file` is refused before the busy guard (`UNPORTED_TOOLS`). When a feature lands, its tool or
 value is implemented in place and its table entry becomes a `Tool`.
 
 Excluded, each with its reason (the table's `Excluded` entries):

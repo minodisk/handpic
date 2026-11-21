@@ -35,7 +35,7 @@ their offline Python scripts stay untouched, as do the live plan folders,
 
 ## Steps
 
-- [ ] Step 1: Remove the AI tools and values from the MCP surface and the app
+- [x] Step 1: Remove the AI tools and values from the MCP surface and the app
   - Done when:
     - The MCP server no longer lists `refit_ranking`, and `set_sort`,
       `set_filter` and `set_settings` no longer declare `recommended`, `genres`
@@ -351,3 +351,8 @@ The user approved these with the plan (2026-11-21):
   in full.
 
 ## Progress
+
+- Step 1 (2026-11-21): removed `refit_ranking` (34 tools), `SortBy::Recommended`,
+  `FilterArgs.genres` and `SettingsArgs.ai_enabled` from the engine's MCP
+  server, and the four `not_in_app` features and their Coverage rows from the
+  app's companion; the docs name only compare and file rename as refused.
