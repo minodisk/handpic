@@ -4991,6 +4991,35 @@ its `wait` is the time `go` took before the hit. `px=` is the preview JPEG's
 stored size and `decoded=` the size it was decoded at for the fit view, both
 unrotated.
 
+### A keyed page's frame does not wait for the vsync tick on Windows (Measured)
+
+gpui-pre-windows 0.3.12 draws only from `WM_PAINT`, which its vsync thread
+raises once a refresh (`DwmFlush`, then `RedrawWindow(RDW_INVALIDATE)`), so
+a `cx.notify()` waited for the next tick: that wait was `frameWait`, 6-10 ms
+at p50. Once a keyed page is pended (`pend_page` returns true), the view runs
+`presentnow::PresentNow::paint`, `RedrawWindow(RDW_INVALIDATE |
+RDW_UPDATENOW)` on its HWND, which dispatches `WM_PAINT` synchronously:
+on the read path in `send`'s task after its `this.update(..)` has returned,
+on a prefetch hit in a task `show_held` spawns. Release, `--auto 19` on the
+20-file compare folders, the same build with `paint` a no-op as A, A B A B
+in one session: `frameWait` p50 7.57-11.74 ms (A) against 1.54-2.10 ms (B),
+prefetch on and off, ARW and RAF alike, and `keypressToPixels` p50 down by
+about the same (ARW prefetch 9.0-11.1 to 3.0-3.1 ms, RAF read 46.1-50.4 to
+40.0-41.3 ms). The 1.4-2 ms left is building the frame before the preview
+canvas's paint closure stamps `paint_started`: A's smallest `frameWait`
+was 1.6-4.4 ms too. One `page` line per press, no panic, and holding an
+arrow key (135 presses at about 30 Hz) ended on the current file's image.
+
+- Rule: never call `paint` inside an update, `cx.defer` or `window.defer`.
+  The `App` is still borrowed there, and GPUI's frame callback touches it
+  (gpui-pre 0.3.12 `window.rs`, its `draw_in_progress()` guard's comment).
+  Call it from a foreground task's body with no update on the stack.
+- Rule: a `page` run on Windows whose `frameWait` p50 is back at 6-10 ms means
+  the immediate paint did not happen (a GPUI upgrade, an inactive or
+  throttled window), not noise.
+- Only keyed pages ask: strip clicks, folder opens, stale frames of a held
+  key and the 1:1 crop still wait for the tick.
+
 ### `keypressToPixels` does not include the texture upload (Measured)
 
 GPUI uploads a new image's whole texture on its first paint

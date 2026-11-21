@@ -3196,9 +3196,11 @@ dependencies = [
  "log",
  "mozjpeg",
  "natord",
+ "raw-window-handle",
  "serde_json",
  "tempfile",
  "tokio",
+ "windows 0.62.2",
  "winresource",
 ]
 

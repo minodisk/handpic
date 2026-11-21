@@ -369,7 +369,12 @@ file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
 an open or a re-listing and narrowed by `retain` on a `refilter`, the
 entries the canvas outgrew given up by `release`; off under
-`--no-prefetch`), `src/fitscale.rs` the `n/8` DCT scale the fit view's
+`--no-prefetch`), `src/presentnow.rs` the keyed page's paint processed at
+once on Windows (`PresentNow`, the window's HWND, whose `paint` is a
+`RedrawWindow(RDW_INVALIDATE | RDW_UPDATENOW)` run from a foreground task's
+body after the update that pended the page, so the frame does not wait for
+GPUI's vsync tick; a no-op elsewhere and without a Win32 handle),
+`src/fitscale.rs` the `n/8` DCT scale the fit view's
 preview is decoded at (`scale_for`, the smallest whose decoded size is not
 below the source's fit in the preview canvas, 8 for an unknown canvas;
 `serves`, whether a decoded image still covers a canvas, which a settled

@@ -813,7 +813,9 @@ decoded=WxH orientation=… source=… file=…` line on standard output (a 1:1 
 time from the key to the read's request, `read`, `decode` and `orient` the
 preview's read (the pause of the scan's reads included), decode and turn
 upright (all 0 for `source=prefetch`, a preview read ahead), `hop` the hand
-over to the window, `frameWait` the wait for the next frame, `paint` the
+over to the window, `frameWait` the wait for the next frame (on Windows a
+key's page asks for its frame at once, so this is about 2 ms of building the
+frame rather than a wait for the display's next refresh), `paint` the
 drawing and `present` the frame's presentation; `keypressToPixels` runs from
 the keypress to the presented frame. `px` is the embedded preview's size and
 `decoded` the size it was decoded at: Handpic decodes the preview at the
