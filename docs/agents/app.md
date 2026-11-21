@@ -4629,9 +4629,17 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   deleted files' judgments leave both histories (`Undo::without_paths`). A
   move whose `Summary::run_id` is set pushes its run on the undo history
   (see the next entry).
-- Not verified headless: the dialog, its keys and clicks, the Recycle Bin
-  and the cancel of a running pass 1; the hand checks are pending in
-  `../plans/20261113-gpui-tree-trash/learnings.md`.
+- Seen on Windows 11 on 2026-11-22: `Move to Trash` confirmed during a fresh
+  264-file scan logged `Move to Trash held for the scan's end`, ended the
+  scan early (`canceled=true` at 12/264), moved the file, re-listed the
+  folder and resumed the scan; the waiting note was too short-lived to
+  capture. With the dialog open `q`, `4` and `ctrl+,` did nothing; Tab moved
+  the outline between the run button and `Cancel`; Escape and `Cancel` moved
+  nothing; the RAW and both sidecars went to the Recycle Bin. Not observed:
+  opening another folder before the held run's scan ends, and an earlier
+  judgment no longer being undoable after a delete (pending in `todo.md`).
+  Primary source:
+  `../plans/_archived/20261122-windows-device-checks-3/learnings.md`.
 
 ### A trash run is undone through the same gate, and outlives a folder switch (Inferred)
 
@@ -4672,8 +4680,17 @@ leaves it there.
   judgment batches (`Undo::drop_judgments`); the runs stay, so a run made in
   one folder is undone from another, its files going back to theirs. A
   delete records no run and is not undoable.
-- Not verified headless: the restore from the Recycle Bin and the redo; the
-  hand checks are pending in `../plans/20261113-gpui-tree-trash/learnings.md`.
+- Seen on Windows 11 on 2026-11-22: `ctrl+z` restored the RAW, `.xmp` and
+  `.dop` from the Recycle Bin (rating kept, current file and selection
+  unmoved) and `ctrl+shift+z` moved them again; a second `ctrl+z` after a
+  rating undid the judgment; a run made in `undo\a` was undone from `undo\b`,
+  the file going back to `undo\a`; two quick `ctrl+z` during a re-listing's
+  scan showed `Undo Move to Trash: waiting for the scan to finish`, did not
+  cancel the scan and ran once at its end (one `trash: undo of run N` line).
+  With the bin emptied by hand the note read `Restored 0 files from the
+  Trash, 3 failed` (the count includes the sidecars, unlike the move's RAW
+  count; the open decision is in `todo.md`). Primary source:
+  `../plans/_archived/20261122-windows-device-checks-3/learnings.md`.
 
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 

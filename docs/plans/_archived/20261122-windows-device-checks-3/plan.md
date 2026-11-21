@@ -120,3 +120,4 @@ Known cases (check for others while editing):
 ## Progress
 
 - Step 1 done: the run's results applied to `todo.md` (one item removed, five reworded, three added) and `docs/agents/app.md` (six folder tree, trash dialog and inline rename rules), and moved from `results.md` into `learnings.md`.
+- 2026-11-22 Wrap-up: learnings-extractor proposed two `docs/agents/app.md` bullets (the trash gate and the trash undo sections, replacing their stale "Not verified headless" lines), applied; todo-curator found nothing to add or delete; the stale `native-tree-no-chevron` plan path in `todo.md` was pointed at `_archived`; no `.claude/settings.local.json` to promote. Plan archived.
