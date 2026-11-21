@@ -488,3 +488,5 @@ as recommended (A).
     `--latest=false`.
 
 ## Progress
+
+- (2026-11-21) Step 1 complete
