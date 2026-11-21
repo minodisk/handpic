@@ -357,8 +357,13 @@ To be checked in the sub-milestone that needs each one.
   works on Windows for the portable copy: `self_update` (`self_replace`)
   installed rc.2 over the running rc.1, and `Restart Now` relaunched it as
   rc.2 with the `self_replace` leftovers gone.
-- **Unverified.** The executable's name in a release (`riffle-native` today
-  in `Info.plist`, the `.desktop` file and `datadir.rs`'s tests).
+- **Measured** (2026-11-21, the rc dry run, the Windows PC). The executable's
+  name in a release is `handpic`: `crates/app/Cargo.toml` names the bin
+  `handpic`, no `riffle-native` is left under `crates/app/packaging` or in
+  `datadir.rs`, and the portable ZIP's folder held only `handpic.exe` and
+  `licenses`, so the Windows ZIP and setup ship `handpic.exe`.
+  **Unverified**: the `.app`, the tarball and the deb (the run had no macOS
+  or Linux machine).
 - **Measured** (2026-11-17, the gpui-packaging plan). The version source is
   `[package].version` of `crates/native/Cargo.toml`, which
   `tools/package/version.sh` prints and every package and file name carries
