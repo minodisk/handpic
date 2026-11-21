@@ -1,0 +1,29 @@
+ARW-warm-A before=12 samples=[38 ; 19 ; 16 ; 13 ; 16 ; 9 ; 17 ; 15 ; 3 ; 9 ; 7 ; 3 ; 4 ; 0 ; 0 ; 1 ; 0 ; 1 ] bad=[load 19; load 16; load 16; load 17; probe exit 2] 
+ARW-warm-B before=1 samples=[8 ; 1 ; 6 ; 9 ; 4 ; 7 ; 5 ; 3 ; 4 ; 2 ; 0 ; 3 ; 9 ; 6 ; 4 ; 1 ; 6 ; 7 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=45.50ms p95=53.77ms
+ARW-A1-try1 before=0 samples=[9 ; 0 ; 0 ; 2 ; 4 ; 0 ; 3 ; 3 ; 3 ; 0 ; 0 ; 1 ; 2 ; 3 ; 2 ; 3 ; 1 ; 3 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=33.52ms p95=41.52ms
+ARW-B1-try1 before=2 samples=[26 ; 1 ; 12 ; 4 ; 5 ; 4 ; 3 ; 3 ; 3 ; 8 ; 5 ; 3 ; 1 ; 9 ; 4 ; 18 ; 2 ; 10 ] bad=[load 18] summary n=60 unchanged=0 accumulated>1=0 screen p50=44.52ms p95=54.79ms
+ARW-B1-try2 before=6 samples=[19 ; 10 ; 4 ; 5 ; 0 ; 7 ; 3 ; 6 ; 5 ; 9 ; 9 ; 5 ; 3 ; 13 ; 3 ; 6 ; 11 ; 15 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=46.43ms p95=69.01ms
+ARW-A2-try1 before=15 samples=[13 ; 6 ; 9 ; 5 ; 4 ; 4 ; 6 ; 7 ; 12 ; 3 ; 0 ; 3 ; 1 ; 1 ; 0 ; 3 ; 11 ; 1 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=33.03ms p95=39.98ms
+ARW-B2-try1 before=4 samples=[15 ; 1 ; 5 ; 0 ; 0 ; 2 ; 0 ; 11 ; 12 ; 3 ; 2 ; 1 ; 2 ; 5 ; 0 ; 2 ; 1 ; 3 ] bad=[] summary n=60 unchanged=0 accumulated>1=1 screen p50=45.14ms p95=69.34ms
+ARW-A3-try1 before=3 samples=[8 ; 2 ; 2 ; 1 ; 1 ; 0 ; 0 ; 2 ; 4 ; 2 ; 0 ; 0 ; 4 ; 2 ; 2 ; 1 ; 4 ; 3 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=34.11ms p95=41.54ms
+ARW-B3-try1 before=0 samples=[16 ; 1 ; 6 ; 2 ; 2 ; 6 ; 7 ; 7 ; 4 ; 3 ; 2 ; 2 ; 6 ; 6 ; 0 ; 9 ; 17 ; 8 ] bad=[load 17] summary n=60 unchanged=0 accumulated>1=0 screen p50=45.40ms p95=54.40ms
+ARW-B3-try2 before=2 samples=[27 ; 2 ; 8 ; 11 ; 7 ; 4 ; 7 ; 14 ; 1 ; 15 ; 5 ; 4 ; 6 ; 9 ; 7 ; 4 ; 3 ; 27 ] bad=[load 27] summary n=60 unchanged=0 accumulated>1=0 screen p50=45.30ms p95=54.28ms
+ARW-B3-try3 before=2 samples=[27 ; 4 ; 12 ; 12 ; 12 ; 9 ] bad=[probe exit 2] 
+ARW-B3-try4 before=2 samples=[4 ; 1 ; 2 ; 0 ; 3 ; 0 ; 2 ; 6 ; 6 ; 0 ; 1 ; 3 ; 6 ; 5 ; 2 ; 2 ; 3 ; 1 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=45.15ms p95=56.30ms
+RAF-warm-A before=2 samples=[10 ; 1 ; 1 ; 0 ; 6 ; 1 ; 1 ; 4 ; 2 ; 3 ; 2 ; 4 ; 4 ; 3 ; 0 ; 0 ; 4 ; 8 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=60.20ms p95=71.65ms
+RAF-warm-B before=2 samples=[27 ; 2 ; 6 ; 3 ; 9 ; 2 ; 3 ; 5 ; 0 ; 9 ; 3 ; 3 ; 3 ; 2 ; 5 ; 12 ; 10 ; 6 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=129.21ms p95=145.88ms
+RAF-A1-try1 before=2 samples=[12 ; 6 ; 1 ; 6 ; 5 ; 4 ; 4 ; 5 ; 2 ; 4 ; 6 ; 3 ; 39 ; 2 ; 4 ; 5 ; 6 ; 10 ] bad=[load 39] summary n=60 unchanged=0 accumulated>1=1 screen p50=63.10ms p95=74.90ms
+RAF-A1-try2 before=10 samples=[15 ; 6 ; 17 ; 2 ; 6 ; 10 ; 7 ; 4 ; 15 ; 14 ; 10 ; 12 ; 0 ; 0 ; 3 ; 4 ; 6 ; 5 ] bad=[load 17] summary n=60 unchanged=0 accumulated>1=1 screen p50=62.01ms p95=75.41ms
+RAF-A1-try3 before=6 samples=[0 ; 0 ; 1 ; 2 ; 1 ; 0 ; 0 ; 0 ; 1 ; 5 ; 0 ; 3 ; 0 ; 0 ; 4 ; 0 ; 4 ; 0 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=59.36ms p95=73.04ms
+RAF-B1-try1 before=2 samples=[19 ; 1 ; 7 ; 0 ; 8 ; 3 ; 6 ; 1 ; 7 ; 6 ; 7 ; 0 ; 3 ; 5 ; 5 ; 6 ; 9 ; 8 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=129.65ms p95=147.86ms
+RAF-A2-try1 before=1 samples=[16 ; 2 ; 8 ; 1 ; 3 ; 3 ; 2 ; 0 ; 4 ; 1 ; 7 ; 6 ; 6 ; 11 ; 8 ; 2 ; 6 ; 10 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=60.14ms p95=72.83ms
+RAF-B2-try1 before=4 samples=[28 ; 3 ; 15 ; 17 ; 9 ; 9 ; 17 ; 7 ; 15 ; 17 ; 13 ; 5 ; 8 ; 14 ; 4 ; 8 ; 9 ; 9 ] bad=[load 17; load 17; load 17] summary n=60 unchanged=0 accumulated>1=0 screen p50=128.64ms p95=146.07ms
+RAF-B2-try2 before=3 samples=[19 ; 12 ; 17 ; 8 ; 11 ; 11 ; 26 ; 9 ; 20 ; 1 ; 2 ; 3 ; 0 ; 1 ; 1 ; 16 ; 1 ; 3 ] bad=[load 17; load 26; load 20; load 16] summary n=60 unchanged=0 accumulated>1=0 screen p50=124.73ms p95=143.61ms
+RAF-B2-try3 before=3 samples=[23 ; 4 ; 3 ; 0 ; 0 ; 2 ; 5 ; 1 ; 3 ; 0 ; 3 ; 9 ; 1 ; 6 ; 0 ; 3 ; 5 ; 6 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=125.05ms p95=146.18ms
+RAF-A3-try1 before=0 samples=[6 ; 0 ; 1 ; 3 ; 4 ; 2 ; 1 ; 3 ; 0 ; 2 ; 2 ; 0 ; 3 ; 3 ; 6 ; 4 ; 0 ; 1 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=60.19ms p95=73.94ms
+RAF-B3-try1 before=1 samples=[28 ; 7 ; 11 ; 1 ; 11 ; 5 ; 6 ; 2 ; 8 ; 5 ; 21 ; 6 ; 3 ; 3 ; 4 ; 2 ; 6 ; 5 ] bad=[load 21] summary n=60 unchanged=0 accumulated>1=0 screen p50=124.84ms p95=147.92ms
+RAF-B3-try2 before=0 samples=[28 ; 2 ; 7 ; 10 ; 9 ; 20 ; 12 ; 8 ; 7 ; 13 ; 0 ; 5 ; 6 ; 9 ; 4 ; 9 ; 4 ; 20 ] bad=[load 20; load 20] summary n=60 unchanged=0 accumulated>1=0 screen p50=123.24ms p95=144.42ms
+RAF-B3-try3 before=6 samples=[20 ; 3 ; 7 ; 9 ; 16 ; 16 ; 15 ; 3 ; 1 ; 3 ; 8 ; 4 ; 1 ; 0 ; 0 ; 0 ; 0 ; 7 ] bad=[load 16; load 16] summary n=60 unchanged=0 accumulated>1=1 screen p50=128.19ms p95=145.04ms
+RAF-B3-try4 before=2 samples=[27 ; 4 ; 6 ] bad=[probe exit 2] 
+RAF-B3-try5 before=9 samples=[36 ; 3 ; 5 ; 6 ; 14 ; 3 ; 3 ; 1 ; 8 ; 3 ; 4 ; 2 ; 8 ; 2 ; 6 ; 2 ; 8 ; 8 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=123.62ms p95=147.53ms
+RAF-A3-try2 before=10 samples=[30 ; 0 ; 3 ; 3 ; 2 ; 8 ; 2 ; 0 ; 4 ; 1 ; 7 ; 3 ; 0 ; 12 ; 0 ; 3 ; 5 ; 13 ] bad=[] summary n=60 unchanged=0 accumulated>1=0 screen p50=60.64ms p95=72.04ms

@@ -919,16 +919,6 @@ In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW co
 
 - [ ] When a later strip change (marks, badges) lands, re-run the same-session A/B and check that `present` p95 has not grown past 1 ms; if it has, look at `paint_strip` first.
 
-### App: the in-app `keypressToPixels` stops about 48 ms before the DWM present on 4416x2944 RAF previews
-
-The `tauri-gpui-latency-ab` same-session A/B measured both apps against one external ruler, keypress (`SendInput`) to the DWM present of the frame that shows the new image. On the GPUI app the DWM-present `screen` number exceeded the in-app `keypressToPixels` (which includes `frameWait` and `present`) by 13.55 ms on the 1616x1080 ARW previews but by 47.95 ms on the 4416x2944 RAF previews (median of 3 runs, p50). Plan: `docs/plans/_archived/20261120-tauri-gpui-latency-ab/plan.md` (see `results.md` beside it).
-
-Cause, found by a follow-up investigation: GPUI (`gpui-pre-windows` 0.3.12, `directx_atlas.rs`) uploads a new image's whole texture with `UpdateSubresource` on its first paint, 52 MB for the RAF preview, and `Present(0, 0)` does not wait for it. With the GPU and its PCIe link idle between page turns, the upload took about 33 ms and the frame missed two DWM compositions. `fit-preview-downscale` made the fit view decode the preview at the smallest `n/8` DCT scale that covers the canvas (`crates/app/src/fitscale.rs`), so a RAF page uploads about 1656x1104. Its Step 3 same-session A/B (`docs/plans/_archived/20261121-fit-preview-downscale/results.md`): RAF `screen` minus `keypressToPixels` p50 47.02 ms before, 15.09 ms after, against 14.36 / 14.92 ms on ARW; RAF `screen` p50 112.60 to 64.94 ms. Files: `crates/app/src/main.rs` (`load`, `present`), `crates/app/src/fitscale.rs`.
-
-#### TODO
-
-- [x] Find where the extra ~34 ms on RAF goes, and decide whether the in-app `present` stamp should move to match the DWM present. Done: the GPU upload of the full-size texture; with the fit view decoded at about the drawn size the RAF gap is at the ARW level (15.09 against 14.92 ms in the same session), so the stamp stays where it is. The in-app RAF `keypressToPixels` (p50 49.85 ms) now trails `screen` (64.94 ms) by the same ~15 ms as ARW.
-
 ### App: by-eye checks of the scaled fit-view decode (fit-preview-downscale)
 
 #### Background
