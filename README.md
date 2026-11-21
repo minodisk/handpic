@@ -21,12 +21,33 @@ verified cameras, see [docs/humans/cameras.md](./docs/humans/cameras.md).
 
 ### Install
 
-Packaged builds of the current app are not released yet. Until they are,
-build it from source as [CONTRIBUTING.md](./CONTRIBUTING.md) describes. The
-packages on the [Releases page](https://github.com/minodisk/handpic/releases)
-(up to 1.10.0) are of the earlier app this one replaced, and they do not
-update to it. See [docs/humans/usage.md](./docs/humans/usage.md#installing)
-for what a new install picks up from an earlier one.
+Download the file for your OS from the latest release (2.0.0 or later) on the
+[Releases page](https://github.com/minodisk/handpic/releases):
+
+| OS                   | File                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| macOS, Apple Silicon | `Handpic-<version>-macos-arm64.dmg`                                                     |
+| macOS, Intel         | `Handpic-<version>-macos-x86_64.dmg`                                                    |
+| Windows              | `Handpic-<version>-windows-x64-setup.exe` (or the portable `…-windows-x64.zip`)         |
+| Linux                | `Handpic-<version>-linux-x64.tar.gz` with `install.sh` (or `handpic_<version>_amd64.deb`) |
+
+Handpic is not signed by Apple or Microsoft, so the first launch needs your
+permission once:
+
+- **macOS**: on macOS 15 and later, after the first launch is blocked, open
+  System Settings → Privacy & Security → Open Anyway. On macOS 14 and earlier,
+  right-click `Handpic.app` → Open.
+- **Windows**: in the SmartScreen warning, More info → Run anyway.
+
+After that, Handpic updates itself. How to install each file, and how updates
+work, is in [docs/humans/usage.md](./docs/humans/usage.md#installing). To
+build from source instead, see [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+**If you used the earlier app** (up to 1.10.0, then called Riffle): it does
+not update to this one. Install Handpic as above. Your judgments are in the
+sidecars and your settings are taken over once; see
+[docs/humans/usage.md](./docs/humans/usage.md#from-the-earlier-app) for what
+a new install picks up.
 
 ### First steps
 

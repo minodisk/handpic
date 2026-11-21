@@ -193,7 +193,41 @@
   checks was answered, so none is to be ticked; the text change is left to
   the wrap-up (see the deferred issues below).
 
+## Step 5: Open the release gate
+
+- The `/release` skill's merger runs in the foreground and returns only
+  after the post-merge runs (or its about 30-minute timeout), by which time
+  the draft may be published. So the notice cannot be prepended after the
+  merger returns. The skill instead hands the merger a one-shot command,
+  `.claude/skills/release/scripts/prepend-notice.sh v2.0.0`, run right
+  after the merge: it waits up to about 8 minutes for release-please's
+  draft, refuses a published release, and is idempotent (it checks the
+  notes' first line). `release.yml`'s publish job only flips `--draft=false`
+  and leaves the notes, so a notice in the draft survives the publish.
+- The notice keeps `<version>` placeholders in its table; the script fills
+  them from the tag, so the table follows the tag (the opening paragraph still names 2.0.0).
+- The install docs' macOS first-launch text (Open Anyway on macOS 15 and
+  later, right-click Open earlier, `xattr`) is the Tauri-era README's,
+  carried over; no Mac was at hand to recheck it for the ad hoc signed
+  native bundle.
+- The checklist lives in the skill itself, not as a link to the plan's
+  list, because the plan moves under `_archived/` at the wrap-up.
+
 ## Deferred issues (todo candidates)
+
+- **Pending manual check (Step 5, the install docs).** On a Mac with
+  macOS 15 or later, download the latest release's
+  `Handpic-<version>-macos-arm64.dmg` with a browser, drag `Handpic.app` to
+  `/Applications` and open it. Expected: Gatekeeper blocks it, and System
+  Settings → Privacy & Security → Open Anyway lets it start, as
+  `README.md` / `docs/humans/usage.md` "Installing" (and their Japanese
+  pairs) say. On Linux, run the `install.sh` command of the usage guide
+  against a release's `SHA256SUMS` and expect `~/.local/bin/handpic` to
+  start from the desktop menu. Basis: the install text written in Step 5
+  without a macOS or Linux machine; Step 5's checkbox was ticked on the
+  automated criteria. Files: `README.md`, `README.ja.md`,
+  `docs/humans/usage.md`, `docs/humans/usage.ja.md`. It folds into the
+  existing `todo.md` items on the macOS and Linux packaging checks.
 
 - **Done (2026-11-21, after #1202's merge; see Step 3 above; #928's CI run
   44895983568 passed). Was pending post-merge

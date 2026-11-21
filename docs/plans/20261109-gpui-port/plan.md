@@ -472,18 +472,16 @@ them; their contents are deliberately coarse.
        `verify-release.sh` checks a native release, and `v2.0.0-rc.1` to
        `v2.0.0-rc.2` ran on the real feed on Windows, recorded in
        [`packaging-updater.md`](./packaging-updater.md) ("The rc dry run on
-       the real feed"). What remains before PR #928 can be merged (as of
-       2026-11-21; that plan's list is the current one):
-       - the macOS `.app`, the Linux tarball and the deb rows, and the
-         Windows standard account, beside-Riffle and real network cut rows,
-         all **Unverified**; shipping 2.0.0 with them is the user's
-         decision;
-       - that plan's Step 5: the install docs, the reinstall notice for the
-         first release's notes, and the `/release` skill no longer
-         suspended;
-       - the accepted risk that `release.yml`'s release-please path (upload
-         to the draft, then publish) first runs at the real release;
-       - the user's `/release`.
+       the real feed"), and that plan's Step 5 put in the install docs,
+       the reinstall notice for the first release's notes and the `release`
+       skill's first-native-release checklist in place of its suspension.
+       What is left of this sub-milestone (as of 2026-11-22) is only the
+       user's `/release` of PR #928. At it, the checklist names what the
+       user decides to ship with: the macOS `.app`, the Linux tarball and
+       the deb rows, and the Windows standard account, beside-Riffle and
+       real network cut rows, all **Unverified**, and the accepted risk
+       that `release.yml`'s release-please path (upload to the draft, then
+       publish) first runs at the real release.
     5. Merge the native crate into the root workspace: one `Cargo.lock`, the
        root toolchain bumped, the patches moved to the root, one `notify`
        version (deciding the `todo.md` item on whether `configure` still

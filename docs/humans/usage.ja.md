@@ -199,7 +199,32 @@ Streamable HTTP で MCP を話すクライアントなら、上のエンドポ�
 
 ## インストール
 
-現在のアプリのパッケージはまだリリースしていません。それまでは、[CONTRIBUTING.md](../../CONTRIBUTING.md)（英語）の手順でソースからビルドしてください。[Releases ページ](https://github.com/minodisk/handpic/releases)のパッケージ（Handpic がまだ Riffle という名前だった 1.10.0 まで）は、このアプリが置き換えた以前のアプリのもので、このアプリへはアップデートされません。
+Handpic のパッケージは、2.0.0 以降の [Releases ページ](https://github.com/minodisk/handpic/releases)にあります。最新リリースのファイルを使ってください。どのリリースにも、そのリリースの全ファイルの SHA-256 ダイジェストを並べた `SHA256SUMS` があります。ソースからビルドする場合は [CONTRIBUTING.md](../../CONTRIBUTING.md)（英語）を参照してください。
+
+- **macOS**: Apple Silicon は `Handpic-<version>-macos-arm64.dmg`、Intel は `Handpic-<version>-macos-x86_64.dmg` です。ディスクイメージを開き、`Handpic.app` を `Applications` にドラッグします。`/Applications` など書き込めるフォルダーに置いたままにしてください。アップデートはアプリ全体を置き換えるので、ディスクイメージやダウンロードフォルダーの中ではできません。
+- **Windows のインストーラー**: `Handpic-<version>-windows-x64-setup.exe` です。そのユーザーだけに、`%LOCALAPPDATA%\Programs\Handpic` へ、管理者の確認なしでインストールします。
+- **Windows のポータブル ZIP**: `Handpic-<version>-windows-x64.zip` です。書き込めるフォルダーに展開して `handpic.exe` を実行します。`licenses` フォルダーは隣に置いたままにしてください。
+- **Linux の `.tar.gz`**: 同じリリースの `Handpic-<version>-linux-x64.tar.gz`、`install.sh`、`SHA256SUMS` を 1 つのフォルダーにダウンロードし、そこで次を実行します。
+
+  ```sh
+  sh install.sh Handpic-<version>-linux-x64.tar.gz \
+    "$(awk '$2 == "Handpic-<version>-linux-x64.tar.gz" { print $1 }' SHA256SUMS)"
+  ```
+
+  `install.sh` は何かを変更する前にアーカイブをそのダイジェストと照合し、それから `~/.local/bin/handpic` と、`~/.local/share` の下のデスクトップエントリーとアイコンをそのユーザーにインストールします。Python 3 が必要で、root は不要です。
+- **Linux の `.deb`**: `handpic_<version>_amd64.deb` を `sudo apt install ./handpic_<version>_amd64.deb` でインストールします。自分ではアップデートしません（[アップデート](#アップデート)を参照してください）。
+
+Handpic は Apple や Microsoft の署名を受けていない（公証も Authenticode もない）ので、最初の起動に一手間かかります。
+
+- **macOS**: Gatekeeper が最初の起動をブロックします。macOS 15 以降では、ブロックされた後にシステム設定 → プライバシーとセキュリティ →「このまま開く」を選びます。macOS 14 以前では、`Handpic.app` を右クリック →「開く」を選びます。どのバージョンでも、代わりに `xattr -d com.apple.quarantine /Applications/Handpic.app` を実行してもかまいません。
+- **Windows**: セットアップ、またはダウンロードした ZIP から展開した `handpic.exe` に SmartScreen が警告を出します。「詳細情報」→「実行」を選びます。
+- **Linux**: 追加の手順はありません。
+
+**リリース候補**: `2.0.0-rc.1` のようなバージョンは GitHub のプレリリースで、テスト用に公開し、最新リリースにはしません。正式リリースからインストールしたコピーにリリース候補を提供することはありません。リリース候補はテストするときだけインストールしてください（[アップデート](#アップデート)の「プレリリース」を参照してください）。
+
+### 以前のアプリから
+
+以前のアプリ（Handpic がまだ Riffle という名前だった 1.10.0 まで）は、このアプリへアップデートされません。上の手順で Handpic をインストールしてください。2 つは別々のインストールで、以前のアプリはインストールしたときの方法で削除するまで残ります。Windows では、インストーラーで入れた Handpic がその隣に並びます。
 
 新しくインストールしたときに以前のインストールから引き継ぐもの:
 
@@ -209,7 +234,7 @@ Streamable HTTP で MCP を話すクライアントなら、上のエンドポ�
 
 ## アップデート
 
-パッケージからインストールした Handpic は、GitHub にあるプロジェクトのリリースから自分でアップデートします（まだ 1 つも公開していません。上を参照してください）。ソースからビルドしたものはアップデートされず、新しいバージョンがあることを知らせるだけです。
+パッケージからインストールした Handpic は、GitHub にあるプロジェクトのリリースから自分でアップデートします。ソースからビルドしたものはアップデートされず、新しいバージョンがあることを知らせるだけです。
 
 - **確認するとき**: 起動時（ただし 1 時間に 1 回まで。最後に確認した時刻は設定と一緒に保存します）と、設定の `Updates` ページで `Check for Updates` を押したときです。このページには、実行中のバージョン、このコピーのインストール方法、アップデートの状態（確認中、ダウンロード中とその割合、検証中、再起動待ち、失敗とその理由）が表示されます。確認やダウンロードに失敗しても Handpic はそのままです。もう一度 `Check for Updates` を押して試してください。
 - **確認なしで**: 新しいバージョンがあると、Handpic はそれを自分でダウンロード、検証、インストールし、再起動を待ちます。ペインの注記と `Updates` ページにその旨が表示され、そのページの `Restart Now` で新しいバージョンとして再起動します。勝手に再起動することはありません。再起動は通常の終了と同じように終了するので、新しいバージョンが起動する前にすべての判定がサイドカーに書き込まれます。
