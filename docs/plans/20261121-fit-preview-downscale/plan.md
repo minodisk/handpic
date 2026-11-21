@@ -42,7 +42,7 @@ driver power settings are out of scope.
 
 ## Steps
 
-- [ ] Step 1: Separate the preview's source size from its decoded pixels (no behavior change)
+- [x] Step 1: Separate the preview's source size from its decoded pixels (no behavior change)
   - Done when:
     - A held preview (`Held`, `OnScreen` in `crates/app/src/main.rs`) carries the upright size of the source preview beside the image. Everything that needs the source's geometry reads that, not `RenderImage::size`:
       - the fit view's bounds (the preview canvas's `fit_centered` call, which the `f` overlay, the peaking overlay and the image all share);
