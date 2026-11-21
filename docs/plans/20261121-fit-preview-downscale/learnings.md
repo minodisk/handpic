@@ -83,18 +83,50 @@ each), before = `066b48ad` (main), after = this step; one run each, p50 / p95.
 - With prefetch on (after, RAF): 57 of 60 pages `source=prefetch`, all at the
   fit scale, `keypressToPixels` p50 11.38 ms.
 
+## Step 3
+
+- The same-session A/B met the target: RAF `screen` minus `keypressToPixels`
+  p50 47.02 ms (A) to 15.09 ms (B), ARW 14.36 / 14.92 ms; RAF `screen` p50
+  112.60 to 64.94 ms. See `results.md`. The `todo.md` RAF entry is closed.
+- Driving it: the branch's `run-ab.ps1` with its B side swapped for a second
+  GPUI build and `summarize.py` reading both builds' stdout, kept in `raw/`.
+  The ruler was exported with `git archive 1e97309e tools/latprobe` into the
+  scratch folder, so the measurement worktree was not touched.
+- A was built in a temporary worktree at `6cf88896` with its own
+  `CARGO_TARGET_DIR` in the scratch folder: a cold release build took 3 m 13 s,
+  as long as the warm-ish B build in this worktree (3 m 25 s). Both worktree
+  and target folder were removed afterwards.
+- The first attempt failed on every run with probe exit 2, "Desktop
+  Duplication delivered no frame": the display had gone to sleep (a sanity run
+  10 minutes earlier had worked). A `SetThreadExecutionState` helper started
+  after it did not wake it; a 1 px mouse move and back (`mouse_event`) did.
+  The driver now does that before each run.
+- Other sessions' `cargo test` / builds discarded 16 of 28 measured attempts;
+  `RAF-B2` failed all 4 tries in its slot and was redone after `RAF-B3`.
+  The whole session took 40 minutes of runs plus about 7 minutes of builds.
+- The Bash tool moves any foreground command past 180 s to the background,
+  so waiting on the driver worked as `until [ $(wc -l < runs.txt) -ge N ]`
+  loops kept under that. A plain `sleep` is refused.
+- Python heredocs through Git Bash mangled backslashes in a Windows path
+  (`\t` became a tab, `\202` in `\20261108` an octal escape) when writing `todo.md`;
+  building the path with `chr(92)` in a script file fixed it.
+
 ## Deferred issues (todo candidates)
 
-- Pending manual check (Windows, the interactive desktop; Step 2's automated
-  criteria ticked the checkbox): on the RAF compare folder with prefetch on,
-  (1) look at the fit view at 3/8, 4/8 and 6/8 (resize the window so the
-  `page` line's `decoded=` shows each) and confirm no visible softness or
-  aliasing against `main`; (2) enlarge the window, hide the side panes, drag
-  the strip down: the image is soft for at most about 150 ms plus a decode,
-  then sharpens with no flash, no meta pane flicker and the `f` marks kept;
-  (3) `z` shows the placeholder at the same place and size as on `main`
-  (softer), then the crop; (4) `e` recomputes after the sharpened image
-  arrives. Step 3's manual check list covers the same ground; this records
-  that Step 2 did not exercise it by eye. Basis: Step 2 Done-when (quality
-  check by eye, growth handling); files `crates/app/src/main.rs`
-  (`refit`, `refitted`, `fit_settled`), `crates/app/src/fitscale.rs`.
+- Pending manual check (Windows, the interactive desktop), Steps 2 and 3,
+  both ticked on their automated criteria (unit tests, `--auto` runs, the
+  Step 3 latency A/B and its `decoded=` sizes). Nothing was looked at by eye.
+  Already written into `todo.md` as the entry "App: by-eye checks of the
+  scaled fit-view decode (fit-preview-downscale)", because Step 3's Done-when
+  asks for it there; do not add it again. It covers: on the RAF compare folder
+  with prefetch on, (1) quality at 3/8, 4/8 and 6/8 against a pre-`d3794643`
+  build; (2) `z`'s placeholder at the same place and size, then the crop, and
+  paging while zoomed; (3) `e` in the fit view and at 1:1, recomputed after a
+  re-decode; (4) a held `g`; (5) `f`'s face boxes and AF mark where they were;
+  (6) enlarging the window, hiding the side panes and dragging the strip: the
+  image sharpens after about 150 ms plus a decode, with no flash, meta pane
+  flicker or lost marks. Basis: Step 2 Done-when (quality check, growth
+  handling) and Step 3 Done-when (manual check list); files
+  `crates/app/src/main.rs` (`refit`, `refitted`, `fit_settled`),
+  `crates/app/src/fitscale.rs`, `crates/app/src/peaking.rs`,
+  `crates/app/src/zoom.rs`.

@@ -4752,6 +4752,25 @@ its `wait` is the time `go` took before the hit. `px=` is the preview JPEG's
 stored size and `decoded=` the size it was decoded at for the fit view, both
 unrotated.
 
+### `keypressToPixels` does not include the texture upload (Measured)
+
+GPUI uploads a new image's whole texture on its first paint
+(`gpui-pre-windows` 0.3.12, `directx_atlas.rs`, `UpdateSubresource`), after
+the `present` stamp and without `Present(0, 0)` waiting for it. Before the fit
+view decoded at the canvas's DCT scale, a 4416x2944 RAF preview (52 MB)
+had a median `screen` p50 47.02 ms above its median `keypressToPixels` p50,
+against 14.36 ms for a 1616x1080 ARW (a difference of medians, not a
+per-press one). Decoded at about the drawn size (`decoded=1656x1104` in a
+1600x1000 window), the RAF difference is 15.09 ms, the ARW level (14.92 ms), and the
+RAF `screen` p50 dropped from 112.60 to 64.94 ms (same-session A/B with the
+external ruler, three runs each, `--no-prefetch`; see
+[the plan's results](../plans/20261121-fit-preview-downscale/results.md)).
+
+- Rule: never hand GPUI an image much larger than it draws on the page path.
+  The upload's cost is invisible to every in-app stage and shows only on an
+  external ruler; the about 15 ms between `present` and the DWM present is
+  the floor for any image size.
+
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 
 The right-hand pane (220 px by default, the Tauri `#info` width) lays out the file
