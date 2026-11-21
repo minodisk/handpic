@@ -121,8 +121,8 @@
   Step 1: release-please rewrites an open release PR only when its
   changelog changes, so the `chore` merge of #1195 left it alone and the
   `feat` merge of #1202 brought the app's files in. #928 was not touched.
-- #928's CI run on that head, 44895983568, was still running when this was
-  written; the main session adds its result.
+- #928's CI run on that head, 44895983568, passed (the `app` job's
+  `--locked` build included).
 - That run 44895914551 was the new `release.yml`'s first push on `main`:
   only `release-please` ran; `guard`, `build` and `publish` were skipped
   (no `release_created`), as intended.
@@ -171,8 +171,8 @@
 
 ## Deferred issues (todo candidates)
 
-- **Done for the files (2026-11-21, after #1202's merge; see Step 3
-  above), #928's CI result added by the main session. Was pending post-merge
+- **Done (2026-11-21, after #1202's merge; see Step 3 above; #928's CI run
+  44895983568 passed). Was pending post-merge
   check (Step 1's last Done-when), still open after Step 1's merge** (see "After the merge" above: #928 "remained the same"
   on the `chore` merge). After the next `feat` / `fix` commit on `main`
   (Step 2's PR or an earlier one), check that release-please has updated PR #928 (do not merge,

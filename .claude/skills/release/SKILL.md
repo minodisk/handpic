@@ -115,7 +115,7 @@ It checks that the release is published (not a draft), that its prerelease
 flag agrees with the version, that exactly the eleven assets of
 `tools/package/assets.sh` are attached (no `latest.json`), that they pass
 `sha256sum --check` against its `SHA256SUMS`, and that the updater's archives
-(the macOS `.tar.gz`, the setup ZIP, the portable ZIP, the Linux `.tar.gz`)
+(the two macOS `.tar.gz`, the setup ZIP, the portable ZIP, the Linux `.tar.gz`)
 pass `zipsign verify` with `crates/app/packaging/update.pub`. Optional second
 and third arguments name another repository and verifying key (the test feed
 and `crates/app/packaging/test/update.pub`).
