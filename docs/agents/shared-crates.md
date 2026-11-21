@@ -501,6 +501,15 @@ that already have the column, and the `ALTER TABLE` fails.
   (v19 to v22 had `edge_gap`, so the v23-era `full_eye_sharp` drop had no
   `DROP COLUMN edge_gap` line to anchor to): add the new drop to every
   older fixture by hand, v19 to v22 included.
+- A bump that removes a table is the mirror image: drop it in `open` as
+  `DROP TABLE IF EXISTS <table>` under `(first_version..new_version).contains(&version)`.
+  `IF EXISTS` is needed because a failed migration rebuilds the index and loses
+  dirty ratings, and tables from older versions may not exist. Dropping the
+  table also drops its indexes. The older fixtures can no longer rely on the
+  table coming back, so they re-create it from a test constant (`OLD_EMBEDDINGS`)
+  and assert through `sqlite_master` (table and index) that `open` drops it. Add
+  one fresh-index test that the table is absent. Source:
+  [`learnings.md`](../plans/_archived/20261121-remove-ai-features/learnings.md), Step 3.
 - Put a new column at the end of `CREATE TABLE`, not next to the column it
   relates to: `ALTER TABLE ADD COLUMN` always appends, so only an end
   placement keeps fresh and migrated databases in the same column order
