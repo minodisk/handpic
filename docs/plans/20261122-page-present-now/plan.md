@@ -115,3 +115,5 @@ fix rests on, and measures the fix with the external ruler.
 - **Step 1 edits an archived record.** That is intended (the analysis belongs to that measurement). Its cause sentence is prose without a link to this plan, because this plan's folder moves on archive; the wrap-up may add the link once the path is final.
 
 ## Progress
+
+- (2026-11-22) Step 1 complete
