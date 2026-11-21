@@ -292,7 +292,7 @@ row or the `.app`, tarball and deb rows, which stay **Unverified** there too.
 
 ## The rc dry run on the real feed (2026-11-21)
 
-Step 4 of [the native-release plan](../20261121-native-release/plan.md): the
+Step 4 of [the native-release plan](../_archived/20261121-native-release/plan.md): the
 rc.1 to rc.2 update from `minodisk/handpic` itself, signed with the
 production key. `release.yml` was dispatched twice on `main` at 1cad6de8:
 `version=2.0.0-rc.1` (run 44902391073) and `version=2.0.0-rc.2` (run
