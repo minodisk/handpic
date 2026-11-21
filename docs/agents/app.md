@@ -3145,7 +3145,9 @@ re-reads the image on screen when `fitscale::serves` says it falls short.
 Hanging it off the paint rather than the resize call sites catches every
 change of the canvas (a scale factor change too), and the check runs only
 after `viewport` holds the new size. `show_current` calls `refit` too, so a
-ring entry or a page read decoded for an older canvas is re-read when shown.
+page read decoded for an older canvas is re-read when shown, and a prefetch
+that arrives below the canvas (it left for an older one) is released as it
+settles, so the ring's entry is read again rather than painted upscaled.
 
 - Rule: a re-read replaces only the image (`refitted`, the old one retired):
   no `present`, `page` line, dwell, `mark_viewed`, `marks.show` or meta pane

@@ -4530,8 +4530,17 @@ impl Handpic {
     /// The prefetch in flight ended; its scan pause ends with it.
     fn prefetched(&mut self, loaded: Result<Loaded, String>, cx: &mut Context<Self>) {
         let held = loaded.ok().map(|loaded| loaded.held);
+        let canvas = self.viewport.get();
         let given = match &mut self.prefetch {
-            Some(ring) => ring.settle(held),
+            Some(ring) => {
+                // A read that left for an older canvas may come back below
+                // this one: release it so it is read again at this scale.
+                let mut given = ring.settle(held);
+                given.extend(ring.release(|held: &Held| {
+                    !fitscale::serves(decoded_size(&held.image), held.upright, canvas)
+                }));
+                given
+            }
             None => held.into_iter().collect(),
         };
         self.give_up(given, cx);

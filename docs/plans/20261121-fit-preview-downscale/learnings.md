@@ -45,8 +45,9 @@
   `present` and `clear_image` bump a `refit` counter, so a page turn or a
   clear supersedes it (a re-listing through `order`, as `send` does). The
   re-read's `Paused` ends when it lands; it is not held for a paint.
-  `show_current` also calls `refit`, which re-reads a ring entry or a page
-  read decoded for an older canvas when it is shown.
+  `show_current` also calls `refit`, which re-reads a page read decoded for
+  an older canvas when it is shown; a prefetch that arrives below the canvas
+  is released in `prefetched` right after `settle`, so it is read again.
 - Design: the ring gives up the entries the settled canvas outgrew through a
   new `Ring::release` (not marked crowded, so `next` reads them again at the
   new scale), then `request_prefetch`.
