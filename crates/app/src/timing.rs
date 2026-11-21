@@ -28,7 +28,10 @@ pub struct Page {
     pub decode: Duration,
     pub orient: Duration,
     pub jpeg_kb: usize,
+    /// The preview JPEG's stored size.
     pub px: (u32, u32),
+    /// The size it was decoded at, unrotated like `px`.
+    pub decoded: (u32, u32),
     pub orientation: u16,
     pub source: Source,
     pub file: String,
@@ -70,7 +73,8 @@ impl Page {
     pub fn line(&self, s: &Stages) -> String {
         format!(
             "page wait={} read={} decode={} orient={} hop={} frameWait={} paint={} present={} \
-             keypressToPixels={} jpegKB={} px={}x{} orientation={} source={} file={}",
+             keypressToPixels={} jpegKB={} px={}x{} decoded={}x{} orientation={} \
+             source={} file={}",
             ms(s.wait),
             ms(s.read),
             ms(s.decode),
@@ -83,6 +87,8 @@ impl Page {
             self.jpeg_kb,
             self.px.0,
             self.px.1,
+            self.decoded.0,
+            self.decoded.1,
             self.orientation,
             self.source.name(),
             self.file,
@@ -155,6 +161,7 @@ mod tests {
             orient: millis(1),
             jpeg_kb: 1234,
             px: (1616, 1080),
+            decoded: (1212, 810),
             orientation: 6,
             source: Source::Read,
             file: "DSC1.ARW".into(),
@@ -204,7 +211,8 @@ mod tests {
             page.line(&s),
             "page wait=0.00ms read=3.00ms decode=6.00ms orient=1.00ms hop=1.00ms \
              frameWait=8.00ms paint=1.00ms present=1.00ms keypressToPixels=22.00ms \
-             jpegKB=1234 px=1616x1080 orientation=6 source=read file=DSC1.ARW"
+             jpegKB=1234 px=1616x1080 decoded=1212x810 orientation=6 source=read \
+             file=DSC1.ARW"
         );
     }
 

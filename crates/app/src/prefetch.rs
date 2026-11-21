@@ -13,10 +13,15 @@ use std::{
     path::Path,
 };
 
-/// The ring's total, excluding the image on screen. At 4 bytes a pixel a
-/// 1616x1080 preview is 7 MB and a 4416x2944 RAF one 52 MB, so 32 MP (128 MB)
-/// holds both neighbours of the largest RAW previews, while the whole JPEGs
-/// of a view-only folder (24 MP and up) may not fit two at once; a preview too
+/// The ring's total of decoded pixels, excluding the image on screen. A
+/// preview is decoded at the `n/8` scale the fit view's canvas needs
+/// (`fitscale.rs`), so an entry is about the canvas's size, not the source's:
+/// a 4416x2944 RAF preview fit in a 1160 px wide canvas is decoded at
+/// 1656x1104 (1.8 MP, 7 MB at 4 bytes a pixel) rather than 13 MP (52 MB). Only
+/// a launch's first reads, before the canvas is painted, and a canvas as large
+/// as the source are full-size; at those sizes 32 MP (128 MB) still holds both
+/// neighbours of the largest RAW previews, while the whole JPEGs of a
+/// view-only folder (24 MP and up) may not fit two at once; a preview too
 /// large to share the cap with its neighbour is not kept at all.
 pub const PREFETCH_PIXEL_CAP: u64 = 32_000_000;
 
@@ -204,6 +209,21 @@ impl<T: Pixels> Ring<T> {
         self.drop_where(gone)
     }
 
+    /// Gives up the entries `gone` picks, which stay wanted and are read
+    /// again (the fit view's canvas outgrew their decoded size).
+    pub fn release(&mut self, gone: impl Fn(&T) -> bool) -> Vec<T> {
+        let paths: Vec<String> = self
+            .held
+            .iter()
+            .filter(|(_, held)| gone(held))
+            .map(|(path, _)| path.clone())
+            .collect();
+        paths
+            .iter()
+            .filter_map(|path| self.held.remove(path))
+            .collect()
+    }
+
     /// A rename or a delete: `paths` no longer name what the ring read.
     #[cfg_attr(
         not(test),
@@ -368,6 +388,19 @@ mod tests {
         assert!(ring.keep("b".into(), held("b")).is_empty());
         assert_eq!(names(ring.keep("a".into(), held("a"))), ["a"]);
         assert_eq!(ring.take("b").map(|f| f.name).as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn a_released_entry_is_read_again() {
+        let mut ring = Ring::default();
+        ring.plan(&FILES, 1, FORWARD);
+        for pixels in [2, 1] {
+            let path = ring.next().unwrap();
+            ring.settle(Some(sized(&path, pixels)));
+        }
+        assert_eq!(names(ring.release(|held| held.pixels < 2)), ["a"]);
+        assert_eq!(ring.next().as_deref(), Some("a"));
+        assert_eq!(ring.take("c").map(|f| f.name).as_deref(), Some("c"));
     }
 
     #[test]

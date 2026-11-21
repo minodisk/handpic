@@ -381,8 +381,14 @@ after the current file or the range last changed, `src/hold.rs` the scan pause a
 decoded neighbour previews (`Ring`, a port of `prefetch.ts`: the current
 file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
-an open or a re-listing and narrowed by `retain` on a `refilter`; off under
-`--no-prefetch`), `src/mcp.rs` the MCP
+an open or a re-listing and narrowed by `retain` on a `refilter`, the
+entries the canvas outgrew given up by `release`; off under
+`--no-prefetch`), `src/fitscale.rs` the `n/8` DCT scale the fit view's
+preview is decoded at (`scale_for`, the smallest whose decoded size is not
+below the source's fit in the preview canvas, 8 for an unknown canvas;
+`serves`, whether a decoded image still covers a canvas, which a settled
+canvas change checks the image on screen and the ring against, re-reading
+what falls short; `scaled`, mozjpeg's `ceil(native * n / 8)`), `src/mcp.rs` the MCP
 companion's server (the engine's `Mcp` with all its tools and the tree's home directory on a tokio runtime of its own on one
 `mcp` thread, `Control`, which spawns them on the first switch on of `mcpEnabled` and keeps them for the session, running each switch in order and sending its `McpState` as `scan::Event::McpState`, on `--mcp-port` for a test
 run, each tool call reaching the view as `scan::Event::Mcp`, stopped on quit;

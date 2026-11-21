@@ -808,14 +808,17 @@ two runs apart.
 Per-page latency is printed instead: run Handpic from a terminal, and each
 page turn a key asked for prints a `page wait=… read=… decode=… orient=…
 hop=… frameWait=… paint=… present=… keypressToPixels=… jpegKB=… px=WxH
-orientation=… source=… file=…` line on standard output (a 1:1 crop prints a
+decoded=WxH orientation=… source=… file=…` line on standard output (a 1:1 crop prints a
 `zoom read=… decode=… orient=… keypressToPixels=…` line). `wait` is the
 time from the key to the read's request, `read`, `decode` and `orient` the
 preview's read (the pause of the scan's reads included), decode and turn
 upright (all 0 for `source=prefetch`, a preview read ahead), `hop` the hand
 over to the window, `frameWait` the wait for the next frame, `paint` the
 drawing and `present` the frame's presentation; `keypressToPixels` runs from
-the keypress to the presented frame. A page not asked for by a key (a strip
+the keypress to the presented frame. `px` is the embedded preview's size and
+`decoded` the size it was decoded at: Handpic decodes the preview at the
+smallest eighth of its size that still covers the photo area on screen, so a
+large preview in a small window decodes smaller than `px`. A page not asked for by a key (a strip
 click or a folder open) prints nothing. Quitting with `q` (or at the end of `--auto N`) prints a summary table of
 the stages, and `--auto N` pages through N files on a timer and quits.
 

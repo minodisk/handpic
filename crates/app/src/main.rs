@@ -13,6 +13,7 @@ mod eyes;
 mod facemesh;
 mod faces;
 mod filter;
+mod fitscale;
 mod focus;
 mod folderops;
 mod grayscale;
@@ -167,6 +168,9 @@ use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
 use zoom::{Arrived, Zoom};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
+/// How long the preview canvas's size holds before the fit images are
+/// checked against it, as long as a 1:1 crop's re-cut waits.
+const FIT_RESIZE_DEBOUNCE: Duration = zoom::CROP_RESIZE_DEBOUNCE;
 /// Out of phase with 60 Hz vsync.
 const AUTO_INTERVAL: Duration = Duration::from_millis(1003);
 /// How long `screenshot` waits for a drawn frame before taking the last one
@@ -190,9 +194,15 @@ struct Held {
 
 impl prefetch::Pixels for Held {
     fn pixels(&self) -> u64 {
-        let size = self.image.size(0);
-        u64::from(size.width.0 as u32) * u64::from(size.height.0 as u32)
+        let (width, height) = decoded_size(&self.image);
+        u64::from(width) * u64::from(height)
     }
+}
+
+/// The upright size `image` was decoded at.
+fn decoded_size(image: &RenderImage) -> (u32, u32) {
+    let size = image.size(0);
+    (size.width.0 as u32, size.height.0 as u32)
 }
 
 /// The image on screen's facts beside the image and its `Metadata` (in
@@ -228,7 +238,9 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
     })
 }
 
-fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
+/// Read `path`'s preview and decode it at the scale `canvas` (device pixels,
+/// `(0, 0)` when unknown) needs for the fit view (`fitscale::scale_for`).
+fn load(path: &Path, slots: &ReadSlots, canvas: (u32, u32)) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
     let preview = reader::read_preview(path);
@@ -236,8 +248,10 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
     let read = started.elapsed();
     let meta = handpic_engine::exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
-    let mut d = mozjpeg::Decompress::new_mem(&jpeg)
-        .map_err(|e| e.to_string())?
+    let mut d = mozjpeg::Decompress::new_mem(&jpeg).map_err(|e| e.to_string())?;
+    let stored = (d.width() as u32, d.height() as u32);
+    d.scale(fitscale::scale_for(stored, arw.orientation, canvas));
+    let mut d = d
         .to_colorspace(mozjpeg::ColorSpace::JCS_EXT_BGRA)
         .map_err(|e| e.to_string())?;
     let (w, h) = (d.width() as u32, d.height() as u32);
@@ -254,8 +268,8 @@ fn load(path: &Path, slots: &ReadSlots) -> Result<Loaded, String> {
         held: Held {
             image,
             jpeg_kb: jpeg.len() / 1024,
-            px: (w, h),
-            upright: (upright_w, upright_h),
+            px: stored,
+            upright: fitscale::turned(stored, arw.orientation),
             orientation: arw.orientation,
             meta,
             focus: arw.shot.focus,
@@ -628,6 +642,11 @@ struct Handpic {
     zoom_timer: Option<Task<()>>,
     /// The preview canvas's size in device pixels, as last painted.
     viewport: Rc<Cell<(u32, u32)>>,
+    /// The pending fit check after the canvas changed; dropping it cancels it.
+    fit_timer: Option<Task<()>>,
+    /// The current re-read of the image on screen at the canvas's scale; a
+    /// re-read of another number is superseded.
+    refit: u64,
     /// The keyed crop the next presented frame shows.
     zoom_pending: Rc<RefCell<Option<zoom::Timed>>>,
     peaking: Peaking<Arc<RenderImage>, Arc<RenderImage>>,
@@ -1047,6 +1066,8 @@ impl Handpic {
             zoom: Zoom::default(),
             zoom_timer: None,
             viewport: Rc::default(),
+            fit_timer: None,
+            refit: 0,
             zoom_pending: Rc::default(),
             peaking: Peaking::default(),
             grayscale: grayscale::Hold::default(),
@@ -4465,6 +4486,7 @@ impl Handpic {
             orient: Duration::ZERO,
             jpeg_kb: held.jpeg_kb,
             px: held.px,
+            decoded: fitscale::turned(decoded_size(&held.image), held.orientation),
             orientation: held.orientation,
             source: Source::Prefetch,
             file: file_name(&self.files[index]),
@@ -4495,9 +4517,10 @@ impl Handpic {
         self.give_up(given, cx);
         let Some(path) = next else { return };
         let slots = self.slots.clone();
+        let canvas = self.viewport.get();
         cx.spawn(async move |this, cx| {
             let loaded = cx
-                .background_spawn(async move { guarded(|| load(Path::new(&path), &slots)) })
+                .background_spawn(async move { guarded(|| load(Path::new(&path), &slots, canvas)) })
                 .await;
             this.update(cx, |this, cx| this.prefetched(loaded, cx)).ok();
         })
@@ -4542,6 +4565,7 @@ impl Handpic {
         let old = self.image.take();
         self.retire(old);
         self.screen = None;
+        self.refit += 1;
     }
 
     fn send(&mut self, index: usize, at: Instant, cx: &mut Context<Self>) {
@@ -4549,9 +4573,10 @@ impl Handpic {
         let path = self.files[index].clone();
         let slots = self.slots.clone();
         let order = self.order;
+        let canvas = self.viewport.get();
         cx.spawn(async move |this, cx| {
             let loaded = cx
-                .background_spawn(async move { guarded(|| load(&path, &slots)) })
+                .background_spawn(async move { guarded(|| load(&path, &slots, canvas)) })
                 .await;
             let received = Instant::now();
             this.update(cx, |this, cx| {
@@ -4621,6 +4646,7 @@ impl Handpic {
                     orient,
                     jpeg_kb: held.jpeg_kb,
                     px: held.px,
+                    decoded: fitscale::turned(decoded_size(&held.image), held.orientation),
                     orientation: held.orientation,
                     source: Source::Read,
                     file: name,
@@ -4650,6 +4676,7 @@ impl Handpic {
         self.zoom.shown(focus, orientation);
         self.analyze_current(cx);
         self.start_dwell(cx);
+        self.refit(cx);
         cx.notify();
     }
 
@@ -4684,6 +4711,7 @@ impl Handpic {
             focus,
         } = held;
         self.status = SharedString::default();
+        self.refit += 1;
         let path = self.files[index].to_string_lossy().into_owned();
         let shown = self
             .shown
@@ -4818,6 +4846,77 @@ impl Handpic {
             })
             .ok();
         }));
+    }
+
+    /// The preview canvas changed size: check the fit images once it has
+    /// settled for `FIT_RESIZE_DEBOUNCE`.
+    fn fit_resized(&mut self, cx: &mut Context<Self>) {
+        self.fit_timer = Some(cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(FIT_RESIZE_DEBOUNCE).await;
+            this.update(cx, |this, cx| this.fit_settled(cx)).ok();
+        }));
+    }
+
+    /// Give up the ring's entries decoded below the scale the settled canvas
+    /// needs, so they are read again, and re-read the image on screen if it
+    /// is one.
+    fn fit_settled(&mut self, cx: &mut Context<Self>) {
+        let canvas = self.viewport.get();
+        if let Some(ring) = &mut self.prefetch {
+            let given = ring.release(|held: &Held| {
+                !fitscale::serves(decoded_size(&held.image), held.upright, canvas)
+            });
+            self.give_up(given, cx);
+        }
+        self.refit(cx);
+        self.request_prefetch(cx);
+    }
+
+    /// Read the current file's image on screen again at the canvas's scale
+    /// when it was decoded below it. The old image stays on screen until the
+    /// new one replaces it, and nothing else about the file is shown again.
+    fn refit(&mut self, cx: &mut Context<Self>) {
+        let canvas = self.viewport.get();
+        let (Some(image), Some(screen)) = (&self.image, &self.screen) else {
+            return;
+        };
+        if self.current_path().as_deref() != Some(screen.path.as_str())
+            || fitscale::serves(decoded_size(image), screen.upright, canvas)
+        {
+            return;
+        }
+        self.refit += 1;
+        let (seq, order) = (self.refit, self.order);
+        let path = PathBuf::from(&screen.path);
+        let slots = self.slots.clone();
+        cx.spawn(async move |this, cx| {
+            let loaded = cx
+                .background_spawn(async move { guarded(|| load(&path, &slots, canvas)) })
+                .await;
+            this.update(cx, |this, cx| this.refitted(seq, order, loaded, cx))
+                .ok();
+        })
+        .detach();
+    }
+
+    /// A re-read of the image on screen arrived: it replaces the image unless
+    /// a page turn, a clear or a newer re-read came first. Its scan pause
+    /// ends here.
+    fn refitted(
+        &mut self,
+        seq: u64,
+        order: u64,
+        loaded: Result<Loaded, String>,
+        cx: &mut Context<Self>,
+    ) {
+        let Ok(loaded) = loaded else { return };
+        if seq != self.refit || order != self.order || self.image.is_none() {
+            self.retire(Some(loaded.held.image));
+            return;
+        }
+        let old = self.image.replace(loaded.held.image);
+        self.retire(old);
+        cx.notify();
     }
 
     /// What the preview canvas paints while zoomed: the held crop, over the
@@ -6155,12 +6254,13 @@ impl Render for Handpic {
                                                 let zoomed = zoom_pending.borrow_mut().take();
                                                 let paint_started = Instant::now();
                                                 let scale = window.scale_factor();
-                                                viewport.set((
+                                                let canvas = (
                                                     (f32::from(bounds.size.width) * scale).round()
                                                         as u32,
                                                     (f32::from(bounds.size.height) * scale).round()
                                                         as u32,
-                                                ));
+                                                );
+                                                let resized = viewport.replace(canvas) != canvas;
                                                 let mut want = None;
                                                 if let Some(zoom_paint) = zoom_paint {
                                                     want = zoom_paint.paint(bounds, window).map(
@@ -6191,6 +6291,7 @@ impl Render for Handpic {
                                                     && zoomed.is_none()
                                                     && old.is_empty()
                                                     && want.is_none()
+                                                    && !resized
                                                 {
                                                     return;
                                                 }
@@ -6223,6 +6324,12 @@ impl Render for Handpic {
                                                             this.want_peaking(
                                                                 view, image, size, cx,
                                                             );
+                                                        })
+                                                        .ok();
+                                                    }
+                                                    if resized {
+                                                        this.update(cx, |this, cx| {
+                                                            this.fit_resized(cx);
                                                         })
                                                         .ok();
                                                     }

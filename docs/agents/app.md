@@ -2510,7 +2510,9 @@ one at a time through `load` on the background executor, only when the pager
 has nothing in flight, the image on screen is the current file's and no scan
 pass runs; it is asked after a current result (read or hit), a settled
 prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
-`--no-prefetch` turns the ring off.
+`--no-prefetch` turns the ring off. `PREFETCH_PIXEL_CAP` counts decoded
+pixels, which are about the canvas's size since the fit view decodes at a
+reduced scale (see "The fit view decodes at the canvas's DCT scale" below).
 
 - Rule: an image is owned by one place at a time: the ring, or the screen.
   `take` hands it to the view; `present` hands the image it replaces back
@@ -3118,6 +3120,43 @@ files `decode` 21 and 47 ms.
 `decode` includes the RGBA to BGRA swap. Two `orient` outliers of 36 and 76 ms
 (a 1024 px crop over 8 scoped threads, 1-2 ms otherwise) are attributed to the
 load, not measured apart.
+
+### The fit view decodes at the canvas's DCT scale (Inferred)
+
+GPUI uploads a new image's whole texture on its first paint, and a 4416x2944
+RAF preview's 52 MB upload after an idle second kept the frame off the screen
+for about 48 ms after `present`
+(`../plans/20261121-fit-preview-downscale/plan.md`). `load` therefore decodes
+the preview JPEG at `fitscale::scale_for`'s `n/8`, the smallest whose decoded
+size is not below the source's fit in the preview canvas (`viewport`, device
+pixels, read when `send`, `request_prefetch` or a re-read builds its closure);
+an unknown canvas (`(0, 0)`, before the first paint) decodes whole. `Held` and
+`OnScreen` keep the source's sizes (`px`, `upright`), which the fit bounds,
+the `f` overlay, the 1:1 placeholder's rectangle and the `page` line's `px=`
+read; only the image is smaller. The `page` line's `decoded=WxH` is the
+decoded size, unrotated like `px`.
+
+The canvas paint compares the canvas with `viewport` and, when it changed,
+asks through its `cx.defer` for `fit_resized`, which settles for
+`FIT_RESIZE_DEBOUNCE` (the crop re-cut's 150 ms, its own timer) before
+`fit_settled`: the ring's entries the new canvas outgrew are given up by
+`Ring::release` (not marked crowded, so they are read again), and `refit`
+re-reads the image on screen when `fitscale::serves` says it falls short.
+Hanging it off the paint rather than the resize call sites catches every
+change of the canvas (a scale factor change too), and the check runs only
+after `viewport` holds the new size. `show_current` calls `refit` too, so a
+ring entry or a page read decoded for an older canvas is re-read when shown.
+
+- Rule: a re-read replaces only the image (`refitted`, the old one retired):
+  no `present`, `page` line, dwell, `mark_viewed`, `marks.show` or meta pane
+  change. `present` and `clear_image` bump `refit`, so a page turn or a clear
+  supersedes the re-read in flight, as `order` does a re-listing.
+- Rule: a smaller canvas reads nothing; an image larger than needed serves.
+- Rule: the 1:1 placeholder is the fit image drawn into the rectangle
+  `zoom::placeholder` gives from the source's upright size, so it is softer
+  for a large preview but placed as before; the crop is `zoom.rs`'s own read.
+  The fit view's peaking layer is keyed by the image id, so a re-read image
+  gets its edges recomputed.
 
 ### Peaking runs off the main thread, one job at a time (Measured)
 
@@ -4631,7 +4670,9 @@ to the update on the main thread), and splits `draw` into
 stopped at `drawImage`. It starts at the latest press of the file that ended up
 shown. `source=read|prefetch` says whether the image came from its own read or
 the prefetch ring; a hit's `read`, `decode`, `orient` and `hop` are 0, and
-its `wait` is the time `go` took before the hit.
+its `wait` is the time `go` took before the hit. `px=` is the preview JPEG's
+stored size and `decoded=` the size it was decoded at for the fit view, both
+unrotated.
 
 ### The meta pane is `div` rows, and its cost lands in `present` (Measured)
 

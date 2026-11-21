@@ -57,7 +57,7 @@ driver power settings are out of scope.
     - `Held.px` is the unrotated decode size today and feeds the `page` line's `px=WxH`. Keep `px=` the source's size, since the archived measurements and `docs/humans/performance.md` read it that way.
     - `zoom::placeholder` takes the upright preview size and uses only its aspect ratio. Hand it the source's upright size, so a later scaled decode's rounding cannot move the placeholder.
     - `overlay::paint` and `mark.rs` map source-image coordinates onto the `fit` bounds only, never onto image pixels. Keeping `fit` computed from the source size keeps them exact.
-- [ ] Step 2: Decode the fit-view preview at the DCT scale the canvas needs, and re-decode when the canvas outgrows it
+- [x] Step 2: Decode the fit-view preview at the DCT scale the canvas needs, and re-decode when the canvas outgrows it
   - Done when:
     - `load` decodes the preview JPEG at the smallest `n/8` scale (1 to 8, never above 8) whose decoded size is not below the fit of the source in the preview canvas, in device pixels. The canvas size is taken when the read is requested. Page reads (`send`) and prefetch reads (`request_prefetch`) both do this, on the background executor as today. Nothing is resized in paint.
     - With no canvas size yet (nothing painted, `viewport` still `(0, 0)`) the decode is full-size, as today.
