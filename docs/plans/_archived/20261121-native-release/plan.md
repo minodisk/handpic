@@ -18,9 +18,9 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 
 ## Purpose
 
-Sub-milestone 4 of Step 10 of [the gpui-port plan](../20261109-gpui-port/plan.md).
+Sub-milestone 4 of Step 10 of [the gpui-port plan](../../20261109-gpui-port/plan.md).
 The app (`crates/app`) can update itself since
-[the native-updater plan](../_archived/20261118-native-updater/plan.md), but
+[the native-updater plan](../20261118-native-updater/plan.md), but
 nothing publishes what it updates from: `.github/workflows/release.yml` keeps
 only the `release-please` job, `package.yml` signs with the test key only, and
 the `release` skill says releases are suspended.
@@ -37,7 +37,7 @@ Once this plan is done:
 - An rc.1 to rc.2 update from the real repository with the production key has
   been run on the Windows PC at hand and recorded as **Measured** /
   **Unverified** in
-  [`packaging-updater.md`](../20261109-gpui-port/packaging-updater.md).
+  [`packaging-updater.md`](../../20261109-gpui-port/packaging-updater.md).
 - The docs say how to cut a release and an rc, and what is left before #928
   can be merged.
 
@@ -187,7 +187,7 @@ Not required before #928: sub-milestone 5 of the gpui-port plan (merging
       into the secret's page on github.com, or pipe it to `gh secret set
       UPDATE_SIGNING_KEY` after checking it is non-empty. `gh secret list`
       cannot tell an empty secret from a set one
-      ([`github-actions-workflows.md`](../../agents/github-actions-workflows.md),
+      ([`github-actions-workflows.md`](../../../agents/github-actions-workflows.md),
       "An empty secret looks set"), which is why the workflow's guard
       exists. Ask the user for this once the guard's failing run has been
       seen.

@@ -467,7 +467,7 @@ them; their contents are deliberately coarse.
          tarball and the deb rows, for want of a macOS or Linux machine).
 
        The workflow and the dry run are done through
-       [the native-release plan](../20261121-native-release/plan.md):
+       [the native-release plan](../_archived/20261121-native-release/plan.md):
        `release.yml` builds, signs with the production key and publishes,
        `verify-release.sh` checks a native release, and `v2.0.0-rc.1` to
        `v2.0.0-rc.2` ran on the real feed on Windows, recorded in
