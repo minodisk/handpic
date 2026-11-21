@@ -4776,7 +4776,7 @@ per-press one). Decoded at about the drawn size (`decoded=1656x1104` in a
 1600x1000 window), the RAF difference is 15.09 ms, the ARW level (14.92 ms), and the
 RAF `screen` p50 dropped from 112.60 to 64.94 ms (same-session A/B with the
 external ruler, three runs each, `--no-prefetch`; see
-[the plan's results](../plans/20261121-fit-preview-downscale/results.md)).
+[the plan's results](../plans/_archived/20261121-fit-preview-downscale/results.md)).
 
 - Rule: never hand GPUI an image much larger than it draws on the page path.
   The upload's cost is invisible to every in-app stage and shows only on an
