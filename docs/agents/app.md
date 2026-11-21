@@ -3344,7 +3344,7 @@ load, not measured apart.
 GPUI uploads a new image's whole texture on its first paint, and a 4416x2944
 RAF preview's 52 MB upload after an idle second kept the frame off the screen
 for about 48 ms after `present`
-(`../plans/20261121-fit-preview-downscale/plan.md`). `load` therefore decodes
+(`../plans/_archived/20261121-fit-preview-downscale/plan.md`). `load` therefore decodes
 the preview JPEG at `fitscale::scale_for`'s `n/8`, the smallest whose decoded
 size is not below the source's fit in the preview canvas (`viewport`, device
 pixels, read when `send`, `request_prefetch` or a re-read builds its closure);
