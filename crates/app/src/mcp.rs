@@ -1,6 +1,7 @@
 //! The MCP companion's server, the engine's `mcp::Mcp` with every tool
 //! (and `with_screenshot` in a build with the `screenshot` feature) and
-//! the tree's home directory (`with_home`), on a tokio runtime of its own on one named thread, spawned on the first switch on of
+//! the tree's home directory (`with_home`), on a tokio runtime of its
+//! own on one named thread, spawned on the first switch on of
 //! `mcpEnabled` and kept for the session, which runs each switch in order
 //! and sends the state it returns as `Event::McpState`. A tool call reaches
 //! the view as `Event::Mcp` through the view's channel, and the view answers
