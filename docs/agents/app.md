@@ -4800,7 +4800,16 @@ reason and running note sit in the footer above the `primary()` or
   the lines at their own height and leaves the body the only flexible
   child. `folderops.rs`'s tests check it through the `debug_selector`s
   `folder-dialog-line`, `folder-dialog-list` and `folder-dialog-footer`
-  (and the component's `dialog-0`).
+  (and the component's `dialog-0`). `debug_bounds` takes a `&'static str`,
+  so the selectors are fixed strings, and the list container's bounds move
+  with the scroll offset (its top is the first row, its bottom the last
+  row's), so check a long list's end by simulated `ScrollEvent`s. Without
+  the fix the list started 134 px (10 rows) to 391 px (300 rows) below the
+  last line in the 1600x1000 test window. Seen on Windows 11 (2026-11-22):
+  the `Sequence JPEG Timestamps…`, `Import…` and `Rename by Capture Date…`
+  dialogs with 10 and 300 rows showed the first row under the lines and the
+  last row whole after scrolling (results in
+  `../plans/_archived/20261122-folder-dialog-list-layout/learnings.md`).
 - Rule: `follow_folder_dialog` runs wherever `folderops.dialog` changes: it
   opens the dialog when one is shown and closes it when none is. The
   import's stepping aside is a close with the flow alive (the focus goes
