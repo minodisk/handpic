@@ -1281,6 +1281,7 @@ impl Handpic {
                 self.record_failed(datefolder::LABEL, e.clone());
                 self.step_note = Some(e);
                 self.settle_folder_run(cx);
+                self.request_prefetch(cx);
                 cx.notify();
                 return;
             }
@@ -1648,6 +1649,11 @@ fn folder_dialog(
 /// The tree's inline rename, a port of `folders.ts`'s editor and
 /// `main.ts`'s `renameFolder` / `holdRename`.
 impl Handpic {
+    /// A folder rename is in flight.
+    pub(crate) fn renaming(&self) -> bool {
+        self.folderops.renames.any()
+    }
+
     /// The name of the tree's row `at`: the text input while it is being
     /// renamed, else its name, or the held rename's name in the pending
     /// style. A click on the open folder's name arms the slow click instead

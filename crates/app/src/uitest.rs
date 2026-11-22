@@ -507,3 +507,69 @@ fn a_port_in_use_leaves_the_switch_on_with_the_bind_error() {
     assert_eq!(stored_mcp_enabled(&ui), Some(true.into()));
     drop(held);
 }
+
+#[test]
+fn a_folder_rename_in_flight_starts_no_prefetch() {
+    let mut ui = Ui::open();
+    let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1), ("c.dng", 1)]);
+    let started = ui.update(|view, cx| {
+        view.clear_ring(cx);
+        view.request_prefetch(cx);
+        view.prefetch.as_ref().unwrap().still_wanted()
+    });
+    assert!(started, "an emptied ring starts no read with no rename");
+    ui.wait_until("the prefetch's end", |view| {
+        !view.prefetch.as_ref().unwrap().still_wanted()
+    });
+    let path = folder.to_string_lossy().into_owned();
+    let started = ui.update(|view, cx| {
+        view.clear_ring(cx);
+        view.request_rename(path, "renamed".into(), cx);
+        assert!(view.renaming());
+        view.request_prefetch(cx);
+        view.prefetch.as_ref().unwrap().still_wanted()
+    });
+    assert!(!started);
+    let renamed = ui.dir().join("renamed");
+    ui.wait_until("the rename's reopen", |view| {
+        view.dir
+            .as_ref()
+            .is_some_and(|dir| dir.ends_with("renamed"))
+    });
+    ui.wait_idle("the renamed folder's preview", 3);
+    assert!(renamed.exists());
+}
+
+#[test]
+fn a_rename_held_over_the_scan_runs_at_its_end_and_the_ring_fills_again() {
+    let mut ui = Ui::open();
+    let folder = ui.dir().join("photos");
+    fs::create_dir(&folder).unwrap();
+    for name in ["a.dng", "b.dng", "c.dng"] {
+        fs::write(folder.join(name), dng(1)).unwrap();
+    }
+    let path = folder.to_string_lossy().into_owned();
+    let held = ui.update(|view, cx| {
+        view.open_from_tree(path.clone(), cx).detach();
+        view.request_rename(path, "renamed".into(), cx);
+        view.gate.waiting()
+    });
+    assert_eq!(held, Some(crate::rename::LABEL));
+    let renamed = ui.dir().join("renamed");
+    ui.wait_until("the held rename's reopen", |view| {
+        !view.renaming()
+            && view
+                .dir
+                .as_ref()
+                .is_some_and(|dir| dir.ends_with("renamed"))
+    });
+    assert!(renamed.exists());
+    assert!(!folder.exists());
+    ui.read(|view| assert_eq!(view.step_note, None));
+    ui.wait_idle("the renamed folder's preview", 3);
+    assert_eq!(ui.current(), "a.dng");
+    ui.wait_until("the ring's neighbour", |view| {
+        let next = view.files[1].to_string_lossy();
+        view.prefetch.as_ref().unwrap().holds(&next)
+    });
+}
