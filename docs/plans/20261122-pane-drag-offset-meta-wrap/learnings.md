@@ -26,6 +26,19 @@
   Locating a `todo.md` heading with `s.index('### App: ...')` matched an
   inline backticked reference to it first; anchor on a leading newline.
 
+## Step 2
+
+- The rows are `flex_wrap` with `gap_x_2` and the value `flex_grow(1.)` /
+  `min_w_0` / `text_right` (basis auto), as the plan said; the name heading
+  is a `flex flex_wrap` row of `meta::name_segments`, which is
+  `str::split_inclusive(['_', '-', ' '])` (no empty segment for an empty
+  name or a trailing separator, by `split_inclusive`'s contract).
+- The layout was not seen in a running window (no screenshot run), so the
+  new `docs/agents/app.md` rule stays (Inferred) and the `todo.md` box open.
+- GPUI's `flex_grow` takes the factor (`flex_grow(1.)`), unlike the
+  argument-free tailwind-style helpers beside it; the first `ci:local` run
+  failed on that.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Windows real device): press the tree's boundary, the
@@ -41,3 +54,16 @@
   run ci:local`). Basis: Step 1's "Trade-offs and risks" (the press listener
   is checked only by reading the source). Files: `crates/app/src/main.rs`
   (`pane_handle`, `strip_handle`, `press_pane`, `press_strip`).
+
+- Pending manual check (Windows real device): with the meta pane at 160 px
+  on a file with long values (`Electronic`, `Compressed RAW`, `Mechanical`,
+  `Manual`) and a long name (`ILCE-1M2_sony_a1_ii_03.arw`), expect no break
+  inside a word, each value that does not fit beside its label on its own
+  right-aligned line under it, and the name broken after `_` / `-`; at the
+  default 220 px, judge the look of the rows whose values now go under the
+  label. Recorded in `todo.md` as `### App: real-device check that the meta
+  pane keeps words whole at its 160 px minimum`. Step 2's checkbox was ticked
+  on the automated criteria (`meta.rs` unit tests of `name_segments`, `mise
+  run ci:local`). Basis: Step 2's "Trade-offs and risks" (the flex layout is
+  checked only by reading GPUI's source). Files: `crates/app/src/main.rs`
+  (`meta_pane`), `crates/app/src/meta.rs` (`name_segments`).

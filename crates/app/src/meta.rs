@@ -186,6 +186,12 @@ pub fn groups<'a>(
     groups
 }
 
+/// The file name in the pieces the pane's heading may break between: each
+/// ends after a `_`, `-` or space, the last holding the rest.
+pub fn name_segments(name: &str) -> Vec<&str> {
+    name.split_inclusive(['_', '-', ' ']).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use handpic_engine::index::{EyesPose, FocusSize, StoredEyes};
@@ -654,5 +660,20 @@ mod tests {
             [EXIF_HEADING, MAKER_NOTE_HEADING]
         );
         assert_eq!(headings(&[]), [EXIF_HEADING]);
+    }
+
+    #[test]
+    fn a_name_breaks_after_its_separators() {
+        let name = "ILCE-1M2_sony_a1_ii_03.arw";
+        let segments = name_segments(name);
+        assert_eq!(segments, ["ILCE-", "1M2_", "sony_", "a1_", "ii_", "03.arw"]);
+        assert_eq!(segments.concat(), name);
+    }
+
+    #[test]
+    fn a_name_gives_no_empty_segment() {
+        assert_eq!(name_segments("DSC00001.ARW"), ["DSC00001.ARW"]);
+        assert!(name_segments("").is_empty());
+        assert_eq!(name_segments("a b_"), ["a ", "b_"]);
     }
 }

@@ -4501,8 +4501,9 @@ gives it its last width with no code.
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
   Not yet seen: the bands against the no-folder message in a narrow window,
-  and macOS and Linux. `todo.md`'s `App: the meta pane breaks words mid-word
-  at its 160 px minimum` holds the second finding of that run (results in
+  and macOS and Linux. `todo.md`'s `App: real-device check that the meta pane
+  keeps words whole at its 160 px minimum` holds the check of the fix for the
+  second finding of that run, words broken mid-word at 160 px (results in
   `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`);
   the press's offset was lost then, before the drag moved by the pointer's
   travel from the press, and `todo.md`'s `App: real-device check that a pane or strip drag keeps the press's offset from the boundary`
@@ -5364,6 +5365,37 @@ rule: a canvas only when `paint` grows by more than 1 ms).
   element tree; look at `present` (and `frameWait` for layout) when adding
   elements beside it.
 
+### A meta pane value that does not fit beside its label goes under it (Inferred)
+
+At the pane's 160 px minimum (132 px of content after `pl_3` and the 16 px
+`SCROLLBAR_TRACK`) a value column beside the label was narrower than one
+word, so `Electronic` broke as `Electroni` / `c` and the file name as
+`ILCE-1M2_sony_a1_ii_0` / `3.arw` (Windows 11, 2026-11-22). Read from the
+source, not seen in the running window.
+
+- Rule: each row is a `flex_wrap` row with `gap_x_2` (no vertical gap on a
+  wrapped row), the label `flex_none` and the value `flex_grow(1.)`, `min_w_0`
+  and `text_right`, its basis left at auto. GPUI's text element measures at
+  its whole single-line width when the available width is not definite
+  (`elements/text.rs`: no `wrap_width` under min- / max-content), so the
+  flex line breaks when label + gap + value is wider than the row, and the
+  value, alone on its line, shrinks to the row and wraps at UAX #14 break
+  opportunities, right-aligned. A value that fits stays on the label's line.
+  Do not give the value `flex_1`: its 0 basis would never break the line.
+- Rule: a value that does not fit whole beside its label goes under it at
+  every width, not only at 160 px; at 220 px a long lens name or a date with
+  its time zone does. Flexbox cannot say "only when the longest word does
+  not fit" without measuring the text.
+- Rule: the file name heading (`Shown::Read` and `Shown::Failed` alike) is a
+  `flex flex_wrap` `div` of `meta::name_segments`, the name cut after each
+  `_`, `-` and space, each segment a `min_w_0` text `div` with no gap, so it
+  breaks between segments and a segment wider than the pane still wraps
+  inside itself. `.` is not a separator, so the extension stays with the
+  last segment. No U+200B: how the fonts draw it was not checked on the
+  three platforms.
+- `todo.md`'s `App: real-device check that the meta pane keeps words whole at
+  its 160 px minimum` holds the check in the running window.
+
 ### The meta pane does not use gpui-component's `DescriptionList` (Inferred)
 
 On 2026-11-15, replacing the pane's `div` rows with gpui-component 0.9.1's
@@ -5373,7 +5405,8 @@ component's source and declined: the pane keeps its `div` rows.
 - Rule: do not port the pane to `DescriptionList` for less code. Its defaults
   (bordered, 3 columns, a fixed 120 px label width, left-aligned values) would
   all need overriding, and today's look (the label at its content width, the
-  value `min_w_0`, right-aligned and wrapping, an 11 px muted group heading
+  value `flex_grow(1.)` and `min_w_0`, right-aligned, going under the label when
+  it does not fit beside it and wrapping there, an 11 px muted group heading
   with `gap_0p5`) means building each value as an `AnyElement`, no shorter
   than the `div` rows. In a 220 px pane a fixed label width also squeezes
   the value and can wrap a long label.
