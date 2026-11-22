@@ -1680,6 +1680,21 @@ the Tauri `sharpness` map was filled from `folder_entries` and patched by
   that names the path where the flow allows it. Mis-clicks cost two runs of
   the notification check on 2026-11-22
   (`../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Rule: a real-device run quits its instance by key only after `Escape`. A
+  click on a tree row gives the tree the keyboard, so `q` goes to the tree
+  and the instance stays up; `Escape` hands the keyboard back, then `q` quits.
+  An MCP `open_folder` does not move the keyboard. Confirm the previous PID is
+  gone before launching the next instance on the same `--mcp-port`: until it
+  exits, the new one logs `could not listen on 127.0.0.1:<port>` (`os error
+  10048`) and runs without MCP.
+- Rule: a folder open prints no `page` line (only a key press is timed), so
+  judge a folder switch from burst captures, comparing each frame's preview
+  region with the first and the last frame. Take the burst in the capturing
+  process and start the action from a second process (a delayed Python MCP
+  call); a burst through PowerShell `Start-Job` starts about a second late.
+  A release build runs the launch update check (`--auto` is off), a network
+  request that offers the latest release to the `0.0.0` build
+  (`../plans/_archived/20261122-windows-device-checks-prefetch-cache/learnings.md`).
 - Rule: on Git Bash, give `curl` the JSON body on stdin
   (`--data-binary @- <<< "$body"`); a `--data` argument with `\` escapes
   reaches the server mangled. The session id is the `Mcp-Session-Id` header of
