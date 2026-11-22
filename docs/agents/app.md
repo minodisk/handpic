@@ -4436,9 +4436,10 @@ gives it its last width with no code.
   `--auto` the panes start at 220 whatever the store holds and nothing is
   written (`remember_panels` off, as for `panels`).
 - Seen (2026-11-22, Windows 11): `SIZEWE` on the preview's outer 5 px beside
-  each pane (x 221 to 226 with the tree's line at 220, about 1374 to 1379
-  with the meta pane's line at 1379, so a synthetic press aimed at the meta
-  pane's boundary must land left of its line); the pill on hover; every
+  each pane (x 221 to 226 with the tree's line at 220, about 1374 to 1380
+  across reads with the meta pane's line at 1379; a press at 1380 moved
+  nothing while 1379 and 1376 worked, so aim a synthetic press at the meta
+  pane's boundary on or left of its line); the pill on hover; every
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
   Not yet seen: the bands against the no-folder message in a narrow window,
