@@ -3378,6 +3378,11 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
 - Rule: read the cursor shape with `GetCursorInfo` against
   `LoadCursor(IDC_SIZENS / IDC_ARROW / IDC_HAND)`. Move the pointer away and
   back and wait about 400 ms first; a 250 ms read lagged a step behind.
+- Rule: moving the pointer away and back with `SetCursorPos` alone (450 ms
+  wait) read `ARROW` all along the pane boundaries; end the move with a few
+  relative `mouse_event` moves before the read, and expect the band's edges
+  to shift by about 1 px between reads (results in
+  `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`).
 - Rule: an OLE drag from Explorer works through `mouse_event`: click,
   shift-click, press, about 60 small moves 25 ms apart, a short wiggle over the
   target, release. The first attempt can go unreceived (no outline); repeat it
@@ -4430,11 +4435,17 @@ gives it its last width with no code.
   non-finite entry, means 220; a number out of range is clamped. Under
   `--auto` the panes start at 220 whatever the store holds and nothing is
   written (`remember_panels` off, as for `panels`).
-- Not observed in the running app: the drag itself, the handle's look on the
-  theme, its band against the preview's own clicks, the tree and the meta pane
-  at 160 px, and a release outside the window (whether Windows delivers it;
-  if not, the write waits for the next release inside). The `todo.md` hand
-  checks hold them.
+- Seen (2026-11-22, Windows 11): `SIZEWE` on the preview's outer 5 px beside
+  each pane (x 221 to 226 with the tree's line at 220, about 1374 to 1379
+  with the meta pane's line at 1379, so a synthetic press aimed at the meta
+  pane's boundary must land left of its line); the pill on hover; every
+  release, outside the window included, writing the widths at once (Windows
+  delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
+  Not yet seen: the bands against the no-folder message in a narrow window,
+  and macOS and Linux. `todo.md`'s `App: decide whether a pane drag keeps
+  the press's offset from the boundary` and `App: the meta pane breaks words
+  mid-word at its 160 px minimum` hold the two findings (results in
+  `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`).
 
 ### The strip's height is one number, stored under `stripHeight` (Inferred)
 
@@ -4494,9 +4505,12 @@ face icon keep their sizes.
 - Rule: no `drawn` rule as the side panes have. The preview's minimum holds
   during a drag only; a window made shorter afterwards takes the space from
   the preview, as the fixed strip did.
-- Not observed in the running app: the drag itself, the handle's line and
-  cursor, the marks on the smallest cells, the sharpness of the largest, and
-  a release outside the window. The `todo.md` hand checks hold them.
+- Seen (2026-11-22, Windows 11): `SIZENS` on y 802 to 807 under the line at
+  801; the releases writing the height at once, outside the window
+  included; `--auto 40` starting at 128 with 199 stored and writing nothing;
+  the 302 px cells drawn at about 1:1 at scale 1. Not yet seen: a HiDPI
+  display, and macOS and Linux (results in
+  `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`).
 
 ### The tree follows the disk through one `TreeWatch` (Measured)
 
