@@ -3634,7 +3634,7 @@ choosing the circle.
   frames for 180 ms after each change. Seen (2026-11-22, Windows 11): at
   pass 2's start the full ring drained to empty within about 240 ms (frames 80 ms apart, consistent with the 180 ms animation) and filled
   again, judged to read as a reset; paging during pass 2 took 12 to 29 ms
-  keypress to pixels against 5 to 21 ms after the scan, the difference
+  keypress to pixels against 5 to 21 ms after the scan (after a first 140 ms page), the difference
   following the read source (`read` during the scan, `prefetch` after), not
   the frames, judged not visibly slower on a debug build; paging during
   pass 1 not taken
@@ -4023,8 +4023,8 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
 - The no-folder text is `empty.ts`'s, with its "Drop a folder onto the
   window" clause (see the drop section below).
 - Seen (2026-11-22, Windows 11): rebinding `open` to `space` made the
-  message end `Or press Space.` in the first frame after the settings
-  closed, and a press on the settings layer over the message opened no
+  message end `Or press Space.` within 150 ms of the settings
+  closing (the first capture), and a press on the settings layer over the message opened no
   picker. The no-key clause cannot be reached from the UI: the Keyboard
   Shortcuts page refuses to remove an action's last key (`"space" is the
   only key for open; use Reset`)
