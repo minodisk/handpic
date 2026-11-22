@@ -950,17 +950,6 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 - [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
 
-### App: real-device checks of the held-key preview and crop (gpui-held-key-preview)
-
-#### Background
-
-`gpui-held-key-preview` made the GPUI app (`crates/app`) draw a stale result before requesting the current one, so holding Left / Right flips through frames in the fit view (Step 1, `Pager::finish` and `loaded()`) and in the 1:1 view (Step 2, `Zoom::page` and `Zoom::arrived`). Both steps were ticked on their automated criteria (`pager.rs` and `zoom.rs` unit tests, `mise run ci`, `mise run app:check`). Nobody has held a key in the running window, where a read outlasting the key repeat is what matters, so the drawn frames, the overlays and the `page` and `zoom` timing lines are unverified. Plan: `docs/plans/_archived/20261113-gpui-held-key-preview/plan.md`. Files: `crates/app/src/pager.rs`, `crates/app/src/zoom.rs`, `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] On Windows, fit view: open a folder in the app (`mise run app:dev`), ideally RAF files whose preview load outlasts the key repeat, and hold `→`. Expected: the preview flips through frames during the hold (skipping some files) instead of staying on the first one until release. On release the current file is shown with its `f` overlay (AF mark, face boxes, mesh), its meta pane and a `page` line. No frame ever shows another file's marks.
-- [ ] On Windows, 1:1 view: on a folder whose crop read outlasts the key repeat (RAF, ARW), press `z`, then hold `→`. Expected: the 1:1 view flips through crops during the hold (skipping some files) instead of staying on the first one until release. No crop is ever drawn over another file's scaled preview. On release the current file's crop is shown. A single press while zoomed goes old crop, new crop. `z` off / on on the same file reuses its crop with no new `zoom` line, and a `z` press prints one `zoom` line.
-
 ### Core: `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit` hits its 1 s bound under parallel load
 
 During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 1 s wall-clock bound under parallel load; run alone it took 0.38 s. The bound measures the machine's load as much as the cancel. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md`. Files: `crates/core/src/scan.rs` (the test, around line 1441).
@@ -1133,19 +1122,6 @@ The test failed once in four `cargo test` runs of the app workspace during `gpui
 #### TODO
 
 - [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).
-
-### App: real-device check of the performance overlay on `d`
-
-`gpui-perf-overlay` ported the Tauri app's performance overlay to the GPUI app: the keymap action `performance` (default key `d`) toggles a 120 px band along the bottom of the preview area that plots the last 60 s of Handpic's and the system's CPU, Handpic's read throughput, the system's disk busy time and one stacked bar per preview switch, with a one-line legend. CI and the unit tests cover the pure model (`crates/app/src/perf.rs`) and the graph layout (`crates/app/src/perfgraph.rs`), and `mise run app:check` passes. The agent could not see the window, so the drawing, the 500 ms motion and the bars were never exercised; the step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261114-gpui-perf-overlay/plan.md`.
-
-Files: `crates/app/src/perf.rs`, `crates/app/src/perfgraph.rs`, `crates/app/src/main.rs`, `crates/app/src/scan.rs` (`Event::Perf`).
-
-#### TODO
-
-- [ ] On Windows, in a release build of `crates/app`, open a folder with `mise run app:dev -- <folder>` and press `d`. Expected: a 120 px band along the bottom of the preview area, `#171717` at 0.85 alpha, with grid lines at 0, 50 and 100 %. The `Handpic CPU` / `System CPU` (blue, solid 2 px / dashed 1 px) and `Handpic disk` / `System disk` (green) lines move every 500 ms with the newest point at the right edge. The one-line legend at 11 px shows each line's swatch, `Latency` and the eight `page` stage names fading, with `<n> MB/s  <n> ms` at the right.
-- [ ] On Windows, with the overlay on, switch previews with an arrow key, with a strip click and by opening a folder from the tree. Expected: one red stacked bar per preview switch, and the key or click works as before.
-- [ ] On Windows, press `d` again. Expected: the band disappears, and on reopening it starts empty.
-- [ ] On Windows, with the overlay off, hold `→` through a folder. Expected: the `page` lines and the `summary` table look as before the change.
 
 ### App: real-device check of the restored window on a second monitor (gpui-session-restore)
 
@@ -1772,24 +1748,6 @@ Files: `crates/app/src/main.rs` (`menu_row`, `context_item`, `label_tag`, `paint
 #### TODO
 
 - [ ] On Windows (or any other desktop platform at hand), run `mise run app:dev`, open a RAW folder, open the status row's `Filter ▾` menu and a strip cell's right-click menu, and label a file; do this in a dark theme (Neutral dark) and again in a light theme (Neutral light). Expected: the seven color label rows (`Red`, `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`) and `No label` in both menus are small Tags holding the name, not clipped, with the row height still `MENU_ROW` (26 px); the Tag stays readable while its row is hovered (accent background); the filter popover is wide enough for its rows; the right-click menu keeps the check mark column and the right-aligned `Kbd` shortcut; a labeled strip cell's name band is filled with the label's 600-scale color with the name readable, the yellow band above all.
-
-### App: real-device Windows check of the momentary grayscale preview
-
-#### Background
-
-The `gpui-grayscale` feature grays the shown photo in the GPUI app (`crates/app`) while the `grayscale` key (default `g`) is held. It uses the per-sprite `grayscale` flag of `Window::paint_image` on the fit image and on the 1:1 placeholder and crop. Only the photo is grayed: the peaking overlay (`e`), the `f` overlay and the performance graph (`d`) stay colored. The hold ends on the release of the held key, on the release of any modifier, on window deactivation, and when the app view's focus handle is blurred (`cx.on_blur`). Unit tests of `Hold` (`grayscale.rs`) and `mise run ci:local` cover the state machine. Nobody ran the GUI: the blur release was read from the GPUI sources only, and the visual result, the auto-repeat behavior and the focus-leaving paths were never exercised. Once all pass, change the "(Inferred)" tag of the grayscale section in `docs/agents/app.md` to "(Measured)". Plan: `docs/plans/_archived/20261117-gpui-grayscale/plan.md`.
-
-Files: `crates/app/src/grayscale.rs`, `crates/app/src/main.rs`, `crates/app/src/zoom.rs`
-
-#### TODO
-
-- [ ] On Windows, run the GPUI app (`mise run app:dev` or the built binary), open a folder and hold `g` in the fit view. Expect the photo to turn gray, and color to return on release. Repeat in 1:1 (`z`): the placeholder and the crop both gray.
-- [ ] On Windows, with `f` and `e` (and `d`) on, hold `g`. Expect the AF mark, face boxes, mesh, labels, the peaking layer and the performance graph to stay colored, and the strip, the panes and the empty-state text to be unaffected.
-- [ ] On Windows, hold `g` long enough to auto-repeat. Expect no flicker.
-- [ ] On Windows, rebind `grayscale` to `ctrl+g` in the settings. Hold Ctrl+G and release Ctrl first, then repeat releasing `g` first. Expect color to return on the first release either way.
-- [ ] On Windows, hold `g` and Alt+Tab away and back. Expect the photo to be in color.
-- [ ] On Windows, hold `g` and open the settings (`ctrl+,`) or a right-click menu, release `g`, then close it. Expect the photo to be in color (the view's `on_blur` released the hold). If it stays gray, release the hold where the view opens the settings, a dialog or a menu instead.
-- [ ] On Windows, while `g` is held, page, press `z`, `f`, `e` and `d`. Expect them to behave as before.
 
 ### App: real-device checks of the drag-resizable strip height (native-strip-resize)
 

@@ -1,0 +1,12 @@
+# Learnings: Windows real-device checks, batch 8
+
+## Step 1
+
+- **`SetCursorPos` followed by a button press can miss GPUI.** In r5 the click selected no cell and opened no menu, although `WindowFromPoint` named the instance. A few relative `mouse_event` moves before the press delivered it every time. Recorded as a rule in `docs/agents/app.md` ("Driving the window in a real-device run on Windows"). Basis: `results.md`, Incidents.
+- **A click on a tree row gives the tree the keyboard**, so the next key goes to its type-ahead: a `d` meant for the overlay moved the tree's cursor to a `d…` folder. `Escape` hands the keyboard back; send it before the next key. Expected behaviour (`treekeys.rs`), recorded as a rule in the same section. Basis: `results.md`, Incidents.
+- **A fast burst of captures with preallocated bitmaps** (one about every 15 ms) caught the 1:1 scaled-preview placeholder (39-70 ms after `z`) before the crop (from 87 ms); slower captures missed the placeholder. Basis: `results.md`, the grayscale item's box 1.
+- **`--no-prefetch` was needed to make the fit view's reads outlast the key repeat** on cached files: with the ring on, most pages were prefetch hits and no stale frame was drawn. Basis: `results.md`, the held-key item's box 1.
+- **Three held-key sub-points were first recorded only in part**: that no frame shows another file's marks, the release's face boxes and mesh, and the files skipped in the 1:1 hold. They were settled before Step 1 by re-reading the kept captures (the stale `--no-prefetch` RAF frame with no AF mark, the crops never drawn) and one extra short hold ending on a face file (r6), so the held-key item was deleted whole.
+- **No new `todo.md` item (list C).** The 1-3 px bars of the performance overlay's box 2 are the latency axis floor (`LATENCY_FLOOR`, 500 ms, `crates/app/src/perf.rs`) working as designed against 12-20 ms switches. The legend without `System disk` 250 ms after reopening is `crates/app/src/perfgraph.rs` drawing that series only once a sample has a disk busy value. `×` on `G` not removing the only key is `Keymap::remove` in `crates/engine/src/shortcuts.rs` refusing the last key. All three are recorded in `results.md` and the PR description only.
+- **`results.md` stays in this folder** as the run's record; the removed `todo.md` boxes live only there and in the PR description.
+- Python on Windows: the edit script read and wrote bytes, so every changed file stayed LF.
