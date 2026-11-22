@@ -126,3 +126,4 @@ while planning, and how each was settled:
   - B / C: none.
   - D (`docs/agents/app.md`, four sections): three tags changed to `(Measured)`, two `Pending` bullets replaced by `Measured` bullets, one observation bullet added to the grayscale section, and two rules added to `Driving the window`.
   - E: `learnings.md` written.
+- 2026-11-22: Wrap-up. `docs/agents/app.md` "Driving the window in a real-device run on Windows" got two more rules (the fast capture burst for short-lived frames, `--no-prefetch` for stale frames on cached files); `todo.md` needed nothing further; no settings to promote. Plan archived.

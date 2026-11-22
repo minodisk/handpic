@@ -3415,6 +3415,15 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
 - Rule: a click on a tree row gives the tree the keyboard, so the next key
   goes to its type-ahead; send `Escape` before the next key
   (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+- Rule: to catch a short-lived frame, such as the 1:1 scaled-preview
+  placeholder (about 39-70 ms after `z`, before the crop at about 87 ms), take
+  a fast burst of captures with preallocated bitmaps (about one every 15 ms);
+  slower captures missed the placeholder
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+- Rule: to see a stale frame during a held key on already-cached files, launch
+  with `--no-prefetch`. With the ring on, most pages are prefetch hits, so the
+  fit view's reads never outlast the key repeat and no stale frame is drawn
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
 
 ### Every keystroke goes through the keymap (Inferred)
 
