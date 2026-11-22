@@ -241,10 +241,6 @@ impl RenamesInFlight {
             .iter()
             .any(|dir| tree::relation(path, dir, ignore_case).is_some())
     }
-
-    pub fn any(&self) -> bool {
-        !self.paths.is_empty()
-    }
 }
 
 pub const RENAMING: &str = "A folder is being renamed; try again in a moment.";

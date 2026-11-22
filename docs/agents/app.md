@@ -2766,7 +2766,8 @@ arm does (`show_current`: the cleared status note, meta pane, `marks.show`, `zoo
 the read and the paint hold. `request_prefetch` reads the next wanted file,
 one at a time through `load` on the background executor, only when the pager
 has nothing in flight, the image on screen is the current file's, no scan
-pass runs and no folder rename is in flight (`renaming`); it is asked after a
+pass runs and no folder rename of the open folder or an ancestor is in flight
+(`renaming`); it is asked after a
 current result (read or hit), a settled prefetch, a `refilter` that leaves the
 current file shown, `FacesDone` and a failed folder rename (`rename_ran`'s
 `Err` arm; a successful one reopens the folder, which refills the ring).
@@ -4922,8 +4923,9 @@ the watcher back when the rename fails or the split leaves the folder.
   That prefetch was the handle behind the held rename's `Access denied (os
   error 5)` at pass 2's end.
 - Rule: `request_prefetch` starts no read while a folder rename is in flight
-  (`RenamesInFlight::any`), so the `FacesDone` that drains a held rename
-  starts none; a failed rename asks for the prefetch again. A page turn's
+  (`RenamesInFlight::blocks` of the open folder), so the `FacesDone` that
+  drains a held rename starts none; a rename of an unrelated folder holds
+  nothing, and a failed rename asks for the prefetch again. A page turn's
   preview read, an on-demand read or a 1:1 crop read in flight at the
   instant of a rename can still refuse it.
 - Rule: the date rename is not held by the gate: with a listing, a scan or a

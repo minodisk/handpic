@@ -45,9 +45,11 @@ What the plan asked to verify:
 
 Implementation notes:
 
-- `RenamesInFlight::any` and `Handpic::renaming` (in `folderops.rs`, since
-  `folderops`' fields are private to that module) answer "a folder rename is
-  in flight". `request_prefetch` refuses on it; `rename_ran`'s `Err` arm asks
+- `Handpic::renaming` (in `folderops.rs`, since `folderops`' fields are
+  private to that module) answers "a folder rename of the open folder or an
+  ancestor is in flight" through `RenamesInFlight::blocks`, so a rename of an
+  unrelated folder, which never reopens, holds no prefetch.
+  `request_prefetch` refuses on it; `rename_ran`'s `Err` arm asks
   for a prefetch after `settle_folder_run`. A successful rename reopens the
   folder, whose `FacesDone` asks for it again.
 - The regression test (`a_folder_rename_in_flight_starts_no_prefetch`) fails

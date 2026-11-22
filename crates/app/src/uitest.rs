@@ -573,3 +573,38 @@ fn a_rename_held_over_the_scan_runs_at_its_end_and_the_ring_fills_again() {
         view.prefetch.as_ref().unwrap().holds(&next)
     });
 }
+
+#[test]
+fn a_refused_folder_rename_fills_the_ring_again() {
+    let mut ui = Ui::open();
+    let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1), ("c.dng", 1)]);
+    fs::create_dir(ui.dir().join("taken")).unwrap();
+    let path = folder.to_string_lossy().into_owned();
+    let started = ui.update(|view, cx| {
+        view.clear_ring(cx);
+        view.request_rename(path, "taken".into(), cx);
+        assert!(view.renaming());
+        view.request_prefetch(cx);
+        view.prefetch.as_ref().unwrap().still_wanted()
+    });
+    assert!(!started);
+    ui.wait_until("the refused rename's end", |view| !view.renaming());
+    ui.read(|view| assert!(view.step_note.is_some()));
+    ui.wait_until("the ring's neighbour", |view| {
+        let next = view.files[1].to_string_lossy();
+        view.prefetch.as_ref().unwrap().holds(&next)
+    });
+}
+
+#[test]
+fn a_rename_of_another_folder_does_not_hold_the_prefetch() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1), ("c.dng", 1)]);
+    let other = ui.dir().join("other");
+    fs::create_dir(&other).unwrap();
+    let path = other.to_string_lossy().into_owned();
+    ui.update(|view, cx| {
+        view.request_rename(path, "elsewhere".into(), cx);
+        assert!(!view.renaming());
+    });
+}

@@ -1281,7 +1281,6 @@ impl Handpic {
                 self.record_failed(datefolder::LABEL, e.clone());
                 self.step_note = Some(e);
                 self.settle_folder_run(cx);
-                self.request_prefetch(cx);
                 cx.notify();
                 return;
             }
@@ -1649,9 +1648,14 @@ fn folder_dialog(
 /// The tree's inline rename, a port of `folders.ts`'s editor and
 /// `main.ts`'s `renameFolder` / `holdRename`.
 impl Handpic {
-    /// A folder rename is in flight.
+    /// A folder rename in flight moves the open folder: it is the renamed
+    /// folder or under it.
     pub(crate) fn renaming(&self) -> bool {
-        self.folderops.renames.any()
+        self.dir.as_deref().is_some_and(|dir| {
+            self.folderops
+                .renames
+                .blocks(&context::shown_path(dir), IGNORE_CASE)
+        })
     }
 
     /// The name of the tree's row `at`: the text input while it is being
@@ -2126,6 +2130,7 @@ impl Handpic {
                 self.record_failed(rename::LABEL, e.clone());
                 self.step_note = Some(e);
                 self.settle_folder_run(cx);
+                self.request_prefetch(cx);
                 cx.notify();
             }
         }
