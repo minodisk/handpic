@@ -19,7 +19,7 @@ lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the li
 ## Purpose
 
 The Windows real-device run of 2026-11-22
-([results](../_archived/20261122-windows-device-checks-resize-scrollbars/results.md),
+([results](../20261122-windows-device-checks-resize-scrollbars/results.md),
 pane box 2 and box 5) left two findings in `todo.md`, and the user decided to
 fix both:
 
