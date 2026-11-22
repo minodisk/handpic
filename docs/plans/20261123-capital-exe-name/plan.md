@@ -200,3 +200,5 @@ renamed copy breaks an update again.
   `target/` path, and likely trip the crate-name lint.
 
 ## Progress
+
+- (2026-11-23) Step 1 complete (hand checks pending in todo.md)
