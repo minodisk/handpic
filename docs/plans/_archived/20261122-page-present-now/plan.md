@@ -119,3 +119,4 @@ fix rests on, and measures the fix with the external ruler.
 - (2026-11-22) Step 1 complete
 - (2026-11-22) Step 2 complete
 - (2026-11-22) Step 3 complete
+- (2026-11-22) Reverted by `revert-page-present-now`: it relies on GPUI internals outside its public API
