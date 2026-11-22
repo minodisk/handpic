@@ -3357,6 +3357,48 @@ otherwise), and pick the process by its path in this worktree, since another
 worktree's `handpic.exe` may be running or exiting. Report a skipped key
 rather than counting it as a page. Held-key measurements also need an idle
 machine: another session's `cargo` build fails the gate, so redo the slot.
+For a cold set the foreground check must pass before the folder opens: pass 1
+lasts only about 4 s over 600 cold ARWs, and a launched window often loses its
+first `SetForegroundWindow` to the terminal. Launch with no folder, retry the
+focus until `GetForegroundWindow` is the instance's window (by PID), then open
+the folder through MCP `open_folder` with the capture already running. Keys
+sent while a listing runs are dropped (3.7 s for 600 files), so paging "during
+pass 1" starts after the listing and has to fit in what is left. See
+[the plan's learnings](../plans/_archived/20261122-windows-device-checks-7/learnings.md).
+
+### Driving the window in a real-device run on Windows (Measured)
+
+Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
+[the plan's learnings](../plans/_archived/20261122-windows-device-checks-7/learnings.md).
+
+- Rule: `SetWindowPos` cannot shorten the window: any asked height came out
+  1460 (the display's 1440 plus the frame) while width and position applied.
+  For a short-window check drag the window's own bottom edge with synthetic
+  mouse input.
+- Rule: read the cursor shape with `GetCursorInfo` against
+  `LoadCursor(IDC_SIZENS / IDC_ARROW / IDC_HAND)`. Move the pointer away and
+  back and wait about 400 ms first; a 250 ms read lagged a step behind.
+- Rule: an OLE drag from Explorer works through `mouse_event`: click,
+  shift-click, press, about 60 small moves 25 ms apart, a short wiggle over the
+  target, release. The first attempt can go unreceived (no outline); repeat it
+  once before calling a drop a failure. Close the Explorer window afterwards
+  through `Shell.Application`'s `Windows()` by `LocationURL`, not with keys.
+- Rule: measure layout by scanning pixel runs along a row or column of a window
+  capture (Neutral dark: pane borders `#1a1a1a`, the status row's border
+  `#2f2f2f`, the preview's black surround). A no-folder window keeps the photo
+  out of the way. There is no line between the strip header and the cells;
+  take the header's height from the cells' symmetric padding. The canvas
+  measured this way (1158 x 767 of surround) does not match the 1160 x 810
+  inferred from an earlier paint-bounds log, which may count differently; the
+  difference is untraced, so prefer capture measurements.
+- Rule: a crop re-cut prints no `zoom` line (only a `z` press is timed), so
+  judge a re-cut after a pane or strip drag from captures. A drag that shrinks
+  the canvas re-cuts nothing because the held crop still covers it
+  (`Zoom::holds`); drag so the canvas grows.
+- Rule: the settings modal reopens on its first page (Sidecar), not the last
+  one shown. Open the target page through its sidebar entry before pressing
+  its controls; a press aimed at a later page once hit the Sidecar `Both`
+  radio at the same position.
 
 ### Every keystroke goes through the keymap (Inferred)
 
