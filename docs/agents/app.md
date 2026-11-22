@@ -2973,7 +2973,7 @@ view's eviction, watchers, sidecar writer, judgment queue, settings `Writes`
 and scan run on `std::thread`s that it does not run; their results reach the
 view through its channel. `Ui::open` calls `allow_parking`, and
 `Ui::wait_until` runs `run_until_parked`, checks a condition on the view and
-sleeps 10 ms, failing after 10 s. `Ui::open` installs a test-only `log`
+sleeps 10 ms, failing after 30 s (`WAIT`). `Ui::open` installs a test-only `log`
 logger once per process, which keeps every line stamped with the time since
 the first `Ui`, so a timed-out `wait_until` puts the view's state and the
 app's log lines naming its temporary folder (`scan list:`, `scan extract:`,
@@ -2990,13 +2990,19 @@ settings writes drained): about 0.5 ms with nothing queued, asserted under
 their SQLite files only after the senders the view held are dropped, a little
 after the quit, so the drop retries removing the temporary folder (gone
 after about 11 ms, one retry) and fails the test if it is still held after
-10 s; nothing is written outside it. The smoke test passed 25 runs alone and
+30 s (`WAIT`); nothing is written outside it. The smoke test passed 25 runs alone and
 20 runs of the whole crate's tests on Windows.
 
 - Rule: build a UI test on `Ui`, wait on the app's threads with
   `wait_until`, never a fixed sleep, and drop the `Ui` to end it.
 - Rule: a UI test that times out is diagnosed from its log lines, not by
-  raising the 10 s wait. On the macOS CI runner five tests of six used to
+  raising the wait. The wait was raised once, from 10 s to 30 s, after such
+  a diagnosis: the only UI test opening 4 files (pass 2's 3 workers leave
+  the 4th file waiting on one of them) took about 7.6 to 8.9 s in a debug
+  build with the suite on 2 cores, each tiny DNG 0.75 to 1.3 s of compute,
+  and failed 3 runs of 9 at 10 s on 2 cores; at 30 s it passed 16 of 16,
+  each run 11.0 to 11.9 s. A later timeout needs its own diagnosis, not a
+  further raise. On the macOS CI runner five tests of six used to
   time out with pass 2 at `analyzing 0/N`: its `QOS_CLASS_BACKGROUND` made
   one tiny DNG's analysis 6 to 14 times slower than at normal priority and
   pass 2 of 2 to 4 files take 15 s to 44 s. The app's pass 2 now runs at
@@ -3008,7 +3014,8 @@ after about 11 ms, one retry) and fails the test if it is still held after
   starves behind the crate's other tests running in parallel on every OS: on
   the Windows CI runner (`THREAD_PRIORITY_LOWEST`) one test's pass 2 had done
   3 of 4 files after 10 s, where it normally takes about 0.7 s for 3. The
-  tests check the wiring, not the scheduling. Do not raise the wait instead.
+  tests check the wiring, not the scheduling. Do not raise the wait instead
+  (the one measured raise to 30 s is in the rule above).
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.

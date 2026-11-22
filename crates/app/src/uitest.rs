@@ -26,7 +26,10 @@ use crate::{
 };
 
 /// How long `wait_until` waits on the app's own threads before failing.
-const WAIT: Duration = Duration::from_secs(10);
+/// Only the failure deadline, so a passing test is not slowed: the 4-file
+/// open's pass 2 takes about 7.6 to 8.9 s in a debug build under the suite's
+/// parallel load on 2 cores, too close to the 10 s this was.
+const WAIT: Duration = Duration::from_secs(30);
 
 /// Under every quit handler's drain timeout, so a quit that waits one out
 /// fails the test.
