@@ -51,11 +51,19 @@ pub fn dragged(wanted: f32, shared: f32) -> f32 {
         .clamp(MIN, MAX)
 }
 
+/// The strip pane's height, header and gutter included, its top edge pressed
+/// at the window `press` with the pane `start` high, the pointer at `y`:
+/// `start` moved by the pointer's travel from the press, the pane growing as
+/// the pointer goes up.
+pub fn wanted(start: f32, press: f32, y: f32) -> f32 {
+    start - (y - press)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         DEFAULT, GUTTER, HEADER, MAX, MIN, PREVIEW_MIN, SCROLLBAR_TRACK, STRIP_PADDING, dragged,
-        from_setting, setting,
+        from_setting, setting, wanted,
     };
     use serde_json::json;
 
@@ -115,5 +123,25 @@ mod tests {
         // Never under the minimum, whatever the room.
         assert_eq!(dragged(extra + 300., 200.), MIN);
         assert_eq!(dragged(extra + 300., extra + PREVIEW_MIN + 50.), MIN);
+    }
+
+    #[test]
+    fn a_drag_moves_the_edge_by_the_pointer_travel_from_the_press() {
+        let start = HEADER + DEFAULT + GUTTER;
+        // 50 px above the press, a pane 50 px higher.
+        assert_eq!(wanted(start, 700., 650.), start + 50.);
+        assert_eq!(dragged(wanted(start, 700., 650.), 900.), DEFAULT + 50.);
+        // Back at the press, the starting height exactly.
+        assert_eq!(wanted(start, 700., 700.), start);
+        assert_eq!(dragged(wanted(start, 700., 700.), 900.), DEFAULT);
+    }
+
+    #[test]
+    fn a_drag_past_a_clamp_and_back_does_not_drift() {
+        let start = HEADER + DEFAULT + GUTTER;
+        let at = |y: f32| dragged(wanted(start, 700., y), 900.);
+        assert_eq!(at(0.), MAX);
+        assert_eq!(at(900.), MIN);
+        assert_eq!(at(680.), DEFAULT + 20.);
     }
 }

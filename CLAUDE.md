@@ -583,8 +583,9 @@ missing or non-boolean entry meaning shown), which the window's
 re-cut and `panels` written (neither read nor written under `--auto`), and
 `src/panewidths.rs` the side panes' widths (`PaneWidths`, `DEFAULT` 220 px
 within `MIN` and `MAX`, the preview kept `PREVIEW_MIN`; `from_setting` and
-`setting`, the `panelWidths` value; `dragged`, the widths a drag of a pane's
-boundary gives; `drawn`, the panes narrowed while the window cannot hold
+`setting`, the `panelWidths` value; `wanted`, the width a drag wants, the
+pane's drawn width at the press moved by the pointer's travel from it;
+`dragged`, the widths that wanted width gives; `drawn`, the panes narrowed while the window cannot hold
 them), which the window sets from gpui-component's standalone
 `resize_handle` on the preview's edges and writes at the drag's end (neither
 read nor written under `--auto`), and `src/stripheight.rs` the strip's
@@ -592,8 +593,9 @@ height, its cells' (`DEFAULT` 128 px within `MIN` and `MAX`, the preview kept
 `PREVIEW_MIN`; `HEADER`, the header row over the cells, and `GUTTER`, the
 9 px band under them holding the horizontal scrollbar's track, which the
 drawn pane adds; `from_setting` and `setting`, the `stripHeight` value;
-`dragged`, the cells' height a drag of the pane's top edge gives, the header
-and the gutter counted), which the window sets from a vertical `resize_handle` on the
+`wanted`, the pane height a drag of its top edge wants, the height at the
+press moved by the pointer's travel from it; `dragged`, the cells' height
+that gives, the header and the gutter counted), which the window sets from a vertical `resize_handle` on the
 header's top edge, the cells
 resized around those in view (`Strip::set_geometry`), and writes at the
 drag's end (neither read nor written under `--auto`), next to

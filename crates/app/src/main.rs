@@ -105,7 +105,7 @@ use gpui_kit::component::{
     list::ListItem,
     menu::{PopupMenu, PopupMenuItem},
     progress::ProgressCircle,
-    resizable::{HandleEdge, resize_handle},
+    resizable::{HandleEdge, ResizeHandle, resize_handle},
     scroll::ScrollableElement,
     status_bar::StatusBar,
     tag::Tag,
@@ -383,6 +383,15 @@ fn entries_of(reader: &Mutex<Index>, dir: &str) -> Option<Entries> {
     Some((judgments, facts, groups))
 }
 
+/// The last press on a pane's boundary or the strip's top edge: the pointer's
+/// coordinate along the drag's axis and the pane's drawn width, or the strip
+/// pane's height, at that moment.
+#[derive(Clone, Copy)]
+struct DragPress {
+    at: f32,
+    start: f32,
+}
+
 struct Handpic {
     focus: FocusHandle,
     /// The listing in natural order, narrowed by `--size` / `--max`: the
@@ -567,6 +576,9 @@ struct Handpic {
     /// The strip's top edge has moved since the button went down; the next
     /// button release writes `stripHeight`.
     strip_dragged: bool,
+    /// What a drag of a pane's boundary or the strip's top edge moves the
+    /// boundary from; the next press replaces it.
+    drag_press: Option<DragPress>,
     /// `--size` and `--max`, which a re-listing applies again.
     wanted: Option<(u32, u32)>,
     max: Option<usize>,
@@ -1026,6 +1038,7 @@ impl Handpic {
             },
             pane_dragged: false,
             strip_dragged: false,
+            drag_press: None,
             wanted: None,
             max: None,
             listing: 0,
@@ -1230,11 +1243,34 @@ impl Handpic {
         .detach();
     }
 
-    /// The boundary of `pane` dragged to the window `x` in a window `window`
-    /// wide, re-cutting a 1:1 crop as a window resize does.
+    /// A press on the boundary of `pane` at the window `x` in a window
+    /// `window` wide, which the drag moves the pane's drawn width from.
+    fn press_pane(&mut self, pane: Panel, x: f32, window: f32) {
+        let drawn = self.pane_widths.drawn(window, self.panels);
+        let start = match pane {
+            Panel::Right => drawn.right,
+            _ => drawn.left,
+        };
+        self.drag_press = Some(DragPress { at: x, start });
+    }
+
+    /// A press on the strip's top edge at the window `y`, which the drag
+    /// moves the strip pane's height, header and gutter included, from.
+    fn press_strip(&mut self, y: f32) {
+        let start = stripheight::HEADER + self.strip.geometry().height + stripheight::GUTTER;
+        self.drag_press = Some(DragPress { at: y, start });
+    }
+
+    /// The boundary of `pane` dragged with the pointer at the window `x` in a
+    /// window `window` wide, moved from the press by the pointer's travel,
+    /// re-cutting a 1:1 crop as a window resize does.
     fn drag_pane(&mut self, pane: Panel, x: f32, window: f32, cx: &mut Context<Self>) {
+        let Some(press) = self.drag_press else {
+            return;
+        };
         self.pane_dragged = true;
-        let widths = self.pane_widths.dragged(pane, x, window, self.panels);
+        let wanted = panewidths::wanted(pane, press.start, press.at, x);
+        let widths = self.pane_widths.dragged(pane, wanted, window, self.panels);
         if widths != self.pane_widths {
             self.pane_widths = widths;
             self.zoom_resized(cx);
@@ -1242,12 +1278,16 @@ impl Handpic {
         }
     }
 
-    /// The strip pane's top edge dragged to make it, header and gutter
-    /// included, `wanted` px high, the preview and the pane sharing `shared`
-    /// px: the cells are resized around the cells in view, and a 1:1 crop is
-    /// re-cut for the new canvas.
-    fn drag_strip(&mut self, wanted: f32, shared: f32, cx: &mut Context<Self>) {
+    /// The strip pane's top edge dragged with the pointer at the window `y`,
+    /// moved from the press by the pointer's travel, the preview and the pane
+    /// sharing `shared` px: the cells are resized around the cells in view,
+    /// and a 1:1 crop is re-cut for the new canvas.
+    fn drag_strip(&mut self, y: f32, shared: f32, cx: &mut Context<Self>) {
+        let Some(press) = self.drag_press else {
+            return;
+        };
         self.strip_dragged = true;
+        let wanted = stripheight::wanted(press.start, press.at, y);
         let height = stripheight::dragged(wanted, shared);
         if height != self.strip.geometry().height {
             self.strip.set_geometry(
@@ -6243,9 +6283,8 @@ impl Render for Handpic {
                     .flex()
                     .flex_col()
                     .on_drag_move(cx.listener(|this, e: &DragMoveEvent<StripDrag>, _, cx| {
-                        let bottom = f32::from(e.bounds.bottom());
                         let shared = f32::from(e.bounds.size.height);
-                        this.drag_strip(bottom - f32::from(e.event.position.y), shared, cx);
+                        this.drag_strip(f32::from(e.event.position.y), shared, cx);
                     }))
                     .child(
                         div()
@@ -6357,15 +6396,13 @@ impl Render for Handpic {
                                         empty_text.map(|text| self.empty_message(empty, text, cx)),
                                     )
                                     .children(
-                                        self.panels
-                                            .left
-                                            .then(|| pane_handle(Panel::Left, HandleEdge::Leading)),
-                                    )
-                                    .children(
-                                        self.panels.right.then(|| {
-                                            pane_handle(Panel::Right, HandleEdge::Trailing)
+                                        self.panels.left.then(|| {
+                                            pane_handle(Panel::Left, HandleEdge::Leading, cx)
                                         }),
-                                    ),
+                                    )
+                                    .children(self.panels.right.then(|| {
+                                        pane_handle(Panel::Right, HandleEdge::Trailing, cx)
+                                    })),
                             )
                             .children(self.panels.right.then(|| self.meta_pane(drawn.right, cx)))
                             .child(drop_outline(cx.theme().ring)),
@@ -6422,7 +6459,7 @@ impl Render for Handpic {
                             .flex_col()
                             .child(self.strip_header(menu_max, cx))
                             .child(cells)
-                            .child(strip_handle())
+                            .child(strip_handle(cx))
                     })),
             )
             .child(self.status_row(cx))
@@ -6608,9 +6645,13 @@ impl Render for PaneDrag {
     }
 }
 
-/// The grab band on the preview's edge beside `pane`, which the root's
-/// `on_drag_move` follows.
-fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
+/// The grab band on the preview's edge beside `pane`, which records its
+/// press and which the root's `on_drag_move` follows.
+fn pane_handle(
+    pane: Panel,
+    edge: HandleEdge,
+    cx: &Context<Handpic>,
+) -> ResizeHandle<PaneDrag, PaneDrag> {
     let id = match pane {
         Panel::Left => "left-pane-edge",
         _ => "right-pane-edge",
@@ -6618,6 +6659,13 @@ fn pane_handle(pane: Panel, edge: HandleEdge) -> impl IntoElement {
     resize_handle::<PaneDrag, PaneDrag>(id, Axis::Horizontal)
         .inside(edge)
         .on_drag(PaneDrag(pane), |drag, _, _, cx| cx.new(|_| *drag))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(move |this, e: &MouseDownEvent, window, _| {
+                let width = f32::from(window.viewport_size().width);
+                this.press_pane(pane, f32::from(e.position.x), width);
+            }),
+        )
 }
 
 /// The drag payload of the strip's top edge, and its dragged item, drawn as
@@ -6631,12 +6679,19 @@ impl Render for StripDrag {
     }
 }
 
-/// The grab band over the strip header's top padding, which the
-/// `on_drag_move` of the wrapper around the middle row and the strip follows.
-fn strip_handle() -> impl IntoElement {
+/// The grab band over the strip header's top padding, which records its
+/// press and which the `on_drag_move` of the wrapper around the middle row
+/// and the strip follows.
+fn strip_handle(cx: &Context<Handpic>) -> ResizeHandle<StripDrag, StripDrag> {
     resize_handle::<StripDrag, StripDrag>("strip-edge", Axis::Vertical)
         .inside(HandleEdge::Leading)
         .on_drag(StripDrag, |drag, _, _, cx| cx.new(|_| *drag))
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, e: &MouseDownEvent, _, _| {
+                this.press_strip(f32::from(e.position.y));
+            }),
+        )
 }
 
 /// The Tauri `body.dragging #main` outline, laid over the main area while an
