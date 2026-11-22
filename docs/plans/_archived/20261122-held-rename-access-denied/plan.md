@@ -155,3 +155,5 @@ end beside it, succeeds, and reopens the folder under its new name.
 
 ## Progress
 
+
+- (2026-11-22) Step 1 complete
