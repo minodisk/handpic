@@ -1200,6 +1200,11 @@ back; a new key then `Ctrl+Shift+Z` did nothing; after `q` and a new index
   file and stores each, with no auto-advance. Nothing happens in a view-only
   folder, with no file shown or outside a burst of two or more; its undo is
   the ordinary `step`.
+- Seen (2026-11-22, Windows 11): under a Picked filter `shift+x` rejected the
+  burst's hidden member, the current file stayed and nothing advanced, the
+  undo and redo named it as hidden by the filter (`Undid _DSC1995.ARW
+  (hidden by the filter)`), and on a singleton it did nothing (results in
+  `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 
 ### The selection is keyed by path and ends every `refilter` (Inferred)
 
@@ -2022,11 +2027,16 @@ dimmed, shows capture order and keeps the stored key.
   (header and cells), the room above the header, so `snap_to_window` has no
   reason to push it over its own button. `change_panels` closes an open menu
   when the strip goes, as a view-only open closes a sort menu.
-- Not verified headless (mouse clicks cannot be driven by `--auto`): that a
-  press on an item reaches its `on_click` and not the strip, and that
-  `on_mouse_down_out` fires for a press in the strip or the preview. Both are
-  read from GPUI's `div.rs` at the pinned rev; the hand check is pending in
+- Not verified in the running app: that a press on an item reaches its
+  `on_click` and not the strip (the menu opened over the preview and the
+  meta pane and never overlapped the strip). It is read from GPUI's `div.rs`
+  at the pinned rev; the hand check is pending in
   `../plans/_archived/20261113-gpui-filter-sort/learnings.md`.
+- Seen (2026-11-22, Windows 11): `escape`, a press on the preview, on a strip
+  cell and on the menu's own button each close the filter menu, the
+  button's staying closed; the strip cell press also selects that cell; the
+  pager and `e` / `f` / `z` work with the filter menu open (results in
+  `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 
 ### The icons are Lucide SVGs served by one `AssetSource` (Inferred)
 
@@ -3547,6 +3557,11 @@ choosing the circle.
   `../plans/20261115-native-status-bar/learnings.md`).
 - Rule: do not zero `duration_normal` to stop the animation: the dialogs read
   it too.
+- Seen (2026-11-22, Windows 11): the circle filled through pass 2 of a cold
+  600-file folder and through a 600-file Move to Trash run and went at each
+  end, the position shifting about 20 px with it; pass 1 (about 1.1 s) was
+  too short to see (results in
+  `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 - Sequence JPEG Timestamps and Import feed it through `shown`'s `folder_op`
   argument: `FolderOps`' `sequence_progress()`, else `import_progress()`
   (the order `status_of` uses), set to `(0, 0)` at the run's start, updated
@@ -3918,10 +3933,14 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   hint shows while the first open's listing runs.
 - The no-folder text is `empty.ts`'s, with its "Drop a folder onto the
   window" clause (see the drop section below).
-- Not verified in the running app: the message's placement, the click
-  opening the picker, the key clause following a rebinding, and the failed
-  preview message on `D:\Photos\samples\NEF\NIKON_D70_Nikon.nef` (the
-  pending hand check in `../plans/20261114-gpui-empty-state/learnings.md`).
+- Not verified in the running app: the key clause following a rebinding,
+  and a click on the settings modal not opening the picker (the pending
+  hand check in `../plans/20261114-gpui-empty-state/learnings.md`).
+- Seen (2026-11-22, Windows 11): the no-folder message centered and its
+  click opening the folder picker, the no-files message's click doing
+  nothing, and on `NIKON_D70_Nikon.nef` the failed-preview message, which
+  `z` hides (results in
+  `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 ### A folder dropped onto the window opens, a later drop winning (Inferred)
 
 The root `div` of the window's `render` takes the drop
