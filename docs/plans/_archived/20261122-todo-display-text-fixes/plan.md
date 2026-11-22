@@ -134,3 +134,5 @@ rename's Access denied and the folder dialogs' file list's blank band.
   `usage` files.
 
 ## Progress
+
+- (2026-11-22) Step 1 complete
