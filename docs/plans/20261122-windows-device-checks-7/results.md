@@ -110,7 +110,7 @@ Incidents:
 - Measured on `few`'s row:
   - the badge's pill ends at x 211, 16 px from the pane's right edge at x 227; its digit ends at x 205
   - the resting thumb spans x 218–223
-  - the gap from the pill's right edge to the thumb is 6 px
+  - the gap from the pill's right edge to the thumb is 7 px (x 211 to x 218)
 - A press at x 208 (the pill's right end) on `few`'s row opened `few\` rather than going to the track. PASS.
 - The collapsed tree drew no bar. Whether a non-overflowing tree looks otherwise unchanged ("4 px more room right of the badges") was not compared: that needs a build from before `native-scrollbar-gutter`.
 
