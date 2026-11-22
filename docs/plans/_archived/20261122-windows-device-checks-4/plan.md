@@ -107,3 +107,4 @@ editing):
 ## Progress
 
 - Step 1: applied the run's results to `todo.md` (lists A to C: boxes removed or narrowed in eight items, the three new items C1 to C3) and `docs/agents/app.md` (list D), moved `results.md` into `learnings.md` and deleted it.
+- 2026-11-22 Wrap-up: learnings-extractor proposed two `docs/agents/app.md` bullets (the refilter section and the Face focus section), applied; todo-curator proposed narrowing the sort/filter item's intro sentence (the strip-cell click question is answered), applied; no `.claude/settings.local.json` to promote. Plan archived.

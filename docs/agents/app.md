@@ -1819,6 +1819,16 @@ last, and a JPEG folder under `"name"` paged in capture order.
   the list emptied, else on its `anchor_after_filter` neighbour, else on the
   first file. This is an improvement of the app: the Tauri `refilter` landed on the
   first file there.
+- Seen (2026-11-22, Windows 11): with the sort on rating, `3` on an unrated
+  file moved it at once to its new place and auto-advance went to its new
+  right neighbour. Under an Untagged filter `p` hid the file and landed on the
+  next shown one with no second move, `Ctrl+Z` brought it back, and the status
+  position went from `3 / 5 (6)` to `3 / 4 (6)` in the first captured frame
+  (about 30 ms). `x` on a 3-star file under a 3-star filter kept it shown. A
+  filter that hid every file and then `Reset` returned to the file shown
+  before. Deleting the file behind a checked EXIF item dropped the check and
+  the item. Not run: the pass-2 race of `shown_after`
+  (`../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 
 ### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
 
@@ -1830,6 +1840,13 @@ last, and a JPEG folder under `"name"` paged in capture order.
   eye offset and edge gap cuts), else `Neutral`, a missing value included.
   The two constants mirror `fullsharp::SOFT_BELOW` and `LOW_BELOW`, and a
   test compares them with the core's; change `focus.ts` with them.
+- Seen (2026-11-22, Windows 11): on the `20261113-filter-sort` fixture's
+  `faces` folder, a Face focus Good filter left 2 files
+  (`ILCE-1M2_sony_a1_ii_03`, `_DSC1758`), each with the green smiling
+  `scan-face` icon, and `DSC00405` was no longer Good. A check written before
+  the rule moved to the full-size eye sharpness must not expect the old set;
+  re-derive the expected files from the current `photo_tier`
+  (`../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 - Source: `docs/plans/20261115-full-eye-sharp-only/plan.md`, Step 3.
 
 ### The bursts are regrouped with the entries and marked with the judgments (Inferred)
