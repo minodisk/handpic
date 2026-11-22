@@ -4754,9 +4754,15 @@ leaves it there.
   scan showed `Undo Move to Trash: waiting for the scan to finish`, did not
   cancel the scan and ran once at its end (one `trash: undo of run N` line).
   With the bin emptied by hand the note read `Restored 0 files from the
-  Trash, 3 failed` (the count includes the sidecars, unlike the move's RAW
-  count; the open decision is in `todo.md`). Primary source:
-  `../plans/_archived/20261122-windows-device-checks-3/learnings.md`.
+  Trash, 3 failed`, counting the sidecars unlike the move's RAW count. That
+  was then changed: the undo's note counts one failure per RAW (or JPEG)
+  group, a sidecar with no media file before it counted as its own item
+  (`Restored::failed_items`), and a sidecar whose RAW did not come back
+  reports `NOT_IN_TRASH` when it is no longer in the Trash and
+  `RAW_NOT_RESTORED` only when it is still there. Primary sources:
+  `../plans/_archived/20261122-windows-device-checks-3/learnings.md` for the
+  observation and `../plans/20261122-todo-display-text-fixes/learnings.md`
+  for the change.
 
 ### The folder operations share one dialog model and live in `folderops.rs` (Inferred)
 
