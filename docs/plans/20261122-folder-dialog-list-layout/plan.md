@@ -165,3 +165,5 @@ the dialog has left, and scrolls only when it does not fit.
   run in the debug profile.
 
 ## Progress
+
+- (2026-11-22) Step 1 complete (real-device check recorded in learnings.md)
