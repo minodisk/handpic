@@ -34,13 +34,27 @@ Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
 
 - [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
 
-### App: real-device check of the 1:1 view on files with a malformed full-size JPEG
+### App: a strip cell of a file whose thumbnail encode panics reads the internal panic text and the Windows verbatim path
 
-The `partial-decode-error-exit` work (`docs/plans/_archived/20261002-partial-decode-error-exit/plan.md`) made `decode_region` in `crates/core/src/partial.rs` return `Err` on a fatal libjpeg error instead of calling `exit(1)`. Unit tests (empty input, non-JPEG input, a JPEG truncated inside the header) and `riffle-cli crop` / `check` on the real files cover the core path. `crop` returned `libjpeg fatal error: Not a JPEG file: starts with 0x3c 0x44` for `NIKON_D70_Nikon.nef` and `... 0x80 0x03` for `CGO3P_YUN00007.dng`. `check` over the samples ran to its summary in 23.0 s. The app's 1:1 view (`z`, whose crop read calls the same `decode_focus_crop`) was never exercised on these files, and neither was what it shows for the error. Files: `crates/app/src/zoom.rs`, `crates/core/src/partial.rs`.
+#### Background
+
+Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-6/results.md`): the strip cells of `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng`, whose embedded JPEG is malformed, read `panic while encoding the thumbnail of \\?\D:\Photos\tests\20261122-strip6\zoom\CGO3P_YUN00007.dng` (and the NEF's): the internal panic wording, with the index-keyed path carrying the Windows verbatim prefix. The text comes from the `catch_unwind` around the thumbnail encode in `crates/core/src/scan.rs`; the corrupt ARW's cell of the same run reads a plain reason (`invalid TIFF byte order`), and the preview's read of the same files gives `libjpeg fatal error: Not a JPEG file: starts with 0x80 0x03` (DNG) / `... 0x3c 0x44` (NEF).
+Files: `crates/core/src/scan.rs`, `crates/app/src/strip.rs` (the cell's error text), `crates/app/src/context.rs` (`shown_path`).
 
 #### TODO
 
-- [ ] On any platform, open `D:\photos\samples\NEF\NIKON_D70_Nikon.nef` and `D:\photos\samples\DNG\CGO3P_YUN00007.dng` in the app and switch to the 1:1 view. Expect the app to stay up and the crop read's error (`libjpeg fatal error: Not a JPEG file ...`) to surface however the 1:1 view shows a failed crop. Note what the UI shows; if it shows nothing useful, file a follow-up.
+- [ ] Make the cell's text a plain reason without the verbatim path (the libjpeg message if the panic carries it, else a short "the preview is not a JPEG" wording), and check the strip cell's hover text for the same prefix.
+
+### App: the 1:1 view of a file whose crop read fails is a plain black canvas
+
+#### Background
+
+Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-6/results.md`): on `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng`, whose embedded JPEG is malformed, the app stayed up through `z` and paging, and the preview read's `libjpeg fatal error: Not a JPEG file ...` showed in the meta pane (in red) and the status line before `z` and stayed there under `z`; the crop read's own error showed up only as the extra `error <file>: libjpeg fatal error ...` line on stdout (two per file). But the 1:1 view itself was plain black: `z` hides the fit view's "The preview of this file could not be shown." (`empty::PREVIEW_FAILED_TEXT`) and the 1:1 view draws no text of its own for a failed crop. This closes the earlier real-device check of the 1:1 view on these files (`partial-decode-error-exit`, `docs/plans/_archived/20261002-partial-decode-error-exit/plan.md`).
+Files: `crates/app/src/zoom.rs`, `crates/app/src/main.rs`, `crates/app/src/empty.rs`.
+
+#### TODO
+
+- [ ] Show a message over the 1:1 canvas when the crop read fails (or keep the fit view's failed-preview message under `z`), and cover it with a test.
 
 ### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
 
@@ -653,14 +667,6 @@ Files: `crates/core/src/arw.rs`, `crates/engine/src/index.rs` (`EXTRACTOR_VERSIO
 
 - [ ] On Windows, with an index written by `EXTRACTOR_VERSION` 11 (open `D:\Photos\samples\DNG\` in a build from before the bump, then in this build), open a folder containing the Pentax K-5 II, iPhone 12 Pro and Leica M (Typ 240) samples. Expected: the rows that cached `not a little-endian TIFF/ARW` are re-extracted, and the thumbnails, the preview and the 1:1 view show.
 
-### App: real-device check of the 1:1 view on older Sony ARW bodies (no full-size JPEG)
-
-The `sony-arw-preview-full` work (`docs/plans/_archived/20261005-sony-arw-preview-full/plan.md`) made `arw::parse` fall back to the preview as `full` when the largest other JPEG is smaller, so the α9 II, α7R IV, α7R IVA, α7C, α6400, α6600 and ZV-E10 no longer take the 160x120 IFD1 thumbnail for the 1:1 view. A synthetic-TIFF unit test, `riffle-cli info` / `bench` on the samples (`full` at the preview's offset / length; decodes of 1616x1080, 1440x1080 on the 4:3 α7C sample and 1920x1080 on the ZV-E10 read from the JPEG SOF) and `mise run ci` cover the core path. The app's 1:1 view (`z`, whose crop read in `crates/app/src/zoom.rs` goes through `reader::read_full` and `decode_focus_crop`) was never exercised on these files. The step was ticked on the automated criteria only. Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `crates/app/src/zoom.rs`.
-
-#### TODO
-
-- [ ] On Windows (or any desktop build), open `D:\photos\samples\ARW` (or a folder with e.g. `ILCE-6400_DSC00087.ARW` / `ZV-E10_DSC00002.ARW`), select the file and press `z`. Expected: a sharp crop of the 1616x1080 preview (1920x1080 on the ZV-E10) around the AF point, not a blurry upscaled 160x120 thumbnail.
-
 ### Agents: bare `python` / `node` hang in Git Bash on the Windows host
 
 #### Background
@@ -888,12 +894,12 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 Build with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build --release` in `crates/app`, and use a fresh `--index <file under D:\Photos\tests\>` for each run so pass 1 runs.
 
+Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-6/results.md`), a debug build with `--features screenshot` on hardlinks and copies under `D:\Photos\tests\20261122-strip6\`: `scanning N/total` climbed with N changing on almost every 100 ms frame on 1100 files and gave way to `analyzing N/total` (pass 2), the status line ending empty, or `1 failed` on the corrupt folder; a held `→` (repeated key-downs, one key-up), `Home` / `End`, the wheel, a far click and a click in the 8 px gap behaved as expected; private bytes (`PrivateMemorySize64` sampled from PowerShell, not Task Manager) went 200 MB before, 204-216 MB while wheeling, 166-169 MB after pass 2, and 166-172 MB over two full end-to-end round trips, with no climb from run to run; the corrupt ARW's cell showed `invalid TIFF byte order`; the instance quit with `q` (still in the default keymap) reopened at the file left at, the strip scrolled to it; and the resync, its copies and deletes made from PowerShell (`Copy-Item` / `Remove-Item`) rather than Explorer, placed a copied file's cell with its thumbnail within 300 ms, kept the current file and the other thumbnails, and moved off a deleted current file to the next one (the one before when it was the last). What is left open is in the boxes below.
+
 #### TODO
 
-- [ ] On Windows, open a folder of a few hundred RAW files under `D:\Photos\` with `handpic.exe <folder> --index <fresh file>`. Expect `scanning N/total` after the file info, N rising about every 100 ms, replaced at the end by nothing (or `N failed`).
-- [ ] On Windows, open a folder of 1000+ RAW files under `D:\Photos\` with a fresh index. Expect, in order: (1) while `scanning N/total` climbs, the gray placeholders turn into thumbnails from the current cell outward, the middle of the strip first, each cell with its file name and the current cell outlined; (2) holding `→` for a few seconds moves the outlined cell and the preview together, the strip scrolls just enough to keep the cell in view, and on release the preview, the outline and the status line name the same file, with `Home` / `End` jumping both to the first / last file; (3) wheeling the strip (toward you scrolls right) to a far cell and clicking it shows that file and moves the outline, while a click in the 8 px gap between cells does nothing; (4) with Task Manager's Details tab showing the `handpic.exe` row's private working set (or Commit size), wheeling the strip from one end to the other and back several times raises the value while scrolling and lets it settle to about the same level, not climbing run after run; (5) on a folder holding a corrupt RAW (e.g. `D:\Photos\tests\20261110-gpui-strip-index\ARW`, file `DSC-RX100M3_corrupt.ARW`) its cell shows `invalid TIFF byte order` in the gray box instead of a thumbnail.
-- [ ] On Windows, on a 1000+ RAW folder with a fresh index (`manual3.sqlite`), wait for the scan to end, press `End`, then `←` a few times, wait a second and quit with `q`. (a) Run again with the same arguments: the preview, the outlined strip cell and the status line open at the file left at, and the strip is scrolled to it. (b) Run on the same folder with another fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next.
-- [ ] On Windows, copy a few ARW files into a new folder under `D:\Photos\tests\` (e.g. `D:\Photos\tests\20261110-gpui-strip-index\manual4`) and run `handpic.exe <that folder> --index <fresh file>`. Page to the second file. (1) From Explorer, copy another ARW into the folder: within about a second its cell appears in the strip at its name's place and gets a thumbnail, the outlined cell, the preview and the status line still name the same file, the status line's total grows by one, and the other thumbnails do not flash back to gray. (2) From Explorer, delete a file that is not the current one: its cell disappears and the current file stays current. (3) Delete the current file: the preview, the outline and the status line move to the file after it (the one before it when it was the last).
+- [ ] On Windows, open a folder of 1000+ RAW files under `D:\Photos\` that are not in the OS file cache (copied with `robocopy /J`) with a fresh index. Expect, while `scanning N/total` climbs, the gray placeholders to turn into thumbnails from the current cell outward, the middle of the strip first, each cell with its file name and the current cell outlined. (Not exercised on 2026-11-22: the cells in view already held thumbnails by the window's first capture.)
+- [ ] On Windows, on a 1000+ RAW folder whose files are not in the OS file cache (copied with `robocopy /J`), run with a fresh index (`manual3b.sqlite`) and press `End` right after the window opens: the thumbnails near the last cell appear within a second or so, before the middle of the folder is scanned (`scanning N/total` still climbing), and wheeling the strip to the middle and stopping fills the cells there next. (Not exercised on 2026-11-22: on cached files pass 1 had ended before the window took keys.)
 
 ### App: measure the scan pause in `load` with presses on files pass 1 has not read yet
 
