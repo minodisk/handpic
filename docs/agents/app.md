@@ -1933,6 +1933,14 @@ count still shows when the header and its lit `Filter ▾` are gone. `menu.rs` h
 `FilterState::is_active`; the sort button is dimmed and has no handler in a
 view-only folder, whose open closes a sort menu left open.
 
+- Rule: with no folder open (`Handpic.dir` unset) both buttons are inert the
+  same way, dimmed with no handler, so neither menu opens (`menu::enabled`,
+  which also holds the view-only rule): with no folder every other key and
+  click does nothing too. `dir` is only ever set, never cleared, so no open
+  menu needs closing when a folder goes. The MCP `set_sort` / `set_filter`
+  path (`apply_menu`) opens no menu and is not gated by it. Inferred: not
+  yet seen on screen.
+
 - Rule: the two buttons are gpui-component `Button`s (`main.rs`'s
   `menu_button`): the default variant at `.xsmall()` with
   `.tab_stop(false)` (the main view routes every key through its own
@@ -1943,7 +1951,8 @@ view-only folder, whose open closes a sort menu left open.
   child are `primary`, without `.selected(true)`, which would change the
   fill; on hover the component's hover style sets the border back to
   `input`, so a lit button shows its `primary` border only while not
-  hovered (the label keeps `primary`). The inert sort button is
+  hovered (the label keeps `primary`). An inert button (the sort in a
+  view-only folder, both with no folder) is
   `.disabled(true)` (no hover, no press) with the normal fill and border
   replayed over the disabled state's and `opacity(0.5)`, as the `div` was
   dimmed. The toggle stays the caller's `on_mouse_down` (`Button` implements
@@ -3090,6 +3099,20 @@ range can go to `ScanFocus` as it is. Its thumbnails come from
 `thumbs.rs`, four reads at a time through the index's read-only connection,
 and every image a cell drops goes through `retired`, like the preview's.
 
+- Rule (Inferred, not yet seen on screen): a cell's name wider than the cell
+  is shortened with `…` in the middle (`main.rs`'s `fitted_name`, GPUI's
+  `LineWrapper::truncate_line` with `TruncateFrom::Middle`: about two thirds
+  of the width for the start, one third for the tail with the frame number
+  and the extension), against the current `cell_width`, which follows the
+  strip's height, less `NAME_INSET` (2 px) on each side, since
+  `truncate_line` sums per-character widths rather than measuring the shaped
+  line. A name that fits is drawn unchanged, centered. Before, a long name
+  was centered and clipped on both sides by the cell's content mask
+  (`)SC-RX100M2_DSC00416.ARW`). The user chose the middle over the end
+  (cells of a prefixed folder would read the same, the extension lost) and
+  the start (the prefix lost), 2026-11-22. The name band's tooltip still
+  shows the label's name, not the file name.
+
 ### A `canvas` gets no input; its wrapping `div` does (Inferred)
 
 `canvas` registers no hitbox and takes no listeners. The strip's canvas sits in
@@ -3548,9 +3571,11 @@ running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
 gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
 size), colored `primary`, its value `fraction * 100`, in the
-`StatusBar`'s right region right of the position, and
-only while `shown` yields a count, so the position shifts by the circle's
-width when it appears or goes. The Tauri app drew a bar along the row's top edge
+`StatusBar`'s right region right of the position, only while `shown`
+yields a count. While it does not, an empty, non-shrinking `size_3` `div`
+holds its slot, so the right region's content width is constant and the
+position stays where it is when the circle appears or goes (the user's
+decision, 2026-11-22; before, the position shifted about 20 px). The Tauri app drew a bar along the row's top edge
 (`#scan-progress`); the circle is the user's decision.
 
 The linear `Progress` was ruled out for that bar, and the reasons hold for
@@ -3570,8 +3595,10 @@ choosing the circle.
   `STATUS_ROW_HEIGHT`, so showing or hiding it changes neither the row's
   height nor the canvas (measured before the strip header: 1160 x 842 either
   way), and the status text,
-  start-aligned in the center region, does not move; only the center region
-  is 20 px narrower (the circle and the region's 8 px gap) while it shows.
+  start-aligned in the center region, does not move; the center region is
+  always 20 px narrower (the circle's slot and the region's 8 px gap), with
+  or without the circle, and the slot is empty space at the row's right end
+  while idle. Inferred: the constant position is not yet seen on screen.
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
@@ -3588,7 +3615,8 @@ choosing the circle.
   it too.
 - Seen (2026-11-22, Windows 11): the circle filled through pass 2 of a cold
   600-file folder and through a 600-file Move to Trash run and went at each
-  end, the position shifting about 20 px with it; pass 1 (about 1.1 s) was
+  end, the position shifting about 20 px with it (since fixed by the
+  reserved slot above); pass 1 (about 1.1 s) was
   too short to see (results in
   `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
 - Sequence JPEG Timestamps and Import feed it through `shown`'s `folder_op`

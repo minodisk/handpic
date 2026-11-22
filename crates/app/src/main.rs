@@ -117,10 +117,10 @@ use gpui_kit::{
     FocusHandle, Focusable, FontWeight, Hsla, KeyBinding, KeyDownEvent, KeyUpEvent, Keystroke,
     ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseUpEvent, NoAction, PathPromptOptions,
     Pixels, Point, RenderImage, ScrollEvent, ScrollHandle, ScrollStrategy, SharedString,
-    Subscription, Task, TextAlign, TitlebarOptions, TransformationMatrix, UniformListScrollHandle,
-    WeakEntity, Window, WindowAppearance, WindowBounds, WindowDecorations, WindowOptions, anchored,
-    base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline, point, prelude::*, px, rgb,
-    rgba, size, svg, uniform_list,
+    Subscription, Task, TextAlign, TitlebarOptions, TransformationMatrix, TruncateFrom,
+    UniformListScrollHandle, WeakEntity, Window, WindowAppearance, WindowBounds, WindowDecorations,
+    WindowOptions, anchored, base::POPUP_PRIORITY, canvas, deferred, div, fill, img, outline,
+    point, prelude::*, px, rgb, rgba, size, svg, uniform_list,
 };
 use handpic_core::{
     Flag,
@@ -5539,8 +5539,9 @@ impl Handpic {
 
     /// The status line, then the strip position (while a file is shown) and
     /// the progress circle while an operation with a count runs, at its right
-    /// end; the row is pinned to `STATUS_ROW_HEIGHT`, so it does not follow
-    /// the circle.
+    /// end, an empty slot of the circle's size in its place otherwise so the
+    /// position does not move; the row is pinned to `STATUS_ROW_HEIGHT`, so it
+    /// does not follow the circle.
     fn status_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let mut row = StatusBar::new().h(STATUS_ROW_HEIGHT).child(self.status());
         if let Some(position) = pager::position(
@@ -5551,10 +5552,10 @@ impl Handpic {
         ) {
             row = row.right(position);
         }
-        if let Some(circle) = self.progress_circle(cx) {
-            row = row.right(circle);
-        }
-        row
+        row.right(match self.progress_circle(cx) {
+            Some(circle) => circle.into_any_element(),
+            None => div().size_3().flex_none().into_any_element(),
+        })
     }
 
     /// The strip's header row: the sort and filter buttons at its right end,
@@ -5575,7 +5576,7 @@ impl Handpic {
                 Which::Sort,
                 "Sort \u{25be}",
                 false,
-                !self.view_only,
+                menu::enabled(Which::Sort, self.dir.is_some(), self.view_only),
                 max_menu_height,
                 cx,
             ))
@@ -5583,7 +5584,7 @@ impl Handpic {
                 Which::Filter,
                 "Filter \u{25be}",
                 self.filter.is_active(),
-                true,
+                menu::enabled(Which::Filter, self.dir.is_some(), self.view_only),
                 max_menu_height,
                 cx,
             ))
@@ -5655,7 +5656,7 @@ impl Handpic {
             if lit { theme.primary } else { theme.foreground },
         );
         // The caller's style is replayed over the disabled state's, so the
-        // inert sort button keeps the normal colors, only dimmed.
+        // inert button keeps the normal colors, only dimmed.
         let mut button = Button::new(id)
             .xsmall()
             .tab_stop(false)
@@ -6974,6 +6975,10 @@ const MARK_SIZE: f32 = 11.;
 /// `.cell.burst::before`'s end radius.
 const BAND_RADIUS: f32 = 6.;
 const FLAG_DOT: f32 = 7.;
+const NAME_FONT_SIZE: f32 = 11.;
+/// Kept clear on each side of a shortened strip name, as `truncate_line`
+/// sums per-character widths rather than measuring the shaped line.
+const NAME_INSET: f32 = 2.;
 /// The strip header's `Sort ▾` / `Filter ▾` buttons' height, the bordered
 /// `div`s' they replaced (a 12 px line at GPUI's default line height, rounded
 /// to 19 px, and the border).
@@ -7097,12 +7102,12 @@ fn paint_strip(
                     }
                     None => roles.name,
                 };
-                let mut run = window.text_style().to_run(cell.name.len());
+                let text = fitted_name(&cell.name, px(cell_width), window, cx);
+                let mut run = window.text_style().to_run(text.len());
                 run.color = name_color;
-                let name =
-                    window
-                        .text_system()
-                        .shape_line(cell.name.clone(), px(11.), &[run], None);
+                let name = window
+                    .text_system()
+                    .shape_line(text, px(NAME_FONT_SIZE), &[run], None);
                 let _ = name.paint(
                     at,
                     px(NAME_HEIGHT),
@@ -7117,6 +7122,23 @@ fn paint_strip(
             },
         );
     }
+}
+
+/// A strip cell's `name` as drawn in a cell `width` wide: unchanged when it
+/// fits, else shortened with `…` in the middle, keeping the start and the
+/// tail with the extension.
+fn fitted_name(name: &SharedString, width: Pixels, window: &Window, cx: &App) -> SharedString {
+    let font = window.text_style().font();
+    let run = window.text_style().to_run(name.len());
+    let mut wrapper = cx.text_system().line_wrapper(font, px(NAME_FONT_SIZE));
+    let (text, _) = wrapper.truncate_line(
+        name.clone(),
+        width - px(2. * NAME_INSET),
+        "\u{2026}",
+        &[run],
+        TruncateFrom::Middle,
+    );
+    text
 }
 
 /// `.cell.burst::before`: a tint around the cell at `origin`, measured from
