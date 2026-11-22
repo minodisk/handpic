@@ -115,3 +115,4 @@ source of truth, and lists A to D below name the exact edits.
 ## Progress
 
 - 2026-11-22: Step 1 done. `results.md` was copied unchanged. In `todo.md`, the ORF and big-endian DNG items were removed and the lens trailing-space item and the Leica 160x120 item were added in their places. `docs/agents/app.md` unchanged by the step. The Done-when heading count was corrected from 138 to 136.
+- 2026-11-22: Wrap-up. Learnings extraction and todo curation found nothing further; no settings to promote. Plan archived.
