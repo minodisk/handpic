@@ -120,3 +120,9 @@ while planning, and how each was settled:
 - A removed item's record lives in `results.md` and the PR description only.
 
 ## Progress
+
+- 2026-11-22: Step 1 done. The run is in `results.md` (copied unchanged, LF), the notes in `learnings.md`. Edits made:
+  - A: the three `todo.md` items deleted whole.
+  - B / C: none.
+  - D (`docs/agents/app.md`, four sections): three tags changed to `(Measured)`, two `Pending` bullets replaced by `Measured` bullets, one observation bullet added to the grayscale section, and two rules added to `Driving the window`.
+  - E: `learnings.md` written.
