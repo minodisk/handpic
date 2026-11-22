@@ -10,7 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext};
+use gpui_kit::{Context, Entity, TestAppContext, VisualTestContext, px};
 use handpic_core::{Flag, scan::Priority};
 use handpic_engine::store::Store;
 use tempfile::TempDir;
@@ -20,7 +20,7 @@ use crate::{
     args::Args,
     entries_of, file_name,
     filter::Orientation,
-    menu, open_index, open_main,
+    fitted_name, menu, open_index, open_main,
     scan::{Priorities, Running},
     settings,
 };
@@ -607,4 +607,24 @@ fn a_rename_of_another_folder_does_not_hold_the_prefetch() {
         view.request_rename(path, "elsewhere".into(), cx);
         assert!(!view.renaming());
     });
+}
+
+#[test]
+fn a_strip_name_wider_than_its_cell_is_shortened_in_the_middle() {
+    let mut ui = Ui::open();
+    let (long, short) = ui.cx.update(|window, cx| {
+        let width = px(146.);
+        (
+            fitted_name(&"DSC-RX100M2_DSC00416.ARW".into(), width, window, cx),
+            fitted_name(&"DSC00416.ARW".into(), width, window, cx),
+        )
+    });
+    assert!(long.starts_with("DSC-RX100M2_"), "{long}");
+    assert!(long.ends_with(".ARW"), "{long}");
+    assert_eq!(long.matches('\u{2026}').count(), 1, "{long}");
+    assert!(
+        long.chars().count() < "DSC-RX100M2_DSC00416.ARW".len(),
+        "{long}"
+    );
+    assert_eq!(short.as_ref(), "DSC00416.ARW");
 }

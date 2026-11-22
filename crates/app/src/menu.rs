@@ -25,6 +25,12 @@ pub enum Which {
     Filter,
 }
 
+/// Whether `which`'s button takes a press: neither opens with no folder, and
+/// the sort is inert in a view-only folder, which keeps capture order.
+pub fn enabled(which: Which, folder_open: bool, view_only: bool) -> bool {
+    folder_open && (which == Which::Filter || !view_only)
+}
+
 /// One filter item's section and value.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Toggle {
@@ -654,6 +660,16 @@ mod tests {
         apply(&mut filter, &mut sort, Action::Sort(SortKey::Rating));
         assert_eq!(sort, SortKey::Rating);
         assert_eq!(filter, before);
+    }
+
+    #[test]
+    fn neither_button_takes_a_press_with_no_folder() {
+        assert!(!enabled(Which::Sort, false, false));
+        assert!(!enabled(Which::Filter, false, false));
+        assert!(enabled(Which::Sort, true, false));
+        assert!(enabled(Which::Filter, true, false));
+        assert!(!enabled(Which::Sort, true, true));
+        assert!(enabled(Which::Filter, true, true));
     }
 
     #[test]

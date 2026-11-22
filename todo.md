@@ -1036,7 +1036,7 @@ After #1020 merged, main's CI `app` job failed in `settings::tests::reads_the_st
 
 ### App: real-device checks of the folder tree and Move to Trash… left open (gpui-tree-trash)
 
-`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the engine's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. On Windows 11 on 2026-11-22 the tree, its menus and the trash dialog, Explorer, the clipboard, the Recycle Bin and the keyboard focus model were exercised on a debug build with synthetic input (results in `docs/plans/_archived/20261122-windows-device-checks-3/learnings.md`); what is left open is in the boxes below. The run's findings are their own items: the Sort / Filter menus opening with no folder and the Undo's count and reason after the Recycle Bin was emptied by hand (the two items below), and the held rename's `Access denied` (under the inline rename item). Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/engine/src/folders.rs`, `crates/engine/src/treewatch.rs`, `crates/engine/src/trash.rs`.
+`gpui-tree-trash` gave the GPUI app (`crates/app`) the left-hand folder tree (roots, expand, RAW count, watchers, the keyboard, a right-click menu with `Expand All` / `Collapse All`), the strip's multi-selection, the strip's right-click menu, `Move to Trash…` / `Delete Permanently…` with the hold during a scan, and Trash undo / redo. CI and the unit tests (`tree.rs`, `treekeys.rs`, `keys.rs`, `context.rs`, `selection.rs`, `strip.rs`, `judgment.rs`, `trash.rs`, `idle.rs`, `history.rs`, `resync.rs`, and the engine's `folders.rs`, `treewatch.rs`, `trash.rs`) cover the pure models. Only the `notify` 8.2.2 collapse / re-expand timing and the `SHParseDisplayName` rejection of the `\\?\` prefix were measured headless. On Windows 11 on 2026-11-22 the tree, its menus and the trash dialog, Explorer, the clipboard, the Recycle Bin and the keyboard focus model were exercised on a debug build with synthetic input (results in `docs/plans/_archived/20261122-windows-device-checks-3/learnings.md`); what is left open is in the boxes below. The run's findings are their own items: the Sort / Filter menus opening with no folder (settled: they do not open, see `docs/agents/app.md`), the Undo's count and reason after the Recycle Bin was emptied by hand (the item below), and the held rename's `Access denied` (under the inline rename item). Windows only. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md` (the full steps and their expected results are in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/tree.rs`, `crates/app/src/treekeys.rs`, `crates/app/src/context.rs`, `crates/app/src/selection.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`, `crates/app/src/history.rs`, `crates/engine/src/folders.rs`, `crates/engine/src/treewatch.rs`, `crates/engine/src/trash.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build` first (rename a locked `handpic.exe` aside, never kill it). Work only on copies under `D:\Photos\tests\20261113-gpui-tree-trash\` with a fresh `--index` per run and an explicit `--settings` test file; never the Tauri index or the app's default index. The tree may list and watch the roots and the ancestors of a test folder; open (click the name of, or press Enter on) only folders under `D:\Photos\tests\`. Trash and delete only the copies.
 
@@ -1049,17 +1049,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, the rest of Move to Trash… and Delete Permanently… (Step 7). With the dialog open, clicks on the tree, strip and status menus do nothing. On `...\trash-large` with a fresh `--index`, during pass 1 pick `Move to Trash…` and confirm: the dialog closes at once, the pane says `Move to Trash: waiting for the scan to finish` and `moving to Trash 0 / 1` shows briefly (both too short-lived to capture on 2026-11-22). Repeat but open another test folder from the tree before the scan ends: nothing is moved and the waiting note goes. Judge a file, then `Delete Permanently…` it: the earlier judgment is no longer undoable.
 - [ ] On Windows, the rest of Trash undo / redo (Steps 5 and 8). On the `Ctrl+Shift+Z` redo of a trash run, `moving to Trash 0 / 1` shows briefly (too short-lived to capture on 2026-11-22). After a restore by `Ctrl+Z` the strip shows the file with its three stars. After a cross-folder undo (trash in `a`, open `b`, `Ctrl+Z`), reopening `a` lists the restored file. With several files selected, Ctrl-click a middle one: it drops out and the focus stays on the current file.
 
-### App: decide whether the Sort / Filter menus open with no folder
-
-#### Background
-
-Launched with no folder on Windows 11 on 2026-11-22, `Sort ▾` and `Filter ▾` both open (Sort with `File name` checked, Filter with all its sections), while the gpui-tree-trash Step 2 check expected them to do nothing. Every other key and click tried there did nothing and nothing panicked. Results: `docs/plans/_archived/20261122-windows-device-checks-3/learnings.md`.
-
-Files: `crates/app/src/main.rs`, `crates/app/src/menu.rs`.
-
-#### TODO
-
-- [ ] Decide whether the Sort / Filter menus should open with no folder. If not, keep the buttons from opening them then and pin it in a test; if so, record the rule in `docs/agents/app.md`.
 
 ### App: real-device check of `open_folder` refused during a rename over MCP
 
@@ -1223,7 +1212,7 @@ each runner had to `TaskStop` and re-run repeatedly (plan:
 
 ### App: real-device checks of the status row's StatusBar and progress circle
 
-`native-status-bar` rendered the GPUI app's status row (`crates/app`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`) the row showed as a bar with a top border and muted small text, and both menus, a tall `Filter ▾` too, opened upward with their right edge on the button's, unclipped, and closed on a press outside; on a cold 600-file folder pass 1 took about 1.1 s, too short to see the circle, which filled from empty through pass 2 (161 s) and went at the end; a 600-file `Move to Trash…` with the right pane hidden showed the run's progress in the circle, which went at the end. When the circle goes, the position text shifts right by about 20 px (the item below decides whether the row reserves the slot), and after the folder emptied the status line read `no RAW files in \\?\D:\Photos\tests\20261122-strip\cold` (since stripped for display). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
+`native-status-bar` rendered the GPUI app's status row (`crates/app`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`) the row showed as a bar with a top border and muted small text, and both menus, a tall `Filter ▾` too, opened upward with their right edge on the button's, unclipped, and closed on a press outside; on a cold 600-file folder pass 1 took about 1.1 s, too short to see the circle, which filled from empty through pass 2 (161 s) and went at the end; a 600-file `Move to Trash…` with the right pane hidden showed the run's progress in the circle, which went at the end. When the circle goes, the position text shifts right by about 20 px (settled: the row now always reserves the circle's slot, see `docs/agents/app.md`), and after the folder emptied the status line read `no RAW files in \\?\D:\Photos\tests\20261122-strip\cold` (its own item, after the Import dialog's `Source:` item). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
 
 Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/src/progress.rs`, `crates/app/src/theme.rs`.
 
@@ -1233,17 +1222,6 @@ Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/s
 - [ ] On Windows, select many files and run `Move to Trash…` with the strip and the left pane hidden. Expect the circle to show the run's progress and go when it ends. In every pane layout, expect the preview canvas not to resize when the circle appears or disappears.
 - [ ] On Windows, confirm a long status text does not push the circle or the buttons out and that an error text is still readable in the muted color.
 - [ ] On macOS and Linux, repeat the menu, scan and Move to Trash checks above when at hand.
-
-### App: decide whether the status row reserves the progress circle's slot
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`): when the progress circle goes at the end of a scan or a Move to Trash run, the position text (`1 / 600`) shifts right by about 20 px, the circle's slot going with it. `docs/agents/app.md`'s progress circle rule ("One progress circle sits in the status row's right region") records the shift as the current behaviour.
-Files: `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] Decide whether the row keeps the circle's slot while no operation runs. If it does, keep the slot and update the rule; if not, record the decision in the rule.
 
 ### App: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
 
@@ -1419,17 +1397,6 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 - [ ] On Windows, move from one cell's region to the next and expect the tooltip to swap. Scroll the strip under a still pointer and expect the tooltip of the cell that moved away to go. A cell cut by the window's left edge must still show its tooltip.
 - [ ] On Windows, over a cell with a tooltip, click, ctrl / shift click, right-click and wheel. Expect them to still select, open the menu and scroll.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and "when at hand" for the other two).
-
-### App: decide whether a strip cell's name longer than the cell ends in an ellipsis
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`): a file name longer than its strip cell is centered and clipped on both sides, with no ellipsis (drawn as `)SC-RX100M2_DSC00416.ARW` in the run).
-Files: `crates/app/src/main.rs`, `crates/app/src/strip.rs`.
-
-#### TODO
-
-- [ ] Decide whether a long name ends in an ellipsis; if so, truncate it with one.
 
 ### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
 
@@ -2088,3 +2055,20 @@ While reverting #1219, `git checkout c57ec2ff -- docs/agents/app.md` silently dr
 - [ ] Decide whether reverts are frequent enough to document. If so, add to the `develop` skill (or a decided guide with a stated trigger): prefer `git show <commit> -- <paths> | git apply -R --index`; when a file must be restored from an old commit, run `git log <base>..origin/main -- <file>` first, re-apply unrelated later hunks and confirm with `git diff`. Otherwise close this item with that reason.
 
 ---
+
+### App: real-device check of the Sort / Filter menus with no folder, the status row's reserved slot and shortened strip names (todo-three-decisions)
+
+#### Background
+
+The `todo-three-decisions` feature settled three "decide" items in `crates/app`. With no folder open, `Sort ▾` and `Filter ▾` are now disabled and dimmed (`menu::enabled`, fed to `menu_button`'s `enabled` flag by `strip_header`). The status row now always keeps a 12 px slot for the progress circle (`status_row`), so the position text no longer shifts when the circle appears or goes. A strip cell's name wider than its cell is now shortened with `…` in the middle by GPUI's `truncate_line` (`fitted_name`, with a 2 px `NAME_INSET` per side). CI and the unit tests cover the `menu::enabled` rule (`neither_button_takes_a_press_with_no_folder`) and the shortening rule through the test platform's `NoopTextSystem`, which gives every ASCII glyph an advance of 0.6 em (`a_strip_name_wider_than_its_cell_is_shortened_in_the_middle`). The slot has no test. No UI test simulates a click on the buttons. Nobody ran the window: whether the dimmed buttons look right, whether the position text stays still, and whether the shortened name fits inside the cell on real font widths (`truncate_line` sums per-character widths and ignores kerning, so `NAME_INSET` may not be needed or may not be enough) are unverified. The three rules are marked Inferred in `docs/agents/app.md`. Windows only. Plan: `docs/plans/_archived/20261122-todo-three-decisions/plan.md`.
+
+Files: `crates/app/src/main.rs` (`status_row`, `fitted_name`, `strip_header`), `crates/app/src/menu.rs` (`enabled`), `crates/app/src/uitest.rs`, `docs/agents/app.md`.
+
+Build in `crates/app` first. Work only on copies under `D:\Photos\tests\` holding long file names (e.g. `DSC-RX100M2_DSC00416.ARW`), with a fresh `--index` per run and an explicit `--settings` test file; never the app's default index.
+
+#### TODO
+
+- [ ] On Windows 11, run a debug build with no folder argument. Expect `Sort ▾` and `Filter ▾` to be dimmed and a click on either to open no menu. Open a folder: expect both to work as before (Sort still inert in a JPEG-only view-only folder).
+- [ ] On Windows 11, open a cold folder of RAW files (fresh `--index`) large enough for the progress circle to show (a cold scan; a `Move to Trash…` run also shows it). Expect the position text (`1 / 600`) not to move when the circle appears or goes.
+- [ ] On Windows 11, open a folder with long file names. Expect a long name in a strip cell to read like `DSC-RX100M2_D…416.ARW`, fully inside the cell with no glyph clipped at either edge, at the default strip height and after dragging the strip shorter and taller. Expect a short name to stay centered and unchanged. If a glyph is clipped, tune `NAME_INSET`.
+- [ ] After the three checks pass, mark the three rules Verified in `docs/agents/app.md` (the menus-with-no-folder rule, the always-reserved slot rule, and the middle-ellipsis rule).
