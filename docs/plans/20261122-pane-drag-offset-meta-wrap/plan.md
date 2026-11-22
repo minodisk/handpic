@@ -58,7 +58,7 @@ measured again):
 
 ## Steps
 
-- [ ] Step 1: A pane or strip drag moves the boundary by the pointer's delta from the press
+- [x] Step 1: A pane or strip drag moves the boundary by the pointer's delta from the press
   - Done when:
     - A drag of the tree's boundary, the meta pane's boundary or the strip's
       top edge gives the width or height at the press plus the pointer's

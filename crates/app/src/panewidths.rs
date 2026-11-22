@@ -53,20 +53,20 @@ impl PaneWidths {
         json!({"left": self.left, "right": self.right})
     }
 
-    /// The widths after `pane`'s boundary is dragged to the window `x` in a
-    /// window `window` wide: the left pane ends at `x` and the right one
-    /// starts there, rounded to whole px, within `MIN` and `MAX` and leaving
-    /// the preview `PREVIEW_MIN` beside the other pane when it is shown.
-    pub fn dragged(self, pane: Panel, x: f32, window: f32, panels: Panels) -> Self {
+    /// The widths after `pane`'s boundary is dragged to make it `wanted` px
+    /// wide in a window `window` wide: rounded to whole px, within `MIN` and
+    /// `MAX` and leaving the preview `PREVIEW_MIN` beside the other pane when
+    /// it is shown.
+    pub fn dragged(self, pane: Panel, wanted: f32, window: f32, panels: Panels) -> Self {
         let room = |other: f32, shown: bool| window - PREVIEW_MIN - if shown { other } else { 0. };
         let width = |wanted: f32, room: f32| wanted.round().min(room).clamp(MIN, MAX);
         match pane {
             Panel::Left => Self {
-                left: width(x, room(self.right, panels.right)),
+                left: width(wanted, room(self.right, panels.right)),
                 ..self
             },
             Panel::Right => Self {
-                right: width(window - x, room(self.left, panels.left)),
+                right: width(wanted, room(self.left, panels.left)),
                 ..self
             },
             Panel::Strip => self,
@@ -103,9 +103,20 @@ impl PaneWidths {
     }
 }
 
+/// The width `pane` wants when its boundary, pressed at the window `press`
+/// with the pane `start` wide, has the pointer at `x`: `start` moved by the
+/// pointer's travel from the press, the left pane growing as the pointer goes
+/// right and the right pane as it goes left.
+pub fn wanted(pane: Panel, start: f32, press: f32, x: f32) -> f32 {
+    match pane {
+        Panel::Right => start - (x - press),
+        _ => start + (x - press),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT, MAX, MIN, PREVIEW_MIN, PaneWidths};
+    use super::{DEFAULT, MAX, MIN, PREVIEW_MIN, PaneWidths, wanted};
     use crate::panels::{Panel, Panels};
     use serde_json::json;
 
@@ -157,14 +168,14 @@ mod tests {
     }
 
     #[test]
-    fn a_drag_follows_the_pointer_within_the_pane_range() {
+    fn a_drag_takes_the_wanted_width_within_the_pane_range() {
         let w = PaneWidths::default();
         assert_eq!(
             w.dragged(Panel::Left, 300.4, 1600., BOTH),
             widths(300., DEFAULT)
         );
         assert_eq!(
-            w.dragged(Panel::Right, 1250., 1600., BOTH),
+            w.dragged(Panel::Right, 350., 1600., BOTH),
             widths(DEFAULT, 350.)
         );
         assert_eq!(
@@ -176,11 +187,11 @@ mod tests {
             widths(MAX, DEFAULT)
         );
         assert_eq!(
-            w.dragged(Panel::Right, 1590., 1600., BOTH),
+            w.dragged(Panel::Right, 10., 1600., BOTH),
             widths(DEFAULT, MIN)
         );
         assert_eq!(
-            w.dragged(Panel::Right, 0., 1600., BOTH),
+            w.dragged(Panel::Right, 1600., 1600., BOTH),
             widths(DEFAULT, MAX)
         );
         assert_eq!(w.dragged(Panel::Strip, 300., 1600., BOTH), w);
@@ -202,11 +213,56 @@ mod tests {
         );
         // 900 - 240 - 220 leaves 440 for the right pane.
         assert_eq!(
-            w.dragged(Panel::Right, 0., 900., BOTH),
+            w.dragged(Panel::Right, 900., 900., BOTH),
             widths(DEFAULT, 440.)
         );
         // Never under the minimum, whatever the room.
         assert_eq!(w.dragged(Panel::Left, 470., 500., BOTH), widths(MIN, 400.));
+    }
+
+    #[test]
+    fn a_drag_moves_the_boundary_by_the_pointer_travel_from_the_press() {
+        let w = PaneWidths::default();
+        // Pressed 3 px right of the line at 220: the line keeps that offset.
+        let left = wanted(Panel::Left, 220., 223., 230.);
+        assert_eq!(left, 227.);
+        assert_eq!(
+            w.dragged(Panel::Left, left, 1600., BOTH),
+            widths(227., DEFAULT)
+        );
+        // The right pane, its line at 1380 in a 1600 px window, pressed at
+        // 1376, grows as the pointer goes left.
+        let right = wanted(Panel::Right, 220., 1376., 1370.);
+        assert_eq!(right, 226.);
+        assert_eq!(
+            w.dragged(Panel::Right, right, 1600., BOTH),
+            widths(DEFAULT, 226.)
+        );
+        // Back at the press, the starting width exactly.
+        assert_eq!(wanted(Panel::Left, 220., 223., 223.), 220.);
+        assert_eq!(wanted(Panel::Right, 220., 1376., 1376.), 220.);
+    }
+
+    #[test]
+    fn a_drag_past_a_clamp_and_back_does_not_drift() {
+        let w = PaneWidths::default();
+        let left = |w: PaneWidths, x: f32| {
+            w.dragged(Panel::Left, wanted(Panel::Left, 220., 223., x), 1600., BOTH)
+        };
+        assert_eq!(left(w, 260.), widths(257., DEFAULT));
+        assert_eq!(left(left(w, 1200.), 260.), left(w, 260.));
+        assert_eq!(left(left(w, 0.), 260.), left(w, 260.));
+        let right = |w: PaneWidths, x: f32| {
+            w.dragged(
+                Panel::Right,
+                wanted(Panel::Right, 220., 1376., x),
+                1600.,
+                BOTH,
+            )
+        };
+        assert_eq!(right(w, 1350.), widths(DEFAULT, 246.));
+        assert_eq!(right(right(w, 0.), 1350.), right(w, 1350.));
+        assert_eq!(right(right(w, 1600.), 1350.), right(w, 1350.));
     }
 
     #[test]

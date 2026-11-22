@@ -4455,10 +4455,23 @@ gives it its last width with no code.
   edge.
 - Rule: the root `div`'s `on_drag_move::<PaneDrag>` follows the drag (capture
   phase, every move while the drag is active, wherever the pointer is). The
-  panes are flush with the window's edges, so the pointer's `x` is the left
-  width and the window width less it the right one; `dragged` rounds it to
-  whole px, clamps it to `MIN`..`MAX` and to what leaves the preview
-  `PREVIEW_MIN` beside the other shown pane's stored width. A move that
+  boundary moves by the pointer's travel from the press, keeping the press's
+  offset from the line: a left-button `on_mouse_down` on each handle
+  (`press_pane`; the band's own press listener does not stop propagation)
+  records the pointer's `x` and the pane's drawn width (`drawn`, so a pane a
+  small window narrows does not jump) as the view's `drag_press`, and
+  `panewidths::wanted` gives the start plus the travel for the left pane and
+  the start less it for the right one, which grows as the pointer goes left.
+  No window geometry enters it, so the Linux client-side frame's padding does
+  not either. `dragged` rounds that width to whole px, clamps it to
+  `MIN`..`MAX` and to what leaves the preview `PREVIEW_MIN` beside the other
+  shown pane's stored width. A press without a drag leaves its record, which
+  the next press replaces. The first moves of a drag change nothing: GPUI
+  starts a drag only on a move more than its private 2 px `DRAG_THRESHOLD`
+  from the press, and the first `DragMoveEvent` is the move after that one;
+  the boundary then catches up to the press-relative position at once
+  (Inferred, from gpui-pre 0.3.12's `elements/div.rs` and the 2026-11-22
+  run, whose first 3 to 5 px moved nothing). A move that
   changes the widths calls `zoom_resized` (the 1:1 crop is re-cut after
   `CROP_RESIZE_DEBOUNCE`, its timer replaced on every move) and repaints; the
   canvas's `viewport` and the peaking layer follow the canvas's own bounds,
@@ -4488,10 +4501,12 @@ gives it its last width with no code.
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
   Not yet seen: the bands against the no-folder message in a narrow window,
-  and macOS and Linux. `todo.md`'s `App: decide whether a pane drag keeps
-  the press's offset from the boundary` and `App: the meta pane breaks words
-  mid-word at its 160 px minimum` hold the two findings (results in
-  `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`).
+  and macOS and Linux. `todo.md`'s `App: the meta pane breaks words mid-word
+  at its 160 px minimum` holds the second finding of that run (results in
+  `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`);
+  the press's offset was lost then, before the drag moved by the pointer's
+  travel from the press, and `todo.md`'s `App: real-device check that a pane or strip drag keeps the press's offset from the boundary`
+  holds the check of the fix.
 
 ### The strip's height is one number, stored under `stripHeight` (Inferred)
 
@@ -4531,8 +4546,13 @@ face icon keep their sizes.
   `DragMoveEvent::bounds` are the wrapper's, so its bottom is the strip's
   bottom edge and its height what the preview and the strip share, with no
   assumption about the status row's height or the Linux frame's padding
-  below. The wanted pane height is that bottom less the pointer's `y`;
-  `dragged` takes the header and the gutter off it, rounds the cells' height
+  below. The wanted pane height is the pane's height at the press less the
+  pointer's travel from it, the pane growing as the pointer goes up: the
+  handle's left-button `on_mouse_down` (`press_strip`) records the pointer's
+  `y` and `HEADER` + the cells' height + `GUTTER` in the view's `drag_press`,
+  and `stripheight::wanted` gives the height, so the press's offset from the
+  edge is kept; the first moves change nothing, as for the panes (GPUI's
+  2 px `DRAG_THRESHOLD`, Inferred). `dragged` takes the header and the gutter off it, rounds the cells' height
   to whole px, clamps it to `MIN`..`MAX` and to what leaves the preview
   `PREVIEW_MIN` with the header and the gutter counted, never under `MIN`.
 - Rule: a move that changes the height calls `Strip::set_geometry`, which
