@@ -2054,9 +2054,13 @@ dimmed, shows capture order and keeps the stored key.
   shown and the status row a `StatusBar` (a debug build at scale 1, the
   canvas's paint bounds logged), the same with the progress circle shown and
   hidden. Before the `StatusBar` (a plain flex `div`, no padding or border)
-  it was 852 tall, so the row grew 10 px. Inferred, not re-measured: with
-  the header the canvas is `stripheight::HEADER` (32 px) shorter while the
-  strip shows, as the status row keeps its height.
+  it was 852 tall, so the row grew 10 px. Measured with the header
+  (2026-11-22, Windows 11, a debug build at scale 1, by scanning a window
+  capture's pixel runs): the canvas's surround is 1158 x 767 between the
+  pane borders and the header's line, 1160 x 768 counting them, in the same
+  window and layout, with the circle shown and gone; not the 810 the header's
+  32 px alone would give, a difference not traced to its source
+  (`../plans/_archived/20261122-windows-device-checks-7/results.md`).
 - Rule: the header is a fixed-height row outside the cells' `div`, in a
   `relative()` `flex_col` wrapper with it and the resize handle, all under
   the one `panels.strip` check, so it hides with the strip and the cells'
@@ -3250,12 +3254,17 @@ they overflow.
   cells, so a stored `stripHeight` keeps its meaning; with the cells
   fitting, the gutter is an empty 9 px band whose press reaches the strip's
   `on_mouse_down`, which selects by `x` only.
-- Not verified by hand yet; the checks are pending in
-  `../plans/_archived/20261115-native-scrollbars/learnings.md`,
-  `../plans/_archived/20261117-native-scrollbars-always/learnings.md` and
-  `../plans/_archived/20261117-native-scrollbar-gutter/learnings.md`.
-  The pending checks are listed in the last of these (the tree and meta pane
-  at its Step 1, the strip at its Step 2).
+- Seen (2026-11-22, Windows 11): the tree's, the strip's, the meta pane's
+  and a dialog body's bars show at rest, and the strip and the tree draw no
+  bar when their content fits; the tree's, the strip's and the dialog body's
+  thumbs drag and their tracks jump; nothing lies under the tree's or the
+  strip's thumb at rest, hovered or dragged, nor under the meta pane's or
+  the dialog's at rest, the tree's badge pill ending 16 px from the pane's edge and 7 px from the
+  resting thumb (x 218-223 in a pane ending at x 227); the strip's empty
+  9 px gutter shows under a short folder; the bars read in Neutral dark,
+  Neutral light and Catppuccin Mocha. Not yet seen: the meta pane's thumb
+  drag, its notes' right inset and an OS appearance change in System mode
+  (`../plans/_archived/20261122-windows-device-checks-7/results.md`).
 
 ### A canvas paints an icon with `paint_svg` (Inferred)
 
@@ -3348,6 +3357,48 @@ otherwise), and pick the process by its path in this worktree, since another
 worktree's `handpic.exe` may be running or exiting. Report a skipped key
 rather than counting it as a page. Held-key measurements also need an idle
 machine: another session's `cargo` build fails the gate, so redo the slot.
+For a cold set the foreground check must pass before the folder opens: pass 1
+lasts only about 4 s over 600 cold ARWs, and a launched window often loses its
+first `SetForegroundWindow` to the terminal. Launch with no folder, retry the
+focus until `GetForegroundWindow` is the instance's window (by PID), then open
+the folder through MCP `open_folder` with the capture already running. Keys
+sent while a listing runs are dropped (3.7 s for 600 files), so paging "during
+pass 1" starts after the listing and has to fit in what is left. See
+[the plan's learnings](../plans/_archived/20261122-windows-device-checks-7/learnings.md).
+
+### Driving the window in a real-device run on Windows (Measured)
+
+Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
+[the plan's learnings](../plans/_archived/20261122-windows-device-checks-7/learnings.md).
+
+- Rule: `SetWindowPos` cannot shorten the window: any asked height came out
+  1460 (the display's 1440 plus the frame) while width and position applied.
+  For a short-window check drag the window's own bottom edge with synthetic
+  mouse input.
+- Rule: read the cursor shape with `GetCursorInfo` against
+  `LoadCursor(IDC_SIZENS / IDC_ARROW / IDC_HAND)`. Move the pointer away and
+  back and wait about 400 ms first; a 250 ms read lagged a step behind.
+- Rule: an OLE drag from Explorer works through `mouse_event`: click,
+  shift-click, press, about 60 small moves 25 ms apart, a short wiggle over the
+  target, release. The first attempt can go unreceived (no outline); repeat it
+  once before calling a drop a failure. Close the Explorer window afterwards
+  through `Shell.Application`'s `Windows()` by `LocationURL`, not with keys.
+- Rule: measure layout by scanning pixel runs along a row or column of a window
+  capture (Neutral dark: pane borders `#1a1a1a`, the status row's border
+  `#2f2f2f`, the preview's black surround). A no-folder window keeps the photo
+  out of the way. There is no line between the strip header and the cells;
+  take the header's height from the cells' symmetric padding. The canvas
+  measured this way (1158 x 767 of surround) does not match the 1160 x 810
+  inferred from an earlier paint-bounds log, which may count differently; the
+  difference is untraced, so prefer capture measurements.
+- Rule: a crop re-cut prints no `zoom` line (only a `z` press is timed), so
+  judge a re-cut after a pane or strip drag from captures. A drag that shrinks
+  the canvas re-cuts nothing because the held crop still covers it
+  (`Zoom::holds`); drag so the canvas grows.
+- Rule: the settings modal reopens on its first page (Sidecar), not the last
+  one shown. Open the target page through its sidebar entry before pressing
+  its controls; a press aimed at a later page once hit the Sidecar `Both`
+  radio at the same position.
 
 ### Every keystroke goes through the keymap (Inferred)
 
@@ -3608,8 +3659,8 @@ choosing the circle.
 - Rule: the circle is in the row's flow inside the right region, never in
   `left` (see the `StatusBar` section). The row is pinned to
   `STATUS_ROW_HEIGHT`, so showing or hiding it changes neither the row's
-  height nor the canvas (measured before the strip header: 1160 x 842 either
-  way), and the status text,
+  height nor the canvas (measured with the strip header on 2026-11-22: 1158 x
+  767 of surround either way, the row 30 px), and the status text,
   start-aligned in the center region, does not move; the center region is
   always 20 px narrower (the circle's slot and the region's 8 px gap), with
   or without the circle, and the slot is empty space at the row's right end
@@ -3622,10 +3673,14 @@ choosing the circle.
   `TrashProgress` and the folder runs' `SequenceProgress` / `ImportProgress`
   already make, and it goes wherever `scan_status.clear()`,
   `trashing = None` and the folder runs' ends do. Its value's transition does request animation
-  frames for 180 ms after each change. Not yet observed: whether the drop
-  from pass 1's full ring to pass 2's empty one reads well, and whether the
-  extra frames slow paging during a scan (the hand check is pending in
-  `../plans/20261115-native-status-bar/learnings.md`).
+  frames for 180 ms after each change. Seen (2026-11-22, Windows 11): at
+  pass 2's start the full ring drained to empty within about 240 ms (frames 80 ms apart, consistent with the 180 ms animation) and filled
+  again, judged to read as a reset; paging during pass 2 took 12 to 29 ms
+  keypress to pixels against 5 to 21 ms after the scan (after a first 140 ms page), the difference
+  following the read source (`read` during the scan, `prefetch` after), not
+  the frames, judged not visibly slower on a debug build; paging during
+  pass 1 not taken
+  (`../plans/_archived/20261122-windows-device-checks-7/results.md`).
 - Rule: do not zero `duration_normal` to stop the animation: the dialogs read
   it too.
 - Seen (2026-11-22, Windows 11): the circle filled through pass 2 of a cold
@@ -3678,9 +3733,11 @@ text was 16 px white, the row transparent over the root's black).
   keymap is unchanged. `Deferred` in `gpui-pre` 0.3.12 calls
   `window.defer_draw` with no content mask (`elements/deferred.rs`), so no
   ancestor of the strip header clips the Sort / Filter popovers and
-  `anchored` still opens them from the button's top-right; read from the
-  sources, the hand check is pending in
-  `../plans/20261117-native-strip-header/learnings.md`.
+  `anchored` still opens them from the button's top-right; seen
+  (2026-11-22, Windows 11): both menus opened upward with their right edge on
+  their button's, unclipped by the header, and in a 603 px window the long
+  filter menu stayed between the title bar and the header
+  (`../plans/_archived/20261122-windows-device-checks-7/results.md`).
 - Rule: on a gpui-component bump, re-check the root's padding, border, text
   size and color and the regions' gap and alignment rules in
   `status_bar.rs`, and `ProgressCircle`'s sizes, track and animation, and
@@ -3691,7 +3748,9 @@ text was 16 px white, the row transparent over the root's black).
   Its own content is shorter (the status text's line is 19 px, 12 px at
   GPUI's default line height rounded by `line_height_in_pixels`, the circle
   12 px), so without the pin the row would shrink and the canvas grow when
-  the buttons left. Inferred from the sources, not re-measured on screen.
+  the buttons left. Measured (2026-11-22, Windows 11, scale 1): the row is
+  30 px including its 1 px top border, the same with the circle shown and
+  gone.
 
 ### The title bar is gpui-component's `TitleBar` with the icon, "Handpic", the open folder's name and the settings gear (Inferred)
 
@@ -4005,9 +4064,13 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   hint shows while the first open's listing runs.
 - The no-folder text is `empty.ts`'s, with its "Drop a folder onto the
   window" clause (see the drop section below).
-- Not verified in the running app: the key clause following a rebinding,
-  and a click on the settings modal not opening the picker (the pending
-  hand check in `../plans/20261114-gpui-empty-state/learnings.md`).
+- Seen (2026-11-22, Windows 11): rebinding `open` to `space` made the
+  message end `Or press Space.` within 150 ms of the settings
+  closing (the first capture), and a press on the settings layer over the message opened no
+  picker. The no-key clause cannot be reached from the UI: the Keyboard
+  Shortcuts page refuses to remove an action's last key (`"space" is the
+  only key for open; use Reset`)
+  (`../plans/_archived/20261122-windows-device-checks-7/results.md`).
 - Seen (2026-11-22, Windows 11): the no-folder message centered and its
   click opening the folder picker, the no-files message's click doing
   nothing, and on `NIKON_D70_Nikon.nef` the failed-preview message, which
@@ -4220,12 +4283,13 @@ strip needed one because `uniform_list` is vertical only.
   clear runs lands after it and re-adds a true row. A test asserting row order must sort
   the expected paths at run time, since `MAIN_SEPARATOR` sorts on opposite
   sides of `2` on Windows and elsewhere.
-- Measured before the strip header: the preview canvas was 1160 x 842
-  logical px in the default 1600 x 1000 window with the tree shown at its
-  default width (see "The sort and filter menus are deferred popovers over
-  the window"); with the header it is inferred 32 px shorter, not
-  re-measured. Inferred: 220 px wider with the tree hidden by `toggleLeft`,
-  not measured. A pane change re-cuts a 1:1 crop through `zoom_resized`.
+- Measured with the strip header (2026-11-22): the preview canvas's
+  surround is 1158 x 767 logical px in the default 1600 x 1000 window with
+  the tree shown at its default width, 1160 x 768 counting the pane borders
+  and the header's line (see "The sort and filter menus are deferred
+  popovers over the window"; before the header it was 1160 x 842).
+  Inferred: 220 px wider with the tree hidden by `toggleLeft`, not
+  measured. A pane change re-cuts a 1:1 crop through `zoom_resized`.
 
 ### The folder tree is not gpui-component's `Tree` (Inferred)
 
