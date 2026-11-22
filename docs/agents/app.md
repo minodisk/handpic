@@ -5311,7 +5311,11 @@ slower disk and is not attributed.
 
 - Rule: copying test files with `cp` leaves them in the OS cache (the second
   pass 1 over a 520-file copy took 0.41 s). For a cold pass 1 copy them with
-  `robocopy /J` (unbuffered) and use each copy once.
+  `robocopy /J` (unbuffered) and use each copy once. Hardlinks of files an
+  earlier run read are cached too: pass 1 over them ends before the debug
+  window takes keys, so the placeholder phase and a steered-scan check (`End`
+  right after the window opens) cannot be seen. The `zoom` timing lines go to
+  stdout like the `page` lines.
 - Rule: to measure the pause itself, press onto files the scan has not read
   (a jump, not the next file); `--auto` only steps to the next file.
 

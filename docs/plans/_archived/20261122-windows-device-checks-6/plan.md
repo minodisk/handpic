@@ -113,4 +113,5 @@ expect (check for others while editing):
 
 ## Progress
 
-- 2026-11-22: Step 1 done. The run's results are in `results.md`. In `todo.md`, the strip item lost boxes 1 and 4 and kept boxes 2 and 3 narrowed to the uncached-file sub-points; both 1:1 items were deleted; two new items were added (the strip cell's panic text with the verbatim path, the black 1:1 canvas of a failed crop). `docs/agents/app.md` unchanged.
+- 2026-11-22: Step 1 done. The run's results are in `results.md`. In `todo.md`, the strip item lost boxes 1 and 4 and kept boxes 2 and 3 narrowed to the uncached-file sub-points; both 1:1 items were deleted; two new items were added (the strip cell's panic text with the verbatim path, the black 1:1 canvas of a failed crop). `docs/agents/app.md` unchanged by the step.
+- 2026-11-22: Wrap-up. `docs/agents/app.md` "During pass 1 the preview reads what the scan already read" got the cached-hardlink note (pass 1 ends before the debug window takes keys) and the `zoom` lines going to stdout; `todo.md` needed nothing further. Plan archived.
