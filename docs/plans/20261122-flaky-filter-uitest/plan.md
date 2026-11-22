@@ -138,3 +138,7 @@ tenfold debug-build inference cost instead of widening the wait.
   side effect, not a goal.
 
 ## Progress
+
+- 2026-11-22: Step 1 done. The ten tract / ndarray / matrixmultiply crates are
+  compiled at `opt-level = 3` in `crates/app`'s dev profile, and the docs are
+  updated. PR reference: to be added once the PR exists.
