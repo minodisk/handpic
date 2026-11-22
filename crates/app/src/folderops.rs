@@ -1571,13 +1571,24 @@ fn folder_dialog(
         .title(content.title.clone())
         .when(!lines.is_empty(), |shell| {
             shell.content(move |body, _, _| {
+                let last = lines.len() - 1;
+                // The component's content and body are both `flex_1`, which
+                // would give the lines half of the dialog's height.
                 body.gap_2()
-                    .children(lines.iter().map(|line| div().child(line.clone())))
+                    .flex_none()
+                    .children(lines.iter().enumerate().map(|(at, line)| {
+                        div()
+                            .when(at == last, |d| {
+                                d.debug_selector(|| "folder-dialog-line".to_owned())
+                            })
+                            .child(line.clone())
+                    }))
             })
         })
         .when(!lists_empty, |shell| {
             shell.child(
                 div()
+                    .debug_selector(|| "folder-dialog-list".to_owned())
                     .flex()
                     .flex_col()
                     .children(content.rows.iter().map(|row| {
@@ -1615,6 +1626,7 @@ fn folder_dialog(
         })
         .footer(
             div()
+                .debug_selector(|| "folder-dialog-footer".to_owned())
                 .flex()
                 .flex_col()
                 .gap_2()
@@ -2153,4 +2165,132 @@ fn renamed_text(renamed: &Renamed) -> String {
 
 fn rows(texts: Vec<String>) -> Vec<Row> {
     texts.into_iter().map(Row::from).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{Bounds, Pixels, ScrollDelta, ScrollEvent, point, px};
+
+    use super::*;
+    use crate::uitest::Ui;
+
+    /// The surface's gap between the lines and the body (`modal.rs`'s
+    /// `gap_2`, the component's `gap_y_2`).
+    const GAP: Pixels = px(8.);
+
+    struct Drawn {
+        surface: Bounds<Pixels>,
+        line: Bounds<Pixels>,
+        list: Bounds<Pixels>,
+        footer: Bounds<Pixels>,
+    }
+
+    /// A folder dialog with two lines, `rows` rows and a headed list of
+    /// three, as Import's.
+    fn open_dialog(ui: &mut Ui, rows: usize) {
+        let content = Content {
+            title: "Import".to_owned(),
+            lines: vec![
+                "Copy 3 files into 1 folder.".to_owned(),
+                "Source: /photos".to_owned(),
+            ],
+            rows: (0..rows).map(|i| Row::from(format!("row {i}"))).collect(),
+            lists: vec![(
+                "Skipped".to_owned(),
+                vec!["a".to_owned(), "b".to_owned(), "c".to_owned()],
+            )],
+            ..Content::default()
+        };
+        ui.update(|view, cx| {
+            view.show_folder_dialog(Dialog::new(content, "Import", Style::Primary, true), cx);
+        });
+    }
+
+    fn close_dialog(ui: &mut Ui) {
+        ui.update(|view, cx| {
+            view.folderops.dialog = None;
+            view.follow_folder_dialog(cx);
+        });
+    }
+
+    fn drawn(ui: &mut Ui) -> Drawn {
+        let mut at = |selector| {
+            ui.cx
+                .debug_bounds(selector)
+                .unwrap_or_else(|| panic!("{selector} is not drawn"))
+        };
+        Drawn {
+            surface: at("dialog-0"),
+            line: at("folder-dialog-line"),
+            list: at("folder-dialog-list"),
+            footer: at("folder-dialog-footer"),
+        }
+    }
+
+    #[test]
+    fn short_list_sits_under_the_lines_whole() {
+        let mut ui = Ui::open();
+        open_dialog(&mut ui, 10);
+        let d = drawn(&mut ui);
+        let room = ui.cx.update(|window, _| window.viewport_size().height);
+        assert!(
+            d.surface.size.height < room - px(100.),
+            "the dialog fills the window: {:?} of {room:?}",
+            d.surface
+        );
+        assert!(
+            d.list.top() - d.line.bottom() <= GAP,
+            "a band between the last line {:?} and the list {:?}",
+            d.line,
+            d.list
+        );
+        assert!(
+            d.list.bottom() <= d.footer.top() - GAP,
+            "the list {:?} runs under the footer {:?}",
+            d.list,
+            d.footer
+        );
+        close_dialog(&mut ui);
+    }
+
+    #[test]
+    fn long_list_scrolls_from_under_the_lines_to_its_last_row() {
+        let mut ui = Ui::open();
+        open_dialog(&mut ui, 300);
+        let d = drawn(&mut ui);
+        assert!(
+            d.list.top() - d.line.bottom() <= GAP,
+            "a band between the last line {:?} and the list {:?}",
+            d.line,
+            d.list
+        );
+        assert!(
+            d.list.bottom() > d.footer.top(),
+            "the list fits: {:?}",
+            d.list
+        );
+        let over = point(d.list.left() + px(20.), d.list.top() + px(20.));
+        for _ in 0..20 {
+            ui.cx.simulate_event(ScrollEvent {
+                position: over,
+                delta: ScrollDelta::Pixels(point(px(0.), px(-1000.))),
+                ..ScrollEvent::default()
+            });
+            ui.cx.run_until_parked();
+        }
+        let d = drawn(&mut ui);
+        assert!(
+            d.list.bottom() <= d.footer.top() - GAP + px(1.),
+            "scrolled to the end, the list {:?} still runs under the footer {:?}",
+            d.list,
+            d.footer
+        );
+        assert!(
+            d.list.bottom() >= d.footer.top() - GAP - px(1.),
+            "scrolled past the end: the list {:?}, the footer {:?}",
+            d.list,
+            d.footer
+        );
+        close_dialog(&mut ui);
+    }
 }
