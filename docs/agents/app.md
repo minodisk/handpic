@@ -38,7 +38,12 @@ then [native-gpui-kit](../plans/_archived/20261116-native-gpui-kit/plan.md).
 (`opt-level = 3` for `gpui-pre`, `gpui-component`, `gpui-kit`,
 `gpui-kit-assets`, `gpui-pre-platform`, `rustybuzz`, `taffy` and
 `ttf-parser`), so a `cargo run` debug build renders at a usable speed at the
-cost of a longer cold build.
+cost of a longer cold build. The block also holds the tract inference crates
+(`tract-core`, `tract-data`, `tract-extra`, `tract-hir`, `tract-linalg`,
+`tract-nnef`, `tract-onnx`, `tract-onnx-opl`, `ndarray` and
+`matrixmultiply`): unoptimized, pass 2's YuNet and face mesh inference is
+about ten times slower, which took a UI test past its 10 s wait on a 4-core
+CI runner (see the UI test rules below).
 
 - Rule: the app crate never picks a GPUI version of its own. An upgrade
   is a `gpui-kit` bump (one exact pin) in one deliberate chore PR, which
@@ -3009,6 +3014,16 @@ after about 11 ms, one retry) and fails the test if it is still held after
   the Windows CI runner (`THREAD_PRIORITY_LOWEST`) one test's pass 2 had done
   3 of 4 files after 10 s, where it normally takes about 0.7 s for 3. The
   tests check the wiring, not the scheduling. Do not raise the wait instead.
+- Rule: the tract inference crates stay at `opt-level = 3` in
+  `[profile.dev.package]`. Unoptimized, pass 2 ran about ten times slower,
+  and on a 4-core CI runner (`faces_threads` giving each scan one pass 2
+  thread, about ten UI tests scanning at once) the 4-file
+  `a_filter_choice_narrows_the_files_and_lands_on_the_anchor` timed out
+  intermittently at `analyzing 3/4` on Ubuntu and Windows. Before: pass 2 of
+  4 files took 1775 ms for one test alone, and pinned to 4 cores every UI
+  test's folder wait was 5.0 to 7.3 s. After: 182 ms alone, the longest
+  folder wait 0.82 s pinned to 4 cores and 1.19 s pinned to 2. Do not raise
+  the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
   (the macOS job's bundle step, `cargo build`) fails.

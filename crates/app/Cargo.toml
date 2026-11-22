@@ -59,6 +59,19 @@ crc32fast = { opt-level = 3 }
 rustybuzz = { opt-level = 3 }
 taffy = { opt-level = 3 }
 ttf-parser = { opt-level = 3 }
+# Pass 2's YuNet and face mesh inference, about ten times slower unoptimized:
+# on a 4-core CI runner each UI test's scan gets one pass 2 thread, and the
+# concurrent UI tests otherwise come near the tests' 10 s wait.
+tract-core = { opt-level = 3 }
+tract-data = { opt-level = 3 }
+tract-extra = { opt-level = 3 }
+tract-hir = { opt-level = 3 }
+tract-linalg = { opt-level = 3 }
+tract-nnef = { opt-level = 3 }
+tract-onnx = { opt-level = 3 }
+tract-onnx-opl = { opt-level = 3 }
+ndarray = { opt-level = 3 }
+matrixmultiply = { opt-level = 3 }
 
 [patch.crates-io]
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
