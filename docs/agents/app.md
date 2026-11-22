@@ -2705,7 +2705,7 @@ yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
 
-### A held key draws each stale preview before chasing the current file (Inferred)
+### A held key draws each stale preview before chasing the current file (Measured)
 
 The pager keeps one preview read in flight. When one read + decode outlasts
 the key repeat, every result during a hold is another file's; throwing those
@@ -2742,10 +2742,14 @@ image id and drawn size, so a stale frame gets its own edges or none.
   prefetch ring hit is not a stale frame: it has had all of them, so
   `Pager::hit` makes the older result still out `Finished::Dropped` (released,
   nothing requested, nothing left in flight) until the current file changes.
-- Pending: a held key flipping frames and the release showing the current file
-  with its overlays is unverified by hand on Windows.
+- Measured on Windows 11 on 2026-11-22: a held `→` (key-downs every 33 ms)
+  flipped frames on RAF files with files skipped and some `page` lines
+  waiting on the read in flight, a stale frame was drawn with no `f`
+  overlay, and the release showed the current file with its marks (face box
+  and mesh on a face file), its meta pane and the last `page` line
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
 
-### A held key draws each stale crop before chasing the current one (Inferred)
+### A held key draws each stale crop before chasing the current one (Measured)
 
 The 1:1 view's crop chain has the same shape: one read in flight, and a crop
 read for an earlier page (`seq`) used to be released. `Zoom` now records the
@@ -2769,8 +2773,13 @@ so `z` never opens on another file's crop.
 - Rule: a single press while zoomed goes old crop, new crop (no black frame or
   placeholder in between), and a folder switch or re-listing while zoomed
   keeps the old crop until the new one arrives.
-- Pending: a held key flipping crops while zoomed, and a single press and `z`
-  off / on still behaving, is unverified by hand on Windows.
+- Measured on Windows 11 on 2026-11-22: with crop reads of 51-62 ms against
+  the 33 ms repeat, the crops changed during the hold with files skipped,
+  every frame one file's crop or placeholder whole, and the release showed
+  the current file's crop; a single press went old crop at 37 ms to new crop
+  from 85 ms with no black or placeholder frame, and `z` off / on reused the
+  crop with no new `zoom` line
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
 
 ### The prefetch ring holds the decoded neighbours (Inferred)
 
@@ -3399,6 +3408,13 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   one shown. Open the target page through its sidebar entry before pressing
   its controls; a press aimed at a later page once hit the Sidecar `Both`
   radio at the same position.
+- Rule: `SetCursorPos` followed by a button press did not deliver the click
+  to GPUI although `WindowFromPoint` named the instance; a few relative
+  `mouse_event` moves before the press did, every time
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+- Rule: a click on a tree row gives the tree the keyboard, so the next key
+  goes to its type-ahead; send `Escape` before the next key
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
 
 ### Every keystroke goes through the keymap (Inferred)
 
@@ -3569,7 +3585,7 @@ overlay comes about 50-60 ms after the image; the held-key measurement showed
 no cost to paging, so no cheaper filter was tried. The 1:1 crop needs no
 resize (Sobel 4-6 ms).
 
-### A held `g` grays only the photo, through the sprite flag (Inferred)
+### A held `g` grays only the photo, through the sprite flag (Measured)
 
 `grayscale` (default `g`) is held, not toggled: `grayscale.rs`'s `Hold` is on
 from the key's press until its release. The pinned `gpui-pre`'s
@@ -3596,6 +3612,11 @@ auto-repeated press calls no `cx.notify()`.
   `Input` has the focus. `cx.on_blur(&focus, ..)` releases the hold when the
   view's own focus handle loses the focus, and the window activation observer
   releases it on deactivation.
+- Seen on Windows 11 on 2026-11-22: the strip's right-click `PopupMenu`
+  opening did not end the hold (the photo stayed gray while `g` was down),
+  and the held `g`'s key-up with the menu open did, which the rule's
+  `PopupMenu` case does not predict; no cause was traced
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
 
 ### The performance overlay is a band painted last in the preview canvas (Inferred)
 
