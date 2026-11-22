@@ -113,3 +113,5 @@ source of truth, and lists A to D below name the exact edits.
 - **`results.md` is copied unchanged**, including its title's "batch 8" and the scratchpad wording; `todo.md` names it by its archived path, which exists only after the wrap-up's archive move (the same PR in single-PR mode).
 
 ## Progress
+
+- 2026-11-22: Step 1 done. `results.md` was copied unchanged. In `todo.md`, the ORF and big-endian DNG items were removed and the lens trailing-space item and the Leica 160x120 item were added in their places. `docs/agents/app.md` unchanged by the step. The Done-when heading count was corrected from 138 to 136.
