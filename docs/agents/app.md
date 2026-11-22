@@ -4470,8 +4470,13 @@ gives it its last width with no code.
   starts a drag only on a move more than its private 2 px `DRAG_THRESHOLD`
   from the press, and the first `DragMoveEvent` is the move after that one;
   the boundary then catches up to the press-relative position at once
-  (Inferred, from gpui-pre 0.3.12's `elements/div.rs` and the 2026-11-22
-  run, whose first 3 to 5 px moved nothing). A move that
+  (Measured on Windows 11, 2026-11-22, from gpui-pre 0.3.12's
+  `elements/div.rs`: the first 1 to 4 px of a drag moved nothing, then the
+  line kept the press's offset from the pointer in both directions and
+  returned to its start when the pointer returned to the press, on the tree's
+  boundary, the meta pane's and the strip's top edge; the handle's
+  `on_mouse_down` fires in the running window, so the first-`DragMoveEvent`
+  fallback is not needed. macOS and Linux are not yet seen). A move that
   changes the widths calls `zoom_resized` (the 1:1 crop is re-cut after
   `CROP_RESIZE_DEBOUNCE`, its timer replaced on every move) and repaints; the
   canvas's `viewport` and the peaking layer follow the canvas's own bounds,
@@ -4501,13 +4506,19 @@ gives it its last width with no code.
   release, outside the window included, writing the widths at once (Windows
   delivers the release); the 1:1 re-cut after a drag; the tree at 160 px.
   Not yet seen: the bands against the no-folder message in a narrow window,
-  and macOS and Linux. `todo.md`'s `App: real-device check that the meta pane
-  keeps words whole at its 160 px minimum` holds the check of the fix for the
-  second finding of that run, words broken mid-word at 160 px (results in
+  and macOS and Linux. the fix for the second finding of that run, words broken mid-word at
+  160 px, is Measured (see "A meta pane value that does not fit beside its
+  label goes under it") (results in
   `../plans/_archived/20261122-windows-device-checks-resize-scrollbars/results.md`);
   the press's offset was lost then, before the drag moved by the pointer's
-  travel from the press, and `todo.md`'s `App: real-device check that a pane or strip drag keeps the press's offset from the boundary`
-  holds the check of the fix.
+  travel from the press; the fix is Measured on Windows (see the drag rule
+  above; macOS and Linux remain under the drag-resizable tree and meta panes
+  checks). One first drag after a launch (no pointer move over the window
+  before the press) did not move the boundary at all and did not recur in
+  later drags or after a relaunch; not reproduced, so if a first drag after
+  launch does nothing, move the pointer over the window and retry before
+  suspecting the code (`../plans/_archived/20261122-pane-drag-offset-meta-wrap/learnings.md`,
+  Wrap-up).
 
 ### The strip's height is one number, stored under `stripHeight` (Inferred)
 
@@ -4553,7 +4564,9 @@ face icon keep their sizes.
   `y` and `HEADER` + the cells' height + `GUTTER` in the view's `drag_press`,
   and `stripheight::wanted` gives the height, so the press's offset from the
   edge is kept; the first moves change nothing, as for the panes (GPUI's
-  2 px `DRAG_THRESHOLD`, Inferred). `dragged` takes the header and the gutter off it, rounds the cells' height
+  2 px `DRAG_THRESHOLD`; Measured on Windows 11, 2026-11-22: the first 1 to
+  4 px stayed still, then the edge kept the press's offset in both
+  directions, y 804 pressed at line 801 gave 809 for 812 and 737 for 740). `dragged` takes the header and the gutter off it, rounds the cells' height
   to whole px, clamps it to `MIN`..`MAX` and to what leaves the preview
   `PREVIEW_MIN` with the header and the gutter counted, never under `MIN`.
 - Rule: a move that changes the height calls `Strip::set_geometry`, which
@@ -5365,13 +5378,18 @@ rule: a canvas only when `paint` grows by more than 1 ms).
   element tree; look at `present` (and `frameWait` for layout) when adding
   elements beside it.
 
-### A meta pane value that does not fit beside its label goes under it (Inferred)
+### A meta pane value that does not fit beside its label goes under it (Measured)
 
 At the pane's 160 px minimum (132 px of content after `pl_3` and the 16 px
 `SCROLLBAR_TRACK`) a value column beside the label was narrower than one
 word, so `Electronic` broke as `Electroni` / `c` and the file name as
-`ILCE-1M2_sony_a1_ii_0` / `3.arw` (Windows 11, 2026-11-22). Read from the
-source, not seen in the running window.
+`ILCE-1M2_sony_a1_ii_0` / `3.arw` (Windows 11, 2026-11-22). The fix is
+Measured on Windows 11 (96 DPI): at 160 px no value broke inside a word, and
+the names broke after `_` (`DSC-HX95_` / `DSC00018.ARW`,
+`ILCE-1M2_sony_a1_ii_` / `03.arw`). At 220 px only `AF point` and `Metering`
+(`Center-weighted average`) went under their labels on those two files and
+every other row stayed on one line, judged acceptable; at about 296 px every
+row was one line.
 
 - Rule: each row is a `flex_wrap` row with `gap_x_2` (no vertical gap on a
   wrapped row), the label `flex_none` and the value `flex_grow(1.)`, `min_w_0`
@@ -5393,8 +5411,7 @@ source, not seen in the running window.
   inside itself. `.` is not a separator, so the extension stays with the
   last segment. No U+200B: how the fonts draw it was not checked on the
   three platforms.
-- `todo.md`'s `App: real-device check that the meta pane keeps words whole at
-  its 160 px minimum` holds the check in the running window.
+- Not yet seen: macOS and Linux (fonts, UAX #14 breaks).
 
 ### The meta pane does not use gpui-component's `DescriptionList` (Inferred)
 

@@ -67,3 +67,18 @@
   run ci:local`). Basis: Step 2's "Trade-offs and risks" (the flex layout is
   checked only by reading GPUI's source). Files: `crates/app/src/main.rs`
   (`meta_pane`), `crates/app/src/meta.rs` (`name_segments`).
+
+## Wrap-up: Windows real-device check after both steps (2026-11-22)
+
+Run by the main agent on Windows 11 (96 DPI) with a debug build of `crates/app` with `--features screenshot` built from `pane-drag-offset-meta-wrap-step-2` (Step 1 merged), on hardlinks of `ILCE-1M2_sony_a1_ii_03.arw` and `DSC-HX95_DSC00018.ARW`, a fresh `--index` / `--settings` / `--log`, synthetic `SetCursorPos` / `mouse_event` input and client-area captures (the boundary line found as the `#1a1a1a` column or row).
+
+- Tree's boundary (line at 398 after an earlier drag, pressed at 401, offset 3): pointer 402, 403, 405 -> line 398 (no move); 408 -> 405, 418 -> 415, 438 -> 435, back to 428 -> 425. The line kept the press's offset in both directions.
+- Meta pane's boundary (line at 1379, pressed at 1376, offset -3): 1375, 1374, 1372 -> 1379 (no move); 1366 -> 1369, 1356 -> 1359, 1346 -> 1349, back to 1366 -> 1369.
+- Strip's top edge (line at y 801, pressed at y 804, offset 3): 805, 806, 808 -> 801 (no move); 812 -> 809, 760 -> 757, 700 -> 697, back to 740 -> 737. Both directions kept the offset.
+- So the handle's `on_mouse_down` press listener fires in the running window, and GPUI's threshold keeps the first 1 to 4 px of a drag still, as Step 1's rules say.
+- One incident: in the very first drag of the first instance after launch (pressed at 223 and at 1376 in one script, no pointer move over the window before the press), the boundary did not move at all. It did not happen again: the next presses on the same instance worked, and a relaunched instance's first drag (pressed at 223 right after launch) moved the line to 257 for a pointer at 260. Not reproduced; recorded only.
+- Meta pane at 160 px (`ILCE-1M2_sony_a1_ii_03.arw`, `DSC-HX95_DSC00018.ARW`): no value broke inside a word. `Electronic`, `Mechanical`, `Manual`, `Compressed RAW`, `SONY DSC-HX95`, `FE 28-70mm F2 GM`, `Center-weighted average`, `Continuous, frame 1`, the dates and the AF point each went on their own right-aligned line under the label (the AF point and `Center-weighted average` wrapping at spaces there); short values stayed beside their labels. The names broke after `_`: `DSC-HX95_` / `DSC00018.ARW`, `ILCE-1M2_sony_a1_ii_` / `03.arw`.
+- Meta pane at the default 220 px: the names fit on one line; only `AF point` (`5913, 2964 of 8640 × 5760`, `2448, 1376 of 4896 × 2752`) and `Metering` (`Center-weighted average`) went under their labels, every other row stayed on one line. Judged acceptable.
+- At about 296 px every row of the ILCE file was one line.
+
+So both `todo.md` real-device check items this plan left (`### App: real-device check that a pane or strip drag keeps the press's offset from the boundary`, `### App: real-device check that the meta pane keeps words whole at its 160 px minimum`) are settled on Windows, and the two `docs/agents/app.md` rules marked (Inferred) by Steps 1 and 2 can become Measured for Windows. The two "Pending manual check" entries under "Deferred issues" above are done; macOS and Linux remain under the existing boxes of `### App: real-device checks of the drag-resizable tree and meta panes` and `### App: real-device checks of the drag-resizable strip height (native-strip-resize)`.
