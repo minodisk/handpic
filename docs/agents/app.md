@@ -2767,7 +2767,8 @@ the read and the paint hold. `request_prefetch` reads the next wanted file,
 one at a time through `load` on the background executor, only when the pager
 has nothing in flight, the image on screen is the current file's, no scan
 pass runs and no folder rename of the open folder or an ancestor is in flight
-(`renaming`); it is asked after a
+(`renaming`, tested by the tree's spelling `tree_open`, which the in-flight
+renames hold, else by the canonical `dir`); it is asked after a
 current result (read or hit), a settled prefetch, a `refilter` that leaves the
 current file shown, `FacesDone` and a failed folder rename (`rename_ran`'s
 `Err` arm; a successful one reopens the folder, which refills the ring).

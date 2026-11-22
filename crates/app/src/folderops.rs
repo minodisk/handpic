@@ -1649,13 +1649,18 @@ fn folder_dialog(
 /// `main.ts`'s `renameFolder` / `holdRename`.
 impl Handpic {
     /// A folder rename in flight moves the open folder: it is the renamed
-    /// folder or under it.
+    /// folder or under it. The open folder is tested by the tree's spelling
+    /// (`tree_open`), which the in-flight renames hold, as well as by the
+    /// canonical `dir`, for an open that is not in the tree yet.
     pub(crate) fn renaming(&self) -> bool {
-        self.dir.as_deref().is_some_and(|dir| {
-            self.folderops
-                .renames
-                .blocks(&context::shown_path(dir), IGNORE_CASE)
-        })
+        let renames = &self.folderops.renames;
+        self.tree_open
+            .as_deref()
+            .is_some_and(|open| renames.blocks(open, IGNORE_CASE))
+            || self
+                .dir
+                .as_deref()
+                .is_some_and(|dir| renames.blocks(&context::shown_path(dir), IGNORE_CASE))
     }
 
     /// The name of the tree's row `at`: the text input while it is being
