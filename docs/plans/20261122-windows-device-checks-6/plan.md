@@ -93,7 +93,7 @@ expect (check for others while editing):
       - Box 4 (the resync) deleted: all three sub-points passed on PowerShell `Copy-Item` / `Remove-Item`; the method is recorded in the Background.
       - The Background got one 2026-11-22 paragraph before `#### TODO`: the material folder, the debug build with `--features screenshot`, the cadence, the private bytes series, the `q` quit, the resync's PowerShell copies and deletes, and "What is left open is in the boxes below."
     - **B. The two 1:1 items**, both deleted whole:
-      - `### App: real-device check of the 1:1 view on files with a malformed full-size JPEG`: the app stayed up through `z` and paging, and the error surfaced in the meta pane and the status line; the black 1:1 canvas became the second list C item, in this item's place.
+      - `### App: real-device check of the 1:1 view on files with a malformed full-size JPEG`: the app stayed up through `z` and paging, and the preview read's error was in the meta pane and the status line before `z` and stayed under `z` (the crop read's own error showed only as an extra stdout line); the black 1:1 canvas became the second list C item, in this item's place.
       - `### App: real-device check of the 1:1 view on older Sony ARW bodies (no full-size JPEG)`: all seven bodies gave a sharp crop of the 1616x1080 / 1920x1080 / 1440x1080 preview.
     - **C. New items** (no existing item covered either), in place of the malformed-JPEG item:
       - `### App: a strip cell of a file whose thumbnail encode panics reads the internal panic text and the Windows verbatim path` (`crates/core/src/scan.rs`'s `catch_unwind` text on `NIKON_D70_Nikon.nef` / `CGO3P_YUN00007.dng`).
