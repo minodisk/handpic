@@ -1104,16 +1104,6 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 
 - [ ] Decide whether every listing should wait for the eviction (or the eviction should be a shared future), or accept the race as unreachable in practice.
 
-### App: real-device check of the prefetch ring on a page turn, a folder switch and a filter change
-
-`gpui-prefetch` added a ring of decoded neighbour previews to the GPUI app (`crates/app`). CI, the ring's unit tests and the `--auto 60` A/B on the ARW and RAF copies cover the logic and the page-turn timing (57 of 60 presses hit, RAF p50 `keypressToPixels` about 66 to 14 ms). Nobody has pressed the keys by hand: the Step 1 checkbox was ticked on the automated criteria only, so a folder switch and a filter change were never watched for another folder's or a hidden file's image appearing. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/main.rs` (`take_held`, `clear_ring`, the `retain` in `refilter`), `crates/app/src/prefetch.rs`.
-
-#### TODO
-
-- [ ] On Windows, with the release build (`mise run app:release`, NASM on `PATH`) on a folder under `D:\Photos\tests\`, wait for the scan to end, then press `→` onto the next file. Expect it to show at once, and its `page` line to say `source=prefetch`.
-- [ ] On Windows, in the same build, open another folder from the tree. Expect no image of the previous folder to show at any point.
-- [ ] On Windows, in the same build, change the filter so the current file's neighbour is hidden, then press `→`. Expect a hidden file's image never to show.
-
 ### App: kept prefetch-ring entries keep their GPU texture
 
 #### Background
@@ -1802,18 +1792,6 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 - [ ] On Windows, press `z` for 1:1, then drag the edge. Expect the crop to be re-cut once the drag settles. Press `toggleStrip` to hide the strip and its handle, and again to bring both back at the dragged height.
 - [ ] On Windows, launch with `--auto`. Expect the strip to start at 128 whatever is stored and a drag to write nothing to `stripHeight`.
 - [ ] On macOS and Linux, repeat the hover, drag, scaling, restart, 1:1 and hide / show checks above. CI only builds these platforms.
-
-### App: real-device checks of the Cache page and Clear Cache (native-clear-cache)
-
-#### Background
-
-The `native-clear-cache` feature ported the Tauri settings modal's `Cache` tab to the app's settings modal: the index size line, a `Clear Cache` button with a confirmation `Dialog`, a clear held until a running scan finishes, and the refresh of the open folder, the tree's cached counts and the size afterwards. `mise run ci:local` and the unit tests (`cache.rs` flow, texts and on-disk size, the `TABS` order) cover the pure parts. The dialog opened over the settings layer (Escape and focus routing), the held clear, the refresh and the size shrinking were seen on Windows 11 on 2026-11-21; whether the tree's cached counts of unlisted folders disappear after a clear was not looked at. Plan: `docs/plans/_archived/20261117-native-clear-cache/plan.md`.
-
-Files: `crates/app/src/main.rs` (`press_clear`, `follow_clear`, `cache_dialog`, `run_clear`, `cleared`, `refresh_index_size`), `crates/app/src/settingsview.rs` (`cache`), `crates/app/src/cache.rs`.
-
-#### TODO
-
-- [ ] On Windows, run `mise run app:dev` with a test `--settings` / `--index`, expand the tree so that unlisted folders show cached counts, open the settings (`ctrl+,`), pick `Cache`, press `Clear Cache` and confirm. Expected: the tree's cached counts of unlisted folders disappear.
 
 ### App: real-device checks of the always-visible scrollbars
 
