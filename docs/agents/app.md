@@ -3259,7 +3259,7 @@ they overflow.
   bar when their content fits; the tree's, the strip's and the dialog body's
   thumbs drag and their tracks jump; nothing lies under the tree's or the
   strip's thumb at rest, hovered or dragged, nor under the meta pane's or
-  the dialog's at rest, the tree's badge pill ending 16 px from the pane's edge and 6 px from the
+  the dialog's at rest, the tree's badge pill ending 16 px from the pane's edge and 7 px from the
   resting thumb (x 218-223 in a pane ending at x 227); the strip's empty
   9 px gutter shows under a short folder; the bars read in Neutral dark,
   Neutral light and Catppuccin Mocha. Not yet seen: the meta pane's thumb
