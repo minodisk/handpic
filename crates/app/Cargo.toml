@@ -36,11 +36,6 @@ gpui-pre-platform = { version = "=0.3.12", features = ["test-support"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 tempfile = "3"
 
-# The keyed page's paint processed at once (`src/presentnow.rs`).
-[target.'cfg(windows)'.dependencies]
-raw-window-handle = "0.6"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Graphics_Gdi"] }
-
 [target.'cfg(windows)'.build-dependencies]
 winresource = "0.1"
 

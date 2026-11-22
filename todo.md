@@ -2121,14 +2121,15 @@ Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/ap
 
 ---
 
-### App: ruler check of the prefetch-hit page turn after the immediate paint (page-present-now)
+
+### Develop: check intervening commits before restoring a file from an old commit in a revert (revert-page-present-now)
 
 #### Background
 
-`page-present-now` makes a keyed page turn on Windows paint at once through `RedrawWindow(.., RDW_UPDATENOW)` on both the read path (`send` / `loaded`) and the prefetch hit (`show_held`). CI, the UI tests and the in-app `--auto 19` A/B cover both paths: B's `frameWait` p50 is 1.7-1.9 ms with prefetch on. The external ruler (`tools/latprobe`) was run only with `--no-prefetch`, where `screen` p50 / p95 moved -8.41 / -7.52 ms on ARW and -4.85 / -3.46 ms on RAF. The on-screen gain of the prefetch hit, the everyday path, was never measured. Plan: `docs/plans/_archived/20261122-page-present-now/plan.md`; record: `docs/plans/_archived/20261122-page-present-now/results.md`, "Caveats". Files: `crates/app/src/main.rs` (`show_held`), `docs/agents/app.md` (the immediate-paint section).
+While reverting #1219, `git checkout c57ec2ff -- docs/agents/app.md` silently dropped the hunks of #1222 (`e433fdf5`), an unrelated change that landed after that base; local review caught it and they were re-applied. Reverse-applying the reverted commit's diff (`git show 6809229f -- <paths> | git apply -R --index`) applied cleanly elsewhere. Record: `docs/plans/_archived/20261122-revert-page-present-now/learnings.md`. Files: `.claude/skills/develop/SKILL.md`.
 
 #### TODO
 
-- [ ] On Windows, in the same session and on an idle machine, run a second ruler A/B with prefetch on: A = `c57ec2ff`, B = `6809229f`, ARW and RAF folders under `D:\Photos\tests\20261108-gpui-compare`, window 1600x1000 at (100,100), alternating A B A B A B, three used runs per app per folder (drivers: `docs/plans/_archived/20261121-fit-preview-downscale/raw/run-ab-gpui.ps1`, `summarize-gpui.py`, and `screengap.py` for the per-press breakdown). Compare `screen` p50 / p95 and the share of presses reaching the first DWM composition. Done when the result is in `docs/agents/app.md`'s immediate-paint section and its "`--no-prefetch`, three runs each" qualifier is kept or dropped accordingly.
+- [ ] Decide whether reverts are frequent enough to document. If so, add to the `develop` skill (or a decided guide with a stated trigger): prefer `git show <commit> -- <paths> | git apply -R --index`; when a file must be restored from an old commit, run `git log <base>..origin/main -- <file>` first, re-apply unrelated later hunks and confirm with `git diff`. Otherwise close this item with that reason.
 
 ---

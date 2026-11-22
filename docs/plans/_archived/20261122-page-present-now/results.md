@@ -14,6 +14,9 @@ reached the screen at the first DWM composition after its page was pended
 RAF presses (34 %) did, a whole refresh earlier, and the rest landed where A's
 do.
 
+The change was reverted (2026-11-22, `revert-page-present-now`) because it
+relies on GPUI internals outside its public API.
+
 Median of the three runs' p50 / p95, in ms:
 
 | Folder | Build | `screen` | `keypressToPixels` (in-app) | `frameWait` | presses at the first composition |
