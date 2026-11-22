@@ -64,3 +64,5 @@ becomes a new item (or stays open).
 - Synthetic keys and captures stand in for a person's eye; a frame between two captures can be missed, so the switch checks use bursts and the `page` lines.
 
 ## Progress
+
+- 2026-11-22: Step 1 done. The run is in `results.md`, the notes in `learnings.md`. All four Windows boxes passed, so both items are deleted whole from `todo.md`: "App: real-device check of the prefetch ring on a page turn, a folder switch and a filter change" and "App: real-device checks of the Cache page and Clear Cache (native-clear-cache)". No new item.
