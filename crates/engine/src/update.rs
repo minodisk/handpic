@@ -1230,7 +1230,7 @@ mod tests {
                 concat!(
                     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
                     "\n<plist version=\"1.0\"><dict>",
-                    "<key>CFBundleExecutable</key><string>handpic</string>",
+                    "<key>CFBundleExecutable</key><string>Handpic</string>",
                     "<key>CFBundleIdentifier</key><string>dev.minodisk.handpic.test</string>",
                     "<key>CFBundlePackageType</key><string>APPL</string>",
                     "</dict></plist>\n"
