@@ -2121,3 +2121,15 @@ Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/ap
 
 ---
 
+
+### Develop: check intervening commits before restoring a file from an old commit in a revert (revert-page-present-now)
+
+#### Background
+
+While reverting #1219, `git checkout c57ec2ff -- docs/agents/app.md` silently dropped the hunks of #1222 (`e433fdf5`), an unrelated change that landed after that base; local review caught it and they were re-applied. Reverse-applying the reverted commit's diff (`git show 6809229f -- <paths> | git apply -R --index`) applied cleanly elsewhere. Record: `docs/plans/_archived/20261122-revert-page-present-now/learnings.md`. Files: `.claude/skills/develop/SKILL.md`.
+
+#### TODO
+
+- [ ] Decide whether reverts are frequent enough to document. If so, add to the `develop` skill (or a decided guide with a stated trigger): prefer `git show <commit> -- <paths> | git apply -R --index`; when a file must be restored from an old commit, run `git log <base>..origin/main -- <file>` first, re-apply unrelated later hunks and confirm with `git diff`. Otherwise close this item with that reason.
+
+---
