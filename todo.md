@@ -626,28 +626,16 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### App: real-device check of an ORF folder in the strip, sidecars and Move to Trash
+### Core: the lens name of some ORFs keeps a trailing space
 
-`orf.rs` and the `.orf` arm of `scan::is_raw_file` / `reader::parse_raw`
-were verified by unit tests and `riffle-cli bench` / `scan` / `focusbox` on
-the raw.pixls.us samples in `D:\photos\samples\ORF\` (never committed), but
-the GUI was never exercised on them. See
-`docs/plans/_archived/20260930-olympus-orf/plan.md` and its `learnings.md`.
-Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
-`crates/core/src/reader.rs`.
+#### Background
+
+Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-orf-dng/results.md`): after a scan of 167 ORF samples, the index's `lens` of `E-M5MarkII__1230049.ORF` and `E-PM2_P1010001.ORF` is `LEICA DG SUMMILUX 25/F1.4 `, with a trailing space. No `make` or `model` of the folder ends in a space: `read_ifd0` in `crates/core/src/exif.rs` trims both (`trim_end`), while `read_exif_ifd` in the same file, which the ORF, NEF, CR3 and JPEG / RAF readers share, takes the lens as stored. `crates/core/src/arw.rs`'s own reader (ARW, DNG) trims only NULs from all three, and `crates/engine/src/exif.rs` drops a lens only when it is all blank. The meta pane's `Lens` row and the filter menu's `Lens` section take the string from the index; whether the padded name shows up as its own filter entry next to the same lens without the space was not checked.
+Files: `crates/core/src/exif.rs` (`read_exif_ifd`, `read_ifd0`), `crates/core/src/arw.rs` (`exif`), `crates/engine/src/exif.rs` (the `lens` of `Exif`), `crates/engine/src/index.rs` (`EXTRACTOR_VERSION`).
 
 #### TODO
 
-- [ ] On Windows, open `D:\photos\samples\ORF\` in the app and check that
-      (1) every `.ORF` appears in the strip with a thumbnail, and the folder
-      tree's RAW count includes them; (2) the preview and the 1:1 view show
-      the 3200x2400 embedded JPEG, the E-M1 Mark II's rotated frames
-      (Orientation 8, e.g. `E-M1MarkII_olympus_om_d_e_m1_mark_ii_01.orf`)
-      upright; (3) the meta pane shows the EXIF rows (camera without
-      trailing spaces, lens, exposure, capture time); (4) a star, a flag and
-      a color label write an XMP and a `.dop` next to the file; (5)
-      the strip's `Move to Trash…` on a file moves the ORF and its
-      sidecars, and Undo restores them.
+- [ ] Trim the lens name's trailing spaces as the make and the model are, with a test: either where it is read (then decide whether `arw.rs`'s reader gets the same, and bump `EXTRACTOR_VERSION` so indexed rows are re-extracted) or where `crates/engine/src/exif.rs` builds the displayed lens (no re-extraction).
 
 ### Core: real-device check of the scan priority's macOS QoS branch
 
@@ -657,15 +645,16 @@ Files: `crates/core/src/orf.rs`, `crates/core/src/scan.rs`,
 
 - [ ] On macOS, open a large RAW folder with a cold index in the app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
-### App: real-device check that big-endian DNGs open after the EXTRACTOR_VERSION bump
+### Core: the Leica M (Typ 240) DNGs show only their 160x120 JPEG in the fit view and the 1:1 view
 
-`big-endian-dng` (`docs/plans/_archived/20261002-big-endian-dng/plan.md`) made `arw::parse` follow the TIFF header's byte order, so the `MM` DNGs of Pentax, Samsung, Ricoh, Leica M (Typ 240 / 246) and iPhone no longer fail with `not a little-endian TIFF/ARW`. It also bumped `EXTRACTOR_VERSION` from 11 to 12, so an index that cached those parse errors should re-extract the rows. The unit tests, `riffle-cli check` on the sample tree (34 of the 52 `MM` files open at every stage) and `mise run ci` cover the parser. The Riffle app was never opened on such a folder, so the re-extraction of cached failed rows and the thumbnails, preview and 1:1 view for these files were never exercised. The step was ticked on the automated criteria only.
+#### Background
 
-Files: `crates/core/src/arw.rs`, `crates/engine/src/index.rs` (`EXTRACTOR_VERSION`).
+Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-orf-dng/results.md`): the three Leica M (Typ 240) DNG samples open, but the only JPEG `arw::parse` finds in them is 160x120 (`page` lines `jpegKB=9..13 px=160x120`). The fit view is that image upscaled, visibly blocky, and the 1:1 view shows it as a 160x120 picture in the middle of the canvas; the orientation is right in both. The app says nowhere that the preview is small. `arw::parse` looks only at IFDs with a JPEG offset and length (0x0201 / 0x0202) and at single-strip YCbCr `Compression=7` IFDs, so a preview stored another way (uncompressed, or in the MakerNote) would be missed; whether these files hold one was not checked. An ORF that holds only a 160x120 thumbnail is refused with `no embedded preview` instead (`docs/agents/raw-metadata-parsing.md`). What pass 2 reads from a 160x120 preview (sharpness, faces) was not looked at.
+Files: `crates/core/src/arw.rs` (`parse`, `strip_jpeg`, `PREVIEW_MIN_WIDTH`), `crates/app/src/zoom.rs`.
 
 #### TODO
 
-- [ ] On Windows, with an index written by `EXTRACTOR_VERSION` 11 (open `D:\Photos\samples\DNG\` in a build from before the bump, then in this build), open a folder containing the Pentax K-5 II, iPhone 12 Pro and Leica M (Typ 240) samples. Expected: the rows that cached `not a little-endian TIFF/ARW` are re-extracted, and the thumbnails, the preview and the 1:1 view show.
+- [ ] Check with exiftool whether the Leica M (Typ 240) DNGs carry a preview larger than 160x120 that `arw::parse` misses, and read it if so. If they do not, decide what the app does with a thumbnail-only DNG: show it as now, say that the preview is small, or refuse it as the ORF reader does.
 
 ### Agents: bare `python` / `node` hang in Git Bash on the Windows host
 
