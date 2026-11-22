@@ -1667,6 +1667,14 @@ the Tauri `sharpness` map was filled from `folder_entries` and patched by
   than 41917 (an installed Handpic or an earlier Tauri build may hold it), seeds `"mcpEnabled": true`
   through `--import-settings` into a fresh `--settings` store, and passes
   `--log` with a file in the test folder, next to `--index`.
+- Rule: a real-device run that clicks the folder tree checks the target row
+  before each click. Test folders are siblings with similar names, so a
+  mis-positioned click opens the folder menu of the neighbour. Verify the
+  menu's folder (the dialog's `Source:` line or the status line) before
+  pressing `Run`, and start a long or destructive run through the MCP tool
+  that names the path where the flow allows it. Mis-clicks cost two runs of
+  the notification check on 2026-11-22
+  (`../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
 - Rule: on Git Bash, give `curl` the JSON body on stdin
   (`--data-binary @- <<< "$body"`); a `--data` argument with `\` escapes
   reaches the server mangled. The session id is the `Mcp-Session-Id` header of

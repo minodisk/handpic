@@ -108,3 +108,4 @@ others while editing):
 ## Progress
 
 - Step 1: applied the run's results to `todo.md` (lists A to C: boxes removed or narrowed in six items, the two new items C1 and C2) and `docs/agents/app.md` (list D), moved `results.md` into `learnings.md` and deleted it.
+- 2026-11-22 Wrap-up: learnings-extractor proposed one `docs/agents/app.md` rule (check the target tree row before clicking in a real-device run), applied; todo-curator found nothing to add or delete; no `.claude/settings.local.json` to promote. Plan archived.
