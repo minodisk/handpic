@@ -116,10 +116,7 @@ mod tests {
     fn the_macos_bundle_names_the_identifier_and_the_binary() {
         let plist = packaging("macos/Info.plist");
         assert_eq!(plist_string(&plist, "CFBundleIdentifier"), IDENTIFIER);
-        assert_eq!(
-            plist_string(&plist, "CFBundleExecutable"),
-            env!("CARGO_BIN_NAME")
-        );
+        assert_eq!(plist_string(&plist, "CFBundleExecutable"), "Handpic");
     }
 
     #[test]

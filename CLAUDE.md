@@ -134,7 +134,9 @@ the build's feed and trusted zipsign key, `minodisk/handpic` with
 at build time that repository and the test key; `check`, the release
 `offered` to the running version, newer by SemVer and with a prerelease
 part only for a prerelease install, each request bounded by `CHECK_TIMEOUT`;
-`install`, a portable or tarball update, or a `.app` install's whole bundle
+`install`, a portable or tarball update, its executable looked up in the
+archive by the shipped name (`Handpic/Handpic.exe`, `Handpic/bin/handpic`),
+never the running exe's, or a `.app` install's whole bundle
 swapped from the macOS tarball (`self_update`'s bundle mode, the staged
 bundle passing `codesign --verify --strict` first, a translocated copy or an
 unwritable folder refused with the move to `/Applications`),
@@ -210,7 +212,8 @@ updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 (`AppId` `dev.minodisk.handpic`, for good) and the portable
 `Handpic-<version>-windows-x64.zip`, and the updater's
 `Handpic-<version>-windows-x64-setup.exe.zip` holding the setup, also
-`mise run app:package:windows`;
+`mise run app:package:windows`; both ship the `handpic` Cargo bin as
+`Handpic.exe` / `Contents/MacOS/Handpic`;
 `linux.sh`, the `Handpic-<version>-linux-x64.tar.gz`, beside it
 `packaging/linux/install.sh` (the per-user install of that tarball under
 `~/.local` after a SHA-256 check, adapted from gpui-kit's guide) and

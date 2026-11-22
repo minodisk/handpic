@@ -14,8 +14,10 @@ set -o nounset
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# The executable's name.
+# The executable cargo builds, from the Cargo bin `handpic`.
 binary="handpic.exe"
+# The executable's name in the ZIP and the install.
+shipped="Handpic.exe"
 
 release="${root}/crates/app/target/release"
 version="$(bash "${root}/tools/package/version.sh")"
@@ -56,14 +58,15 @@ echo "windows.sh: ${iscc}" >&2
 stage="$(mktemp -d)"
 trap 'rm -rf "${stage}"' EXIT
 mkdir -p "${stage}/Handpic"
-cp "${release}/${binary}" "${stage}/Handpic/${binary}"
+cp "${release}/${binary}" "${stage}/Handpic/${shipped}"
 bash "${root}/tools/package/notices.sh" "${stage}/Handpic/licenses"
 
 # MSYS would rewrite ISCC's /-options as paths.
 MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' "${iscc}" \
 	"/DAppVersion=${version}" \
 	"/DFileVersion=${file_version}" \
-	"/DBinary=${binary}" \
+	"/DBinary=${shipped}" \
+	"/DBuiltBinary=${binary}" \
 	"/DReleaseDir=$(cygpath -w "${release}")" \
 	"/DLicensesDir=$(cygpath -w "${stage}/Handpic/licenses")" \
 	"/O$(cygpath -w "${release}")" \

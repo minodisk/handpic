@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Handpic</string>
 	<key>CFBundleExecutable</key>
-	<string>handpic</string>
+	<string>Handpic</string>
 	<key>CFBundleIconFile</key>
 	<string>icon.icns</string>
 	<key>CFBundleIdentifier</key>
