@@ -129,3 +129,4 @@ exercised and passed (or does not apply). A finding becomes a new item
   - D (`todo.md`): two new items after the pane item, the pane drag's offset from the boundary and the meta pane's mid-word breaks at 160 px.
   - E (`docs/agents/app.md`): a cursor-probe bullet, and `Seen (2026-11-22, Windows 11)` bullets for the panes' widths and the strip's height replacing the "Not observed" ones.
   - F (`learnings.md`): the three incidents and the note that #1232 had merged first.
+- 2026-11-22: Wrap-up. Learnings extraction and todo curation found nothing further; no settings to promote. Plan archived.
