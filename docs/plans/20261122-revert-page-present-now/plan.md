@@ -108,3 +108,4 @@ proposed upstream rather than re-added here.
   the A side of the archived A/B.
 
 ## Progress
+- (2026-11-22) Step 1 complete
