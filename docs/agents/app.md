@@ -2765,9 +2765,13 @@ arm does (`show_current`: the cleared status note, meta pane, `marks.show`, `zoo
 `analyze_current`, `start_dwell`, the `page` line with `source=prefetch`) but
 the read and the paint hold. `request_prefetch` reads the next wanted file,
 one at a time through `load` on the background executor, only when the pager
-has nothing in flight, the image on screen is the current file's and no scan
-pass runs; it is asked after a current result (read or hit), a settled
-prefetch, a `refilter` that leaves the current file shown and `FacesDone`.
+has nothing in flight, the image on screen is the current file's, no scan
+pass runs and no folder rename of the open folder or an ancestor is in flight
+(`renaming`, tested by the tree's spelling `tree_open`, which the in-flight
+renames hold, else by the canonical `dir`); it is asked after a
+current result (read or hit), a settled prefetch, a `refilter` that leaves the
+current file shown, `FacesDone` and a failed folder rename (`rename_ran`'s
+`Err` arm; a successful one reopens the folder, which refills the ring).
 `--no-prefetch` turns the ring off. `PREFETCH_PIXEL_CAP` counts decoded
 pixels, which are about the canvas's size since the fit view decodes at a
 reduced scale (see "The fit view decodes at the canvas's DCT scale" below).
@@ -4916,6 +4920,21 @@ the watcher back when the rename fails or the split leaves the folder.
   the scan rule below, so the window is a read in flight at the moment of
   the rename; a rename refused that way reports the OS error in the status
   and leaves the folder, its watcher and its index rows as they were.
+- Measured (2026-11-22, Windows 11): a held rename runs in `FacesDone`'s
+  `finished`, and `request_prefetch`, which refuses while a scan pass runs,
+  came right after it in the same UI turn, so the first prefetch since the
+  open started beside the rename (a UI test logged it on every one of five
+  held renames). `handpic_core::reader::read_preview` of real ARWs on a
+  thread concurrent with `std::fs::rename` of their folder failed the rename
+  with `PermissionDenied` 39 times in 40; with no read, 40 in 40 renamed.
+  That prefetch was the handle behind the held rename's `Access denied (os
+  error 5)` at pass 2's end.
+- Rule: `request_prefetch` starts no read while a folder rename is in flight
+  (`RenamesInFlight::blocks` of the open folder), so the `FacesDone` that
+  drains a held rename starts none; a rename of an unrelated folder holds
+  nothing, and a failed rename asks for the prefetch again. A page turn's
+  preview read, an on-demand read or a 1:1 crop read in flight at the
+  instant of a rename can still refuse it.
 - Rule: the date rename is not held by the gate: with a listing, a scan or a
   run under way (`Resync::busy` or the gate's in-flight count) the preview
   and the run are refused with `SCAN_RUNNING` in the status. The run holds
@@ -5020,8 +5039,12 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   said `Rename…: waiting for the scan to finish` and the scan was not
   canceled; typing the real name back and opening another folder each
   canceled it with `Rename… was canceled`. One held rename of two failed
-  when it ran as pass 2 ended, with `Access denied (os error 5)` (pending in
-  `todo.md`); the other, and the failed one run again by hand, succeeded.
+  when it ran as pass 2 ended, with `Access denied (os error 5)`; the other,
+  and the failed one run again by hand, succeeded. The cause was the first
+  prefetch since the open, started in the same `FacesDone` turn as the held
+  rename; no prefetch starts while a folder rename is in flight now (see "A
+  folder rename releases the watches, then follows in the tree and
+  reopens"). The real-device repeat is pending in `todo.md`.
 - Seen on Windows 11 on 2026-11-22: a single click on the open row's name
   opened the field after about 0.5 s; a double-click, a click followed by Up
   and two clicks about 280 ms apart opened none; two clicks about 480 ms

@@ -175,6 +175,12 @@ impl<T: Pixels> Ring<T> {
         }
     }
 
+    /// Whether the ring holds `path`'s decoded preview.
+    #[cfg(test)]
+    pub fn holds(&self, path: &str) -> bool {
+        self.held.contains_key(path)
+    }
+
     /// Removes `path`'s entry for the view, which now owns it.
     pub fn take(&mut self, path: &str) -> Option<T> {
         self.held.remove(path)

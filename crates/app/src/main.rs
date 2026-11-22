@@ -4500,11 +4500,14 @@ impl Handpic {
 
     /// Read the next neighbour once the current file's preview is on screen
     /// and no page read is out. Skipped while a scan pass runs, so the scan
-    /// is not slowed by reads the user may never look at.
+    /// is not slowed by reads the user may never look at, and while a
+    /// folder rename is in flight: on Windows a read holding a file of the
+    /// folder open refuses the rename, and `FacesDone` drains a held one.
     fn request_prefetch(&mut self, cx: &mut Context<Self>) {
         let on_screen = self.screen.as_ref().map(|s| s.path.as_str());
         if self.pager.in_flight()
             || self.scanning()
+            || self.renaming()
             || on_screen.is_none()
             || on_screen != self.current_path().as_deref()
         {
