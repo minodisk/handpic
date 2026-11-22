@@ -154,14 +154,15 @@ pub fn restored_count(restored: &Restored, what: What, count: usize) -> usize {
 }
 
 /// What the pane says once an undo of a run of `what` that moved `count`
-/// came back: the files that came back, and how many failed.
+/// came back: the files that came back, and how many failed, a RAW with its
+/// sidecars counting as one.
 pub fn restored_status(restored: &Restored, what: What, count: usize) -> String {
     let count = restored_count(restored, what, count);
     let back = format!("Restored {count} {} from the Trash", noun(count, what));
-    if restored.failed.is_empty() {
+    if restored.failed_items == 0 {
         back
     } else {
-        format!("{back}, {} failed", restored.failed.len())
+        format!("{back}, {} failed", restored.failed_items)
     }
 }
 
@@ -465,6 +466,7 @@ mod tests {
                 })
                 .collect(),
             back: Vec::new(),
+            failed_items: failed,
         }
     }
 
@@ -530,6 +532,27 @@ mod tests {
         assert_eq!(
             restored_status(&restored(&["/b.ARW"], 2), What::Files, 0),
             "Restored 1 file from the Trash, 2 failed"
+        );
+    }
+
+    #[test]
+    fn restored_status_counts_a_raw_with_its_sidecars_as_one_failure() {
+        let gone = Restored {
+            failed_items: 1,
+            ..restored(&[], 3)
+        };
+        assert_eq!(
+            restored_status(&gone, What::Files, 1),
+            "Restored 0 files from the Trash, 1 failed"
+        );
+        assert_eq!(gone.failed.len(), 3);
+        let sidecars_failed = Restored {
+            failed_items: 1,
+            ..restored(&["/a.ARW"], 2)
+        };
+        assert_eq!(
+            restored_status(&sidecars_failed, What::Files, 1),
+            "Restored 1 file from the Trash, 1 failed"
         );
     }
 

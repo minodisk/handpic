@@ -1061,19 +1061,6 @@ Files: `crates/app/src/main.rs`, `crates/app/src/menu.rs`.
 
 - [ ] Decide whether the Sort / Filter menus should open with no folder. If not, keep the buttons from opening them then and pin it in a test; if so, record the rule in `docs/agents/app.md`.
 
-### App: an Undo of Move to Trash whose files left the Recycle Bin counts the sidecars and misnames their reason
-
-#### Background
-
-On Windows 11 on 2026-11-22 a RAW with its `.xmp` and `.dop` was moved to the Trash (`Moved 1 file to the Trash`), the three were removed from the Recycle Bin by hand, and `Ctrl+Z` was pressed. The notes said `Restored 0 files from the Trash, 3 failed`, with `_DSC1497.ARW: could not restore from the Trash: not in the Trash (emptied or restored by hand)` for the RAW and `left in the Trash: its RAW could not be restored` for the `.xmp` and the `.dop`, which were not in the Trash either; nothing was left to redo. The gpui-tree-trash Step 8 check expected `1 failed`: the restore's count includes the sidecars while the move's counts the RAWs, and the sidecars' reason is wrong when they too were emptied. Results: `docs/plans/_archived/20261122-windows-device-checks-3/learnings.md`.
-
-Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs` (`restored_status`, `trashed_status`).
-
-#### TODO
-
-- [ ] Decide whether the restore's note counts as the move's does (RAWs, not their sidecars) and apply it.
-- [ ] Give a sidecar that is itself no longer in the Trash a reason that says so, not `its RAW could not be restored`.
-
 ### App: real-device check of `open_folder` refused during a rename over MCP
 
 #### Background
@@ -1236,7 +1223,7 @@ each runner had to `TaskStop` and re-run repeatedly (plan:
 
 ### App: real-device checks of the status row's StatusBar and progress circle
 
-`native-status-bar` rendered the GPUI app's status row (`crates/app`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`) the row showed as a bar with a top border and muted small text, and both menus, a tall `Filter ▾` too, opened upward with their right edge on the button's, unclipped, and closed on a press outside; on a cold 600-file folder pass 1 took about 1.1 s, too short to see the circle, which filled from empty through pass 2 (161 s) and went at the end; a 600-file `Move to Trash…` with the right pane hidden showed the run's progress in the circle, which went at the end. When the circle goes, the position text shifts right by about 20 px (the item below decides whether the row reserves the slot), and after the folder emptied the status line read `no RAW files in \\?\D:\Photos\tests\20261122-strip\cold` (its own item, after the Import dialog's `Source:` item). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
+`native-status-bar` rendered the GPUI app's status row (`crates/app`) through gpui-component's `StatusBar` and replaced the 2 px top-edge progress bar (`gpui-progress-bars`) with a 12 px `ProgressCircle` in the bar's right region, left of `Sort ▾`. CI, the `progress.rs` and `theme.rs` unit tests, a measured preview canvas (1160 x 842 in the default 1600 x 1000 window) and screenshots of the row, a forced-shown circle and a long status text cover the build. The menus, a live scan (the circle's fill and the pass 1 to pass 2 restart), the Move to Trash run and paging cost during a scan were never exercised by hand. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`) the row showed as a bar with a top border and muted small text, and both menus, a tall `Filter ▾` too, opened upward with their right edge on the button's, unclipped, and closed on a press outside; on a cold 600-file folder pass 1 took about 1.1 s, too short to see the circle, which filled from empty through pass 2 (161 s) and went at the end; a 600-file `Move to Trash…` with the right pane hidden showed the run's progress in the circle, which went at the end. When the circle goes, the position text shifts right by about 20 px (the item below decides whether the row reserves the slot), and after the folder emptied the status line read `no RAW files in \\?\D:\Photos\tests\20261122-strip\cold` (since stripped for display). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261115-native-status-bar/plan.md` (and `docs/plans/_archived/20261114-gpui-progress-bars/plan.md` for the removed bar).
 
 Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/src/progress.rs`, `crates/app/src/theme.rs`.
 
@@ -1311,7 +1298,7 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 
 #### Background
 
-`gpui-folder-dialogs` Step 3 ported the folder menu's part-2 items, the shared confirmation dialog (`dialog.rs`), `folderops.rs` and the two sidecar operations to the GPUI app. CI and the unit tests of `dialog.rs`, `sidecars.rs`, `context.rs`, `trash.rs`, `history.rs` and `idle.rs` cover the models, and `mise run ci` and `mise run app:check` passed. Nobody has driven the dialog, its keys, the waiting note during a scan or the runs on disk in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the folder menu's order, the waiting notes of a Rewrite and a Delete requested during a scan with the scan not canceled, a waiting Delete dropped by another open, the Rewrite dialog's rows, question, outline, Tab to `Cancel`, Escape and its run on disk, the Delete dialog's counts, sizes and run with its undo and redo, the `jpeg-only` refusals and an open dialog keeping clicks and keys from the tree and the strip were seen. Under `sidecarFormat: both` the question reads `Rewrite the XMP and .dop sidecars of …`; a redo pressed while the roughly 3 s restore still ran took effect after it; the held Rewrite on a folder with nothing judged ended in the `No judgments indexed` message (its own item below). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full numbered steps are in the `learnings.md` of the same folder). Files: `crates/app/src/dialog.rs`, `crates/app/src/folderops.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/context.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`.
+`gpui-folder-dialogs` Step 3 ported the folder menu's part-2 items, the shared confirmation dialog (`dialog.rs`), `folderops.rs` and the two sidecar operations to the GPUI app. CI and the unit tests of `dialog.rs`, `sidecars.rs`, `context.rs`, `trash.rs`, `history.rs` and `idle.rs` cover the models, and `mise run ci` and `mise run app:check` passed. Nobody has driven the dialog, its keys, the waiting note during a scan or the runs on disk in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the folder menu's order, the waiting notes of a Rewrite and a Delete requested during a scan with the scan not canceled, a waiting Delete dropped by another open, the Rewrite dialog's rows, question, outline, Tab to `Cancel`, Escape and its run on disk, the Delete dialog's counts, sizes and run with its undo and redo, the `jpeg-only` refusals and an open dialog keeping clicks and keys from the tree and the strip were seen. Under `sidecarFormat: both` the question reads `Rewrite the XMP and .dop sidecars of …`; a redo pressed while the roughly 3 s restore still ran took effect after it; the held Rewrite on a folder with nothing judged ended in the `No judgments indexed` message (since reworded to `No judgments indexed for <name>`). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full numbered steps are in the `learnings.md` of the same folder). Files: `crates/app/src/dialog.rs`, `crates/app/src/folderops.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/context.rs`, `crates/app/src/trash.rs`, `crates/app/src/idle.rs`.
 
 #### TODO
 
@@ -1333,17 +1320,6 @@ Files: `crates/app/src/sidecars.rs` (the row's text), `crates/engine/src/folders
 
 - [ ] Check whether the wording matches what is counted (a scanned file without a judgment is in the index), and reword the row or change the count.
 
-### Engine: a held Rewrite Sidecars on an open folder with nothing judged says `open the folder first`
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`): at the end of a scan, the `Rewrite Sidecars from Index…` request held during it on the open folder `scan1` (no sidecars, nothing judged) answered `No judgments indexed for scan1; open the folder first`. `targets` returns that message whenever the index has no row for any of the folder's listed RAW files, open or not.
-Files: `crates/engine/src/foldersidecars.rs` (`targets` and its test).
-
-#### TODO
-
-- [ ] Reword the message so it does not tell the user to open a folder that is open.
-
 ### App: real-device checks of Sequence JPEG Timestamps… (gpui-folder-dialogs Step 4)
 
 #### Background
@@ -1362,7 +1338,7 @@ Files: `crates/engine/src/foldersidecars.rs` (`targets` and its test).
 
 #### Background
 
-`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the dialog's count, its date folder rows and undated list and `Run` outlined, a run opening its first date folder in the tree and strip and ending in `Imported 9 files (273.1 MB)` with each `.xmp` beside its RAW, the reopened dialog's `Nothing left to copy` with `Run` dimmed and `Cancel` focused, the other-size list, the no-root refusal and one `import:` log line per run were seen. The source held no JPEGs of the two dates and no `.dop`; a 3.16 GB source copied from the file cache in a few seconds, too fast for the mid-run box; MCP `import_folder` is refused during a run (`a folder operation is under way in Handpic; try again once it ends`); the `Source:` line and the status line's `no RAW files in` text showed the Windows verbatim prefix (the two verbatim prefix items below); the list clipped its last row (the item on the folder dialogs' file list below). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/engine/src/import.rs`.
+`gpui-folder-dialogs` Step 5 ported Import… to the GPUI app (`import.rs`: preview on a background task, `prepare` / `run_plan` on a thread with a cancel flag, the dialog stepping aside, the first date folder opened through `open_from_tree`). CI and the unit tests of `import.rs`, `context.rs` and `dialog.rs` cover the model. Nobody has seen the dialog, the progress, the open of the first date folder, the reopen or the cancel in the running app. The step's checkbox was ticked on the automated criteria only. On Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`; the run's material was under `D:\Photos\tests\20261122-folderops\`, not the `20261113-gpui-folder-dialogs` paths its setup box names) the dialog's count, its date folder rows and undated list and `Run` outlined, a run opening its first date folder in the tree and strip and ending in `Imported 9 files (273.1 MB)` with each `.xmp` beside its RAW, the reopened dialog's `Nothing left to copy` with `Run` dimmed and `Cancel` focused, the other-size list, the no-root refusal and one `import:` log line per run were seen. The source held no JPEGs of the two dates and no `.dop`; a 3.16 GB source copied from the file cache in a few seconds, too fast for the mid-run box; MCP `import_folder` is refused during a run (`a folder operation is under way in Handpic; try again once it ends`); the `Source:` line and the status line's `no RAW files in` text showed the Windows verbatim prefix (since stripped for display); the list clipped its last row (the item on the folder dialogs' file list below). What is left open is in the boxes below. Plan: `docs/plans/_archived/20261113-gpui-folder-dialogs/plan.md` (the full steps are in the `learnings.md` of the same folder). Files: `crates/app/src/import.rs`, `crates/app/src/folderops.rs`, `crates/engine/src/import.rs`.
 
 #### TODO
 
@@ -1371,28 +1347,6 @@ Files: `crates/engine/src/foldersidecars.rs` (`targets` and its test).
 - [ ] On Windows, `Run` on a source not in the file cache (or on a slow disk). Expect the dialog to step aside once the first date folder opens and the pane to count `importing n / m` while the strip fills.
 - [ ] On Windows, with a larger source (or a slow disk), pick `Import…` again mid-run. Expect the dialog back with `Cancel` focused; Escape hides it and the run goes on; `Cancel` stops it with `Import canceled, k files copied` and no `.handpic-tmp` file left.
 - [ ] Record the results in the archived `learnings.md`.
-
-### App: the Import dialog's `Source:` line shows the Windows verbatim prefix
-
-#### Background
-
-Seen on Windows 11 on 2026-11-21: an import started over MCP (`import_folder`) with an index-keyed path showed `Source: \\?\D:\...` in the dialog; its destination row did not carry the prefix. The line is built from `preview.source` as is; the Sequence dialog's `Source:` line is built from `dir` the same way. `context.rs`'s `shown_path` strips the prefix for display elsewhere. The status line's `no RAW files in` text shows the prefix too, from another code path (the item below).
-Files: `crates/app/src/folderops.rs` (the `Source:` lines), `crates/app/src/context.rs` (`shown_path`), `crates/engine/src/import.rs`.
-
-#### TODO
-
-- [ ] Check whether the tree's right-click `Import…` shows the prefix too, and strip it for display with `shown_path`.
-
-### App: the status line's `no RAW files in` text shows the Windows verbatim prefix
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22: after a `Move to Trash…` emptied the open folder, the status line read `no RAW files in \\?\D:\Photos\tests\20261122-strip\cold` (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`); the run's notes say the batch before saw the same on an empty folder (`ren\taken`). The text is `format!("no RAW files in {}", listed.dir)` in `main.rs`, the index-keyed path as is, not the dialogs' `Source:` lines of the item above, though the fix is the same: `context.rs`'s `shown_path` strips the prefix for display elsewhere.
-Files: `crates/app/src/main.rs`, `crates/app/src/context.rs`.
-
-#### TODO
-
-- [ ] Show the path through `shown_path`, and check the other status texts that print a folder path.
 
 ### App: real-device checks of Rename by Capture Date… and the folder-rename aftermath (gpui-folder-dialogs Step 6)
 

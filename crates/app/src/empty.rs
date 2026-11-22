@@ -4,7 +4,7 @@
 
 use handpic_engine::shortcuts::Binding;
 
-use crate::{filter::FILTERED_TEXT, settingsmodal::display_key};
+use crate::{context::shown_path, filter::FILTERED_TEXT, settingsmodal::display_key};
 
 pub const NO_FILES_TEXT: &str = "This folder has no RAW or JPEG files.";
 pub const PREVIEW_FAILED_TEXT: &str = "The preview of this file could not be shown.";
@@ -50,6 +50,12 @@ pub fn open_hint(bindings: &[Binding]) -> String {
     format!("{OPEN_TEXT} Or press {}.", keys.join(" or "))
 }
 
+/// The status line of an open folder that lists no file, its path as the
+/// user writes it.
+pub fn no_files_status(dir: &str) -> String {
+    format!("no RAW files in {}", shown_path(dir))
+}
+
 /// The state's message, `None` for no message.
 pub fn text(state: State, bindings: &[Binding]) -> Option<String> {
     match state {
@@ -63,7 +69,7 @@ pub fn text(state: State, bindings: &[Binding]) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{State, open_hint, state, text};
+    use super::{State, no_files_status, open_hint, state, text};
     use crate::filter::FILTERED_TEXT;
     use handpic_engine::shortcuts::Binding;
 
@@ -165,6 +171,18 @@ mod tests {
         assert_eq!(
             text(State::PreviewFailed, &bindings).as_deref(),
             Some("The preview of this file could not be shown.")
+        );
+    }
+
+    #[test]
+    fn the_no_files_status_drops_the_verbatim_prefix() {
+        assert_eq!(
+            no_files_status(r"\\?\D:\photos\2026"),
+            r"no RAW files in D:\photos\2026"
+        );
+        assert_eq!(
+            no_files_status("/home/me/photos"),
+            "no RAW files in /home/me/photos"
         );
     }
 }

@@ -4,6 +4,8 @@
 
 use handpic_engine::import::{Preview, Ran};
 
+use crate::context::shown_path;
+
 /// The operation's name, the dialog's title.
 pub const LABEL: &str = "Import";
 
@@ -34,6 +36,16 @@ pub fn size_text(bytes: u64) -> String {
     } else {
         format!("{:.1} MB", bytes / 1e6)
     }
+}
+
+/// The dialog's line naming the folder, its path as the user writes it.
+pub fn source_line(source: &str) -> String {
+    format!("Source: {}", shown_path(source))
+}
+
+/// The pane's note while the plan of `dir` is read.
+pub fn reading_note(dir: &str) -> String {
+    format!("reading {}…", shown_path(dir))
 }
 
 pub fn total_line(preview: &Preview) -> String {
@@ -503,6 +515,17 @@ mod tests {
     #[test]
     fn progress() {
         assert_eq!(progress_status(2, 5), "importing 2 / 5");
+    }
+
+    #[test]
+    fn the_paths_drop_the_verbatim_prefix() {
+        assert_eq!(
+            source_line(r"\\?\D:\DCIM\100MSDCF"),
+            r"Source: D:\DCIM\100MSDCF"
+        );
+        assert_eq!(source_line(r"\\?\UNC\nas\photos"), r"Source: \\nas\photos");
+        assert_eq!(reading_note(r"\\?\D:\DCIM"), r"reading D:\DCIM…");
+        assert_eq!(reading_note("/media/card"), "reading /media/card…");
     }
 
     #[test]

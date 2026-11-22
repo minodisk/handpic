@@ -88,9 +88,7 @@ pub fn targets(dir: &str, index: &Arc<Mutex<Index>>) -> Result<(Vec<DirtyRow>, u
         .filter(|(path, _, _, _, _)| raws.contains(path.as_str()))
         .collect();
     if rows.is_empty() {
-        return Err(format!(
-            "No judgments indexed for {name}; open the folder first"
-        ));
+        return Err(format!("No judgments indexed for {name}"));
     }
     let skipped = raws.len() - rows.len();
     Ok((rows, skipped))
@@ -545,7 +543,13 @@ mod tests {
         let f = Fixture::new("refuse");
         f.raw("a.ARW");
         let err = preview(&f.key, &f.index, SidecarFormat::Xmp).unwrap_err();
-        assert!(err.starts_with("No judgments indexed for "), "{err}");
+        assert_eq!(
+            err,
+            format!(
+                "No judgments indexed for handpic-foldersidecars-refuse-{}",
+                std::process::id()
+            )
+        );
 
         let jpegs = Fixture::new("refuse-jpeg");
         std::fs::write(jpegs.dir.join("a.jpg"), b"not really a JPEG").unwrap();

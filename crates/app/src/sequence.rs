@@ -5,6 +5,8 @@
 
 use handpic_engine::sequence::{Failure, Preview, Ran, Row};
 
+use crate::context::shown_path;
+
 /// The operation's name, the dialog's title.
 pub const LABEL: &str = "Sequence JPEG Timestamps";
 
@@ -41,6 +43,16 @@ pub fn row_parts(row: &Row) -> RowParts {
         same: new[..start].iter().collect(),
         diff: new[start..].iter().collect(),
     }
+}
+
+/// The dialog's lines naming the folder and the output folder, each path as
+/// the user writes it.
+pub fn source_line(dir: &str) -> String {
+    format!("Source: {}", shown_path(dir))
+}
+
+pub fn output_line(output_dir: &str) -> String {
+    format!("Output: {}", shown_path(output_dir))
 }
 
 /// `None` when the output folder does not exist yet.
@@ -98,7 +110,9 @@ pub fn done_status(ran: &Ran) -> Option<String> {
         let files = if ran.total == 1 { "file" } else { "files" };
         format!(
             "Wrote {} of {} {files} to {}",
-            ran.written, ran.total, ran.output_dir
+            ran.written,
+            ran.total,
+            shown_path(&ran.output_dir)
         )
     };
     Some(if ran.failed.is_empty() {
@@ -423,6 +437,23 @@ mod tests {
                 ..ran()
             }),
             None
+        );
+    }
+
+    #[test]
+    fn the_paths_drop_the_verbatim_prefix() {
+        assert_eq!(source_line(r"\\?\D:\x\export"), r"Source: D:\x\export");
+        assert_eq!(
+            output_line(r"\\?\D:\x\export-sequenced"),
+            r"Output: D:\x\export-sequenced"
+        );
+        assert_eq!(
+            done_status(&Ran {
+                output_dir: r"\\?\D:\x\export-sequenced".to_owned(),
+                ..ran()
+            })
+            .as_deref(),
+            Some(r"Wrote 3 of 3 files to D:\x\export-sequenced")
         );
     }
 

@@ -3362,7 +3362,7 @@ impl Handpic {
         self.strip_moved(cx);
         if self.files.is_empty() {
             self.status = if self.all.is_empty() {
-                format!("no RAW files in {}", listed.dir).into()
+                empty::no_files_status(&listed.dir).into()
             } else {
                 filter::FILTERED_TEXT.into()
             };
