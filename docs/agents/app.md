@@ -1667,6 +1667,14 @@ the Tauri `sharpness` map was filled from `folder_entries` and patched by
   than 41917 (an installed Handpic or an earlier Tauri build may hold it), seeds `"mcpEnabled": true`
   through `--import-settings` into a fresh `--settings` store, and passes
   `--log` with a file in the test folder, next to `--index`.
+- Rule: a real-device run that clicks the folder tree checks the target row
+  before each click. Test folders are siblings with similar names, so a
+  mis-positioned click opens the folder menu of the neighbour. Verify the
+  menu's folder (the dialog's `Source:` line or the status line) before
+  pressing `Run`, and start a long or destructive run through the MCP tool
+  that names the path where the flow allows it. Mis-clicks cost two runs of
+  the notification check on 2026-11-22
+  (`../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
 - Rule: on Git Bash, give `curl` the JSON body on stdin
   (`--data-binary @- <<< "$body"`); a `--data` argument with `\` escapes
   reaches the server mangled. The session id is the `Mcp-Session-Id` header of
@@ -4843,9 +4851,35 @@ the backdrop's condition and the gate's `Held` variant.
   process that exits first can leave that file under its `.handpic-tmp` name in
   the destination; the files already copied stay, and a second import skips
   them by name and size.
-- Not verified headless: the dialog, its keys and the runs; the hand checks
-  are pending in `../plans/20261113-gpui-folder-dialogs/learnings.md` and,
-  for the component `Dialog`,
+- Seen (2026-11-22, Windows 11): during a scan a Rewrite and a Delete
+  request each showed its waiting note with the scan not canceled, and
+  another open dropped the waiting Delete with no dialog; with a dialog open
+  a click on the tree or the strip, `→`, `3` and `ctrl+,` did nothing
+  (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Seen (2026-11-22, Windows 11): a Delete Sidecars run said `Moved 24
+  sidecars to the Trash`, its undo `Restored 24 sidecars from the Trash`, and
+  its redo moved them again (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Seen (2026-11-22, Windows 11): a 300-file Sequence run dimmed `Run` and
+  focused `Cancel`, and Escape ended it with `canceled, 60 of 300 written`
+  and no Explorer window (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Seen (2026-11-22, Windows 11): an import opened its first date folder
+  during the run, and a reopen with nothing to copy had `Run` dimmed and
+  `Cancel` focused (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Not verified headless: a held sidecar request's dialog opening once the
+  scan ends; Tab back to the run button, and Tab and Escape on the Sequence,
+  Import and Rename by Capture Date dialogs; the dimmed buttons and running
+  note of a sidecar run and of a date rename; `Cancel` focused on a
+  colliding date rename; the strip's marks on a sidecar delete and its
+  undo; `ctrl+,` while a preview reads or a Sequence dialog or run is up; a
+  second Sequence request; the pane's `sequencing n / m`, `reading …` and
+  `importing n / m`; an import's stepping aside, mid-run reopen and cancel.
+  The hand checks are pending in
+  `../plans/20261113-gpui-folder-dialogs/learnings.md` and, for the
+  component `Dialog`,
   `../plans/_archived/20261114-gpui-component-adoption/learnings.md`.
 
 ### A folder rename releases the watches, then follows in the tree and reopens (Measured)
@@ -4903,9 +4937,16 @@ the watcher back when the rename fails or the split leaves the folder.
   first date folder opens; a folder the tree asked for during the run opens
   instead. A file that failed to move goes to the notes as `<name>: could
   not move: <message>`.
-- Not verified headless: the dialog, the tree row following in place and
-  the reopen keeping the strip's judgments and position; the hand check is
-  pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
+- Seen (2026-11-22, Windows 11): during a scan the date rename was refused
+  with `SCAN_RUNNING`; a one-date rename showed the row under its new name,
+  kept the strip's files and current file, logged `todo=0` in the
+  reconcile, and `Ctrl+Z` restored a trashed RAW into the renamed folder; a
+  split kept the folder with its undated file, another removed it and
+  opened the first date folder; an existing sibling of the date's name
+  disabled `Run` (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+- Not verified headless: the reopen keeping the strip's judgments; the hand
+  check is pending in `../plans/20261113-gpui-folder-dialogs/learnings.md`.
 
 ### The tree's inline rename is a text input in the row, held by the gate (Inferred)
 
@@ -5011,6 +5052,11 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   replace one. Not unit-tested beyond the decision and the text (no
   `gpui::test` harness here); the hand check on Windows is pending in
   `../plans/20261116-native-import-notification/learnings.md`.
+- Seen (2026-11-22, Windows 11): an import that ended while the window was
+  inactive posted a toast at the desktop's bottom-right with the header
+  `Handpic`, the title `Import finished` and the status line's summary as its
+  body, under a generic app icon, not Handpic's (results in
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
 
 ## Timings
 
