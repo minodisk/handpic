@@ -4792,6 +4792,15 @@ reason and running note sit in the footer above the `primary()` or
 `danger()` run `Button` and Cancel, on focus handles the view keeps
 (`folder_buttons`).
 
+- Rule: the lines block is `flex_none`. The component's `DialogContent` and
+  the wrapper of its scrolled body are both `flex_1` (grow 1, shrink 1, basis
+  0 %) siblings in one column, so a dialog that fills both slots gives each
+  half of its height: the lines were stretched into a blank band above the
+  list and the list clipped its last row with room left. `flex_none` keeps
+  the lines at their own height and leaves the body the only flexible
+  child. `folderops.rs`'s tests check it through the `debug_selector`s
+  `folder-dialog-line`, `folder-dialog-list` and `folder-dialog-footer`
+  (and the component's `dialog-0`).
 - Rule: `follow_folder_dialog` runs wherever `folderops.dialog` changes: it
   opens the dialog when one is shown and closes it when none is. The
   import's stepping aside is a close with the flow alive (the focus goes
