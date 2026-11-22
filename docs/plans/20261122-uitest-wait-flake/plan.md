@@ -103,3 +103,5 @@ drop follows `WAIT` to 30 s (the smallest diff); update its doc sentence.
   the only evidence for the other platforms.
 
 ## Progress
+
+- 2026-11-22: Step 1 done. `WAIT` in `crates/app/src/uitest.rs` raised to 30 s, the two `docs/agents/app.md` sentences and two rules updated, and the diagnosis recorded in `learnings.md`.
