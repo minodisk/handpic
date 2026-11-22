@@ -636,8 +636,8 @@ impl Handpic {
         match previewed {
             Ok(preview) if self.folderops.sequence.previewed() => {
                 let mut lines = vec![
-                    format!("Source: {dir}"),
-                    format!("Output: {}", preview.output_dir),
+                    sequence::source_line(&dir),
+                    sequence::output_line(&preview.output_dir),
                 ];
                 lines.extend(sequence::rebuild_notice(&preview).map(str::to_owned));
                 let content = Content {
@@ -808,7 +808,7 @@ impl Handpic {
             return;
         }
         self.folderops.imported = None;
-        self.folderops.importing = Some(format!("reading {dir}…"));
+        self.folderops.importing = Some(import::reading_note(&dir));
         self.folderops.import_previews += 1;
         let id = self.folderops.import_previews;
         let settings = ImportSettings {
@@ -861,7 +861,7 @@ impl Handpic {
         self.folderops.importing = None;
         match previewed {
             Ok((preview, plan)) if self.folderops.import.previewed(preview.id) => {
-                let mut lines = vec![format!("Source: {}", preview.source)];
+                let mut lines = vec![import::source_line(&preview.source)];
                 if preview.refusal.is_none() {
                     lines.push(import::total_line(&preview));
                 }

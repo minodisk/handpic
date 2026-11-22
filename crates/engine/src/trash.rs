@@ -199,6 +199,11 @@ pub struct Restored {
     /// what a redo moves to the Trash again.
     #[serde(skip)]
     pub back: Vec<PathBuf>,
+    /// How many items of the run have a failed file, a RAW (or JPEG) with
+    /// its sidecars counting as one item and a sidecar with no RAW before it
+    /// as one of its own: what the pane's note counts as failed.
+    #[serde(skip)]
+    pub failed_items: usize,
 }
 
 impl Restored {
@@ -217,8 +222,29 @@ impl Restored {
                 })
                 .collect(),
             back: Vec::new(),
+            failed_items: items(&run.moved),
         }
     }
+}
+
+fn is_media(path: &Path) -> bool {
+    handpic_core::scan::is_raw_file(path) || handpic_core::scan::is_jpeg_file(path)
+}
+
+/// The items of `moved`: each RAW or JPEG with the sidecars after it, and
+/// each sidecar with no RAW before it.
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+fn items(moved: &[Trashed]) -> usize {
+    let mut after_media = false;
+    moved
+        .iter()
+        .filter(|trashed| {
+            let media = is_media(&trashed.path);
+            let item = media || !after_media;
+            after_media |= media;
+            item
+        })
+        .count()
 }
 
 /// The sidecars of `format`'s kinds that exist for `path`, from the stats
@@ -568,9 +594,9 @@ pub const RAW_NOT_RESTORED: &str = "left in the Trash: its RAW could not be rest
 /// failure and never overwriting: a file whose destination `exists` fails,
 /// as does one `in_trash` finds no item for; otherwise `mover` restores the
 /// item. The RAW goes first, and when it does not come back its sidecars stay
-/// in the Trash (each reported), the mirror of `run`'s rule: a reject sidecar
-/// restored next to a different file that took the RAW's name would pin the
-/// judgment on that file.
+/// in the Trash (each reported, as not in the Trash when it is not), the
+/// mirror of `run`'s rule: a reject sidecar restored next to a different file
+/// that took the RAW's name would pin the judgment on that file.
 pub fn restore<I>(
     run: &TrashRun,
     mut in_trash: impl FnMut(&Trashed) -> Option<I>,
@@ -579,13 +605,16 @@ pub fn restore<I>(
 ) -> Restored {
     let mut restored = Restored::default();
     let mut raw_back = true;
+    let mut item_failed = None;
     for trashed in &run.moved {
-        let is_media = handpic_core::scan::is_raw_file(&trashed.path)
-            || handpic_core::scan::is_jpeg_file(&trashed.path);
+        let is_media = is_media(&trashed.path);
         let destination = trashed.destination();
         let path = destination.to_string_lossy().into_owned();
         let result = if !is_media && !raw_back {
-            Err(RAW_NOT_RESTORED.to_string())
+            Err(match in_trash(trashed) {
+                Some(_) => RAW_NOT_RESTORED.to_string(),
+                None => NOT_IN_TRASH.to_string(),
+            })
         } else if exists(destination) {
             Err(ALREADY_EXISTS.to_string())
         } else {
@@ -596,6 +625,13 @@ pub fn restore<I>(
         };
         if is_media {
             raw_back = result.is_ok();
+            item_failed = Some(false);
+        }
+        if result.is_err() && item_failed != Some(true) {
+            restored.failed_items += 1;
+            if item_failed.is_some() {
+                item_failed = Some(true);
+            }
         }
         match result {
             Ok(()) => {
@@ -1151,11 +1187,65 @@ mod tests {
             failures(&restored),
             [
                 ("a.ARW", NOT_IN_TRASH),
-                ("a.xmp", RAW_NOT_RESTORED),
+                ("a.xmp", NOT_IN_TRASH),
                 ("b.ARW", NOT_IN_TRASH)
             ]
         );
+        assert_eq!(restored.failed_items, 2);
         assert!(asked.is_empty());
+    }
+
+    #[test]
+    fn a_raw_gone_with_its_sidecars_is_one_failed_item() {
+        let run = trash_run(&["a.ARW", "a.xmp", "a.ARW.dop"]);
+        let (restored, asked) = restore_with(&run, &[], &[]);
+        assert!(restored.restored.is_empty());
+        assert_eq!(
+            failures(&restored),
+            [
+                ("a.ARW", NOT_IN_TRASH),
+                ("a.xmp", NOT_IN_TRASH),
+                ("a.ARW.dop", NOT_IN_TRASH)
+            ]
+        );
+        assert_eq!(restored.failed_items, 1);
+        assert!(asked.is_empty());
+    }
+
+    #[test]
+    fn a_sidecar_still_in_the_trash_after_a_raw_gone_stays_there() {
+        let run = trash_run(&["a.ARW", "a.xmp", "a.ARW.dop"]);
+        let (restored, asked) = restore_with(&run, &["a.xmp"], &[]);
+        assert_eq!(
+            failures(&restored),
+            [
+                ("a.ARW", NOT_IN_TRASH),
+                ("a.xmp", RAW_NOT_RESTORED),
+                ("a.ARW.dop", NOT_IN_TRASH)
+            ]
+        );
+        assert_eq!(restored.failed_items, 1);
+        assert!(asked.is_empty());
+    }
+
+    #[test]
+    fn a_raw_back_with_its_sidecars_failed_is_one_failed_item() {
+        let run = trash_run(&["a.ARW", "a.xmp", "a.ARW.dop", "b.ARW"]);
+        let (restored, _) = restore_with(&run, &["a.ARW", "b.ARW"], &[]);
+        assert_eq!(restored.restored, ["a.ARW", "b.ARW"]);
+        assert_eq!(restored.failed.len(), 2);
+        assert_eq!(restored.failed_items, 1);
+    }
+
+    #[test]
+    fn a_sidecar_with_no_raw_before_it_is_an_item_of_its_own() {
+        let run = trash_run(&["a.xmp", "b.xmp", "c.xmp"]);
+        let (restored, _) = restore_with(&run, &["b.xmp"], &[]);
+        assert_eq!(
+            failures(&restored),
+            [("a.xmp", NOT_IN_TRASH), ("c.xmp", NOT_IN_TRASH)]
+        );
+        assert_eq!(restored.failed_items, 2);
     }
 
     #[test]
@@ -1165,6 +1255,9 @@ mod tests {
             failures(&Restored::none(&run, "no Trash")),
             [("a.ARW", "no Trash"), ("a.xmp", "no Trash")]
         );
+        assert_eq!(Restored::none(&run, "no Trash").failed_items, 1);
+        let sidecars = trash_run(&["a.xmp", "b.xmp"]);
+        assert_eq!(Restored::none(&sidecars, "no Trash").failed_items, 2);
     }
 
     #[test]

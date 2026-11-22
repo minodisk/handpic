@@ -646,6 +646,7 @@ mod tests {
                 })
                 .collect(),
             back: Vec::new(),
+            failed_items: failed,
         }
     }
 

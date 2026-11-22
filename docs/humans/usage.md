@@ -432,7 +432,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   (`CmdOrCtrl+Z`) takes the whole move back, whichever folder is open (none
   at all included): every file and sidecar it moved goes back where it came
   from, the status line says how many came back ("Restored 3 files from the
-  Trash", with how many failed), and when the open folder is the one it
+  Trash", with how many failed, a file and its sidecars counting as one),
+  and when the open folder is the one it
   moved from, the strip shows the files again with their judgments.
   Nothing is overwritten: a file with the same name back at the original
   location, a Trash emptied since, or a file already put back by hand is
@@ -610,8 +611,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   when the scan ends.
   - `Rewrite Sidecars from Index…` writes what the folder index holds, so
     the folder must have been opened in Handpic once; on one never opened
-    the status line says `No judgments indexed for <name>; open the folder
-    first`. The dialog counts the files with a judgment, those without one
+    (or one whose RAW files the index holds nothing for yet) the status
+    line says `No judgments indexed for <name>`. The dialog counts the files with a judgment, those without one
     (whose existing sidecar is cleared to unrated, unflagged and unlabeled;
     none is created for them) and the RAW files the index does not know
     yet (skipped), and asks `Rewrite the XMP sidecars of N files in
