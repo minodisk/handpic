@@ -5100,7 +5100,17 @@ impl Handpic {
                 Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
                 Shown::Failed { name, error } => (name, None, Some(error)),
             };
-            body = body.child(div().font_weight(FontWeight::SEMIBOLD).child(name.clone()));
+            body = body.child(
+                div()
+                    .flex()
+                    .flex_wrap()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .children(
+                        meta::name_segments(name)
+                            .into_iter()
+                            .map(|segment| div().min_w_0().child(segment.to_owned())),
+                    ),
+            );
             if let Some(error) = error {
                 body = body.child(div().text_color(danger).child(error.clone()));
             }
@@ -5119,15 +5129,22 @@ impl Handpic {
                         .children(group.rows.into_iter().map(|row| {
                             div()
                                 .flex()
+                                .flex_wrap()
                                 .justify_between()
-                                .gap_2()
+                                .gap_x_2()
                                 .child(
                                     div()
                                         .flex_none()
                                         .text_color(muted)
                                         .child(row.label.to_owned()),
                                 )
-                                .child(div().min_w_0().text_right().child(row.value.to_owned()))
+                                .child(
+                                    div()
+                                        .flex_grow(1.)
+                                        .min_w_0()
+                                        .text_right()
+                                        .child(row.value.to_owned()),
+                                )
                         })),
                 );
             }

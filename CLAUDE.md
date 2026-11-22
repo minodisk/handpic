@@ -471,7 +471,8 @@ latter also carrying the index's AF point and frame (`af_rows`) after
 pass 2 stored for the shown file: `metaGroups`' rows with its labels and
 strings, the full-size eye score named `Eye focus`, the closed probability, the EAR, the mesh's eye
 offset, the edge gap and the preview's sharpness; both from the window's
-`Facts` of the file, never the on-demand eyes judgment), `src/viewonly.rs`
+`Facts` of the file, never the on-demand eyes judgment; `name_segments`, the
+file name heading cut after each `_`, `-` and space), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of
 `viewonly.ts`), whose `VIEW_ONLY_NOTE` the pane's notes area shows, and
 which keeps such a folder in capture order (`sort_for`), `src/empty.rs` why

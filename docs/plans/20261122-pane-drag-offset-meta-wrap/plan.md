@@ -140,7 +140,7 @@ measured again):
       handle call sites in `render`), `crates/app/src/panewidths.rs`,
       `crates/app/src/stripheight.rs`, `docs/agents/app.md`, `todo.md`.
     - Not on the page path (a drag is not paging): no A/B latency gate.
-- [ ] Step 2: The meta pane wraps a value under its label and breaks the file name at its separators
+- [x] Step 2: The meta pane wraps a value under its label and breaks the file name at its separators
   - Done when:
     - In `meta_pane`, a row whose value does not fit whole beside its label
       puts the value on its own line under the label, right-aligned, where it
@@ -258,3 +258,4 @@ measured again):
 ## Progress
 
 - (2026-11-22) Step 1 complete
+- (2026-11-22) Step 2 complete
