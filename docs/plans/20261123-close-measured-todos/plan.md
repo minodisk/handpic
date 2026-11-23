@@ -395,3 +395,5 @@ distance stays out of scope.
   run the steps in order and merge main before each PR.
 
 ## Progress
+
+(2026-11-24) Step 1 complete
