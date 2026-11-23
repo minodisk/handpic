@@ -1450,17 +1450,6 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folde
   - Inset edge: a click and a right-click on a row's inset edge behave as on the row.
 - [ ] Once the three are confirmed, drop the "not yet observed" remainder from the folder tree rule in `docs/agents/app.md` ("a tree row takes `w_full()`"). If a point fails, correct the rule with the observed behavior and, per the plan's risk note, record what the layout actually does in `learnings.md` before trying anything wider.
 
-### App: `ctrl+,` does not open the settings while the folder tree holds the keyboard
-
-#### Background
-
-Seen on Windows 11 on 2026-11-21: after a click on a tree row, or after an inline rename, `ctrl+,` does nothing; after Escape it opens the settings. The title bar's gear button opens them throughout. The tree's gate lets through only `TREE_PASSTHROUGH`.
-Files: `crates/app/src/treekeys.rs` (`TREE_PASSTHROUGH`, `tree_gate`), `crates/app/src/main.rs` (`key_down`).
-
-#### TODO
-
-- [ ] Decide whether `ctrl+,` should pass the tree's gate; if so, let it through and pin it in `treekeys.rs`'s test.
-
 ### App: real-device check of the meta pane's `Analysis` group and the AF rows in `Maker note`
 
 `native-meta-analysis` made the GPUI app's (`crates/app`) right-hand meta pane show an `Analysis` group from the values the scan's pass 1 and pass 2 stored in the index (`Eye focus`, `Eyes`, `Eyes closed`, `Eye aspect ratio`, `Yaw`, `Pitch`, `Roll`, `Mesh eye offset`, `Edge gap`, `Sharpness`), and `AF point` / `AF frame` in the `Maker note` group after `AF tracking`. Unit tests in `meta.rs` and `mise run ci:local` cover the row builders, `groups` and the string formats (ported from `meta.test.ts`). Nobody has looked at the running window: what the pane shows for a scanned file, that the rows appear by themselves when the scan reaches the shown file, the failed-preview and hidden-by-refilter cases, and the first preview after a folder open (that path now sets `self.shown`'s index to `None`, so the pane shows the old file name with no index rows until the new folder's first preview arrives) were never exercised. Plan: `docs/plans/_archived/20261114-native-meta-analysis/plan.md`. Files: `crates/app/src/meta.rs`, `crates/app/src/main.rs` (`meta_pane`, the open path's `shown`).
@@ -1803,18 +1792,6 @@ Files: `crates/app/src/main.rs` (the title bar in `impl Render for Riffle`, `TIT
 #### TODO
 
 - [ ] On Windows 11 (`mise run app:dev` or a debug build of `crates/app`), open a folder. Expect "Handpic" next to the icon to read at 14 px with the icon still 16 px, and the folder's name to disappear with no folder open. Narrow the window: expect a long name to be truncated with an ellipsis before it reaches "Handpic" or the gear. If 160 px a side of `TITLE_NAME_MARGIN` looks wrong, tune it. Also open another folder, rename the open folder and run `Rename by Capture Date…` on it: expect the name to follow.
-
----
-
-### App: the keymap's `compare` action is bound to `v` and listed, but does nothing
-
-The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/engine/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/main.rs` (`key_down`), `docs/humans/usage.md`.
-
-#### TODO
-
-- [ ] Either hide unimplemented actions on the `Keyboard Shortcuts` page, or implement compare.
 
 ---
 

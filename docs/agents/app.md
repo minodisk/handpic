@@ -1632,8 +1632,10 @@ tool the table names and fails on `unknown request`.
 
 The features the Tauri app had and the app does not have yet keep
 their tools (D6), refused with one message, `not_in_app`'s "`<feature>` is
-not implemented in Handpic yet", which a test checks for each:
-compare (`set_view`'s `compare`) and file rename (`rename_file`).
+not implemented in Handpic yet", which a test checks for each: file
+rename (`rename_file`). Compare is not among them: on the user's decision
+(2026-11-23) it left the keymap and the MCP surface, so `set_view` takes
+only `normal` and `zoom` and refuses `compare` as an unknown mode.
 `rename_file` is refused before the busy guard (`UNPORTED_TOOLS`). When a feature lands, its tool or
 value is implemented in place and its table entry becomes a `Tool`.
 
@@ -3481,7 +3483,7 @@ lower-cased, GPUI's `left` / `right` / `up` / `down` as `arrowleft` ...
 its action, built at startup and again on every Keyboard Shortcuts edit
 (`self.bindings` replaced, the lookup still one `HashMap` read). The window's handler, past the tree's gate while
 the tree has the keyboard ("The tree takes the keyboard through one flag in
-the view"), takes `home`, `end` and `q`
+the view"; the settings key passes that gate), takes `home`, `end` and `q`
 literally first (the app's own keys, bound to no action), then the
 actions: `previous` / `next` page and `focus` toggles the `f` overlay and `zoom` the `z` 1:1 view, so a
 user's override of those keys applies; a judgment action goes to
@@ -4786,6 +4788,12 @@ mouse listeners were the smaller change.
   swallowed, so `q`, the judgment keys, the burst moves and undo never reach
   the photo. The cursor row is outlined (`ListItem`'s `secondary_selected`,
   `selection`) only while the tree has the keyboard, which Left / Right paging leaves with the tree.
+- Rule: the settings key (`settingsmodal::OPEN_KEY`, `ctrl+,` / `meta+,`)
+  opens the settings while the tree has the keyboard: it is no keymap
+  action, so `tree_gate` would swallow it, and `key_down` lets it past the
+  gate by name. An inline rename still owns every key
+  (`rename_owns_keys` returns before the gate), so it does not open them
+  there.
 - Rule: this departs from the Tauri app on purpose (the user's request).
   There, Left / Right were the WAI-ARIA tree keys (expand, collapse, first
   child, parent); here they page the strip whatever has the keyboard, the

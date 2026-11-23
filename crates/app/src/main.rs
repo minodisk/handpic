@@ -3777,8 +3777,8 @@ impl Handpic {
     /// app's own keys, `ctrl+,` (`meta+,` on macOS) opens the settings,
     /// and `escape` while a menu is open; an action not handled yet is only
     /// logged. Nothing gets through while the settings are open. While the
-    /// tree has the keyboard it takes the key first, and of the rest only
-    /// `tree_gate`'s actions run.
+    /// tree has the keyboard the settings key still opens them; it takes
+    /// every other key first, and of the rest only `tree_gate`'s actions run.
     fn key_down(&mut self, keystroke: &Keystroke, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_view.read(cx).is_open() {
             return;
@@ -3806,6 +3806,7 @@ impl Handpic {
             }
         }
         if self.tree_keys
+            && name != settingsmodal::OPEN_KEY
             && (self.tree_key_down(keystroke, &name, cx)
                 || treekeys::tree_gate(action) == Gate::Swallow)
         {

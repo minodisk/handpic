@@ -264,7 +264,6 @@ pub fn shortcut_label(action: &'static str) -> &'static str {
         "focus" => "Focus mark",
         "zoom" => "1:1 zoom",
         "grayscale" => "Grayscale",
-        "compare" => "Compare frames",
         "performance" => "Performance graph",
         "peaking" => "Focus peaking",
         "rate1" => "1 star",
@@ -353,9 +352,7 @@ fn known_group(action: &str) -> Option<ShortcutGroup> {
         "rate1" | "rate2" | "rate3" | "rate4" | "rate5" | "reject" | "rejectRest" | "pick"
         | "unflag" | "clear" | "red" | "orange" | "yellow" | "green" | "blue" | "pink"
         | "purple" | "clearlabel" | "clearall" => ShortcutGroup::Judgment,
-        "focus" | "zoom" | "grayscale" | "compare" | "performance" | "peaking" => {
-            ShortcutGroup::Preview
-        }
+        "focus" | "zoom" | "grayscale" | "performance" | "peaking" => ShortcutGroup::Preview,
         "toggleLeft" | "toggleRight" | "toggleStrip" | "toggleSides" => ShortcutGroup::Panes,
         "open" | "undo" | "redo" => ShortcutGroup::General,
         _ => return None,

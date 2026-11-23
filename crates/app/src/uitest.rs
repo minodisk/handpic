@@ -442,6 +442,46 @@ fn the_settings_modal_drops_the_paging_keys_until_escape_closes_it() {
     ui.wait_idle("the next file's preview", 2);
 }
 
+#[test]
+fn the_settings_key_opens_the_settings_from_the_tree_but_not_from_a_rename() {
+    let mut ui = Ui::open();
+    let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    let open = if cfg!(target_os = "macos") {
+        "cmd-,"
+    } else {
+        "ctrl-,"
+    };
+    let settings = ui.read(|view| view.settings_view.clone());
+    let is_open = |ui: &Ui| settings.read_with(&ui.cx, |settings, _| settings.is_open());
+    ui.update(|view, cx| view.set_tree_keys(true, cx));
+    ui.cx.simulate_keystrokes(open);
+    assert!(is_open(&ui));
+    ui.cx.simulate_keystrokes("escape");
+    assert!(!is_open(&ui));
+    ui.read(|view| assert!(view.tree_keys));
+
+    let path = folder.to_string_lossy().into_owned();
+    let view = ui.view.clone().unwrap();
+    view.update_in(&mut ui.cx, |view, window, cx| {
+        if !view.tree_rows.iter().any(|row| row.path == path) {
+            view.tree_rows.push(crate::tree::Row {
+                depth: 0,
+                path: path.clone(),
+                name: "photos".into(),
+                expanded: false,
+                expandable: false,
+                raw_count: None,
+                failed: None,
+            });
+        }
+        view.start_rename(path, None, window, cx);
+        assert!(view.rename_owns_keys());
+    });
+    ui.cx.run_until_parked();
+    ui.cx.simulate_keystrokes(open);
+    assert!(!is_open(&ui));
+}
+
 /// Flips the MCP page's server switch as a click does.
 fn flip_mcp(ui: &mut Ui) {
     let settings = ui.read(|view| view.settings_view.clone());

@@ -45,8 +45,9 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   the folder it matches (see the fixed keys under [Keys](#keys)).
   `ArrowLeft` / `ArrowRight` are not tree keys: they page the strip as
   usual. While the tree has the keyboard the other culling keys are off:
-  only the `open` key, the strip's previous / next and the pane toggles
-  (`Alt+Cmd+Arrow` / `Ctrl+Alt+Arrow` and `Tab` by default) still run,
+  only the `open` key, the strip's previous / next, the pane toggles
+  (`Alt+Cmd+Arrow` / `Ctrl+Alt+Arrow` and `Tab` by default) and
+  `CmdOrCtrl+,` (the settings) still run,
   until `Escape`, a click elsewhere or hiding the left pane hands the keys
   back.
   Right-clicking a folder opens a menu whose first item shows the folder
@@ -879,7 +880,8 @@ While the folder tree has the keyboard, only `open`, `previous`, `next`,
 `toggleStrip`, `toggleLeft`, `toggleRight` and `toggleSides` (by default
 `Cmd+O` / `Ctrl+O`, `ArrowLeft` / `ArrowRight`, `Alt+Cmd+Arrow` /
 `Ctrl+Alt+Arrow` and `Tab`) still run, whatever keys they are bound
-to; every other action is ignored until the tree lets go of the keyboard.
+to, and `CmdOrCtrl+,` still opens the settings; every other action is
+ignored until the tree lets go of the keyboard.
 The tree's own keys below come first, and every printable character is
 type-ahead there, so one of those actions rebound to a plain character
 (`l`, say) does not fire while the tree has the keyboard.
@@ -1027,8 +1029,8 @@ same path as the judgment keys: fields it is not given keep each photo's own
 value, the strip updates at once, the change is one step for the undo key,
 and the sidecar is written as a key press writes it. Auto-advance does not
 apply to it. The server's instructions ask the assistant to suggest
-judgments and to write them only when you ask. Asking for compare or a file
-rename is refused: this app does not have them.
+judgments and to write them only when you ask. Asking for a file rename is
+refused: this app does not have it.
 
 Any client that speaks MCP over Streamable HTTP connects to the endpoint
 above. Two examples:
