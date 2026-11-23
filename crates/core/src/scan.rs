@@ -12,7 +12,7 @@ use crate::arw::{Arw, FocusLocation, Shot};
 use crate::candidate::{face_cue_unless, focus_cue_rgb_unless, luma, Cue};
 use crate::decode::{decode_rgb, thumbnail_jpeg, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
-use crate::faces::{detect_around, Detection, Face};
+use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
 use crate::reader::{read_full, read_metadata, read_preview};
 use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
@@ -169,11 +169,13 @@ pub struct Analysis {
     /// (`eyes::mesh_trusted`, no eye centers), the file has no usable larger
     /// JPEG, or on any failure.
     pub full_eye_sharp: Option<f64>,
-    /// The all-faces check's counts (`allfaces`): the judged face and the
-    /// other confident faces of the whole preview; `None` when the
-    /// whole-image detection or a needed preview decode failed, and always
-    /// for a JPEG file.
-    pub face_counts: Option<FaceCounts>,
+    /// `allfaces::gate_count`, how many confident faces of a size similar to
+    /// the judged face's the whole preview holds, the judged face included:
+    /// over a `faces::GATE_INPUT` detection with an AF point, over the
+    /// whole-image detection the cue already ran without one. 0 when the cue
+    /// judged no face (no detection is run for it); `None` when that
+    /// detection failed, and always for a JPEG file.
+    pub gate_count: Option<u32>,
 }
 
 /// Compute the face cue and the sharpness score of one file from one read of
@@ -185,23 +187,21 @@ pub struct Analysis {
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure leaves
 /// the face its YuNet eye landmarks, a mesh `eyes::mesh_trusted` turns down
-/// leaves it no eye centers. The whole preview is searched for faces
-/// on an AF frame too, and the other confident faces large enough are meshed
-/// on the same decode for the all-faces counts (`allfaces`). The judged face's
-/// eyes, and those of the other faces counted, are measured once more on the
-/// full JPEG, one second read, when the file holds one larger than the
-/// preview (`full_eye_sharp`, `face_counts`). A JPEG file gets none of these,
-/// and is not read.
+/// leaves it no eye centers. An AF frame whose cue judged a face is
+/// also searched whole at the low `faces::GATE_INPUT` for the gate count. The
+/// judged face's eyes are measured once more on the full JPEG, a second
+/// read, when the file holds one larger than the preview (`full_eye_sharp`).
+/// A JPEG file gets none of these, and is not read.
 pub fn extract_analysis(path: &Path) -> Result<Analysis, String> {
     extract_analysis_unless(path, &AtomicBool::new(false), &ReadSlots::default())
         .expect("a never-set flag never abandons")
 }
 
 thread_local! {
-    /// The read slots of the pass 2 file this thread is analyzing, which
-    /// `yield_to_pause` waits on, with the instant its stage waits first saw a
-    /// pause (one budget for the whole file); none outside
-    /// `extract_analysis_unless`.
+    /// The read slots of the pass 2 file this thread is analyzing, or of the
+    /// file `extract_face_counts_unless` measures, which `yield_to_pause`
+    /// waits on, with the instant its stage waits first saw a pause (one
+    /// budget for the whole file); none outside those two.
     static PASS_SLOTS: std::cell::RefCell<Option<(ReadSlots, Option<Instant>)>> =
         const { std::cell::RefCell::new(None) };
 }
@@ -222,10 +222,11 @@ impl Drop for PassSlots {
     }
 }
 
-/// A stage boundary of pass 2: wait out a pause held on the slots of the file
-/// this thread analyzes (`ReadSlots::wait_unpaused_since`). All of a file's
-/// stage waits share one `MAX_PAUSE` budget. A no-op outside pass 2,
-/// so `candidate`'s stages call it whoever runs them.
+/// A stage boundary of pass 2 or of the all-faces check: wait out a pause
+/// held on the slots of the file this thread analyzes
+/// (`ReadSlots::wait_unpaused_since`). All of a file's stage waits share one
+/// `MAX_PAUSE` budget. A no-op outside those, so `candidate`'s stages call it
+/// whoever runs them.
 pub fn yield_to_pause(cancel: &AtomicBool) {
     PASS_SLOTS.with(|s| {
         if let Some((slots, since)) = &mut *s.borrow_mut() {
@@ -261,12 +262,120 @@ fn extract_analysis_unless(
         return None;
     }
     let focus = trusted_focus(&arw.shot);
-    // With an AF point the cue's detection runs around it and the score needs
-    // no faces; without one the faces are searched for on the whole image,
-    // the cue judges the largest confident one and the score falls back to
-    // them. Either way the whole-image faces are the other faces of the
-    // frame.
-    let (cue, faces, whole, rgb, scored) = match focus {
+    let (cue, faces, gate_count, scored) = cue_and_gate(&preview, arw.orientation, focus, cancel)?;
+    if canceled(cancel) {
+        return None;
+    }
+    yield_to_pause(cancel);
+    let sharpness = scored.or_else(|| score(&preview, &arw.shot, focus, &faces));
+    yield_to_pause(cancel);
+    let full_eye_sharp = full_eye_sharp(path, &arw, &cue, cancel, slots)?;
+    Some(Ok(Analysis {
+        cue,
+        sharpness,
+        full_eye_sharp,
+        gate_count,
+    }))
+}
+
+/// Pass 2's cue of `preview`, the faces its score falls back to and its gate
+/// count. With the AF point `focus` the cue's detection runs around it, the
+/// score needs no faces and the gate count takes a `faces::GATE_INPUT` search
+/// of its own (`af_gate_count`); without one the faces are searched for on
+/// the whole image at `faces::WHOLE_INPUT`, the cue judges the largest
+/// confident one, the score falls back to them and the gate counts over
+/// them, taken on the cue's decode when it made one (`score_rgb`), the fourth
+/// value. `None` once `cancel` abandoned the file.
+fn cue_and_gate(
+    preview: &[u8],
+    orientation: u16,
+    focus: Option<FocusLocation>,
+    cancel: &AtomicBool,
+) -> Option<(Cue, Vec<Face>, Option<u32>, Option<f64>)> {
+    match focus {
+        Some(at) => {
+            let (cue, _) = af_cue(preview, orientation, at, cancel)?;
+            yield_to_pause(cancel);
+            if canceled(cancel) {
+                return None;
+            }
+            let gate = af_gate_count(preview, orientation, &cue);
+            Some((cue, Vec::new(), gate, None))
+        }
+        None => {
+            let detection = whole_image_detection(preview, orientation);
+            yield_to_pause(cancel);
+            if canceled(cancel) {
+                return None;
+            }
+            let faces = detection.as_ref().map(|d| d.faces.clone());
+            let (cue, rgb) = whole_image_cue_rgb(preview, orientation, detection, cancel)?;
+            let gate = faces
+                .as_ref()
+                .map(|f| allfaces::gate_count(f, cue.face.as_ref()));
+            let faces = faces.unwrap_or_default();
+            let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
+            Some((cue, faces, gate, scored))
+        }
+    }
+}
+
+/// The gate count of an AF frame whose cue is `cue`, over a whole-preview
+/// search of `preview` at `faces::GATE_INPUT`: 0 with no search when the cue
+/// judged no face, `None` when the search failed or panicked.
+fn af_gate_count(preview: &[u8], orientation: u16, cue: &Cue) -> Option<u32> {
+    let Some(judged) = &cue.face else {
+        return Some(0);
+    };
+    let detection = catch_unwind(AssertUnwindSafe(|| {
+        detect_gate_upright(&decode_gate(preview, orientation)?, orientation)
+    }))
+    .ok()
+    .and_then(Result::ok)?;
+    Some(allfaces::gate_count(&detection.faces, Some(judged)))
+}
+
+/// The all-faces check of the file at `path` (`allfaces`): its counts of the
+/// faces judged, of those with closed eyes and of those with soft eyes, over
+/// the face its cue judges and the other confident faces of the whole
+/// preview. It recomputes the cue as pass 2 does, on its own read and decode
+/// of the preview, searches the whole preview at `faces::WHOLE_INPUT` on an
+/// AF frame too, meshes the other faces on the same decode and measures
+/// every eye of the frame on the full JPEG in one pass, a second read, when
+/// the file holds one larger than the preview. It takes no threshold: the
+/// caller picks the files, by their gate count. `Ok(None)` when the
+/// whole-image detection or a needed preview decode failed, and for a JPEG
+/// file, which is not read; only an unreadable file is `Err`.
+pub fn extract_face_counts(path: &Path) -> Result<Option<FaceCounts>, String> {
+    extract_face_counts_unless(path, &AtomicBool::new(false), &ReadSlots::default())
+        .expect("a never-set flag never abandons")
+}
+
+/// `extract_face_counts`, abandoned (`None`) once `cancel` is set between its
+/// stages, its reads going through `slots` and its stages yielding to a pause
+/// of them.
+fn extract_face_counts_unless(
+    path: &Path,
+    cancel: &AtomicBool,
+    slots: &ReadSlots,
+) -> Option<Result<Option<FaceCounts>, String>> {
+    let _pass = PassSlots::set(slots);
+    if is_jpeg_file(path) {
+        return Some(Ok(None));
+    }
+    let read = {
+        let _slot = slots.acquire(cancel)?;
+        read_preview(path)
+    };
+    let (arw, preview) = match read {
+        Ok(read) => read,
+        Err(e) => return Some(Err(e.to_string())),
+    };
+    yield_to_pause(cancel);
+    if canceled(cancel) {
+        return None;
+    }
+    let (cue, whole, rgb) = match trusted_focus(&arw.shot) {
         Some(at) => {
             let (cue, rgb) = af_cue(&preview, arw.orientation, at, cancel)?;
             let whole = rgb
@@ -277,7 +386,7 @@ fn extract_analysis_unless(
             if canceled(cancel) {
                 return None;
             }
-            (cue, Vec::new(), whole, rgb, None)
+            (cue, whole, rgb)
         }
         None => {
             let detection = whole_image_detection(&preview, arw.orientation);
@@ -287,17 +396,12 @@ fn extract_analysis_unless(
             }
             let whole = detection.as_ref().map(|d| d.faces.clone());
             let (cue, rgb) = whole_image_cue_rgb(&preview, arw.orientation, detection, cancel)?;
-            let faces = whole.clone().unwrap_or_default();
-            // The score takes its luma from the cue's decode when it made one.
-            let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
-            (cue, faces, whole, rgb, scored)
+            (cue, whole, rgb)
         }
     };
     if canceled(cancel) {
         return None;
     }
-    yield_to_pause(cancel);
-    let sharpness = scored.or_else(|| score(&preview, &arw.shot, focus, &faces));
     yield_to_pause(cancel);
     let others = other_faces(
         &cue,
@@ -312,7 +416,7 @@ fn extract_analysis_unless(
         judged: full_eye_sharp,
         others: sharps,
     } = full_sharps(path, &arw, &cue, &eyes, width, cancel, slots)?;
-    let face_counts = others.map(|others| {
+    Some(Ok(others.map(|others| {
         let judged = cue.eyes_ear.map(|ear| Reading {
             ear,
             full_eye_sharp,
@@ -325,13 +429,7 @@ fn extract_analysis_unless(
             }))
             .collect();
         allfaces::counts(&readings, sharps.is_some())
-    });
-    Some(Ok(Analysis {
-        cue,
-        sharpness,
-        full_eye_sharp,
-        face_counts,
-    }))
+    })))
 }
 
 /// A preview decoded to stored RGB: the pixels, the width and the height.
@@ -401,7 +499,7 @@ pub fn has_larger_jpeg(arw: &Arw) -> bool {
 /// state; `None` inside when the cue judged no face or has no eye centers (an
 /// untrusted mesh), the file has no larger
 /// JPEG or anything failed, `None` outside when `cancel` abandoned the file.
-#[cfg(test)]
+/// The read goes through `slots`, the decode does not.
 fn full_eye_sharp(
     path: &Path,
     arw: &Arw,
@@ -501,7 +599,6 @@ fn whole_image_detection(preview: &[u8], orientation: u16) -> Option<Detection> 
 /// `detection` (the largest at or above `sharpness::FACE_CONFIDENCE`), on one
 /// full-size decode of `preview`. No detection or no such face is an unknown
 /// cue with no decode; a decode failure or a panic is an unknown cue.
-#[cfg(test)]
 fn whole_image_cue(
     preview: &[u8],
     orientation: u16,
@@ -668,6 +765,33 @@ where
         priority,
         focus,
         extract_analysis_unless,
+        on_item,
+        cancel,
+    )
+}
+
+/// Run `extract_face_counts` over `paths` the way `extract_analysis_all` runs
+/// `extract_analysis`: same pool, same `focus` order and read slots, same
+/// `cancel`, a file abandoned by it not handed to `on_item`, same
+/// `threads == 0` error, the same priority report, and the same rule that
+/// `on_item` must not panic.
+pub fn extract_face_counts_all<F>(
+    paths: &[PathBuf],
+    threads: usize,
+    priority: Priority,
+    focus: &ScanFocus,
+    on_item: F,
+    cancel: &AtomicBool,
+) -> Result<Option<String>, String>
+where
+    F: Fn(usize, Result<Option<FaceCounts>, String>) + Send + Sync,
+{
+    for_each_path(
+        paths,
+        threads,
+        priority,
+        focus,
+        extract_face_counts_unless,
         on_item,
         cancel,
     )
@@ -1040,6 +1164,7 @@ where
 mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
+    use crate::eyes::MESH_CALLS;
     use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
@@ -1476,7 +1601,7 @@ mod tests {
         let paths: Vec<PathBuf> = (0..8)
             .map(|i| write(&dir, &format!("{i}.ARW"), &fixture(1, &jpeg(64, 48))))
             .collect();
-        for analysis in [false, true] {
+        for pass in 1..=3 {
             let cancel = AtomicBool::new(false);
             let delivered = Mutex::new(0usize);
             for_each_path(
@@ -1487,11 +1612,11 @@ mod tests {
                 |path, cancel: &AtomicBool, slots: &ReadSlots| {
                     let started = Instant::now();
                     cancel.store(true, Ordering::Relaxed);
-                    let result = if analysis {
-                        extract_analysis_unless(path, cancel, slots).map(|r| r.map(|_| ()))
-                    } else {
-                        extract_unless(path, cancel, slots)
-                            .map(|r| r.map(|_| ()).map_err(|e| e.message))
+                    let result = match pass {
+                        1 => extract_unless(path, cancel, slots)
+                            .map(|r| r.map(|_| ()).map_err(|e| e.message)),
+                        2 => extract_analysis_unless(path, cancel, slots).map(|r| r.map(|_| ())),
+                        _ => extract_face_counts_unless(path, cancel, slots).map(|r| r.map(|_| ())),
                     };
                     assert!(started.elapsed() < Duration::from_secs(5));
                     result
@@ -1500,11 +1625,7 @@ mod tests {
                 &cancel,
             )
             .unwrap();
-            assert_eq!(
-                delivered.into_inner().unwrap(),
-                0,
-                "analysis pass: {analysis}"
-            );
+            assert_eq!(delivered.into_inner().unwrap(), 0, "pass {pass}");
         }
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -1664,6 +1785,161 @@ mod tests {
             other_faces(&cue, Some(&[away]), Some(&rgb), 1, &AtomicBool::new(true)),
             None
         );
+    }
+
+    /// The model runs (`faces::model_runs`) and face meshes this thread made
+    /// while `run` ran.
+    fn runs_of<T>(run: impl FnOnce() -> T) -> (T, (usize, usize, usize), usize) {
+        let ((crop, whole, gate), meshes) = (crate::faces::model_runs(), MESH_CALLS.get());
+        let out = run();
+        let (c, w, g) = crate::faces::model_runs();
+        (
+            out,
+            (c - crop, w - whole, g - gate),
+            MESH_CALLS.get() - meshes,
+        )
+    }
+
+    #[test]
+    fn pass_two_runs_no_whole_image_search_and_no_other_mesh_on_an_af_frame() {
+        let never = AtomicBool::new(false);
+        let preview = jpeg(640, 480);
+        let focus = FocusLocation {
+            sensor_w: 6000,
+            sensor_h: 4000,
+            x: 3000,
+            y: 2000,
+        };
+        let (got, runs, meshes) = runs_of(|| cue_and_gate(&preview, 1, Some(focus), &never));
+        let (cue, faces, gate) = got.unwrap();
+        assert_eq!(
+            (runs, meshes),
+            ((1, 0, 0), 0),
+            "the crop search alone: no judged face, no gate search"
+        );
+        assert_eq!((cue.face, faces, gate), (None, Vec::new(), Some(0)));
+
+        let judged = Cue {
+            face: Some(scored(0.9, 100.0)),
+            ..Cue::default()
+        };
+        let (gate, runs, meshes) = runs_of(|| af_gate_count(&preview, 1, &judged));
+        assert_eq!(
+            (gate, runs, meshes),
+            (Some(1), (0, 0, 1), 0),
+            "a judged face takes one low-resolution search and counts though it found nothing"
+        );
+        assert_eq!(
+            af_gate_count(b"not a jpeg", 1, &judged),
+            None,
+            "a failed search is unknown"
+        );
+        assert_eq!(
+            cue_and_gate(&preview, 1, Some(focus), &AtomicBool::new(true)),
+            None
+        );
+    }
+
+    #[test]
+    fn without_an_af_point_the_gate_counts_over_the_whole_image_search() {
+        let never = AtomicBool::new(false);
+        let (got, runs, _) = runs_of(|| cue_and_gate(&jpeg(640, 480), 1, None, &never));
+        assert_eq!(runs, (0, 1, 0), "no search of its own");
+        assert_eq!(
+            got.map(|(cue, _, gate)| (cue.face, gate)),
+            Some((None, Some(0)))
+        );
+        let (got, runs, _) = runs_of(|| cue_and_gate(b"not a jpeg", 1, None, &never));
+        assert_eq!(runs, (0, 0, 0));
+        assert_eq!(
+            got.map(|(_, _, gate)| gate),
+            Some(None),
+            "a failed detection is unknown"
+        );
+    }
+
+    #[test]
+    fn the_face_counts_of_a_file_are_abandoned_on_cancel_and_none_for_a_jpeg() {
+        let dir = dir("face-counts");
+        let path = write(&dir, "a.ARW", &fixture(1, &jpeg(64, 48)));
+        let slots = ReadSlots::default();
+        assert_eq!(
+            extract_face_counts_unless(&path, &AtomicBool::new(true), &slots),
+            None
+        );
+        assert_eq!(
+            extract_face_counts(&path),
+            Ok(Some(FaceCounts::default())),
+            "no face, and no larger JPEG for the soft count"
+        );
+        assert_eq!(
+            extract_face_counts(&dir.join("missing.jpg")),
+            Ok(None),
+            "a JPEG file is not read"
+        );
+        assert!(extract_face_counts(&dir.join("missing.ARW")).is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_face_counts_pass_delivers_every_index_once_and_stops_on_cancel() {
+        let dir = dir("face-counts-all");
+        let jpeg = jpeg(64, 48);
+        let paths: Vec<PathBuf> = (0..200)
+            .map(|i| write(&dir, &format!("{i:03}.ARW"), &fixture(1, &jpeg)))
+            .collect();
+
+        let seen = Mutex::new(Vec::new());
+        extract_face_counts_all(
+            &paths,
+            4,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            |i, r| seen.lock().unwrap().push((i, r.unwrap())),
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        let mut seen = seen.into_inner().unwrap();
+        seen.sort_by_key(|&(i, _)| i);
+        assert_eq!(
+            seen,
+            (0..200)
+                .map(|i| (i, Some(FaceCounts::default())))
+                .collect::<Vec<_>>(),
+            "each index exactly once"
+        );
+
+        let cancel = AtomicBool::new(false);
+        let done = Mutex::new(0usize);
+        extract_face_counts_all(
+            &paths,
+            2,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            |_, _| {
+                let mut done = done.lock().unwrap();
+                *done += 1;
+                if *done >= 4 {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            },
+            &cancel,
+        )
+        .unwrap();
+        let done = done.into_inner().unwrap();
+        assert!(done >= 4, "the files before the cancel are delivered");
+        assert!(done < paths.len(), "the rest are not, got {done}");
+
+        assert!(extract_face_counts_all(
+            &paths,
+            0,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            |_, _| {},
+            &AtomicBool::new(false)
+        )
+        .is_err());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Long enough for the pool to start and reach the gate.

@@ -741,66 +741,82 @@ so part of it is run-to-run noise. The cold-disk cost is not measured.
 
 #### All-faces check (Windows 11)
 
-Pass 2 now also counts the frame's other faces (`crates/core/src/allfaces.rs`):
-every face of the whole-image detection at score 0.8 or above with a box
-long side of at least 60 px is meshed on the preview, and its eyes are
-measured on the full-size JPEG, up to 8 faces per frame with the judged one.
-A frame with a trusted AF point therefore gets a whole-image detection
-(a scaled decode and YuNet at 640x448) it did not run before, and a frame
-whose cue judged no face but that holds other faces now reads the full JPEG
-(still one read per file). Every eye of the frame, the judged face's
-included, is now cut from the full JPEG in one decoding pass
-(`fullsharp::full_eye_sharpnesses` over `partial::decode_crops`) instead of
-one partial decode per eye; the judged face's `full_eye_sharp` is the same
-value.
+The all-faces check of group photos (`crates/core/src/allfaces.rs`) is in
+two parts. Pass 2 only counts, for every frame, the confident faces of a
+size similar to the judged face's over the whole preview (the gate count,
+`allfaces::gate_count`): a frame with a trusted AF point whose cue judged a
+face gets a whole-preview YuNet run of its own at 320x224
+(`faces::GATE_INPUT`) on a scaled decode, and a frame without an AF point
+counts over the 640x448 detection its cue already runs. Measuring every
+face (the other faces' meshes, and every eye of the frame on the full JPEG)
+is a separate entry point, `scan::extract_face_counts`, which reads and
+decodes the preview again, recomputes the cue, searches the whole preview
+at 640x448 on an AF frame too and reads the full JPEG once; its caller
+runs it only on the frames whose gate count reaches a threshold. In pass
+2, the judged face's two eyes are now cut from the full JPEG in one
+decoding pass (`fullsharp::full_eye_sharpnesses` over
+`partial::decode_crops`) instead of one partial decode per eye; the stored
+`full_eye_sharp` is the same value.
 
-Measured on 2026-11-23 on Windows 11 (Intel Core i7-13700), files read from
-the local drive, warm page cache, release build. Other processes shared the
-machine, so the runs on 8 threads varied by up to 2x between repeats; the
-figures below are on one thread. Where the time goes, per AF file, timed
-stage by stage by a scratch subcommand on the first 100 α7 V ARW of
-`2026-10-03` (mostly one person; 44 other faces measured) and of
-`2026-11-07` (a team sport; 76 other faces), two runs that agreed within
+Measured on 2026-11-24 on Windows 11 (Intel Core i7-13700), files read from
+the local drive, warm page cache, release build, one thread. Pass 2 is
+`handpic-cli features <files> 1`'s `analysis_ms` (`scan::extract_analysis`
+alone), before (`3918064c`) and now; the entry point is
+`handpic-cli allfaces <files> 1`'s per-file time. Three alternated runs on
+the first 100 α7 V ARW of `2026-10-03` (mostly one person) and of
+`2026-11-07` (a team sport), every file with a trusted AF point, and on the
+first 100 M11-P DNG of `2026-02-01` (groups, no AF point); the fastest
+run's mean / median / p95, as the other processes sharing the machine only
+ever add:
+
+| Files | Pass 2 before (ms) | Pass 2 now (ms) | Entry point (ms) |
+| --- | --- | --- | --- |
+| Mostly one person, AF | 86.3 / 83.0 / 115.2 | 92.2 / 92.2 / 118.7 | 169.7 / 168.4 / 227.8 |
+| Groups, AF | 96.8 / 96.1 / 149.7 | 89.4 / 92.0 / 119.6 | 185.9 / 189.1 / 252.6 |
+| Groups, no AF | 119.4 / 97.6 / 197.1 | 106.8 / 81.6 / 165.2 | 105.3 / 75.0 / 213.4 |
+
+The low-resolution run, the scaled decode included, costs about 20 ms per
+AF file whose cue judged a face (19.4 and 20.1 ms on the first two sets;
+the gate stage alone, the faster of two runs), against 80 ms at 640x448;
+384x256 cost 25-26 ms and 480x320 36-38 ms. The one-pass eye crops win
+back about 9 to 12 ms of it on an AF file (the judged face's two eyes: 22.8
+and 36.6 ms with one partial decode each against 13.6 and 24.4 in one
+pass, from the profile below). So pass 2 on an AF file costs about what it
+did before this work: +5.9 ms on the one-person set and -7.4 ms on the
+group set, within the spread of the runs. A frame whose cue judged no face
+runs no such detection, and a frame without an AF point pays nothing for
+its gate count. 320x224 loses the small faces: on the team-sport frames it counts
+about half the faces the 640x448 run counts at the gate's 0.8 score floor;
+the sizes tried and what each counts are in the all-faces-check plan's
+`measurement.md`.
+
+The entry point costs about what pass 2 cost with the first version of the
+check inside it, which ran it on every frame (163.3 / 165.4 / 209.3 ms
+mostly one person, 183.9 / 184.0 / 239.4 ms groups with AF and 117.5 /
+91.5 / 218.0 ms groups without on 2026-11-23), and is paid only on the
+frames at the gate. Where
+its time goes, per AF file, timed stage by stage by a scratch subcommand on
+2026-11-23 on the same first 100 files of `2026-10-03` (44 other faces
+measured) and of `2026-11-07` (76 other faces), two runs that agreed within
 3%:
 
-| Stage | Mostly one person (ms) | Groups (ms) | New |
-| --- | --- | --- | --- |
-| Preview read, full-size decode, cue (crop detection and the judged face's mesh), score, full JPEG read | 61 | 55 | no |
-| Judged face's eyes on the full JPEG, one partial decode per eye | 22.8 | 36.6 | no (replaced) |
-| Scaled decode for the whole-image search | 3.8 | 4.3 | yes |
-| Whole-image YuNet at 640x448 | 71.0 | 72.0 | yes |
-| Other faces' meshes | 19.4 | 33.5 | yes |
-| Other faces' eyes on the full JPEG, one partial decode per eye | 7.4 | 30.0 | yes (replaced) |
-| All eyes of the frame on the full JPEG in one pass | 13.6 | 24.4 | yes |
+| Stage | Mostly one person (ms) | Groups (ms) |
+| --- | --- | --- |
+| Preview read, full-size decode, cue (crop detection and the judged face's mesh), score, full JPEG read | 61 | 55 |
+| Scaled decode for the whole-image search | 3.8 | 4.3 |
+| Whole-image YuNet at 640x448 | 71.0 | 72.0 |
+| Other faces' meshes | 19.4 | 33.5 |
+| All eyes of the frame on the full JPEG in one pass | 13.6 | 24.4 |
+| (For comparison) the judged face's eyes, one partial decode per eye | 22.8 | 36.6 |
+| (For comparison) the other faces' eyes, one partial decode per eye | 7.4 | 30.0 |
 
-`handpic-cli features <files> 1`'s `analysis_ms` (`scan::extract_analysis`
-alone) on the same 100 files, and on the first 100 M11-P DNG of
-`2026-02-01` (groups, no AF point, so no added detection), before
-(`3918064c`), with the first version of the check (one partial decode per
-eye) and now, alternated, three runs each; the fastest run's mean / median
-/ p95, as the other processes only ever add:
-
-| Files | Before (ms) | First version (ms) | Now (ms) |
-| --- | --- | --- | --- |
-| Mostly one person, AF | 81.5 / 82.6 / 99.8 | 188.6 / 179.6 / 261.1 | 163.3 / 165.4 / 209.3 |
-| Groups, AF | 92.4 / 94.1 / 117.6 | 240.4 / 223.6 / 361.2 | 183.9 / 184.0 / 239.4 |
-| Groups, no AF | 119.3 / 87.2 / 196.4 | 138.9 / 91.6 / 367.0 | 117.5 / 91.5 / 218.0 |
-
-So pass 2 on an AF file about doubles (+80 to +90 ms on one thread), and
-the whole-image YuNet run is most of it (71 ms). A smaller 480x320 input
-halved that run but lost 23-32% of the faces counted (69 of 302 on the
-`2026-11-07` slice, 39 of 121 on `2026-10-03`, 44 of 146 on `2026-09-19`),
-so the input stays 640x448. Feeding the search from the preview already
-decoded for the cue would save at most the 4 ms scaled decode, and the AF
-frames' face set would then differ from the one the no-AF path and
-`handpic-cli facechoice` see, so it was not done. On a file without an AF
-point the added cost is only the other faces' meshes, and the one pass over
-the full JPEG pays for them on group frames. The stored values
-(`sharpness`, the cue's EAR, pose, eye offset and edge gap, and
-`full_eye_sharp`) did not change on any file (`features` columns compared
-on all three sets; `facechoice --check`: 0 mismatches of 146, 300 and 300
-files). The thresholds and the faces counted are in the all-faces-check
-plan's `measurement.md`.
+The stored values (`sharpness`, the cue's EAR, pose, eye offset and edge
+gap, and `full_eye_sharp`) did not change on any file, and the entry
+point's counts are the first version's: `features` columns compared and
+`facechoice --check` run on `2026-02-01`, `2026-09-19`, the first 300 of
+`2026-11-07` and the first 100 of `2026-10-03` (0 differences of 828
+files), and the first version's counts against `allfaces` on the same
+files (0 mismatches).
 
 #### Eye-state model survey (Windows 11)
 

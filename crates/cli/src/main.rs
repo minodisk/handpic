@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Result};
+use handpic_core::allfaces::FaceCounts;
 use handpic_core::candidate;
 use handpic_core::copy;
 use handpic_core::decode::{apply_orientation, decode_rgb, decode_upright_near};
@@ -75,6 +76,23 @@ fn main() -> Result<()> {
             }
             features(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
         }
+        Some("allfaces") => {
+            let mut inputs = &args[1..];
+            let threads = match inputs.last().map(|t| t.parse::<usize>()) {
+                Some(Ok(n)) => {
+                    inputs = &inputs[..inputs.len() - 1];
+                    n
+                }
+                _ => 1,
+            };
+            if inputs.is_empty() {
+                bail!("usage: {ALLFACES_USAGE}");
+            }
+            allfaces(
+                &inputs.iter().map(PathBuf::from).collect::<Vec<_>>(),
+                threads,
+            )
+        }
         Some("check") => {
             let mut dirs = &args[1..];
             let threads = match dirs.last().map(|t| t.parse::<usize>()) {
@@ -101,7 +119,7 @@ fn main() -> Result<()> {
             _ => bail!("usage: {COPYBENCH_USAGE}"),
         },
         _ => bail!(
-            "usage: handpic-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       handpic-cli crop <file.ARW> <out.png> [size]\n       handpic-cli scan <dir> [threads]\n       handpic-cli detect <dir|file>... [threads]\n       handpic-cli eyecrops <dir|file>... <out-dir>\n       handpic-cli eyes <dir|file>...\n       handpic-cli features <dir>... [threads]\n       handpic-cli check <dir>... [threads]\n       {}\n       {PREVIEWS_USAGE}
+            "usage: handpic-cli <info|focusbox|faces|bench> <file.ARW> [out.png]\n       handpic-cli crop <file.ARW> <out.png> [size]\n       handpic-cli scan <dir> [threads]\n       handpic-cli detect <dir|file>... [threads]\n       handpic-cli eyecrops <dir|file>... <out-dir>\n       handpic-cli eyes <dir|file>...\n       handpic-cli features <dir>... [threads]\n       {ALLFACES_USAGE}\n       handpic-cli check <dir>... [threads]\n       {}\n       {PREVIEWS_USAGE}
        {COPYBENCH_USAGE}",
             facechoice::USAGE
         ),
@@ -503,7 +521,7 @@ const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsha
 /// (a trusted AF point), the judged face's box side, the EAR of its more
 /// closed eye, the eyes-open probability (`1 -` the closed one), `yaw`,
 /// `pitch` and `roll` in degrees; from the analysis again, the cue mesh's
-/// `eye_offset` and `edge_gap`; then the ms of the analysis and of the eyes
+/// `eye_offset` and `edge_gap` and the all-faces `gate` count; then the ms of the analysis and of the eyes
 /// path; then, untimed, `eye_af` (`1` when `sharpness::eye_af_frame` gives a
 /// frame, the face-tracked frames whose stored `sharpness` is the AF frame's
 /// window, else `0`) and `eye_mid`, the sharpness of the window between the
@@ -536,6 +554,8 @@ fn features(dirs: &[PathBuf], threads: Option<usize>) -> Result<()> {
     faces::detect(&[0; 3], 1, 1)?;
     faces::detect_whole(&[0; 3], 1, 1)?;
     faces::detect_whole(&[0; 6], 1, 2)?;
+    faces::detect_gate(&[0; 3], 1, 1)?;
+    faces::detect_gate(&[0; 6], 1, 2)?;
     eyes::ear_of(&[0; 3], 1, 1, &probe)?;
 
     let start = Instant::now();
@@ -836,9 +856,14 @@ fn features_line(
                 opt(a.cue.face.map(|f| f.width.max(f.height) as f64), 1),
             ]
             .join("\t"),
-            [opt(a.cue.eye_offset, 4), opt(a.cue.edge_gap, 4)].join("\t"),
+            [
+                opt(a.cue.eye_offset, 4),
+                opt(a.cue.edge_gap, 4),
+                a.gate_count.map_or("-".to_string(), |n| n.to_string()),
+            ]
+            .join("\t"),
         ),
-        Err(_) => (["err"; 2].join("\t"), ["err"; 2].join("\t")),
+        Err(_) => (["err"; 2].join("\t"), ["err"; 3].join("\t")),
     };
     let (time, eyes) = match eyes {
         Ok(e) => (
@@ -865,6 +890,101 @@ fn features_line(
         Err(_) => ["err"; 2].join("\t"),
     };
     format!("{folder}\t{name}\t{time}\t{xmp_flag}\t{dop_flag}\t{analysis}\t{eyes}\t{mesh}\t{analysis_ms:.1}\t{eyes_ms:.1}\t{mid}")
+}
+
+const ALLFACES_USAGE: &str = "handpic-cli allfaces <dir|file>... [threads]";
+
+/// The header of `allfaces`, the column names of `allfaces_line`.
+const ALLFACES_HEADER: &str = "folder\tfile\tjudged\tclosed\tsoft\tms";
+
+/// Run the all-faces check (`scan::extract_face_counts`) on every RAW file
+/// given or in the folders given, on a pool of `threads` threads (one unless
+/// given, so the per-file times are not inflated by contention), the models
+/// built outside the timing: `ALLFACES_HEADER`, then one `allfaces_line` per
+/// file on stdout; the totals and the mean, median, p95 and max ms per file
+/// on stderr.
+fn allfaces(inputs: &[PathBuf], threads: usize) -> Result<()> {
+    if threads == 0 {
+        bail!("threads must be at least 1");
+    }
+    let paths = raw_paths(inputs)?;
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()?;
+    let probe = faces::Face {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+        score: 1.0,
+        left_eye: (0.0, 0.0),
+        right_eye: (0.0, 0.0),
+        nose: (0.0, 0.0),
+        mouth_left: (0.0, 0.0),
+        mouth_right: (0.0, 0.0),
+    };
+    faces::detect(&[0; 3], 1, 1)?;
+    faces::detect_whole(&[0; 3], 1, 1)?;
+    faces::detect_whole(&[0; 6], 1, 2)?;
+    eyes::mesh_of(&[0; 3], 1, 1, 1, &probe);
+
+    let start = Instant::now();
+    let results: Vec<(Result<Option<FaceCounts>, String>, f64)> = pool.install(|| {
+        use rayon::prelude::*;
+        paths
+            .par_iter()
+            .map(|p| {
+                let t = Instant::now();
+                let counts = scan::extract_face_counts(p);
+                (counts, t.elapsed().as_secs_f64() * 1000.0)
+            })
+            .collect()
+    });
+    let total = start.elapsed();
+    println!("{ALLFACES_HEADER}");
+    let mut errors = 0;
+    for (p, (counts, ms)) in paths.iter().zip(&results) {
+        let folder = p
+            .parent()
+            .and_then(Path::file_name)
+            .unwrap_or_default()
+            .to_string_lossy();
+        let name = p.file_name().unwrap_or_default().to_string_lossy();
+        println!("{}", allfaces_line(&folder, &name, counts, *ms));
+        errors += counts.is_err() as usize;
+    }
+    eprintln!(
+        "{} files, {threads} threads, {errors} with an error: {:.2}s total",
+        paths.len(),
+        total.as_secs_f64()
+    );
+    if !results.is_empty() {
+        let (mean, median, p95, max) = summary(results.iter().map(|(_, ms)| *ms).collect());
+        eprintln!("mean {mean:.1}ms  median {median:.1}ms  p95 {p95:.1}ms  max {max:.1}ms");
+    }
+    Ok(())
+}
+
+/// One tab-separated record of `allfaces`: the folder's and the file's
+/// names, the faces judged, closed and soft (`-` when unknown, every count
+/// `-` when the check had none, `err` on a read failure) and the ms.
+fn allfaces_line(
+    folder: &str,
+    name: &str,
+    counts: &Result<Option<FaceCounts>, String>,
+    ms: f64,
+) -> String {
+    let counts = match counts {
+        Ok(Some(c)) => [
+            c.judged.to_string(),
+            c.closed.to_string(),
+            c.soft.map_or("-".to_string(), |n| n.to_string()),
+        ]
+        .join("\t"),
+        Ok(None) => ["-"; 3].join("\t"),
+        Err(_) => ["err"; 3].join("\t"),
+    };
+    format!("{folder}\t{name}\t{counts}\t{ms:.1}")
 }
 
 /// One file of `detect`: the path taken, the faces and the times in ms.
@@ -1631,7 +1751,7 @@ mod tests {
             },
             sharpness: Some(123.45678),
             full_eye_sharp: None,
-            face_counts: None,
+            gate_count: Some(3),
         });
         let eyes = Ok(EyesFeatures {
             capture_time: Some("2026:09:19 10:11:12".into()),
@@ -1709,6 +1829,35 @@ mod tests {
         assert_eq!(
             failed,
             "x\tc.ARW\terr\terr\terr\t-\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\t1.0\t2.0\terr\terr"
+        );
+    }
+
+    #[test]
+    fn allfaces_line_lists_the_counts_with_dashes_for_unknown_ones() {
+        let counts = |soft| {
+            Ok(Some(FaceCounts {
+                judged: 4,
+                closed: 1,
+                soft,
+            }))
+        };
+        assert_eq!(
+            allfaces_line("2026-11-07", "a.ARW", &counts(Some(2)), 180.04),
+            "2026-11-07\ta.ARW\t4\t1\t2\t180.0"
+        );
+        assert_eq!(
+            allfaces_line("d", "b.ARW", &counts(None), 1.0),
+            "d\tb.ARW\t4\t1\t-\t1.0"
+        );
+        assert_eq!(
+            allfaces_line("d", "c.ARW", &Ok(None), 1.0),
+            "d\tc.ARW\t-\t-\t-\t1.0"
+        );
+        let failed = allfaces_line("d", "e.ARW", &Err("bad".into()), 1.0);
+        assert_eq!(failed, "d\te.ARW\terr\terr\terr\t1.0");
+        assert_eq!(
+            failed.split('\t').count(),
+            ALLFACES_HEADER.split('\t').count()
         );
     }
 

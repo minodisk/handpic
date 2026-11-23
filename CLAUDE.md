@@ -26,14 +26,20 @@ whole preview, its face mesh and what the mesh gives: the EAR, the head
 pose, the eye offset, the edge gap and the eye centers `fullsharp.rs`
 measures around, YuNet's eye landmarks without a mesh, none of them from an
 untrusted mesh, no EAR or pose under the presence floor), `src/allfaces.rs` the
-all-faces check of pass 2 (`candidates`: the other whole-image faces at
+all-faces check of group photos (`gate_count`, the gate count pass 2 stores in
+`scan::Analysis::gate_count`: the judged face and the whole-preview faces at
+`FACE_CONFIDENCE` whose box long side is within `GATE_MIN_SIZE` to
+`GATE_MAX_SIZE` of its, searched at `faces::GATE_INPUT` on an AF frame and
+over the cue's own whole-image search without one; `candidates`: the other whole-image faces at
 `FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not overlapping the judged
 face, the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
 counted only within `MAX_EYE_OFFSET`; `counts`, the `FaceCounts` of faces
 judged, closed by `EYES_CLOSED_EAR` and soft under `LOW_BELOW`, the soft
-count unknown without the full JPEG), which `scan::Analysis` carries as
-`face_counts`, the whole preview searched on an AF frame too and the full
-JPEG still read and decoded once, `src/jpeg.rs` the Exif reader of a plain
+count unknown without the full JPEG), which `scan::extract_face_counts`
+measures on one file outside pass 2 (the cue recomputed, the whole preview
+searched at `WHOLE_INPUT` on an AF frame too, the full JPEG read and decoded
+once) and `scan::extract_face_counts_all` runs over a list of paths like
+pass 2, the caller picking the files by their gate count, `src/jpeg.rs` the Exif reader of a plain
 JPEG file (orientation and the standard shooting tags into the same `Shot`
 the RAW parsers fill), which `reader` and `scan` dispatch to for a `.jpg` /
 `.jpeg`, `src/exif.rs` the crate-private IFD0 + Exif IFD reader `jpeg.rs`,
@@ -58,7 +64,7 @@ thread through a bounded channel of buffers, each file written under
 PIL's bilinear and bicubic resampling, which `fullsharp.rs` resizes its eye
 crops through, `src/scan.rs` the folder scan's worker pool and passes,
 whose `ReadSlots` caps how many workers are inside a file read at once and
-holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
+holds new reads back, and pass 2 and the all-faces check at their stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
 sharpness of the judged face on the full-size embedded JPEG (a crop around each
 eye resized to 154 px, the gradient's 99th percentile over the contrast, the
 sharper eye counting, a frame under `SOFT_BELOW` being soft;
@@ -69,9 +75,10 @@ sharpness score of the embedded preview, taken on the Sony eye-AF frame
 when the camera tracked a face, else around the AF point, else between
 the eyes of a detected face, else from the sharpest tile), `crates/cli` (the
 benchmark CLI, including the `scan` folder-extraction benchmark, the
-`copybench` timing of the import's copy pipeline and the
+`copybench` timing of the import's copy pipeline, the
 `facechoice` per-face dump of the face choice, with YuNet's nose, the face mesh's eye
-centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness),
+centers and nose tip, their eye and nose offsets, the mesh's edge gap and the full-size eye sharpness, and the
+`allfaces` counts and per-file time of `scan::extract_face_counts`),
 `crates/engine` (`handpic-engine`, the GUI-free engine the app depends on, which holds the
 stateful machinery the app drives (the index, the scan passes, the sidecar writer,
 the watchers, the trash runs, the MCP server) against `handpic-core`'s

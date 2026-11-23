@@ -2,7 +2,15 @@
 //! other confident face of the whole-image detection that is large enough is
 //! meshed and measured the same way, and the frame gets the counts of the
 //! faces judged, of those whose eyes are closed and of those whose eyes are
-//! clearly soft on the full JPEG.
+//! clearly soft on the full JPEG. `scan::extract_face_counts` runs it on one
+//! file, outside pass 2; the caller runs it only on group photos, the frames
+//! whose gate count (`gate_count`, which pass 2 stores) reaches its threshold.
+//!
+//! The gate count is the judged face and every confident face of a whole
+//! preview detection whose box is of a similar size (`GATE_MIN_SIZE` to
+//! `GATE_MAX_SIZE` of the judged face's long side): a face at half the linear
+//! size stands about twice as far, a passer-by or a spectator, not a member of
+//! the group.
 //!
 //! A candidate scores at least `sharpness::FACE_CONFIDENCE`, has a box long
 //! side of at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`) and does
@@ -30,6 +38,12 @@ pub const MAX_FACES: usize = 8;
 /// landmarks, in face box sides (`candidate::mesh_eye_offset`), is fitted
 /// off the face and the face is not counted; the app's `MAX_EYE_OFFSET` cut.
 pub const MAX_EYE_OFFSET: f64 = 0.1;
+/// The smallest box long side, over the judged face's, a face counts toward
+/// the gate with.
+pub const GATE_MIN_SIZE: f32 = 0.5;
+/// The largest box long side, over the judged face's, a face counts toward
+/// the gate with.
+pub const GATE_MAX_SIZE: f32 = 2.0;
 
 /// The counts of one frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -59,6 +73,30 @@ pub struct Measured {
     /// `candidate::mesh_eye_centers` of its mesh, where its full-size eye
     /// sharpness is taken.
     pub eye_centers: [(f32, f32); 2],
+}
+
+/// The gate count of a frame whose cue judged the face `judged`, from the
+/// `faces` of a whole-preview detection in the same stored coordinates: the
+/// judged face, and every face at or above `FACE_CONFIDENCE` whose box long
+/// side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of the judged face's and
+/// that does not overlap it by more than `NMS_THRESHOLD` (the judged face
+/// found again). 0 without a judged face.
+pub fn gate_count(faces: &[Face], judged: Option<&Face>) -> u32 {
+    let Some(judged) = judged else {
+        return 0;
+    };
+    let side = long_side(judged);
+    let band = GATE_MIN_SIZE * side..=GATE_MAX_SIZE * side;
+    let similar = faces
+        .iter()
+        .filter(|f| f.score >= FACE_CONFIDENCE && band.contains(&long_side(f)))
+        .filter(|f| iou(f, judged) <= NMS_THRESHOLD)
+        .count();
+    1 + similar as u32
+}
+
+fn long_side(face: &Face) -> f32 {
+    face.width.max(face.height)
 }
 
 /// The candidates among a whole-image detection's `faces`: at or above
@@ -166,6 +204,48 @@ mod tests {
             "without a judged face every confident large face is a candidate"
         );
         assert!(iou(&near, &judged) <= NMS_THRESHOLD);
+    }
+
+    #[test]
+    fn the_gate_counts_the_judged_face_and_the_confident_faces_of_a_similar_size() {
+        let judged = face(0.0, 100.0, 0.9);
+        assert_eq!(gate_count(&[judged], None), 0, "no judged face, no group");
+        assert_eq!(gate_count(&[], None), 0);
+        assert_eq!(
+            gate_count(&[], Some(&judged)),
+            1,
+            "the judged face counts though the detection missed it"
+        );
+        assert_eq!(
+            gate_count(&[judged], Some(&judged)),
+            1,
+            "the judged face found again counts once"
+        );
+        // The same face as detected on the crop: shifted, IoU above 0.3.
+        let again = face(8.0, 96.0, 0.85);
+        assert!(iou(&again, &judged) > NMS_THRESHOLD);
+        assert_eq!(gate_count(&[again], Some(&judged)), 1);
+        let min = face(200.0, 50.0, 0.9);
+        let max = face(400.0, 200.0, 0.9);
+        let under = face(700.0, 50.0f32.next_down(), 0.9);
+        let over = face(900.0, 200.0f32.next_up(), 0.9);
+        let shy = face(1200.0, 100.0, FACE_CONFIDENCE.next_down());
+        let sure = face(1400.0, 100.0, FACE_CONFIDENCE);
+        assert_eq!(
+            gate_count(&[min, max, under, over, shy, sure], Some(&judged)),
+            4,
+            "the judged face, both size bounds and the face at the score floor"
+        );
+        let tall = Face {
+            width: 30.0,
+            height: 100.0,
+            ..face(1600.0, 100.0, 0.9)
+        };
+        assert_eq!(
+            gate_count(&[tall], Some(&judged)),
+            2,
+            "the long side decides"
+        );
     }
 
     #[test]

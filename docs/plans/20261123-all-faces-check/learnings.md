@@ -50,15 +50,50 @@
   killed once (exit 137) while the session ended; with `--test-threads=4` it
   passed (371 tests).
 
+## Step 1 (rework): the gate count in pass 2, the all-faces check as its own entry point
+
+- The first version's counts are reproduced exactly by
+  `scan::extract_face_counts`: a throwaway `eprintln!` of
+  `Analysis::face_counts` in a build of `50a0cb4f` against the new
+  `handpic-cli allfaces` on `2026-02-01`, `2026-09-19`, the first 300 ARW of
+  `2026-11-07` and the first 100 of `2026-10-03`: 0 mismatches of 828 files.
+  The entry point is the first version's pass 2 minus the score, so this was
+  expected; the existing `features` columns and `facechoice --check` did
+  not change either.
+- A cold release build of `handpic-cli` took 2.5 min here once and 12 min
+  another time (after a build of the `3918064c` sources from a scratch copy
+  into the same target dir); incremental ones took 13-16 s.
+- `cargo` from a scratch copy of an older commit (`git archive` into the
+  scratchpad, `--target-dir` pointing at this worktree's `target/`) is a
+  quick way to time "before" without touching the worktree or the stash.
+- Testing "no 640x448 detection and no other mesh on an AF frame" needed
+  test-only counters: `faces::model_runs` (per model input) and
+  `eyes::MESH_CALLS`, both `#[cfg(test)]` thread-locals. A synthetic preview
+  has no face, so the AF frame's cue judges none; `af_gate_count` is tested
+  on a `Cue` given a face directly.
+- The plan's cost estimate for the low-resolution run held (about 20 ms per
+  AF file on one thread at 320x224, the scaled decode included), but its
+  recall did not: at the gate's 0.8 score floor it counts about half the
+  faces the 640x448 run counts on the team-sport frames, and the gate
+  reaches N = 5 on 1 AF frame of the 682 measured against 49 with 640x448
+  (measurement.md, "The low-resolution input"). 320x224 was kept as the
+  plan's rule asks (the size picked against its cost); a larger input at
+  0.8 does not fix it within budget (480x320: about 38 ms, 15 of 44 on the
+  `2026-11-07` slice).
+- What does fix it is the score floor: the small faces are found at 0.6 to
+  0.8. 320x224 with a 0.6 floor counts about as many faces as 640x448 at
+  0.8 (884 against 909 on the `2026-11-07` slice). Not adopted, since the
+  plan's rule is one floor (0.8) on both paths; listed below as a decision.
+- No measured folder holds a posed group photo on a body with an AF point;
+  the frames the gate passes at 5 or more are basketball frames with
+  players, a bench or spectators of the judged player's size. The posed
+  7-person group of `2026-02-01` counts 4 even at 640x448 (three faces score
+  0.64-0.75), so the default N = 5 does not pass it.
+- The first version's deferred "pass 2 about doubles" is resolved by this
+  rework (the 640x448 run left pass 2) and was taken off the list below.
+
 ## Deferred issues (todo candidates)
 
-- Pass 2 cost on AF frames still about doubles, mostly the whole-image
-  YuNet run at 640x448 (about 71 ms on one thread). Ideas not tried: run it
-  only on the parts of the preview outside the `CATCH_CROP` square, or pick
-  a smaller input only for previews large enough that a 60 px face stays
-  above YuNet's minimum. Basis: Step 1's profile (measurement.md, "(3) Cost
-  and where it goes"). Files: `crates/core/src/scan.rs`
-  (`extract_analysis_unless`), `crates/core/src/faces.rs`.
 - On ARW team-sport folders 24-48% of the confident faces are under
   `EYES_MIN_FACE` and go unjudged (measurement.md, item 1); meshing them from
   the full JPEG (the plan's Option B) is the follow-up the plan names.
@@ -67,3 +102,23 @@
   `NMS_THRESHOLD` IoU is counted twice (1 of 258 AF frames on
   `2026-09-19`). A matching rule by eye landmarks instead of IoU would close
   it. Files: `crates/core/src/allfaces.rs` (`candidates`).
+- Decision needed: the gate's score floor on the low-resolution run. At
+  0.8 (the plan's rule, as implemented) the 320x224 gate count is about half
+  the 640x448 one on team-sport frames and opens at N = 5 on almost no AF
+  frame; a 0.6 floor on that run alone (or on both paths) brings it level
+  with 640x448 at the same cost. Changing it is a `FACES_VERSION` matter
+  once Step 2 stores the count, so decide before Step 2 merges. Basis: Step
+  1 rework's sweep (measurement.md, "Not adopted: a lower score floor for
+  the gate"). Files: `crates/core/src/allfaces.rs` (`gate_count`),
+  `crates/core/src/scan.rs` (`af_gate_count`), `crates/core/src/faces.rs`
+  (`GATE_INPUT`).
+- The default N = 5 passes no posed group photo of the measured folders:
+  the 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 floor (three
+  faces at 0.64-0.75). Revisit the default (Step 4) or the floor above.
+  Basis: Step 1 rework (measurement.md). Files: the app's setting (Step 4),
+  `crates/core/src/allfaces.rs`.
+- The size band does not tell a group from a background row at the same
+  distance: `2026-11-07/_DSC1611.ARW` counts 9 at 640x448, one player and
+  eight spectators on the bench behind. A frame like that passes the gate
+  and pays pass 3. Basis: Step 1 rework's look at the frames at 5 or more.
+  Files: `crates/core/src/allfaces.rs` (`gate_count`).

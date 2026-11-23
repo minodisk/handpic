@@ -298,6 +298,12 @@ pub struct Mesh {
     pub presence: f32,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The calls `mesh_of` took on this thread.
+    pub(crate) static MESH_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// The mesh of `face` on the stored `width` x `height` RGB image of EXIF
 /// `orientation`, `face` in its coordinates, whatever the face's size. Only
 /// the face crop `landmarks_of` would cut from the upright image is rotated
@@ -310,6 +316,8 @@ pub fn mesh_of(
     orientation: u16,
     face: &Face,
 ) -> Option<Mesh> {
+    #[cfg(test)]
+    MESH_CALLS.with(|c| c.set(c.get() + 1));
     let (uw, uh) = match orientation {
         6 | 8 => (height, width),
         _ => (width, height),

@@ -44,7 +44,7 @@ not change.
 
 ## Steps
 
-- [ ] Step 1: The gate count in pass 2 and the all-faces measurement as its own entry point (`handpic-core`)
+- [x] Step 1: The gate count in pass 2 and the all-faces measurement as its own entry point (`handpic-core`)
   - State: the first version is committed on the branch
     `all-faces-check-step-1` as `7ef67c07` (no PR yet). It runs the
     640x448 whole-image detection and the other faces' measurement inside

@@ -144,3 +144,89 @@ check (Windows 11)" in `docs/humans/performance.md`. The stored values
 (`sharpness`, the cue, `full_eye_sharp`) are the same before and after on
 every file of the three timed sets (`features` columns compared,
 `facechoice --check`: 0 mismatches of 146, 300 and 300 files).
+
+# Step 1 rework: the gate count and the entry point
+
+Measured on 2026-11-24 on the same machine, release `handpic-cli`, files
+on the local drive, warm page cache. The rework keeps the first version's
+measurement in a separate entry point (`scan::extract_face_counts`) and
+gives pass 2 only the gate count (`allfaces::gate_count`): the judged face
+and every face of a whole-preview detection at score 0.8 or above whose box
+long side is 0.5x to 2x the judged face's, not overlapping it. A frame with
+an AF point counts on a low-resolution YuNet run of its own; a frame without
+one counts on the 640x448 detection its cue already runs.
+
+## The counts and the stored values did not change
+
+- The first version's `Analysis::face_counts` (printed by a throwaway
+  `eprintln!` in a build of `50a0cb4f`) and the counts of
+  `handpic-cli allfaces` (the new entry point) on `2026-02-01` (146 DNG),
+  `2026-09-19` (282 ARW), the first 300 ARW of `2026-11-07` and the first
+  100 of `2026-10-03`: 0 mismatches of 828 files.
+- `features` columns (`sharpness`, the cue's side, eye offset and edge gap,
+  the eyes path's columns) of the same 828 files, first version against
+  now: 0 differing values. `facechoice --check` (the stored
+  `full_eye_sharp`): 0 mismatches of 146, 282, 300 and 100 files.
+
+## The low-resolution input
+
+The gate count of every AF frame of `2026-09-19` (282), the `2026-11-07`
+slice (300) and the first 100 of `2026-10-03`, at each input tried, against
+the count the 640x448 detection gives by the same rule (a scratch build
+read the input size from an environment variable). Cost: the gate stage
+alone (the scaled decode and YuNet), mean per AF file whose cue judged a
+face, one thread, the faster of two runs, on the first 100 of
+`2026-10-03` / of `2026-11-07`.
+
+| Input | Cost (ms) | Faces counted, of the 640x448 count (09-19 / 11-07 / 10-03) | Frames the 640x448 count puts at N or above that fall under it, N = 3 / 4 / 5 (09-19; 11-07; 10-03) |
+| --- | --- | --- | --- |
+| 320x224 | 19.4 / 20.1 | 304 of 473, 425 of 909, 118 of 184 | 49/16/3; 157/94/43; 19/8/2 |
+| 384x256 | 24.7 / 26.0 | 339, 570, 132 | 41/16/3; 114/82/40; 17/8/2 |
+| 480x320 | 36.3 / 38.2 | 393, 743, 147 | 23/14/3; 44/49/30; 11/7/2 |
+| 640x448 | 80.6 / 80.2 | 473, 909, 184 | 0 |
+
+No input counts a face the 640x448 run does not, bar a handful (at most 5
+frames a folder count more). The lost faces are the small ones: a team
+member 50 px tall on the 1616 px preview is 10 px at 320x224, where YuNet's
+score falls under 0.8.
+
+Chosen: 320x224 (`faces::GATE_INPUT`), the only input within the plan's
+cost estimate (15 to 20 ms). At the plan's score floor it counts about half
+the faces the 640x448 run counts on the team-sport frames, so the gate
+rarely opens on an AF frame:
+
+| Frames at the gate count | N >= 3 | N >= 4 | N >= 5 |
+| --- | --- | --- | --- |
+| `2026-09-19`, 320x224 (640x448) | 2 (51) | 1 (17) | 0 (3) |
+| `2026-11-07` slice, 320x224 (640x448) | 24 (180) | 4 (98) | 1 (44) |
+| `2026-10-03` first 100, 320x224 (640x448) | 2 (21) | 0 (8) | 0 (2) |
+| `2026-02-01`, no AF point, 640x448 | 9 | 3 | 0 |
+
+Whether they are group photos: no. The frames the 640x448 count puts at 5
+or more are basketball frames (`_DSC1611` counts one player and eight
+spectators on the bench row behind; `_DSC1494` five players walking off;
+`_DSC1742` two players and a seated bench; the one 320x224 frame at 5,
+`_DSC1531`, two players in front and three behind). None of the AF folders
+holds a posed group photo. The posed group of `2026-02-01`, the 7-person
+`L1005161.DNG` (no AF point, so the 640x448 path), counts 4: three of its
+seven faces score 0.64 to 0.75.
+
+### Not adopted: a lower score floor for the gate
+
+The low-resolution run finds most of the missing faces at scores between
+0.6 (the detection's own floor) and 0.8. With the gate's floor lowered on
+the AF path only (a scratch build; the plan's rule keeps 0.8 on both):
+
+| Input, floor | Faces counted (09-19 / 11-07 / 10-03; 640x448 at 0.8: 473 / 909 / 184) | Missed at N = 5 (09-19; 11-07; 10-03) | Frames at N >= 5 (09-19; 11-07; 10-03) |
+| --- | --- | --- | --- |
+| 320x224, 0.7 | 400, 686, 165 | 3; 37; 2 | 0; 7; 0 |
+| 320x224, 0.6 | 510, 884, 214 | 2; 17; 1 | 8; 37; 6 |
+| 384x256, 0.7 | 468, 843, 186 | 2; 14; 2 | 5; 33; 0 |
+| 480x320, 0.7 | 538, 993, 220 | 0; 2; 0 | 11; 65; 7 |
+
+320x224 at 0.6 counts about as many faces as 640x448 at 0.8 for a quarter
+of the cost, missing 20 of the 49 frames at 5 or more across the three
+folders and adding some of its own. It would make the two paths count by
+different floors, which the plan does not have, so it is left to a decision
+(see `learnings.md`). On `L1005161.DNG` a 0.6 floor on the 640x448 path
+would count all 7 faces.

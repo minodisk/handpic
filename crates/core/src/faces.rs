@@ -1,7 +1,8 @@
 //! Offline face and eye detection on the embedded preview with the YuNet
 //! model (OpenCV Zoo, `face_detection_yunet_2023mar.onnx`, MIT), run through
 //! `tract`. The image is scaled to fit the model input (`INPUT` x `INPUT`
-//! for a crop, `WHOLE_INPUT` for a whole preview) and padded into it; the
+//! for a crop, `WHOLE_INPUT` for a whole preview, `GATE_INPUT` for the
+//! all-faces gate's low-resolution count) and padded into it; the
 //! per-stride outputs are decoded as OpenCV's `FaceDetectorYN` does,
 //! thresholded and merged by NMS. Results are in the caller's pixel
 //! coordinates.
@@ -33,6 +34,14 @@ pub const INPUT: usize = 320;
 /// minimum, and the 3:2 shape spares the third of a square input a 3:2
 /// preview would leave as padding.
 pub const WHOLE_INPUT: (usize, usize) = (640, 448);
+/// Model input (width, height) of the low-resolution whole-image search a
+/// frame with an AF point counts the all-faces gate on
+/// (`allfaces::gate_count`), transposed for a portrait image. A quarter of
+/// `WHOLE_INPUT`'s area: about 20 ms against 80 ms on one thread, the decode
+/// included, but a 50 px face of a 1616 px preview shrinks to 10 px, so it
+/// finds fewer of the small faces at the gate's score floor (see the
+/// all-faces-check plan's `measurement.md`).
+pub const GATE_INPUT: (usize, usize) = (320, 224);
 /// Minimum detection score kept.
 pub const SCORE_THRESHOLD: f32 = 0.6;
 /// Boxes overlapping a better one by more than this IoU are dropped.
@@ -81,6 +90,8 @@ enum Input {
     Square,
     Landscape,
     Portrait,
+    GateLandscape,
+    GatePortrait,
 }
 
 impl Input {
@@ -93,12 +104,24 @@ impl Input {
         }
     }
 
+    /// The gate's low-resolution input for an upright `width` x `height`
+    /// image.
+    fn gate(width: usize, height: usize) -> Self {
+        if width >= height {
+            Input::GateLandscape
+        } else {
+            Input::GatePortrait
+        }
+    }
+
     /// (width, height) in pixels.
     fn size(self) -> (usize, usize) {
         match self {
             Input::Square => (INPUT, INPUT),
             Input::Landscape => WHOLE_INPUT,
             Input::Portrait => (WHOLE_INPUT.1, WHOLE_INPUT.0),
+            Input::GateLandscape => GATE_INPUT,
+            Input::GatePortrait => (GATE_INPUT.1, GATE_INPUT.0),
         }
     }
 }
@@ -110,8 +133,8 @@ struct Detector {
 }
 
 fn detector(input: Input) -> Result<&'static Detector> {
-    static DETECTORS: [OnceLock<std::result::Result<Detector, String>>; 3] =
-        [const { OnceLock::new() }; 3];
+    static DETECTORS: [OnceLock<std::result::Result<Detector, String>>; 5] =
+        [const { OnceLock::new() }; 5];
     DETECTORS[input as usize]
         .get_or_init(|| build(input.size()).map_err(|e| format!("{e:#}")))
         .as_ref()
@@ -159,10 +182,35 @@ pub fn detect_whole(rgb: &[u8], width: usize, height: usize) -> Result<Vec<Face>
     detect_at(rgb, width, height, Input::whole(width, height))
 }
 
+/// `detect` at the `GATE_INPUT` model input the gate's count uses.
+pub fn detect_gate(rgb: &[u8], width: usize, height: usize) -> Result<Vec<Face>> {
+    detect_at(rgb, width, height, Input::gate(width, height))
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The model runs `detect_at` made on this thread, per `Input`.
+    static RUNS: std::cell::Cell<[usize; 5]> = const { std::cell::Cell::new([0; 5]) };
+}
+
+/// The model runs made on this thread so far: the `INPUT` square, the
+/// `WHOLE_INPUT` whole-image search and the `GATE_INPUT` one.
+#[cfg(test)]
+pub(crate) fn model_runs() -> (usize, usize, usize) {
+    let r = RUNS.with(std::cell::Cell::get);
+    (r[0], r[1] + r[2], r[3] + r[4])
+}
+
 fn detect_at(rgb: &[u8], width: usize, height: usize, input: Input) -> Result<Vec<Face>> {
     if width == 0 || height == 0 || rgb.len() < width * height * 3 {
         return Ok(Vec::new());
     }
+    #[cfg(test)]
+    RUNS.with(|r| {
+        let mut runs = r.get();
+        runs[input as usize] += 1;
+        r.set(runs);
+    });
     let d = detector(input)?;
     let size = input.size();
     let scale = fit(width, height, size);
@@ -463,8 +511,24 @@ pub fn decode_whole(preview: &[u8], orientation: u16) -> Result<Upright> {
 /// `WHOLE_INPUT`, in the stored preview's pixel coordinates. Faces below
 /// `CATCH_CONFIDENCE` are dropped.
 pub fn detect_whole_upright(image: &Upright, orientation: u16) -> Result<Detection> {
+    detect_scaled_upright(image, orientation, Input::whole(image.width, image.height))
+}
+
+/// Decode `preview` upright for the gate's search: at the smallest `n/8`
+/// scale whose long edge is not below `GATE_INPUT`'s.
+pub fn decode_gate(preview: &[u8], orientation: u16) -> Result<Upright> {
+    decode_upright_near(preview, orientation, GATE_INPUT.0)
+}
+
+/// `detect_whole_upright` at `GATE_INPUT`, on an image `decode_gate`
+/// returned.
+pub fn detect_gate_upright(image: &Upright, orientation: u16) -> Result<Detection> {
+    detect_scaled_upright(image, orientation, Input::gate(image.width, image.height))
+}
+
+fn detect_scaled_upright(image: &Upright, orientation: u16, input: Input) -> Result<Detection> {
     let (width, height) = image.stored;
-    let faces = detect_whole(&image.rgb, image.width, image.height)?
+    let faces = detect_at(&image.rgb, image.width, image.height, input)?
         .into_iter()
         .filter(|f| f.score >= CATCH_CONFIDENCE)
         .map(|f| scaled_to_stored(f, orientation, (image.width, image.height), image.stored))
@@ -793,6 +857,9 @@ mod tests {
         assert_eq!(Input::whole(1408, 2112).size(), (448, 640));
         assert_eq!(Input::whole(500, 500), Input::Landscape);
         assert_eq!(Input::Square.size(), (INPUT, INPUT));
+        assert_eq!(Input::gate(2112, 1408).size(), GATE_INPUT);
+        assert_eq!(Input::gate(1408, 2112).size(), (GATE_INPUT.1, GATE_INPUT.0));
+        assert_eq!(Input::gate(500, 500), Input::GateLandscape);
     }
 
     #[test]
