@@ -200,6 +200,28 @@ run-to-run spread; `paint` and `present` did not move. Per-run numbers and the
 conditions are in
 [`results.md`](../plans/_archived/20261113-gpui-filter-sort/results.md).
 
+A JPEG-only (view-only) folder pages from the prefetch ring like a RAW one
+(2026-11-23, `--auto` in the default window, one press a second, three runs
+each with the ring on and with `--no-prefetch`, an ARW folder as the ruler in
+the same session, the median of the three runs' p50 / p95
+`keypressToPixels`; every file of the three JPEG folders is a baseline JPEG, decoded at 1/8 or 2/8):
+
+| Case | Prefetch on | `--no-prefetch` | `decode` p50 without the ring |
+|---|---|---|---|
+| ARW, 1616x1080 (ruler) | 12.3 / 19.5 | 19.6 / 25.8 | 6.7 |
+| Leica M11-P DxO exports, 36-50 MP | 9.7 / 108.7 | 114.8 / 176.2 | 105.1 |
+| Sony ILCE-7M5 exports, 13-33 MP | 12.6 / 19.2 | 50.2 / 62.5 | 29.6 |
+
+With the ring on, which is the default, nearly every page comes from it and
+the p50 is at or under the ARW ruler's: 9-10 ms on the Leica folders, 12.6 ms on the Sony one, within the ruler's run-to-run spread of 12.3 to 13.6 ms. A page the ring misses (paging faster than
+the ring decodes, or a jump) pays the whole decode: about 115 ms p50 on a
+50 MP JPEG, because the entropy decode of a 10-28 MB file does not shrink with
+the output scale. Turning off fancy upsampling and using the fast integer
+IDCT did not change `decode` (96.6 to 99.9 ms median). The 10-file folder's
+p95 with the ring on is one such miss a run (n=8). Per-run numbers, the
+500-file folder and the conditions are in
+[`jpeg-preview.md`](../plans/20261123-todo-four-closeouts/jpeg-preview.md).
+
 ## Folder scan throughput
 
 `handpic-cli scan` runs the folder extraction (bounded read, metadata parse,
