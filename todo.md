@@ -664,18 +664,6 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 - [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
 
-### Engine: a split moves a shared sidecar with whichever RAW moves first
-
-#### Background
-
-Two RAWs sharing a stem (`a.ARW` and `a.NEF`) share `a.xmp`. `Rename by Capture Date…` moves that sidecar with whichever RAW moves first, which leaves the other RAW without it when the two have different dates. This is the same ambiguity `rename::file_plan` has. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
-
-Files: `crates/engine/src/datefolder.rs` (`move_plan`), `crates/engine/src/rename.rs`.
-
-#### TODO
-
-- [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
-
 ### Agents: `test (ubuntu-latest)` hangs on docs-only commits
 
 #### Background

@@ -92,7 +92,7 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
     - `Summary` has no skipped field today (`written`, `failed`, `flushed`); adding one is part of this step. `Preview` and `Summary` derive `Serialize`; check whether `crates/app/src/companion.rs` reports either to MCP clients before changing a field.
     - When every indexed row is oversize, `targets` still refuses only when no row exists, so the dialog offers a rewrite of 0 files with the skipped figure; keep it, and test it.
 
-- [ ] Step 3: copy a shared `.xmp` on a date split and a file rename (`fix(engine)`)
+- [x] Step 3: copy a shared `.xmp` on a date split and a file rename (`fix(engine)`)
   - Done when:
     - In a split, RAWs that share one `.xmp` and go to different date folders each have the `.xmp` beside them afterwards, moved with one and copied for the others.
     - A dated RAW whose stem-mate is undated, and so stays, gets a copy, and the original `.xmp` stays with the undated RAW.
