@@ -294,3 +294,5 @@ Rules for every step:
    desktop session. Only same-session comparisons count.
 
 ## Progress
+
+- (2026-11-23) Step 1 complete
