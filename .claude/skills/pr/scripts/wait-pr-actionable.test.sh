@@ -9,7 +9,8 @@ set -o nounset
 # pr-runner and merger branch on the exit code and the ACTION= line, so every
 # case pins both. `gh` is replaced by a stub placed first on PATH that answers
 # successive `gh pr view` calls with successive fixtures, the last repeating,
-# so a case can be a sequence of PR states.
+# so a case can be a sequence of PR states. A fixture reading `FAIL` makes that
+# call fail, as a network error or an `api.github.com` outage does.
 #
 # Run it directly, or via `mise run ci`.
 
@@ -30,6 +31,10 @@ echo "${count}" >"${STUB_CASE}/count"
 last=$(cat "${STUB_CASE}/last")
 if ((count > last)); then
 	count="${last}"
+fi
+if [[ "$(cat "${STUB_CASE}/${count}.json")" == FAIL ]]; then
+	echo "stub gh: error connecting to api.github.com" >&2
+	exit 1
 fi
 cat "${STUB_CASE}/${count}.json"
 STUB
@@ -137,6 +142,37 @@ expect "blocked through the grace" 0 30 \
 expect "timeout inside the grace" 2 0 \
 	"$(pr BLOCKED "${jobs_done},${ci_done}")" -- \
 	'wait-pr-actionable.sh: timed out after 0s (last ACTION=blocked)' 'ACTION=blocked'
+
+expect "fails, then succeeds" 0 30 \
+	FAIL \
+	FAIL \
+	"$(pr CLEAN "${jobs_done},${ci_done}")" -- \
+	'[elapsed 0s] pr-status.sh failed; retrying in 1s' \
+	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
+	'ACTION=ready' 'mergeStateStatus=CLEAN'
+
+expect "fails on every call of the slice" 1 2 \
+	FAIL \
+	FAIL \
+	FAIL -- \
+	'[elapsed 0s] pr-status.sh failed; retrying in 1s' \
+	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
+	'wait-pr-actionable.sh: pr-status.sh failed on every call for 2s'
+
+expect "fails at the end after a success" 2 2 \
+	"$(pr BLOCKED "${jobs_running}")" \
+	"$(pr BLOCKED "${jobs_running}")" \
+	FAIL -- \
+	'[elapsed 1s] ACTION=wait; retrying in 1s' \
+	'wait-pr-actionable.sh: timed out after 2s (last call failed; reporting the last successful state)' \
+	'ACTION=wait'
+
+expect "a failed call keeps the blocked grace" 0 2 \
+	"$(pr BLOCKED "${jobs_done},${ci_done}")" \
+	FAIL \
+	"$(pr BLOCKED "${jobs_done},${ci_done}")" -- \
+	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
+	'ACTION=blocked' 'mergeStateStatus=BLOCKED'
 
 if [[ "${failures}" -gt 0 ]]; then
 	echo "wait-pr-actionable: ${failures} failure(s) in ${cases} cases" >&2

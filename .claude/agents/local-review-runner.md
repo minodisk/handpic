@@ -58,9 +58,21 @@ variables):
 >
 > Review history: {the review file path from Round 2 on; "none" for Round 1}
 
+Then wait for the reviewer's hand-back as in "Dispatching a child and waiting
+for its hand-back" below.
+
 ### 2. Decide
 
-Read the `STATUS:` of the latest round in the review file.
+Read the `STATUS:` of the latest round in the review file. Decide only when
+the file's latest section is `## Round {round_n}` and it holds a `STATUS:`
+line. If that section is missing (the file ends at an earlier round, or does
+not exist yet in round 1), the reviewer has not finished: do not decide, do
+not run "3. Commit the history" and do not report as success. If the
+reviewer's hand-back has not arrived yet (the async launch returned early), end
+your turn and wait for it, then read the file again. If the hand-back has
+already arrived and the section is still missing or has no `STATUS:` line, treat
+it as a child failure and report it to the caller (see "About the child
+agents"); do not wait again.
 
 - `APPROVED`: leave the loop and go to "3. Commit the history"
 - `NEEDS_FIX`: go to "4. Address phase"
@@ -105,7 +117,8 @@ Include in the prompt:
 - The review file path
 - The round number `{round_n}` to address
 
-Check the addresser's terminal state.
+Wait for the addresser's hand-back as in "Dispatching a child and waiting for
+its hand-back" below, then check its terminal state.
 
 - `COMMITTED`: record the return value (fixes / dismissals / commit hash) and go
   back to "1. Review phase" as round N+1.
@@ -146,6 +159,23 @@ exists only on this path). Do not move on to any other work on your own.
 - The addresser's `LOCAL_CHECK_FAILED` (a give-up report) is a normal exit for
   the child and is not a "child failure" in that sense. See "4. Address phase"
 
+### Dispatching a child and waiting for its hand-back
+
+An `Agent` launch of the reviewer or the addresser can return at once as async
+("Async agent launched successfully") whatever `run_in_background` says;
+passing `run_in_background: false` is harmless but does not make the call
+synchronous. **After dispatching a child, end your turn and wait for its
+hand-back message.** Until the hand-back arrives, run nothing: no reading of
+the review file to decide, no `commit-review-history.sh`, no `sleep` /
+`until` / `while` polling, and no branch polling (`git log`, `git status`,
+`pgrep`). The child's hand-back reaches you after your turn ends. When it
+arrives, continue with the step that follows the dispatch ("2. Decide" after
+the reviewer, the terminal state check after the addresser).
+
+Ending your turn here is not returning a result. Write no report or terminal
+state and do not hand back to the caller. Your own hand-back to the caller
+happens only at a terminal state listed in "Output".
+
 ## Output
 
 Report to the caller:
@@ -164,8 +194,10 @@ Report to the caller:
 ## Claude execution contract
 
 - Each round, start the Review phase with `Agent`,
-  `subagent_type: "local-review-reviewer"`, `run_in_background: false`.
+  `subagent_type: "local-review-reviewer"`, `run_in_background: false`; wait
+  for its hand-back as in "Dispatching a child and waiting for its hand-back".
 - Run `commit-review-history.sh` with `dangerouslyDisableSandbox: true`,
   `timeout: 600000`, in the foreground. Setting an upstream needs a write to the
   shared `.git/config`, so it cannot run inside the sandbox.
-- Start `local-review-addresser` with `Agent`, in the foreground, too.
+- Start `local-review-addresser` with `Agent`, in the foreground, too, and wait
+  for its hand-back the same way.
