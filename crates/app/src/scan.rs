@@ -281,31 +281,67 @@ impl Status {
 }
 
 /// The view's scan, shared with the app's quit handler, which can outlive the
-/// view.
+/// view, and the scans a re-listing took from it that are still stopping.
 #[derive(Clone, Default)]
-pub struct Running(Arc<Mutex<Option<Scan>>>);
+pub struct Running(Arc<Mutex<Held>>);
+
+#[derive(Default)]
+struct Held {
+    scan: Option<Scan>,
+    retired: Vec<Retired>,
+}
+
+/// What the holder keeps of a scan a re-listing is stopping: enough for the
+/// quit to cancel it and wait for its thread to end.
+struct Retired {
+    id: u64,
+    cancel: Arc<AtomicBool>,
+    ended: Receiver<()>,
+}
+
+/// What a quit's bounded stop came to: the held scan stopped (true with none
+/// held), and the retired one, `None` with none still stopping.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Stopped {
+    pub held: bool,
+    pub retired: Option<bool>,
+}
 
 impl Running {
-    fn held(&self) -> std::sync::MutexGuard<'_, Option<Scan>> {
+    fn held(&self) -> std::sync::MutexGuard<'_, Held> {
         self.0.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn put(&self, scan: Scan) {
-        *self.held() = Some(scan);
+        self.held().scan = Some(scan);
     }
 
-    pub fn take(&self) -> Option<Scan> {
-        self.held().take()
+    /// Take the held scan for a re-listing to stop, keeping its cancel flag
+    /// and end signal here until `Stopping::stop` returns.
+    pub fn retire(&self) -> Option<Stopping> {
+        let mut held = self.held();
+        let scan = held.scan.take()?;
+        held.retired.push(Retired {
+            id: scan.id,
+            cancel: scan.cancel.clone(),
+            ended: scan.ended,
+        });
+        Some(Stopping {
+            id: scan.id,
+            cancel: scan.cancel,
+            thread: scan.thread,
+            running: self.clone(),
+        })
     }
 
     /// The held scan is `id`.
     pub fn is(&self, id: u64) -> bool {
-        self.held().as_ref().is_some_and(|s| s.id == id)
+        self.held().scan.as_ref().is_some_and(|s| s.id == id)
     }
 
     /// The files the held scan takes first.
     pub fn focus(&self, paths: Vec<String>) {
-        if let Some(scan) = self.held().as_ref() {
+        if let Some(scan) = self.held().scan.as_ref() {
             scan.focus(paths);
         }
     }
@@ -313,14 +349,57 @@ impl Running {
     /// `Scan::cancel` on the held scan, which stays held: it still ends
     /// through `Done` and `FacesDone`.
     pub fn cancel(&self) {
-        if let Some(scan) = self.held().as_ref() {
+        if let Some(scan) = self.held().scan.as_ref() {
             scan.cancel();
         }
     }
 
-    /// `Scan::stop_within` on the held scan; true with none held.
-    pub fn stop_within(&self, timeout: Duration) -> bool {
-        self.take().is_none_or(|scan| scan.stop_within(timeout))
+    /// Cancel the held scan and the retired ones and wait for them, at most
+    /// `timeout` in all.
+    pub fn stop_within(&self, timeout: Duration) -> Stopped {
+        let deadline = Instant::now() + timeout;
+        let (scan, retired) = {
+            let mut held = self.held();
+            (held.scan.take(), std::mem::take(&mut held.retired))
+        };
+        for retired in &retired {
+            retired.cancel.store(true, Ordering::Relaxed);
+        }
+        let held = scan.is_none_or(|scan| scan.stop_within(timeout));
+        let retired = (!retired.is_empty()).then(|| {
+            retired.iter().fold(true, |stopped, retired| {
+                let left = deadline.saturating_duration_since(Instant::now());
+                match retired.ended.recv_timeout(left) {
+                    Err(RecvTimeoutError::Timeout) => {
+                        log::warn!(
+                            "retired scan {} did not stop within {}ms",
+                            retired.id,
+                            timeout.as_millis()
+                        );
+                        false
+                    }
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => stopped,
+                }
+            })
+        });
+        Stopped { held, retired }
+    }
+}
+
+/// A scan a re-listing took from the holder, stopped off the UI thread.
+pub struct Stopping {
+    id: u64,
+    cancel: Arc<AtomicBool>,
+    thread: JoinHandle<()>,
+    running: Running,
+}
+
+impl Stopping {
+    /// Cancel and wait for the thread to end, then drop it from the holder.
+    pub fn stop(self) {
+        self.cancel.store(true, Ordering::Relaxed);
+        let _ = self.thread.join();
+        self.running.held().retired.retain(|r| r.id != self.id);
     }
 }
 
@@ -457,12 +536,6 @@ impl Scan {
         self.cancel.store(true, Ordering::Relaxed);
     }
 
-    /// Cancel and wait for the thread to end.
-    pub fn stop(self) {
-        self.cancel.store(true, Ordering::Relaxed);
-        let _ = self.thread.join();
-    }
-
     /// Cancel and wait at most `timeout` for the thread to end: false when it
     /// did not, the thread left to die with the process.
     pub fn stop_within(self, timeout: Duration) -> bool {
@@ -581,8 +654,8 @@ fn run_faces_pass(
 #[cfg(test)]
 mod tests {
     use super::{
-        Priorities, Running, STOP_TIMEOUT, Scan, Status, faces_threads_for, list, natural_order,
-        threads_for,
+        Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped, faces_threads_for, list,
+        natural_order, threads_for,
     };
     use handpic_core::{Flag, scan::ScanFocus};
     use handpic_engine::{
@@ -592,7 +665,13 @@ mod tests {
     use std::{
         fs,
         path::PathBuf,
-        sync::{Arc, Mutex},
+        sync::{
+            Arc, Mutex,
+            atomic::{AtomicBool, Ordering},
+            mpsc,
+        },
+        thread,
+        time::Duration,
     };
 
     #[test]
@@ -655,7 +734,11 @@ mod tests {
         ));
         let (events, _received) = futures::channel::mpsc::unbounded();
         let running = Running::default();
-        assert!(running.stop_within(STOP_TIMEOUT));
+        let none = Stopped {
+            held: true,
+            retired: None,
+        };
+        assert_eq!(running.stop_within(STOP_TIMEOUT), none);
         running.put(Scan::start(
             7,
             index,
@@ -666,9 +749,78 @@ mod tests {
             events,
         ));
         assert!(running.is(7));
-        assert!(running.stop_within(STOP_TIMEOUT));
+        assert_eq!(running.stop_within(STOP_TIMEOUT), none);
         assert!(!running.is(7));
-        assert!(running.take().is_none());
+        assert!(running.held().scan.is_none());
+    }
+
+    #[test]
+    fn a_retired_scan_is_waited_for_until_its_stop_returns() {
+        let (release, released) = mpsc::channel::<()>();
+        let (alive, ended) = mpsc::channel::<()>();
+        let cancel = Arc::new(AtomicBool::new(false));
+        let running = Running::default();
+        running.put(Scan {
+            id: 3,
+            focus: ScanFocus::default(),
+            cancel: cancel.clone(),
+            thread: thread::spawn(move || {
+                let _alive = alive;
+                let _ = released.recv();
+            }),
+            ended,
+        });
+        let stopping = running.retire().unwrap();
+        assert!(!running.is(3));
+        assert_eq!(running.held().retired.len(), 1);
+        let stopper = thread::spawn(move || stopping.stop());
+        let (quit, stopped) = mpsc::channel();
+        let waiter = {
+            let running = running.clone();
+            thread::spawn(move || {
+                let _ = quit.send(running.stop_within(Duration::from_secs(600)));
+            })
+        };
+        // The quit's stop has the retired scan before its thread may end.
+        while !running.held().retired.is_empty() {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(stopped.recv_timeout(Duration::from_millis(100)).is_err());
+        release.send(()).unwrap();
+        stopper.join().unwrap();
+        waiter.join().unwrap();
+        assert_eq!(
+            stopped.recv().unwrap(),
+            Stopped {
+                held: true,
+                retired: Some(true),
+            }
+        );
+        assert!(cancel.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn a_retired_scan_leaves_the_holder_once_its_stop_returns() {
+        let temp = tempfile::tempdir().unwrap();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        let (events, _received) = futures::channel::mpsc::unbounded();
+        let running = Running::default();
+        running.put(Scan::start(
+            8,
+            index,
+            temp.path().to_string_lossy().into_owned(),
+            Vec::new(),
+            ScanFocus::default(),
+            Priorities::APP,
+            events,
+        ));
+        let stopping = running.retire().unwrap();
+        assert_eq!(running.held().retired.len(), 1);
+        stopping.stop();
+        assert!(running.held().retired.is_empty());
+        assert!(running.retire().is_none());
     }
 
     #[test]

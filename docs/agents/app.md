@@ -1291,11 +1291,15 @@ The other sidecar writes seen in that run (`xmp.json` unless named):
   file.
 
 The same handler first stops the running scan, before the drains: the view
-holds its scan in a `scan::Running` (an `Arc<Mutex<Option<Scan>>>`) whose
-clone the handler keeps, since the view may be gone by then.
-`Scan::stop_within(STOP_TIMEOUT)` sets the cancel flag and waits on a channel
-the scan thread drops its sender of when it ends (`JoinHandle` has no timed
-join), logging `quit: scan stopped=<bool> in <ms>ms`. Mid-pass 2 on 3,360
+holds its scan in a `scan::Running` (an `Arc<Mutex<..>>` of the held scan and
+the retired ones a re-listing is still stopping) whose clone the handler
+keeps, since the view may be gone by then. `Running::stop_within(STOP_TIMEOUT)`
+sets the cancel flag of the held scan and of every retired one and waits, one
+deadline for them all, on a channel each scan thread drops its sender of when
+it ends (`JoinHandle` has no timed join), logging
+`quit: scan stopped=<bool> retired=<none|bool> in <ms>ms` (`stopped` the
+held scan, true with none held; `retired` the retired ones, `none` with none
+still stopping). Mid-pass 2 on 3,360
 hardlinked ARW files (release, 3 pass 2 threads) the stop took 6-10 ms and
 the process exited 47-140 ms after the quit, `scan faces: ... canceled=true`
 logged, by `--auto 10` and by `CloseMainWindow` alike. `STOP_TIMEOUT` is 2 s,
@@ -1303,9 +1307,12 @@ as `DRAIN_TIMEOUT`, for a read a slow or network volume holds; past it the
 process exits with the scan running, as before.
 
 - Rule: a re-listing still stops the previous scan with the unbounded
-  `Scan::stop`: it must not reconcile while the old scan writes. A scan being
-  stopped that way when the app quits is not in the holder, so the quit does
-  not wait for it.
+  `Stopping::stop`: it must not reconcile while the old scan writes.
+  `Running::retire` takes the scan out of the holder for it but keeps the
+  scan's cancel flag and end signal there until that stop returns, so a quit
+  during a re-listing cancels and waits for it too (the background task may
+  not have reached its stop yet), and does not cut its write transaction
+  within `STOP_TIMEOUT`.
 
 ### The MCP companion answers from the view, one channel hop away (Measured)
 
@@ -2883,7 +2890,7 @@ eighth of the cores) rather than pass 1's `scan_threads()`: on 22 threads it
 cost paging +9.4 ms on ARW and +89 ms on RAF at p50, and on a quarter (6)
 still +13 ms on RAF
 ([results](../plans/_archived/20261110-gpui-focus-marks/results.md)).
-One thread and one flag mean `Scan::stop` (and the quit's bounded
+One thread and one flag mean `Stopping::stop` (and the quit's bounded
 `stop_within`) cancels and joins whichever pass is running, and the hot list reaches both passes through the one handle
 (`focus_scan` gates on either pass running, as `scan::Status::scanning` tells,
 cleared as soon as a re-listing takes the scan, whether or not a new one
