@@ -172,3 +172,4 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 ## Progress
 
 - (2026-11-23) Step 1 complete
+- (2026-11-23) Step 2 complete
