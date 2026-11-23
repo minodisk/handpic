@@ -41,7 +41,7 @@ use std::{
 };
 
 use gpui_kit::component::ThemeMode;
-use handpic_core::{Flag, i18n, xmp::LabelNames};
+use handpic_core::{Flag, eyes::EyeState, i18n, xmp::LabelNames};
 use handpic_engine::shortcuts::Keymap;
 use handpic_engine::{
     import::{self as importer, ImportSettings},
@@ -363,8 +363,9 @@ pub struct View<'a> {
     pub groups: &'a Groups,
     pub panes: Panels,
     pub overlays: Overlays,
-    /// The current file's eyes: `None` not judged yet, `Some(None)` judged
-    /// with the eyes unknown.
+    /// The current file's on-demand eyes judgment: `None` not judged yet,
+    /// `Some(None)` judged with the eyes unknown. `get_view` falls back to it
+    /// when the index holds no stored eye state for the file.
     pub eyes: Option<Option<Arc<EyesJudgment>>>,
     /// The open folder holds only JPEGs.
     pub view_only: bool,
@@ -1425,16 +1426,30 @@ pub fn get_view(view: &View) -> Value {
         let mut current = Map::new();
         current.insert("path".into(), json!(path.to_string_lossy()));
         current.insert("position".into(), json!(view.index + 1));
-        let good = view
+        let focus = view
             .facts
             .get(path.to_string_lossy().as_ref())
-            .and_then(|f| f.focus)
-            .is_some_and(|f| f.eyes.photo_tier());
+            .and_then(|f| f.focus);
+        let good = focus.is_some_and(|f| f.eyes.photo_tier());
         current.insert(
             "photo_tier".into(),
             if good { json!("good") } else { Value::Null },
         );
-        if let Some(eyes) = &view.eyes {
+        if let Some(stored) = focus.map(|f| f.eyes)
+            && let Some(state) = stored.eyes
+        {
+            current.insert(
+                "eyes".into(),
+                json!({
+                    "state": match state {
+                        EyeState::Open => "open",
+                        EyeState::Closed => "closed",
+                    },
+                    "probability": stored.eyes_closed,
+                    "pose": stored.pose,
+                }),
+            );
+        } else if let Some(eyes) = &view.eyes {
             current.insert(
                 "eyes".into(),
                 eyes.as_ref().map_or(Value::Null, |eyes| {
@@ -2358,13 +2373,13 @@ mod tests {
         trash::{self, Target},
         tree::Row,
     };
-    use handpic_core::{Flag, i18n, xmp::LabelNames};
+    use handpic_core::{Flag, eyes::Eyes, i18n, xmp::LabelNames};
     use handpic_engine::{
         index::{EyesPose, Focus, StoredEyes},
         ondemand::{EyesJudgment, EyesMesh},
     };
     use handpic_engine::{shortcuts::Keymap, sidecar::SidecarFormat};
-    use serde_json::{Value, json};
+    use serde_json::{Map, Value, json};
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
@@ -2744,6 +2759,96 @@ mod tests {
         assert_eq!(current["photo_tier"], Value::Null);
         assert!(current.as_object().unwrap().contains_key("photo_tier"));
         assert_eq!(tier_of(None), Value::Null);
+    }
+
+    fn eyes_of(
+        facts: Option<Facts>,
+        eyes: Option<Option<Arc<EyesJudgment>>>,
+    ) -> Map<String, Value> {
+        let files = paths(&["/d/a.ARW"]);
+        let facts: HashMap<String, Facts> = facts
+            .into_iter()
+            .map(|f| ("/d/a.ARW".to_owned(), f))
+            .collect();
+        let Value::Object(current) = get_view(&View {
+            facts: &facts,
+            eyes,
+            ..view(&files)
+        })["current"]
+            .clone()
+        else {
+            panic!("no current photo");
+        };
+        current
+    }
+
+    fn with_focus(focus: Option<Focus>) -> Option<Facts> {
+        Some(Facts {
+            focus,
+            ..sharp(0.5)
+        })
+    }
+
+    fn not_scanned() -> Option<Focus> {
+        Some(Focus {
+            point: None,
+            manual_focus: false,
+            eyes: StoredEyes::default(),
+        })
+    }
+
+    #[test]
+    fn answers_the_eyes_from_the_stored_values_without_a_judgment() {
+        let current = eyes_of(with_focus(focus(0.35)), None);
+        assert_eq!(
+            current["eyes"],
+            json!({
+                "state": "open",
+                "probability": Eyes::from_ear(0.35).probability,
+                "pose": { "yaw": 10.0, "pitch": -5.0, "roll": 3.0 },
+            })
+        );
+        let closed = eyes_of(with_focus(focus(0.1)), None);
+        assert_eq!(closed["eyes"]["state"], "closed");
+    }
+
+    #[test]
+    fn the_stored_eyes_win_over_a_differing_judgment() {
+        let current = eyes_of(with_focus(focus(0.35)), judged(None));
+        assert_eq!(current["eyes"]["state"], "open");
+        assert_eq!(
+            current["eyes"]["probability"],
+            json!(Eyes::from_ear(0.35).probability)
+        );
+        let unknown = eyes_of(with_focus(focus(0.35)), Some(None));
+        assert_eq!(unknown["eyes"]["state"], "open");
+    }
+
+    #[test]
+    fn falls_back_to_the_judgment_without_a_stored_state() {
+        let current = eyes_of(with_focus(not_scanned()), judged(None));
+        assert_eq!(current["eyes"]["state"], "closed");
+        assert_eq!(current["eyes"]["probability"], 0.9);
+        let unknown = eyes_of(with_focus(not_scanned()), Some(None));
+        assert_eq!(unknown["eyes"], Value::Null);
+        assert!(unknown.contains_key("eyes"));
+    }
+
+    #[test]
+    fn leaves_the_eyes_key_out_without_a_stored_state_or_a_judgment() {
+        let unreached = eyes_of(
+            Some(Facts {
+                focus: not_scanned(),
+                sharpness: None,
+                ..sharp(0.5)
+            }),
+            None,
+        );
+        assert!(!unreached.contains_key("eyes"));
+        let no_mesh = eyes_of(with_focus(not_scanned()), None);
+        assert!(!no_mesh.contains_key("eyes"));
+        let jpeg = eyes_of(with_focus(None), None);
+        assert!(!jpeg.contains_key("eyes"));
     }
 
     #[test]

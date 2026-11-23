@@ -1,6 +1,7 @@
 //! Whether the eyes of the shown file's AF face are closed, judged on demand
-//! per file and kept for the session, for the `f` overlay's face mesh. A
-//! port of the Tauri frontend's `eyes.ts` (`EyesCache`).
+//! per file and kept for the session, for the `f` overlay's face mesh and as
+//! `get_view`'s fallback when the index holds no stored eye state. A port of
+//! the Tauri frontend's `eyes.ts` (`EyesCache`).
 
 use std::{
     collections::HashMap,

@@ -212,7 +212,7 @@ widens the rule and reuses the mark.
     - No tooltip in this step (`strip::tip_regions` holds only the label and
       failure texts, which must not overlap).
 
-- [ ] Step 3: Answer `get_view`'s `eyes` from the stored values (todo item 3)
+- [x] Step 3: Answer `get_view`'s `eyes` from the stored values (todo item 3)
   - Done when:
     - `get_view`'s `current.eyes` comes from the index's stored values of
       the current photo when they hold an eye state, whether or not the `f`
