@@ -169,15 +169,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       on 68%, the gap at the frontal / oblique boundary. See
       `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
       "Closed-eyes judgment on demand (Windows 11)".
-- [ ] Derive the good-photo rule in the engine, in
-      `crates/engine/src/index.rs`, so the MCP `get_view` tool can carry it.
-      The rule lives only in `crates/app/src/mark.rs` (`photo_tier`) and
-      `get_view` says nothing about it. Done when the index derives the tier
-      from the stored columns with the thresholds in one place (the app
-      reads it instead of recomputing), `get_view` carries it for the
-      current file, and the boundary tests of `mark.rs` move with the rule.
-      Files: `crates/engine/src/index.rs`, `crates/app/src/mark.rs`,
-      `crates/app/src/companion.rs`.
 - [ ] Measure the good-photo mark's precision on labels. Decision B rests
       on the user's stars and the mark rate; no labeled set was made. Done
       when 100-150 faced AF frames drawn stratified around the cuts and at
@@ -186,7 +177,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       final) and the precision and coverage of the mark at its cuts are
       written with a Wilson interval, with `full_eye_sharp >= SOFT_BELOW`
       alone as the baseline (the procedure is in `docs/plans/20261008-burst-keep-score/plan.md` Step 5). Files: the plan
-      folder of that work, `crates/app/src/mark.rs` if the cuts move.
+      folder of that work, `crates/engine/src/index.rs` if the cuts move.
 - [ ] Re-check the good-photo cuts after the closed-eyes and head-pose label
       reviews (the items in the sections below). If the user's review
       moves `EYES_CLOSED_EAR` in `crates/core/src/eyes.rs` or changes the
@@ -194,7 +185,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `EYES_WIDE_OPEN_EAR` in `crates/app/src/meta.rs`, which anchors the
       openness against the core's `EYES_CLOSED_EAR`) and `GOOD_MAX_YAW` on
       the rated frames of `D:\photos\samples\ARW\good-mark-2026-10-09\`.
-      Files: `crates/app/src/mark.rs`, `crates/app/src/meta.rs`,
+      Files: `crates/engine/src/index.rs`, `crates/app/src/meta.rs`,
       `crates/core/src/eyes.rs`.
 - [x] Give the no-AF path a good-photo mark once it has a focus cue. Done
       in `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2: pass 2 runs
@@ -204,7 +195,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       without a point, so the same cuts mark it. The check of those cuts on
       starred no-AF frames is the next item.
 - [ ] Check the good-photo cuts on starred frames with no trusted AF point.
-      The cuts in `crates/app/src/mark.rs` (`GOOD_FULL_EYE_SHARP`,
+      The cuts in `crates/engine/src/index.rs` (`GOOD_FULL_EYE_SHARP`,
       `GOOD_EYE_EAR`, `GOOD_MAX_YAW`, `GOOD_MAX_PITCH`, `MAX_EYE_OFFSET`,
       `MIN_EDGE_GAP`) were fitted on AF faces only; since
       `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2 they also judge
@@ -217,7 +208,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       10 marked and 10 unmarked picks for the user to look at. Done when the
       numbers are recorded in a plan's `learnings.md` and the cuts are either
       kept or a separate no-AF cut is proposed with them. Files:
-      `crates/app/src/mark.rs`.
+      `crates/engine/src/index.rs`.
 - [x] Measure the AF eye in-focus probability over each eye's eyelid
       region from the face mesh instead of the window between the eyes.
       The scan's second pass runs MediaPipe Face Landmarker v2 on the face
@@ -255,7 +246,7 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       of the mesh against its own geometry, and the good-photo mark's share
       and the rated frames of `D:\photos\samples\ARW\good-mark-2026-10-09\`
       are re-read. Files: `crates/core/src/candidate.rs`
-      (`mesh_eye_offset`), `crates/app/src/mark.rs` (`MAX_EYE_OFFSET`).
+      (`mesh_eye_offset`), `crates/engine/src/index.rs` (`MAX_EYE_OFFSET`).
 - [ ] Distrust the mesh values on side faces, the dominant mesh misfit
       (78% of the off meshes, weighted, in
       `docs/plans/20261010-mesh-roll/misfit-truth.md`). Done when a rule

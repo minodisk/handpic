@@ -396,6 +396,281 @@ impl StoredEyes {
             full_eye_sharp,
         }
     }
+
+    /// Whether the frame is a good photo: a judged face whose eyes are sharp
+    /// at full size, open and toward the camera, with the mesh on the face
+    /// and the face not cut by the frame's edge, every value present and
+    /// inside its cut. `focus.ts`'s tier has the one value `good`; the AF
+    /// point and manual focus play no part.
+    pub fn photo_tier(&self) -> bool {
+        self.full_eye_sharp
+            .is_some_and(|s| s >= GOOD_FULL_EYE_SHARP)
+            && self.eyes_ear.is_some_and(|e| e >= GOOD_EYE_EAR)
+            && self
+                .pose
+                .is_some_and(|p| p.yaw.abs() <= GOOD_MAX_YAW && p.pitch.abs() <= GOOD_MAX_PITCH)
+            && self.eye_offset.is_some_and(|o| o <= MAX_EYE_OFFSET)
+            && self.edge_gap.is_some_and(|g| g >= MIN_EDGE_GAP)
+    }
+}
+
+/// The good-photo cuts `StoredEyes::photo_tier` applies. The EAR of the more
+/// closed eye.
+pub const GOOD_EYE_EAR: f64 = 0.25;
+/// |yaw| in degrees.
+pub const GOOD_MAX_YAW: f64 = 35.;
+/// |pitch| in degrees.
+pub const GOOD_MAX_PITCH: f64 = 45.;
+/// The mesh's eyes farther than this from YuNet's eye landmarks, in face box
+/// sides, mean a mesh fitted off the face.
+pub const MAX_EYE_OFFSET: f64 = 0.1;
+/// The face or a mesh eye region closer to the preview's edge than this, in
+/// face box sides, means a face the frame cuts.
+pub const MIN_EDGE_GAP: f64 = 0.02;
+/// The sharpness of the eyes on the full-size JPEG a good photo needs at
+/// least; a file without the value is not good.
+pub const GOOD_FULL_EYE_SHARP: f64 = handpic_core::fullsharp::SOFT_BELOW;
+
+#[cfg(test)]
+mod photo_tier_tests {
+    use super::*;
+
+    fn pose(yaw: f64, pitch: f64, roll: f64) -> Option<EyesPose> {
+        Some(EyesPose { yaw, pitch, roll })
+    }
+
+    fn good() -> StoredEyes {
+        StoredEyes {
+            eyes_ear: Some(0.35),
+            pose: pose(10., -5., 3.),
+            eye_offset: Some(0.03),
+            edge_gap: Some(2.),
+            full_eye_sharp: Some(0.3),
+            ..StoredEyes::default()
+        }
+    }
+
+    fn with(eyes: StoredEyes, edit: impl FnOnce(&mut StoredEyes)) -> StoredEyes {
+        let mut eyes = eyes;
+        edit(&mut eyes);
+        eyes
+    }
+
+    fn ear(ear: f64) -> StoredEyes {
+        with(good(), |e| e.eyes_ear = Some(ear))
+    }
+
+    fn sharp(full_eye_sharp: Option<f64>) -> StoredEyes {
+        with(good(), |e| e.full_eye_sharp = full_eye_sharp)
+    }
+
+    fn good_photo(eyes: &StoredEyes) -> bool {
+        eyes.photo_tier()
+    }
+
+    fn rated(eyes_ear: f64, p: Option<EyesPose>, offset: f64, gap: f64) -> StoredEyes {
+        with(good(), |e| {
+            e.eyes_ear = Some(eyes_ear);
+            e.pose = p;
+            e.eye_offset = Some(offset);
+            e.edge_gap = Some(gap);
+        })
+    }
+
+    #[test]
+    fn photo_tier_passes_a_candidate_whose_eyes_and_pose_clear_every_cut() {
+        assert!(good_photo(&good()));
+    }
+
+    #[test]
+    fn photo_tier_passes_a_candidate_with_no_recorded_point_on_its_values() {
+        let pointless = Focus {
+            point: None,
+            manual_focus: false,
+            eyes: good(),
+        };
+        let manual = Focus {
+            manual_focus: true,
+            ..pointless
+        };
+        let below = Focus {
+            eyes: sharp(Some(GOOD_FULL_EYE_SHARP - 0.01)),
+            ..pointless
+        };
+        assert!(good_photo(&pointless.eyes));
+        assert!(good_photo(&manual.eyes));
+        assert!(!good_photo(&below.eyes));
+    }
+
+    #[test]
+    fn photo_tier_is_false_when_any_value_is_missing() {
+        assert!(!good_photo(&sharp(None)));
+        assert!(!good_photo(&with(good(), |e| e.eyes_ear = None)));
+        assert!(!good_photo(&with(good(), |e| e.pose = None)));
+        assert!(!good_photo(&with(good(), |e| e.eye_offset = None)));
+        assert!(!good_photo(&with(good(), |e| e.edge_gap = None)));
+    }
+
+    #[test]
+    fn the_eye_offset_passes_at_and_below_its_cut_not_above() {
+        let at = |o: f64| good_photo(&with(good(), |e| e.eye_offset = Some(o)));
+        assert!(at(MAX_EYE_OFFSET));
+        assert!(at(MAX_EYE_OFFSET - 0.001));
+        assert!(!at(MAX_EYE_OFFSET + 0.001));
+    }
+
+    #[test]
+    fn the_edge_gap_passes_at_and_above_its_cut_not_below_or_outside() {
+        let at = |g: f64| good_photo(&with(good(), |e| e.edge_gap = Some(g)));
+        assert!(at(MIN_EDGE_GAP));
+        assert!(at(MIN_EDGE_GAP + 0.001));
+        assert!(!at(MIN_EDGE_GAP - 0.001));
+        assert!(!at(-0.1));
+    }
+
+    #[test]
+    fn a_frame_soft_or_unmeasured_at_full_size_is_not_good_at_the_cut_it_is() {
+        assert!(!good_photo(&sharp(Some(GOOD_FULL_EYE_SHARP - 0.001))));
+        assert!(!good_photo(&sharp(None)));
+        assert!(good_photo(&sharp(Some(GOOD_FULL_EYE_SHARP))));
+    }
+
+    #[test]
+    fn the_three_frames_the_user_named_are_not_good() {
+        // `_DSC2638`: the mesh off a rotated face.
+        assert!(!good_photo(&rated(
+            0.3601,
+            pose(3., -11.8, 11.8),
+            0.1247,
+            0.2241
+        )));
+        // `_DSC2827`: turned, the EAR inflated.
+        assert!(!good_photo(&rated(
+            0.3032,
+            pose(-48.6, 5.2, 9.4),
+            0.0866,
+            1.6918
+        )));
+        // `_DSC3345`: cut by the left edge, its mesh off too.
+        assert!(!good_photo(&rated(
+            0.314,
+            pose(-15.3, 2.7, -3.6),
+            0.3521,
+            0.0076
+        )));
+    }
+
+    #[test]
+    fn the_one_star_frames_a_looser_yaw_or_eye_offset_cut_lets_in_are_not_good() {
+        // `_DSC2050`: turned past the yaw cut.
+        assert!(!good_photo(&rated(
+            0.3228,
+            pose(-36.6, 11.7, 5.1),
+            0.0241,
+            5.1189
+        )));
+        // `_DSC6920`: the mesh off the eyes of a face YuNet sees in profile.
+        assert!(!good_photo(&rated(
+            0.4054,
+            pose(26.8, -17.4, 3.6),
+            0.1769,
+            3.3674
+        )));
+    }
+
+    #[test]
+    fn a_five_star_frame_the_step_5b_cuts_left_out_is_good() {
+        // `_DSC3280`: pitched 16.1 degrees down.
+        assert!(good_photo(&rated(
+            0.3468,
+            pose(-23.9, -16.1, -4.7),
+            0.0298,
+            7.2376
+        )));
+        // `_DSC4912`: turned 34.5 degrees.
+        assert!(good_photo(&rated(
+            0.4194,
+            pose(34.5, 3.7, 1.6),
+            0.0456,
+            4.7066
+        )));
+    }
+
+    #[test]
+    fn the_full_size_eye_sharpness_cut_passes_at_and_above_not_below() {
+        let at = |s: f64| good_photo(&sharp(Some(s)));
+        assert!(at(GOOD_FULL_EYE_SHARP));
+        assert!(at(GOOD_FULL_EYE_SHARP + 0.0005));
+        assert!(!at(GOOD_FULL_EYE_SHARP - 0.0005));
+    }
+
+    #[test]
+    fn the_ear_cut_passes_at_and_above_not_below() {
+        assert!(good_photo(&ear(GOOD_EYE_EAR)));
+        assert!(good_photo(&ear(GOOD_EYE_EAR + 0.001)));
+        assert!(!good_photo(&ear(GOOD_EYE_EAR - 0.001)));
+    }
+
+    #[test]
+    fn the_yaw_cut_passes_at_and_within_not_beyond_either_sign() {
+        for sign in [1., -1.] {
+            let at = |yaw: f64| good_photo(&with(good(), |e| e.pose = pose(sign * yaw, 0., 0.)));
+            assert!(at(GOOD_MAX_YAW));
+            assert!(at(GOOD_MAX_YAW - 0.1));
+            assert!(!at(GOOD_MAX_YAW + 0.1));
+        }
+    }
+
+    #[test]
+    fn the_pitch_cut_passes_at_and_within_not_beyond_either_sign() {
+        for sign in [1., -1.] {
+            let at =
+                |pitch: f64| good_photo(&with(good(), |e| e.pose = pose(0., sign * pitch, 0.)));
+            assert!(at(GOOD_MAX_PITCH));
+            assert!(at(GOOD_MAX_PITCH - 0.1));
+            assert!(!at(GOOD_MAX_PITCH + 0.1));
+        }
+    }
+
+    #[test]
+    fn the_roll_is_not_a_cut() {
+        assert!(good_photo(&with(good(), |e| e.pose = pose(0., 0., 90.))));
+    }
+
+    #[test]
+    fn the_folded_tier_is_good_or_not() {
+        assert!(good().photo_tier());
+        assert!(!ear(0.1).photo_tier());
+    }
+
+    #[test]
+    fn the_cuts_are_the_step_7_cuts() {
+        assert_eq!(GOOD_EYE_EAR, 0.25);
+        assert_eq!(GOOD_MAX_YAW, 35.);
+        assert_eq!(GOOD_MAX_PITCH, 45.);
+        assert_eq!(MAX_EYE_OFFSET, 0.1);
+        assert_eq!(MIN_EDGE_GAP, 0.02);
+    }
+
+    #[test]
+    fn a_frame_below_the_step_5_good_cuts_that_cleared_the_fair_ones_is_good() {
+        assert!(good_photo(&ear(0.27)));
+        assert!(good_photo(&ear(0.25)));
+    }
+
+    #[test]
+    fn the_exclusions_still_apply_at_the_folded_cuts() {
+        let edge = with(ear(GOOD_EYE_EAR), |e| {
+            e.full_eye_sharp = Some(GOOD_FULL_EYE_SHARP);
+        });
+        assert!(good_photo(&edge));
+        assert!(!good_photo(&with(edge, |e| {
+            e.eye_offset = Some(MAX_EYE_OFFSET + 0.001);
+        })));
+        assert!(!good_photo(&with(edge, |e| {
+            e.edge_gap = Some(MIN_EDGE_GAP - 0.001);
+        })));
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]

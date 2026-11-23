@@ -89,7 +89,11 @@ from that same mesh, and, on every frame whose cue judged a face, the
 second read; none when the file holds no JPEG larger than the preview), and streams them as `faces-progress` /
 `faces-done` events; the passes run on worker threads below normal OS
 priority (the second lower still) and take the on-screen files first
-through the shared `ScanFocus` handle, `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
+through the shared `ScanFocus` handle; it also holds the good-photo rule,
+`StoredEyes::photo_tier`, computed on call from those stored values against
+the cuts defined there (`GOOD_EYE_EAR`, `GOOD_MAX_YAW`, `GOOD_MAX_PITCH`,
+`MAX_EYE_OFFSET`, `MIN_EDGE_GAP`, `GOOD_FULL_EYE_SHARP`, which is
+`fullsharp::SOFT_BELOW`), `src/sidecar.rs` the coalescing sidecar writer thread and `SidecarFormat`, the
 XMP, `.dop` or both setting chosen in the settings modal and persisted in the
 `sidecarFormat` key of the settings store, a switch's drain, persist and index reset (`switch_to`), next to the configurable
 `xmp:Label` names per color persisted in the `labelNames` key
@@ -391,7 +395,8 @@ view is doing; `encode`, scaled to the asked long edge, never up, and a PNG,
 off the UI thread; its pure parts also built for the tests),
 `src/companion.rs` the answers to its tool calls (a port of `companion.ts`
 over a snapshot of the view: the strip's selection, its targets as
-`selected`, its burst
+`selected`, the current photo's `photo_tier` (`good` or null, the engine's
+`StoredEyes::photo_tier` over its `Facts`' focus), its burst
 (`burstOf`, each frame's sharpness from the `Facts`), the coverage table
 (`Coverage`: every keymap action, right-click item, menu item, folder
 operation and settings page mapped to its tool, to a tool refused with
@@ -446,8 +451,9 @@ re-lists the open folder (`Resync`: at once when idle, else once the listing
 or scan under way ends, a burst collapsing into one), the current file
 landing where `filter::anchor_after_filter` puts it, the strip keeping the same files in view (`strip.rs`'s
 `carried_offset`) and the loaded thumbnails of files still listed
-(`carried_indices`), `src/mark.rs` the port of `focus.ts`'s good-photo rule
-(`photo_tier`, `af_eye_state`: Good / Neutral / Low, Low being
+(`carried_indices`), `src/mark.rs` the port of `focus.ts`'s mark states
+(`af_eye_state`: Good / Neutral / Low, Good being the engine's
+`StoredEyes::photo_tier`, which holds the rule and its cuts, Low being
 `full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
 `face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
 `FaceCache` (each path detected once, kept by path, a clear dropping the

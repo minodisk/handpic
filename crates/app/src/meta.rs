@@ -6,9 +6,7 @@
 
 use handpic_core::eyes::{EYES_CLOSED_EAR, EyeState};
 use handpic_engine::exif::Metadata;
-use handpic_engine::index::{Focus, FocusPoint};
-
-use crate::mark::GOOD_FULL_EYE_SHARP;
+use handpic_engine::index::{Focus, FocusPoint, GOOD_FULL_EYE_SHARP};
 
 pub const EXIF_HEADING: &str = "EXIF";
 pub const MAKER_NOTE_HEADING: &str = "Maker note";

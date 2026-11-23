@@ -1081,7 +1081,12 @@ impl Companion {
         compare pane, the sort order, whether a filter is active, and the current photo's \
         burst (empty when it is not part of one) with each frame's sharpness score, stars \
         (null when unrated), pick / reject flag, color label, and whether the filter shows it \
-        (a frame it hides cannot be shown or selected). The current photo carries `eyes`, the \
+        (a frame it hides cannot be shown or selected). The current photo carries \
+        `photo_tier`, `good` when the scan's second pass judged it a good photo (the bright \
+        green focus mark: the face's eyes sharp at full size, open and toward the camera, \
+        the face mesh on the face and the face not cut by the edge), else null, which also \
+        covers a photo the second pass has not reached yet (call `wait_for_idle` first to \
+        tell them apart) and a photo with no focus data (a JPEG). It also carries `eyes`, the \
         judgment of the eyes of the face nearest the AF point (else the largest confident \
         face): `state` (open or closed), `probability` (the probability the eyes are closed, \
         0 to 1) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
