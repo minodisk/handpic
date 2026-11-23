@@ -126,3 +126,4 @@ The `todo.md` headings in scope (and no other):
 ## Progress
 
 - Step 1: recorded the Windows measurement and check batch in `todo.md` and the docs. Items 1, 2, 5 and 6 are closed; item 3 is rewritten to the `READ_SLOTS` cap decision; item 4 is narrowed to SATA; item 7 is rewritten to the five unsettled themes; item 8 has its verified boxes removed and the rest narrowed to the by-eye remainder. Two deferred issues stay in `learnings.md`: aligning the two `notify` locks, and measuring a file manager's permanent delete (Shift+Delete) of a folder.
+- (2026-11-23) Step 1 complete

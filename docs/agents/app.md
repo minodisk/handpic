@@ -1918,7 +1918,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   presses) each ended with the meta pane, the image and the outlined cell
   on `get_view`'s current file: the `shown_after` race did not show in six
   presses
-  (`../plans/20261123-todo-measurements/learnings.md`).
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
 
@@ -1945,7 +1945,7 @@ last, and a JPEG folder under `"name"` paged in capture order.
   green icons (`1 / 2 (8)`). The strip filled in one step at the end of the
   pass, not file by file: pass 2 writes its rows `BATCH` (10) at a time, so
   an 8-file folder refilters once
-  (`../plans/20261123-todo-measurements/learnings.md`).
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 - Source: `docs/plans/20261115-full-eye-sharp-only/plan.md`, Step 3.
 
 ### The bursts are regrouped with the entries and marked with the judgments (Inferred)
@@ -2175,7 +2175,7 @@ dimmed, shows capture order and keeps the stored key.
   the folder's one lens; on the fixture's `faces` folder `lens` listed six
   lenses after the five cameras. No tool opens the menu, so the drawn
   sections were not seen
-  (`../plans/20261123-todo-measurements/learnings.md`).
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### The icons are Lucide SVGs served by one `AssetSource` (Inferred)
 
@@ -2839,7 +2839,7 @@ yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
   throughout, and the two runs made under it (26.6 ms p50 pause on; 47.5
   ms/file and only 2 of 36 jumps landing pause off) are not comparable.
   Whether the pause shortens the read on SATA is still open
-  (`../plans/20261123-todo-measurements/learnings.md`).
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### A held key draws each stale preview before chasing the current file (Measured)
 

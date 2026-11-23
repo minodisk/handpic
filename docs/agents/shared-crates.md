@@ -918,7 +918,7 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   handle on the slots. `acquire` then returns `None` and the worker abandons
   the file, as `extract_unless` does at its other stages.
 - Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2;
-  the NVMe runs: `docs/plans/20261123-todo-measurements/learnings.md`, Step 1.
+  the NVMe runs: `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1.
 
 ### Scan, on-demand faces and eyes: timings taken through the earlier app (Measured)
 
@@ -1233,7 +1233,7 @@ open has no watch at all.
   the asynchronous release is from
   `docs/plans/_archived/20260929-treewatch-unwatch-barrier/learnings.md`,
   Step 1; the delete measurement and the 8.2.2 re-check are from
-  `docs/plans/20261123-todo-measurements/learnings.md`, Step 1; the trash check is from
+  `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1; the trash check is from
   `docs/plans/_archived/20260928-trash-rejected-from-tree/learnings.md`, Step 1.
 
 ### `Writer::set` / `set_now` carry `#[allow(clippy::too_many_arguments)]`, not a parameter struct (Hit)
