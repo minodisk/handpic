@@ -1684,8 +1684,9 @@ A `curl` check on test copies found the stars, the pick and the label in each
 
 `selected` is the selection's targets in strip order (`selection::targets`:
 the current file alone when one or none is selected), which a `set_judgment`
-without `paths` judges, as a judgment key does, and `current.eyes` is present only once the `f` overlay has judged the
-file. `burst` is the Tauri `burstOf` over the view's `bursts` (empty for a
+without `paths` judges, as a judgment key does, and `current.eyes` comes from the file's stored `Facts.focus.eyes` once pass 2
+has stored an eye state, else from the `f` overlay's on-demand judgment
+(`View.eyes`), and is absent until one of the two has judged the file. `burst` is the Tauri `burstOf` over the view's `bursts` (empty for a
 burst of one, else every member in position order, a hidden one with
 `visible: false`); each frame's `sharpness` is `Facts.sharpness`, set from the
 entries read and patched by pass 2's `ready` files (`apply_face_ready`), as

@@ -1095,8 +1095,8 @@ impl Companion {
         judgment; before that, or when the second pass judged no face, from the `f` overlay's \
         judgment of the shown photo, and it is null when that judgment found no face to judge \
         (none found, too small, or a failure). `eyes` is absent until one of the two has \
-        judged the photo (never in a JPEG-only folder), and also for a photo with no face \
-        while the `f` overlay is off: call `wait_for_idle` first."
+        judged the photo (never in a JPEG-only folder); after `wait_for_idle`, a missing \
+        `eyes` with the `f` overlay off means the second pass judged no face."
     )]
     async fn get_view(&self) -> CallToolResult {
         tool_result(
