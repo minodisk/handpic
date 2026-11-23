@@ -149,12 +149,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       labels of `docs/plans/_archived/20261007-closed-eyes-detection/eyes-truth.md`
       (no eye to judge, including false detections) can seed it. Files:
       `crates/core/src/eyes.rs`, `docs/agents/tract-onnx-inference.md`.
-- [ ] Mark closed eyes in the strip. Pass 2 now stores the EAR for the face
-      the cue meshes and the filter menu has an `Eyes` section (the
-      `mesh-eyes-index` work), but no tile shows a closed-eyes mark yet; the
-      stored `eyes` state (`open` / `closed` / `unknown`) is on `Focus`, so
-      the remaining work is the mark itself. Files:
-      `crates/app/src/strip.rs`, `crates/app/src/mark.rs`.
 - [x] Estimate the head pose of the judged face. MediaPipe's face geometry
       pipeline (perspective unprojection at its 63 deg camera, weighted
       Procrustes onto the canonical face) is ported to

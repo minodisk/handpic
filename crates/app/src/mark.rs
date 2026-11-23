@@ -4,6 +4,7 @@
 //! (`afEyeState`, `focusMark`, `uprightPoint`, `faceMarks`, `faceLabel`,
 //! `faceLabelAt`); its comments say where each cut comes from.
 
+use handpic_core::eyes::EyeState;
 use handpic_engine::{index::Focus, ondemand::FaceBox};
 
 use crate::icons;
@@ -77,6 +78,15 @@ pub fn af_eye_state(focus: Option<&Focus>) -> MarkState {
         Some(f) if f.eyes.photo_tier() => MarkState::Good,
         Some(_) => MarkState::Neutral,
     }
+}
+
+/// Whether the strip cell draws the closed-eyes mark: today when the stored
+/// eye state of the judged face is closed, never without a focus (a JPEG) or
+/// before pass 2 reaches the file. Named for the mark, not the face, so a
+/// rule over every face can widen it without touching the cell or its
+/// painting.
+pub fn closed_eyes_mark(focus: Option<&Focus>) -> bool {
+    focus.is_some_and(|f| f.eyes.eyes == Some(EyeState::Closed))
 }
 
 /// `None` without a recorded point or for a manual-focus shot, whose recorded
@@ -447,6 +457,28 @@ mod tests {
     fn af_eye_state_is_neutral_without_a_value() {
         assert_eq!(af_eye_state(Some(&point())), MarkState::Neutral);
         assert_eq!(af_eye_state(Some(&sharp(None))), MarkState::Neutral);
+    }
+
+    fn eyes(state: Option<EyeState>) -> Focus {
+        Focus {
+            eyes: StoredEyes {
+                eyes: state,
+                ..no_eyes()
+            },
+            ..point()
+        }
+    }
+
+    #[test]
+    fn the_closed_eyes_mark_shows_for_closed_eyes_only() {
+        assert!(closed_eyes_mark(Some(&eyes(Some(EyeState::Closed)))));
+        assert!(!closed_eyes_mark(Some(&eyes(Some(EyeState::Open)))));
+        assert!(!closed_eyes_mark(Some(&eyes(None))));
+    }
+
+    #[test]
+    fn the_closed_eyes_mark_is_off_without_a_focus_as_on_a_jpeg() {
+        assert!(!closed_eyes_mark(None));
     }
 
     #[test]

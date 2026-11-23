@@ -30,3 +30,38 @@
 - Tooling: a Python script fed through a Bash heredoc lost the `\`
   line continuations of `mcp.rs`'s `#[tool(description = ...)]` string
   (the lines were joined); the Edit tool is the safe way to edit those.
+
+## Step 2: the closed-eyes strip mark
+
+- all-faces-check Step 3 had not landed on `main` when this step started
+  (its plan's Step 3 still unchecked, no `faces_closed` in the code), so the
+  mark was built here as planned.
+- The rule is `mark::closed_eyes_mark(Option<&Focus>) -> bool`, true only for
+  `Focus.eyes.eyes == Some(EyeState::Closed)`. `StripCell` gained one
+  `closed_eyes: bool`; all-faces-check Step 3 only widens the function.
+- The painting reuses `paint_face_icon` with a new `slot` argument (0 the
+  face focus icon, 1 the closed-eyes mark, `FACE_ICON + 2` px further
+  right), so both icons share size, inset and `overlay::HALO`. The color is
+  a fixed `CLOSED_EYES_COLOR` (amber `0xffb347`) in `main.rs`.
+- Clearance at `stripheight::MIN` (a 96 x 64 image box): the two slots span
+  x 2..28 px (29 with the halo); a `999/999` burst badge at 11 px is about
+  45 px wide, right-aligned to x 94, so it starts near x 49. The stars and
+  the flag dot are on the top edge.
+- `eye-off` comes from the `gpui-kit-assets` catalog (`IconName::EyeOff`);
+  `the_catalog_paths_equal_their_icon_names` and
+  `every_icon_path_loads_an_svg` cover it.
+
+## Deferred issues (todo candidates)
+
+- Pending manual check (Step 2, closed-eyes strip mark): on a real folder of
+  RAW files with people (any platform; Windows is the author's), let pass 2
+  finish, then check that the strip cells showing the amber `eye-off` mark at
+  the bottom-left are exactly the files whose meta pane `Eyes` row says
+  closed, and exactly the files the filter menu's `Eyes` > `Closed` keeps;
+  also that the mark appears live while `analyzing N / M` runs, sits right of
+  the face focus icon without overlapping it or the burst badge at the
+  minimum strip height, and is dimmed with a rejected cell. The step's
+  checkbox was ticked on the automated criteria (unit tests of
+  `closed_eyes_mark`, the icon tests, `mise run ci:local`). Files:
+  `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`),
+  `crates/app/src/mark.rs`.

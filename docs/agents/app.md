@@ -3330,7 +3330,9 @@ bottom-left, over eight black copies at `overlay::HALO`'s offsets for the
 Tauri `drop-shadow`, and painted before the rejected cell's `Roles::rejected_dim`
 quad so the dimming covers it. Its state is computed in `strip_cells()` from
 `facts` as the filter's `passes` does, so it follows pass 2 with no
-bookkeeping. That the icon is crisp at 100 % and 150 % is not yet checked by
+bookkeeping. The closed-eyes mark (`icons::EYE_OFF`) is painted the same
+way in a second slot 14 px to the right, so neither icon moves when the
+other appears. That the icon is crisp at 100 % and 150 % is not yet checked by
 eye.
 
 ### A Windows mouse wheel arrives in lines (Inferred)
