@@ -176,14 +176,28 @@ pub fn shared_xmps(dir: &Path) -> HashMap<PathBuf, Vec<PathBuf>> {
         by_name.entry(name).or_default().push(raw);
     }
     let mut shared: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
-    for raws in by_name.into_values().filter(|raws| raws.len() > 1) {
+    for mut raws in by_name.into_values().filter(|raws| raws.len() > 1) {
+        raws.sort();
+        // Bucket by the entry on disk, since each RAW spells the sidecar from
+        // its own stem and a case-insensitive file system maps those
+        // spellings to one file; the key is the first RAW's spelling.
+        let mut buckets: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = Vec::new();
         for raw in raws {
-            if let Some(xmp) = existing_sidecar(&raw, SidecarFormat::Xmp) {
-                shared.entry(xmp).or_default().push(raw);
+            let Some(xmp) = existing_sidecar(&raw, SidecarFormat::Xmp) else {
+                continue;
+            };
+            let entry = std::fs::canonicalize(&xmp).unwrap_or_else(|_| xmp.clone());
+            match buckets.iter_mut().find(|(e, _, _)| *e == entry) {
+                Some((_, _, members)) => members.push(raw),
+                None => buckets.push((entry, xmp, vec![raw])),
+            }
+        }
+        for (_, xmp, members) in buckets {
+            if members.len() > 1 {
+                shared.insert(xmp, members);
             }
         }
     }
-    shared.retain(|_, raws| raws.len() > 1);
     shared
 }
 
@@ -222,7 +236,9 @@ pub fn file_plan(dir: &Path, path: &str, name: &str) -> Result<FilePlan, String>
     for format in [SidecarFormat::Xmp, SidecarFormat::Dop] {
         if let Some(sidecar) = existing_sidecar(&raw, format) {
             let to = format.sidecar_path(&target);
-            if format == SidecarFormat::Xmp && shared_xmps(dir).contains_key(&sidecar) {
+            if format == SidecarFormat::Xmp
+                && shared_xmps(dir).values().any(|raws| raws.contains(&raw))
+            {
                 if !same_entry(&to, &sidecar) {
                     steps.push((Op::Copy, sidecar, to));
                 }

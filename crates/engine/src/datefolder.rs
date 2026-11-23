@@ -1035,6 +1035,22 @@ mod tests {
         assert!(names(&dir).is_empty());
     }
 
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn mates_whose_stems_differ_in_case_each_get_the_shared_xmp() {
+        let dir = xmp_folder("shared-case", &["a.ARW", "A.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("A.NEF")]),
+        ];
+        let (_, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(read(&parent.join("2026-10-31").join("a.xmp")), b"shared");
+        assert_eq!(read(&parent.join("2026-11-01").join("A.xmp")), b"shared");
+        assert!(names(&dir).is_empty());
+    }
+
     #[test]
     fn a_failing_step_after_the_copy_deletes_it_and_puts_the_raw_back() {
         let dir = xmp_folder("shared-rollback", &["a.ARW", "a.ARW.dop", "a.NEF"]);
