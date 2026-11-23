@@ -321,8 +321,8 @@ was not committed. The machine was shared with other sessions' cargo builds
 
 | Read | files | total | files/s | bytes read |
 |------|-------|-------|---------|------|
-| Bounded 1MiB | 415 | 4.04s | 103 | |
-| Bounded 1MiB | 373 | 6.17s | 60 | |
+| Bounded 1MiB | 415 | 4.04s | 103 | not recorded |
+| Bounded 1MiB | 373 | 6.17s | 60 | not recorded |
 | Whole file | 468 | 48.32s | 10 | 22,048MB |
 | Whole file | 324 | 36.84s | 9 | 16,402MB |
 
