@@ -10,7 +10,7 @@
 //! (`full_all.py`'s `met`): numpy's `gradient` and `percentile`, PIL's bicubic.
 
 use crate::candidate::luma;
-use crate::partial::{decode_crop, jpeg_width};
+use crate::partial::{decode_crop, decode_crops, jpeg_width, Crop};
 use crate::resample::{resample, Filter};
 
 /// The frame score below which the eyes are soft at full size. Chosen by
@@ -70,13 +70,73 @@ pub fn full_eye_sharpness(
     Some(score(lx, ly)?.max(score(rx, ry)?))
 }
 
+/// `full_eye_sharpness` of each pair of `eyes`, from one pass over
+/// `full_jpeg` (`partial::decode_crops`); every value `None` when the pass
+/// fails.
+pub fn full_eye_sharpnesses(
+    full_jpeg: &[u8],
+    eyes: &[[(f32, f32); 2]],
+    preview_width: usize,
+) -> Vec<Option<f64>> {
+    let none = || vec![None; eyes.len()];
+    if preview_width == 0 || eyes.is_empty() {
+        return none();
+    }
+    let Ok(width) = jpeg_width(full_jpeg) else {
+        return none();
+    };
+    let scale = width as f64 / preview_width as f64;
+    if scale <= MIN_SCALE {
+        return none();
+    }
+    let squares: Vec<((f64, f64), f64)> = eyes
+        .iter()
+        .flat_map(|pair| {
+            let [(lx, ly), (rx, ry)] = pair.map(|(x, y)| (f64::from(x), f64::from(y)));
+            let half = CROP_HALF_SIDE * (lx - rx).hypot(ly - ry).max(MIN_EYE_DISTANCE) * scale;
+            [
+                ((lx * scale, ly * scale), half),
+                ((rx * scale, ry * scale), half),
+            ]
+        })
+        .collect();
+    let Ok(crops) = decode_crops(
+        full_jpeg,
+        &squares
+            .iter()
+            .map(|&((cx, cy), half)| (cx as usize, cy as usize, side_of(half)))
+            .collect::<Vec<_>>(),
+    ) else {
+        return none();
+    };
+    let scores: Vec<Option<f64>> = squares
+        .iter()
+        .zip(&crops)
+        .map(|(&(center, half), crop)| crop_score(crop, center, half))
+        .collect();
+    scores
+        .chunks_exact(2)
+        .map(|pair| Some(pair[0]?.max(pair[1]?)))
+        .collect()
+}
+
+/// The side of the square decoded for an eye crop of half-side `half`.
+fn side_of(half: f64) -> usize {
+    (2.0 * half).ceil() as usize + CROP_MARGIN
+}
+
 /// `eye_crop_score` of the square of half-side `half` around `center`, in
 /// full-size px, as far as it lies inside the image. The square's corners
 /// truncate as PIL's `crop` box did in the prototype.
 fn eye_score(full_jpeg: &[u8], center: (f64, f64), half: f64) -> Option<f64> {
     let (cx, cy) = center;
-    let side = (2.0 * half).ceil() as usize + CROP_MARGIN;
-    let crop = decode_crop(full_jpeg, cx as usize, cy as usize, side).ok()?;
+    let crop = decode_crop(full_jpeg, cx as usize, cy as usize, side_of(half)).ok()?;
+    crop_score(&crop, center, half)
+}
+
+/// `eye_score` on an already decoded `crop`.
+fn crop_score(crop: &Crop, center: (f64, f64), half: f64) -> Option<f64> {
+    let (cx, cy) = center;
     let local = |v: f64, origin: usize, limit: usize| {
         (v as i64 - origin as i64).clamp(0, limit as i64) as usize
     };
@@ -258,6 +318,44 @@ mod tests {
         let want = crisp;
         let got = full_eye_sharpness(&jpeg, eyes, w / 4).unwrap();
         assert!((got - want).abs() < 0.01, "{got} and {want}");
+    }
+
+    #[test]
+    fn one_pass_over_several_faces_gives_each_face_its_own_score() {
+        let side = 160;
+        let (sharp, blurred) = (disc(side, 30, 220), box_blurred(&disc(side, 30, 220), side));
+        let (w, h) = (side * 2 + 16, side * 2);
+        let mut gray = Vec::with_capacity(w * h);
+        for y in 0..h {
+            let (a, b) = if y < side {
+                (&blurred, &sharp)
+            } else {
+                (&sharp, &blurred)
+            };
+            let r = y % side;
+            gray.extend_from_slice(&a[r * side..(r + 1) * side]);
+            gray.extend_from_slice(&[220; 16]);
+            gray.extend_from_slice(&b[r * side..(r + 1) * side]);
+        }
+        let jpeg = encode(&gray, w, h);
+        let faces = [
+            [(33.25f32, 20.0f32), (50.75, 20.0)],
+            [(20.0, 60.0), (37.5, 60.0)],
+            [(5000.0, 5000.0), (5010.0, 5000.0)],
+            [(60.0, 70.0), (77.5, 70.0)],
+        ];
+        let want: Vec<Option<f64>> = faces
+            .iter()
+            .map(|&eyes| full_eye_sharpness(&jpeg, eyes, w / 4))
+            .collect();
+        assert!(want[0].is_some() && want[1].is_some() && want[2].is_none());
+        assert_eq!(full_eye_sharpnesses(&jpeg, &faces, w / 4), want);
+        assert!(full_eye_sharpnesses(&jpeg, &[], w / 4).is_empty());
+        assert_eq!(full_eye_sharpnesses(&jpeg, &faces[..1], w), vec![None]);
+        assert_eq!(
+            full_eye_sharpnesses(b"not a jpeg", &faces[..2], 40),
+            vec![None, None]
+        );
     }
 
     #[test]

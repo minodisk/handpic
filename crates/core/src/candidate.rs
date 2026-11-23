@@ -226,19 +226,33 @@ pub fn focus_cue_unless(
     focus: Option<FocusLocation>,
     cancel: &AtomicBool,
 ) -> Option<Result<Cue>> {
-    if focus.is_none() {
+    let Some(focus) = focus else {
         return Some(Ok(Cue::unknown()));
-    }
-    let canceled = || cancel.load(Ordering::Relaxed);
+    };
     let (rgb, width, height) = match decode_rgb(preview) {
         Ok(decoded) => decoded,
         Err(e) => return Some(Err(e)),
     };
+    focus_cue_rgb_unless(&rgb, width, height, orientation, focus, cancel)
+}
+
+/// `focus_cue_unless` on a preview already decoded to stored RGB
+/// (`width` x `height`), abandoned (`None`) once `cancel` is set before the
+/// detection or the face mesh.
+pub fn focus_cue_rgb_unless(
+    rgb: &[u8],
+    width: usize,
+    height: usize,
+    orientation: u16,
+    focus: FocusLocation,
+    cancel: &AtomicBool,
+) -> Option<Result<Cue>> {
+    let canceled = || cancel.load(Ordering::Relaxed);
     crate::scan::yield_to_pause(cancel);
     if canceled() {
         return None;
     }
-    let detection = match detect_around_rgb(&rgb, width, height, orientation, focus) {
+    let detection = match detect_around_rgb(rgb, width, height, orientation, Some(focus)) {
         Ok(detection) => detection,
         Err(e) => return Some(Err(e)),
     };
@@ -251,7 +265,7 @@ pub fn focus_cue_unless(
         return None;
     }
     match face {
-        Some(f) => face_cue_unless(&rgb, width, height, orientation, &f, detection, cancel).map(Ok),
+        Some(f) => face_cue_unless(rgb, width, height, orientation, &f, detection, cancel).map(Ok),
         None => Some(Ok(cue_of(None, detection, None, width, height))),
     }
 }

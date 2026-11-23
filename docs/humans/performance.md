@@ -739,6 +739,69 @@ change. The whole pass took 82.5 / 85.6s before and 85.6 / 106.8s after; the
 second after run was slower on every group, the no-face files included,
 so part of it is run-to-run noise. The cold-disk cost is not measured.
 
+#### All-faces check (Windows 11)
+
+Pass 2 now also counts the frame's other faces (`crates/core/src/allfaces.rs`):
+every face of the whole-image detection at score 0.8 or above with a box
+long side of at least 60 px is meshed on the preview, and its eyes are
+measured on the full-size JPEG, up to 8 faces per frame with the judged one.
+A frame with a trusted AF point therefore gets a whole-image detection
+(a scaled decode and YuNet at 640x448) it did not run before, and a frame
+whose cue judged no face but that holds other faces now reads the full JPEG
+(still one read per file). Every eye of the frame, the judged face's
+included, is now cut from the full JPEG in one decoding pass
+(`fullsharp::full_eye_sharpnesses` over `partial::decode_crops`) instead of
+one partial decode per eye; the judged face's `full_eye_sharp` is the same
+value.
+
+Measured on 2026-11-23 on Windows 11 (Intel Core i7-13700), files read from
+the local drive, warm page cache, release build. Other processes shared the
+machine, so the runs on 8 threads varied by up to 2x between repeats; the
+figures below are on one thread. Where the time goes, per AF file, timed
+stage by stage by a scratch subcommand on the first 100 α7 V ARW of
+`2026-10-03` (mostly one person; 44 other faces measured) and of
+`2026-11-07` (a team sport; 76 other faces), two runs that agreed within
+3%:
+
+| Stage | Mostly one person (ms) | Groups (ms) | New |
+| --- | --- | --- | --- |
+| Preview read, full-size decode, cue (crop detection and the judged face's mesh), score, full JPEG read | 61 | 55 | no |
+| Judged face's eyes on the full JPEG, one partial decode per eye | 22.8 | 36.6 | no (replaced) |
+| Scaled decode for the whole-image search | 3.8 | 4.3 | yes |
+| Whole-image YuNet at 640x448 | 71.0 | 72.0 | yes |
+| Other faces' meshes | 19.4 | 33.5 | yes |
+| Other faces' eyes on the full JPEG, one partial decode per eye | 7.4 | 30.0 | yes (replaced) |
+| All eyes of the frame on the full JPEG in one pass | 13.6 | 24.4 | yes |
+
+`handpic-cli features <files> 1`'s `analysis_ms` (`scan::extract_analysis`
+alone) on the same 100 files, and on the first 100 M11-P DNG of
+`2026-02-01` (groups, no AF point, so no added detection), before
+(`3918064c`), with the first version of the check (one partial decode per
+eye) and now, alternated, three runs each; the fastest run's mean / median
+/ p95, as the other processes only ever add:
+
+| Files | Before (ms) | First version (ms) | Now (ms) |
+| --- | --- | --- | --- |
+| Mostly one person, AF | 81.5 / 82.6 / 99.8 | 188.6 / 179.6 / 261.1 | 163.3 / 165.4 / 209.3 |
+| Groups, AF | 92.4 / 94.1 / 117.6 | 240.4 / 223.6 / 361.2 | 183.9 / 184.0 / 239.4 |
+| Groups, no AF | 119.3 / 87.2 / 196.4 | 138.9 / 91.6 / 367.0 | 117.5 / 91.5 / 218.0 |
+
+So pass 2 on an AF file about doubles (+80 to +90 ms on one thread), and
+the whole-image YuNet run is most of it (71 ms). A smaller 480x320 input
+halved that run but lost 23-32% of the faces counted (69 of 302 on the
+`2026-11-07` slice, 39 of 121 on `2026-10-03`, 44 of 146 on `2026-09-19`),
+so the input stays 640x448. Feeding the search from the preview already
+decoded for the cue would save at most the 4 ms scaled decode, and the AF
+frames' face set would then differ from the one the no-AF path and
+`handpic-cli facechoice` see, so it was not done. On a file without an AF
+point the added cost is only the other faces' meshes, and the one pass over
+the full JPEG pays for them on group frames. The stored values
+(`sharpness`, the cue's EAR, pose, eye offset and edge gap, and
+`full_eye_sharp`) did not change on any file (`features` columns compared
+on all three sets; `facechoice --check`: 0 mismatches of 146, 300 and 300
+files). The thresholds and the faces counted are in the all-faces-check
+plan's `measurement.md`.
+
 #### Eye-state model survey (Windows 11)
 
 YuNet's five landmarks carry no eyelid points, so telling closed eyes apart

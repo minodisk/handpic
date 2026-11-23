@@ -286,7 +286,7 @@ fn decode_stride(
     }
 }
 
-fn iou(a: &Face, b: &Face) -> f32 {
+pub(crate) fn iou(a: &Face, b: &Face) -> f32 {
     let w = (a.x + a.width).min(b.x + b.width) - a.x.max(b.x);
     let h = (a.y + a.height).min(b.y + b.height) - a.y.max(b.y);
     if w <= 0.0 || h <= 0.0 {

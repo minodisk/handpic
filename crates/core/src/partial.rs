@@ -73,6 +73,93 @@ pub fn decode_crop(jpeg: &[u8], cx: usize, cy: usize, size: usize) -> Result<Cro
     })
 }
 
+/// `decode_crop` of each `(cx, cy, size)` square, from one pass over `jpeg`:
+/// the rows are decoded once, top to bottom, over the columns of all the
+/// squares, so a square costs no pass of its own. Each square is clamped to
+/// the image as `decode_crop` clamps it, and its `Crop` starts at that
+/// corner, without the MCU snap. Its pixels are `decode_crop`'s but for the
+/// outermost column of `decode_crop`'s own window, which chroma upsampling
+/// fills without its outer neighbor; `fullsharp`'s eye cut stays inside it.
+/// A fatal libjpeg error, or a JPEG that ends before a square's last row,
+/// comes back as `Err`.
+pub fn decode_crops(jpeg: &[u8], squares: &[(usize, usize, usize)]) -> Result<Vec<Crop>> {
+    if squares.is_empty() {
+        return Ok(Vec::new());
+    }
+    guarded(|| unsafe { decode_crops_unguarded(jpeg, squares) })
+}
+
+unsafe fn decode_crops_unguarded(
+    jpeg: &[u8],
+    squares: &[(usize, usize, usize)],
+) -> Result<Vec<Crop>> {
+    let mut err: sys::jpeg_error_mgr = mem::zeroed();
+    let mut cinfo: sys::jpeg_decompress_struct = mem::zeroed();
+    cinfo.common.err = sys::jpeg_std_error(&mut err);
+    (*cinfo.common.err).error_exit = Some(unwind_error_exit);
+    sys::jpeg_create_decompress(&mut cinfo);
+    let guard = scopeguard(&mut cinfo as *mut _);
+    sys::jpeg_mem_src(&mut cinfo, jpeg.as_ptr(), jpeg.len() as _);
+    if sys::jpeg_read_header(&mut cinfo, true as _) != 1 {
+        bail!("jpeg_read_header failed");
+    }
+    cinfo.out_color_space = sys::J_COLOR_SPACE::JCS_RGB;
+    sys::jpeg_start_decompress(&mut cinfo);
+    let (iw, ih) = (cinfo.output_width as usize, cinfo.output_height as usize);
+    let mut crops: Vec<Crop> = squares
+        .iter()
+        .map(|&(cx, cy, size)| {
+            let (w, h) = (size.min(iw), size.min(ih));
+            let (x, y) = (
+                cx.saturating_sub(w / 2).min(iw - w),
+                cy.saturating_sub(h / 2).min(ih - h),
+            );
+            Crop {
+                pixels: vec![0; w * h * 3],
+                width: w,
+                height: h,
+                x,
+                y,
+                image_width: iw,
+                image_height: ih,
+            }
+        })
+        .collect();
+    let left = crops.iter().map(|c| c.x).min().unwrap_or(0);
+    let right = crops.iter().map(|c| c.x + c.width).max().unwrap_or(0);
+    let mut xoff = left as sys::JDIMENSION;
+    let mut width = (right - left) as sys::JDIMENSION;
+    sys::jpeg_crop_scanline(&mut cinfo, &mut xoff, &mut width);
+    let (xoff, stride) = (xoff as usize, width as usize * 3);
+    let mut row = vec![0u8; stride];
+    let mut next = 0usize;
+    let last = crops.iter().map(|c| c.y + c.height).max().unwrap_or(0);
+    for y in 0..last {
+        if !crops.iter().any(|c| (c.y..c.y + c.height).contains(&y)) {
+            continue;
+        }
+        if y > next {
+            sys::jpeg_skip_scanlines(&mut cinfo, (y - next) as _);
+        }
+        let mut ptr = row.as_mut_ptr();
+        if sys::jpeg_read_scanlines(&mut cinfo, &mut ptr, 1) == 0 {
+            bail!("the JPEG ended at row {y}");
+        }
+        next = y + 1;
+        for c in crops
+            .iter_mut()
+            .filter(|c| (c.y..c.y + c.height).contains(&y))
+        {
+            let from = (c.x - xoff) * 3;
+            let to = (y - c.y) * c.width * 3;
+            c.pixels[to..to + c.width * 3].copy_from_slice(&row[from..from + c.width * 3]);
+        }
+    }
+    sys::jpeg_abort_decompress(&mut cinfo);
+    drop(guard);
+    Ok(crops)
+}
+
 /// The width of `jpeg` from its header alone.
 pub fn jpeg_width(jpeg: &[u8]) -> Result<usize> {
     guarded(|| unsafe {
@@ -325,5 +412,35 @@ mod tests {
     fn decode_crop_still_returns_rgb() {
         let c = decode_crop(&jpeg(320, 240), 160, 120, 64).unwrap();
         assert_eq!(c.pixels.len(), c.width * c.height * 3);
+    }
+
+    #[test]
+    fn one_pass_cuts_the_same_pixels_as_one_crop_each() {
+        let input = jpeg(320, 240);
+        let squares = [(40, 30, 33), (300, 200, 50), (160, 120, 64), (0, 239, 20)];
+        let crops = decode_crops(&input, &squares).unwrap();
+        for (&(cx, cy, size), c) in squares.iter().zip(&crops) {
+            let one = decode_crop(&input, cx, cy, size).unwrap();
+            assert_eq!((c.width, c.height), (size, size));
+            // A window's own edge column is upsampled without its outer
+            // neighbor, so only the columns inside the single crop's window
+            // (or on the image's edge) are compared.
+            let inside = |x: usize| {
+                (x > one.x || x == 0) && (x + 1 < one.x + one.width || x + 1 == one.image_width)
+            };
+            for y in 0..c.height {
+                for x in (c.x..c.x + c.width).filter(|&x| inside(x)) {
+                    let at = ((y * c.width) + x - c.x) * 3;
+                    let from = ((c.y + y - one.y) * one.width + x - one.x) * 3;
+                    assert_eq!(
+                        c.pixels[at..at + 3],
+                        one.pixels[from..from + 3],
+                        "({x}, {y})"
+                    );
+                }
+            }
+        }
+        assert!(decode_crops(&input, &[]).unwrap().is_empty());
+        assert!(decode_crops(b"not a jpeg", &squares).is_err());
     }
 }

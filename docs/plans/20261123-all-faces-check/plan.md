@@ -33,7 +33,7 @@ not change.
 
 ## Steps
 
-- [ ] Step 1: Measure every confident face in pass 2 (`handpic-core`)
+- [x] Step 1: Measure every confident face in pass 2 (`handpic-core`)
   - Done when:
     - `scan::Analysis` carries per-frame face counts (judged, closed, soft)
       next to the existing cue, and `extract_analysis` fills them from the one

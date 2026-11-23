@@ -1,5 +1,6 @@
 //! Reusable ARW parsing and JPEG decoding shared by the CLI and the app.
 
+pub mod allfaces;
 pub mod arw;
 pub mod candidate;
 pub mod copy;

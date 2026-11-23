@@ -25,7 +25,15 @@ side face's mesh untrusted, `mesh_trusted`, and a face under
 whole preview, its face mesh and what the mesh gives: the EAR, the head
 pose, the eye offset, the edge gap and the eye centers `fullsharp.rs`
 measures around, YuNet's eye landmarks without a mesh, none of them from an
-untrusted mesh, no EAR or pose under the presence floor), `src/jpeg.rs` the Exif reader of a plain
+untrusted mesh, no EAR or pose under the presence floor), `src/allfaces.rs` the
+all-faces check of pass 2 (`candidates`: the other whole-image faces at
+`FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not overlapping the judged
+face, the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
+counted only within `MAX_EYE_OFFSET`; `counts`, the `FaceCounts` of faces
+judged, closed by `EYES_CLOSED_EAR` and soft under `LOW_BELOW`, the soft
+count unknown without the full JPEG), which `scan::Analysis` carries as
+`face_counts`, the whole preview searched on an AF frame too and the full
+JPEG still read and decoded once, `src/jpeg.rs` the Exif reader of a plain
 JPEG file (orientation and the standard shooting tags into the same `Shot`
 the RAW parsers fill), which `reader` and `scan` dispatch to for a `.jpg` /
 `.jpeg`, `src/exif.rs` the crate-private IFD0 + Exif IFD reader `jpeg.rs`,
@@ -53,7 +61,9 @@ whose `ReadSlots` caps how many workers are inside a file read at once and
 holds new reads back, and pass 2 at its stage boundaries (`yield_to_pause`), while a `Paused` is held, `src/fullsharp.rs` the eye
 sharpness of the judged face on the full-size embedded JPEG (a crop around each
 eye resized to 154 px, the gradient's 99th percentile over the contrast, the
-sharper eye counting, a frame under `SOFT_BELOW` being soft), and
+sharper eye counting, a frame under `SOFT_BELOW` being soft;
+`full_eye_sharpnesses`, every face's eyes of a frame cut in one pass over
+the JPEG by `partial::decode_crops`), and
 `src/sharpness.rs` the
 sharpness score of the embedded preview, taken on the Sony eye-AF frame
 when the camera tracked a face, else around the AF point, else between
