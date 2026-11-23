@@ -185,7 +185,17 @@ and a labeled set, not only whether it loads.
   (`eyes::presence_judges_eyes`). The logit is also low on real faces: real
   profiles, faces looking down and faces rotated in the crop, which has no
   roll correction. So the thresholds depend on the crop: recalibrate them
-  after any change to it (`FACE_CROP`, the resize, a roll step). See
+  after any change to it (`FACE_CROP`, the resize, a roll step). The rules
+  sit in `candidate::cue_of`, not in `face_mesh` or `mesh_of`, because
+  `cue_of` must fall back to YuNet's landmarks for a face with no mesh and
+  must not for an untrusted one. `mesh_of` and `landmarks_of` stay raw (the
+  presence rides on `Mesh` / `Landmarks`), so `handpic-cli facechoice` and
+  any all-faces check apply the public rules themselves. `mesh_trusted` and
+  `presence_judges_eyes` treat a NaN logit as untrusted. The `x` faces the
+  `EYES_MIN_PRESENCE` gate targets are mostly backs of heads, profiles and
+  occlusions, not false detections; under it the scan's cue keeps the eye
+  centers, eye offset, edge gap and so `full_eye_sharp`, and drops only the
+  EAR and pose. See
   `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
 - The z of each point is a relative depth, larger away from the camera, in
   input pixels at the scale of x (Inferred: MediaPipe's

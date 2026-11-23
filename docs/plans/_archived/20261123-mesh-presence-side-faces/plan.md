@@ -178,3 +178,5 @@ items from `todo.md`.
   recorded in `learnings.md`, the doc comments and the tract guide.
 
 ## Progress
+
+- (2026-11-24) Step 1 complete

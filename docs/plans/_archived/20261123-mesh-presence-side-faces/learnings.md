@@ -219,17 +219,18 @@ the stored and the upright face.
   unloaded), so under a saturated CPU wait it out rather than call it a
   failure.
 
+## Check on real files (wrap-up, 2026-11-24)
+
+The manual check Step 1 left open was run during the wrap-up (Measured).
+`handpic-cli eyes` on `D:\photos\2026\2026-07-11`: the frontal faces
+`_DSC2570` and `_DSC2577` read presence +23.3 and +15.3 and `open`; the side
+faces `_DSC2574` (yed 0.085, presence -4.4) and `_DSC2580` (yed 0.047,
+presence -2.4) read `- unknown`; `_DSC2578` (yed 0.29, presence -13.7) reads
+`- unknown` through the presence gate. Every presence equals the
+measurement dump's, so the right output is resolved. The ignored
+`eyes::tests::judges_a_face_in_a_real_image` passes with
+`HANDPIC_FACE_JPEG` set to `_DSC2570`'s 1616 px preview.
+
 ## Deferred issues (todo candidates)
 
-- Pending manual check (Step 1, any platform with real files): run
-  `handpic-cli eyes` on a few real RAW files with a clear frontal face and
-  confirm the line's `presence` reads about +15..+25 and the state column
-  gives `open` / `closed`; on a known side face (a profile from
-  `D:\Photos\tests\2026-11-23-side-faces\dump\`, yed under 0.15) confirm a
-  negative presence and `- unknown`. Also run the ignored
-  `eyes::tests::judges_a_face_in_a_real_image` with `HANDPIC_FACE_JPEG` set
-  to an upright JPEG with one clear face and confirm it still passes (it
-  prints the presence). Not run here because the host was pinned at 100%
-  CPU by another session; the step's checkbox was ticked on the automated
-  criteria. Files: `crates/cli/src/main.rs` (`eyes_line`),
-  `crates/core/src/eyes.rs`.
+None.

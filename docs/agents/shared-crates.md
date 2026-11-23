@@ -599,7 +599,11 @@ retried.
   Do not measure the preview instead: with the full-size thresholds it reads
   about half the full-size value and would put most such frames in Low (see
   `docs/plans/20261115-full-eye-sharp-only/preview-vs-full.md`). A failed
-  full-size read or decode stays `None` too. The tiers read
+  full-size read or decode stays `None` too. `FACES_VERSION` 12 applies the
+  mesh presence rules (`eyes::mesh_trusted`, `eyes::presence_judges_eyes`):
+  an untrusted mesh stores no EAR, pose, eye offset, edge gap or
+  `full_eye_sharp`; a face under `EYES_MIN_PRESENCE` stores no EAR or pose.
+  The tiers read
   `full_eye_sharp` alone since that plan's Step 3: Good at or above
   `SOFT_BELOW` with the other cuts, Low under `LOW_BELOW` (0.110, in
   `fullsharp.rs` next to `SOFT_BELOW`), Neutral otherwise, a missing value
@@ -651,6 +655,25 @@ full-eye-sharp-only plan removed.
   eye distance is small, let a 1-star frame in. Gating on YuNet's eye distance
   fails because YuNet sees a profile where the mesh sees a face
   (`2026-09-27-a__DSC6920`).
+- The mesh's untrusted case is "no value", not a fallback (Measured). When
+  YuNet's eye distance is under 0.15 of the box side and the presence logit is
+  under 0 (`eyes::mesh_trusted`), the EAR, pose, eye offset, edge gap and eye
+  centers are all `None`, so `full_eye_sharp` is too. Falling back to YuNet's
+  eye points instead raised false Low on 3-star frames (3 -> 5-7). With that
+  rule in, skipping the `MAX_EYE_OFFSET` cut would add 0 frames; without it,
+  about 15 of 20 of the frames skipping the cut would add look off, so the cut
+  stays. The mesh's |yaw| is not a misfit signal (AUC 0.50): a side-face
+  misfit is usually fitted as a frontal face. Source:
+  `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
+- The cuts are shared between frames with a trusted AF point and frames
+  without one (user decision, 2026-11-23). On 325 eligible no-AF frames (55
+  picks) the mark was 21.2% of frames, with picks 13.0% of the marked and
+  18.0% of the unmarked, against a 16.9% base, and no no-AF variant did
+  clearly better with picks as the label. Loosening `full_eye_sharp` to about
+  0.12 marks 2-3x more picks at about 17.5% precision, which overlaps the base
+  rate. Do not re-tune a separate no-AF cut against picks; check one only
+  against failure labels ("is this frame a failure"). Source:
+  `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
 - Keep `MIN_EDGE_GAP` as a box-plus-grown-eye-region gap. Testing the 1.25x
   mesh crop flags whole faces near the edge (only hair outside).
 - The EAR is inflated on a turned, foreshortened eye. That is why the yaw cut
