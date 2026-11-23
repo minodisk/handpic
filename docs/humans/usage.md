@@ -29,8 +29,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   about a second (a folder the app cannot watch, a network share say, is
   re-listed only when it is expanded again). On
   Windows, while a folder is expanded, the file manager cannot rename the
-  folders that hold it (the folder itself and those under it stay free);
-  collapse it first. An expanded
+  folders that hold it or move them to the Recycle Bin (the folder itself
+  and those under it stay free); collapse it first. An expanded
   folder shows how many RAW files it holds itself, or, for a folder with no
   RAW file, how many JPEGs (see **JPEG-only folders**). Clicking a folder's name
   opens it. The `open` key, the empty-state hint and a drop still open

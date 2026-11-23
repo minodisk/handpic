@@ -632,9 +632,32 @@ report pass of both builds already ran the mesh, so that is an upper bound
 on the scan pass's peak rather than a before / after comparison. The app was
 not run for this measurement either.
 
-The `scan extract` / `scan faces` log lines of an app open of this folder are
-not recorded here yet: that needs the GUI, which was not run for this
-measurement.
+The app's own lines, recorded on 2026-11-23 on Windows 11 (24 hardware
+threads), release build of `3918064c`. The 2134-file folder no longer exists
+in that form: `D:\Photos\2026\2026-09-19` now holds 282 ARW (14 GB), so
+these are a copy of today's folder under `D:\Photos\tests\`, not a
+continuation of the 2134-file numbers above, and today's pass 2 does more
+than the 2026-09-25 `candidates` run did (the face mesh, the full-size eye
+read). Two `handpic-cli scan` runs warmed the copy first; the app was then
+opened on it twice, each with a fresh `--index`, and both passes were left
+to finish (another process was reading the same SATA drive at about 480
+MB/s throughout, and the total CPU load before the second open was 11-14
+%). The second open, warm for both passes:
+
+```text
+scan list: dir=\\?\D:\Photos\tests\20261123-todo-measurements\sep19 files=282 in 0ms
+scan reconcile: dir=\\?\D:\Photos\tests\20261123-todo-measurements\sep19 todo=282 removed=0 in 2ms
+scan sidecars: dir=\\?\D:\Photos\tests\20261123-todo-measurements\sep19 dirty=0 changed=0 in 0ms
+scan extract: dir=\\?\D:\Photos\tests\20261123-todo-measurements\sep19 files=282 done=282 errors=0 threads=22 canceled=false in 251ms
+scan faces: dir=\\?\D:\Photos\tests\20261123-todo-measurements\sep19 files=282 done=282 errors=0 threads=3 canceled=false in 6726ms
+```
+
+The first open, whose pass 2 also read the full-size JPEGs for the first
+time, gave `scan extract: ... in 212ms` and `scan faces: ... in 7344ms` with
+the same counts. `handpic-cli scan <copy>` (24 threads) on the same copy
+right after: 0.22 / 0.24 / 0.26s total, 18.1 / 19.5 / 21.6ms mean per file
+on a worker, 0 errors. A cold first open was not recorded: the copy was
+read before the app ran, and the drive was busy with that other reader.
 
 The scan now runs the face mesh only on a face whose box long side is at
 least 60 px (`eyes::EYES_MIN_FACE`); a smaller face goes straight to the eye
