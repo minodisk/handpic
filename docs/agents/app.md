@@ -1977,8 +1977,10 @@ view-only folder, whose open closes a sort menu left open.
   which also holds the view-only rule): with no folder every other key and
   click does nothing too. `dir` is only ever set, never cleared, so no open
   menu needs closing when a folder goes. The MCP `set_sort` / `set_filter`
-  path (`apply_menu`) opens no menu and is not gated by it. Inferred: not
-  yet seen on screen.
+  path (`apply_menu`) opens no menu and is not gated by it. Verified on
+  Windows 11 on 2026-11-23: both buttons were dimmed and a left click on
+  either opened no menu
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 
 - Rule: the two buttons are gpui-component `Button`s (`main.rs`'s
   `menu_button`): the default variant at `.xsmall()` with
@@ -3171,19 +3173,23 @@ range can go to `ScanFocus` as it is. Its thumbnails come from
 `thumbs.rs`, four reads at a time through the index's read-only connection,
 and every image a cell drops goes through `retired`, like the preview's.
 
-- Rule (Inferred, not yet seen on screen): a cell's name wider than the cell
-  is shortened with `…` in the middle (`main.rs`'s `fitted_name`, GPUI's
-  `LineWrapper::truncate_line` with `TruncateFrom::Middle`: about two thirds
-  of the width for the start, one third for the tail with the frame number
-  and the extension), against the current `cell_width`, which follows the
-  strip's height, less `NAME_INSET` (2 px) on each side, since
-  `truncate_line` sums per-character widths rather than measuring the shaped
-  line. A name that fits is drawn unchanged, centered. Before, a long name
-  was centered and clipped on both sides by the cell's content mask
-  (`)SC-RX100M2_DSC00416.ARW`). The user chose the middle over the end
-  (cells of a prefixed folder would read the same, the extension lost) and
-  the start (the prefix lost), 2026-11-22. The name band's tooltip still
-  shows the label's name, not the file name.
+- Rule (seen at the default strip height only; other heights not yet seen on
+  screen): a cell's name wider than the cell is shortened with `…` in the
+  middle (`main.rs`'s `fitted_name`, GPUI's `LineWrapper::truncate_line` with
+  `TruncateFrom::Middle`: about two thirds of the width for the start, one
+  third for the tail with the frame number and the extension), against the
+  current `cell_width`, which follows the strip's height, less `NAME_INSET` (2
+  px) on each side, since `truncate_line` sums per-character widths rather
+  than measuring the shaped line. A name that fits is drawn unchanged,
+  centered. Before, a long name was centered and clipped on both sides by the
+  cell's content mask (`)SC-RX100M2_DSC00416.ARW`). The user chose the middle
+  over the end (cells of a prefixed folder would read the same, the extension
+  lost) and the start (the prefix lost), 2026-11-22. The name band's tooltip
+  still shows the label's name, not the file name. Seen on Windows 11 on
+  2026-11-23 at the default strip height: `ILCE-6300_Free_ra…3068.arw` and
+  `L1001880-DxO_D…ME 3.jpg` fitted inside their cells and short names stayed
+  centered and unchanged
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 
 ### A `canvas` gets no input; its wrapping `div` does (Inferred)
 
@@ -3745,7 +3751,9 @@ choosing the circle.
   start-aligned in the center region, does not move; the center region is
   always 20 px narrower (the circle's slot and the region's 8 px gap), with
   or without the circle, and the slot is empty space at the row's right end
-  while idle. Inferred: the constant position is not yet seen on screen.
+  while idle. Verified on Windows 11 on 2026-11-23: the position `1 / 8`
+  stayed at the same x with the circle shown (pass 2) and gone
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
