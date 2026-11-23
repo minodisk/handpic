@@ -34,27 +34,20 @@ Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
 
 - [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
 
-### App: a strip cell of a file whose thumbnail encode panics reads the internal panic text and the Windows verbatim path
+### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
 #### Background
 
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-6/results.md`): the strip cells of `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng`, whose embedded JPEG is malformed, read `panic while encoding the thumbnail of \\?\D:\Photos\tests\20261122-strip6\zoom\CGO3P_YUN00007.dng` (and the NEF's): the internal panic wording, with the index-keyed path carrying the Windows verbatim prefix. The text comes from the `catch_unwind` around the thumbnail encode in `crates/core/src/scan.rs`; the corrupt ARW's cell of the same run reads a plain reason (`invalid TIFF byte order`), and the preview's read of the same files gives `libjpeg fatal error: Not a JPEG file: starts with 0x80 0x03` (DNG) / `... 0x3c 0x44` (NEF).
-Files: `crates/core/src/scan.rs`, `crates/app/src/strip.rs` (the cell's error text), `crates/app/src/context.rs` (`shown_path`).
+`todo-four-display-fixes` made a strip cell whose thumbnail encode panics read the panic's own message (libjpeg's) with no path, showed `The 1:1 view of this file could not be shown.` over the 1:1 canvas when the current file's crop read fails, reworded the `Rewrite Sidecars from Index…` dialog's third row to `N files with no judgment on record (skipped)`, and drew the strip no taller than leaves the preview `stripheight::PREVIEW_MIN` in a shorter window, the user's height kept. Unit tests cover each rule; nobody has seen them in the running app. The step's checkbox was ticked on the automated criteria only. Existing error rows keep the old text until Clear Cache or a change of the file (`EXTRACTOR_VERSION` was not bumped), so start from a fresh `--index`. Plan: `docs/plans/20261123-todo-four-display-fixes/plan.md`. Files: `crates/core/src/scan.rs`, `crates/app/src/zoom.rs`, `crates/app/src/empty.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/stripheight.rs`, `crates/app/src/main.rs`.
+
+Run each check with `--settings <fresh test store>`, `--index <fresh test index>` and `--log <test file>`, never the real store.
 
 #### TODO
 
-- [ ] Make the cell's text a plain reason without the verbatim path (the libjpeg message if the panic carries it, else a short "the preview is not a JPEG" wording), and check the strip cell's hover text for the same prefix.
-
-### App: the 1:1 view of a file whose crop read fails is a plain black canvas
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-6/results.md`): on `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng`, whose embedded JPEG is malformed, the app stayed up through `z` and paging, and the preview read's `libjpeg fatal error: Not a JPEG file ...` showed in the meta pane (in red) and the status line before `z` and stayed there under `z`; the crop read's own error showed up only as the extra `error <file>: libjpeg fatal error ...` line on stdout (two per file). But the 1:1 view itself was plain black: `z` hides the fit view's "The preview of this file could not be shown." (`empty::PREVIEW_FAILED_TEXT`) and the 1:1 view draws no text of its own for a failed crop. This closes the earlier real-device check of the 1:1 view on these files (`partial-decode-error-exit`, `docs/plans/_archived/20261002-partial-decode-error-exit/plan.md`).
-Files: `crates/app/src/zoom.rs`, `crates/app/src/main.rs`, `crates/app/src/empty.rs`.
-
-#### TODO
-
-- [ ] Show a message over the 1:1 canvas when the crop read fails (or keep the fit view's failed-preview message under `z`), and cover it with a test.
+- [ ] On Windows, open a folder holding `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng` (malformed embedded JPEGs). Expect each strip cell and its hover text to read the libjpeg reason (`libjpeg fatal error: Not a JPEG file: starts with ...`) with no `panic` wording and no path.
+- [ ] On Windows, press `z` on those files. Expect `The 1:1 view of this file could not be shown.` centered over the canvas; paging to a good file shows its crop and no message, and `z` off shows the fit view's own state.
+- [ ] On Windows, drag the strip to `MAX`, then drag the window's bottom edge up. Expect the preview canvas to stay at 240 px or more; dragging the edge back down gives the strip its height back, and after a relaunch the stored height is still `MAX`.
+- [ ] On Windows, run `Rewrite Sidecars from Index…` in a folder with scanned but never-judged files that have no sidecar. Expect the third row to read `N files with no judgment on record (skipped)`.
 
 ### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
 
@@ -1235,17 +1228,6 @@ Files: `crates/app/src/main.rs` (`menu_row`), `crates/app/src/menu.rs`, `crates/
 - [ ] On Windows, pressing `Ctrl+,` while the preview is under way does not open the settings modal.
 - [ ] Record the results in the archived `learnings.md`.
 
-### App: Rewrite Sidecars from Index reported "4 files not in the index (skipped)" in a fully scanned folder
-
-#### Background
-
-Seen on Windows 11 on 2026-11-21: the preview's row said `4 files not in the index (skipped)` in a folder whose scan had finished; those files had no `ratings` row. The engine counts `skipped` as the listed RAW files less the rows it will write. It did not reproduce on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-5/learnings.md`): on a fully scanned 12-file folder the preview listed only the `with a judgment` / `without one` rows.
-Files: `crates/app/src/sidecars.rs` (the row's text), `crates/engine/src/foldersidecars.rs` (`targets`, `preview`).
-
-#### TODO
-
-- [ ] Check whether the wording matches what is counted (a scanned file without a judgment is in the index), and reword the row or change the count.
-
 ### App: real-device checks of Sequence JPEG Timestamps… (gpui-folder-dialogs Step 4)
 
 #### Background
@@ -1758,14 +1740,6 @@ Run each check with `--settings <fresh test store>`, `--index <test index>` and 
 #### TODO
 
 - [ ] On macOS and Linux, repeat the header, popover, handle, drag and `toggleStrip` checks above. CI only builds these platforms.
-
-### App: a shorter window leaves the preview under PREVIEW_MIN until the strip is dragged
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-7/results.md`): with the strip at `MAX` (302 px cells) in a 1009 px window, dragging the window's bottom edge up to 603 px kept the strip's height, so the preview canvas was 188 px tall, under `stripheight::PREVIEW_MIN` (240). The next drag of the strip's top edge clamped the strip and gave the preview its 240 px back. `stripheight::dragged` clamps only a drag; nothing clamps the drawn strip when the window shrinks, unlike the side panes, which `panewidths::drawn` narrows while the window cannot hold them. Files: `crates/app/src/stripheight.rs`, `crates/app/src/main.rs` (`render`, `drag_strip`).
-
-#### TODO
-
-- [ ] Draw the strip no taller than leaves the preview `PREVIEW_MIN` when the window is shorter than the stored height allows (as `panewidths::drawn` does for the side panes), without writing the narrowed height to `stripHeight`, and cover the rule with a unit test.
 
 ### App: real-device checks of the packages the Package workflow builds (gpui-packaging)
 

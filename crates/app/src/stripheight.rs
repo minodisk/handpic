@@ -51,6 +51,14 @@ pub fn dragged(wanted: f32, shared: f32) -> f32 {
         .clamp(MIN, MAX)
 }
 
+/// The cells' height to draw for the user's `height`, the preview and the
+/// pane sharing `shared` px: no taller than leaves the preview `PREVIEW_MIN`,
+/// the bound `dragged` keeps, and never under `MIN`. `height` itself is kept,
+/// so a taller window draws it again.
+pub fn drawn(height: f32, shared: f32) -> f32 {
+    height.min(shared - PREVIEW_MIN - HEADER - GUTTER).max(MIN)
+}
+
 /// The strip pane's height, header and gutter included, its top edge pressed
 /// at the window `press` with the pane `start` high, the pointer at `y`:
 /// `start` moved by the pointer's travel from the press, the pane growing as
@@ -63,7 +71,7 @@ pub fn wanted(start: f32, press: f32, y: f32) -> f32 {
 mod tests {
     use super::{
         DEFAULT, GUTTER, HEADER, MAX, MIN, PREVIEW_MIN, SCROLLBAR_TRACK, STRIP_PADDING, dragged,
-        from_setting, setting, wanted,
+        drawn, from_setting, setting, wanted,
     };
     use serde_json::json;
 
@@ -123,6 +131,32 @@ mod tests {
         // Never under the minimum, whatever the room.
         assert_eq!(dragged(extra + 300., 200.), MIN);
         assert_eq!(dragged(extra + 300., extra + PREVIEW_MIN + 50.), MIN);
+    }
+
+    #[test]
+    fn a_height_that_fits_is_drawn_as_set() {
+        assert_eq!(drawn(DEFAULT, 900.), DEFAULT);
+        assert_eq!(drawn(MAX, 900.), MAX);
+        let extra = HEADER + GUTTER;
+        assert_eq!(drawn(MAX, extra + MAX + PREVIEW_MIN), MAX);
+    }
+
+    #[test]
+    fn a_shorter_window_draws_the_strip_shorter_and_leaves_the_preview_its_minimum() {
+        let extra = HEADER + GUTTER;
+        // 302 px cells with 500 px shared: 500 - 240 - 32 - 9 leaves 219.
+        assert_eq!(drawn(MAX, 500.), 219.);
+        let shared = 500.;
+        assert_eq!(shared - (extra + drawn(MAX, shared)), PREVIEW_MIN);
+        assert_eq!(drawn(MAX, extra + MAX + PREVIEW_MIN - 0.5), MAX - 0.5);
+    }
+
+    #[test]
+    fn the_drawn_strip_is_never_under_its_minimum() {
+        let extra = HEADER + GUTTER;
+        assert_eq!(drawn(MAX, extra + PREVIEW_MIN + 50.), MIN);
+        assert_eq!(drawn(MAX, 200.), MIN);
+        assert_eq!(drawn(MIN, 0.), MIN);
     }
 
     #[test]

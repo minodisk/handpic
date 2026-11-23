@@ -1,6 +1,7 @@
 //! Why the preview area shows no photo, a port of `empty.ts`: no folder is
-//! open, the folder has no RAW or JPEG files, the filter hides every file, or
-//! the current file's preview could not be shown.
+//! open, the folder has no RAW or JPEG files, the filter hides every file,
+//! the current file's preview could not be shown, or its 1:1 view could not be
+//! read.
 
 use handpic_engine::shortcuts::Binding;
 
@@ -8,6 +9,7 @@ use crate::{context::shown_path, filter::FILTERED_TEXT, settingsmodal::display_k
 
 pub const NO_FILES_TEXT: &str = "This folder has no RAW or JPEG files.";
 pub const PREVIEW_FAILED_TEXT: &str = "The preview of this file could not be shown.";
+pub const ZOOM_FAILED_TEXT: &str = "The 1:1 view of this file could not be shown.";
 
 const OPEN_TEXT: &str = "Drop a folder onto the window, or click here to choose one.";
 
@@ -18,11 +20,19 @@ pub enum State {
     NoFiles,
     Filtered,
     PreviewFailed,
+    ZoomFailed,
 }
 
-/// The state from the open folder, the listed and shown file counts and
-/// whether the current file's preview failed, the earlier cases winning.
-pub fn state(open: bool, total: usize, shown: usize, preview_failed: bool) -> State {
+/// The state from the open folder, the listed and shown file counts, whether
+/// the current file's preview failed and whether its 1:1 view's read failed,
+/// the earlier cases winning.
+pub fn state(
+    open: bool,
+    total: usize,
+    shown: usize,
+    preview_failed: bool,
+    zoom_failed: bool,
+) -> State {
     if !open {
         State::NoFolder
     } else if total == 0 {
@@ -31,6 +41,8 @@ pub fn state(open: bool, total: usize, shown: usize, preview_failed: bool) -> St
         State::Filtered
     } else if preview_failed {
         State::PreviewFailed
+    } else if zoom_failed {
+        State::ZoomFailed
     } else {
         State::None
     }
@@ -64,6 +76,7 @@ pub fn text(state: State, bindings: &[Binding]) -> Option<String> {
         State::NoFiles => Some(NO_FILES_TEXT.to_string()),
         State::Filtered => Some(FILTERED_TEXT.to_string()),
         State::PreviewFailed => Some(PREVIEW_FAILED_TEXT.to_string()),
+        State::ZoomFailed => Some(ZOOM_FAILED_TEXT.to_string()),
     }
 }
 
@@ -82,34 +95,46 @@ mod tests {
 
     #[test]
     fn no_folder_open() {
-        assert_eq!(state(false, 0, 0, false), State::NoFolder);
+        assert_eq!(state(false, 0, 0, false, false), State::NoFolder);
     }
 
     #[test]
     fn a_folder_without_raw_or_jpeg_files() {
-        assert_eq!(state(true, 0, 0, false), State::NoFiles);
+        assert_eq!(state(true, 0, 0, false, false), State::NoFiles);
     }
 
     #[test]
     fn every_file_filtered_out() {
-        assert_eq!(state(true, 12, 0, false), State::Filtered);
+        assert_eq!(state(true, 12, 0, false, false), State::Filtered);
     }
 
     #[test]
     fn files_to_show() {
-        assert_eq!(state(true, 12, 3, false), State::None);
+        assert_eq!(state(true, 12, 3, false, false), State::None);
     }
 
     #[test]
     fn the_current_files_preview_failed() {
-        assert_eq!(state(true, 12, 3, true), State::PreviewFailed);
+        assert_eq!(state(true, 12, 3, true, false), State::PreviewFailed);
     }
 
     #[test]
     fn the_other_states_win_over_a_failed_preview() {
-        assert_eq!(state(false, 0, 0, true), State::NoFolder);
-        assert_eq!(state(true, 0, 0, true), State::NoFiles);
-        assert_eq!(state(true, 12, 0, true), State::Filtered);
+        assert_eq!(state(false, 0, 0, true, false), State::NoFolder);
+        assert_eq!(state(true, 0, 0, true, false), State::NoFiles);
+        assert_eq!(state(true, 12, 0, true, false), State::Filtered);
+    }
+
+    #[test]
+    fn the_current_files_1_1_read_failed() {
+        assert_eq!(state(true, 12, 3, false, true), State::ZoomFailed);
+    }
+
+    #[test]
+    fn the_other_states_win_over_a_failed_1_1_read() {
+        assert_eq!(state(false, 0, 0, false, true), State::NoFolder);
+        assert_eq!(state(true, 0, 0, false, true), State::NoFiles);
+        assert_eq!(state(true, 12, 0, false, true), State::Filtered);
     }
 
     #[test]
@@ -171,6 +196,10 @@ mod tests {
         assert_eq!(
             text(State::PreviewFailed, &bindings).as_deref(),
             Some("The preview of this file could not be shown.")
+        );
+        assert_eq!(
+            text(State::ZoomFailed, &bindings).as_deref(),
+            Some("The 1:1 view of this file could not be shown.")
         );
     }
 

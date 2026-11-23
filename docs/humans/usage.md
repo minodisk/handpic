@@ -614,8 +614,9 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
     (or one whose RAW files the index holds nothing for yet) the status
     line says `No judgments indexed for <name>`. The dialog counts the files with a judgment, those without one
     (whose existing sidecar is cleared to unrated, unflagged and unlabeled;
-    none is created for them) and the RAW files the index does not know
-    yet (skipped), and asks `Rewrite the XMP sidecars of N files in
+    none is created for them) and the RAW files with no judgment on record
+    (never judged in Handpic and with no sidecar read at a folder open;
+    skipped), and asks `Rewrite the XMP sidecars of N files in
     <name>?`. An existing sidecar is patched, not regenerated: only the
     rating, the pick / reject flag and the color label (and the `.dop`'s
     two timestamps) change, so Lightroom's develop settings and PhotoLab's

@@ -42,7 +42,7 @@ pub fn rewrite_rows(preview: &Preview) -> Vec<String> {
     }
     if preview.skipped > 0 {
         rows.push(format!(
-            "{} not in the index (skipped)",
+            "{} with no judgment on record (skipped)",
             files(preview.skipped)
         ));
     }
@@ -223,7 +223,7 @@ mod tests {
             vec![
                 "12 files with a judgment",
                 "3 files without one (any existing sidecar is cleared)",
-                "5 files not in the index (skipped)",
+                "5 files with no judgment on record (skipped)",
             ]
         );
     }
@@ -241,7 +241,7 @@ mod tests {
             rewrite_rows(&preview(0, 2, 1)),
             vec![
                 "2 files without one (any existing sidecar is cleared)",
-                "1 file not in the index (skipped)",
+                "1 file with no judgment on record (skipped)",
             ]
         );
     }

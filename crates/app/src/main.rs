@@ -439,7 +439,11 @@ struct Handpic {
     reader: Option<Arc<Mutex<Index>>>,
     /// The index's file, `None` without an index.
     index_path: Option<PathBuf>,
+    /// Drawn at `stripheight::drawn` of `strip_height`.
     strip: Strip,
+    /// The strip's height as the user set it, kept while a shorter window
+    /// draws it shorter.
+    strip_height: f32,
     /// The strip's scrollbar handle, synced from `strip` on every render.
     strip_bar: StripBar,
     thumbs: Thumbs,
@@ -705,6 +709,12 @@ impl Handpic {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
+        // `--auto` starts at the default height.
+        let strip_height = if remember {
+            settings.strip_height
+        } else {
+            stripheight::DEFAULT
+        };
         let (index, reader, index_path) = match index {
             Ok((writer, reader, path)) => (Ok(writer), Some(reader), Some(path)),
             Err(e) => (Err(e), None, None),
@@ -718,6 +728,7 @@ impl Handpic {
                 *observed.lock().unwrap() = Some(geometry);
             }
             this.strip_width = content_width(window);
+            this.fit_strip(window);
             this.strip.clamp(this.strip_width);
             this.strip_moved(cx);
             this.zoom_resized(cx);
@@ -957,15 +968,11 @@ impl Handpic {
             status: "no folder".into(),
             index,
             reader,
-            // `--auto` starts at the default height.
             strip: Strip::new(
                 &[],
-                strip::Geometry::of(if remember {
-                    settings.strip_height
-                } else {
-                    stripheight::DEFAULT
-                }),
+                strip::Geometry::of(stripheight::drawn(strip_height, shared_height(window))),
             ),
+            strip_height,
             index_path,
             strip_bar: StripBar::default(),
             thumbs: Thumbs::default(),
@@ -1289,6 +1296,7 @@ impl Handpic {
         self.strip_dragged = true;
         let wanted = stripheight::wanted(press.start, press.at, y);
         let height = stripheight::dragged(wanted, shared);
+        self.strip_height = height;
         if height != self.strip.geometry().height {
             self.strip.set_geometry(
                 strip::Geometry::of(height),
@@ -1301,6 +1309,20 @@ impl Handpic {
         }
     }
 
+    /// The strip drawn at the user's height within the window's room, resized
+    /// around the cells in view when that changes; the caller moves the
+    /// strip and re-cuts a 1:1 crop.
+    fn fit_strip(&mut self, window: &Window) {
+        let height = stripheight::drawn(self.strip_height, shared_height(window));
+        if height != self.strip.geometry().height {
+            self.strip.set_geometry(
+                strip::Geometry::of(height),
+                self.strip_width,
+                self.pager.current(),
+            );
+        }
+    }
+
     /// A button release anywhere in the window ends a pane or strip drag and
     /// writes the widths or the height once.
     fn end_pane_drag(&mut self) {
@@ -1310,10 +1332,9 @@ impl Handpic {
                 .set("panelWidths", self.pane_widths.setting());
         }
         if std::mem::take(&mut self.strip_dragged) && self.remember_panels {
-            self.settings.writes.set(
-                "stripHeight",
-                stripheight::setting(self.strip.geometry().height),
-            );
+            self.settings
+                .writes
+                .set("stripHeight", stripheight::setting(self.strip_height));
         }
     }
 
@@ -6208,6 +6229,7 @@ impl Render for Handpic {
             self.all.len(),
             self.files.len(),
             preview_failed,
+            self.zoom.read_failed(),
         );
         let empty_text = empty::text(empty, &self.settings.keymap.bindings());
         let window_width = f32::from(window.viewport_size().width);
@@ -7467,6 +7489,15 @@ fn rect_of(bounds: Bounds<Pixels>) -> session::Rect {
         width: f32::from(bounds.size.width),
         height: f32::from(bounds.size.height),
     }
+}
+
+/// The height the middle row and the strip share: the window's less its
+/// client-side frame, the title bar and the status row.
+fn shared_height(window: &Window) -> f32 {
+    let pad = gpui_kit::component::window_paddings(window);
+    f32::from(
+        window.viewport_size().height - pad.top - pad.bottom - TITLE_BAR_HEIGHT - STATUS_ROW_HEIGHT,
+    )
 }
 
 /// The viewport's width less the client-side frame's left and right padding
