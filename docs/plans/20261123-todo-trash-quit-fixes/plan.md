@@ -87,7 +87,7 @@ Scope rules for every step:
       listed in `todo.md` as flaky on a loaded machine. Do not add a test
       that depends on a tight real-time bound.
 
-- [ ] Step 2: A held Clear Cache is drained when a blocking dialog is canceled (item 2)
+- [x] Step 2: A held Clear Cache is drained when a blocking dialog is canceled (item 2)
   - Done when:
     - Canceling the trash dialog (Cancel / Escape) and canceling a folder
       dialog each call `drain_clear`, so a Clear Cache held at an idle point
@@ -330,3 +330,5 @@ Risks:
 ## Progress
 
 (2026-11-23) Step 1 complete
+
+(2026-11-24) Step 2 complete

@@ -1437,6 +1437,7 @@ impl Handpic {
                 import::Dismiss::None => {}
             }
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         } else if self.folderops.sequence.is_open() {
             match self.folderops.sequence.dismiss() {
@@ -1449,10 +1450,12 @@ impl Handpic {
                 sequence::Dismiss::None => {}
             }
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         } else if self.folderops.sidecars.dismiss() || self.folderops.date.dismiss() {
             self.folderops.dialog = None;
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         }
     }
@@ -2172,7 +2175,7 @@ mod tests {
     use gpui_kit::{Bounds, Pixels, ScrollDelta, ScrollEvent, point, px};
 
     use super::*;
-    use crate::uitest::Ui;
+    use crate::uitest::{Ui, hold_a_clear_past_the_idle_point};
 
     /// The surface's gap between the lines and the body (`modal.rs`'s
     /// `gap_2`, the component's `gap_y_2`).
@@ -2183,6 +2186,33 @@ mod tests {
         line: Bounds<Pixels>,
         list: Bounds<Pixels>,
         footer: Bounds<Pixels>,
+    }
+
+    #[test]
+    fn canceling_a_folder_dialog_drains_a_held_clear() {
+        let mut ui = Ui::open();
+        let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+        let dir = folder.to_string_lossy().into_owned();
+        ui.update(|view, cx| {
+            let target = Target {
+                kind: Kind::Rewrite,
+                dir,
+            };
+            assert!(view.folderops.sidecars.start(target));
+            assert!(view.folderops.sidecars.previewed());
+            view.show_folder_dialog(
+                Dialog::new(Content::default(), "Rewrite", Style::Primary, true),
+                cx,
+            );
+            assert!(view.folderops.dialog_open());
+        });
+        hold_a_clear_past_the_idle_point(&mut ui);
+        let running = ui.update(|view, cx| {
+            view.dismiss_folder_dialog(true, cx);
+            view.clear.running()
+        });
+        assert!(running);
+        ui.wait_until("the clear's end", |view| !view.clear.running());
     }
 
     /// A folder dialog with two lines, `rows` rows and a headed list of

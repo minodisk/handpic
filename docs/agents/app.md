@@ -2256,7 +2256,10 @@ not open.
   folder's Delete Sidecars; with a folder open it re-lists), a trash undo's (`restored`, one into
   another folder lists nothing), a sidecar rewrite's (`sidecars_ran`) and a
   folder run's that reopens nothing (`settle_folder_run`, a failed rename
-  among them). The confirmation is a
+  among them), and the cancel of the trash dialog (`dismiss_trash`) or of a
+  folder dialog (`dismiss_folder_dialog`), by its Cancel, Escape or an MCP
+  `cancel_operation`, so a clear held past an idle point that came while
+  that dialog was up goes on once it closes. The confirmation is a
   component `Dialog` through `modal.rs`, the first one opened from inside
   the settings: its keys reach `clear_key_down` in the footer's capture
   phase, so Escape cancels the dialog, not the settings, and the component

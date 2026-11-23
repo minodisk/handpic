@@ -628,3 +628,34 @@ fn a_strip_name_wider_than_its_cell_is_shortened_in_the_middle() {
     );
     assert_eq!(short.as_ref(), "DSC00416.ARW");
 }
+
+/// A Clear Cache an MCP client confirmed during a re-listing, whose end, the
+/// idle point, passes while the dialog `ui` shows is up: the clear stays held.
+pub(crate) fn hold_a_clear_past_the_idle_point(ui: &mut Ui) {
+    ui.update(|view, cx| {
+        view.resync.open();
+        view.relist(cx);
+        view.confirmed_clear(cx);
+        assert!(view.clear.waiting());
+    });
+    ui.wait_until("the re-listing's end", |view| !view.clear_busy());
+    ui.read(|view| assert!(view.clear.waiting(), "drained under a dialog"));
+}
+
+#[test]
+fn canceling_the_trash_dialog_drains_a_held_clear() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    ui.update(|view, cx| {
+        let paths = [view.files[0].to_string_lossy().into_owned()];
+        view.confirm_trash(&paths, crate::trash::Mode::Trash, cx);
+        assert!(view.trash.busy());
+    });
+    hold_a_clear_past_the_idle_point(&mut ui);
+    let running = ui.update(|view, cx| {
+        view.dismiss_trash(cx);
+        view.clear.running()
+    });
+    assert!(running);
+    ui.wait_until("the clear's end", |view| !view.clear.running());
+}
