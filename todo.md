@@ -324,33 +324,6 @@ Files: `.claude/agents/pr-runner.md`
 
 - [ ] On the next real `/pr` run, read the `pr-runner` subagent transcript (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that every `.claude/skills/**/scripts` call, especially `wait-pr-actionable.sh`, has exactly the text in its code block with no pipe, `tail`, redirect, `; echo exit=$?`, `${PIPESTATUS[...]}` or chaining, and that none waited long before starting or was moved to the background after the script finished. If a decorated call appears, strengthen the wording in `.claude/agents/pr-runner.md` §4.
 
-### Core: SIGMA fp L strip thumbnails have over ten times the pixels of other bodies'
-
-SIGMA fp L DNGs have no strip JPEG at or above `PREVIEW_MIN_WIDTH` (1600)
-below the 9520x6328 full-size one, so the preview tier falls back to the
-full-size JPEG. The strip does not decode that per thumbnail: at scan time
-`thumbnail_jpeg` decodes the preview tier at 2/8 scale and re-encodes it,
-the index caches the result, and the strip's thumbnail read
-(`crates/app/src/thumbs.rs`) reads the cache. But 2/8 of 9520x6328 is about 2380x1582 (about 3.8 MP), more than
-ten times the pixels of the ~404x270 thumbnail of other bodies, so each
-strip cell costs more to read and to decode. Each scan also
-decodes the ~60 MP JPEG (at 2/8 scale) once per file. OM System / Olympus
-ORFs have the same cost on a smaller scale: their only JPEG is 3200x2400, so
-the fixed 2/8 gives 800x600 thumbnails, about four times the pixels of the
-~404x270 ones (`crates/core/src/orf.rs`; decided in
-`docs/plans/_archived/20260930-olympus-orf/plan.md` to leave `scan.rs`
-alone for now). Files: `crates/core/src/decode.rs` (`thumbnail_jpeg`), `crates/core/src/scan.rs`,
-`crates/engine/src/index.rs`, `crates/app/src/thumbs.rs`,
-`crates/core/src/arw.rs` (`PREVIEW_MIN_WIDTH`, tier selection).
-
-#### TODO
-
-- [ ] Measure strip thumbnail load time on a SIGMA fp L folder (per-cell
-      read and decode).
-- [ ] Candidate fix, not decided: cap the thumbnail size, e.g. pick a
-      larger DCT scale-down (`d.scale(n)`) when the preview is large, or
-      resize to the normal thumbnail width.
-
 ### Core: Nikon DX-crop and non-standard-crop AF point mapping is unverified
 
 `nef::parse`'s Nikon `AFInfo2` AF point is read as top-left coordinates in
