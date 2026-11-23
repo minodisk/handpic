@@ -26,7 +26,9 @@ use serde::Serialize;
 
 use crate::index::{self, Index};
 use crate::listing::{canonicalize, read_listing};
-use crate::rename::{apply, file_run, folder_target, shared_xmps, Context, FilePlan, Op, Renamed};
+use crate::rename::{
+    apply, file_run, folder_target, same_entry, shared_xmps, Context, FilePlan, Op, Renamed,
+};
 use crate::sidecar::{existing_sidecar, SidecarFormat};
 use crate::trash::Failure;
 use crate::treewatch;
@@ -313,7 +315,7 @@ fn split(
             });
             let op = match &xmp {
                 None => Some(Op::Move),
-                Some((_, to, _)) if placed.contains(to) => None,
+                Some((_, to, _)) if placed.iter().any(|p| same_entry(p, to)) => None,
                 Some((_, _, true)) => Some(Op::Copy),
                 Some((_, _, false)) => Some(Op::Move),
             };
@@ -1048,6 +1050,25 @@ mod tests {
         assert!(failed.is_empty());
         assert_eq!(read(&parent.join("2026-10-31").join("a.xmp")), b"shared");
         assert_eq!(read(&parent.join("2026-11-01").join("A.xmp")), b"shared");
+        assert!(names(&dir).is_empty());
+    }
+
+    #[test]
+    fn mates_whose_stems_differ_in_case_split_into_one_date_folder() {
+        let dir = xmp_folder("shared-case-same", &["a.ARW", "A.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [group(
+            "2026-10-31",
+            vec![dir.join("a.ARW"), dir.join("A.NEF")],
+        )];
+        let (counts, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(counts, vec![("2026-10-31".to_string(), 2)]);
+        let xmps = names(&parent.join("2026-10-31"))
+            .iter()
+            .filter(|n| n.to_lowercase().ends_with(".xmp"))
+            .count();
+        assert_eq!(xmps, 1);
         assert!(names(&dir).is_empty());
     }
 

@@ -205,7 +205,7 @@ pub fn shared_xmps(dir: &Path) -> HashMap<PathBuf, Vec<PathBuf>> {
 }
 
 /// Whether `a` and `b` are one entry on disk.
-fn same_entry(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_entry(a: &Path, b: &Path) -> bool {
     matches!(
         (std::fs::canonicalize(a), std::fs::canonicalize(b)),
         (Ok(a), Ok(b)) if a == b
