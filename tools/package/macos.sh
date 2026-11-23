@@ -14,8 +14,9 @@ set -o nounset
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-# The executable's name.
-binary="handpic"
+# The executable's name in the bundle, which mise.toml's app:bundle:macos
+# copies from the Cargo bin `handpic`.
+binary="Handpic"
 
 release="${root}/crates/app/target/release"
 app="${release}/Handpic.app"

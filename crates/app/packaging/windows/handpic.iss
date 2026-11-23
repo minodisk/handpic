@@ -3,7 +3,8 @@
 ;   AppVersion  the version, tools/package/version.sh's SemVer form
 ;   FileVersion the version's Windows form (x.y.z.0), which Inno cannot
 ;               derive from a prerelease AppVersion
-;   Binary      the executable's file name, e.g. handpic.exe
+;   Binary      the installed executable's file name, Handpic.exe
+;   BuiltBinary the built executable's file name in ReleaseDir, handpic.exe
 ;   ReleaseDir  the folder holding the built executable
 ;   LicensesDir the folder notices.sh filled
 
@@ -37,7 +38,7 @@ Compression=lzma2
 SolidCompression=yes
 
 [Files]
-Source: "{#ReleaseDir}\{#Binary}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#ReleaseDir}\{#BuiltBinary}"; DestDir: "{app}"; DestName: "{#Binary}"; Flags: ignoreversion
 Source: "{#LicensesDir}\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 
 [Icons]

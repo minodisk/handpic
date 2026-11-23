@@ -536,7 +536,8 @@ the distributables").
 
 `mise run app:bundle:macos [profile]` (release by default) builds and lays
 out `crates/app/target/<profile>/Handpic.app` with the checked-in
-`crates/app/packaging/macos/Info.plist`, `Contents/MacOS/handpic` and
+`crates/app/packaging/macos/Info.plist`, `Contents/MacOS/Handpic` (the
+Cargo bin `handpic`, copied under the shipped name) and
 `crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
 numeric form `tools/package/version.sh numeric` prints into the copied
 `Info.plist`'s `CFBundleShortVersionString` and `CFBundleVersion` (`plutil
@@ -567,6 +568,22 @@ of them. Each leg builds with `mise exec rust@1.98.1 -- cargo build --release
 --locked` in `crates/app`, as the `app` CI job runs cargo, and then
 packages the built `target/release` binary with a script under
 `tools/package/`, which builds nothing.
+
+- Rule: the shipped executable is `Handpic.exe` on Windows (the portable
+  ZIP's `Handpic/Handpic.exe`, the setup's `{app}\Handpic.exe`) and
+  `Contents/MacOS/Handpic` in `Handpic.app`, while the Cargo bin stays
+  `handpic` (`crates/app/Cargo.toml`), so `cargo run`, `target/<profile>/`,
+  the mise tasks and the Linux packages keep `handpic`. The rename happens
+  in packaging only: `windows.sh` (`binary`, cargo's output, and `shipped`,
+  passed to `handpic.iss` as `BuiltBinary` and `Binary`, the `[Files]`
+  entry's `DestName`), `app:bundle:macos` in `mise.toml`, `macos.sh` and the
+  `Info.plist`'s `CFBundleExecutable`. The updater looks the executable up
+  in an archive by that fixed name per install kind, never by the running
+  exe's own file name (below). An Inno Setup upgrade over an install holding
+  `handpic.exe` writes the new casing: a throwaway setup with its own
+  `AppId` installing `x.exe` and then one with `DestName` `X.exe` left only
+  `X.exe` holding the new bytes (Measured 2026-11-23, Inno Setup 6.7.3), so
+  `handpic.iss` has no `[InstallDelete]` for it.
 
 - `version.sh [form] [version]` prints `[package].version` of
   `crates/app/Cargo.toml` (`0.0.0` until release-please owns it), or the
@@ -2430,6 +2447,15 @@ call.
   `<...>/.local/bin/<exe>` the tarball, else unknown. So a `cargo run` or
   `target/release` binary is unknown and never installs. The registry's
   uninstall entry is not used, since it cannot tell a moved install apart.
+- Rule: the portable and tarball archive path. The engine's `install`
+  takes the executable at a fixed path per install kind (`portable_asset`):
+  `Handpic/Handpic.exe` in the Windows ZIP and `Handpic/bin/handpic` in the
+  Linux tarball, matched exactly, and writes it onto the running exe's own
+  path (`bin_install_path`), so a portable copy whose exe is `handpic.exe`
+  keeps that name. Nothing is derived from the running exe's file name
+  (`bin_name` is the constant `handpic`), so a renamed copy still updates. A
+  2.0.0 portable copy looks for `Handpic/handpic.exe` and fails on a ZIP
+  that ships `Handpic.exe`; it is reinstalled by hand.
 - Rule: the Inno Setup install's setup. The engine's `stage_setup`
   downloads `Handpic-<version>-windows-x64-setup.exe.zip` of the pinned
   release into `datadir::update_staging` (`update` in the `<IDENTIFIER>`
@@ -2453,7 +2479,8 @@ call.
   bundle from the executable's path (`app_bundle`, the `<x>.app` of
   `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
   mode (`bundle_path_in_archive("Handpic.app")`, `bundle_install_path`, no
-  `bin_path_in_archive`, `bin_name` still set) with the portable path's
+  `bin_path_in_archive`, `bin_name` still set to the Cargo bin's `handpic`,
+  which names no path) with the portable path's
   `SHA256SUMS`, zipsign keys, tag pin and exact asset name
   (`Handpic-<version>-macos-<arch>.tar.gz`, `arm64` for Rust's `aarch64`).
   `self_update` extracts the whole bundle into a temporary folder beside the

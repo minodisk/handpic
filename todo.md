@@ -1956,3 +1956,21 @@ Build in `crates/app` first. Work only on copies under `D:\Photos\tests\` holdin
 - [ ] On Windows 11, open a cold folder of RAW files (fresh `--index`) large enough for the progress circle to show (a cold scan; a `Move to Trash…` run also shows it). Expect the position text (`1 / 600`) not to move when the circle appears or goes.
 - [ ] On Windows 11, open a folder with long file names. Expect a long name in a strip cell to read like `DSC-RX100M2_D…416.ARW`, fully inside the cell with no glyph clipped at either edge, at the default strip height and after dragging the strip shorter and taller. Expect a short name to stay centered and unchanged. If a glyph is clipped, tune `NAME_INSET`.
 - [ ] After the three checks pass, mark the three rules Verified in `docs/agents/app.md` (the menus-with-no-folder rule, the always-reserved slot rule, and the middle-ellipsis rule).
+
+### App: real-device checks of the capital executable name (`Handpic.exe`, `Contents/MacOS/Handpic`)
+
+#### Background
+
+The `capital-exe-name` feature ships the Cargo bin `handpic` as `Handpic.exe` in the Windows portable ZIP and the Inno Setup install, and as `Contents/MacOS/Handpic` in `Handpic.app`; Linux keeps `handpic`. The engine's updater now looks the executable up in an archive by a fixed name per install kind (`Handpic/Handpic.exe`, `Handpic/bin/handpic`) instead of the running exe's own file name, and writes it onto the running exe's path, so a portable `handpic.exe` keeps its name. The unit tests cover the lookup and the kept name, `mise run app:package:windows` was run locally and its ZIP listed, and a throwaway Inno Setup script showed an upgrade writes the new casing (`x.exe` then `DestName` `X.exe` left `X.exe`). Nobody ran a real upgrade over a 2.0.0 install, a real portable update from a test feed, the macOS bundle or a `Package` run. A 2.0.0 portable copy is expected to fail its update (it looks for `Handpic/handpic.exe`) and to be reinstalled by hand, as accepted. Plan: `docs/plans/20261123-capital-exe-name/plan.md`.
+
+Files: `tools/package/windows.sh`, `crates/app/packaging/windows/handpic.iss`, `tools/package/macos.sh`, `crates/app/packaging/macos/Info.plist`, `mise.toml` (`[tasks."app:bundle:macos"]`), `crates/engine/src/update.rs` (`portable_asset`, `install`).
+
+Test copies get their own `--settings`, `--index`, `--log` and `--mcp-port`, and are quit by their own PID, never by image name.
+
+#### TODO
+
+- [ ] On Windows 11, over a real 2.0.0 Inno Setup install, run the new setup by hand, then (on another 2.0.0 install) through the updater with `Restart Now`. Expect `Handpic.exe` (and no `handpic.exe`) in `%LOCALAPPDATA%\Programs\Handpic`, the Start menu shortcut starting it, Settings → Apps showing Handpic with its icon, the relaunch starting the new version, and the uninstall removing the folder's files and the entry.
+- [ ] On Windows 11, a portable copy whose exe is `handpic.exe`, running a build with this change, updates from a test feed (`tools/package/test-release.sh`) to a newer build. Expect the new version after `Restart Now`; record the exe's file name afterwards (expected `handpic.exe`). Repeat with a copy whose exe is `Handpic.exe` (expected to stay `Handpic.exe`).
+- [ ] On Windows 11, a 2.0.0 portable copy offered the new release fails its install and stays on 2.0.0, as accepted; record the message shown.
+- [ ] On macOS, run `mise run app:package:macos` and open the DMG's `Handpic.app`. Expect it to launch, `Contents/MacOS/Handpic` on disk and `codesign --verify --strict` passing. Then a 2.0.0 `Handpic.app` in `/Applications` updates to the new bundle and restarts into it.
+- [ ] Dispatch the `Package` workflow by hand on the branch; expect its logs' listings (the ZIP's contents, the installed folder, the bundle) to show `Handpic.exe` and `Contents/MacOS/Handpic`.

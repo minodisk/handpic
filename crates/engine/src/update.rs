@@ -175,7 +175,7 @@ fn configure(source: &Source, current: &str) -> github::UpdateBuilder {
 pub fn check(source: &Source, current: &str) -> Result<Option<Offer>, String> {
     Version::parse(current).map_err(|e| format!("version {current}: {e}"))?;
     let releases = configure(source, current)
-        .bin_name("handpic")
+        .bin_name(BIN_NAME)
         .timeout(CHECK_TIMEOUT)
         .build()
         .and_then(|update| update.get_newer_releases())
@@ -191,17 +191,22 @@ pub fn check(source: &Source, current: &str) -> Result<Option<Offer>, String> {
     }))
 }
 
+/// `self_update`'s required `bin_name`, the Cargo bin's name. It names no
+/// path: the archive paths are fixed per install kind.
+const BIN_NAME: &str = "handpic";
+
 /// The asset an install kind updates from and the executable's path inside
-/// it, `None` for a kind `install` does not update.
-fn portable_asset(kind: InstallKind, version: &str, exe_name: &str) -> Option<(String, String)> {
+/// it, the name the package ships whatever the running exe is called, `None`
+/// for a kind `install` does not update.
+fn portable_asset(kind: InstallKind, version: &str) -> Option<(String, String)> {
     match kind {
         InstallKind::Portable => Some((
             format!("Handpic-{version}-windows-x64.zip"),
-            format!("Handpic/{exe_name}"),
+            "Handpic/Handpic.exe".to_string(),
         )),
         InstallKind::Tarball => Some((
             format!("Handpic-{version}-linux-x64.tar.gz"),
-            format!("Handpic/bin/{exe_name}"),
+            "Handpic/bin/handpic".to_string(),
         )),
         _ => None,
     }
@@ -222,27 +227,15 @@ pub fn install(
     current: &str,
     progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
 ) -> Result<(), String> {
-    let exe_name = exe
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("{}: no file name", exe.display()))?;
     if kind == InstallKind::App {
         let bundle = app_bundle(exe)
             .ok_or_else(|| format!("{}: not inside a .app bundle", exe.display()))?;
-        return install_app(
-            source,
-            offer,
-            bundle,
-            exe_name,
-            current,
-            progress,
-            codesign_check,
-        );
+        return install_app(source, offer, bundle, current, progress, codesign_check);
     }
-    let (asset, path_in_archive) = portable_asset(kind, &offer.version, exe_name)
+    let (asset, path_in_archive) = portable_asset(kind, &offer.version)
         .ok_or_else(|| format!("a {kind:?} install is not updated by the app"))?;
     let status = configure(source, current)
-        .bin_name(exe_name)
+        .bin_name(BIN_NAME)
         .bin_path_in_archive(path_in_archive)
         .bin_install_path(exe)
         .timeout(INSTALL_TIMEOUT)
@@ -329,12 +322,11 @@ fn codesign_check(bundle: &Path) -> Result<(), String> {
 /// `install`'s, the whole bundle extracted beside `bundle`, `verify`
 /// (`codesign_check`) run on it, and the two folders swapped by renames, the
 /// old one put back on a failed step. The executable inside is never
-/// replaced alone. `exe_name` is `self_update`'s required `bin_name`.
+/// replaced alone.
 fn install_app(
     source: &Source,
     offer: &Offer,
     bundle: &Path,
-    exe_name: &str,
     current: &str,
     progress: impl Fn(u64, Option<u64>) + Send + Sync + 'static,
     verify: fn(&Path) -> Result<(), String>,
@@ -344,7 +336,7 @@ fn install_app(
     }
     let asset = app_asset(&offer.version);
     let status = configure(source, current)
-        .bin_name(exe_name)
+        .bin_name(BIN_NAME)
         .bundle_path_in_archive(APP_IN_ARCHIVE)
         .bundle_install_path(bundle)
         .timeout(INSTALL_TIMEOUT)
@@ -410,7 +402,7 @@ fn stage(
     let (zip_name, setup_name) = setup_asset(&offer.version);
     let tag = format!("v{}", offer.version);
     let release = configure(source, current)
-        .bin_name("handpic")
+        .bin_name(BIN_NAME)
         .timeout(CHECK_TIMEOUT)
         .build()
         .and_then(|update| update.get_release_version(&tag))
@@ -689,7 +681,12 @@ mod tests {
     const TAR: &str = "Handpic-2.0.0-linux-x64.tar.gz";
 
     fn portable_archive(signer: Option<&SigningKey>) -> (String, Vec<u8>) {
-        let archive = zip_of("Handpic/handpic.exe", NEW);
+        portable_archive_of("Handpic/Handpic.exe", signer)
+    }
+
+    /// The portable ZIP with the new exe at `path`.
+    fn portable_archive_of(path: &str, signer: Option<&SigningKey>) -> (String, Vec<u8>) {
+        let archive = zip_of(path, NEW);
         let bytes = match signer {
             Some(key) => signed(ZIP, &archive, key),
             None => archive,
@@ -697,11 +694,12 @@ mod tests {
         (ZIP.to_string(), bytes)
     }
 
-    /// A portable install at 1.0.0 in a temp folder; its exe.
-    fn portable_install(name: &str) -> PathBuf {
+    /// A portable install at 1.0.0 in a temp folder, its exe named
+    /// `exe_name`; its exe.
+    fn portable_install(name: &str, exe_name: &str) -> PathBuf {
         let dir = temp_dir(name).join("Handpic");
         std::fs::create_dir_all(dir.join("licenses")).unwrap();
-        let exe = dir.join("handpic.exe");
+        let exe = dir.join(exe_name);
         std::fs::write(&exe, OLD).unwrap();
         exe
     }
@@ -713,16 +711,26 @@ mod tests {
         }
     }
 
-    /// Install the 2.0.0 the feed of `assets` holds over a portable 1.0.0,
-    /// trusting `key(1)`; the result and the exe's bytes afterwards.
+    /// Install the 2.0.0 the feed of `assets` holds over a portable 1.0.0
+    /// whose exe is `Handpic.exe`, trusting `key(1)`; the result and the exe's
+    /// bytes afterwards.
     fn install_portable(
         name: &str,
+        assets: Vec<(String, Vec<u8>)>,
+    ) -> (Result<(), String>, Vec<u8>) {
+        install_portable_as(name, "Handpic.exe", assets)
+    }
+
+    /// `install_portable` over an exe named `exe_name`.
+    fn install_portable_as(
+        name: &str,
+        exe_name: &str,
         assets: Vec<(String, Vec<u8>)>,
     ) -> (Result<(), String>, Vec<u8>) {
         let mut r = release("2.0.0");
         r.assets = assets;
         let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
-        let exe = portable_install(name);
+        let exe = portable_install(name, exe_name);
         let result = install(
             &source,
             &offer("2.0.0"),
@@ -788,7 +796,7 @@ mod tests {
             .port();
         let source = source(format!("http://127.0.0.1:{port}"), vec![]);
         assert!(check(&source, "1.0.0").is_err());
-        let exe = portable_install("unreachable");
+        let exe = portable_install("unreachable", "Handpic.exe");
         assert!(install(
             &source,
             &offer("2.0.0"),
@@ -801,13 +809,37 @@ mod tests {
         assert_eq!(std::fs::read(&exe).unwrap(), OLD);
     }
 
+    /// The names in the folder of the portable install `name`.
+    fn portable_listing(name: &str) -> Vec<String> {
+        let dir = std::env::temp_dir()
+            .join(format!("handpic-update-{name}-{}", std::process::id()))
+            .join("Handpic");
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
     #[test]
-    fn a_signed_zip_replaces_the_portable_exe() {
-        let archive = portable_archive(Some(&key(1)));
-        let assets = with_sums(archive);
-        let (result, exe) = install_portable("zip", assets);
-        result.unwrap();
-        assert_eq!(exe, NEW);
+    fn a_signed_zip_replaces_the_portable_exe_and_keeps_its_name() {
+        for (name, exe_name) in [("zip-lower", "handpic.exe"), ("zip-upper", "Handpic.exe")] {
+            let archive = portable_archive(Some(&key(1)));
+            let (result, exe) = install_portable_as(name, exe_name, with_sums(archive));
+            result.unwrap();
+            assert_eq!(exe, NEW, "{exe_name}");
+            assert_eq!(portable_listing(name), [exe_name, "licenses"]);
+        }
+    }
+
+    #[test]
+    fn a_zip_holding_only_the_lowercase_exe_installs_nothing() {
+        let archive = portable_archive_of("Handpic/handpic.exe", Some(&key(1)));
+        let (result, exe) = install_portable_as("zip-old", "handpic.exe", with_sums(archive));
+        assert!(result.is_err());
+        assert_eq!(exe, OLD);
+        assert_eq!(portable_listing("zip-old"), ["handpic.exe", "licenses"]);
     }
 
     #[test]
@@ -883,7 +915,7 @@ mod tests {
         let mut r = release("2.0.0");
         r.assets = with_sums(archive);
         let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
-        let exe = portable_install("deb");
+        let exe = portable_install("deb", "Handpic.exe");
         for kind in [InstallKind::Deb, InstallKind::Unknown] {
             assert!(install(&source, &offer("2.0.0"), kind, &exe, "1.0.0", |_, _| {}).is_err());
             assert_eq!(std::fs::read(&exe).unwrap(), OLD);
@@ -1009,11 +1041,11 @@ mod tests {
     }
 
     /// The files of a `.app`, relative to it, with the executable at
-    /// `Contents/MacOS/handpic` holding `exe`.
+    /// `Contents/MacOS/Handpic` holding `exe`.
     fn app_files(exe: &[u8]) -> Vec<(&'static str, Vec<u8>)> {
         vec![
             ("Contents/Info.plist", b"<plist/>".to_vec()),
-            ("Contents/MacOS/handpic", exe.to_vec()),
+            ("Contents/MacOS/Handpic", exe.to_vec()),
             ("Contents/Resources/icon.icns", exe.to_vec()),
         ]
     }
@@ -1055,15 +1087,7 @@ mod tests {
         let mut r = release("2.0.0");
         r.assets = assets;
         let source = source(serve(vec![r]), vec![key(1).verifying_key().to_bytes()]);
-        install_app(
-            &source,
-            &offer("2.0.0"),
-            bundle,
-            "handpic",
-            "1.0.0",
-            |_, _| {},
-            verify,
-        )
+        install_app(&source, &offer("2.0.0"), bundle, "1.0.0", |_, _| {}, verify)
     }
 
     fn app_archive(tar_gz: &[u8], signer: Option<&SigningKey>) -> (String, Vec<u8>) {
@@ -1076,7 +1100,7 @@ mod tests {
     }
 
     fn exe_of(bundle: &Path) -> Vec<u8> {
-        std::fs::read(bundle.join("Contents/MacOS/handpic")).unwrap()
+        std::fs::read(bundle.join("Contents/MacOS/Handpic")).unwrap()
     }
 
     type Verify = fn(&Path) -> Result<(), String>;
@@ -1113,7 +1137,7 @@ mod tests {
     #[test]
     fn a_bundle_failing_a_check_leaves_the_old_bundle_in_place() {
         let tar = app_tar_gz(&app_files(NEW));
-        let other = tar_gz_of("Other.app/Contents/MacOS/handpic", NEW);
+        let other = tar_gz_of("Other.app/Contents/MacOS/Handpic", NEW);
         let cases: [Case; 5] = [
             (
                 "app-unsigned",
@@ -1200,13 +1224,13 @@ mod tests {
         fn signed_bundle(dir: &Path) -> PathBuf {
             let app = dir.join(APP_IN_ARCHIVE);
             std::fs::create_dir_all(app.join("Contents/MacOS")).unwrap();
-            std::fs::copy("/usr/bin/true", app.join("Contents/MacOS/handpic")).unwrap();
+            std::fs::copy("/usr/bin/true", app.join("Contents/MacOS/Handpic")).unwrap();
             std::fs::write(
                 app.join("Contents/Info.plist"),
                 concat!(
                     r#"<?xml version="1.0" encoding="UTF-8"?>"#,
                     "\n<plist version=\"1.0\"><dict>",
-                    "<key>CFBundleExecutable</key><string>handpic</string>",
+                    "<key>CFBundleExecutable</key><string>Handpic</string>",
                     "<key>CFBundleIdentifier</key><string>dev.minodisk.handpic.test</string>",
                     "<key>CFBundlePackageType</key><string>APPL</string>",
                     "</dict></plist>\n"
@@ -1230,7 +1254,7 @@ mod tests {
 
         let app = signed_bundle(&temp_dir("codesign-src"));
         codesign_check(&app).unwrap();
-        let signed_exe = std::fs::read(app.join("Contents/MacOS/handpic")).unwrap();
+        let signed_exe = std::fs::read(app.join("Contents/MacOS/Handpic")).unwrap();
         let good = tar_gz_dir(&app);
         let mut plist = std::fs::OpenOptions::new()
             .append(true)
@@ -1271,13 +1295,13 @@ mod tests {
 
     #[test]
     fn the_install_kind_follows_the_executables_place() {
-        let exe = portable_install("detect");
+        let exe = portable_install("detect", "Handpic.exe");
         assert_eq!(detect(&exe), InstallKind::Portable);
         std::fs::write(exe.with_file_name("unins000.exe"), b"").unwrap();
         assert_eq!(detect(&exe), InstallKind::Inno);
         let cases = [
             (
-                "/Applications/Handpic.app/Contents/MacOS/handpic",
+                "/Applications/Handpic.app/Contents/MacOS/Handpic",
                 InstallKind::App,
             ),
             ("/usr/lib/handpic/handpic", InstallKind::Deb),
@@ -1287,13 +1311,13 @@ mod tests {
                 InstallKind::Unknown,
             ),
             (
-                "/Applications/Handpic/Contents/MacOS/handpic",
+                "/Applications/Handpic/Contents/MacOS/Handpic",
                 InstallKind::Unknown,
             ),
         ];
         assert_eq!(
             app_bundle(Path::new(
-                "/Applications/Handpic.app/Contents/MacOS/handpic"
+                "/Applications/Handpic.app/Contents/MacOS/Handpic"
             )),
             Some(Path::new("/Applications/Handpic.app"))
         );

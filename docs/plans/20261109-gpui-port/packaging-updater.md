@@ -349,8 +349,10 @@ To be checked in the sub-milestone that needs each one.
   exact name through `asset_matcher` (`Handpic-<version>-windows-x64.zip`,
   `Handpic-<version>-linux-x64.tar.gz`), which replaces `self_update`'s
   target matching, with the release pinned by `release_tag("v<version>")`;
-  the executable is `bin_path_in_archive` `Handpic/<exe>` in the ZIP and
-  `Handpic/bin/<exe>` in the tarball. Only the executable is replaced: the
+  the executable is `bin_path_in_archive` `Handpic/Handpic.exe` in the ZIP
+  and `Handpic/bin/handpic` in the tarball, fixed per install kind (until
+  the 2026-11-23 rename, `Handpic/<exe>` and `Handpic/bin/<exe>` from the
+  running exe's own file name). Only the executable is replaced: the
   ZIP's `licenses/` and the tarball's icon and desktop entry stay as first
   installed (the plan's deviation 6 from gpui-kit's guide).
 - **Measured** (2026-11-21, the test feed above). Replacing the running exe
@@ -362,6 +364,9 @@ To be checked in the sub-milestone that needs each one.
   `handpic`, no `riffle-native` is left under `crates/app/packaging` or in
   `datadir.rs`, and the portable ZIP's folder held only `handpic.exe` and
   `licenses`, so the Windows ZIP and setup ship `handpic.exe`.
+  Since the 2026-11-23 rename (`capital-exe-name`), the Cargo bin stays
+  `handpic` but the Windows ZIP and setup ship `Handpic.exe` and the `.app`
+  holds `Contents/MacOS/Handpic`; Linux keeps `handpic`.
   **Unverified**: the `.app`, the tarball and the deb (the run had no macOS
   or Linux machine).
 - **Measured** (2026-11-17, the gpui-packaging plan). The version source is

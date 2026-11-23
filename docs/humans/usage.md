@@ -1068,7 +1068,7 @@ source instead, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
   It installs for your user only, into `%LOCALAPPDATA%\Programs\Handpic`,
   without an administrator prompt.
 - **Windows, the portable ZIP**: `Handpic-<version>-windows-x64.zip`.
-  Unpack it into a folder you can write to and run `handpic.exe`, keeping
+  Unpack it into a folder you can write to and run `Handpic.exe`, keeping
   the `licenses` folder beside it.
 - **Linux, the `.tar.gz`**: download `Handpic-<version>-linux-x64.tar.gz`,
   `install.sh` and `SHA256SUMS` of the same release into one folder and run
@@ -1094,7 +1094,7 @@ Authenticode), so the first launch needs one extra step:
   Open Anyway. On macOS 14 and earlier, right-click `Handpic.app` → Open. On
   any version you can instead run
   `xattr -d com.apple.quarantine /Applications/Handpic.app`.
-- **Windows**: SmartScreen warns about the setup, or about `handpic.exe`
+- **Windows**: SmartScreen warns about the setup, or about `Handpic.exe`
   unpacked from a downloaded ZIP. Choose More info → Run anyway.
 - **Linux**: nothing extra.
 
@@ -1149,9 +1149,11 @@ version exists.
   quits as any quit does, so every judgment is in its sidecar before the
   new version starts.
 - **By how it was installed**:
-  - **Windows, the portable ZIP**: `handpic.exe` in its folder is replaced
+  - **Windows, the portable ZIP**: `Handpic.exe` in its folder is replaced
     while Handpic runs, and `Restart Now` starts the new one. Only the
     executable is replaced; the `licenses` folder stays as you unpacked it.
+    A 2.0.0 portable copy (its exe named `handpic.exe`) cannot update itself
+    to a later release: replace it with a fresh download of the ZIP.
   - **Windows, the installer**: the new version's setup is downloaded in the
     background and runs silently when Handpic quits, for your user only and
     without an administrator prompt. `Restart Now` quits, lets it install and
