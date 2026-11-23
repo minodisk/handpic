@@ -564,23 +564,6 @@ so `docs/humans/usage.md` and the plan's Trade-offs section say "rename" only.
       `docs/humans/usage.md` and `docs/agents/shared-crates.md` to match (or confirm
       they need no change).
 
-### App: a JPEG folder's preview decodes 15-20x longer than an ARW's
-
-Backend measurement (docs/plans/_archived/20260927-jpeg-view-only/learnings.md,
-Step 2): a 21.5 MP JPEG's `read_preview` + full `decode_rgb` took ~197 ms
-and a 14.8 MP one ~141 ms, versus ~9-15 ms for an ARW/DNG preview. The
-plan's remedy (a DCT-scaled, capped re-encode) was measured and found
-slower than shipping the whole file, so the Tauri app's `preview` sent the
-whole JPEG as is. The app decodes the whole JPEG for its preview too.
-
-#### TODO
-
-- [ ] Find a payload that skips the full decode/encode round trip, e.g. a
-      DCT-scaled decode (4/8 or 3/8), or reading a JPEG's embedded Exif
-      thumbnail first. Verify with the app's `page` timing lines before
-      choosing. Files: `crates/app/src/main.rs` (the preview load),
-      `crates/core/src/decode.rs`.
-
 ### Engine: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
 `crates/engine/src/photolab.rs` looks up the registered Uuids on macOS too

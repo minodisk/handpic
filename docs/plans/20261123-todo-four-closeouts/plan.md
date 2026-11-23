@@ -192,7 +192,7 @@ Rules for every step:
       Step 1 or 2 has merged or is open (Trade-offs 4): take the then-current
       `FACES_VERSION` plus one, and rebase onto its `scan.rs` if it landed.
 
-- [ ] Step 4: Measure a JPEG folder's page time in the app and apply the smallest fix the numbers call for
+- [x] Step 4: Measure a JPEG folder's page time in the app and apply the smallest fix the numbers call for
   - Done when:
     - The app's `page` timing lines were taken on JPEG-only folders with the
       release build (`mise run app:release -- <folder> --auto N | cat` in Git
@@ -297,3 +297,4 @@ Rules for every step:
 
 - (2026-11-23) Step 1 complete
 - (2026-11-23) Step 2 complete
+- (2026-11-23) Step 4 complete

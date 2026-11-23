@@ -28,6 +28,28 @@
   (`\t` inside Rust string literals) did not match reliably; the Edit tool
   did.
 
+## Step 4: A JPEG folder's page time in the app
+
+- Run before Step 3, because `docs/plans/20261123-all-faces-check` Step 1 is
+  in progress on the same `crates/core/src/scan.rs` code (Trade-offs 4).
+- With the prefetch ring on, JPEG paging at one press a second is served from
+  the ring (p50 9-13 ms, under the ARW ruler). With `--no-prefetch` the 50 MP
+  Leica exports take about 115 ms p50 (`decode` about 100 ms at 1/8 scale),
+  the 26 MP Sony exports about 50 ms. See `jpeg-preview.md`.
+- Fancy upsampling off plus `DctMethod::IntegerFast` did not cut `decode` on
+  the JPEGs (96.62 to 99.87 ms median): at 1/8 and 2/8 the time is the
+  entropy decode, which no decoder setting changes.
+- A fresh index on a large folder makes the scan's reads contend with the
+  page reads (`read` 50-75 ms); finish the scan, or discount those runs,
+  before comparing.
+- Decision (user, via the caller): Trade-offs 5 (a). Warm paging is judged
+  by the default prefetch-on figures (p50 9-13 ms, under 65 ms), so no code
+  change; the todo item is removed, and the ring-miss cost (about 115 ms p50
+  on the 50 MP Leica exports with `--no-prefetch`) is recorded next to them
+  in `docs/humans/performance.md` / `.ja.md`. The step stopped once before
+  committing to ask, because the `--no-prefetch` figure, the one comparable
+  to the 65 ms RAF number, is above the bar.
+
 ## Deferred issues (todo candidates)
 
 - Core: the within-burst sharpness ranking of face-tracked Sony frames differs
