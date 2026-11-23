@@ -214,19 +214,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Decision's shares rest on the agent's labels; if labels change,
       re-run `compare.py` in that plan folder and update `compare.md` and
       the Decision if a number moves.
-- [ ] Repoint the MCP `get_view` tool's `eyes` answer to the stored values.
-      Pass 2 now stores the EAR and the pose of the face it meshes (the
-      `mesh-eyes-index` work: `eyes_ear`, `eyes`, `eyes_closed` and `pose` on
-      `Focus` / `FaceReady`, `docs/plans/_archived/20261008-mesh-eyes-index/plan.md`),
-      but the app's `get_view`'s `eyes` still comes from the on-demand
-      judgment (`EyesCache`), so it answers only for a file already shown
-      (see `docs/plans/_archived/20261008-mcp-eyes-pose/plan.md`, written for
-      the Tauri app). Answer from the stored values when present, falling
-      back to the on-demand judgment, and keep the `eyes` key absent from
-      `get_view` until a file is judged. Done when `get_view` answers from
-      the stored values and a test covers the key's absence before a
-      judgment. Files: `crates/app/src/companion.rs`,
-      `crates/app/src/eyes.rs`.
 - [ ] Skip the second model run in `ondemand::read_eyes` for a file whose
       scan already stored the EAR and pose (the `mesh-eyes-index` work stores
       them, and the meta pane reads them). The on-demand judgment still runs

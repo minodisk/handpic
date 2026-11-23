@@ -1091,9 +1091,12 @@ impl Companion {
         face): `state` (open or closed), `probability` (the probability the eyes are closed, \
         0 to 1) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
         the image's right, pitch positive up, roll positive clockwise on screen; null when it \
-        could not be fitted). `eyes` is null when the photo has no face to judge (none found, \
-        too small, or a failure), and absent until Handpic has judged the photo, which it does \
-        a moment after showing it (never in a JPEG-only folder): call again shortly."
+        could not be fitted). `eyes` comes from the scan's second pass once it has stored the \
+        judgment; before that, or when the second pass judged no face, from the `f` overlay's \
+        judgment of the shown photo, and it is null when that judgment found no face to judge \
+        (none found, too small, or a failure). `eyes` is absent until one of the two has \
+        judged the photo (never in a JPEG-only folder); after `wait_for_idle`, a missing \
+        `eyes` with the `f` overlay off means the second pass judged no face."
     )]
     async fn get_view(&self) -> CallToolResult {
         tool_result(
