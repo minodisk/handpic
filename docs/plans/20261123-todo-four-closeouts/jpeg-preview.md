@@ -10,25 +10,31 @@ large folders. Per folder: one warm run, then prefetch on and
 `--no-prefetch` alternated, three runs each. The first `page` line of a run
 is dropped. Under `--auto` the window is the default one, so the canvas, and
 the `n/8` `fitscale::scale_for` picks, are the default window's: the JPEGs
-decoded at 1/8 to 3/8 (a 7910x6328 frame to 989x791). Percentiles are the
+decoded at 1/8 or 2/8 (sizes below). Percentiles are the
 nearest rank of each run; the table gives the median of the three runs' p50
 / p95, in ms.
 
 All JPEGs are baseline (`exiftool -EncodingProcess`: `Baseline DCT, Huffman
-coding` on all 782 files of the 500-file folder and the Output folder; the 10-file
-folder was not checked separately, and its files being baseline too is an
-assumption from the same camera and export).
+coding` on all 782 files of the 500-file folder and the Output folder, and on
+all 10 files of the 10-file folder, checked 2026-11-23).
 
-Every `page` line of those runs logged `px=` and `decoded=` (`timing.rs`),
-but the output was not kept, so the scale is derived from
-`fitscale::scale_for`. The ARW row's 6/8 for 1616x1080 (`decoded=1212x810`)
-puts the default canvas's fit height between 676 and 810 px. Hence the
-median 26 MP Sony frame (3:2, about 6190x4130) decodes at 2/8 (1/8 would be
-about 774x516, below the fit); the median 50 MP Leica frame (7910x6328)
-decodes at 1/8 (989x791) when the fit height is 791 or less, which the one
-recorded decoded size (989x791) confirms; the smaller frames of each range
-(13-33 MP Sony, 23-37 MP Leica) need 2/8 or more. The exact `n/8` of every
-frame was not recorded.
+Preview sizes, from the `px=` (source) and `decoded=` fields of the `page`
+lines of the warm, on and off runs (the first line of each run dropped; the
+`n/8` is `decoded` over `px`, every line matching mozjpeg's
+`ceil(native * n / 8)` exactly):
+
+| Folder | Lines | `px=` (source) | `decoded=` | `n/8` |
+|---|---|---|---|---|
+| ARW ruler | 126 | 1616x1080 on all | 1212x810 on 119, 808x540 on 7 (the one `orientation=6` file) | 6/8 on 119, 4/8 on 7 |
+| `2026-09-28-gui-check-jpeg` | 56 | 9 sizes, 36.1-50.1 MP; 7910x6328 most common (12) | 9 sizes, width 973-2296, height 499-1500; 989x791 most common (12) | 1/8 on 35 (37.1-50.1 MP), 2/8 on 21 (36.1-45.0 MP) |
+| `2026-09-28-gui-check-jpeg-500` | 203 | 88 sizes, 23.4-60.3 MP (median 50.1); 7910x6328 most common (102) | 85 sizes, width 668-2308, height 499-1529; 989x791 most common (102) | 1/8 on 147 (36.1-60.3 MP), 2/8 on 56 (23.4-52.0 MP) |
+| `2026-09-19\Output` | 203 | 68 sizes, 14.7-32.7 MP (median 27.1); 4673x7008 most common (20) | 64 sizes, width 506-1460, height 767-1525; 585x876 most common (20) | 1/8 on 123 (all portrait, 25.1-32.7 MP), 2/8 on 80 (54 portrait, 26 landscape; 14.7-27.3 MP) |
+
+No page decoded at 3/8 or more on a JPEG. The ARW lines put the default
+canvas's fit height between 676 and 810 px (6/8 of 1080 is 810, 5/8 would be
+675): the landscape 1/8 decodes are at most 791 px high, the 2/8 ones at least
+978. The A / B trial's runs below logged the same sizes (ARW 6/8 on 104 lines,
+4/8 on 4; the 10-file folder 1/8 on 28, 2/8 on 20).
 
 | Folder | Files | Prefetch | n per run | keypressToPixels | read | decode | orient |
 |---|---|---|---|---|---|---|---|

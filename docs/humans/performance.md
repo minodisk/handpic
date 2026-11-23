@@ -204,7 +204,7 @@ A JPEG-only (view-only) folder pages from the prefetch ring like a RAW one
 (2026-11-23, `--auto` in the default window, one press a second, three runs
 each with the ring on and with `--no-prefetch`, an ARW folder as the ruler in
 the same session, the median of the three runs' p50 / p95
-`keypressToPixels`; every file of the 500-file and Output folders checked is a baseline JPEG, decoded at 1/8 to 3/8):
+`keypressToPixels`; every file of the three JPEG folders is a baseline JPEG, decoded at 1/8 or 2/8):
 
 | Case | Prefetch on | `--no-prefetch` | `decode` p50 without the ring |
 |---|---|---|---|

@@ -50,6 +50,19 @@
   committing to ask, because the `--no-prefetch` figure, the one comparable
   to the 65 ms RAF number, is above the bar.
 
+- Step 4 follow-up: the review thought the runs' `page` lines were lost and
+  derived the scales from `fitscale::scale_for`; the raw outputs were in the
+  session scratchpad after all. The logged `decoded=` sizes put every JPEG
+  page at 1/8 or 2/8 (not 1/8 to 3/8 as derived) and the median 26 MP Sony
+  export (portrait) at 1/8, not 2/8, so a derived scale is no substitute for
+  the logged field. Keep a measurement's raw output next to the plan (or
+  summarize its sizes) before the scratchpad goes. `exiftool -EncodingProcess`
+  on the 10-file folder: all 10 `Baseline DCT, Huffman coding`.
+- The 10-file folder's files measure 36.1-50.1 MP (exiftool and the `px=`
+  fields alike), while the step's table and `performance.md` give the Leica
+  row as 37-60 MP; left as is (the follow-up was told not to change other
+  numbers).
+
 ## Deferred issues (todo candidates)
 
 - Core: the within-burst sharpness ranking of face-tracked Sony frames differs
