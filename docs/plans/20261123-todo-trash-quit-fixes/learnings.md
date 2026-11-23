@@ -38,8 +38,10 @@
   user's Cancel / Escape and the MCP cancel alike. `drain_clear` was added
   after `follow_trash` in `dismiss_trash` and after `follow_folder_dialog` in
   each of `dismiss_folder_dialog`'s three branches; its `ClearFlow::idle`
-  guard makes the call a no-op where the dialog only steps aside (an import
-  set aside, a run being canceled is still in flight).
+  guard makes the call a no-op only where the dialog stays open or the view
+  is still busy (the Cancel of a running import or sequencing, whose dialog
+  stays open until the run ends). An import set aside lets a held clear go
+  on, because its run does not hold the index.
 - The reachable state is an MCP-confirmed clear (`confirmed_clear`): a
   pressed one needs the settings open, which `confirm_trash` and
   `start_sidecars` refuse. The UI tests in `crates/app/src/uitest.rs` open
