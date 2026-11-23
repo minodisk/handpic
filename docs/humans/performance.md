@@ -213,7 +213,7 @@ the same session, the median of the three runs' p50 / p95
 | Sony ILCE-7M5 exports, 13-33 MP | 12.6 / 19.2 | 50.2 / 62.5 | 29.6 |
 
 With the ring on, which is the default, nearly every page comes from it and
-the p50 is at about the ARW ruler's (within its run-to-run spread, 12.3 to 13.6 ms). A page the ring misses (paging faster than
+the p50 is at or under the ARW ruler's: 9-10 ms on the Leica folders, 12.6 ms on the Sony one, within the ruler's run-to-run spread of 12.3 to 13.6 ms. A page the ring misses (paging faster than
 the ring decodes, or a jump) pays the whole decode: about 115 ms p50 on a
 50 MP JPEG, because the entropy decode of a 10-28 MB file does not shrink with
 the output scale. Turning off fancy upsampling and using the fast integer

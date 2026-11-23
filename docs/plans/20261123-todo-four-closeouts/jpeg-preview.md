@@ -19,10 +19,16 @@ coding` on all 782 files of the 500-file folder and the Output folder; the 10-fi
 folder was not checked separately, and its files being baseline too is an
 assumption from the same camera and export).
 
-Per-folder `px=` and `decoded=` were not logged per run; the scale is by
-`fitscale::scale_for`: the 50 MP Leica frames decode at 1/8 (7910x6328 to
-989x791), and the smaller frames (23-33 MP) at 1/8 or 2/8 depending on
-their size; the exact `n/8` per folder was not recorded.
+Every `page` line of those runs logged `px=` and `decoded=` (`timing.rs`),
+but the output was not kept, so the scale is derived from
+`fitscale::scale_for`. The ARW row's 6/8 for 1616x1080 (`decoded=1212x810`)
+puts the default canvas's fit height between 676 and 810 px. Hence the
+median 26 MP Sony frame (3:2, about 6190x4130) decodes at 2/8 (1/8 would be
+about 774x516, below the fit); the median 50 MP Leica frame (7910x6328)
+decodes at 1/8 (989x791) when the fit height is 791 or less, which the one
+recorded decoded size (989x791) confirms; the smaller frames of each range
+(13-33 MP Sony, 23-37 MP Leica) need 2/8 or more. The exact `n/8` of every
+frame was not recorded.
 
 | Folder | Files | Prefetch | n per run | keypressToPixels | read | decode | orient |
 |---|---|---|---|---|---|---|---|
