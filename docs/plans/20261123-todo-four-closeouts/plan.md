@@ -73,7 +73,7 @@ Rules for every step:
       `crates/app` and `crates/engine/src/mcp.rs`); if one does, route it
       through the same trimmed value rather than adding a second trim.
 
-- [ ] Step 2: Add the eye-midpoint score to `handpic-cli features` and spot-check the within-burst ranking of face-tracked Sony frames
+- [x] Step 2: Add the eye-midpoint score to `handpic-cli features` and spot-check the within-burst ranking of face-tracked Sony frames
   - Done when:
     - `handpic-cli features` prints two more columns, appended after
       `eyes_ms` so existing column positions stay: whether the frame is a
@@ -296,3 +296,4 @@ Rules for every step:
 ## Progress
 
 - (2026-11-23) Step 1 complete
+- (2026-11-23) Step 2 complete

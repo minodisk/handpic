@@ -301,11 +301,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       already shows, against about 56% for the best technical rule); and
       the non-picks are mostly technically fine. Revisit only with a new
       signal; the per-frame good-photo mark above covers "is this a miss".
-- [ ] Spot-check whether the sharpness ranking within a burst changes now
-      that Sony frames with face tracking are scored on the camera's AF frame
-      instead of YuNet's eye midpoint. Needs a per-file score output
-      (`handpic-cli scan` prints none). Files: `crates/core/src/sharpness.rs`,
-      `crates/core/src/scan.rs`, `crates/cli/src/main.rs`.
 - [ ] Crop detection can false-positive on printed faces or logos near the AF
       point (e.g. `_DSC3632`: a shirt logo scored 0.67), yielding a false
       candidate (or a false not-a-candidate) when the logo is the face nearest
