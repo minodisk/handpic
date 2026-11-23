@@ -202,22 +202,32 @@ Implementation notes:
   `docs/plans/_archived/20261005-photolab-macos-verified-docs/plan.md`,
   Step 1.
 
-## A picked virtual copy is invisible to `dop::read_flag` (Hit)
+## A picked virtual copy reads as a pick; the flag is written to every item (Hit)
 
-`dop::read_flag` (`crates/core/src/dop.rs`, `locate`) reads the first `Items`
-entry only, as the app does. When the user picks a PhotoLab virtual copy, the
-`.dop`'s second item has `ShouldProcess = 0`, the master item stays `2`
-(unflagged), and `Output/` holds `<stem>_<n>.jpg`. Handpic then shows the frame
-unflagged. Seen on 199 frames of one folder and about 230 of another.
+When the user picks a PhotoLab virtual copy, the `.dop`'s later item has
+`ShouldProcess = 0`, the master item (`Items[0]`) stays `2` (unflagged), and
+`Output/` holds `<stem>_<n>.jpg`. Seen on 199 frames of one folder and about 230
+of another. `dop::read_flag` (`crates/core/src/dop.rs`, `locate`) therefore
+returns `Pick` when any `Items` entry has `ShouldProcess = 0`, else the flag of
+`Items[0]`. `dop::write_rating` writes `ShouldProcess` to every item, inserting
+the line in an item that lacks it, and stamps every item's `ModificationDate`
+(each virtual copy is its own database item, and PhotoLab ignores a sidecar
+older than the item). `Rating`, `ColorLabel`, `Settings` and `Orientation` stay
+`Items[0]`'s alone, and `write_label` touches only `Items[0]`.
 
-- When reading a user's `.dop` folders for an analysis, do not trust the
-  `read_flag` column alone. A frame whose `<stem>_<n>` is in `Output/` is
-  picked. Strip the `_<n>` only when the stem is not itself a frame (Sigma BF
-  `BF_00634` already ends in `_<digits>`). Checked on every sidecar folder of
-  the data set: the frames with a pick on any item equal `Output/`'s frames
-  exactly.
-- Whether Handpic should read any item's flag, and which item it writes, is an
-  open product decision.
+- So the first `write_rating` on a frame whose virtual copy is picked (a star
+  change, or `Rewrite Sidecars from Index…`) makes the master picked in
+  PhotoLab too. This was accepted with the decision.
+- Unverified: whether PhotoLab applies the per-item `ModificationDate` and
+  shows the new flag on both the master and the copy. The repository has no
+  real virtual-copy `.dop`; the tests build the two-item text from a
+  one-item fixture, assuming each item opens on its own depth-3 line as the
+  first does.
+- `read_flag` now agrees with `Output/` on such a frame: a frame whose
+  `<stem>_<n>` is in `Output/` is picked. Strip the `_<n>` only when the stem
+  is not itself a frame (Sigma BF `BF_00634` already ends in `_<digits>`).
+  Checked on every sidecar folder of the data set: the frames with a pick on
+  any item equal `Output/`'s frames exactly.
 - DeepPRIME exports (`<stem>-DxO_DeepPRIME 3.dng`) are listed as RAWs by
   `scan::is_raw_file`. When counting frames against `Output/`, group by the
   base stem (suffix removed) and prefer the camera file; otherwise

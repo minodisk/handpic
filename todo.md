@@ -14,15 +14,13 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 - [ ] On Windows (Git Bash), run `mise run app:watch` in a terminal and wait for the app's window. Press Ctrl+C in that terminal. Expect watchexec, `cargo` and `handpic.exe` all to exit (none left in Task Manager) and the prompt to return.
 - [ ] On Windows (Git Bash), run `mise run app:watch`, save a `.rs` file under `crates/app/src`, and confirm the window reappears and repaints after the restart (the earlier check saw only the process and its log).
 
-### Core: the `.dop` reader ignores a picked PhotoLab virtual copy
+### Core: real-device check of the `.dop` flag on a PhotoLab virtual copy
 
-Found in `burst-keep-score` Step 1 (the inventory, `docs/plans/_archived/20261008-burst-keep-score/data.md`). `dop::read_flag` (`crates/core/src/dop.rs`, `locate`) reads only the first `Items` entry, so it returns `None` for 199 frames of `2026-06-05` and 228 of `2026-09-13-b` whose virtual copy (a later item) is picked in PhotoLab. Riffle shows those frames unflagged, so the strip's filter does not count them as picked. Whether Riffle should read any item's flag, and which item it writes, is a product decision.
-
-Files: `crates/core/src/dop.rs`.
+`sidecar-and-keymap-decisions` Step 1 made `dop::read_flag` read a pick on any `Items` entry and `dop::write_rating` write `ShouldProcess` to every item, stamping every item's `ModificationDate`. The tests build a two-item `.dop` from a one-item fixture; no real virtual-copy sidecar was tried, and whether PhotoLab honours the per-item `ModificationDate` is unverified. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/20261123-sidecar-and-keymap-decisions/plan.md`. Files: `crates/core/src/dop.rs`, `docs/agents/photolab.md`.
 
 #### TODO
 
-- [ ] Decide which `Items` entry's flag Riffle reads and writes, then change `read_flag` and its tests to match.
+- [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
 
 ### App: the MCP `get_view` eyes summary carries no openness
 

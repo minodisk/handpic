@@ -1,17 +1,24 @@
 //! DxO PhotoLab `.dop` sidecar reading and writing for ratings.
 //!
 //! A `.dop` is a Lua table literal. PhotoLab keeps the judgment in two keys
-//! directly under `Sidecar.Source.Items[0]`: `ShouldProcess` (`0` pick, `1`
-//! reject, `2` unflagged) and `Rating` (`0..=5`). They map onto a [`Flag`]
-//! and the stars one to one: every write sets both `Rating` and
+//! directly under each item of `Sidecar.Source.Items`: `ShouldProcess` (`0`
+//! pick, `1` reject, `2` unflagged) and `Rating` (`0..=5`). `Items[0]` is the
+//! master; each later item is one of its virtual copies. They map onto a
+//! [`Flag`] and the stars one to one: every write sets both `Rating` and
 //! `ShouldProcess`, so a pick or a reject keeps its stars, as in PhotoLab.
 //!
+//! The flag spans the items: a pick on any item, a virtual copy included,
+//! reads as a pick, else `Items[0]`'s flag counts, and [`write_rating`] writes
+//! `ShouldProcess` to every item. The stars, the color label, `Settings` and
+//! `Orientation` are `Items[0]`'s alone.
+//!
 //! An existing sidecar is patched by splicing the bytes of those values and
-//! of the two timestamps `Sidecar.Date` and `Items[0].ModificationDate`, so
-//! PhotoLab's develop settings stay byte-for-byte; a sidecar is never
-//! regenerated from a parse. The color label is the `ColorLabel = "Red",`
-//! line of the same item, absent for "no label"; [`write_label`] splices,
-//! inserts or removes that line the same way.
+//! of the timestamps `Sidecar.Date` and `Items[0].ModificationDate` (every
+//! item's `ModificationDate` for [`write_rating`]), so PhotoLab's develop
+//! settings stay byte-for-byte; a sidecar is never regenerated from a parse.
+//! The color label is the `ColorLabel = "Red",` line of `Items[0]`, absent
+//! for "no label"; [`write_label`] splices, inserts or removes that line the
+//! same way.
 //!
 //! PhotoLab 10 refuses an item without a `Settings` table: the folder shows
 //! no images. The fresh template carries the minimal one,
@@ -37,7 +44,8 @@
 //! database holds for the image, which the template writes verbatim; `None`
 //! mints two random ones. PhotoLab also ignores a sidecar whose timestamps are
 //! older than the database item's `ModificationDate`; the caller's `now` is
-//! newer.
+//! newer. Each virtual copy is its own database item, which is why a flag
+//! write stamps every item's `ModificationDate`.
 //!
 //! There is no Lua parser: a scanner tracks brace depth (skipping over
 //! double-quoted strings) and matches `Key = value,` lines at the depth of the
@@ -87,12 +95,22 @@ pub fn read_rating(bytes: &[u8]) -> Result<Option<i8>, String> {
     }))
 }
 
-/// The flag of `Items[0]`: `ShouldProcess` `0` is a pick, `1` a reject and
-/// anything else (or none) unflagged; `Err` as for [`read_rating`].
+/// The flag of the sidecar: a pick when any item, `Items[0]` or a virtual
+/// copy, has `ShouldProcess` `0`; otherwise the flag of `Items[0]`, where `1`
+/// is a reject and anything else (or none) unflagged; `Err` as for
+/// [`read_rating`].
 pub fn read_flag(bytes: &[u8]) -> Result<Flag, String> {
     let text = std::str::from_utf8(bytes).map_err(|e| format!("not UTF-8: {e}"))?;
     let doc = locate(text)?;
-    Ok(match doc.should_process.map(|r| &text[r.0..r.1]) {
+    let value = |r: Option<Range>| r.map(|r| &text[r.0..r.1]);
+    if doc
+        .copies
+        .iter()
+        .any(|c| value(c.should_process) == Some("0"))
+    {
+        return Ok(Flag::Pick);
+    }
+    Ok(match value(doc.should_process) {
         Some("0") => Flag::Pick,
         Some("1") => Flag::Reject,
         _ => Flag::None,
@@ -112,7 +130,8 @@ pub fn read_flag(bytes: &[u8]) -> Result<Flag, String> {
 /// doc).
 ///
 /// `ShouldProcess` becomes `0` for a pick, `1` for a reject and `2`
-/// otherwise.
+/// otherwise, on every item: the virtual copies get `ShouldProcess` and
+/// `ModificationDate` (each inserted when absent) and nothing else.
 ///
 /// `rating` `None` means unrated and writes `Rating = 0`. On a file that has
 /// no sidecar yet, the caller must not write anything at all for a judgment
@@ -163,6 +182,22 @@ pub fn write_rating(
     )?);
     edits.extend(doc.insert_settings(text)?);
     edits.extend(doc.insert_orientation(text, orientation)?);
+    for copy in &doc.copies {
+        edits.push(doc.edit(
+            text,
+            copy.should_process,
+            copy.close,
+            "ShouldProcess",
+            should_process(flag),
+        )?);
+        edits.push(doc.edit(
+            text,
+            copy.modification_date,
+            copy.close,
+            "ModificationDate",
+            &stamp,
+        )?);
+    }
     edits.sort_by_key(|e| std::cmp::Reverse(e.0));
     let mut out = text.to_string();
     for (start, end, replacement) in edits {
@@ -364,6 +399,13 @@ struct Line {
     depth: usize,
 }
 
+/// A virtual copy: an `Items` entry after the first.
+struct VirtualCopy {
+    close: usize,
+    should_process: Option<Range>,
+    modification_date: Option<Range>,
+}
+
 struct Doc {
     sidecar_close: usize,
     item_close: usize,
@@ -374,6 +416,7 @@ struct Doc {
     color_label: Option<Range>,
     orientation: Option<Range>,
     settings: bool,
+    copies: Vec<VirtualCopy>,
 }
 
 impl Doc {
@@ -463,18 +506,25 @@ fn locate(text: &str) -> Result<Doc, String> {
     let sidecar = table((0, text.len()), 0, "Sidecar")?;
     let source = table(sidecar, 1, "Source")?;
     let items = table(source, 2, "Items")?;
-    let item_open = lines
+    let mut entries = lines
         .iter()
         .filter(|l| l.start > items.0 && l.start < items.1 && l.depth == 3)
-        .find_map(|l| {
+        .filter_map(|l| {
             let line = &text[l.start..l.end];
             let trimmed = line.trim_start();
-            trimmed
-                .starts_with('{')
-                .then(|| l.start + line.len() - trimmed.len())
+            trimmed.starts_with('{').then(|| {
+                let open = l.start + line.len() - trimmed.len();
+                (open, closes[&open])
+            })
+        });
+    let item = entries.next().ok_or("Items has no item")?;
+    let copies = entries
+        .map(|copy| VirtualCopy {
+            close: copy.1,
+            should_process: field(text, &lines, copy, 4, "ShouldProcess"),
+            modification_date: field(text, &lines, copy, 4, "ModificationDate"),
         })
-        .ok_or("Items has no item")?;
-    let item = (item_open, closes[&item_open]);
+        .collect();
     let in_item = |key| field(text, &lines, item, 4, key);
     Ok(Doc {
         sidecar_close: sidecar.1,
@@ -486,6 +536,7 @@ fn locate(text: &str) -> Result<Doc, String> {
         color_label: in_item("ColorLabel"),
         orientation: in_item("Orientation"),
         settings: in_item("Settings").is_some(),
+        copies,
     })
 }
 
@@ -1253,5 +1304,111 @@ mod tests {
             assert_eq!(out.matches("Orientation = ").count(), 1);
             assert!(out.contains("Orientation = 8,"));
         }
+    }
+
+    const COPY_UUID: &str = "C0FFEE00-0000-4000-8000-000000000001";
+    const COPY_MODIFIED: &str = "2026-09-17T09:00:00.0000000Z";
+
+    fn item_of_three() -> &'static str {
+        let (_, rest) = THREE.split_once("Items = {\n").unwrap();
+        &rest[..rest.rfind("}\n,\nUuid = \"").unwrap()]
+    }
+
+    fn master(flag: &str) -> String {
+        item_of_three().replace("ShouldProcess = 2,", &format!("ShouldProcess = {flag},"))
+    }
+
+    fn copy(flag: &str) -> String {
+        master(flag)
+            .replace("B638CACC-6B37-4480-8A40-9377C1C2783A", COPY_UUID)
+            .replace("2026-09-18T10:21:52.2405327Z", COPY_MODIFIED)
+            .replace("Rating = 3,", "Rating = 1,")
+            .replace("Orientation = 8,", "Orientation = 3,")
+            .replace(
+                &format!("Uuid = \"{COPY_UUID}\","),
+                &format!("ColorLabel = \"Blue\",\nUuid = \"{COPY_UUID}\","),
+            )
+    }
+
+    fn two_items(master: &str, copy: &str) -> String {
+        let (head, rest) = THREE.split_once("Items = {\n").unwrap();
+        let tail = &rest[rest.rfind("}\n,\nUuid = \"").unwrap()..];
+        format!("{head}Items = {{\n{master}{copy}{tail}")
+    }
+
+    fn stamped_copy(copy: &str) -> String {
+        copy.replace(
+            &format!("ModificationDate = \"{COPY_MODIFIED}\","),
+            &format!("ModificationDate = \"{NOW}\","),
+        )
+    }
+
+    #[test]
+    fn a_pick_on_a_virtual_copy_reads_as_a_pick() {
+        let read =
+            |m: &str, c: &str| read_flag(two_items(&master(m), &copy(c)).as_bytes()).unwrap();
+        assert_eq!(read("2", "0"), Flag::Pick);
+        assert_eq!(read("1", "0"), Flag::Pick);
+        assert_eq!(read("1", "2"), Flag::Reject);
+        assert_eq!(read("2", "1"), Flag::None);
+        assert_eq!(read("0", "2"), Flag::Pick);
+
+        let source = two_items(&master("2"), &copy("0"));
+        assert_eq!(read_rating(source.as_bytes()).unwrap(), Some(3));
+        assert_eq!(read_label(source.as_bytes()).unwrap(), None);
+    }
+
+    #[test]
+    fn a_flag_lands_on_every_item() {
+        for (flag, value) in [(Flag::Pick, "0"), (Flag::Reject, "1"), (Flag::None, "2")] {
+            let source = two_items(&master("2"), &copy("1"));
+            let out = patched(&source, Some(3), flag);
+            let expected = with_now(
+                &two_items(&master(value), &stamped_copy(&copy(value))),
+                "2026-09-18T10:21:52.2415388Z",
+                "2026-09-18T10:21:52.2405327Z",
+            );
+            assert_eq!(out, expected);
+            assert_eq!(read_flag(out.as_bytes()).unwrap(), flag);
+        }
+    }
+
+    #[test]
+    fn a_flag_write_inserts_nothing_else_into_a_copy() {
+        let bare = copy("2")
+            .replace("Rating = 1,\n", "")
+            .replace("Orientation = 3,\n", "")
+            .replace("ColorLabel = \"Blue\",\n", "");
+        let out = patched(&two_items(&master("2"), &bare), Some(5), Flag::Pick);
+        assert!(out.contains(&stamped_copy(
+            &bare.replace("ShouldProcess = 2,", "ShouldProcess = 0,")
+        )));
+        assert_eq!(out.matches("Rating = ").count(), 1);
+        assert_eq!(out.matches("Orientation = ").count(), 1);
+        assert_eq!(out.matches("Settings = {").count(), 2);
+        assert!(!out.contains("ColorLabel"));
+    }
+
+    #[test]
+    fn a_label_write_leaves_a_copy_byte_identical() {
+        let copy = copy("0");
+        let out = labeled(&two_items(&master("2"), &copy), Some("Red"));
+        assert!(out.contains(&copy));
+        assert_eq!(read_label(out.as_bytes()).unwrap().as_deref(), Some("Red"));
+        assert_eq!(out.matches("ColorLabel = ").count(), 2);
+
+        let out = labeled(&two_items(&master("2"), &copy), None);
+        assert!(out.contains(&copy));
+    }
+
+    #[test]
+    fn a_copy_without_should_process_gets_the_line() {
+        let bare = copy("2").replace("ShouldProcess = 2,\n", "");
+        let out = patched(&two_items(&master("2"), &bare), Some(3), Flag::Reject);
+        assert!(out.contains(&format!(
+            "Uuid = \"{COPY_UUID}\",\nShouldProcess = 1,\n}}\n,\n}}\n"
+        )));
+        assert_eq!(out.matches("ShouldProcess = 1,").count(), 2);
+        assert_eq!(read_flag(out.as_bytes()).unwrap(), Flag::Reject);
     }
 }

@@ -31,7 +31,7 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 
 ## Steps
 
-- [ ] Step 1: `.dop` flag across virtual copies (`fix(core)`)
+- [x] Step 1: `.dop` flag across virtual copies (`fix(core)`)
   - Done when:
     - `dop::read_flag` returns `Flag::Pick` when any `Items` entry has `ShouldProcess = 0`, else the flag of `Items[0]` as today.
     - `dop::write_rating` on an existing sidecar writes `ShouldProcess` to every `Items` entry (pick, reject and unflag alike), inserting the line in an item that lacks it.

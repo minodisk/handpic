@@ -922,7 +922,9 @@ of two formats or in both, chosen on the settings' `Sidecar` page
   the RAW extension),
   holding the stars, the pick / reject flag and the `ColorLabel` line (`Red`,
   `Orange`, `Yellow`, `Green`, `Blue`, `Pink`, `Purple`), which PhotoLab 10
-  reads.
+  reads. A frame with a picked PhotoLab virtual copy counts as a pick, and the
+  pick / reject flag is written to the master and to each of its virtual
+  copies; the stars and the label are the master's.
 - **Both**: every judgment is written to `FOO.xmp` and to `FOO.ARW.dop`, each
   as above. When a folder opens, the one of the two modified last is read
   back (on a tie, the XMP), so an edit made later in either Lightroom or
