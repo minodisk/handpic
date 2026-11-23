@@ -202,4 +202,10 @@ constants), and `BURST_GAP_MS`.
 
 ## Progress
 
-- (none yet)
+- (2026-11-23) Closed without implementing. The mark lived in the Tauri UI
+  (`sharpness.ts`, `strip.ts`, `compare.ts`), removed with the Tauri app on
+  2026-11-18; the GPUI app (`crates/app`) has no burst "best" mark, so the
+  plan lost its target. Step 1's measurement was never merged: the current
+  mark landed on a good frame in 47.6% of the ARW bursts that hold one
+  (random 45.8%, the first frame 55.0%). Its branch, `burst-best-mark-step-1`
+  (commit `1ef8c204`, no PR), was deleted.
