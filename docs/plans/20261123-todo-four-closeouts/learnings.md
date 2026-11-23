@@ -62,6 +62,29 @@
   fields alike), while the step's table and `performance.md` / `.ja.md` gave
   the Leica row as 37-60 MP; corrected to 36-50 MP in all three.
 
+## Step 3: Score a faced no-AF file from the cue's RGB decode
+
+- Adopted (Trade-offs 3): median per-file saving 13.4 ms (`2026-02-01`) and
+  16.2 ms (`2026-09-05`), per-burst Spearman 1.000 over 26 bursts, same top
+  frame in all. `FACES_VERSION` 12 -> 13 (12 came from #1264, after the plan
+  was written). See `no-af-decode.md`.
+- The Spearman of 1.000 is trivial on these folders: on the Leica M11-P DNG
+  previews `candidate::luma` of mozjpeg's RGB output equals its grayscale
+  (Y) output on every pixel, so not one score changed. On ARW, CR3, NEF,
+  RAF and ORF previews the two differ on about half the pixels (score
+  0.1-1.1% off), but no real burst of faced no-AF frames of those makes
+  exists on this host, so their ranking is unchecked.
+- `analysis_ms` per file is noisy (p10 of the saving negative) because it
+  includes `full_eye_sharp`'s full-JPEG read and decode; compare medians of
+  per-file medians over alternated runs, not single files.
+- The first `features` run of `2026-09-05` took 423 s against 119-140 s for
+  the next ones: the 411 DNGs' full JPEGs were not in the page cache yet.
+  Do the warm-up run before the timed ones.
+- `whole_image_cue` now hands back `(Cue, Option<f64>)`; the score is taken
+  inside the cue's `guarded` closure right after the decode, so a later mesh
+  panic keeps the score, and a decode failure (no score) falls back to
+  `score_preview`'s own decode.
+
 ## Deferred issues (todo candidates)
 
 - Core: the within-burst sharpness ranking of face-tracked Sony frames differs
@@ -75,3 +98,13 @@
   `docs/plans/20261123-todo-four-closeouts/burst-rank.md`. Files:
   `crates/core/src/sharpness.rs` (`score`, `eye_af_frame`),
   `crates/engine/src/index.rs` (`FACES_VERSION`).
+- Core: a file with a trusted AF point still decodes its preview twice in
+  pass 2 (full-size RGB for the cue's crop, grayscale for the score).
+  Reusing the RGB's luma as Step 3 does for no-AF files would save a
+  grayscale decode (about 4-5 ms on a 1616x1080 ARW preview) per file, but
+  on ARW previews the BT.601 luma differs from the Y channel on about half
+  the pixels, so it needs its own ranking check on Sony bursts and a
+  `FACES_VERSION` bump. Basis: Step 3's scope note in `plan.md` and the
+  luma-vs-Y check in `no-af-decode.md`. Files: `crates/core/src/scan.rs`
+  (`cue`, `score`), `crates/core/src/candidate.rs` (`focus_cue_unless`),
+  `crates/core/src/sharpness.rs` (`score_gray`).

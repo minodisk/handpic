@@ -175,8 +175,16 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// logit: a side face's mesh it does not back leaves the cue's values and
 /// `full_eye_sharp` `None`, and a presence under `eyes::EYES_MIN_PRESENCE`
 /// leaves the EAR and the pose `None`
-/// (`docs/plans/_archived/20261123-mesh-presence-side-faces/`).
-pub const FACES_VERSION: i64 = 12;
+/// (`docs/plans/_archived/20261123-mesh-presence-side-faces/`). `13` scores
+/// a file with no trusted AF point and a confident face on the luma of the
+/// cue's RGB decode (`candidate::luma`) instead of a grayscale decode of its
+/// own, which saves a decode (a median 13-16 ms per such file); the BT.601
+/// luma can differ from the JPEG's Y channel, so the score can move. On the
+/// 276 faced no-AF Leica DNGs of two real folders it did not move at all
+/// (per-burst Spearman 1.000 over 26 bursts); on previews of other makes the
+/// two lumas differ on about half the pixels and a window's score by up to
+/// about 1% (`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`).
+pub const FACES_VERSION: i64 = 13;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on

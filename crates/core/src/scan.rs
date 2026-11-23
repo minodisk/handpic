@@ -8,13 +8,13 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::arw::{Arw, FocusLocation, Shot};
-use crate::candidate::{face_cue_unless, focus_cue_unless, Cue};
+use crate::candidate::{face_cue_unless, focus_cue_unless, luma, Cue};
 use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
 use crate::faces::{detect_around, Detection, Face};
 use crate::fullsharp::full_eye_sharpness;
 use crate::reader::{read_full, read_metadata, read_preview};
-use crate::sharpness::{eye_af_frame, score_preview, trusted_focus};
+use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
@@ -174,7 +174,8 @@ pub struct Analysis {
 /// its preview. The cue runs the face detector and, on the face
 /// nearest the AF point, the face mesh (`candidate::focus_cue_unless`);
 /// without a trusted AF point, on the largest confident face of the whole
-/// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Only
+/// preview (`eyes::judged_face`, `candidate::face_cue_unless`), whose
+/// full-size RGB decode the sharpness score then takes its luma from. Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure leaves
 /// the face its YuNet eye landmarks, a mesh `eyes::mesh_trusted` turns down
@@ -254,9 +255,13 @@ fn extract_analysis_unless(
     // With an AF point the cue's detection runs around it and the score needs
     // no faces; without one the faces are searched for on the whole image,
     // the cue judges the largest confident one and the score falls back to
-    // them.
-    let (cue, faces) = match focus {
-        Some(_) => (cue(&preview, arw.orientation, focus, cancel)?, Vec::new()),
+    // them, taken on the cue's decode when it made one.
+    let (cue, faces, scored) = match focus {
+        Some(_) => (
+            cue(&preview, arw.orientation, focus, cancel)?,
+            Vec::new(),
+            None,
+        ),
         None => {
             let detection = whole_image_detection(&preview, arw.orientation);
             yield_to_pause(cancel);
@@ -266,15 +271,16 @@ fn extract_analysis_unless(
             let faces = detection
                 .as_ref()
                 .map_or_else(Vec::new, |d| d.faces.clone());
-            let cue = whole_image_cue(&preview, arw.orientation, detection, cancel)?;
-            (cue, faces)
+            let (cue, scored) =
+                whole_image_cue(&preview, arw.orientation, detection, &faces, cancel)?;
+            (cue, faces, scored)
         }
     };
     if canceled(cancel) {
         return None;
     }
     yield_to_pause(cancel);
-    let sharpness = score(&preview, &arw.shot, focus, &faces);
+    let sharpness = scored.or_else(|| score(&preview, &arw.shot, focus, &faces));
     yield_to_pause(cancel);
     let full_eye_sharp = full_eye_sharp(path, &arw, &cue, cancel, slots)?;
     Some(Ok(Analysis {
@@ -340,21 +346,26 @@ fn whole_image_detection(preview: &[u8], orientation: u16) -> Option<Detection> 
 
 /// The cue of the face `eyes::judged_face` picks from the whole-image
 /// `detection` (the largest at or above `sharpness::FACE_CONFIDENCE`), on one
-/// full-size decode of `preview`. No detection or no such face is an unknown
-/// cue with no decode; a decode failure or a panic is an unknown cue.
+/// full-size decode of `preview`, with the no-AF-point score of `faces`
+/// (`sharpness::score_gray`) taken on the luma of that same decode. No
+/// detection or no such face is an unknown cue with no decode and no score; a
+/// decode failure or a panic is an unknown cue, with no score when it came
+/// before the scoring.
 fn whole_image_cue(
     preview: &[u8],
     orientation: u16,
     detection: Option<Detection>,
+    faces: &[Face],
     cancel: &AtomicBool,
-) -> Option<Cue> {
+) -> Option<(Cue, Option<f64>)> {
     let Some(detection) = detection else {
-        return Some(Cue::unknown());
+        return Some((Cue::unknown(), None));
     };
     let Some(face) = judged_face(&detection.faces, None).copied() else {
-        return Some(Cue::unknown());
+        return Some((Cue::unknown(), None));
     };
-    guarded(|| {
+    let mut scored = None;
+    let cue = guarded(|| {
         let (rgb, width, height) = match decode_rgb(preview) {
             Ok(decoded) => decoded,
             Err(e) => return Some(Err(e)),
@@ -362,8 +373,10 @@ fn whole_image_cue(
         if canceled(cancel) {
             return None;
         }
+        scored = score_gray(&luma(&rgb, width, height), width, height, None, None, faces).ok();
         face_cue_unless(&rgb, width, height, orientation, &face, detection, cancel).map(Ok)
-    })
+    })?;
+    Some((cue, scored))
 }
 
 /// `score_preview` of `preview`; a failure or panic is no score.
@@ -1920,26 +1933,31 @@ mod tests {
         let small = scored(0.95, 20.0);
         let large = scored(0.9, 30.0);
         let shy = scored(FACE_CONFIDENCE.next_down(), 40.0);
-        let found = whole(vec![small, large, shy]);
-        let cue = whole_image_cue(&jpeg(64, 48), 1, found.clone(), &never).unwrap();
+        let faces = [small, large, shy];
+        let found = whole(faces.to_vec());
+        let (cue, scored) =
+            whole_image_cue(&jpeg(64, 48), 1, found.clone(), &faces, &never).unwrap();
         assert_eq!(cue.face, Some(large));
         assert_eq!(cue.detection, found);
+        let (rgb, w, h) = decode_rgb(&jpeg(64, 48)).unwrap();
+        let expected = score_gray(&luma(&rgb, w, h), w, h, None, None, &faces).unwrap();
+        assert_eq!(scored, Some(expected), "scored on the cue's decode");
 
         for none in [None, whole(Vec::new()), whole(vec![shy])] {
             assert_eq!(
-                whole_image_cue(&[0u8; 512], 1, none, &never),
-                Some(Cue::unknown()),
+                whole_image_cue(&[0u8; 512], 1, none, &faces, &never),
+                Some((Cue::unknown(), None)),
                 "no judged face is unknown, with no decode"
             );
         }
         assert_eq!(
-            whole_image_cue(&[0u8; 512], 1, whole(vec![large]), &never),
-            Some(Cue::unknown()),
-            "a decode failure is unknown"
+            whole_image_cue(&[0u8; 512], 1, whole(vec![large]), &faces, &never),
+            Some((Cue::unknown(), None)),
+            "a decode failure is unknown, with no score"
         );
         let set = AtomicBool::new(true);
         assert_eq!(
-            whole_image_cue(&jpeg(64, 48), 1, whole(vec![large]), &set),
+            whole_image_cue(&jpeg(64, 48), 1, whole(vec![large]), &faces, &set),
             None
         );
     }

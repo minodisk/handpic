@@ -840,6 +840,18 @@ focus candidate cue and the sharpness score:
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
 | Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) stays for the shown file's overlay |
 
+A file with no trusted AF point and a confident face decodes its preview
+twice in the second pass, not three times: the 3/8 decode of the whole-image
+search and one full-size RGB decode, whose BT.601 luma the sharpness score now
+takes instead of a grayscale decode of its own (`FACES_VERSION` 13). On
+2026-11-24 (Windows 11, i7-13700, release, one thread, warm, two alternated
+runs each), `handpic-cli features <dir> 1` put the median `analysis_ms` of
+those files at 286.6 -> 245.2ms on `2026-02-01` (72 files) and 226.5 ->
+211.3ms on `2026-09-05` (204 files), a median saving of 13.4 and 16.2ms per
+file; on those Leica M11-P DNGs the score did not change at all. Every other
+file is scored as before. See
+`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`.
+
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the
 thumbnails appear at the speed of the read and the thumbnail encode, and the
 focus marks fill in during the second pass. The

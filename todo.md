@@ -263,18 +263,6 @@ Files: `docs/plans/_archived/20261007-head-pose/pose-truth.md`, `docs/plans/_arc
       unknown or whether the label stands.
 - [ ] On Windows, open the sheets `D:\Photos\tests\2026-10-07-head-pose\sheets\s00.png` to `s16.png` (4 tiles across, row by row in the `#` order of the `pose-truth.md` table; crops in `crops\`) and compare each tile to its row. Note any label to change. If labels change, re-run `aggregate.py` (in `D:\Photos\tests\2026-10-07-head-pose\`) and update `pose-results.md` and the plan's Decision if a number moves.
 
-### Core: the no-AF-point path decodes the preview up to three times
-
-#### Background
-
-On a file with no trusted AF point, pass 2 decodes the preview up to three times: the DCT-scaled RGB decode for the whole-image face search, a full-size RGB decode for the face mesh and the eye regions of the judged face (since `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2, only when a confident face is found), then a full-size grayscale decode in `sharpness::score_preview`. The face-detection-recall-cost work cut the first decode to 3/8. Step 2 measured on one thread (`riffle-cli features`, `D:\photos\2026\2026-02-01` and `2026-09-05`, Leica DNG): a faced no-AF file went from about 94 ms to about 122 ms of analysis, a file with no face did not change; the numbers are in that plan's `learnings.md`. Scoring from the full-size RGB decode (its luma) would drop the grayscale decode on faced files, but it changes the score's pixels and its stored values, so it needs a `FACES_VERSION` bump. See also `docs/plans/_archived/20261005-face-detection-recall-cost/learnings.md` (Step 3 measurements).
-
-Files: `crates/core/src/scan.rs` (`extract_analysis_unless`, `whole_image_cue`, `score`), `crates/core/src/sharpness.rs` (`score_preview`).
-
-#### TODO
-
-- [ ] Score a faced no-AF-point file from the full-size RGB decode the cue already made (its `candidate::luma`) instead of `score_preview`'s own grayscale decode. Measure the per-file saving with `handpic-cli features` on one thread over `D:\photos\2026\2026-02-01` and `2026-09-05` before and after, check that the score's ranking within bursts holds on those folders (Spearman per burst against the old score), and bump `FACES_VERSION`. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/engine/src/index.rs`.
-
 ### Agents: confirm `pr-runner` waits for a child's hand-back on a real `/pr` run
 
 #### Background

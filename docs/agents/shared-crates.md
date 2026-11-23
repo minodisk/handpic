@@ -601,7 +601,12 @@ retried.
   whole preview (`eyes::judged_face`); `9` added the latter, so a frame with
   no trusted AF point now fills every one of those columns too. That branch
   costs one extra full-size RGB decode, the luma and the mesh per faced
-  file, about +28 ms in release (`handpic-cli features`, `analysis_ms`); a
+  file, about +28 ms in release (`handpic-cli features`, `analysis_ms`).
+  Since `FACES_VERSION` 13 the sharpness score of such a file is taken on
+  the luma of that RGB decode (`sharpness::score_gray`) instead of a
+  grayscale decode of its own, which took back a median 13-16 ms per file
+  (`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`); a file whose
+  RGB decode fails still scores through its own decode. A
   file with no face pays nothing, because `whole_image_cue` returns
   `Cue::unknown()` before any decode. The face-free frame itself stays
   Neutral: the sharpness score did not separate picks from non-picks
