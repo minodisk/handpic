@@ -153,10 +153,13 @@ pub struct FilePlan {
     pub steps: Vec<(Op, PathBuf, PathBuf)>,
 }
 
-/// The RAWs of `dir` that share one `.xmp`, keyed by that sidecar: two RAWs
-/// share when `existing_sidecar` gives both the same path, which is the file
-/// the sidecar writer patches for each. Only a sidecar of two or more RAWs is
-/// kept.
+/// The RAWs of `dir` that share one `.xmp`: two RAWs share when the paths
+/// `existing_sidecar` gives them canonicalize to the same entry on disk (so
+/// `a.xmp` and `A.xmp` are one file on a case-insensitive file system), which
+/// is the file the sidecar writer patches for each. The key is one member's
+/// spelling of the sidecar (the first RAW's, in sorted order), not a path
+/// every member's `existing_sidecar` returns, so check membership by RAW, not
+/// by looking the sidecar up. Only a sidecar of two or more RAWs is kept.
 pub fn shared_xmps(dir: &Path) -> HashMap<PathBuf, Vec<PathBuf>> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return HashMap::new();
