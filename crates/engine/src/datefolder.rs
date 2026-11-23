@@ -12,9 +12,13 @@
 //! parent is a collision, which the dialog shows as the reason the run is
 //! disabled; nothing is merged. A split moves each dated file with its
 //! sidecars into its sibling date folder, its index rows following, leaves
-//! the undated files, and removes the folder only when it ends up empty.
+//! the undated files, and removes the folder only when it ends up empty. A
+//! `.xmp` shared by RAWs of one stem ends up beside each of them: it is
+//! copied into a date folder while another of its RAWs is still in the
+//! folder, moved with the last one to leave, and dropped from the folder
+//! once each of its RAWs went into a date folder that already holds it.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -22,7 +26,9 @@ use serde::Serialize;
 
 use crate::index::{self, Index};
 use crate::listing::{canonicalize, read_listing};
-use crate::rename::{file_run, folder_target, Context, FilePlan, Renamed};
+use crate::rename::{
+    apply, file_run, folder_target, same_entry, shared_xmps, Context, FilePlan, Op, Renamed,
+};
 use crate::sidecar::{existing_sidecar, SidecarFormat};
 use crate::trash::Failure;
 use crate::treewatch;
@@ -229,25 +235,31 @@ pub fn plan_of(index: Option<&Mutex<Index>>, dir: &str) -> Result<Plan, String> 
     plan(dir, &files)
 }
 
-/// The renames that move `file` into the folder `target`, file first: a RAW
+/// The steps that move `file` into the folder `target`, file first: a RAW
 /// takes the existing sidecars of both formats along, their targets minted
-/// from the moved RAW's path (a `.dop` name embeds the RAW's whole name), and
-/// a JPEG moves alone. Refuses any target that already exists, so nothing is
-/// overwritten.
-pub fn move_plan(file: &Path, target: &Path) -> Result<FilePlan, String> {
+/// from the moved RAW's path (a `.dop` name embeds the RAW's whole name), its
+/// `.xmp` by `xmp` (`None` leaves it), and a JPEG moves alone. Refuses any
+/// target that already exists, so nothing is overwritten.
+pub fn move_plan(file: &Path, target: &Path, xmp: Option<Op>) -> Result<FilePlan, String> {
     let to = target.join(file.file_name().unwrap_or_default());
-    let mut moves = vec![(file.to_path_buf(), to.clone())];
+    let mut steps = vec![(Op::Move, file.to_path_buf(), to.clone())];
     if handpic_core::scan::is_raw_file(file) {
-        for format in [SidecarFormat::Xmp, SidecarFormat::Dop] {
-            if let Some(sidecar) = existing_sidecar(file, format) {
-                moves.push((sidecar, format.sidecar_path(&to)));
+        for (format, op) in [
+            (SidecarFormat::Xmp, xmp),
+            (SidecarFormat::Dop, Some(Op::Move)),
+        ] {
+            if let (Some(op), Some(sidecar)) = (op, existing_sidecar(file, format)) {
+                steps.push((op, sidecar, format.sidecar_path(&to)));
             }
         }
     }
-    if let Some((_, taken)) = moves.iter().find(|(_, to)| to.symlink_metadata().is_ok()) {
+    if let Some((_, _, taken)) = steps
+        .iter()
+        .find(|(_, _, to)| to.symlink_metadata().is_ok())
+    {
         return Err(format!("{} already exists", file_name(taken)));
     }
-    Ok(FilePlan { moves })
+    Ok(FilePlan { steps })
 }
 
 /// One file a split moved: where it was, and the folder it is in now.
@@ -257,19 +269,32 @@ struct Move {
     dir: PathBuf,
 }
 
-/// Create each group's folder in `parent` and move its files in with
-/// `rename`, never stopping at a failure: a file whose move fails (rolled
-/// back by `file_run`) is listed and stays, and a folder nothing moved into
-/// is removed again. Returns each folder that received files with its count,
-/// the failures and every file moved.
+/// Create each group's folder in `parent` and move the files of `dir` in
+/// with `apply`, never stopping at a failure: a file whose move fails (rolled
+/// back by `file_run`, a copy deleted with `remove`) is listed and stays, and
+/// a folder nothing moved into is removed again. A `.xmp` shared by RAWs of
+/// `dir` (`shared_xmps`) is copied while another of its RAWs is still in
+/// `dir` (undated, failed or not moved yet), moved with the last one, left
+/// out when the date folder already holds it, and removed from `dir` once
+/// none of its RAWs is left there. Returns each folder that received files
+/// with its count, the failures and every file moved.
 fn split(
+    dir: &Path,
     parent: &Path,
     groups: &[Group],
-    mut rename: impl FnMut(&Path, &Path) -> Result<(), String>,
+    mut apply: impl FnMut(Op, &Path, &Path) -> Result<(), String>,
+    mut remove: impl FnMut(&Path) -> Result<(), String>,
 ) -> (Vec<(String, usize)>, Vec<Failure>, Vec<Move>) {
     let mut counts = Vec::new();
     let mut failed = Vec::new();
     let mut moves = Vec::new();
+    let shared = shared_xmps(dir);
+    let xmp_of: HashMap<&Path, &Path> = shared
+        .iter()
+        .flat_map(|(xmp, raws)| raws.iter().map(move |raw| (raw.as_path(), xmp.as_path())))
+        .collect();
+    let mut gone: HashSet<PathBuf> = HashSet::new();
+    let mut placed: HashSet<PathBuf> = HashSet::new();
     for group in groups {
         let target = parent.join(&group.name);
         if let Err(e) = std::fs::create_dir(&target) {
@@ -281,8 +306,32 @@ fn split(
         }
         let mut count = 0;
         for file in &group.files {
-            match move_plan(file, &target).and_then(|plan| file_run(plan, &mut rename)) {
+            let xmp = xmp_of.get(file.as_path()).map(|&xmp| {
+                let to = SidecarFormat::Xmp.sidecar_path(&target.join(file_name(file)));
+                let staying = shared[xmp]
+                    .iter()
+                    .any(|raw| raw != file && !gone.contains(raw));
+                (xmp, to, staying)
+            });
+            let op = match &xmp {
+                None => Some(Op::Move),
+                Some((_, to, _)) if placed.iter().any(|p| same_entry(p, to)) => None,
+                Some((_, _, true)) => Some(Op::Copy),
+                Some((_, _, false)) => Some(Op::Move),
+            };
+            match move_plan(file, &target, op)
+                .and_then(|plan| file_run(plan, &mut apply, &mut remove))
+            {
                 Ok(()) => {
+                    if let Some((xmp, to, staying)) = xmp {
+                        if op.is_none() && !staying {
+                            if let Err(e) = remove(xmp) {
+                                log::warn!("could not remove {}: {e}", xmp.display());
+                            }
+                        }
+                        placed.insert(to);
+                    }
+                    gone.insert(file.clone());
                     count += 1;
                     moves.push(Move {
                         from: file.clone(),
@@ -384,9 +433,13 @@ pub fn split_folder(cx: &Context, dir: &str, caller: &str, plan: &Plan) -> Resul
     let released = watch::release_under(cx.watch, dir);
     let ((counts, failed, moves), (removed, left)) =
         treewatch::with_released(cx.trees, dir, || {
-            let split = split(parent, &plan.groups, |from, to| {
-                std::fs::rename(from, to).map_err(|e| format!("{}: {e}", file_name(from)))
-            });
+            let split = split(
+                path,
+                parent,
+                &plan.groups,
+                |op, from, to| apply(op, from, to).map_err(|e| format!("{}: {e}", file_name(from))),
+                |path| std::fs::remove_file(path).map_err(|e| format!("{}: {e}", file_name(path))),
+            );
             Ok((split, remove_if_empty(path)))
         })?;
     if !removed {
@@ -688,8 +741,12 @@ mod tests {
         names
     }
 
-    fn fs_rename(from: &Path, to: &Path) -> Result<(), String> {
-        std::fs::rename(from, to).map_err(|e| e.to_string())
+    fn fs_apply(op: Op, from: &Path, to: &Path) -> Result<(), String> {
+        apply(op, from, to).map_err(|e| e.to_string())
+    }
+
+    fn fs_remove(path: &Path) -> Result<(), String> {
+        std::fs::remove_file(path).map_err(|e| e.to_string())
     }
 
     fn group(name: &str, files: Vec<PathBuf>) -> Group {
@@ -705,16 +762,20 @@ mod tests {
         let target = dir.parent().unwrap().join("2026-10-31");
         touch(&dir, &["a.ARW", "a.xmp", "a.ARW.dop", "b.JPG", "b.xmp"]);
         assert_eq!(
-            move_plan(&dir.join("a.ARW"), &target).unwrap().moves,
+            move_plan(&dir.join("a.ARW"), &target, Some(Op::Move))
+                .unwrap()
+                .steps,
             vec![
-                (dir.join("a.ARW"), target.join("a.ARW")),
-                (dir.join("a.xmp"), target.join("a.xmp")),
-                (dir.join("a.ARW.dop"), target.join("a.ARW.dop")),
+                (Op::Move, dir.join("a.ARW"), target.join("a.ARW")),
+                (Op::Move, dir.join("a.xmp"), target.join("a.xmp")),
+                (Op::Move, dir.join("a.ARW.dop"), target.join("a.ARW.dop")),
             ]
         );
         assert_eq!(
-            move_plan(&dir.join("b.JPG"), &target).unwrap().moves,
-            vec![(dir.join("b.JPG"), target.join("b.JPG"))]
+            move_plan(&dir.join("b.JPG"), &target, Some(Op::Move))
+                .unwrap()
+                .steps,
+            vec![(Op::Move, dir.join("b.JPG"), target.join("b.JPG"))]
         );
     }
 
@@ -725,8 +786,8 @@ mod tests {
         std::fs::create_dir(&target).unwrap();
         touch(&dir, &["a.ARW", "a.xmp", "b.ARW"]);
         touch(&target, &["a.xmp", "b.ARW"]);
-        assert!(move_plan(&dir.join("a.ARW"), &target).is_err());
-        assert!(move_plan(&dir.join("b.ARW"), &target).is_err());
+        assert!(move_plan(&dir.join("a.ARW"), &target, Some(Op::Move)).is_err());
+        assert!(move_plan(&dir.join("b.ARW"), &target, Some(Op::Move)).is_err());
     }
 
     #[test]
@@ -738,7 +799,7 @@ mod tests {
             group("2026-10-31", vec![dir.join("a.ARW")]),
             group("2026-11-01", vec![dir.join("b.ARW")]),
         ];
-        let (counts, failed, moves) = split(parent, &groups, fs_rename);
+        let (counts, failed, moves) = split(&dir, parent, &groups, fs_apply, fs_remove);
         assert_eq!(
             counts,
             vec![("2026-10-31".to_string(), 1), ("2026-11-01".to_string(), 1)]
@@ -771,16 +832,16 @@ mod tests {
             group("2026-10-31", vec![dir.join("a.ARW"), dir.join("b.ARW")]),
             group("2026-11-01", vec![dir.join("c.ARW")]),
         ];
-        let refuse = |from: &Path, to: &Path| {
+        let refuse = |op: Op, from: &Path, to: &Path| {
             if from
                 .file_name()
                 .is_some_and(|n| n == "a.xmp" || n == "c.ARW.dop")
             {
                 return Err("refused".to_string());
             }
-            fs_rename(from, to)
+            fs_apply(op, from, to)
         };
-        let (counts, failed, moves) = split(parent, &groups, refuse);
+        let (counts, failed, moves) = split(&dir, parent, &groups, refuse, fs_remove);
         assert_eq!(counts, vec![("2026-10-31".to_string(), 1)]);
         let failed: Vec<_> = failed.iter().map(|f| f.path.clone()).collect();
         assert_eq!(
@@ -800,7 +861,7 @@ mod tests {
         std::fs::create_dir(parent.join("2026-10-31")).unwrap();
         touch(&dir, &["a.ARW"]);
         let groups = [group("2026-10-31", vec![dir.join("a.ARW")])];
-        let (counts, failed, moves) = split(parent, &groups, fs_rename);
+        let (counts, failed, moves) = split(&dir, parent, &groups, fs_apply, fs_remove);
         assert!(counts.is_empty());
         assert_eq!(failed.len(), 1);
         assert!(moves.is_empty());
@@ -885,5 +946,214 @@ mod tests {
             index::lock(&index).folder_counts().unwrap(),
             [(s(&first), 2), (s(&second), 1)]
         );
+    }
+
+    fn read(path: &Path) -> Vec<u8> {
+        std::fs::read(path).unwrap()
+    }
+
+    fn xmp_folder(name: &str, raws: &[&str]) -> PathBuf {
+        let dir = folder(name);
+        touch(&dir, raws);
+        std::fs::write(dir.join("a.xmp"), b"shared").unwrap();
+        dir
+    }
+
+    #[test]
+    fn mates_of_different_dates_each_get_the_shared_xmp() {
+        let dir = xmp_folder("shared-dates", &["a.ARW", "a.ARW.dop", "a.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("a.NEF")]),
+        ];
+        let (counts, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert_eq!(counts.len(), 2);
+        assert!(failed.is_empty());
+        let first = parent.join("2026-10-31");
+        let second = parent.join("2026-11-01");
+        assert_eq!(names(&first), ["a.ARW", "a.ARW.dop", "a.xmp"]);
+        assert_eq!(names(&second), ["a.NEF", "a.xmp"]);
+        assert_eq!(read(&first.join("a.xmp")), b"shared");
+        assert_eq!(read(&second.join("a.xmp")), b"shared");
+        assert!(names(&dir).is_empty());
+    }
+
+    #[test]
+    fn a_dated_mate_gets_a_copy_and_the_undated_keeps_the_original() {
+        let dir = xmp_folder("shared-undated", &["a.ARW", "a.NEF", "b.ARW"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("b.ARW")]),
+        ];
+        let (_, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        let first = parent.join("2026-10-31");
+        assert_eq!(names(&first), ["a.ARW", "a.xmp"]);
+        assert_eq!(read(&first.join("a.xmp")), b"shared");
+        assert_eq!(names(&dir), ["a.NEF", "a.xmp"]);
+        assert_eq!(read(&dir.join("a.xmp")), b"shared");
+    }
+
+    #[test]
+    fn mates_of_one_date_end_with_one_xmp() {
+        let dir = xmp_folder("shared-same", &["a.ARW", "a.NEF", "b.ARW"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW"), dir.join("a.NEF")]),
+            group("2026-11-01", vec![dir.join("b.ARW")]),
+        ];
+        let (counts, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(
+            counts,
+            vec![("2026-10-31".to_string(), 2), ("2026-11-01".to_string(), 1)]
+        );
+        assert_eq!(
+            names(&parent.join("2026-10-31")),
+            ["a.ARW", "a.NEF", "a.xmp"]
+        );
+        assert!(names(&dir).is_empty());
+        assert_eq!(remove_if_empty(&dir), (true, Vec::new()));
+    }
+
+    #[test]
+    fn three_mates_over_two_dates_each_get_the_shared_xmp() {
+        let dir = xmp_folder("shared-three", &["a.ARW", "a.CR3", "a.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW"), dir.join("a.NEF")]),
+            group("2026-11-01", vec![dir.join("a.CR3")]),
+        ];
+        let (_, failed, moves) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(moves.len(), 3);
+        assert_eq!(
+            names(&parent.join("2026-10-31")),
+            ["a.ARW", "a.NEF", "a.xmp"]
+        );
+        assert_eq!(names(&parent.join("2026-11-01")), ["a.CR3", "a.xmp"]);
+        assert!(names(&dir).is_empty());
+    }
+
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn mates_whose_stems_differ_in_case_each_get_the_shared_xmp() {
+        let dir = xmp_folder("shared-case", &["a.ARW", "A.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("A.NEF")]),
+        ];
+        let (_, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(read(&parent.join("2026-10-31").join("a.xmp")), b"shared");
+        assert_eq!(read(&parent.join("2026-11-01").join("A.xmp")), b"shared");
+        assert!(names(&dir).is_empty());
+    }
+
+    #[cfg(any(windows, target_os = "macos"))]
+    #[test]
+    fn mates_whose_stems_differ_in_case_split_into_one_date_folder() {
+        let dir = xmp_folder("shared-case-same", &["a.ARW", "A.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [group(
+            "2026-10-31",
+            vec![dir.join("a.ARW"), dir.join("A.NEF")],
+        )];
+        let (counts, failed, _) = split(&dir, parent, &groups, fs_apply, fs_remove);
+        assert!(failed.is_empty());
+        assert_eq!(counts, vec![("2026-10-31".to_string(), 2)]);
+        let xmps = names(&parent.join("2026-10-31"))
+            .iter()
+            .filter(|n| n.to_lowercase().ends_with(".xmp"))
+            .count();
+        assert_eq!(xmps, 1);
+        assert!(names(&dir).is_empty());
+    }
+
+    #[test]
+    fn a_failing_step_after_the_copy_deletes_it_and_puts_the_raw_back() {
+        let dir = xmp_folder("shared-rollback", &["a.ARW", "a.ARW.dop", "a.NEF"]);
+        let parent = dir.parent().unwrap();
+        let groups = [
+            group("2026-10-31", vec![dir.join("a.ARW")]),
+            group("2026-11-01", vec![dir.join("a.NEF")]),
+        ];
+        let refuse = |op: Op, from: &Path, to: &Path| {
+            if from.file_name().is_some_and(|n| n == "a.ARW.dop") {
+                return Err("refused".to_string());
+            }
+            fs_apply(op, from, to)
+        };
+        let mut removed = Vec::new();
+        let (counts, failed, _) = split(&dir, parent, &groups, refuse, |path| {
+            removed.push(path.to_path_buf());
+            fs_remove(path)
+        });
+        let first = parent.join("2026-10-31");
+        assert_eq!(removed, [first.join("a.xmp")]);
+        assert_eq!(counts, vec![("2026-11-01".to_string(), 1)]);
+        assert_eq!(failed.len(), 1);
+        assert!(!first.exists());
+        assert_eq!(names(&parent.join("2026-11-01")), ["a.NEF", "a.xmp"]);
+        assert_eq!(names(&dir), ["a.ARW", "a.ARW.dop", "a.xmp"]);
+    }
+
+    #[test]
+    fn a_split_of_mates_keeps_both_judgments_and_removes_the_folder() {
+        let dir = xmp_folder("shared-index", &["a.ARW", "a.NEF"]);
+        let parent = dir.parent().unwrap().to_path_buf();
+        let caller = dir.to_string_lossy().into_owned();
+        let canonical = canonicalize(&caller);
+        let files = [
+            file(Path::new(&canonical), "a.ARW", Some("2026-10-31")),
+            file(Path::new(&canonical), "a.NEF", Some("2026-11-01")),
+        ];
+        let plan = plan(Path::new(&canonical), &files).unwrap();
+        let index = Mutex::new(Index::open(&parent.join("index.sqlite")).unwrap());
+        let key = |name: &str| {
+            Path::new(&canonical)
+                .join(name)
+                .to_string_lossy()
+                .into_owned()
+        };
+        for (name, rating) in [("a.ARW", 3), ("a.NEF", 5)] {
+            index::lock(&index)
+                .set_rating(
+                    &canonical,
+                    &key(name),
+                    Some(rating),
+                    handpic_core::Flag::Pick,
+                    None,
+                    true,
+                )
+                .unwrap();
+        }
+        let watch = crate::watch::Watch::spawn(|_| {});
+        let trees = crate::treewatch::TreeWatch::spawn(|_| {});
+        let runs = crate::trash::Runs::default();
+        let cx = Context {
+            watch: &watch,
+            trees: &trees,
+            index: Some(&index),
+            runs: &runs,
+        };
+
+        let split = split_folder(&cx, &canonical, &caller, &plan).unwrap();
+
+        assert!(split.removed);
+        assert_eq!(split.warning, None);
+        for (date, name, rating) in [("2026-10-31", "a.ARW", 3), ("2026-11-01", "a.NEF", 5)] {
+            let to_dir = canonicalize(&parent.join(date).to_string_lossy());
+            let to = Path::new(&to_dir).join(name).to_string_lossy().into_owned();
+            let rows = index::lock(&index).rows_of(&to_dir).unwrap();
+            assert_eq!(
+                rows,
+                [(to, Some(rating), handpic_core::Flag::Pick, None, true)]
+            );
+            assert_eq!(names(&parent.join(date)), [name, "a.xmp"]);
+        }
     }
 }

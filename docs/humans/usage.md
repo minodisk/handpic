@@ -589,7 +589,10 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
     file count. `Run` creates those folders next to the original folder, in
     its parent, and moves each dated file into its date's folder, a RAW
     file with its `.xmp` and `.dop` sidecars (whichever exist) and a JPEG
-    alone. Its stars, flag, color label, thumbnail and metadata follow
+    alone. A `.xmp` that RAW files of one name share (`a.ARW` and `a.NEF`
+    with one `a.xmp`) ends up beside each of them: it is copied into a date
+    folder while another of those RAW files stays behind, and moved with the
+    last one. Its stars, flag, color label, thumbnail and metadata follow
     it, so nothing is re-extracted. The undated files stay in the original
     folder, and the dialog lists them; the subfolders stay too. A file that
     fails to move stays where it was, its error listed, and the others

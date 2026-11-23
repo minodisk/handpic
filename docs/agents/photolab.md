@@ -236,17 +236,19 @@ older than the item). `Rating`, `ColorLabel`, `Settings` and `Orientation` stay
 - Source: `docs/plans/_archived/20261008-burst-keep-score/learnings.md`,
   Step 1.
 
-## `photolab::lookup` keys on folder + file `Name`; a rename does not follow through to PhotoLab or a shared sidecar (Hit)
+## `photolab::lookup` keys on folder + file `Name`; a rename does not follow through to PhotoLab (Hit)
 
 `photolab::lookup` (`crates/engine/src/photolab.rs`) finds a RAW's Uuids by its
 folder and file `Name`, and a `.dop` Handpic writes carries that `Name`
 inside. `rename.rs`'s `file_plan` moves a `.dop` unchanged when a RAW is
 renamed, so the sidecar's inner `Name` and PhotoLab's own database still
 say the old name until PhotoLab re-indexes — check this against a real
-PhotoLab install before assuming the moved `.dop` still matches. Likewise,
-`file_plan`, like `trash::groups_of`, takes `a.xmp` as `a.ARW`'s sidecar even
-when an `a.DNG` in the same folder shares that same `a.xmp`; renaming or
-trashing `a.ARW` alone carries the DNG's sidecar away too. See
+PhotoLab install before assuming the moved `.dop` still matches. When an
+`a.DNG` in the same folder shares `a.ARW`'s `a.xmp` (`rename::shared_xmps`),
+`file_plan` copies `a.xmp` to the new name and leaves the original with the
+DNG, and a date split (`datefolder.rs`) copies it into each date folder,
+moving it with the last of its RAWs to leave; `trash::groups_of` still takes
+it along when `a.ARW` alone goes to the Trash. See
 `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md` for
 the open follow-ups.
 

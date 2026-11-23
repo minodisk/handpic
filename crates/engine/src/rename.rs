@@ -2,9 +2,12 @@
 //! name check and the target planning are pure so they can be tested on temp
 //! dirs; `rename_folder` releases the folder watcher and the tree watches,
 //! renames on disk and carries the index rows and the recorded trash runs
-//! along, so nothing is re-extracted and no judgment is lost. The scan check
-//! and the sidecar writer's drain are the caller's.
+//! along, so nothing is re-extracted and no judgment is lost. A RAW file
+//! rename carries its sidecars along, but copies a `.xmp` it shares with a
+//! RAW of the same stem that stays, so neither loses it. The scan check and
+//! the sidecar writer's drain are the caller's.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -136,20 +139,89 @@ pub fn rename_folder(cx: &Context, dir: &str, name: &str) -> Result<Renamed, Str
     })
 }
 
-/// The renames that move one RAW and its sidecars, RAW first, as
-/// `(from, to)` pairs.
+/// One step of a `FilePlan`: a rename, or a copy that never overwrites.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Op {
+    Move,
+    Copy,
+}
+
+/// The steps that move one RAW and its sidecars, RAW first, as
+/// `(op, from, to)`.
 #[derive(Debug, PartialEq, Eq)]
 pub struct FilePlan {
-    pub moves: Vec<(PathBuf, PathBuf)>,
+    pub steps: Vec<(Op, PathBuf, PathBuf)>,
+}
+
+/// The RAWs of `dir` that share one `.xmp`: two RAWs share when the paths
+/// `existing_sidecar` gives them canonicalize to the same entry on disk (so
+/// `a.xmp` and `A.xmp` are one file on a case-insensitive file system), which
+/// is the file the sidecar writer patches for each. The key is one member's
+/// spelling of the sidecar (the first RAW's, in sorted order), not a path
+/// every member's `existing_sidecar` returns, so check membership by RAW, not
+/// by looking the sidecar up. Only a sidecar of two or more RAWs is kept.
+pub fn shared_xmps(dir: &Path) -> HashMap<PathBuf, Vec<PathBuf>> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return HashMap::new();
+    };
+    let mut by_name: HashMap<String, Vec<PathBuf>> = HashMap::new();
+    for raw in entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| handpic_core::scan::is_raw_file(path))
+    {
+        let name = SidecarFormat::Xmp
+            .sidecar_path(&raw)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        by_name.entry(name).or_default().push(raw);
+    }
+    let mut shared: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    for mut raws in by_name.into_values().filter(|raws| raws.len() > 1) {
+        raws.sort();
+        // Bucket by the entry on disk, since each RAW spells the sidecar from
+        // its own stem and a case-insensitive file system maps those
+        // spellings to one file; the key is the first RAW's spelling.
+        let mut buckets: Vec<(PathBuf, PathBuf, Vec<PathBuf>)> = Vec::new();
+        for raw in raws {
+            let Some(xmp) = existing_sidecar(&raw, SidecarFormat::Xmp) else {
+                continue;
+            };
+            let entry = std::fs::canonicalize(&xmp).unwrap_or_else(|_| xmp.clone());
+            match buckets.iter_mut().find(|(e, _, _)| *e == entry) {
+                Some((_, _, members)) => members.push(raw),
+                None => buckets.push((entry, xmp, vec![raw])),
+            }
+        }
+        for (_, xmp, members) in buckets {
+            if members.len() > 1 {
+                shared.insert(xmp, members);
+            }
+        }
+    }
+    shared
+}
+
+/// Whether `a` and `b` are one entry on disk.
+pub(crate) fn same_entry(a: &Path, b: &Path) -> bool {
+    matches!(
+        (std::fs::canonicalize(a), std::fs::canonicalize(b)),
+        (Ok(a), Ok(b)) if a == b
+    )
 }
 
 /// Plan renaming the RAW `path`, directly in `dir`, to `name`, carrying the
 /// existing sidecars of both formats along (a format switch can leave both on
 /// disk). A sidecar's target is minted from the new RAW path, since a `.dop`
-/// name embeds the RAW's whole name. Refuses a `path` that is not a RAW in
-/// `dir`, a `name` that is not a valid RAW file name, and any target that
-/// exists as another entry than its source (a target that canonicalizes to
-/// its source is a case-only rename).
+/// name embeds the RAW's whole name. A `.xmp` shared with a RAW that stays
+/// (`shared_xmps`) is copied to the new name and the original left, and
+/// nothing is planned for it when that copy would land on the shared sidecar
+/// itself (a rename to another RAW extension, or a case-only rename).
+/// Refuses a `path` that is not a RAW in `dir`, a `name` that is not a valid
+/// RAW file name, and any target that exists as another entry than its
+/// source (a target that canonicalizes to its source is a case-only rename).
 pub fn file_plan(dir: &Path, path: &str, name: &str) -> Result<FilePlan, String> {
     let raw = PathBuf::from(path);
     if !handpic_core::scan::is_raw_file(&raw) {
@@ -163,41 +235,70 @@ pub fn file_plan(dir: &Path, path: &str, name: &str) -> Result<FilePlan, String>
     if !handpic_core::scan::is_raw_file(&target) {
         return Err(format!("{name}: not a RAW file name"));
     }
-    let mut moves = vec![(raw.clone(), target.clone())];
+    let mut steps = vec![(Op::Move, raw.clone(), target.clone())];
     for format in [SidecarFormat::Xmp, SidecarFormat::Dop] {
         if let Some(sidecar) = existing_sidecar(&raw, format) {
-            moves.push((sidecar, format.sidecar_path(&target)));
-        }
-    }
-    for (from, to) in &moves {
-        if to.symlink_metadata().is_ok() {
-            match (std::fs::canonicalize(to), std::fs::canonicalize(from)) {
-                (Ok(a), Ok(b)) if a == b => {}
-                _ => {
-                    let taken = to.file_name().unwrap_or_default().to_string_lossy();
-                    return Err(format!("{taken} already exists"));
+            let to = format.sidecar_path(&target);
+            if format == SidecarFormat::Xmp
+                && shared_xmps(dir).values().any(|raws| raws.contains(&raw))
+            {
+                if !same_entry(&to, &sidecar) {
+                    steps.push((Op::Copy, sidecar, to));
                 }
+            } else {
+                steps.push((Op::Move, sidecar, to));
             }
         }
     }
-    Ok(FilePlan { moves })
+    for (_, from, to) in &steps {
+        if to.symlink_metadata().is_ok() && !same_entry(to, from) {
+            let taken = to.file_name().unwrap_or_default().to_string_lossy();
+            return Err(format!("{taken} already exists"));
+        }
+    }
+    Ok(FilePlan { steps })
 }
 
-/// Carry out `plan` with `rename`, RAW first. When a sidecar fails, what
-/// already moved is renamed back (best effort, logged) and the error
-/// returned, so a failure leaves the folder as it was.
+/// Carry out one step on disk: `std::fs::rename`, or a copy into a new file
+/// that fails when `to` exists (`std::fs::copy` would overwrite it), its
+/// partial target removed on a failed write.
+pub fn apply(op: Op, from: &Path, to: &Path) -> std::io::Result<()> {
+    match op {
+        Op::Move => std::fs::rename(from, to),
+        Op::Copy => {
+            let mut source = std::fs::File::open(from)?;
+            let mut target = std::fs::File::create_new(to)?;
+            if let Err(e) = std::io::copy(&mut source, &mut target) {
+                drop(target);
+                let _ = std::fs::remove_file(to);
+                return Err(e);
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Carry out `plan` with `apply`, RAW first. When a step fails, what already
+/// happened is undone (best effort, logged): a move renamed back with
+/// `apply`, a copy deleted with `remove`. The error is returned, so a
+/// failure leaves the folder as it was.
 pub fn file_run(
     plan: FilePlan,
-    mut rename: impl FnMut(&Path, &Path) -> Result<(), String>,
+    mut apply: impl FnMut(Op, &Path, &Path) -> Result<(), String>,
+    mut remove: impl FnMut(&Path) -> Result<(), String>,
 ) -> Result<(), String> {
-    for (i, (from, to)) in plan.moves.iter().enumerate() {
-        if let Err(e) = rename(from, to) {
-            for (from, to) in plan.moves[..i].iter().rev() {
-                if let Err(back) = rename(to, from) {
+    for (i, (op, from, to)) in plan.steps.iter().enumerate() {
+        if let Err(e) = apply(*op, from, to) {
+            for (op, from, to) in plan.steps[..i].iter().rev() {
+                let undone = match op {
+                    Op::Move => apply(Op::Move, to, from),
+                    Op::Copy => remove(to),
+                };
+                if let Err(back) = undone {
                     log::warn!(
-                        "could not rename {} back to {}: {back}",
-                        to.display(),
-                        from.display()
+                        "could not undo the {op:?} of {} to {}: {back}",
+                        from.display(),
+                        to.display()
                     );
                 }
             }
@@ -209,7 +310,9 @@ pub fn file_run(
 
 #[cfg(test)]
 mod tests {
-    use super::{check_name, file_plan, file_run, folder_target, rename_folder, Context};
+    use super::{
+        apply, check_name, file_plan, file_run, folder_target, rename_folder, Context, Op,
+    };
     use crate::index::{self, Index};
     use std::path::{Path, PathBuf};
     use std::sync::Mutex;
@@ -297,8 +400,12 @@ mod tests {
         names
     }
 
-    fn fs_rename(from: &Path, to: &Path) -> Result<(), String> {
-        std::fs::rename(from, to).map_err(|e| e.to_string())
+    fn fs_apply(op: Op, from: &Path, to: &Path) -> Result<(), String> {
+        apply(op, from, to).map_err(|e| e.to_string())
+    }
+
+    fn fs_remove(path: &Path) -> Result<(), String> {
+        std::fs::remove_file(path).map_err(|e| e.to_string())
     }
 
     #[test]
@@ -310,14 +417,14 @@ mod tests {
         let path = dir.join("a.ARW").to_string_lossy().into_owned();
         let plan = file_plan(&dir, &path, "shoot.ARW").unwrap();
         assert_eq!(
-            plan.moves,
+            plan.steps,
             vec![
-                (dir.join("a.ARW"), dir.join("shoot.ARW")),
-                (dir.join("a.xmp"), dir.join("shoot.xmp")),
-                (dir.join("a.ARW.dop"), dir.join("shoot.ARW.dop")),
+                (Op::Move, dir.join("a.ARW"), dir.join("shoot.ARW")),
+                (Op::Move, dir.join("a.xmp"), dir.join("shoot.xmp")),
+                (Op::Move, dir.join("a.ARW.dop"), dir.join("shoot.ARW.dop")),
             ]
         );
-        file_run(plan, fs_rename).unwrap();
+        file_run(plan, fs_apply, fs_remove).unwrap();
         assert_eq!(
             names(&dir),
             ["b.ARW", "shoot.ARW", "shoot.ARW.dop", "shoot.xmp"]
@@ -330,7 +437,12 @@ mod tests {
         write(&dir.join("a.ARW"));
         write(&dir.join("a.xmp"));
         let path = dir.join("a.ARW").to_string_lossy().into_owned();
-        file_run(file_plan(&dir, &path, "A.ARW").unwrap(), fs_rename).unwrap();
+        file_run(
+            file_plan(&dir, &path, "A.ARW").unwrap(),
+            fs_apply,
+            fs_remove,
+        )
+        .unwrap();
         // The listing carries the names as stored, whatever the file
         // system's case sensitivity, unlike `exists()`.
         assert_eq!(names(&dir), ["A.ARW", "A.xmp"]);
@@ -367,14 +479,117 @@ mod tests {
         }
         let path = dir.join("a.ARW").to_string_lossy().into_owned();
         let plan = file_plan(&dir, &path, "b.ARW").unwrap();
-        let result = file_run(plan, |from, to| {
-            if from.extension().is_some_and(|e| e == "dop") {
-                return Err("refused".to_string());
-            }
-            fs_rename(from, to)
-        });
+        let result = file_run(
+            plan,
+            |op, from, to| {
+                if from.extension().is_some_and(|e| e == "dop") {
+                    return Err("refused".to_string());
+                }
+                fs_apply(op, from, to)
+            },
+            fs_remove,
+        );
         assert_eq!(result, Err("refused".to_string()));
         assert_eq!(names(&dir), ["a.ARW", "a.ARW.dop", "a.xmp"]);
+    }
+
+    #[test]
+    fn a_shared_xmp_is_copied_and_an_unshared_one_moved() {
+        let dir = temp_dir("file-shared");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.ARW.dop", "b.ARW", "b.xmp"] {
+            std::fs::write(dir.join(name), name).unwrap();
+        }
+        let path = dir.join("a.ARW").to_string_lossy().into_owned();
+        let plan = file_plan(&dir, &path, "c.ARW").unwrap();
+        assert_eq!(
+            plan.steps,
+            vec![
+                (Op::Move, dir.join("a.ARW"), dir.join("c.ARW")),
+                (Op::Copy, dir.join("a.xmp"), dir.join("c.xmp")),
+                (Op::Move, dir.join("a.ARW.dop"), dir.join("c.ARW.dop")),
+            ]
+        );
+        file_run(plan, fs_apply, fs_remove).unwrap();
+        assert_eq!(
+            names(&dir),
+            [
+                "a.NEF",
+                "a.xmp",
+                "b.ARW",
+                "b.xmp",
+                "c.ARW",
+                "c.ARW.dop",
+                "c.xmp"
+            ]
+        );
+        assert_eq!(std::fs::read(dir.join("c.xmp")).unwrap(), b"a.xmp");
+
+        let path = dir.join("b.ARW").to_string_lossy().into_owned();
+        let plan = file_plan(&dir, &path, "d.ARW").unwrap();
+        assert_eq!(
+            plan.steps,
+            vec![
+                (Op::Move, dir.join("b.ARW"), dir.join("d.ARW")),
+                (Op::Move, dir.join("b.xmp"), dir.join("d.xmp")),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_shared_xmp_renamed_onto_itself_plans_nothing() {
+        let dir = temp_dir("file-shared-self");
+        for name in ["a.ARW", "a.NEF", "a.xmp"] {
+            write(&dir.join(name));
+        }
+        let path = dir.join("a.ARW").to_string_lossy().into_owned();
+        let plan = file_plan(&dir, &path, "a.DNG").unwrap();
+        assert_eq!(
+            plan.steps,
+            vec![(Op::Move, dir.join("a.ARW"), dir.join("a.DNG"))]
+        );
+    }
+
+    #[test]
+    fn a_failing_step_after_a_copy_deletes_the_copy() {
+        let dir = temp_dir("file-shared-rollback");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.ARW.dop"] {
+            write(&dir.join(name));
+        }
+        let path = dir.join("a.ARW").to_string_lossy().into_owned();
+        let plan = file_plan(&dir, &path, "b.ARW").unwrap();
+        let mut removed = Vec::new();
+        let result = file_run(
+            plan,
+            |op, from, to| {
+                if from.extension().is_some_and(|e| e == "dop") {
+                    return Err("refused".to_string());
+                }
+                fs_apply(op, from, to)
+            },
+            |path| {
+                removed.push(path.to_path_buf());
+                fs_remove(path)
+            },
+        );
+        assert_eq!(result, Err("refused".to_string()));
+        assert_eq!(removed, [dir.join("b.xmp")]);
+        assert_eq!(names(&dir), ["a.ARW", "a.ARW.dop", "a.NEF", "a.xmp"]);
+    }
+
+    #[test]
+    fn a_copy_onto_an_existing_file_is_refused() {
+        let dir = temp_dir("file-shared-collision");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "b.xmp"] {
+            write(&dir.join(name));
+        }
+        let path = dir.join("a.ARW").to_string_lossy().into_owned();
+        let before = names(&dir);
+        assert_eq!(
+            file_plan(&dir, &path, "b.ARW"),
+            Err("b.xmp already exists".to_string())
+        );
+        assert!(apply(Op::Copy, &dir.join("a.xmp"), &dir.join("b.xmp")).is_err());
+        assert_eq!(names(&dir), before);
     }
 
     #[test]
