@@ -209,7 +209,7 @@ the same session, the median of the three runs' p50 / p95
 | Case | Prefetch on | `--no-prefetch` | `decode` p50 without the ring |
 |---|---|---|---|
 | ARW, 1616x1080 (ruler) | 12.3 / 19.5 | 19.6 / 25.8 | 6.7 |
-| Leica M11-P DxO exports, 37-60 MP | 9.7 / 108.7 | 114.8 / 176.2 | 105.1 |
+| Leica M11-P DxO exports, 36-50 MP | 9.7 / 108.7 | 114.8 / 176.2 | 105.1 |
 | Sony ILCE-7M5 exports, 13-33 MP | 12.6 / 19.2 | 50.2 / 62.5 | 29.6 |
 
 With the ring on, which is the default, nearly every page comes from it and

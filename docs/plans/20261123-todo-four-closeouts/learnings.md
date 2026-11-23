@@ -59,9 +59,8 @@
   summarize its sizes) before the scratchpad goes. `exiftool -EncodingProcess`
   on the 10-file folder: all 10 `Baseline DCT, Huffman coding`.
 - The 10-file folder's files measure 36.1-50.1 MP (exiftool and the `px=`
-  fields alike), while the step's table and `performance.md` give the Leica
-  row as 37-60 MP; left as is (the follow-up was told not to change other
-  numbers).
+  fields alike), while the step's table and `performance.md` / `.ja.md` gave
+  the Leica row as 37-60 MP; corrected to 36-50 MP in all three.
 
 ## Deferred issues (todo candidates)
 
