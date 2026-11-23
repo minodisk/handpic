@@ -1437,6 +1437,7 @@ impl Handpic {
                 import::Dismiss::None => {}
             }
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         } else if self.folderops.sequence.is_open() {
             match self.folderops.sequence.dismiss() {
@@ -1449,10 +1450,12 @@ impl Handpic {
                 sequence::Dismiss::None => {}
             }
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         } else if self.folderops.sidecars.dismiss() || self.folderops.date.dismiss() {
             self.folderops.dialog = None;
             self.follow_folder_dialog(cx);
+            self.drain_clear(cx);
             cx.notify();
         }
     }

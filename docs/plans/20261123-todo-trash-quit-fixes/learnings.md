@@ -29,3 +29,30 @@
   already lists. Its held path (`Scan::stop_within`) is unchanged by this
   step. The two new holder tests passed. A re-run of the scan tests alone
   was killed for low memory.
+
+## Step 2: a dialog cancel drains a held clear
+
+- The MCP `cancel_operation` reaches the same two functions
+  (`Cancel::TrashDialog` calls `dismiss_trash`, `Cancel::Folder`
+  `dismiss_folder_dialog(false, ..)`), so the two cancel paths cover the
+  user's Cancel / Escape and the MCP cancel alike. `drain_clear` was added
+  after `follow_trash` in `dismiss_trash` and after `follow_folder_dialog` in
+  each of `dismiss_folder_dialog`'s three branches; its `ClearFlow::idle`
+  guard makes the call a no-op where the dialog only steps aside (an import
+  set aside, a run being canceled is still in flight).
+- The reachable state is an MCP-confirmed clear (`confirmed_clear`): a
+  pressed one needs the settings open, which `confirm_trash` and
+  `start_sidecars` refuse. The UI tests in `crates/app/src/uitest.rs` open
+  the dialog first (a real Move to Trash question, a real Rewrite Sidecars
+  preview), then `resync.open()` + `relist` to make the view busy, confirm a
+  clear (held), wait for the re-listing's `finished` (the idle point, which
+  leaves the clear held under the dialog), cancel the dialog and check that
+  the clear runs.
+- The first build of the two new tests (`cargo test --bin handpic
+  drains_a_held_clear`, CARGO_BUILD_JOBS=4) was killed for low memory
+  before it finished, so they have not run yet, and neither has `mise run
+  ci:local`.
+- Local checks (`mise run ci:local`, cargo build / test / clippy) were
+  skipped for this step by the user's decision, since this machine runs out
+  of memory; only `mise run fmt` ran locally, and the PR's GitHub Actions
+  checks verify the build, clippy and the new tests.

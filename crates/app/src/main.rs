@@ -1739,6 +1739,7 @@ impl Handpic {
     fn dismiss_trash(&mut self, cx: &mut Context<Self>) {
         if self.trash.dismiss() {
             self.follow_trash(cx);
+            self.drain_clear(cx);
             cx.notify();
         }
     }
