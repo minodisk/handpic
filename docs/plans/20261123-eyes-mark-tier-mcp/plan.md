@@ -148,7 +148,7 @@ widens the rule and reuses the mark.
       reached the file"; say so in the description.
     - `get_photo` is not changed by this step.
 
-- [ ] Step 2: Mark closed eyes on the strip cell (todo item 1)
+- [x] Step 2: Mark closed eyes on the strip cell (todo item 1)
   - Done when:
     - A strip cell draws a closed-eyes mark when the stored eye state of the
       frame's judged face is closed (`Focus.eyes.eyes`), and none for open,

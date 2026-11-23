@@ -216,7 +216,15 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   bottom-left, above the file name, filling in as the pass runs: a smiling
   face (Lucide's `scan-face`) on a good frame and the same face with its mouth
   turned down on a gray one, both ISC license,
-  text in `crates/app/LICENSE-lucide`; white frames get none. It is a
+  text in `crates/app/LICENSE-lucide`; white frames get none. A frame whose
+  judged face (nearest the AF point, else the largest confident face of the
+  whole preview) the pass stored with closed eyes (the `Closed` of the meta
+  pane's `Eyes` row and of the filter's `Eyes` section) also gets an amber
+  Lucide `eye-off` right of that icon's place, which stays put whether or
+  not the face icon is drawn. It judges that one face only: a blinking
+  bystander gets no mark, and neither does a face under about 60 pixels on
+  the embedded preview, which is not judged. A profile or a downcast look can
+  read as closed, as the `Eyes` row can. It is a
   cue, not a verdict: AF on a person in the
   background gives a sharp face and a false good, and the back of a
   head or an upturned face finds no face and stays white. The mark also

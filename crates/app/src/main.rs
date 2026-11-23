@@ -4498,6 +4498,9 @@ impl Handpic {
                     face: mark::af_eye_state(
                         self.facts.get(key.as_ref()).and_then(|f| f.focus.as_ref()),
                     ),
+                    closed_eyes: mark::closed_eyes_mark(
+                        self.facts.get(key.as_ref()).and_then(|f| f.focus.as_ref()),
+                    ),
                     burst: self.strip.burst(index),
                 }
             })
@@ -7010,6 +7013,8 @@ struct StripCell {
     marks: Marks,
     /// The face focus icon's state, `Neutral` drawing none.
     face: mark::MarkState,
+    /// Draws the closed-eyes mark (`mark::closed_eyes_mark`).
+    closed_eyes: bool,
     /// The hover texts' regions.
     tips: Vec<TipRegion>,
     burst: Option<BurstMark>,
@@ -7023,6 +7028,8 @@ const TITLE_NAME_MARGIN: f32 = 160.;
 const TIP_MAX_WIDTH: f32 = 360.;
 /// `.cell span.marks svg`'s size.
 const FACE_ICON: f32 = 12.;
+/// The closed-eyes mark, fixed like the other marks over the photo.
+const CLOSED_EYES_COLOR: u32 = 0xffb347;
 
 /// The cell's tooltip regions, transparent `div`s over the strip's canvas
 /// that take no click or wheel from the strip's own `div`. Their ids carry a
@@ -7185,7 +7192,10 @@ fn paint_strip(
                     paint_burst_badge(mark, image_box, window, cx);
                 }
                 if let Some(icon) = cell.face.icon() {
-                    paint_face_icon(icon, cell.face.color(), image_box, window, cx);
+                    paint_face_icon(icon, cell.face.color(), 0, image_box, window, cx);
+                }
+                if cell.closed_eyes {
+                    paint_face_icon(icons::EYE_OFF, CLOSED_EYES_COLOR, 1, image_box, window, cx);
                 }
                 let at = point(origin.x, image_box.bottom());
                 let name_color = match cell.marks.label {
@@ -7288,18 +7298,21 @@ fn paint_burst_band(
     }));
 }
 
-/// `.cell span.marks`: the face focus icon 2 px inside the image box's
-/// bottom-left, over dark copies for the `drop-shadow` halo.
+/// `.cell span.marks`: an icon 2 px inside the image box's bottom-left, in
+/// `slot` 0 the face focus icon's and in slot 1 the closed-eyes mark's right
+/// of it, so neither moves when the other is drawn, over dark copies for the
+/// `drop-shadow` halo.
 fn paint_face_icon(
     icon: &'static str,
     color: u32,
+    slot: u8,
     image_box: Bounds<Pixels>,
     window: &mut Window,
     cx: &mut App,
 ) {
     let inset = px(2.);
     let at = point(
-        image_box.origin.x + inset,
+        image_box.origin.x + inset + px(f32::from(slot) * (FACE_ICON + 2.)),
         image_box.bottom() - inset - px(FACE_ICON),
     );
     let paint = |at: Point<Pixels>, color: u32, window: &mut Window| {

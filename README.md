@@ -179,7 +179,11 @@ DxO PhotoLab.
   for the judged face, and the filter menu's `Face focus` section (`Good` / `Neutral` /
   `Low`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
-  `Unknown`). The mark also draws the faces
+  `Unknown`). A frame whose judged face (the one nearest the AF point, else
+  the largest confident face) the same pass stored as `Closed` gets an
+  amber eye-off icon at the cell's bottom-left, right of the face icon's
+  place, filling in as the pass runs; it
+  judges that one face only, and a face under 60 px is not judged. The mark also draws the faces
   Handpic detects near the AF point as a cyan box with a cyan dot on each eye,
   the nose tip and the mouth corners and a label beside it (the detection
   score, the box size and the distance between the eyes, in preview pixels),
@@ -196,7 +200,7 @@ DxO PhotoLab.
   locally with no network access. The strip's
   focus mark icons, also on the filter menu's `Good` and `Low` items, are
   [Lucide](https://lucide.dev)'s `scan-face` and the same with its mouth
-  turned down (ISC license).
+  turned down, and its closed-eyes mark Lucide's `eye-off` (ISC license).
 - **HDR PQ (HEIF) CR3 previews**: the HEVC previews of Canon CR3 files shot
   with HDR PQ on are decoded by the bundled
   [hpvcd](https://github.com/awxkee/hpvcd) (BSD-3-Clause OR Apache-2.0).

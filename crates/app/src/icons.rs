@@ -32,6 +32,7 @@ pub const RECTANGLE_VERTICAL: &str = "icons/rectangle-vertical.svg";
 pub const RECTANGLE_HORIZONTAL: &str = "icons/rectangle-horizontal.svg";
 pub const SCAN_FACE: &str = "icons/scan-face.svg";
 pub const SCAN_FACE_FROWN: &str = "icons/scan-face-frown.svg";
+pub const EYE_OFF: &str = "icons/eye-off.svg";
 pub const FOLDER: &str = "icons/folder.svg";
 pub const FOLDER_OPEN: &str = "icons/folder-open.svg";
 pub const APP: &str = "icons/app.png";
@@ -51,7 +52,10 @@ const SVGS: [(&str, &str); 2] = [
 // `Assets` already holds them.
 // If `every_icon_path_loads_an_svg` fails after a gpui-kit-assets bump, move
 // the missing one into this list.
-gpui_kit::assets::icon_assets!(Catalog, [RectangleVertical, RectangleHorizontal, ScanFace]);
+gpui_kit::assets::icon_assets!(
+    Catalog,
+    [RectangleVertical, RectangleHorizontal, ScanFace, EyeOff]
+);
 
 pub struct Icons;
 
@@ -95,13 +99,14 @@ mod tests {
 
     use super::*;
 
-    const PATHS: [&str; 8] = [
+    const PATHS: [&str; 9] = [
         STAR,
         STAR_FILLED,
         RECTANGLE_VERTICAL,
         RECTANGLE_HORIZONTAL,
         SCAN_FACE,
         SCAN_FACE_FROWN,
+        EYE_OFF,
         FOLDER,
         FOLDER_OPEN,
     ];
@@ -128,6 +133,7 @@ mod tests {
             (RECTANGLE_VERTICAL, IconName::RectangleVertical),
             (RECTANGLE_HORIZONTAL, IconName::RectangleHorizontal),
             (SCAN_FACE, IconName::ScanFace),
+            (EYE_OFF, IconName::EyeOff),
             (FOLDER, IconName::Folder),
             (FOLDER_OPEN, IconName::FolderOpen),
         ] {

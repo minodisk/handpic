@@ -315,7 +315,9 @@ color label rows gpui-component `Tag`s, the other leads Lucide icons
 from `src/icons.rs` (served by `Icons`, the application's one
 `AssetSource`, to `svg().path(..)`: the two own derivatives, the filled
 star and the frowning `scan-face`, under their license header,
-then the `gpui-kit-assets` catalog icons selected with `icon_assets!`, then
+then the `gpui-kit-assets` catalog icons selected with `icon_assets!`
+(the orientation rectangles, `scan-face` and the closed-eyes mark's
+`eye-off`), then
 `gpui_kit::assets::Assets`, which serves `star` and the icons
 gpui-component's controls draw, with the title bar's
 `icons/64x64.png` for `img(..)`),
@@ -359,7 +361,9 @@ hit testing and which cell to ask for next, with `strip.ts`'s `missing` /
 the flag dot, the dimmed reject and the label's `Tint`, and its hover texts'
 `tip_regions`: the label's name over the name band, the scan's error over the
 rest of the cell), which the window draws along its bottom edge on
-a `canvas` with each cell's face focus icon (`MarkState::icon`), under
+a `canvas` with each cell's face focus icon (`MarkState::icon`) at the
+image box's bottom-left and, in a fixed slot right of it, the closed-eyes
+mark (`mark::closed_eyes_mark`, Lucide's `eye-off`), under
 transparent region `div`s that show those texts as gpui-component `Tooltip`s
 and under gpui-component's horizontal scrollbar, whose handle is
 `src/stripbar.rs`'s `StripBar` (a `ScrollbarHandle` over the strip's offset
@@ -454,7 +458,7 @@ landing where `filter::anchor_after_filter` puts it, the strip keeping the same 
 (`carried_indices`), `src/mark.rs` the port of `focus.ts`'s mark states
 (`af_eye_state`: Good / Neutral / Low, Good being the engine's
 `StoredEyes::photo_tier`, which holds the rule and its cuts, Low being
-`full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
+`full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `closed_eyes_mark`, the strip cell's closed-eyes mark rule (the judged face's stored eye state closed), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
 `face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
 `FaceCache` (each path detected once, kept by path, a clear dropping the
 answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
