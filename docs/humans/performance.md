@@ -204,7 +204,7 @@ A JPEG-only (view-only) folder pages from the prefetch ring like a RAW one
 (2026-11-23, `--auto` in the default window, one press a second, three runs
 each with the ring on and with `--no-prefetch`, an ARW folder as the ruler in
 the same session, the median of the three runs' p50 / p95
-`keypressToPixels`; all files baseline JPEGs, decoded at 1/8 or 2/8):
+`keypressToPixels`; every file of the 500-file and Output folders checked is a baseline JPEG, decoded at 1/8 or 2/8):
 
 | Case | Prefetch on | `--no-prefetch` | `decode` p50 without the ring |
 |---|---|---|---|
@@ -213,7 +213,7 @@ the same session, the median of the three runs' p50 / p95
 | Sony ILCE-7M5 exports, 13-33 MP | 12.6 / 19.2 | 50.2 / 62.5 | 29.6 |
 
 With the ring on, which is the default, nearly every page comes from it and
-the p50 is under the ARW ruler's. A page the ring misses (paging faster than
+the p50 is at about the ARW ruler's (within its run-to-run spread, 12.3 to 13.6 ms). A page the ring misses (paging faster than
 the ring decodes, or a jump) pays the whole decode: about 115 ms p50 on a
 50 MP JPEG, because the entropy decode of a 10-28 MB file does not shrink with
 the output scale. Turning off fancy upsampling and using the fast integer

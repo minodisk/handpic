@@ -33,7 +33,7 @@
 - Run before Step 3, because `docs/plans/20261123-all-faces-check` Step 1 is
   in progress on the same `crates/core/src/scan.rs` code (Trade-offs 4).
 - With the prefetch ring on, JPEG paging at one press a second is served from
-  the ring (p50 9-13 ms, under the ARW ruler). With `--no-prefetch` the 50 MP
+  the ring (p50 9-13 ms, about the ARW ruler's). With `--no-prefetch` the 50 MP
   Leica exports take about 115 ms p50 (`decode` about 100 ms at 1/8 scale),
   the 26 MP Sony exports about 50 ms. See `jpeg-preview.md`.
 - Fancy upsampling off plus `DctMethod::IntegerFast` did not cut `decode` on

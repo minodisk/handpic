@@ -15,7 +15,14 @@ nearest rank of each run; the table gives the median of the three runs' p50
 / p95, in ms.
 
 All JPEGs are baseline (`exiftool -EncodingProcess`: `Baseline DCT, Huffman
-coding` on all 782 files of the 500-file folder and the Output folder).
+coding` on all 782 files of the 500-file folder and the Output folder; the 10-file
+folder was not checked separately, and its files being baseline too is an
+assumption from the same camera and export).
+
+Per-folder `px=` and `decoded=` were not logged per run; the scale is by
+`fitscale::scale_for`: the 50 MP Leica frames decode at 1/8 (7910x6328 to
+989x791), and the smaller frames (23-33 MP) at 1/8 or 2/8 depending on
+their size; the exact `n/8` per folder was not recorded.
 
 | Folder | Files | Prefetch | n per run | keypressToPixels | read | decode | orient |
 |---|---|---|---|---|---|---|---|
@@ -35,7 +42,9 @@ Output on 14.84 / 12.21 / 12.57, off 102.06 / 49.92 / 50.21.
 
 - With the prefetch ring on (the default), paging one file a second is served
   from the ring (`source=prefetch` on every page but one or two a run) and the
-  p50 is 9-13 ms on every JPEG folder, under the ARW ruler's 12.31 ms. The
+  p50 is 9-13 ms on every JPEG folder, at about the ARW ruler's 12.31 ms
+  (the ARW per-run p50s span 12.26 to 13.59; only the Leica folders are
+  under it, the Sony Output folder's 12.57 ms is just above). The
   p95 of 108.71 ms in the 10-file folder is one page a run that missed the
   ring and was read (n=8, so p95 is the largest sample).
 - Without the ring, every page pays the decode. On the 50 MP Leica exports it
