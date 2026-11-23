@@ -614,15 +614,19 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
     (or one whose RAW files the index holds nothing for yet) the status
     line says `No judgments indexed for <name>`. The dialog counts the files with a judgment, those without one
     (whose existing sidecar is cleared to unrated, unflagged and unlabeled;
-    none is created for them) and the RAW files with no judgment on record
-    (never judged in Handpic and with no sidecar read at a folder open;
-    skipped), and asks `Rewrite the XMP sidecars of N files in
+    none is created for them) and the RAW files skipped: those with no
+    judgment on record (never judged in Handpic and with no sidecar read at
+    a folder open) and those with a sidecar of the selected format larger
+    than 4 MiB, which a folder open never reads and the rewrite leaves
+    untouched (under `Both (.xmp and .dop)`, either kind that large skips
+    the file). It asks `Rewrite the XMP sidecars of N files in
     <name>?`. An existing sidecar is patched, not regenerated: only the
     rating, the pick / reject flag and the color label (and the `.dop`'s
     two timestamps) change, so Lightroom's develop settings and PhotoLab's
     corrections are kept byte for byte; a file with a judgment and no
     sidecar gets a new one. The status line then says `Rewrote the
-    sidecars of N files in <name>`, with how many failed; a failed write is
+    sidecars of N files in <name>`, with how many were skipped and how many
+    failed; a failed write is
     listed in the meta pane's errors and retried the next time the folder
     opens. The strip does not change, since it already shows the index.
   - `Delete Sidecars…` works on any folder, opened or not. The dialog lists

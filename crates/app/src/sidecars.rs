@@ -4,6 +4,7 @@
 //! `sidecars.ts`; the window runs the engine's `foldersidecars`.
 
 use handpic_engine::foldersidecars::{DeletePreview, Preview, Summary};
+use handpic_engine::sidecar::MAX_SIDECAR_BYTES;
 
 pub const REWRITE_RUNNING_NOTE: &str =
     "Writing the sidecars; this closes once every file is written.";
@@ -42,8 +43,9 @@ pub fn rewrite_rows(preview: &Preview) -> Vec<String> {
     }
     if preview.skipped > 0 {
         rows.push(format!(
-            "{} with no judgment on record (skipped)",
-            files(preview.skipped)
+            "{} skipped (no judgment on record, or a sidecar larger than {} MiB)",
+            files(preview.skipped),
+            MAX_SIDECAR_BYTES / 1024 / 1024
         ));
     }
     rows
@@ -58,10 +60,13 @@ pub fn rewrite_total_line(preview: &Preview, name: &str) -> String {
 }
 
 pub fn rewritten_status(summary: &Summary, name: &str) -> String {
-    let head = format!(
+    let mut head = format!(
         "Rewrote the sidecars of {} in {name}",
         files(summary.written)
     );
+    if summary.skipped > 0 {
+        head = format!("{head}, {} skipped", summary.skipped);
+    }
     if summary.failed == 0 {
         head
     } else {
@@ -223,7 +228,7 @@ mod tests {
             vec![
                 "12 files with a judgment",
                 "3 files without one (any existing sidecar is cleared)",
-                "5 files with no judgment on record (skipped)",
+                "5 files skipped (no judgment on record, or a sidecar larger than 4 MiB)",
             ]
         );
     }
@@ -241,7 +246,7 @@ mod tests {
             rewrite_rows(&preview(0, 2, 1)),
             vec![
                 "2 files without one (any existing sidecar is cleared)",
-                "1 file with no judgment on record (skipped)",
+                "1 file skipped (no judgment on record, or a sidecar larger than 4 MiB)",
             ]
         );
     }
@@ -286,6 +291,7 @@ mod tests {
         let summary = |written, failed, flushed| Summary {
             written,
             failed,
+            skipped: 0,
             flushed,
         };
         assert_eq!(
@@ -303,6 +309,24 @@ mod tests {
         assert_eq!(
             rewritten_status(&summary(10, 5, false), "a"),
             "Rewrote the sidecars of 10 files in a, 5 failed"
+        );
+    }
+
+    #[test]
+    fn rewritten_status_adds_the_skipped_files_before_the_failures() {
+        let summary = |written, failed, skipped| Summary {
+            written,
+            failed,
+            skipped,
+            flushed: true,
+        };
+        assert_eq!(
+            rewritten_status(&summary(12, 0, 3), "a"),
+            "Rewrote the sidecars of 12 files in a, 3 skipped"
+        );
+        assert_eq!(
+            rewritten_status(&summary(0, 1, 2), "a"),
+            "Rewrote the sidecars of 0 files in a, 2 skipped, 1 failed"
         );
     }
 

@@ -647,17 +647,6 @@ The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run
 - [ ] Record each sidecar's RAW in the trash run (for example in `trash::Trashed`), so that a redo clears the index rows of a closed folder.
 - [ ] Add a test covering delete, undo, then redo with another folder open.
 
-### Engine: Rewrite Sidecars from Index… patches an oversize sidecar
-
-#### Background
-
-The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidecars::rewrite` hands every listed row to the writer, including a file whose sidecar is larger than `MAX_SIDECAR_BYTES`. A folder open deliberately keeps such a file away from the writer through `sidecar::reconcile_of`, because its contents were never read. This was left as is because the user asked for the index to be pushed out. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/engine/src/foldersidecars.rs` (`rewrite`), `crates/engine/src/sidecar.rs` (`MAX_SIDECAR_BYTES`, `reconcile_of`).
-
-#### TODO
-
-- [ ] Decide whether the rewrite should skip oversize sidecars like a folder open does.
-- [ ] If it should, skip them and count them in the dialog's "skipped" figure.
-
 ### Shortcuts: a newly added default key silently displaces a user's stored override
 
 #### Background
