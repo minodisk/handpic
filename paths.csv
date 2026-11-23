@@ -533,3 +533,13 @@ date,path,count,uniques
 2026-11-22,"/minodisk/handpic/releases/tag/v1.10.0",3,2
 2026-11-22,"/minodisk/riffle",5,2
 2026-11-22,"/minodisk/riffle/pulls",2,1
+2026-11-23,"/minodisk/handpic",90,7
+2026-11-23,"/minodisk/handpic/actions",31,1
+2026-11-23,"/minodisk/handpic/blob/main/README.md",2,1
+2026-11-23,"/minodisk/handpic/issues",2,1
+2026-11-23,"/minodisk/handpic/pull/928",4,2
+2026-11-23,"/minodisk/handpic/pulls",21,3
+2026-11-23,"/minodisk/handpic/releases/tag/v1.10.0",3,2
+2026-11-23,"/minodisk/handpic/tree/fix/photolab-windows",2,2
+2026-11-23,"/minodisk/handpic/tree/main/crates",2,2
+2026-11-23,"/minodisk/riffle",4,1
