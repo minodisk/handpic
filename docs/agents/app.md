@@ -2904,6 +2904,9 @@ non-empty batch's file names go to the log as `scan faces first:`.
   `faces_extractor`, so the next scan resumes it) but would restart the pass;
   waiting for its end keeps a burst of changes from restarting it over and
   over.
+- Rule: pass 2 writes its rows in `BATCH` (10) transactions, so a folder of
+  fewer than 10 files shows its pass-2 columns (`Analysis`, face icons) only
+  at `FacesDone`.
 
 ### The engine logs through `log`, printed by `logger.rs` (Hit)
 
@@ -3481,6 +3484,30 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   with `--no-prefetch`. With the ring on, most pages are prefetch hits, so the
   fit view's reads never outlast the key repeat and no stale frame is drawn
   (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+- Rule: MCP plus the `screenshot` tool (an app built with `mise run
+  app:dev:screenshot`) closes the checks that need only an open, a navigation,
+  a setting, a confirmed run or a left click. It cannot close a key press (Tab
+  or Escape in a dialog, `Ctrl+Z`, a held `→`), the IME, a drag, a
+  right-click, a HiDPI display or macOS / Linux. A run confirmed through MCP
+  with `mcpAllowDestructive` opens no dialog, so the dialog's keys and
+  dimmed buttons stay open too. Colors, legibility and text size still need
+  the user's eye on the running window.
+  Launch with a fresh `--index`, `--settings` and `--log`, a fixed
+  `--mcp-port`, and `{"mcpEnabled": true}` (plus `"mcpAllowDestructive":
+  true` where a run must be confirmed) through `--import-settings`
+  ([the plan's learnings](../plans/_archived/20261123-windows-device-checks-mcp-visual/learnings.md)).
+- Rule: Git Bash mangles `\\` in JSON arguments, even through stdin
+  here-strings. Give the MCP client `D:/...` paths; it converts them to
+  backslashes. A Bash `python -` with no stdin hangs the tool call; run a
+  script as a file with `mise x -- python -I <file>`.
+- Rule: pass 2 commits rows in batches of 10 (`BATCH`,
+  `crates/engine/src/index.rs`), so in a folder of fewer than 10 files the
+  `Analysis` group and the strip's face icons appear only when pass 2 ends.
+  Check "appears without input" in a folder of more than 10 files.
+- Rule: a run's recorded findings can go stale against `main` before they are
+  applied (a row's wording was reworded by a merge after the run's build).
+  After the rebase, check that each anchor a finding was to extend still
+  exists.
 
 ### Every keystroke goes through the keymap (Inferred)
 
