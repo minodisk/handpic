@@ -75,7 +75,7 @@ your own conversation** (not as shell variables). Branch on the exit code.
   as-is while `pr_wait_timeouts < 15` (about 20–35 minutes in total). Once it is
   reached, return `NOT_READY` (ACTION is the last value observed, or
   `wait_timeout` if none) with the last observed state
-- **1**: error: `pr-status.sh` was still failing when the slice ended. The
+- **1**: error: `pr-status.sh` failed on every call of the slice. The
   script has already retried it every 60 s within the slice (a network error,
   a short `api.github.com` outage). Increment `pr_status_failures` and re-run. If
   `pr_status_failures > 5`, return `FAILED` (reason: `pr_status_failure`) with

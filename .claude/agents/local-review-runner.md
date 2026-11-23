@@ -67,8 +67,12 @@ Read the `STATUS:` of the latest round in the review file. Decide only when
 the file's latest section is `## Round {round_n}` and it holds a `STATUS:`
 line. If that section is missing (the file ends at an earlier round, or does
 not exist yet in round 1), the reviewer has not finished: do not decide, do
-not run "3. Commit the history" and do not report. End your turn and wait for
-the reviewer's hand-back, then read the file again.
+not run "3. Commit the history" and do not report as success. If the
+reviewer's hand-back has not arrived yet (the async launch returned early), end
+your turn and wait for it, then read the file again. If the hand-back has
+already arrived and the section is still missing or has no `STATUS:` line, treat
+it as a child failure and report it to the caller (see "About the child
+agents"); do not wait again.
 
 - `APPROVED`: leave the loop and go to "3. Commit the history"
 - `NEEDS_FIX`: go to "4. Address phase"

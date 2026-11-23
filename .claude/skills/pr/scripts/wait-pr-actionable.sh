@@ -23,8 +23,9 @@
 # A failed pr-status.sh (a network error, an `api.github.com` outage) is
 # treated like a waiting state: reported on stderr, slept on and counted toward
 # max_wait_sec. It neither resets nor ends the `blocked` grace. Only a slice
-# that ends with the last call still failing exits 1, so one exit 1 stands for
-# an outage as long as the slice.
+# in which every call failed exits 1, so one exit 1 stands for an outage as
+# long as the slice. A slice that ends on a failed call after at least one
+# success exits 2 with the last successful output, as ordinary waiting.
 #
 # The default max_wait_sec is 240 (4 minutes). The Bash tool's default
 # foreground timeout can be as low as 120 s, so callers must pass the Bash
@@ -45,7 +46,7 @@
 # usage: wait-pr-actionable.sh <PR_number_or_url> [interval_sec=30] [max_wait_sec=240]
 # exit code:
 #   0 = reached a non-waiting ACTION (branch on the ACTION= line in the output)
-#   1 = error (bad arguments / pr-status.sh still failing when the slice ended)
+#   1 = error (bad arguments / pr-status.sh failed on every call of the slice)
 #   2 = timeout (prints the last observed state to stdout; calling again is fine)
 set -euo pipefail
 
@@ -67,10 +68,16 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 elapsed=0
 blocked_since=""
+last_out=""
 while true; do
 	if ! out=$(bash "$script_dir/pr-status.sh" "$PR"); then
 		if ((elapsed >= MAX_WAIT)); then
-			echo "wait-pr-actionable.sh: pr-status.sh still failing after ${MAX_WAIT}s" >&2
+			if [[ -n "$last_out" ]]; then
+				echo "wait-pr-actionable.sh: timed out after ${MAX_WAIT}s (last call failed; reporting the last successful state)" >&2
+				printf '%s\n' "$last_out"
+				exit 2
+			fi
+			echo "wait-pr-actionable.sh: pr-status.sh failed on every call for ${MAX_WAIT}s" >&2
 			exit 1
 		fi
 		echo "[elapsed ${elapsed}s] pr-status.sh failed; retrying in ${INTERVAL}s" >&2
@@ -78,6 +85,7 @@ while true; do
 		elapsed=$((elapsed + INTERVAL))
 		continue
 	fi
+	last_out="$out"
 	action=$(grep -E '^ACTION=' <<<"$out" | cut -d= -f2)
 	case "$action" in
 	wait | review_required) blocked_since="" ;;

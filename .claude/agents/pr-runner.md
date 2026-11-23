@@ -258,10 +258,10 @@ Handle the exit code as follows.
     70–150 s). Once it is reached, treat
     it as checks / the approver being stalled and return `aborted` (reason:
     `wait_timeout`) with the last observed state
-- **1**: error: `pr-status.sh` was still failing when the slice ended. The
+- **1**: error: `pr-status.sh` failed on every call of the slice. The
   script has already retried it every 60 s within the slice (a network error,
   a short `api.github.com` outage), so one exit 1 stands for an outage as long
-  as a slice. Increment `pr_status_failures` and re-run. If
+  as a slice (a slice that ends on a failed call after a success exits 2). Increment `pr_status_failures` and re-run. If
   `pr_status_failures > 5` it may be a persistent error (expired auth,
   insufficient permissions, bad arguments), so return `aborted` (reason:
   `pr_status_failure`) with the last stderr
