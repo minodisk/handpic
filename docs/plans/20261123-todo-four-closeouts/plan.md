@@ -296,3 +296,4 @@ Rules for every step:
 ## Progress
 
 - (2026-11-23) Step 1 complete
+- (2026-11-23) Step 2 complete
