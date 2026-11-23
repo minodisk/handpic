@@ -66,7 +66,7 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
       - the engine tests that call `dop::read_flag` use single-item sidecars.
     - The fresh template is single-item and does not change.
 
-- [ ] Step 2: skip oversize sidecars in `Rewrite Sidecars from Index…` (`fix(engine)`)
+- [x] Step 2: skip oversize sidecars in `Rewrite Sidecars from Index…` (`fix(engine)`)
   - Done when:
     - A listed RAW with a row, one of whose existing sidecars of the current `SidecarFormat`'s kinds is larger than `MAX_SIDECAR_BYTES`, is neither marked dirty nor handed to the writer by `foldersidecars::rewrite`, and its sidecar bytes are unchanged afterwards.
     - `foldersidecars::preview` counts that file in `skipped`, not in `judged` or `unjudged`.
@@ -172,3 +172,4 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 ## Progress
 
 - (2026-11-23) Step 1 complete
+- (2026-11-23) Step 2 complete

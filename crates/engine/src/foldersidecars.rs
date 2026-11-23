@@ -6,7 +6,8 @@
 //! Every write goes through the sidecar writer, which patches only the
 //! judgment fields of an existing sidecar (so Lightroom's develop settings
 //! and PhotoLab's corrections survive) and mints one only for a row holding
-//! a judgment. A delete is recorded in `trash::Runs` like a `Move to Trash`
+//! a judgment. A file with an existing sidecar of the format's kinds larger
+//! than `MAX_SIDECAR_BYTES` is skipped, as a folder open never reads one. A delete is recorded in `trash::Runs` like a `Move to Trash`
 //! run, so an undo takes it back and a redo moves it again. Only the current
 //! `SidecarFormat`'s kinds are touched.
 
@@ -21,7 +22,7 @@ use serde::Serialize;
 
 use crate::index::{self, DirtyRow, Index};
 use crate::listing::{read_listing, stat_sidecars};
-use crate::sidecar::{SidecarFormat, Writer};
+use crate::sidecar::{SidecarFormat, Writer, MAX_SIDECAR_BYTES};
 use crate::trash::{self, Failure, Group, Runs, Trashed};
 
 /// Longest a rewrite waits for the writer to drain. `DRAIN_TIMEOUT` is for
@@ -31,9 +32,9 @@ pub const REWRITE_DRAIN: Duration = Duration::from_secs(10 * 60);
 
 /// What the rewrite's confirmation dialog counts: the
 /// rows with a judgment, the rows without one (whose existing sidecar is
-/// patched to "no judgment"), the listed RAWs with no `ratings` row (no
-/// judgment on record, even when the scan indexed the file), which are
-/// skipped, and the format written (`SidecarFormat::setting`).
+/// patched to "no judgment"), the skipped listed RAWs (those with no
+/// `ratings` row, no judgment on record even when the scan indexed the file,
+/// and those with an oversize sidecar) and the format written (`SidecarFormat::setting`).
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Preview {
     pub judged: usize,
@@ -43,7 +44,8 @@ pub struct Preview {
 }
 
 /// What a rewrite reports: the files handed to the writer whose
-/// rows came back clean, those still dirty after the drain, and whether the
+/// rows came back clean, those still dirty after the drain, the files
+/// skipped as `Preview` counts them, and whether the
 /// drain finished within `REWRITE_DRAIN`. A row still dirty is retried on the
 /// next open of the folder; one a judgment re-dirtied during the drain is
 /// counted as failed too.
@@ -51,6 +53,7 @@ pub struct Preview {
 pub struct Summary {
     pub written: usize,
     pub failed: usize,
+    pub skipped: usize,
     pub flushed: bool,
 }
 
@@ -65,15 +68,22 @@ fn judged((_, rating, flag, label, _): &DirtyRow) -> bool {
 }
 
 /// The `ratings` rows of `dir` to rewrite, those of the RAWs the folder lists,
-/// and the number of listed RAWs without one. Such a row exists once a file
-/// is judged or its sidecar is read at a folder open, so a scanned file never
-/// judged and with no sidecar is counted here. A row whose RAW is no longer listed
-/// is left out, so no sidecar is minted next to a file that is gone. A folder
-/// listing no RAW (a JPEG folder is view-only) and one with no row for any
-/// listed RAW are refused.
-pub fn targets(dir: &str, index: &Arc<Mutex<Index>>) -> Result<(Vec<DirtyRow>, usize), String> {
+/// and the number of listed RAWs skipped. A RAW without a row is skipped. Such
+/// a row exists once a file is judged or its sidecar is read at a folder open,
+/// so a scanned file never judged and with no sidecar is counted here. A row
+/// whose RAW has an existing sidecar of `format`'s kinds larger than
+/// `MAX_SIDECAR_BYTES` is skipped too: a folder open never read it, so
+/// patching it would overwrite an edit unread. A row whose RAW is no longer
+/// listed is left out, so no sidecar is minted next to a file that is gone. A
+/// folder listing no RAW (a JPEG folder is view-only) and one with no row for
+/// any listed RAW are refused.
+pub fn targets(
+    dir: &str,
+    index: &Arc<Mutex<Index>>,
+    format: SidecarFormat,
+) -> Result<(Vec<DirtyRow>, usize), String> {
     let name = folder_name(dir);
-    let listing = read_listing(Path::new(dir), None)?;
+    let listing = read_listing(Path::new(dir), Some(format))?;
     let raws: HashSet<&str> = listing
         .files
         .iter()
@@ -93,6 +103,15 @@ pub fn targets(dir: &str, index: &Arc<Mutex<Index>>) -> Result<(Vec<DirtyRow>, u
     if rows.is_empty() {
         return Err(format!("No judgments indexed for {name}"));
     }
+    let sidecars = stat_sidecars(&listing.sidecars);
+    let rows: Vec<DirtyRow> = rows
+        .into_iter()
+        .filter(|(path, ..)| {
+            trash::sidecars_of(format, path, &sidecars)
+                .iter()
+                .all(|(_, size, _)| *size <= MAX_SIDECAR_BYTES)
+        })
+        .collect();
     let skipped = raws.len() - rows.len();
     Ok((rows, skipped))
 }
@@ -103,7 +122,7 @@ pub fn preview(
     index: &Arc<Mutex<Index>>,
     format: SidecarFormat,
 ) -> Result<Preview, String> {
-    let (rows, skipped) = targets(dir, index)?;
+    let (rows, skipped) = targets(dir, index, format)?;
     let judged = rows.iter().filter(|row| judged(row)).count();
     Ok(Preview {
         judged,
@@ -123,7 +142,7 @@ pub fn rewrite(
     names: &LabelNames,
     bound: Duration,
 ) -> Result<Summary, String> {
-    let (rows, _) = targets(dir, index)?;
+    let (rows, skipped) = targets(dir, index, format)?;
     let paths: Vec<String> = rows.into_iter().map(|(path, ..)| path).collect();
     let dirty = index::lock(index).mark_dirty(dir, &paths)?;
     let total = dirty.len();
@@ -148,6 +167,7 @@ pub fn rewrite(
     Ok(Summary {
         written: total.saturating_sub(failed),
         failed,
+        skipped,
         flushed,
     })
 }
@@ -440,6 +460,7 @@ mod tests {
             Summary {
                 written: 1,
                 failed: 0,
+                skipped: 0,
                 flushed: true
             }
         );
@@ -589,6 +610,184 @@ mod tests {
         std::fs::write(jpegs.dir.join("a.jpg"), b"not really a JPEG").unwrap();
         let err = preview(&jpegs.key, &jpegs.index, SidecarFormat::Xmp).unwrap_err();
         assert!(err.ends_with("applies to RAW files only"), "{err}");
+    }
+
+    fn oversize(path: &Path, extra: usize) -> Vec<u8> {
+        let bytes = vec![b'x'; MAX_SIDECAR_BYTES as usize + extra];
+        std::fs::write(path, &bytes).unwrap();
+        bytes
+    }
+
+    /// The preview and then the summary of a rewrite of `f`'s folder, whose
+    /// skipped figures must agree.
+    fn preview_and_rewrite(f: &Fixture, format: SidecarFormat) -> (Preview, Summary) {
+        let preview = preview(&f.key, &f.index, format).unwrap();
+        let summary = f.rewrite(format);
+        assert_eq!(preview.skipped, summary.skipped);
+        (preview, summary)
+    }
+
+    fn assert_clean(f: &Fixture, path: &Path) {
+        let key = path.to_string_lossy().into_owned();
+        assert!(!index::lock(&f.index).row_flags(&f.key).unwrap()[&key].dirty);
+    }
+
+    #[test]
+    fn an_oversize_xmp_under_xmp_is_skipped_and_left_unchanged() {
+        let f = Fixture::new("oversize-xmp");
+        let a = f.raw("a.ARW");
+        let b = f.raw("b.ARW");
+        let big = oversize(&xmp::sidecar_path(&a), 1);
+        f.row(&a, Some(4), Flag::Pick, None);
+        f.row(&b, Some(2), Flag::None, None);
+
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Xmp);
+
+        assert_eq!(
+            preview,
+            Preview {
+                judged: 1,
+                unjudged: 0,
+                skipped: 1,
+                format: "xmp"
+            }
+        );
+        assert_eq!(
+            summary,
+            Summary {
+                written: 1,
+                failed: 0,
+                skipped: 1,
+                flushed: true
+            }
+        );
+        assert_eq!(std::fs::read(xmp::sidecar_path(&a)).unwrap(), big);
+        assert_clean(&f, &a);
+        assert!(xmp::sidecar_path(&b).exists());
+    }
+
+    #[test]
+    fn an_oversize_dop_under_dop_is_skipped_and_left_unchanged() {
+        let f = Fixture::new("oversize-dop");
+        let a = f.raw("a.ARW");
+        let big = oversize(&dop::sidecar_path(&a), 1);
+        f.row(&a, None, Flag::None, None);
+
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Dop);
+
+        assert_eq!(
+            (preview.judged, preview.unjudged, preview.skipped),
+            (0, 0, 1)
+        );
+        assert_eq!((summary.written, summary.failed), (0, 0));
+        assert_eq!(std::fs::read(dop::sidecar_path(&a)).unwrap(), big);
+        assert_clean(&f, &a);
+    }
+
+    #[test]
+    fn under_both_one_oversize_kind_skips_the_file_and_neither_sidecar_is_written() {
+        let f = Fixture::new("oversize-both");
+        let a = f.raw("_DSC0003.ARW");
+        std::fs::write(xmp::sidecar_path(&a), lightroom_xmp()).unwrap();
+        let big = oversize(&dop::sidecar_path(&a), 1);
+        f.row(&a, Some(5), Flag::Reject, None);
+
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Both);
+
+        assert_eq!((preview.judged, preview.skipped), (0, 1));
+        assert_eq!((summary.written, summary.skipped), (0, 1));
+        assert_eq!(
+            std::fs::read_to_string(xmp::sidecar_path(&a)).unwrap(),
+            lightroom_xmp()
+        );
+        assert_eq!(std::fs::read(dop::sidecar_path(&a)).unwrap(), big);
+        assert_clean(&f, &a);
+    }
+
+    #[test]
+    fn an_oversize_sidecar_of_the_other_format_does_not_skip_the_file() {
+        let f = Fixture::new("oversize-other");
+        let a = f.raw("a.ARW");
+        let b = f.raw("b.ARW");
+        let big_dop = oversize(&dop::sidecar_path(&a), 1);
+        let big_xmp = oversize(&xmp::sidecar_path(&b), 1);
+        f.row(&a, Some(3), Flag::None, None);
+        f.row(&b, Some(2), Flag::None, None);
+
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Xmp);
+        assert_eq!((preview.judged, preview.skipped), (1, 1));
+        assert_eq!((summary.written, summary.skipped), (1, 1));
+        let bytes = std::fs::read(xmp::sidecar_path(&a)).unwrap();
+        assert_eq!(xmp::read_rating(&bytes).unwrap(), Some(3));
+        assert_eq!(std::fs::read(dop::sidecar_path(&a)).unwrap(), big_dop);
+        assert_eq!(std::fs::read(xmp::sidecar_path(&b)).unwrap(), big_xmp);
+
+        std::fs::remove_file(xmp::sidecar_path(&b)).unwrap();
+        std::fs::remove_file(dop::sidecar_path(&a)).unwrap();
+        let big_xmp = oversize(&xmp::sidecar_path(&a), 1);
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Dop);
+        assert_eq!((preview.judged, preview.skipped), (2, 0));
+        assert_eq!((summary.written, summary.skipped), (2, 0));
+        let bytes = std::fs::read(dop::sidecar_path(&a)).unwrap();
+        assert_eq!(dop::read_rating(&bytes).unwrap(), Some(3));
+        assert_eq!(std::fs::read(xmp::sidecar_path(&a)).unwrap(), big_xmp);
+    }
+
+    #[test]
+    fn a_sidecar_of_exactly_the_limit_is_not_skipped() {
+        let f = Fixture::new("oversize-limit");
+        let a = f.raw("a.ARW");
+        let text = lightroom_xmp();
+        let end = text.find("<?xpacket end").unwrap();
+        let padding = " ".repeat(MAX_SIDECAR_BYTES as usize - text.len());
+        let text = format!("{}{padding}{}", &text[..end], &text[end..]);
+        assert_eq!(text.len() as i64, MAX_SIDECAR_BYTES);
+        std::fs::write(xmp::sidecar_path(&a), text).unwrap();
+        f.row(&a, Some(4), Flag::None, None);
+
+        assert_eq!(
+            preview(&f.key, &f.index, SidecarFormat::Xmp)
+                .unwrap()
+                .skipped,
+            0
+        );
+        let summary = f.rewrite(SidecarFormat::Xmp);
+
+        assert_eq!((summary.written, summary.skipped), (1, 0));
+        let bytes = std::fs::read(xmp::sidecar_path(&a)).unwrap();
+        assert_eq!(xmp::read_rating(&bytes).unwrap(), Some(4));
+    }
+
+    #[test]
+    fn a_folder_whose_every_row_is_oversize_offers_a_rewrite_of_none() {
+        let f = Fixture::new("oversize-all");
+        let a = f.raw("a.ARW");
+        let b = f.raw("b.ARW");
+        let big = oversize(&xmp::sidecar_path(&a), 1);
+        f.row(&a, Some(1), Flag::None, None);
+
+        let (preview, summary) = preview_and_rewrite(&f, SidecarFormat::Xmp);
+
+        assert_eq!(
+            preview,
+            Preview {
+                judged: 0,
+                unjudged: 0,
+                skipped: 2,
+                format: "xmp"
+            }
+        );
+        assert_eq!(
+            summary,
+            Summary {
+                written: 0,
+                failed: 0,
+                skipped: 2,
+                flushed: true
+            }
+        );
+        assert_eq!(std::fs::read(xmp::sidecar_path(&a)).unwrap(), big);
+        assert!(!xmp::sidecar_path(&b).exists());
     }
 
     fn put(dir: &Path, name: &str, bytes: usize) -> PathBuf {
