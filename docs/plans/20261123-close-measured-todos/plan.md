@@ -59,7 +59,7 @@ distance stays out of scope.
 
 ## Steps
 
-- [ ] Step 1: Record the RAF scan cost and the bounded vs whole-file read, and
+- [x] Step 1: Record the RAF scan cost and the bounded vs whole-file read, and
       close todo items 2 and 5 (docs only)
   - Done when:
     - The "Fujifilm RAF" section of `docs/humans/performance.md` no longer
@@ -395,3 +395,5 @@ distance stays out of scope.
   run the steps in order and merge main before each PR.
 
 ## Progress
+
+(2026-11-24) Step 1 complete

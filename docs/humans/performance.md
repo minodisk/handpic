@@ -82,8 +82,37 @@ scale: the thumbnails come out 404 px on the long edge (19.4KB mean, against
 16-60ms per file. The per-file scan cost stays high because the sharpness
 score decodes the whole JPEG and, with no AF point read, faces are searched on
 the whole image. Those two have since moved to the scan's second pass (see
-"Which pass carries which cost" below), so the `scan` rows above no longer
-match what `handpic-cli scan` measures today.
+"Which pass carries which cost" below), so the `scan` rows above are the
+historical one-pass numbers, not what `handpic-cli scan` measures today.
+
+Today's two passes were measured on 2026-11-23 on Windows 11 (i7-13700) with
+release builds, one thread, warm, on a folder of 20 X-series RAFs against a
+folder of 20 Sony ARWs. The machine was shared with other sessions' cargo
+builds (CPU load about 100% at times) and the runs were not idle-gated, so
+treat the numbers as rough:
+
+| | RAF | ARW |
+|---|---|---|
+| Pass 1 (`handpic-cli scan`), per file mean / p95 | 89.7ms / 122.5ms | 31.2ms / 60.9ms |
+| Pass 2 (`handpic-cli features <dir> 1`, `analysis_ms`), mean / p50 / p95 | 299.0 / 294.4 / 393.7ms | 140.1 / 116.5 / 227.1ms |
+
+All 20 RAFs had an AF point, so none searched the whole image for faces.
+Pass 2 still decodes the 4416x2944 preview in full twice: once in RGB for the
+face cue (about 74ms) and once in grayscale for the sharpness score (about
+50ms). A mozjpeg DCT-scaled decode of those previews is not faster (means,
+n=20, the second of two decodes of each file):
+
+| Scale | Grayscale | RGB |
+|-------|-----------|-----|
+| 8/8 | 50.5ms | 74.0ms |
+| 4/8 | 64.5ms | 84.7ms |
+| 3/8 | 73.1ms | 87.3ms |
+| 2/8 | 78.0ms | 80.0ms |
+
+So the sharpness score keeps its full-size decode and the RAF scan was left
+unchanged. See "DCT-scaled decode for the whole-image search (Windows 11)"
+below for the earlier measurement of a scaled decode on the smaller DNG and
+ARW previews.
 
 ## Per-page preview read
 
@@ -281,6 +310,27 @@ measured, so there is no NVMe-vs-SATA comparison. The expected workaround,
 not a measurement, is to keep the folders being culled on an NVMe drive,
 internal or in an external USB NVMe enclosure with UASP; even over 5Gbps USB
 it should be several times faster.
+
+The bounded 1MiB read was then compared with reading the whole file, on
+2026-11-23 on the same machine and drive with release builds, 4 threads,
+each run on a different folder of Sony ARWs not read since boot, each once.
+The bounded read is `handpic-cli scan`; the whole-file read is
+`std::fs::read` + `arw::parse` + `thumbnail_jpeg` in a throwaway test that
+was not committed. The machine was shared with other sessions' cargo builds
+(CPU load about 100% at times) and the runs were not idle-gated:
+
+| Read | files | total | files/s | bytes read |
+|------|-------|-------|---------|------|
+| Bounded 1MiB | 415 | 4.04s | 103 | not recorded |
+| Bounded 1MiB | 373 | 6.17s | 60 | not recorded |
+| Whole file | 468 | 48.32s | 10 | 22,048MB |
+| Whole file | 324 | 36.84s | 9 | 16,402MB |
+
+The whole-file read moves about 450MB/s, about the SATA link's rate, and is
+6-10 times slower than the bounded read. A warm repeat was not faster
+(44 files/s bounded, 8 files/s whole file) because of the concurrent load.
+The 1 / 4 / 8 / 22 thread sweep is the 2026-09-22 table above; the NVMe
+drive is still unmeasured.
 
 ### Sharpness scoring cost
 
