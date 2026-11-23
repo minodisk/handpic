@@ -635,8 +635,8 @@ zero `pick` (now `flag`), which lost a pick set during a switch.
 
 ### The good-photo mark's rule is validated against the user's stars; know what it can claim (Hit)
 
-`crates/app/src/mark.rs`'s `photo_tier` (a port of the earlier app's
-`focus.ts` `photoTier`) says whether a frame is good. The rule needs the
+`crates/engine/src/index.rs`'s `StoredEyes::photo_tier` (a port of the
+earlier app's `focus.ts` `photoTier`) says whether a frame is good. The rule needs the
 stored `full_eye_sharp`, `eyes_ear`, `pose`, `eye_offset` and `edge_gap`;
 `af_eye_state` makes Low from `full_eye_sharp` too, on the consumer's side,
 no longer from the preview's in-focus probability, which the
@@ -660,10 +660,10 @@ full-eye-sharp-only plan removed.
   full-eye-sharp-only plan replaced that cut with `full_eye_sharp >=
   SOFT_BELOW` and Low with `full_eye_sharp < LOW_BELOW`; its evidence is in
   `docs/plans/20261115-full-eye-sharp-only/` (`experiment.md`,
-  `low-threshold.md`). The app's `mark.rs` mirrors `SOFT_BELOW` and
-  `LOW_BELOW` as `GOOD_FULL_EYE_SHARP` and `LOW_FULL_EYE_SHARP`, each pinned
-  by a test (`fullsharp.rs` against the figures, `mark.rs` against the core
-  constants).
+  `low-threshold.md`). The engine's `index.rs` defines `GOOD_FULL_EYE_SHARP`
+  as `SOFT_BELOW` itself, and the app's `mark.rs` mirrors `LOW_BELOW` as
+  `LOW_FULL_EYE_SHARP`, pinned by a test (`fullsharp.rs` against the
+  figures, `mark.rs` against the core constant).
 - Burst-level technical features do not predict a kept scene: burst length
   does (>= 15 frames: 79% hold a pick). Do not rebuild a burst "keep" or
   "best" mark from sharpness / eyes / pose. The first frame of a burst also

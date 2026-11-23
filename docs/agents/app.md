@@ -1881,10 +1881,12 @@ last, and a JPEG folder under `"name"` paged in capture order.
   `Face focus` items and the overlay's mark color read a file's state from,
   as `afEyeState` was in the Tauri frontend. It reads `full_eye_sharp` alone
   for the eye focus: `Low` under `LOW_FULL_EYE_SHARP`, `Good` when
-  `photo_tier` holds (at or above `GOOD_FULL_EYE_SHARP` with the EAR, pose,
-  eye offset and edge gap cuts), else `Neutral`, a missing value included.
-  The two constants mirror `fullsharp::SOFT_BELOW` and `LOW_BELOW`, and a
-  test compares them with the core's; change `focus.ts` with them.
+  the engine's `StoredEyes::photo_tier` holds (at or above
+  `GOOD_FULL_EYE_SHARP` with the EAR, pose, eye offset and edge gap cuts, all
+  defined in `crates/engine/src/index.rs`), else `Neutral`, a missing value
+  included. `GOOD_FULL_EYE_SHARP` is `fullsharp::SOFT_BELOW` itself;
+  `LOW_FULL_EYE_SHARP` mirrors `LOW_BELOW`, and a test compares it with the
+  core's.
 - Seen (2026-11-22, Windows 11): on the `20261113-filter-sort` fixture's
   `faces` folder, a Face focus Good filter left 2 files
   (`ILCE-1M2_sony_a1_ii_03`, `_DSC1758`), each with the green smiling

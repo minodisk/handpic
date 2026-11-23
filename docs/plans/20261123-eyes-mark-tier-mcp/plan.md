@@ -78,7 +78,7 @@ widens the rule and reuses the mark.
 
 ## Steps
 
-- [ ] Step 1: Derive the good-photo tier in the engine and carry it in `get_view` (todo item 2)
+- [x] Step 1: Derive the good-photo tier in the engine and carry it in `get_view` (todo item 2)
   - Done when:
     - `crates/engine/src/index.rs` derives the tier from the stored values
       (`StoredEyes`), and the cuts (`GOOD_EYE_EAR`, `GOOD_MAX_YAW`,

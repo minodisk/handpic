@@ -179,8 +179,8 @@ mod tests {
         c.finish().unwrap()
     }
 
-    /// `GOOD_FULL_EYE_SHARP` in `crates/app/src/mark.rs` is this figure:
-    /// update it with the threshold.
+    /// `GOOD_FULL_EYE_SHARP` in `crates/engine/src/index.rs` is this
+    /// constant, the cut the good-photo tier applies.
     #[test]
     fn the_threshold_is_the_figure_the_ui_cuts_good_at() {
         assert_eq!(SOFT_BELOW, 0.162);

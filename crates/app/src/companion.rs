@@ -1425,6 +1425,15 @@ pub fn get_view(view: &View) -> Value {
         let mut current = Map::new();
         current.insert("path".into(), json!(path.to_string_lossy()));
         current.insert("position".into(), json!(view.index + 1));
+        let good = view
+            .facts
+            .get(path.to_string_lossy().as_ref())
+            .and_then(|f| f.focus)
+            .is_some_and(|f| f.eyes.photo_tier());
+        current.insert(
+            "photo_tier".into(),
+            if good { json!("good") } else { Value::Null },
+        );
         if let Some(eyes) = &view.eyes {
             current.insert(
                 "eyes".into(),
@@ -2351,7 +2360,7 @@ mod tests {
     };
     use handpic_core::{Flag, i18n, xmp::LabelNames};
     use handpic_engine::{
-        index::EyesPose,
+        index::{EyesPose, Focus, StoredEyes},
         ondemand::{EyesJudgment, EyesMesh},
     };
     use handpic_engine::{shortcuts::Keymap, sidecar::SidecarFormat};
@@ -2483,7 +2492,7 @@ mod tests {
             [
                 json!("/d"),
                 json!(2),
-                json!({ "path": "/d/b.ARW", "position": 2 }),
+                json!({ "path": "/d/b.ARW", "position": 2, "photo_tier": null }),
                 json!(["/d/b.ARW"]),
                 json!("zoom"),
                 json!([]),
@@ -2557,7 +2566,10 @@ mod tests {
             ..view(&files)
         };
         let state = get_view(&view);
-        assert_eq!(state["current"], json!({ "path": "/d/b", "position": 2 }));
+        assert_eq!(
+            state["current"],
+            json!({ "path": "/d/b", "position": 2, "photo_tier": null })
+        );
         assert_eq!(
             state["burst"],
             json!([
@@ -2653,6 +2665,7 @@ mod tests {
             json!({
                 "path": "/d/a",
                 "position": 1,
+                "photo_tier": null,
                 "eyes": {
                     "state": "closed",
                     "probability": 0.9,
@@ -2678,6 +2691,59 @@ mod tests {
     fn leaves_the_eyes_key_out_until_the_file_has_been_judged() {
         let current = current_with(None);
         assert!(!current.as_object().unwrap().contains_key("eyes"));
+    }
+
+    fn tier_of(focus: Option<Focus>) -> Value {
+        let files = paths(&["/d/a.ARW"]);
+        let facts = HashMap::from([(
+            "/d/a.ARW".to_owned(),
+            Facts {
+                focus,
+                ..sharp(0.5)
+            },
+        )]);
+        get_view(&View {
+            facts: &facts,
+            ..view(&files)
+        })["current"]["photo_tier"]
+            .clone()
+    }
+
+    fn focus(eyes_ear: f64) -> Option<Focus> {
+        Some(Focus {
+            point: None,
+            manual_focus: false,
+            eyes: StoredEyes::new(
+                Some(eyes_ear),
+                Some(EyesPose {
+                    yaw: 10.,
+                    pitch: -5.,
+                    roll: 3.,
+                }),
+                Some(0.03),
+                Some(2.),
+                Some(0.3),
+            ),
+        })
+    }
+
+    #[test]
+    fn reports_a_good_frame_as_the_good_photo_tier() {
+        assert_eq!(tier_of(focus(0.35)), json!("good"));
+    }
+
+    #[test]
+    fn reports_a_null_photo_tier_for_a_frame_that_is_not_good() {
+        assert_eq!(tier_of(focus(0.1)), Value::Null);
+    }
+
+    #[test]
+    fn reports_a_null_photo_tier_for_a_file_without_a_focus_as_a_jpeg() {
+        let files = paths(&["/d/a.JPG"]);
+        let current = get_view(&view(&files))["current"].clone();
+        assert_eq!(current["photo_tier"], Value::Null);
+        assert!(current.as_object().unwrap().contains_key("photo_tier"));
+        assert_eq!(tier_of(None), Value::Null);
     }
 
     #[test]

@@ -481,8 +481,8 @@ mod tests {
     //! cases leave `undefined` is `mark::af_eye_state(None)`, `Neutral`.
 
     use super::*;
-    use crate::mark::{GOOD_FULL_EYE_SHARP, LOW_FULL_EYE_SHARP, af_eye_state};
-    use handpic_engine::index::{FocusPoint, StoredEyes};
+    use crate::mark::{LOW_FULL_EYE_SHARP, af_eye_state};
+    use handpic_engine::index::{FocusPoint, GOOD_FULL_EYE_SHARP, StoredEyes};
     use serde_json::json;
 
     const NEUTRAL: AfEye = MarkState::Neutral;
