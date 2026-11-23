@@ -668,16 +668,6 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] Put an unopened RAW folder on the NVMe, close the app and measure the preview read during pass 1 at caps 22 and 2 on cold data (a new harness, or the app's `page` timing lines). Done when `docs/agents/shared-crates.md`'s read cap section has the numbers and the cap is confirmed or changed.
 
-### Core: test the scan's post-read cancel check
-
-#### Background
-
-`a_file_canceled_mid_pipeline_is_not_delivered` stops at `ReadSlots::acquire` returning `None`, because nothing can set the flag during the read without a hook in `read_preview`, so the first post-read cancel check in `extract_unless` and `extract_analysis_unless` is untested. File: `crates/core/src/scan.rs`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`.
-
-#### TODO
-
-- [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
-
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
 #### Background
@@ -772,14 +762,6 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 - [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
 
-### Core: `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit` hits its 1 s bound under parallel load
-
-During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 1 s wall-clock bound under parallel load; run alone it took 0.38 s. The bound measures the machine's load as much as the cancel. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md`. Files: `crates/core/src/scan.rs` (the test, around line 1441).
-
-#### TODO
-
-- [ ] Loosen the bound, or wait on a condition (the scan's end) instead of the wall clock, and confirm `mise run ci` passes with full parallelism.
-
 ### App: real-device checks of the f focus mark, face boxes and face mesh
 
 `gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/app`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the GPUI window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Seen on Windows 11 on 2026-11-23 (results in `docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`): the user judged the `f` overlay OK by eye on the eight files, with no reference Tauri build at hand and so not side by side: the AF crosshair and frame bright green on `_DSC1758`, gray on `_DSC1616`, white on the rest and no AF mark on `ILCE-6400_DSC00405`; nine face boxes with cyan dots and labels on `_DSC1758`; the magenta mesh on `DSC03068` (closed eyes, no iris rings), `DSC00405`, `DSC01340` (orientation 6) and `_DSC1758`; the labels of small adjacent faces overlap on `_DSC1616` / `_DSC1758`, which the user accepted; the status line went `scanning N/8`, `analyzing N/8`, then empty. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/app/src/mark.rs`, `crates/app/src/overlay.rs`, `crates/app/src/faces.rs`, `crates/app/src/eyes.rs`, `crates/app/src/facemesh.rs`, `crates/app/src/main.rs`.
@@ -840,14 +822,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 #### TODO
 
 - [ ] On Windows, the Japanese IME in a label name field. Run on a folder of RAW copies with a fresh `--index`, `--settings` and `--log`, format XMP. Ctrl+, → Sidecar; with the Japanese IME on, type a name in the Yellow field: the composition is underlined, the candidate window sits at the field, Enter commits the composition (not the field), a second Enter commits the field.
-
-### App: the settings-store tests are flaky on CI
-
-After #1020 merged, main's CI `app` job failed in `settings::tests::reads_the_stored_values` and `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`. A stored `sidecarFormat` of `both` read back as `xmp`. Rerunning the job passed (run 43465601803). The tests come from the settings store (#1008 / #1012), not `gpui-companions`. The likely cause is the store's writer thread not having flushed the seed before the reopen. Found during `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/app/src/settings.rs`.
-
-#### TODO
-
-- [ ] Make the tests wait for the writer (or write the seed synchronously) so they pass repeatedly. Done when both tests pass across many repeated runs.
 
 ### App: real-device checks of the folder tree and Move to Trash… left open (gpui-tree-trash)
 
@@ -921,16 +895,6 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 #### TODO
 
 - [ ] Decide whether `neighbours` should wrap when the pager does. If so, make it wrap with unit tests, and re-run `--auto 60` to check that the p95 falls.
-
-### App: `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped` is flaky on a loaded machine
-
-#### Background
-
-The test failed once in four `cargo test` runs of the app workspace during `gpui-prefetch`, with no change near `scan.rs`, and passed on the reruns. It is probably a timing-bound `stop_within` on a loaded machine. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/scan.rs`.
-
-#### TODO
-
-- [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).
 
 ### App: real-device check of the restored window on a second monitor (gpui-session-restore)
 

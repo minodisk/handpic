@@ -97,6 +97,8 @@ fn extract_unless(
 ) -> Option<Result<Entry, Failure>> {
     let read = {
         let _slot = slots.acquire(cancel)?;
+        #[cfg(test)]
+        tests::cancel_mid_read(cancel);
         read_preview(path)
     };
     let (arw, preview) = match read {
@@ -247,6 +249,8 @@ fn extract_analysis_unless(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
+        #[cfg(test)]
+        tests::cancel_mid_read(cancel);
         read_preview(path)
     };
     let (arw, preview) = match read {
@@ -1195,6 +1199,61 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    thread_local! {
+        static CANCEL_MID_READ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Set `cancel` inside the read's slot when this thread asked for it
+    /// (`MidRead`).
+    pub(super) fn cancel_mid_read(cancel: &AtomicBool) {
+        if CANCEL_MID_READ.get() {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Turns `cancel_mid_read` on for this thread until dropped.
+    struct MidRead;
+
+    impl MidRead {
+        fn on() -> Self {
+            CANCEL_MID_READ.set(true);
+            MidRead
+        }
+    }
+
+    impl Drop for MidRead {
+        fn drop(&mut self) {
+            CANCEL_MID_READ.set(false);
+        }
+    }
+
+    #[test]
+    fn a_file_canceled_during_its_read_is_not_delivered() {
+        let dir = dir("cancel-read");
+        let good = write(&dir, "good.ARW", &fixture(1, &jpeg(64, 48)));
+        let bad = write(&dir, "bad.ARW", &fixture(6, &[0u8; 512]));
+        let slots = ReadSlots::default();
+        let mid_read = MidRead::on();
+        for path in [&good, &bad] {
+            let cancel = AtomicBool::new(false);
+            assert!(
+                extract_unless(path, &cancel, &slots).is_none(),
+                "{}",
+                path.display()
+            );
+            assert!(cancel.load(Ordering::Relaxed));
+            let cancel = AtomicBool::new(false);
+            assert!(
+                extract_analysis_unless(path, &cancel, &slots).is_none(),
+                "{}",
+                path.display()
+            );
+            assert!(cancel.load(Ordering::Relaxed));
+        }
+        drop(mid_read);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn a_file_canceled_mid_pipeline_is_not_delivered() {
         let dir = dir("cancel-mid");
@@ -1339,6 +1398,9 @@ mod tests {
     const SETTLE: Duration = Duration::from_millis(150);
     /// A pause no test outlasts.
     const LONG_PAUSE: Duration = Duration::from_secs(60);
+    /// Only a scan that ignores its cancel waits this long, well under
+    /// `LONG_PAUSE`.
+    const HANG: Duration = Duration::from_secs(30);
 
     fn fixtures(name: &str, n: usize) -> (PathBuf, Vec<PathBuf>) {
         let dir = dir(name);
@@ -1515,14 +1577,20 @@ mod tests {
             std::thread::scope(|s| {
                 let paused = on_pause.then(|| slots.pause());
                 let slot = (!on_pause).then(|| slots.acquire(&cancel));
-                let scan = s.spawn(|| pass(false, &paths, &slots, &cancel, &seen));
+                let (alive, ended) = std::sync::mpsc::channel::<()>();
+                let scan = s.spawn(|| {
+                    let _alive = alive;
+                    pass(false, &paths, &slots, &cancel, &seen)
+                });
                 std::thread::sleep(SETTLE);
-                let canceled = Instant::now();
                 cancel.store(true, Ordering::Relaxed);
-                scan.join().unwrap();
-                let took = canceled.elapsed();
-                assert!(took < Duration::from_secs(1), "took {took:?}");
+                let hung = matches!(
+                    ended.recv_timeout(HANG),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                );
                 drop((paused, slot));
+                assert!(!hung, "the scan ended while held, paused: {on_pause}");
+                scan.join().unwrap();
             });
             assert_eq!(sorted(seen), Vec::<usize>::new(), "paused: {on_pause}");
         }

@@ -266,6 +266,31 @@ on the read.
   in the assertion message so a transient sharing violation stays visible.
 - Source: `docs/plans/_archived/20260930-todo-five-more-items/learnings.md`, Step 1.
 
+### A cancel or stop test must not bound the scan by wall-clock time (Hit)
+
+`scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit` asserted that
+a canceled scan ended within 1 s. That bound reproduced as a failure on a loaded
+host (`took 1.0520229s`, run 8 of 30 under 48 busy loops). The app's
+`a_bounded_stop_reports_an_ended_scan_stopped` gave a whole scan the 2 s
+`STOP_TIMEOUT`, but under 24 busy loops its three-test run took 0.25 s to 25.66 s
+a run. A debug-build `scan::tests` module takes over 8 minutes a run under 24
+busy loops.
+
+- Wait for the end, not for a deadline. The test waits on an `mpsc` channel that
+  the scan thread's end disconnects, and its only bound is a hang guard (`HANG`,
+  30 s, under `LONG_PAUSE`). Drop the pause or permit before asserting, then join.
+- To cancel "during a read" deterministically, use a `#[cfg(test)]` hook inside
+  the read's slot just before `read_preview` (`tests::cancel_mid_read`).
+  `read_preview` never looks at `cancel`, so this is the same as canceling during
+  the read.
+- To check a new test's sensitivity, remove the production check it covers (for
+  example the first post-read `canceled` check of `extract_unless`) and confirm
+  the test fails.
+- To reproduce a timing flake, loop the single test (30 runs) under 24 to 48
+  busy loops. A whole-module loop in a debug build is too slow and low on memory
+  to be practical on this host.
+- Source: `docs/plans/_archived/20261123-todo-flaky-scan-tests/learnings.md`, Step 1.
+
 ### Snapshot the state you decided on, not just the lock, across a release (Hit)
 
 `reconcile_sidecars` (decides what to parse) and `store_sidecar_ratings`
