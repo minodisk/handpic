@@ -61,3 +61,4 @@
   closes with no code change.
 - Bare `python3` hangs in Git Bash here, as the plan warns; use the Edit tool
   or `sed` for scripted edits.
+- `mise run ci:local` ran after the Round 1 fixes (2026-11-24): every selected check passed.

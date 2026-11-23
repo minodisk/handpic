@@ -155,8 +155,8 @@ item and `docs/plans/20261123-all-faces-check` alone.
       retry).
     - Post-read cancel test: add a test-only way to set `cancel` during the
       read in `crates/core/src/scan.rs`. The smallest known shape is a
-      `#[cfg(test)]` thread-local flag and a `#[cfg(test)]` call right after
-      `read_preview(path)` inside the read block of `extract_unless` and of
+      `#[cfg(test)]` thread-local flag and a `#[cfg(test)]` call just before
+      the `read_preview(path)` call, inside the read slot, of `extract_unless` and of
       `extract_analysis_unless`, which stores `true` into `cancel` when the
       flag is on. The test calls both functions directly on its own thread, so
       a thread-local keeps parallel tests apart; reset the flag on drop. The
@@ -212,3 +212,4 @@ item and `docs/plans/20261123-all-faces-check` alone.
   one `#[cfg(test)]` line per function.
 
 ## Progress
+- (2026-11-24) Step 1 complete (whole-module load loops waived by the user; settings tests closed on evidence)
