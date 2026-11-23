@@ -397,3 +397,4 @@ distance stays out of scope.
 ## Progress
 
 (2026-11-24) Step 1 complete
+(2026-11-24) Step 2 complete
