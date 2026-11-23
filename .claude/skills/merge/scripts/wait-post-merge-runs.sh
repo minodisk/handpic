@@ -15,9 +15,10 @@ set -o nounset
 # Options via env:
 #   POLL_INTERVAL   Seconds. Default 30
 #   MAX_WAIT        Seconds. Default 1800 (30 minutes). Only used when --max-wait is absent.
-#                   Agent callers pass --max-wait=240 and the Bash tool's
+#                   Agent callers pass --max-wait=30 and the Bash tool's
 #                   `timeout: 600000` (ms), because the default foreground
-#                   timeout can be as low as 120 s
+#                   timeout can be as low as 120 s and the harness moves a
+#                   foreground command to the background after about 180 s
 #   INITIAL_GRACE   Seconds. Default 60 (waiting for runs to appear in the list)
 #
 # Behavior:

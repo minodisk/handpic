@@ -20,6 +20,12 @@
 # resets the grace. The grace's sleeps count toward max_wait_sec, and a timeout
 # during it exits 2 with the last output (ACTION=blocked), as for `wait`.
 #
+# A failed pr-status.sh (a network error, an `api.github.com` outage) is
+# treated like a waiting state: reported on stderr, slept on and counted toward
+# max_wait_sec. It neither resets nor ends the `blocked` grace. Only a slice
+# that ends with the last call still failing exits 1, so one exit 1 stands for
+# an outage as long as the slice.
+#
 # The default max_wait_sec is 240 (4 minutes). The Bash tool's default
 # foreground timeout can be as low as 120 s, so callers must pass the Bash
 # tool's `timeout: 600000` (ms) explicitly; 600 s is the maximum. Keep the wait
@@ -28,13 +34,18 @@
 # max_wait_sec is the sum of the sleeps; real time adds pr-status.sh's runtime
 # on top (a few seconds per call × the number of waits). At 240 it measures out
 # around 5 minutes, well under 600 s.
+# The harness also moves a foreground command to the background after about
+# 180 s, so the agent callers (pr-runner, merger) pass a shorter slice,
+# `60 60`: two calls 60 s apart, enough for the default BLOCKED_GRACE, which
+# measured 70-150 s with a slow api.github.com and returns by itself before
+# that; their slice-count limits assume that slice.
 # To wait longer, callers extend the wait by re-running and counting exit 2, not
 # by backgrounding.
 #
 # usage: wait-pr-actionable.sh <PR_number_or_url> [interval_sec=30] [max_wait_sec=240]
 # exit code:
 #   0 = reached a non-waiting ACTION (branch on the ACTION= line in the output)
-#   1 = error (bad arguments / pr-status.sh failed)
+#   1 = error (bad arguments / pr-status.sh still failing when the slice ended)
 #   2 = timeout (prints the last observed state to stdout; calling again is fine)
 set -euo pipefail
 
@@ -57,7 +68,16 @@ script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 elapsed=0
 blocked_since=""
 while true; do
-	out=$(bash "$script_dir/pr-status.sh" "$PR") || exit 1
+	if ! out=$(bash "$script_dir/pr-status.sh" "$PR"); then
+		if ((elapsed >= MAX_WAIT)); then
+			echo "wait-pr-actionable.sh: pr-status.sh still failing after ${MAX_WAIT}s" >&2
+			exit 1
+		fi
+		echo "[elapsed ${elapsed}s] pr-status.sh failed; retrying in ${INTERVAL}s" >&2
+		sleep "$INTERVAL"
+		elapsed=$((elapsed + INTERVAL))
+		continue
+	fi
 	action=$(grep -E '^ACTION=' <<<"$out" | cut -d= -f2)
 	case "$action" in
 	wait | review_required) blocked_since="" ;;

@@ -86,6 +86,11 @@ Worth writing:
 - What to verify during implementation ("measure whether X holds")
 - When there is more than one option, what the step will decide between
 
+When the plan refers to another plan, link it only at its archived path or
+name it as a backticked path while it is still in flight: a plan folder moves
+under `_archived/` when it completes, and a link to its old path then breaks
+the link check on main.
+
 ## plan.md template
 
 ````markdown
@@ -98,6 +103,7 @@ Record additional important information (investigation results, design details) 
 Record what you learn during implementation, and notable events (CI failures, review feedback, plan changes, user intervention), in `learnings.md` as they happen.
 After finishing a step, continue to the next without asking the user.
 lychee (`mise run lint`) resolves a relative link in `docs/plans/**` from the linking file's own directory, so write links relative to the plan folder (e.g. `../../humans/usage.md`) and put an example path that is not a real link target in backticks.
+A plan folder moves under `_archived/` when it completes, so link another plan only at its archived path (`../_archived/<folder>/...`) or link a stable non-plan path, and name a plan still in flight as a backticked path. After rebasing onto a main where plan folders moved, re-run the link check (`mise run ci:local` runs lychee when the branch changed Markdown; `mise run lint` always does).
 
 <pr-rules>
 - Include the plan.md update (marking the step done + the Progress entry) in the implementation PR

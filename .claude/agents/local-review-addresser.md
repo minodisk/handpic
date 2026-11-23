@@ -83,6 +83,14 @@ You are given:
      can be as low as 120 s and would cut it off). **Do not set `run_in_background: true`** (the foreground
      run is what makes the exit code observable to branch on, while a
      background run would hand the watching to a task notification)
+   - That rule is about not choosing `run_in_background` yourself. The
+     harness can still move a long foreground command to the background on
+     its own (after about 180 s, saying "Command was moved to the background
+     ... You will be notified when it completes"). If it does, do not re-run
+     the command and do not poll with `sleep` / `until`: end your turn, wait
+     for its completion notification, and take the exit code and the output
+     from that notification (and its output file). That run counts once
+     toward the 3 attempts
 6. Once the checks pass, `git add` **only the files you actually fixed this
    round and the review history file** by path (`git add .` and `git add -A` are
    forbidden: they pull in unrelated untracked or unstaged changes):

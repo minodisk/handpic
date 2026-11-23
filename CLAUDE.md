@@ -646,3 +646,7 @@ Conventional Commits, in English. Example:
 
 Do all development through the `develop` skill (`/develop`), however small the
 change. Do not edit code and open a PR by hand or through `/pr` alone.
+
+On the Windows host, run `python` and `node` through `mise x --` (for example
+`mise x -- python script.py`); a bare invocation can hang or be missing from
+`PATH` in Git Bash.

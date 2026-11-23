@@ -656,18 +656,6 @@ Files: `crates/core/src/arw.rs` (`parse`, `strip_jpeg`, `PREVIEW_MIN_WIDTH`), `c
 
 - [ ] Check with exiftool whether the Leica M (Typ 240) DNGs carry a preview larger than 160x120 that `arw::parse` misses, and read it if so. If they do not, decide what the app does with a thumbnail-only DNG: show it as now, say that the preview is small, or refuse it as the ORF reader does.
 
-### Agents: bare `python` / `node` hang in Git Bash on the Windows host
-
-#### Background
-
-During `merge-settings-drop-hook-exclusions` (`docs/plans/_archived/20261002-merge-settings-drop-hook-exclusions/learnings.md`), a bare `python` or `node` in Git Bash on the Windows host hung instead of failing; running them through `mise x --` worked. Any agent session on this host that runs a script needing them hits the same hang, before any guide would be consulted.
-
-Files: `CLAUDE.md` (Development) or a new `docs/agents/dev-environment.md`.
-
-#### TODO
-
-- [ ] Check that the note is not already in the user-level memory or instructions, then add it: preferably a short line under `CLAUDE.md` Development ("On Windows, run python / node through `mise x --`; a bare invocation hangs in Git Bash"), otherwise a new `docs/agents/dev-environment.md`. Done when the note exists in the chosen place.
-
 ---
 
 ### Engine: a redo of Delete Sidecars… leaves a closed folder's rows judged
@@ -702,26 +690,6 @@ The folder-sidecars feature added `Rewrite Sidecars from Index…`. `foldersidec
 
 - [ ] Decide whether a newly added default should yield to an existing override, or whether the drop should be logged at `warn` (or both).
 - [ ] Implement the chosen behavior with a Rust test covering an old store that binds the new default's key to another action.
-
-### Agents: the archived plan scripts' import paths broke when their folders moved
-
-#### Background
-
-`docs/plans/_archived/20261014-folder-wide-pick-model/folder_gate.py`, `docs/plans/_archived/20261014-ball-game-ranking-features/ballgate.py` and `docs/plans/_archived/20261014-genre-ranking-offsets/genre_offsets.py` insert `<their folder>/../_archived/20261012-image-embeddings` on `sys.path`. They were written before the archive move, so that now resolves to `_archived/_archived/...`. `folder_gate.py`'s `GENRES` also points at `docs/crates/core/genres/siglip2.json`. Run directly, any of them fails at `import gate` (or at `extend`). They still work when imported after `gate`, as `folderwide.py` does, and `folderwide.py` overrides `GENRES`. Found in `folder-wide-ranking-eval` Step 2. Files: the three scripts above.
-
-#### TODO
-
-- [ ] Either fix the paths in the archived scripts, or state in the archive convention that a plan's scripts are frozen as run and must be imported the way `docs/plans/_archived/20261015-folder-wide-ranking-eval/folderwide.py` does.
-
-### Agents: a plan linking a sibling plan in flight breaks lint on main once the sibling is archived
-
-#### Background
-
-PR #827 linked `../20261015-similar-scene-groups/plan.md`; PR #826 archived that folder and merged first. Each PR passed lint alone, but main's lychee (`mise run lint`) failed after both merged; the folder-wide-ranking-eval Step 1 PR fixed it by retargeting the link to `_archived/`. Basis: `docs/plans/_archived/20261015-folder-wide-ranking-eval/learnings.md` (Step 1, Deferred issues). Files: `.claude/skills/develop/SKILL.md` or the planner's plan-writing instructions, or a new `docs/agents/` plans guide.
-
-#### TODO
-
-- [ ] Put the rule in the chosen place: link only archived or stable plan targets from a plan, and re-run `mise run lint` after rebasing onto the latest main when a linked plan may move. Done when the procedure tells the author to re-run lint after rebasing onto a main where plans moved.
 
 ### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
 
@@ -1055,17 +1023,6 @@ Files: `crates/app/src/main.rs` (`pane_errors`), `crates/app/src/companion.rs` (
 
 - [ ] Decide whether a new run clears the earlier run's failure lines, and apply it.
 
-### Agents: `local-review-runner` returns before its reviewer finishes, and `pr-runner` aborts on a transient `api.github.com` outage
-
-#### Background
-
-Seen by the orchestrating session of `native-mcp-everything` (plan: `docs/plans/_archived/20261117-native-mcp-everything/plan.md`). (1) In Step 5, `local-review-runner` returned before its reviewer finished: the Agent tool launched the reviewer in the background despite a foreground request. (2) In Step 7, `pr-runner` aborted with `pr_status_failure` on a transient `api.github.com` outage. Files: `.claude/agents/local-review-runner.md`, `.claude/agents/pr-runner.md`, `.claude/skills/pr/scripts`.
-
-#### TODO
-
-- [ ] Make `local-review-runner` wait for the reviewer's result or detect a background launch. Done when a run never returns before the reviewer has.
-- [ ] Make `pr-runner` retry network errors for longer before counting a `pr_status_failure`. Done when a short `api.github.com` outage does not abort a run.
-
 ### App: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
 
 The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending value across folders. A position pushed in folder A while a write is out is replaced by B's first push if B is opened and paged before that write settles, so A reopens one file earlier. The Tauri `lastViewedWriter` had the same shape. Found in `gpui-tree-trash` Step 2's second-open review of `opened`. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. Files: `crates/app/src/viewed.rs`.
@@ -1131,34 +1088,6 @@ On Windows 11 on 2026-11-21, on one 5120x1440 display with the taskbar docked le
 #### TODO
 
 - [ ] Decide whether the default placement should center on the display's work area (the visible bounds) or on the whole display, measure where `Bounds::centered` puts the window with the taskbar at the bottom and at the left, and change the default if the decision differs from what is measured.
-
-### Agents: a cold Rust `ci:local` is moved to the background by the Bash tool after 180 s
-
-#### Background
-
-During Step 1 the Bash tool moved a foreground command to the background after
-about 180 s even with `timeout: 600000`, and the cold Rust `ci:local` runs hit
-this. `.claude/agents/implementer.md` (step 7) and
-`.claude/agents/local-review-addresser.md` tell the agent to run the check in
-the foreground so the exit code is observable, and say nothing about the run
-being backgrounded anyway.
-Plan: `docs/plans/_archived/20261114-light-local-ci/plan.md`
-`native-mcp-everything` saw the same with the PR wait scripts: the harness
-moved every foreground wait script to the background after about 180 s, so
-each runner had to `TaskStop` and re-run repeatedly (plan:
-`docs/plans/_archived/20261117-native-mcp-everything/plan.md`).
-
-#### TODO
-
-- [ ] Reproduce the behavior once with a cold `ci:local`. If it holds, add to
-      both agent definitions that an exit code arriving as a task notification
-      is acceptable and is waited for, not retried, and that the rule is only
-      about not choosing `run_in_background` yourself. Done when both
-      definitions say what to do when the Bash tool backgrounds the run.
-- [ ] Give the PR wait scripts an internal timeout under 180 s that returns a
-      "still waiting" status, or document the re-run loop in
-      `.claude/agents/pr-runner.md`. Done when a PR run needs no manual
-      re-dispatch or `TaskStop`.
 
 ### App: real-device checks of the status row's StatusBar and progress circle
 

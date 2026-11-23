@@ -622,6 +622,17 @@ writes to the shared `.git/config`, which **always** fails under the sandbox
 with `could not lock config file ...: Operation not permitted` (measured;
 `allowWrite` does not lift it).
 
+Scripts in a plan folder (evaluation `.py` files and the like) are records of
+the run they served. The move rewrites none of their relative paths, and they
+are not maintained afterwards, so one that reached a sibling plan folder by a
+relative hop (`<folder>/../_archived/<other>`) no longer resolves once both
+sit under `_archived/`, and a file it read may since have left the
+repository. To reuse such a script, import it from your own code: put the
+plan folders it needs on `sys.path` yourself, import its dependencies first
+(for example `gate` before the script that extends it), and override any
+module-level path that no longer exists (such as a `GENRES` file) before
+calling it. Do not fix paths inside an archived plan.
+
 Remove the in-flight plan entry from auto memory (`MEMORY.md`). Auto memory is a
 user settings file outside the repository and not under git, so no commit or
 push is needed (trying to commit here gives you a pathspec error or an empty
@@ -763,7 +774,8 @@ If it is `[x]`, run the following in order:
    `pr-runner` bundles it with learnings / todo / settings into one commit, and
    pushing separately here would split that up. Use a plain `mv` to move only,
    and leave the staging to S.6. A destination collision was already checked by
-   `ensure-plan-dir.sh` in S.2, `_archived/` included
+   `ensure-plan-dir.sh` in S.2, `_archived/` included. The folder's scripts
+   are frozen as run, as 3.5 describes
 6. Remove the in-flight plan entry from auto memory (`MEMORY.md`) (same as 3.5;
    outside git, so no commit or push)
 

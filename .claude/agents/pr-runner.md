@@ -151,12 +151,17 @@ Hold six integer counters — `address_rounds`, `wait_timeouts`,
 variables). Each iteration, run this single command.
 
 ```bash
-<wait-pr-actionable command> <PR-number>
+<wait-pr-actionable command> <PR-number> 60 60
 ```
 
-Pass the Bash tool's `timeout` of `600000` (ms) explicitly on every run: the
-default foreground timeout can be as low as 120 s, far shorter than one
-4-minute slice.
+The `60 60` (poll every 60 s, at most 60 s of sleeps) makes one slice: two
+`pr-status.sh` calls 60 s apart, which also covers the script's 60 s
+`BLOCKED_GRACE`. The harness moves a foreground command to the background
+after about 180 s, and this slice returns by itself before that: measured on
+the Windows host with a slow `api.github.com` (2026-11-23), one call took up to
+about 46 s, so a slice takes about 70-150 s. Pass the Bash tool's `timeout` of
+`600000` (ms) explicitly on every run: the default foreground timeout can be as
+low as 120 s, shorter than a slow slice.
 
 **Run every script under `.claude/skills/**/scripts` exactly as written in its
 code block, as a standalone Bash call** — the `<wait-pr-actionable command>`
@@ -185,7 +190,7 @@ Handle the exit code as follows.
 
 - **0**: it reached a state needing a decision. Read `ACTION=` from the output
   and branch per the table below
-- **2**: timeout (4 minutes by default). Check the last output and branch **in
+- **2**: timeout (the end of the slice). Check the last output and branch **in
   this order** (this branching applies before "waiting longer" below):
   - If `reviewDecision=CHANGES_REQUESTED` and `unresolvedThreads=0` and
     `force_rerequests == 0`, the approver has most likely lost its trigger to
@@ -204,10 +209,10 @@ Handle the exit code as follows.
     Judging on `reviewDecision` alone without `ACTION` misfires during ordinary
     waiting on a PR with long CI and wastes `reset_rerequests`' limit of 1 on
     the happy path), increment `review_required_timeouts`.
-    - `review_required_timeouts < 2` (the first time; hold off until the second
-      so a normal post-push review wait is not misdetected): treat it as
+    - `review_required_timeouts < 4` (the first slices; hold off until the
+      fourth so a normal post-push review wait is not misdetected): treat it as
       ordinary waiting (increment `wait_timeouts` and re-run)
-    - `review_required_timeouts >= 2` (roughly 8–10 minutes stalled): run
+    - `review_required_timeouts >= 4` (roughly 5–10 minutes stalled): run
       `head-reviewed-by-copilot.sh` once to check the reviewer's state:
 
       ```bash
@@ -249,19 +254,24 @@ Handle the exit code as follows.
         non-zero** (aborted because a Team reviewer is pending, say), **treat
         that as ordinary waiting too** (increment `wait_timeouts` and re-run)
   - Otherwise increment `wait_timeouts` and re-run as-is while
-    `wait_timeouts < 7` (about 30 minutes in total). Once it is reached, treat
+    `wait_timeouts < 15` (about 20–35 minutes in total, by the slice's
+    70–150 s). Once it is reached, treat
     it as checks / the approver being stalled and return `aborted` (reason:
     `wait_timeout`) with the last observed state
-- **1**: error. Increment `pr_status_failures` and re-run. If
+- **1**: error: `pr-status.sh` was still failing when the slice ended. The
+  script has already retried it every 60 s within the slice (a network error,
+  a short `api.github.com` outage), so one exit 1 stands for an outage as long
+  as a slice. Increment `pr_status_failures` and re-run. If
   `pr_status_failures > 5` it may be a persistent error (expired auth,
   insufficient permissions, bad arguments), so return `aborted` (reason:
   `pr_status_failure`) with the last stderr
 
-The 4-minute default timeout exists because the Bash tool cuts off foreground
-execution at 600 s at most, even with `timeout: 600000`, and its default can be
-as low as 120 s (so always pass `timeout: 600000`). Killed by the tool, the exit
-code is unobservable and cannot be branched on, so always let the script itself
-return exit 2.
+The short slice exists because the harness moves a foreground command to the
+background after about 180 s, and the Bash tool cuts off foreground execution
+at 600 s at most, even with `timeout: 600000`, and its default can be as low as
+120 s (so always pass `timeout: 600000`). Moved to the background or killed by
+the tool, the exit code is not observable in the call and cannot be branched
+on, so always let the script itself return exit 2.
 
 **Do not switch the waiting to `run_in_background: true`.** Even when
 `ACTION=review_required` (waiting on the approver) persists or checks are
@@ -273,7 +283,7 @@ was tried the runner handed "waiting for a notice" back to the caller as its
 result, which dropped the watching onto the caller (this actually happened). Express a long
 wait by ticking it off in the foreground while counting `wait_timeouts`, and
 return `aborted` (reason: `wait_timeout`) once you hit the limit
-(`wait_timeouts < 7`). Waiting for a child is different: see "Dispatching a
+(`wait_timeouts < 15`). Waiting for a child is different: see "Dispatching a
 child and waiting for its hand-back".
 
 **If the harness nonetheless reports that a command was moved to the
@@ -308,7 +318,7 @@ result, stop every background task of your own that is still running with
 
 Resetting only on exit 0 (a state where an ACTION was observed and things moved
 on) avoids counters returning to 0 forever and looping when exit 2 and exit 1
-alternate indefinitely. As long as exit 0 never appears, `wait_timeouts < 7` and
+alternate indefinitely. As long as exit 0 never appears, `wait_timeouts < 15` and
 `pr_status_failures > 5` act as the ceiling on total stall time.
 `review_required_timeouts` is an intermediate counter that rises alongside
 `wait_timeouts` within exit 2; it holds `wait_timeouts`' increment only on the
