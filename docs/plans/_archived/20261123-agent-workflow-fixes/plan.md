@@ -214,3 +214,5 @@ or a script behavior that prevents it, and the five items are gone from
   `node`, which was not on `PATH` in the planning session's Git Bash.
 
 ## Progress
+
+(2026-11-23) Step 1 complete
