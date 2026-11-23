@@ -626,17 +626,6 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### Core: the lens name of some ORFs keeps a trailing space
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-orf-dng/results.md`): after a scan of 167 ORF samples, the index's `lens` of `E-M5MarkII__1230049.ORF` and `E-PM2_P1010001.ORF` is `LEICA DG SUMMILUX 25/F1.4 `, with a trailing space. No `make` or `model` of the folder ends in a space: `read_ifd0` in `crates/core/src/exif.rs` trims both (`trim_end`), while `read_exif_ifd` in the same file, which the ORF, NEF, CR3 and JPEG / RAF readers share, takes the lens as stored. `crates/core/src/arw.rs`'s own reader (ARW, DNG) trims only NULs from all three, and `crates/engine/src/exif.rs` drops a lens only when it is all blank. The meta pane's `Lens` row and the filter menu's `Lens` section take the string from the index; whether the padded name shows up as its own filter entry next to the same lens without the space was not checked.
-Files: `crates/core/src/exif.rs` (`read_exif_ifd`, `read_ifd0`), `crates/core/src/arw.rs` (`exif`), `crates/engine/src/exif.rs` (the `lens` of `Exif`), `crates/engine/src/index.rs` (`EXTRACTOR_VERSION`).
-
-#### TODO
-
-- [ ] Trim the lens name's trailing spaces as the make and the model are, with a test: either where it is read (then decide whether `arw.rs`'s reader gets the same, and bump `EXTRACTOR_VERSION` so indexed rows are re-extracted) or where `crates/engine/src/exif.rs` builds the displayed lens (no re-extraction).
-
 ### Core: real-device check of the scan priority's macOS QoS branch
 
 `scan-priority` (docs/plans/_archived/20260930-scan-priority/plan.md) ran the scan workers below normal OS priority (first pass `BELOW_NORMAL` / `QOS_CLASS_UTILITY`, analysis pass `LOWEST` / `QOS_CLASS_BACKGROUND`; the analysis pass was later moved to `QOS_CLASS_UTILITY` at relative priority -5, `LOWEST_RELATIVE_PRIORITY`, after the UI tests timed out on macOS CI; docs/plans/_archived/20261119-uitest-macos-timeout/plan.md, whose option D was chosen on CI evidence alone: pass 2 took 15 s to 44 s at BACKGROUND against UTILITY passing, measured on the CI runner, never on a Mac). CI covers the priority read back inside a worker on Windows, Linux and macOS (the QoS class and relative priority); the macOS QoS branch was never exercised on a real Mac. The app's paging cost during the passes was measured on Windows (see `docs/agents/app.md`). Files: `crates/core/src/scan.rs` (`for_each_path`, `Priority`), `crates/engine/src/index.rs` (`run_scan`, `run_faces_scan`), `docs/humans/performance.md` ("Which pass carries which cost"), `docs/humans/performance.ja.md`, `docs/agents/shared-crates.md` ("The scan pool's priority levels").

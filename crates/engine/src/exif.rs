@@ -294,7 +294,12 @@ pub fn exif(shot: &Shot) -> Exif {
     };
     Exif {
         camera,
-        lens: shot.lens_model.clone().filter(|l| !l.trim().is_empty()),
+        lens: shot
+            .lens_model
+            .as_deref()
+            .map(str::trim_end)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string),
         aperture,
         shutter: shot.exposure_time.and_then(|r| {
             Some(Labeled {
@@ -489,6 +494,15 @@ mod tests {
             });
             assert_eq!(e.lens, None);
         }
+    }
+
+    #[test]
+    fn a_lens_loses_its_trailing_spaces() {
+        let e = exif(&Shot {
+            lens_model: Some("LEICA DG SUMMILUX 25/F1.4 ".to_string()),
+            ..Shot::default()
+        });
+        assert_eq!(e.lens.as_deref(), Some("LEICA DG SUMMILUX 25/F1.4"));
     }
 
     #[test]

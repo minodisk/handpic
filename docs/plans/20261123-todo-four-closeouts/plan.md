@@ -45,7 +45,7 @@ Rules for every step:
 
 ## Steps
 
-- [ ] Step 1: Trim the trailing spaces of the displayed lens name
+- [x] Step 1: Trim the trailing spaces of the displayed lens name
   - Done when:
     - A lens stored as `LEICA DG SUMMILUX 25/F1.4 ` (trailing space) comes out
       of `handpic_engine::exif::exif` without it, so the meta pane's `Lens` row
@@ -294,3 +294,5 @@ Rules for every step:
    desktop session. Only same-session comparisons count.
 
 ## Progress
+
+- (2026-11-23) Step 1 complete
