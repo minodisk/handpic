@@ -75,14 +75,6 @@ section.
       `scan extract` / `scan faces` log lines in `docs/humans/performance.md`
       "Focus candidate pass", next to the existing CLI numbers.
 
-### Core: cold first scan on an internal SSD is far slower than the extrapolation
-
-A real cold first scan on Windows 11 (internal SSD, 22 threads, Sony ARW) costs ~16-19ms per file, ~82-97s extrapolated to 5000 files against the 30s target; see "Real folders on Windows" in docs/humans/performance.md. Excluding the folder from Defender did not help, and a warm-cache scan runs at ~1ms per file, so neither Defender nor CPU is the cause. The cause is unknown. A later data point (Windows 11, v0.2.0, 2026-09-22): a cold first scan after an index schema change took 25.5s on 3045 Sony ARW (~8.4ms/file, ~42s extrapolated to 5000), against the earlier 16-19ms/file; it is unknown whether the OS cache was cold for that run.
-
-#### TODO
-
-- [ ] Run `handpic-cli scan` on a cold real folder on Windows at thread counts 1 / 4 / 8 / 22 (cold each run) to separate IO concurrency from per-file cost, and compare the bounded 1MiB read against reading the whole file.
-
 ### App: a deep-row focus point still exceeds the 50ms budget
 
 A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to pixels (n=2, before the #56 and #60 fixes); see "The 1:1 focus check path" in docs/humans/performance.md. Options are prefetching the neighboring files' crops (Phase 4's ring buffer) or a DCT-scaled placeholder; nothing is chosen. The measurement was the Tauri app's; the app's 1:1 view (`crates/app/src/zoom.rs`) reads the crop through the same `crates/core/src/partial.rs`.
@@ -502,16 +494,6 @@ samples, as done for the Sigma BF `0x0147` in
       1000x667 scale (see the `SIGMA_BF_AF_GRID_W` doc comment in
       `crates/core/src/arw.rs` and the archived plan's
       [Trade-offs and risks](docs/plans/_archived/20260924-sigma-bf-af-point/plan.md#trade-offs-and-risks)).
-
-### Core: a RAF folder scan costs ~222ms per file
-
-#### Background
-
-The `fujifilm-raf` Step 1 survey (`docs/plans/_archived/20260930-fujifilm-raf/learnings.md`) ran `riffle-cli scan` over 46 raw.pixls.us RAFs: 221.8ms per file mean on one thread (290.2ms p95), 36 files/s on 24 threads. The embedded JPEG is 4416x2944 / 4000x3000 (against ARW's 1616x1080 preview), it is decoded whole for the sharpness score, and the face search runs on the whole image on frames with no AF point. The Fujifilm `FocusPixel` is now read (Tier 2 of "Core: widen camera support from public sample RAW files"), so the face search is skipped on autofocus frames while manual-focus frames still search the whole image; a scaled decode for the score would be a separate change. Files: `crates/core/src/scan.rs`, `crates/core/src/sharpness.rs`, `crates/core/src/raf.rs`.
-
-#### TODO
-
-- [ ] Measure the scan on a real RAF folder after the AF point is read, and decide whether the sharpness score should work on a scaled decode of the RAF JPEG.
 
 ### Core: M-RAW RAF files are unverified
 
