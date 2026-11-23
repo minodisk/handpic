@@ -171,8 +171,12 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// file holds one larger than the preview (and past `fullsharp`'s `MIN_SCALE`);
 /// a file without one stays `None`. It stayed `11` when the in-focus
 /// probability and its eye window went (the full-eye-sharp-only plan): the
-/// values left are computed as before.
-pub const FACES_VERSION: i64 = 11;
+/// values left are computed as before. `12` reads the mesh's face presence
+/// logit: a side face's mesh it does not back leaves the cue's values and
+/// `full_eye_sharp` `None`, and a presence under `eyes::EYES_MIN_PRESENCE`
+/// leaves the EAR and the pose `None`
+/// (`docs/plans/_archived/20261123-mesh-presence-side-faces/`).
+pub const FACES_VERSION: i64 = 12;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on

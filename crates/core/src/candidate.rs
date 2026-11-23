@@ -4,7 +4,11 @@
 //!
 //! The mesh (`eyes::mesh_of`) runs only on a face whose box long side is at
 //! least `eyes::EYES_MIN_FACE` (`meshes_face`); a smaller face, or one the mesh
-//! fails on, keeps only its YuNet eye landmarks as its eye centers.
+//! fails on, keeps only its YuNet eye landmarks as its eye centers. A mesh
+//! the model's presence logit does not back gives less: an untrusted side
+//! face mesh (`eyes::mesh_trusted`) gives nothing, eye centers included,
+//! and a presence under `eyes::EYES_MIN_PRESENCE` gives no EAR and no pose
+//! (`eyes::presence_judges_eyes`).
 //!
 //! Faces come from `faces::detect_around_rgb` in a `CATCH_CROP` square around
 //! the trusted AF point. A Sony eye-AF frame gets the same detection: the
@@ -20,7 +24,8 @@ use anyhow::Result;
 use crate::arw::FocusLocation;
 use crate::decode::decode_rgb;
 use crate::eyes::{
-    mesh_of, more_closed_ear, Mesh, EYES_MIN_FACE, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR,
+    mesh_of, mesh_trusted, more_closed_ear, presence_judges_eyes, Mesh, EYES_MIN_FACE,
+    LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR,
 };
 use crate::faces::{detect_around_rgb, Detection, Face};
 use crate::pose::Pose;
@@ -42,19 +47,21 @@ pub struct Cue {
     /// to after a failure.
     pub detection: Option<Detection>,
     /// The EAR of the more closed eye of `face` (`eyes::more_closed_ear`), the
-    /// closed-eyes judgment's input; `None` without a mesh.
+    /// closed-eyes judgment's input; `None` without a trusted mesh or with a
+    /// presence under `eyes::EYES_MIN_PRESENCE`.
     pub eyes_ear: Option<f64>,
-    /// The head pose of `face`; `None` without a mesh or a solve.
+    /// The head pose of `face`; `None` without a trusted mesh, with a
+    /// presence under `eyes::EYES_MIN_PRESENCE`, or without a solve.
     pub pose: Option<Pose>,
     /// How far the mesh's eyes sit from `face`'s YuNet eye landmarks
-    /// (`mesh_eye_offset`); `None` without a mesh.
+    /// (`mesh_eye_offset`); `None` without a trusted mesh.
     pub eye_offset: Option<f64>,
     /// How close `face` and its mesh eye regions come to the preview's edge
-    /// (`edge_gap`); `None` without a mesh.
+    /// (`edge_gap`); `None` without a trusted mesh.
     pub edge_gap: Option<f64>,
     /// The two eye centers of `face` in stored coordinates: the mesh's
     /// (`mesh_eye_centers`), else YuNet's landmarks; `None` when no face was
-    /// judged.
+    /// judged or its mesh is untrusted (`eyes::mesh_trusted`).
     pub eye_centers: Option<[(f32, f32); 2]>,
     /// The stored width of the preview the cue was taken on; 0 in a
     /// `Cue::unknown`.
@@ -268,8 +275,10 @@ pub fn face_cue_unless(
 
 /// The cue of `face`, picked from `detection`, with its `mesh` on the
 /// `width` x `height` image; the EAR, the pose, the eye offset and the edge
-/// gap come from the mesh, so a face without one has none of them and its eye
-/// centers are `face`'s landmarks.
+/// gap come from the mesh. A face without one has none of them and its eye
+/// centers are `face`'s landmarks; a face whose mesh `eyes::mesh_trusted`
+/// turns down has none of them and no eye centers either; a mesh under
+/// `eyes::presence_judges_eyes` gives no EAR and no pose but the rest.
 fn cue_of(
     face: Option<Face>,
     detection: Detection,
@@ -278,15 +287,20 @@ fn cue_of(
     height: usize,
 ) -> Cue {
     let preview_width = detection.width;
+    let untrusted = face
+        .zip(mesh)
+        .is_some_and(|(f, m)| !mesh_trusted(&f, m.presence));
+    let mesh = mesh.filter(|_| !untrusted);
+    let judged = mesh.filter(|m| presence_judges_eyes(m.presence));
     let measured = face.zip(mesh);
     Cue {
         face,
         detection: Some(detection),
-        eyes_ear: mesh.and_then(|m| more_closed_ear(&m.points)),
-        pose: mesh.and_then(|m| m.pose),
+        eyes_ear: judged.and_then(|m| more_closed_ear(&m.points)),
+        pose: judged.and_then(|m| m.pose),
         eye_offset: measured.and_then(|(f, m)| mesh_eye_offset(&f, &m.points)),
         edge_gap: measured.and_then(|(f, m)| edge_gap(&f, &m.points, width, height)),
-        eye_centers: face.map(|f| {
+        eye_centers: face.filter(|_| !untrusted).map(|f| {
             mesh.and_then(|m| mesh_eye_centers(&m.points))
                 .unwrap_or([f.left_eye, f.right_eye])
         }),
@@ -378,7 +392,11 @@ mod tests {
                 points[i] = [x + (k % 2) as f32 * w, y + (k / 2 % 2) as f32 * h];
             }
         }
-        Mesh { points, pose }
+        Mesh {
+            points,
+            pose,
+            presence: 20.0,
+        }
     }
 
     /// Both eyes 20 x 10, their regions 40 x 30 around the two step edges.
@@ -491,6 +509,58 @@ mod tests {
         assert!(cue.eye_offset.is_some() && cue.edge_gap.is_some());
         assert_eq!(cue.eye_centers, Some([(21.25, 25.0), (80.0, 25.0)]));
         assert_eq!(cue.preview_width, 120);
+    }
+
+    /// The mesh and the detection of `the_cue_carries_the_ear_and_the_pose_of_its_mesh`,
+    /// with `presence`, on `face`.
+    fn posed_mesh(face: Face, presence: f32) -> (Mesh, Detection) {
+        let pose = Pose {
+            yaw: -20.0,
+            pitch: 5.0,
+            roll: 1.0,
+        };
+        let mut mesh = both_eyes(Some(pose));
+        mesh.points[133] = [30.0, 20.0];
+        mesh.presence = presence;
+        let detection = Detection {
+            width: 120,
+            height: 60,
+            faces: vec![face],
+            point: Some((50, 25)),
+        };
+        (mesh, detection)
+    }
+
+    #[test]
+    fn an_untrusted_side_face_mesh_gives_nothing_not_even_landmarks() {
+        // Eyes 5 px apart on a 60 px box: an eye distance of 0.083.
+        let side = face(0.0, 0.0, 60.0, (20.0, 25.0), (25.0, 25.0));
+        let (mesh, detection) = posed_mesh(side, -0.5);
+        let cue = cue_of(Some(side), detection.clone(), Some(&mesh), 120, 60);
+        assert_eq!((cue.eyes_ear, cue.pose), (None, None));
+        assert_eq!((cue.eye_offset, cue.edge_gap), (None, None));
+        assert_eq!(cue.eye_centers, None);
+        assert_eq!(cue.face, Some(side));
+        let (mesh, _) = posed_mesh(side, 0.0);
+        let cue = cue_of(Some(side), detection, Some(&mesh), 120, 60);
+        assert!(cue.eyes_ear.is_some() && cue.eye_centers.is_some());
+    }
+
+    #[test]
+    fn a_mesh_under_the_presence_floor_keeps_all_but_the_ear_and_the_pose() {
+        let (mesh, detection) = posed_mesh(two_eyed(), -12.5);
+        let cue = cue_of(Some(two_eyed()), detection, Some(&mesh), 120, 60);
+        assert_eq!((cue.eyes_ear, cue.pose), (None, None));
+        assert_eq!(
+            (cue.eye_offset, cue.edge_gap),
+            (
+                mesh_eye_offset(&two_eyed(), &mesh.points),
+                edge_gap(&two_eyed(), &mesh.points, 120, 60)
+            )
+        );
+        assert!(cue.eye_offset.is_some() && cue.edge_gap.is_some());
+        assert_eq!(cue.eye_centers, mesh_eye_centers(&mesh.points));
+        assert_eq!(cue.eye_centers, Some([(21.25, 25.0), (80.0, 25.0)]));
     }
 
     #[test]

@@ -12,8 +12,13 @@
 //! `EYES_LOGIT_SLOPE`). The same points, z included, give the face's head
 //! pose (`pose::head_pose`).
 //!
+//! The model's face presence logit, from the same run, decides when a mesh
+//! is not believed: a side face whose mesh is fitted off the face
+//! (`mesh_trusted`) gives no value at all, and a face the model says is
+//! hardly there gets no open / closed judgment (`presence_judges_eyes`).
+//!
 //! The geometry and the constants are the ones measured on the hand-labeled
-//! faces of `docs/plans/20261007-closed-eyes-detection/eyes-truth.md`
+//! faces of `docs/plans/_archived/20261007-closed-eyes-detection/eyes-truth.md`
 //! (2026-10-07, 253 faces with an open or closed label, 57 closed): face AUC
 //! 0.974. A change to the crop, the resize or the points is a new model:
 //! re-validate it with `handpic-cli eyes` on those faces.
@@ -54,6 +59,22 @@ pub const EYES_CLOSED_EAR: f64 = 0.137;
 /// (28.996; a free intercept would put the midpoint at 0.155). An EAR of 0.10
 /// reads 75% closed, 0.20 reads 14%.
 pub const EYES_LOGIT_SLOPE: f64 = 29.0;
+/// The eye distance under which a face counts as a side face: YuNet's two eye
+/// landmarks apart by less than this fraction of the box's longer side
+/// (`eye_distance`). With the presence logit under `SIDE_FACE_PRESENCE` it
+/// marks a mesh fitted off a side face; measured in
+/// `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
+pub const SIDE_FACE_EYE_DISTANCE: f32 = 0.15;
+/// The presence logit under which a side face's mesh is not believed
+/// (MediaPipe's own 0.5 presence); see `SIDE_FACE_EYE_DISTANCE` and
+/// `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
+pub const SIDE_FACE_PRESENCE: f32 = 0.0;
+/// The presence logit under which no face, whatever its eye distance, gets
+/// an open / closed judgment or a head pose: it loses no labeled open or
+/// closed face. Calibrated on the current face crop (no roll correction);
+/// recalibrate after any crop change. See
+/// `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
+pub const EYES_MIN_PRESENCE: f32 = -12.0;
 /// The EAR points of the eye on the left of the image (the subject's right
 /// eye): the two corners `33` and `133`, the upper lid `160` / `158` and the
 /// lower lid `153` / `144`, in the order `p1`..`p6` of Soukupová and Čech.
@@ -113,12 +134,42 @@ pub fn closed_probability(ear: f64) -> f64 {
     1.0 / (1.0 + (-EYES_LOGIT_SLOPE * (EYES_CLOSED_EAR - ear)).exp())
 }
 
+/// YuNet's eye distance of `face`: the distance between its `left_eye` and
+/// `right_eye` divided by the box's longer side; `None` when the box is
+/// empty. A quarter or half turn keeps it, so stored and upright faces agree.
+pub fn eye_distance(face: &Face) -> Option<f32> {
+    let side = face.width.max(face.height);
+    let (l, r) = (face.left_eye, face.right_eye);
+    (side > 0.0).then(|| (r.0 - l.0).hypot(r.1 - l.1) / side)
+}
+
+/// Whether the mesh of `face` with the presence logit `presence` is believed:
+/// not when the eye distance is under `SIDE_FACE_EYE_DISTANCE` and the logit
+/// under `SIDE_FACE_PRESENCE` (a side face fitted off the face). A
+/// non-finite logit is never believed, and an empty box counts as under the
+/// eye distance.
+pub fn mesh_trusted(face: &Face, presence: f32) -> bool {
+    if !presence.is_finite() {
+        return false;
+    }
+    let side_face = eye_distance(face).is_none_or(|d| d < SIDE_FACE_EYE_DISTANCE);
+    !(side_face && presence < SIDE_FACE_PRESENCE)
+}
+
+/// Whether a mesh with the presence logit `presence` gives an open / closed
+/// judgment and a head pose: at or above `EYES_MIN_PRESENCE` (a NaN does not).
+pub fn presence_judges_eyes(presence: f32) -> bool {
+    presence >= EYES_MIN_PRESENCE
+}
+
 type Plan = Arc<TypedRunnableModel>;
 
 struct Model {
     plan: Plan,
     /// Output index of `Identity`, the points.
     points: usize,
+    /// Output index of `Identity_1`, the face presence logit.
+    presence: usize,
 }
 
 fn model() -> Result<&'static Model> {
@@ -140,12 +191,20 @@ fn build() -> Result<Model> {
         .iter()
         .map(|o| model.outlet_label(*o).unwrap_or_default().to_string())
         .collect();
-    let points = names
-        .iter()
-        .position(|n| n == "Identity")
-        .with_context(|| format!("no output Identity in {names:?}"))?;
+    let output = |name: &str| {
+        names
+            .iter()
+            .position(|n| n == name)
+            .with_context(|| format!("no output {name} in {names:?}"))
+    };
+    let points = output("Identity")?;
+    let presence = output("Identity_1")?;
     let plan = model.into_optimized()?.into_runnable()?;
-    Ok(Model { plan, points })
+    Ok(Model {
+        plan,
+        points,
+        presence,
+    })
 }
 
 /// The center and side of the square crop of an upright `face`: its box,
@@ -178,8 +237,10 @@ pub fn judged_face(faces: &[Face], point: Option<(usize, usize)>) -> Option<&Fac
 /// Judge the eyes of `face` on the full-size upright RGB image
 /// (`width` x `height`, 3 bytes per pixel), `face` in its coordinates.
 /// `None` when the face's longer box side is below `EYES_MIN_FACE`, its
-/// center lies outside the image, or the model fails or panics: a bad crop
-/// leaves the eyes unknown instead of failing the caller.
+/// center lies outside the image, the model fails or panics (a bad crop
+/// leaves the eyes unknown instead of failing the caller), or the mesh is
+/// not believed (`mesh_trusted`) or too unsure of the face
+/// (`presence_judges_eyes`).
 pub fn judge(rgb: &[u8], width: usize, height: usize, face: &Face) -> Option<Eyes> {
     judge_mesh(rgb, width, height, face).map(|j| j.eyes)
 }
@@ -196,25 +257,33 @@ pub struct Judged {
     /// The head pose of the face (`pose::head_pose`), `None` when the solve
     /// fails or the fit is upside down (the roll past `MAX_ROLL`).
     pub pose: Option<Pose>,
+    /// The model's face presence logit.
+    pub presence: f32,
 }
 
-/// `judge` with the mesh points, under the same floor and failures.
+/// `judge` with the mesh points, under the same floor, failures and
+/// presence rules.
 pub fn judge_mesh(rgb: &[u8], width: usize, height: usize, face: &Face) -> Option<Judged> {
     if face.width.max(face.height) < EYES_MIN_FACE {
         return None;
     }
     // Nothing here is shared or observable after a panic, hence
     // `AssertUnwindSafe`.
-    let points = catch_unwind(AssertUnwindSafe(|| landmarks_of(rgb, width, height, face)))
-        .ok()
-        .and_then(Result::ok)
-        .flatten()?;
+    let Landmarks { points, presence } =
+        catch_unwind(AssertUnwindSafe(|| landmarks_of(rgb, width, height, face)))
+            .ok()
+            .and_then(Result::ok)
+            .flatten()?;
+    if !mesh_trusted(face, presence) || !presence_judges_eyes(presence) {
+        return None;
+    }
     let ear = more_closed_ear(&points)?;
     Some(Judged {
         eyes: Eyes::from_ear(ear),
         ear,
         pose: head_pose(&points, width, height),
         points,
+        presence,
     })
 }
 
@@ -225,6 +294,8 @@ pub struct Mesh {
     pub points: Vec<[f32; 2]>,
     /// The head pose, solved on the upright points (as `judge_mesh` does).
     pub pose: Option<Pose>,
+    /// The model's face presence logit, raw (see `mesh_trusted`).
+    pub presence: f32,
 }
 
 /// The mesh of `face` on the stored `width` x `height` RGB image of EXIF
@@ -256,7 +327,7 @@ pub fn mesh_of(
     let sub = upright_crop(rgb, width, height, orientation, win);
     // Nothing here is shared or observable after a panic, hence
     // `AssertUnwindSafe`.
-    let points = catch_unwind(AssertUnwindSafe(|| {
+    let (points, presence) = catch_unwind(AssertUnwindSafe(|| {
         landmarks(input_tensor(&sub, win.width, win.height))
     }))
     .ok()?
@@ -270,7 +341,11 @@ pub fn mesh_of(
             [x, y]
         })
         .collect();
-    Some(Mesh { points, pose })
+    Some(Mesh {
+        points,
+        pose,
+        presence,
+    })
 }
 
 /// The `win` window of the upright image of a stored `width` x `height` RGB
@@ -297,19 +372,29 @@ fn upright_crop(rgb: &[u8], width: usize, height: usize, orientation: u16, win: 
 /// face's size; `None` when its center lies outside the image or neither
 /// eye's EAR is finite.
 pub fn ear_of(rgb: &[u8], width: usize, height: usize, face: &Face) -> Result<Option<f64>> {
-    Ok(landmarks_of(rgb, width, height, face)?.and_then(|p| more_closed_ear(&p)))
+    Ok(landmarks_of(rgb, width, height, face)?.and_then(|l| more_closed_ear(&l.points)))
+}
+
+/// One model run on a face: its mesh points and its presence logit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Landmarks {
+    /// The `LANDMARKS` points (see `landmarks_of`).
+    pub points: Vec<[f32; 3]>,
+    /// The model's face presence logit, raw (see `mesh_trusted`).
+    pub presence: f32,
 }
 
 /// The `LANDMARKS` points of `face`'s mesh in the full-size upright image's
-/// pixels, whatever the face's size; `None` when its center lies outside the
-/// image. z is the model's relative depth (larger away from the camera)
-/// scaled like x, as MediaPipe's `LandmarkProjectionCalculator` does.
+/// pixels, whatever the face's size, with the presence logit; `None` when its
+/// center lies outside the image. z is the model's relative depth (larger
+/// away from the camera) scaled like x, as MediaPipe's
+/// `LandmarkProjectionCalculator` does. Neither presence rule is applied.
 pub fn landmarks_of(
     rgb: &[u8],
     width: usize,
     height: usize,
     face: &Face,
-) -> Result<Option<Vec<[f32; 3]>>> {
+) -> Result<Option<Landmarks>> {
     let (cx, cy) = (face.x + face.width / 2.0, face.y + face.height / 2.0);
     if rgb.len() < width * height * 3
         || !(0.0..width as f32).contains(&cx)
@@ -319,8 +404,11 @@ pub fn landmarks_of(
     }
     let (center, side) = face_square(face);
     let (sub, win) = crop_rgb(rgb, width, height, center, side.max(1));
-    let points = landmarks(input_tensor(&sub, win.width, win.height))?;
-    Ok(Some(to_full(&points, &win)))
+    let (points, presence) = landmarks(input_tensor(&sub, win.width, win.height))?;
+    Ok(Some(Landmarks {
+        points: to_full(&points, &win),
+        presence,
+    }))
 }
 
 /// Map the model's points, in input pixels, onto the full image the crop
@@ -353,8 +441,8 @@ pub fn more_closed_ear<P: AsRef<[f32]>>(points: &[P]) -> Option<f64> {
 }
 
 /// Run the model on an `input_tensor`: the 478 (x, y, z) points, x and y in
-/// input pixels.
-fn landmarks(input: Tensor) -> Result<Vec<[f32; 3]>> {
+/// input pixels, and the face presence logit.
+fn landmarks(input: Tensor) -> Result<(Vec<[f32; 3]>, f32)> {
     let m = model()?;
     let out = m.plan.run(tvec!(input.into()))?;
     let v = out[m.points].try_as_plain_ram()?.as_slice::<f32>()?;
@@ -365,10 +453,17 @@ fn landmarks(input: Tensor) -> Result<Vec<[f32; 3]>> {
             LANDMARKS * 3
         ));
     }
-    Ok(v.chunks_exact(3)
+    let points = v
+        .chunks_exact(3)
         .take(LANDMARKS)
         .map(|p| [p[0], p[1], p[2]])
-        .collect())
+        .collect();
+    let presence = *out[m.presence]
+        .try_as_plain_ram()?
+        .as_slice::<f32>()?
+        .first()
+        .ok_or_else(|| anyhow!("face mesh model: no presence value"))?;
+    Ok((points, presence))
 }
 
 /// Resize an RGB crop bilinearly to `INPUT` x `INPUT` into an RGB NHWC
@@ -559,6 +654,62 @@ mod tests {
         }
     }
 
+    /// A face of box side 1 whose eye landmarks are `distance` apart.
+    fn eyes_apart(distance: f32) -> Face {
+        Face {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 0.5,
+            left_eye: (0.0, 0.0),
+            right_eye: (distance, 0.0),
+            ..upright()
+        }
+    }
+
+    #[test]
+    fn the_eye_distance_is_over_the_longer_box_side() {
+        let d = eye_distance(&upright()).unwrap();
+        assert!((d - 401f32.sqrt() / 40.0).abs() < 1e-6, "{d}");
+        let empty = Face {
+            width: 0.0,
+            height: 0.0,
+            ..upright()
+        };
+        assert_eq!(eye_distance(&empty), None);
+    }
+
+    #[test]
+    fn a_side_face_mesh_is_untrusted_only_under_both_cuts() {
+        let at = eyes_apart(SIDE_FACE_EYE_DISTANCE);
+        let under = eyes_apart(SIDE_FACE_EYE_DISTANCE.next_down());
+        let low = SIDE_FACE_PRESENCE.next_down();
+        assert!(!mesh_trusted(&under, low));
+        assert!(!mesh_trusted(&under, -20.0));
+        assert!(mesh_trusted(&under, SIDE_FACE_PRESENCE));
+        assert!(mesh_trusted(&at, low));
+        assert!(mesh_trusted(&at, -20.0));
+        assert!(mesh_trusted(&at, 20.0));
+        let empty = Face {
+            width: 0.0,
+            height: 0.0,
+            ..upright()
+        };
+        assert!(!mesh_trusted(&empty, low));
+        assert!(mesh_trusted(&empty, SIDE_FACE_PRESENCE));
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(!mesh_trusted(&at, bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_presence_under_the_floor_gives_no_eyes_judgment() {
+        assert!(presence_judges_eyes(EYES_MIN_PRESENCE));
+        assert!(!presence_judges_eyes(EYES_MIN_PRESENCE.next_down()));
+        assert!(presence_judges_eyes(20.0));
+        assert!(!presence_judges_eyes(f32::NAN));
+    }
+
     #[test]
     fn faces_below_the_floor_or_outside_the_image_are_not_judged() {
         let rgb = vec![128u8; 200 * 150 * 3];
@@ -703,8 +854,9 @@ mod tests {
         let face = crate::faces::detect(&rgb, w, h).unwrap()[0];
         let (center, side) = face_square(&face);
         let (sub, win) = crop_rgb(&rgb, w, h, center, side);
-        let points = landmarks(input_tensor(&sub, win.width, win.height)).unwrap();
+        let (points, presence) = landmarks(input_tensor(&sub, win.width, win.height)).unwrap();
         assert_eq!(points.len(), LANDMARKS);
+        println!("presence {presence:.1}");
         for p in &points {
             assert!((0.0..=INPUT as f32).contains(&p[0]), "{p:?}");
             assert!((0.0..=INPUT as f32).contains(&p[1]), "{p:?}");
@@ -719,6 +871,7 @@ mod tests {
         let stored_face = crate::faces::to_stored(face, 6, sw, sh);
         let mesh = mesh_of(&stored, sw, sh, 6, &stored_face).unwrap();
         assert_eq!(mesh.pose, judged.pose);
+        assert_eq!(mesh.presence, judged.presence);
         let judged_ear = more_closed_ear(&judged.points).unwrap();
         assert_eq!(judged.eyes, Eyes::from_ear(judged_ear));
         let stored_ear = more_closed_ear(&mesh.points).unwrap();

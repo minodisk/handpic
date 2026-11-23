@@ -18,11 +18,14 @@ landmarks: the eyes, the nose tip and the mouth corners), whose ONNX model and l
 live in `crates/core/models/`, `src/eyes.rs` the closed-eyes judgment of one
 face (the eye aspect ratio of the MediaPipe Face Landmarker v2 face mesh,
 its ONNX and `LICENSE-mediapipe` next to YuNet's; the scan runs only its
-mesh, `mesh_of`, for the face cue), `src/pose.rs` the head pose (yaw / pitch / roll) of a face from its face mesh points, a port of MediaPipe's face geometry pipeline whose 33-point Procrustes basis is in `LICENSE-mediapipe`, `src/candidate.rs` the face cue
+mesh, `mesh_of`, for the face cue; the model's face presence logit leaves a
+side face's mesh untrusted, `mesh_trusted`, and a face under
+`EYES_MIN_PRESENCE` unjudged, `presence_judges_eyes`), `src/pose.rs` the head pose (yaw / pitch / roll) of a face from its face mesh points, a port of MediaPipe's face geometry pipeline whose 33-point Procrustes basis is in `LICENSE-mediapipe`, `src/candidate.rs` the face cue
 (the face nearest the AF point, else the largest confident face of the
 whole preview, its face mesh and what the mesh gives: the EAR, the head
 pose, the eye offset, the edge gap and the eye centers `fullsharp.rs`
-measures around, YuNet's eye landmarks without a mesh), `src/jpeg.rs` the Exif reader of a plain
+measures around, YuNet's eye landmarks without a mesh, none of them from an
+untrusted mesh, no EAR or pose under the presence floor), `src/jpeg.rs` the Exif reader of a plain
 JPEG file (orientation and the standard shooting tags into the same `Shot`
 the RAW parsers fill), which `reader` and `scan` dispatch to for a `.jpg` /
 `.jpeg`, `src/exif.rs` the crate-private IFD0 + Exif IFD reader `jpeg.rs`,

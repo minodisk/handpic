@@ -332,7 +332,12 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   `crates/core/models/LICENSE-mediapipe`, run locally with no network
   access). It is left out when
   there is no face, when the face is under about 60 pixels on the embedded
-  preview (too small to judge), and for JPEG files. A downcast eye shows no
+  preview (too small to judge), for a side face whose face mesh the model
+  itself doubts (the detector's two eye points close together and the mesh's
+  face presence low: such a mesh is usually fitted off the face, so its eye
+  rows, pose, mesh eye offset, edge gap and `Eye focus` are all left out),
+  when the mesh's face presence is very low on any face (the eye rows and the
+  pose are left out, the rest kept), and for JPEG files. A downcast eye shows no
   iris either, so it counts as closed like a blink. `Eyes closed` is the
   probability that the eyes are closed, and `Eye aspect ratio` the ratio the
   openness is read from. `Yaw`, `Pitch` and `Roll`
@@ -363,7 +368,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   the pass runs), the stored eye state of the judged face (the
   `Eyes` section: `Open`, `Closed`, or `Unknown` for a file with no stored
   state, such as one with no face found, with a face under about 60 pixels,
-  or not reached by the second pass yet), whether the file was exported
+  with a side face whose face mesh is not believed or a face mesh of very low
+  face presence, or not reached by the second pass yet), whether the file was exported
   (the `Output` section, described below),
   camera, lens, aperture, shutter speed, ISO and focal length (grouped into
   ranges such as `24–35 mm`). The color

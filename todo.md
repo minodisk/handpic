@@ -143,12 +143,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `eyes-truth.md` did not label. Files: `crates/engine/src/ondemand.rs`
       (`read_eyes`), `crates/core/src/eyes.rs` (`judged_face`),
       `crates/app/src/meta.rs`.
-- [ ] Use the model's face presence output (`Identity_1`, a logit the
-      `eyes` module ignores) to drop false face detections before judging
-      the eyes. Needs a threshold calibrated on labeled faces: the `x`
-      labels of `docs/plans/_archived/20261007-closed-eyes-detection/eyes-truth.md`
-      (no eye to judge, including false detections) can seed it. Files:
-      `crates/core/src/eyes.rs`, `docs/agents/tract-onnx-inference.md`.
 - [x] Estimate the head pose of the judged face. MediaPipe's face geometry
       pipeline (perspective unprojection at its 63 deg camera, weighted
       Procrustes onto the canonical face) is ported to
@@ -185,22 +179,8 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       largest confident face of the whole preview when a frame has no
       trusted AF point (`FACES_VERSION` 9), and `Focus` carries the cue
       without a point, so the same cuts mark it. The check of those cuts on
-      starred no-AF frames is the next item.
-- [ ] Check the good-photo cuts on starred frames with no trusted AF point.
-      The cuts in `crates/engine/src/index.rs` (`GOOD_FULL_EYE_SHARP`,
-      `GOOD_EYE_EAR`, `GOOD_MAX_YAW`, `GOOD_MAX_PITCH`, `MAX_EYE_OFFSET`,
-      `MIN_EDGE_GAP`) were fitted on AF faces only; since
-      `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2 they also judge
-      the largest confident face of a frame with no AF point. Run
-      `handpic-cli features` over the Leica folders with `.dop` picks
-      (`D:\photos\2026\2026-09-05` and the other DNG folders of the
-      `20261008-burst-keep-score` data set), apply the same cuts to the
-      `noaf` rows in a script, and report the share of faced frames marked
-      good, the share of `.dop` picks among them against the base rate, and
-      10 marked and 10 unmarked picks for the user to look at. Done when the
-      numbers are recorded in a plan's `learnings.md` and the cuts are either
-      kept or a separate no-AF cut is proposed with them. Files:
-      `crates/engine/src/index.rs`.
+      starred no-AF frames kept them shared; see
+      `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
 - [x] Measure the AF eye in-focus probability over each eye's eyelid
       region from the face mesh instead of the window between the eyes.
       The scan's second pass runs MediaPipe Face Landmarker v2 on the face
@@ -226,28 +206,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       90 deg, seen from above and not-a-face. Nothing in the scan or the
       index changed. See `docs/plans/20261010-mesh-roll/` (Decision,
       `compare.md`, `misfit-truth.md`).
-- [ ] Make `eye_offset` reliable where YuNet's eye distance is under 0.20
-      of the face box side, for `20261008-burst-keep-score`, which owns the
-      `MAX_EYE_OFFSET` 0.10 cut. `docs/plans/20261010-mesh-roll/` found that,
-      weighted to its six folders, about 27% of the frames over 0.10 have a
-      mesh off the face and about 65% an on-face mesh compared against YuNet
-      eye points that are off the eyes (profiles whose two points sit
-      together on one eye or the nose); frames under 0.20 eye distance are
-      33.5% of the frames but 66% of those over 0.10. Done when the cut is
-      skipped below that eye distance or `eye_offset` is replaced by a check
-      of the mesh against its own geometry, and the good-photo mark's share
-      and the rated frames of `D:\photos\samples\ARW\good-mark-2026-10-09\`
-      are re-read. Files: `crates/core/src/candidate.rs`
-      (`mesh_eye_offset`), `crates/engine/src/index.rs` (`MAX_EYE_OFFSET`).
-- [ ] Distrust the mesh values on side faces, the dominant mesh misfit
-      (78% of the off meshes, weighted, in
-      `docs/plans/20261010-mesh-roll/misfit-truth.md`). Done when a rule
-      (e.g. YuNet eye distance under 0.10 of the box side, or the mesh's
-      |yaw| past a bound) leaves the EAR, the AF eye cue and the pose of
-      such a face unknown instead of a plausible-looking wrong value, checked
-      on the misfit truth set and on the AF-eye, closed-eyes and head-pose
-      labeled sets. Files: `crates/core/src/candidate.rs`,
-      `crates/core/src/eyes.rs`.
 - [ ] Faces rolled past 90 deg (a baby lying head-down,
       `D:\photos\2026\2026-07-11\_DSC2638.ARW`) get a mesh fitted as if
       upright, and the eye line cannot de-rotate them: `faces.rs` orders
@@ -295,12 +253,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       already shows, against about 56% for the best technical rule); and
       the non-picks are mostly technically fine. Revisit only with a new
       signal; the per-frame good-photo mark above covers "is this a miss".
-- [ ] Crop detection can false-positive on printed faces or logos near the AF
-      point (e.g. `_DSC3632`: a shirt logo scored 0.67), yielding a false
-      candidate (or a false not-a-candidate) when the logo is the face nearest
-      the AF point. Consider a size or aspect filter on crop boxes. Files:
-      `crates/core/src/faces.rs` (`detect_around`),
-      `crates/core/src/candidate.rs`.
 - [ ] AF on a person in the background gives a sharp face and a false Good:
       the measure says the eyes of the face nearest the AF point are sharp,
       not that it is the subject. Files: `crates/core/src/candidate.rs`.
