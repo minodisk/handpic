@@ -1053,6 +1053,7 @@ mod tests {
         assert!(names(&dir).is_empty());
     }
 
+    #[cfg(any(windows, target_os = "macos"))]
     #[test]
     fn mates_whose_stems_differ_in_case_split_into_one_date_folder() {
         let dir = xmp_folder("shared-case-same", &["a.ARW", "A.NEF"]);
