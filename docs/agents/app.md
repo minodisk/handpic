@@ -1984,8 +1984,10 @@ view-only folder, whose open closes a sort menu left open.
   which also holds the view-only rule): with no folder every other key and
   click does nothing too. `dir` is only ever set, never cleared, so no open
   menu needs closing when a folder goes. The MCP `set_sort` / `set_filter`
-  path (`apply_menu`) opens no menu and is not gated by it. Inferred: not
-  yet seen on screen.
+  path (`apply_menu`) opens no menu and is not gated by it. Verified on
+  Windows 11 on 2026-11-23: both buttons were dimmed and a left click on
+  either opened no menu
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 
 - Rule: the two buttons are gpui-component `Button`s (`main.rs`'s
   `menu_button`): the default variant at `.xsmall()` with
@@ -2909,6 +2911,9 @@ non-empty batch's file names go to the log as `scan faces first:`.
   `faces_extractor`, so the next scan resumes it) but would restart the pass;
   waiting for its end keeps a burst of changes from restarting it over and
   over.
+- Rule: pass 2 writes its rows in `BATCH` (10) transactions, so a folder of
+  fewer than 10 files shows its pass-2 columns (`Analysis`, face icons) only
+  at `FacesDone`.
 
 ### The engine logs through `log`, printed by `logger.rs` (Hit)
 
@@ -3178,19 +3183,23 @@ range can go to `ScanFocus` as it is. Its thumbnails come from
 `thumbs.rs`, four reads at a time through the index's read-only connection,
 and every image a cell drops goes through `retired`, like the preview's.
 
-- Rule (Inferred, not yet seen on screen): a cell's name wider than the cell
-  is shortened with `…` in the middle (`main.rs`'s `fitted_name`, GPUI's
-  `LineWrapper::truncate_line` with `TruncateFrom::Middle`: about two thirds
-  of the width for the start, one third for the tail with the frame number
-  and the extension), against the current `cell_width`, which follows the
-  strip's height, less `NAME_INSET` (2 px) on each side, since
-  `truncate_line` sums per-character widths rather than measuring the shaped
-  line. A name that fits is drawn unchanged, centered. Before, a long name
-  was centered and clipped on both sides by the cell's content mask
-  (`)SC-RX100M2_DSC00416.ARW`). The user chose the middle over the end
-  (cells of a prefixed folder would read the same, the extension lost) and
-  the start (the prefix lost), 2026-11-22. The name band's tooltip still
-  shows the label's name, not the file name.
+- Rule (seen at the default strip height only; other heights not yet seen on
+  screen): a cell's name wider than the cell is shortened with `…` in the
+  middle (`main.rs`'s `fitted_name`, GPUI's `LineWrapper::truncate_line` with
+  `TruncateFrom::Middle`: about two thirds of the width for the start, one
+  third for the tail with the frame number and the extension), against the
+  current `cell_width`, which follows the strip's height, less `NAME_INSET` (2
+  px) on each side, since `truncate_line` sums per-character widths rather
+  than measuring the shaped line. A name that fits is drawn unchanged,
+  centered. Before, a long name was centered and clipped on both sides by the
+  cell's content mask (`)SC-RX100M2_DSC00416.ARW`). The user chose the middle
+  over the end (cells of a prefixed folder would read the same, the extension
+  lost) and the start (the prefix lost), 2026-11-22. The name band's tooltip
+  still shows the label's name, not the file name. Seen on Windows 11 on
+  2026-11-23 at the default strip height: `ILCE-6300_Free_ra…3068.arw` and
+  `L1001880-DxO_D…ME 3.jpg` fitted inside their cells and short names stayed
+  centered and unchanged
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 
 ### A `canvas` gets no input; its wrapping `div` does (Inferred)
 
@@ -3482,6 +3491,30 @@ Measured on 2026-11-22 (Windows 11, a 1440 px tall display) in
   with `--no-prefetch`. With the ring on, most pages are prefetch hits, so the
   fit view's reads never outlast the key repeat and no stale frame is drawn
   (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+- Rule: MCP plus the `screenshot` tool (an app built with `mise run
+  app:dev:screenshot`) closes the checks that need only an open, a navigation,
+  a setting, a confirmed run or a left click. It cannot close a key press (Tab
+  or Escape in a dialog, `Ctrl+Z`, a held `→`), the IME, a drag, a
+  right-click, a HiDPI display or macOS / Linux. A run confirmed through MCP
+  with `mcpAllowDestructive` opens no dialog, so the dialog's keys and
+  dimmed buttons stay open too. Colors, legibility and text size still need
+  the user's eye on the running window.
+  Launch with a fresh `--index`, `--settings` and `--log`, a fixed
+  `--mcp-port`, and `{"mcpEnabled": true}` (plus `"mcpAllowDestructive":
+  true` where a run must be confirmed) through `--import-settings`
+  ([the plan's learnings](../plans/_archived/20261123-windows-device-checks-mcp-visual/learnings.md)).
+- Rule: Git Bash mangles `\\` in JSON arguments, even through stdin
+  here-strings. Give the MCP client `D:/...` paths; it converts them to
+  backslashes. A Bash `python -` with no stdin hangs the tool call; run a
+  script as a file with `mise x -- python -I <file>`.
+- Rule: pass 2 commits rows in batches of 10 (`BATCH`,
+  `crates/engine/src/index.rs`), so in a folder of fewer than 10 files the
+  `Analysis` group and the strip's face icons appear only when pass 2 ends.
+  Check "appears without input" in a folder of more than 10 files.
+- Rule: a run's recorded findings can go stale against `main` before they are
+  applied (a row's wording was reworded by a merge after the run's build).
+  After the rebase, check that each anchor a finding was to extend still
+  exists.
 
 ### Every keystroke goes through the keymap (Inferred)
 
@@ -3752,7 +3785,9 @@ choosing the circle.
   start-aligned in the center region, does not move; the center region is
   always 20 px narrower (the circle's slot and the region's 8 px gap), with
   or without the circle, and the slot is empty space at the row's right end
-  while idle. Inferred: the constant position is not yet seen on screen.
+  while idle. Verified on Windows 11 on 2026-11-23: the position `1 / 8`
+  stayed at the same x with the circle shown (pass 2) and gone
+  (`docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`).
 - Rule: do not use `.loading(true)`: nothing here is indeterminate. Pass 2
   starts at `(0, 0)` and pass 1 can start at a total of 0, so the empty
   track ring shows there.
