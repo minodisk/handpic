@@ -231,3 +231,5 @@ concurrently, so touch only these four headings and what this plan adds), and
   it makes a partial revert coarser.
 
 ## Progress
+
+(2026-11-23) Step 1 complete

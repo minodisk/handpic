@@ -38,7 +38,7 @@ Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
 
 #### Background
 
-`todo-four-display-fixes` made a strip cell whose thumbnail encode panics read the panic's own message (libjpeg's) with no path, showed `The 1:1 view of this file could not be shown.` over the 1:1 canvas when the current file's crop read fails, reworded the `Rewrite Sidecars from Index…` dialog's third row to `N files with no judgment on record (skipped)`, and drew the strip no taller than leaves the preview `stripheight::PREVIEW_MIN` in a shorter window, the user's height kept. Unit tests cover each rule; nobody has seen them in the running app. The step's checkbox was ticked on the automated criteria only. Existing error rows keep the old text until Clear Cache or a change of the file (`EXTRACTOR_VERSION` was not bumped), so start from a fresh `--index`. Plan: `docs/plans/20261123-todo-four-display-fixes/plan.md`. Files: `crates/core/src/scan.rs`, `crates/app/src/zoom.rs`, `crates/app/src/empty.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/stripheight.rs`, `crates/app/src/main.rs`.
+`todo-four-display-fixes` made a strip cell whose thumbnail encode panics read the panic's own message (libjpeg's) with no path, showed `The 1:1 view of this file could not be shown.` over the 1:1 canvas when the current file's crop read fails, reworded the `Rewrite Sidecars from Index…` dialog's third row to `N files with no judgment on record (skipped)`, and drew the strip no taller than leaves the preview `stripheight::PREVIEW_MIN` in a shorter window, the user's height kept. Unit tests cover each rule; nobody has seen them in the running app. The step's checkbox was ticked on the automated criteria only. Existing error rows keep the old text until Clear Cache or a change of the file (`EXTRACTOR_VERSION` was not bumped), so start from a fresh `--index`. Plan: `docs/plans/_archived/20261123-todo-four-display-fixes/plan.md`. Files: `crates/core/src/scan.rs`, `crates/app/src/zoom.rs`, `crates/app/src/empty.rs`, `crates/app/src/sidecars.rs`, `crates/app/src/stripheight.rs`, `crates/app/src/main.rs`.
 
 Run each check with `--settings <fresh test store>`, `--index <fresh test index>` and `--log <test file>`, never the real store.
 
@@ -48,6 +48,18 @@ Run each check with `--settings <fresh test store>`, `--index <fresh test index>
 - [ ] On Windows, press `z` on those files. Expect `The 1:1 view of this file could not be shown.` centered over the canvas; paging to a good file shows its crop and no message, and `z` off shows the fit view's own state.
 - [ ] On Windows, drag the strip to `MAX`, then drag the window's bottom edge up. Expect the preview canvas to stay at 240 px or more; dragging the edge back down gives the strip its height back, and after a relaunch the stored height is still `MAX`.
 - [ ] On Windows, run `Rewrite Sidecars from Index…` in a folder with scanned but never-judged files that have no sidecar. Expect the third row to read `N files with no judgment on record (skipped)`.
+
+### App: measure shared_height against the strip wrapper's bounds on Linux (client-side decorations) and macOS
+
+#### Background
+
+`todo-four-display-fixes` draws the strip no taller than leaves the preview `stripheight::PREVIEW_MIN`, using `shared_height` in `crates/app/src/main.rs` (the viewport height less the client-side frame's top and bottom padding, `TITLE_BAR_HEIGHT` and `STATUS_ROW_HEIGHT`). The step's measurement ran only on GPUI's test platform on Windows (`bounds=936 computed=936` on every frame, through a temporary `canvas` in the wrapper `div` the `StripDrag` listener sits on). Nobody has run it on a real Linux window with client-side decorations, where `window_paddings` is non-zero, or on macOS. A mismatch would leave the preview a few px off `PREVIEW_MIN` in a short window. Plan: `docs/plans/_archived/20261123-todo-four-display-fixes/plan.md`. Files: `crates/app/src/main.rs` (`shared_height`), `docs/agents/app.md` (the strip-height section's "unmeasured" sentence).
+
+#### TODO
+
+- [ ] On Linux with client-side decorations, print the `StripDrag` wrapper's bounds height next to `shared_height(window)` (a temporary `canvas`, as in the Windows measurement). Expect the two equal on every frame, or correct `shared_height`.
+- [ ] On macOS, do the same measurement and expect the same result.
+- [ ] Replace the "unmeasured" sentence in `docs/agents/app.md`'s strip-height section with the result.
 
 ### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
 

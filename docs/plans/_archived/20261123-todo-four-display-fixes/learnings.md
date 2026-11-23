@@ -47,3 +47,10 @@
   would leave the preview a few px off `PREVIEW_MIN` in a short window.
   Basis: Step 1's measurement ran on GPUI's test platform only. File:
   `crates/app/src/main.rs` (`shared_height`).
+  Change: print the `StripDrag` wrapper's bounds height next to
+  `shared_height(window)` on a real Linux window with client-side
+  decorations and on macOS. Done when: the two are measured equal or
+  `shared_height` is corrected, and the "unmeasured" sentence in
+  `docs/agents/app.md`'s strip-height section is replaced by the result.
+  Suggested heading: `App: measure shared_height against the wrapper's
+  bounds on Linux (client-side decorations) and macOS`.

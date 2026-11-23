@@ -4629,7 +4629,11 @@ face icon keep their sizes.
   `shared_height` in `main.rs`, the window's viewport height less the
   client-side frame's top and bottom padding, `TITLE_BAR_HEIGHT` and
   `STATUS_ROW_HEIGHT`, computed rather than read from the wrapper's bounds so
-  it holds from the first frame. `Handpic::new` builds the strip at the drawn
+  it holds from the first frame. It matched the wrapper's bounds on every
+  frame on GPUI's test platform (Windows, 936 = 936); Linux with client-side
+  decorations (non-zero `window_paddings`) and macOS are unmeasured, so a
+  preview a few px off `PREVIEW_MIN` in a short window there points at this
+  arithmetic first. `Handpic::new` builds the strip at the drawn
   height and `observe_window_bounds` runs `fit_strip`, which calls
   `Strip::set_geometry` when the drawn height changes (the existing
   `strip_moved` and `zoom_resized` there follow it). A drag sets
