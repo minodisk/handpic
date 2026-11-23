@@ -170,3 +170,5 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 - The four PRs each edit `todo.md`, and most edit `docs/humans/usage.md` and its `.ja.md`, so they are merged in order.
 
 ## Progress
+
+- (2026-11-23) Step 1 complete
