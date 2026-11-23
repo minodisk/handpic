@@ -271,8 +271,7 @@ fn extract_analysis_unless(
             let faces = detection
                 .as_ref()
                 .map_or_else(Vec::new, |d| d.faces.clone());
-            let (cue, scored) =
-                whole_image_cue(&preview, arw.orientation, detection, &faces, cancel)?;
+            let (cue, scored) = whole_image_cue(&preview, arw.orientation, detection, cancel)?;
             (cue, faces, scored)
         }
     };
@@ -355,7 +354,6 @@ fn whole_image_cue(
     preview: &[u8],
     orientation: u16,
     detection: Option<Detection>,
-    faces: &[Face],
     cancel: &AtomicBool,
 ) -> Option<(Cue, Option<f64>)> {
     let Some(detection) = detection else {
@@ -373,7 +371,19 @@ fn whole_image_cue(
         if canceled(cancel) {
             return None;
         }
-        scored = score_gray(&luma(&rgb, width, height), width, height, None, None, faces).ok();
+        // Its own guard: a scoring panic must not take the cue with it.
+        scored = catch_unwind(AssertUnwindSafe(|| {
+            score_gray(
+                &luma(&rgb, width, height),
+                width,
+                height,
+                None,
+                None,
+                &detection.faces,
+            )
+        }))
+        .ok()
+        .and_then(Result::ok);
         face_cue_unless(&rgb, width, height, orientation, &face, detection, cancel).map(Ok)
     })?;
     Some((cue, scored))
@@ -1935,8 +1945,7 @@ mod tests {
         let shy = scored(FACE_CONFIDENCE.next_down(), 40.0);
         let faces = [small, large, shy];
         let found = whole(faces.to_vec());
-        let (cue, scored) =
-            whole_image_cue(&jpeg(64, 48), 1, found.clone(), &faces, &never).unwrap();
+        let (cue, scored) = whole_image_cue(&jpeg(64, 48), 1, found.clone(), &never).unwrap();
         assert_eq!(cue.face, Some(large));
         assert_eq!(cue.detection, found);
         let (rgb, w, h) = decode_rgb(&jpeg(64, 48)).unwrap();
@@ -1945,19 +1954,19 @@ mod tests {
 
         for none in [None, whole(Vec::new()), whole(vec![shy])] {
             assert_eq!(
-                whole_image_cue(&[0u8; 512], 1, none, &faces, &never),
+                whole_image_cue(&[0u8; 512], 1, none, &never),
                 Some((Cue::unknown(), None)),
                 "no judged face is unknown, with no decode"
             );
         }
         assert_eq!(
-            whole_image_cue(&[0u8; 512], 1, whole(vec![large]), &faces, &never),
+            whole_image_cue(&[0u8; 512], 1, whole(vec![large]), &never),
             Some((Cue::unknown(), None)),
             "a decode failure is unknown, with no score"
         );
         let set = AtomicBool::new(true);
         assert_eq!(
-            whole_image_cue(&jpeg(64, 48), 1, whole(vec![large]), &faces, &set),
+            whole_image_cue(&jpeg(64, 48), 1, whole(vec![large]), &set),
             None
         );
     }
