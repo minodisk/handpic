@@ -1122,9 +1122,13 @@ fn eyes_cmd(inputs: &[PathBuf]) -> Result<()> {
                 face,
                 ear,
                 pose,
+                presence,
                 model,
             })) => {
-                println!("{}", eyes_line(&name, crop, &face, ear, pose, model));
+                println!(
+                    "{}",
+                    eyes_line(&name, crop, &face, ear, pose, presence, model)
+                );
                 judged += 1;
                 t_model.push(model);
             }
@@ -1146,13 +1150,14 @@ fn eyes_cmd(inputs: &[PathBuf]) -> Result<()> {
     Ok(())
 }
 
-/// The face `eyes` judged in one file, upright, its EAR, its head pose and
-/// the model time.
+/// The face `eyes` judged in one file, upright, its EAR, its head pose, the
+/// mesh's presence logit and the model time.
 struct Judged {
     crop: bool,
     face: faces::Face,
     ear: Option<f64>,
     pose: Option<pose::Pose>,
+    presence: Option<f32>,
     model: f64,
 }
 
@@ -1168,13 +1173,16 @@ fn judge_file(path: &Path) -> Result<Option<Judged>> {
     let (upright, uw, uh) = faces::upright_rgb(&rgb, w, h, a.orientation);
     let face = faces::face_to_upright(stored, a.orientation, w, h);
     let t = Instant::now();
-    let points = eyes::landmarks_of(&upright, uw, uh, &face)?;
+    let fit = eyes::landmarks_of(&upright, uw, uh, &face)?;
     let model = t.elapsed().as_secs_f64() * 1000.0;
     Ok(Some(Judged {
         crop: focus.is_some(),
         face,
-        ear: points.as_deref().and_then(eyes::more_closed_ear),
-        pose: points.and_then(|p| pose::head_pose(&p, uw, uh)),
+        ear: fit.as_ref().and_then(|f| eyes::more_closed_ear(&f.points)),
+        pose: fit
+            .as_ref()
+            .and_then(|f| pose::head_pose(&f.points, uw, uh)),
+        presence: fit.map(|f| f.presence),
         model,
     }))
 }
@@ -1182,22 +1190,27 @@ fn judge_file(path: &Path) -> Result<Option<Judged>> {
 /// One file of `eyes`: the path taken, the judged face's box side (the
 /// longer of width and height) in preview pixels, the EAR of its more closed
 /// eye, the closed probability and the state (`unknown` below
-/// `eyes::EYES_MIN_FACE` or without an EAR), the head pose in degrees (`-`
-/// without one), and the model time.
+/// `eyes::EYES_MIN_FACE`, without an EAR, or when the presence logit turns
+/// the mesh down: `eyes::mesh_trusted`, `eyes::presence_judges_eyes`), the
+/// presence logit (`-` without a mesh), the head pose in degrees (`-`
+/// without one), and the model time. The EAR and the pose are printed raw.
 fn eyes_line(
     name: &str,
     crop: bool,
     face: &faces::Face,
     ear: Option<f64>,
     pose: Option<pose::Pose>,
+    presence: Option<f32>,
     model: f64,
 ) -> String {
     let side = face.width.max(face.height);
+    let believed =
+        presence.is_some_and(|p| eyes::mesh_trusted(face, p) && eyes::presence_judges_eyes(p));
     let judged = ear
-        .filter(|_| side >= eyes::EYES_MIN_FACE)
+        .filter(|_| side >= eyes::EYES_MIN_FACE && believed)
         .map(eyes::Eyes::from_ear);
     format!(
-        "{name}  {}  {side:.0}px  ear {}  {}  {}  model {model:.1}ms",
+        "{name}  {}  {side:.0}px  ear {}  {}  presence {}  {}  model {model:.1}ms",
         if crop { "crop" } else { "whole" },
         ear.map_or("-".into(), |e| format!("{e:.4}")),
         match judged {
@@ -1211,6 +1224,7 @@ fn eyes_line(
             ),
             None => "- unknown".into(),
         },
+        presence.map_or("-".into(), |p| format!("{p:.1}")),
         match pose {
             Some(p) => format!("yaw {:.1}  pitch {:.1}  roll {:.1}", p.yaw, p.pitch, p.roll),
             None => "yaw -  pitch -  roll -".into(),
@@ -1562,8 +1576,8 @@ mod tests {
             ..upright()
         };
         assert_eq!(
-            eyes_line("a.ARW", true, &face, Some(0.05), None, 49.04),
-            "a.ARW  crop  97px  ear 0.0500  0.93 closed  yaw -  pitch -  roll -  model 49.0ms"
+            eyes_line("a.ARW", true, &face, Some(0.05), None, Some(18.26), 49.04),
+            "a.ARW  crop  97px  ear 0.0500  0.93 closed  presence 18.3  yaw -  pitch -  roll -  model 49.0ms"
         );
         let pose = pose::Pose {
             yaw: 12.34,
@@ -1571,8 +1585,20 @@ mod tests {
             roll: 0.0,
         };
         assert_eq!(
-            eyes_line("b.DNG", false, &face, Some(0.3), Some(pose), 50.0),
-            "b.DNG  whole  97px  ear 0.3000  0.01 open  yaw 12.3  pitch -5.1  roll 0.0  model 50.0ms"
+            eyes_line("b.DNG", false, &face, Some(0.3), Some(pose), Some(-12.0), 50.0),
+            "b.DNG  whole  97px  ear 0.3000  0.01 open  presence -12.0  yaw 12.3  pitch -5.1  roll 0.0  model 50.0ms"
+        );
+        assert_eq!(
+            eyes_line("e.DNG", false, &face, Some(0.3), Some(pose), Some(-12.5), 50.0),
+            "e.DNG  whole  97px  ear 0.3000  - unknown  presence -12.5  yaw 12.3  pitch -5.1  roll 0.0  model 50.0ms"
+        );
+        let side = faces::Face {
+            right_eye: (25.0, 25.0),
+            ..face
+        };
+        assert_eq!(
+            eyes_line("f.ARW", true, &side, Some(0.3), None, Some(-0.5), 50.0),
+            "f.ARW  crop  97px  ear 0.3000  - unknown  presence -0.5  yaw -  pitch -  roll -  model 50.0ms"
         );
         let small = faces::Face {
             width: 40.0,
@@ -1580,12 +1606,12 @@ mod tests {
             ..upright()
         };
         assert_eq!(
-            eyes_line("c.ARW", true, &small, Some(0.05), Some(pose), 48.0),
-            "c.ARW  crop  50px  ear 0.0500  - unknown  yaw 12.3  pitch -5.1  roll 0.0  model 48.0ms"
+            eyes_line("c.ARW", true, &small, Some(0.05), Some(pose), Some(20.0), 48.0),
+            "c.ARW  crop  50px  ear 0.0500  - unknown  presence 20.0  yaw 12.3  pitch -5.1  roll 0.0  model 48.0ms"
         );
         assert_eq!(
-            eyes_line("d.ARW", true, &face, None, None, 48.0),
-            "d.ARW  crop  97px  ear -  - unknown  yaw -  pitch -  roll -  model 48.0ms"
+            eyes_line("d.ARW", true, &face, None, None, None, 48.0),
+            "d.ARW  crop  97px  ear -  - unknown  presence -  yaw -  pitch -  roll -  model 48.0ms"
         );
     }
 

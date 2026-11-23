@@ -173,7 +173,8 @@ pub struct Analysis {
     /// scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
     /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the full
-    /// JPEG; `None` when the cue judged no face, the file has no usable larger
+    /// JPEG; `None` when the cue judged no face or its mesh was turned down
+    /// (`eyes::mesh_trusted`, no eye centers), the file has no usable larger
     /// JPEG, or on any failure.
     pub full_eye_sharp: Option<f64>,
 }
@@ -185,7 +186,8 @@ pub struct Analysis {
 /// preview (`eyes::judged_face`, `candidate::face_cue_unless`). Only
 /// an unreadable file is `Err`; a decode, detection or scoring failure, or a
 /// panic in any of them, is an unknown cue or no score; a mesh failure leaves
-/// the face its YuNet eye landmarks. The judged face's eyes are measured once
+/// the face its YuNet eye landmarks, a mesh `eyes::mesh_trusted` turns down
+/// leaves it no eye centers. The judged face's eyes are measured once
 /// more on the full JPEG, a second read, when the file holds one larger than
 /// the preview (`full_eye_sharp`). A JPEG file gets none of these, and is not
 /// read.
@@ -300,8 +302,8 @@ pub fn has_larger_jpeg(arw: &Arw) -> bool {
 }
 
 /// The full-size sharpness of the eyes of the face `cue` judged, whatever its
-/// state; `None` inside when the cue judged no face, the file has no larger
-/// JPEG or anything failed, `None` outside when `cancel` abandoned the file.
+/// state; `None` inside when the cue judged no face or has no eye centers (an
+/// untrusted mesh), the file has no larger JPEG or anything failed, `None` outside when `cancel` abandoned the file.
 /// The read goes through `slots`, the decode does not.
 fn full_eye_sharp(
     path: &Path,
