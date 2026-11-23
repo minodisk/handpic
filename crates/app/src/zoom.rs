@@ -78,6 +78,8 @@ pub struct Zoom<C> {
     in_flight: bool,
     held: Option<Held<C>>,
     shown: Option<(u64, Option<FocusLocation>, u16)>,
+    /// The page whose last read failed.
+    failed: Option<u64>,
 }
 
 impl<C> Default for Zoom<C> {
@@ -88,6 +90,7 @@ impl<C> Default for Zoom<C> {
             in_flight: false,
             held: None,
             shown: None,
+            failed: None,
         }
     }
 }
@@ -107,6 +110,15 @@ impl<C> Zoom<C> {
     /// files.
     pub fn placeholder_fits(&self) -> bool {
         self.held.as_ref().is_none_or(|held| held.seq == self.seq)
+    }
+
+    /// Whether the 1:1 view has nothing of the current page to show because
+    /// its read failed: zoomed, its last read failed and no crop of it is
+    /// held.
+    pub fn read_failed(&self) -> bool {
+        self.on
+            && self.failed == Some(self.seq)
+            && self.held.as_ref().is_none_or(|held| held.seq != self.seq)
     }
 
     fn holds(&self, viewport: (u32, u32)) -> bool {
@@ -153,6 +165,7 @@ impl<C> Zoom<C> {
             return None;
         }
         self.on = !self.on;
+        self.failed = None;
         if !self.on || self.holds(viewport) {
             return None;
         }
@@ -204,6 +217,7 @@ impl<C> Zoom<C> {
         }
         match crop {
             Ok((crop, requested)) => {
+                self.failed = None;
                 let release = self
                     .held
                     .replace(Held {
@@ -217,14 +231,17 @@ impl<C> Zoom<C> {
                     resized: self.on && requested != viewport,
                 }
             }
-            Err(error) => Arrived::Failed {
-                error,
-                release: if self.placeholder_fits() {
-                    None
-                } else {
-                    self.held.take().map(|held| held.crop)
-                },
-            },
+            Err(error) => {
+                self.failed = Some(seq);
+                Arrived::Failed {
+                    error,
+                    release: if self.placeholder_fits() {
+                        None
+                    } else {
+                        self.held.take().map(|held| held.crop)
+                    },
+                }
+            }
         }
     }
 
@@ -740,6 +757,60 @@ mod tests {
             }
         );
         assert!(z.page(true, VIEW).1.is_some());
+    }
+
+    #[test]
+    fn the_current_pages_failure_with_no_crop_of_it_is_a_failed_read() {
+        let mut z = Zoom::<u8>::default();
+        let r = on(&mut z, Instant::now());
+        assert!(!z.read_failed());
+        z.arrived(r.seq, Err("bad".into()), VIEW);
+        assert!(z.read_failed());
+
+        let mut z = Zoom::<u8>::default();
+        let r = on(&mut z, Instant::now());
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        let r = z.page(true, VIEW).1.unwrap();
+        z.arrived(r.seq, Err("bad".into()), VIEW);
+        assert!(z.read_failed());
+    }
+
+    #[test]
+    fn a_failed_re_cut_keeps_its_own_crop_and_is_no_failed_read() {
+        let mut z = Zoom::<u8>::default();
+        let r = on(&mut z, Instant::now());
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        let r = z.settled(z.resized().unwrap(), (900, 700)).unwrap();
+        z.arrived(r.seq, Err("bad".into()), VIEW);
+        assert!(!z.read_failed());
+    }
+
+    #[test]
+    fn a_failed_read_ends_with_a_page_a_later_read_or_leaving_the_1_1_view() {
+        let failed = || {
+            let mut z = Zoom::<u8>::default();
+            let r = on(&mut z, Instant::now());
+            z.arrived(r.seq, Err("bad".into()), VIEW);
+            z
+        };
+
+        let mut z = failed();
+        let r = z.page(true, VIEW).1.unwrap();
+        assert!(!z.read_failed());
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        assert!(!z.read_failed());
+
+        let mut z = failed();
+        let r = z.settled(z.resized().unwrap(), (900, 700)).unwrap();
+        assert!(z.read_failed());
+        z.arrived(r.seq, Ok((7, (900, 700))), (900, 700));
+        assert!(!z.read_failed());
+
+        let mut z = failed();
+        z.toggle(true, VIEW, Instant::now());
+        assert!(!z.read_failed());
+        assert!(z.toggle(true, VIEW, Instant::now()).is_some());
+        assert!(!z.read_failed());
     }
 
     #[test]

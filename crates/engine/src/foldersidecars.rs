@@ -31,7 +31,8 @@ pub const REWRITE_DRAIN: Duration = Duration::from_secs(10 * 60);
 
 /// What the rewrite's confirmation dialog counts: the
 /// rows with a judgment, the rows without one (whose existing sidecar is
-/// patched to "no judgment"), the listed RAWs with no row, which are
+/// patched to "no judgment"), the listed RAWs with no `ratings` row (no
+/// judgment on record, even when the scan indexed the file), which are
 /// skipped, and the format written (`SidecarFormat::setting`).
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Preview {
@@ -63,8 +64,10 @@ fn judged((_, rating, flag, label, _): &DirtyRow) -> bool {
     rating.is_some_and(|r| r != 0) || *flag != Flag::None || label.is_some()
 }
 
-/// The rows of `dir` to rewrite, those of the RAWs the folder lists, and the
-/// number of listed RAWs without a row. A row whose RAW is no longer listed
+/// The `ratings` rows of `dir` to rewrite, those of the RAWs the folder lists,
+/// and the number of listed RAWs without one. Such a row exists once a file
+/// is judged or its sidecar is read at a folder open, so a scanned file never
+/// judged and with no sidecar is counted here. A row whose RAW is no longer listed
 /// is left out, so no sidecar is minted next to a file that is gone. A folder
 /// listing no RAW (a JPEG folder is view-only) and one with no row for any
 /// listed RAW are refused.
@@ -512,6 +515,37 @@ mod tests {
         assert!(xmp::sidecar_path(&a).exists());
         assert!(!xmp::sidecar_path(&b).exists());
         assert!(!xmp::sidecar_path(&gone).exists());
+    }
+
+    #[test]
+    fn a_raw_the_scan_indexed_with_no_ratings_row_is_skipped_not_unjudged() {
+        let f = Fixture::new("scanned");
+        let a = f.raw("a.ARW");
+        let b = f.raw("b.ARW");
+        f.row(&a, Some(2), Flag::None, None);
+        index::lock(&f.index)
+            .write_batch(
+                &f.key,
+                &[(
+                    index::stat(&b).unwrap(),
+                    Err(handpic_core::scan::Failure::from("not really an ARW")),
+                )],
+            )
+            .unwrap();
+        assert!(index::lock(&f.index)
+            .entry(&b.to_string_lossy())
+            .unwrap()
+            .is_some());
+
+        assert_eq!(
+            preview(&f.key, &f.index, SidecarFormat::Xmp).unwrap(),
+            Preview {
+                judged: 1,
+                unjudged: 0,
+                skipped: 1,
+                format: "xmp"
+            }
+        );
     }
 
     #[test]

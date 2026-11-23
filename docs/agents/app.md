@@ -4110,7 +4110,8 @@ multiple: false`) and, in a `cx.spawn`, opens the chosen folder through
 `empty.rs` is the port of `empty.ts`: `state` judges, in `emptyState`'s
 order, no folder (`dir` unset), no listed file (`all` empty), no shown file
 (`files` empty, the text being `filter::FILTERED_TEXT`), a failed preview of
-the current file, else nothing; `text` gives the state's message and
+the current file, a failed 1:1 read of it (`ZoomFailed`, `ZOOM_FAILED_TEXT`,
+`The 1:1 view of this file could not be shown.`), else nothing; `text` gives the state's message and
 `open_hint` the no-folder one, the `open` action's keys from the live
 keymap's `bindings()` shown through `settingsmodal::display_key` and joined
 by ` or `, the key clause left out when `open` has none. `render` wraps the
@@ -4132,6 +4133,17 @@ the message is an `absolute`, full-size, centered child in `muted_foreground` at
   view). A page turn moves `pager.current()` off `shown`'s index, so the
   message goes at once; `refilter` moves `shown`'s index through
   `filter::shown_after`, so it stays with the failed file.
+- Rule: "the current file's 1:1 read failed" is `Zoom::read_failed`: the
+  1:1 view on, the last crop read for the current page (`seq`) failed and no
+  crop of that page held. `arrived`'s `Err` arm records the page, a
+  successful read of the current page clears it, `toggle` clears it and a
+  page bumps `seq` past it, so the message goes on a page turn, a later read
+  that succeeds (a re-cut after a resize) and `z` off, the fit view then
+  showing its own state. A failed re-cut after a resize keeps the page's own
+  crop on screen and shows no message. The status line still gets the
+  read's error (`crop_arrived`'s `fail`). Without this the 1:1 view of a file
+  whose crop read fails was a plain black canvas, with nothing to draw when
+  its preview had failed too.
 - Rule: a failure clears the image (`loaded`'s `Err` arm calls
   `clear_image`), and nothing puts an older one back: `Finished::Stale` never
   draws a failure and draws a success only after the pager has moved on, the
@@ -4609,9 +4621,26 @@ face icon keep their sizes.
   non-number or non-finite value means 128; a number out of range is
   clamped. Under `--auto` the strip starts at 128 and nothing is written
   (`remember_panels` off).
-- Rule: no `drawn` rule as the side panes have. The preview's minimum holds
-  during a drag only; a window made shorter afterwards takes the space from
-  the preview, as the fixed strip did.
+- Rule: the view keeps the height the user set (`strip_height`, from the
+  stored value, `DEFAULT` under `--auto`) apart from the drawn geometry,
+  which is `stripheight::drawn(strip_height, shared)`: no taller than leaves
+  the preview `PREVIEW_MIN` with the header and the gutter counted (the
+  bound `dragged` keeps), never under `MIN`. `shared` outside a drag is
+  `shared_height` in `main.rs`, the window's viewport height less the
+  client-side frame's top and bottom padding, `TITLE_BAR_HEIGHT` and
+  `STATUS_ROW_HEIGHT`, computed rather than read from the wrapper's bounds so
+  it holds from the first frame. It matched the wrapper's bounds on every
+  frame on GPUI's test platform (Windows, 936 = 936); Linux with client-side
+  decorations (non-zero `window_paddings`) and macOS are unmeasured, so a
+  preview a few px off `PREVIEW_MIN` in a short window there points at this
+  arithmetic first. `Handpic::new` builds the strip at the drawn
+  height and `observe_window_bounds` runs `fit_strip`, which calls
+  `Strip::set_geometry` when the drawn height changes (the existing
+  `strip_moved` and `zoom_resized` there follow it). A drag sets
+  `strip_height` to the dragged height, `press_strip` starts from the drawn
+  height, and only a drag writes `stripHeight`, so a shorter window draws
+  the strip shorter, a taller one gives the user's height back, and a resize
+  writes nothing.
 - Seen (2026-11-22, Windows 11): `SIZENS` on y 802 to 807 under the line at
   801; the releases writing the height at once, outside the window
   included; `--auto 40` starting at 128 with 199 stored and writing nothing;

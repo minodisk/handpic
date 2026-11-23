@@ -147,11 +147,12 @@ fn extract_unless(
     })) {
         Ok(Ok(thumbnail)) => thumbnail,
         Ok(Err(e)) => return Some(Err(failed(e.to_string()))),
-        Err(_) => {
-            return Some(Err(failed(format!(
-                "panic while encoding the thumbnail of {}",
-                path.display()
-            ))))
+        Err(e) => {
+            let message = match e.downcast::<String>() {
+                Ok(message) => *message,
+                Err(_) => "the thumbnail could not be made".to_string(),
+            };
+            return Some(Err(failed(message)));
         }
     };
     if canceled(cancel) {
@@ -1904,6 +1905,18 @@ mod tests {
         assert_eq!(failure.orientation, 6);
         assert!(failure.shot.is_some());
         assert_eq!(failure.to_string(), failure.message);
+        assert!(
+            failure.message.starts_with("libjpeg fatal error:"),
+            "{}",
+            failure.message
+        );
+        assert!(!failure.message.contains("panic"), "{}", failure.message);
+        assert!(
+            !failure.message.contains(&*paths[4].to_string_lossy()),
+            "{}",
+            failure.message
+        );
+        assert!(!failure.message.contains("bad.ARW"), "{}", failure.message);
         assert!(extract(&dir.join("missing.ARW"))
             .unwrap_err()
             .shot
