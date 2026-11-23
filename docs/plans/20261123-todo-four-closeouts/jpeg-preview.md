@@ -10,7 +10,7 @@ large folders. Per folder: one warm run, then prefetch on and
 `--no-prefetch` alternated, three runs each. The first `page` line of a run
 is dropped. Under `--auto` the window is the default one, so the canvas, and
 the `n/8` `fitscale::scale_for` picks, are the default window's: the JPEGs
-decoded at 1/8 or 2/8 (a 7910x6328 frame to 989x791). Percentiles are the
+decoded at 1/8 to 3/8 (a 7910x6328 frame to 989x791). Percentiles are the
 nearest rank of each run; the table gives the median of the three runs' p50
 / p95, in ms.
 
