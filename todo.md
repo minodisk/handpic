@@ -1236,13 +1236,13 @@ Files: `crates/app/src/main.rs` (`strip_tips`, `paint_face_icon`), `crates/app/s
 
 #### Background
 
-Seen on Windows 11 on 2026-11-23 (results in `docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`): on screen the strip's stars are drawn with a dark outer outline while the face focus icons (Good / Low) are not; the user wants the strip's icon drawing unified. In the code both paint dark copies under the mark (`paint_marks`, the stars "over a 1 px dark copy"; `paint_face_icon`, "over dark copies for the halo" at `overlay::HALO`), so why the icon's halo does not show is not known.
+Seen on Windows 11 on 2026-11-23 (results in `docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`): on screen the strip's stars are drawn with a dark outer outline while the face focus icons (Good / Low) are not; the user wants the strip's icon drawing unified. In the code both paint dark copies under the mark (`paint_marks`, the stars "over a 1 px dark copy"; `paint_face_icon`, over dark copies for the `drop-shadow` halo, at `overlay::HALO`), so why the icon's halo does not show is not known. `paint_face_icon` also draws the closed-eyes mark in slot 1 (#1257), which the run (`3918064c`) predates, so it was not seen.
 
 Files: `crates/app/src/main.rs` (`paint_marks`, `paint_face_icon`, `paint_burst_badge`), `crates/app/src/overlay.rs` (`HALO`).
 
 #### TODO
 
-- [ ] Find why the face focus icon's halo does not show, decide one drawing for the strip's marks (the stars, the face focus icon, the burst badge) with the user, and apply it.
+- [ ] Find why the face focus icon's halo does not show, decide one drawing for the strip's marks (the stars, the face focus icon, the closed-eyes mark, the burst badge) with the user, and apply it.
 
 ### App: real-device checks of the gpui-component adoption (theme, Input, controls, menus, Root, the three Dialogs)
 
