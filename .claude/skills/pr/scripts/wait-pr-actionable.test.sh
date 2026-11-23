@@ -151,9 +151,21 @@ expect "fails, then succeeds" 0 30 \
 	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
 	'ACTION=ready' 'mergeStateStatus=CLEAN'
 
-expect "fails on every call of the slice" 1 2 	FAIL 	FAIL 	FAIL -- 	'[elapsed 0s] pr-status.sh failed; retrying in 1s' 	'[elapsed 1s] pr-status.sh failed; retrying in 1s' 	'wait-pr-actionable.sh: pr-status.sh failed on every call for 2s'
+expect "fails on every call of the slice" 1 2 \
+	FAIL \
+	FAIL \
+	FAIL -- \
+	'[elapsed 0s] pr-status.sh failed; retrying in 1s' \
+	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
+	'wait-pr-actionable.sh: pr-status.sh failed on every call for 2s'
 
-expect "fails at the end after a success" 2 2 	"$(pr BLOCKED "${jobs_running}")" 	"$(pr BLOCKED "${jobs_running}")" 	FAIL -- 	'[elapsed 1s] ACTION=wait; retrying in 1s' 	'wait-pr-actionable.sh: timed out after 2s (last call failed; reporting the last successful state)' 	'ACTION=wait'
+expect "fails at the end after a success" 2 2 \
+	"$(pr BLOCKED "${jobs_running}")" \
+	"$(pr BLOCKED "${jobs_running}")" \
+	FAIL -- \
+	'[elapsed 1s] ACTION=wait; retrying in 1s' \
+	'wait-pr-actionable.sh: timed out after 2s (last call failed; reporting the last successful state)' \
+	'ACTION=wait'
 
 expect "a failed call keeps the blocked grace" 0 2 \
 	"$(pr BLOCKED "${jobs_done},${ci_done}")" \
