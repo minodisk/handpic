@@ -446,9 +446,10 @@ embedded JPEG's offset / length, `0x5c` / `0x60` the RAF directory (tags
   or the crop, and is 1.3 to 5.5 MiB, so it never fits the 1 MiB prefix and
   every open costs one ranged read. Its Exif segment ends at byte 65,600, so
   `read_metadata` always parses from the prefix.
-- The JPEG is 2.5 to 2.7 times the ARW preview's long edge, so `scan`
-  thumbnails a RAF with `thumbnail_jpeg_near` (404 px) as it does a JPEG
-  file; the fixed 2/8 scale gave 1000 to 1104 px and ~110 KB thumbnails.
+- The JPEG is 2.5 to 2.7 times the ARW preview's long edge. `scan`
+  thumbnails every file, a RAF included, with `thumbnail_jpeg_near` towards
+  404 px; the fixed 2/8 scale RAW previews took before gave a RAF 1000 to
+  1104 px and ~110 KB thumbnails.
 - The Exif carries `Make` `FUJIFILM`, `Orientation` (6 and 8 on the X-H2 and
   X100VI portrait samples) and `SubSecTimeOriginal` only on bodies from about
   2023 (GFX100 II, X100VI, X-T50, X-M5, X-E5, X-T30 III, GFX100RF and

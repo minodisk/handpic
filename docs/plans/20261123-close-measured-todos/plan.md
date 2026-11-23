@@ -107,7 +107,7 @@ distance stays out of scope.
       repeat it.
     - Commit type `docs`.
 
-- [ ] Step 2: Thumbnail every format towards 404 px, and close todo item 3
+- [x] Step 2: Thumbnail every format towards 404 px, and close todo item 3
   - Done when:
     - `crates/core/src/scan.rs` calls
       `thumbnail_jpeg_near(.., JPEG_THUMBNAIL_LONG_EDGE, THUMBNAIL_QUALITY)`

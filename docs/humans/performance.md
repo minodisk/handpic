@@ -36,8 +36,9 @@ decode only, not keypress to pixels.
 | 1 | 0.39s | 83 files/s | 12.1ms / 14.1ms |
 | 12 | 0.05s | 596 files/s | 17.3ms / 24.2ms |
 
-Thumbnails (528x352): 30,231 bytes per file on average (967,419 bytes over
-32 files), against ~19KB on the α7 V.
+Thumbnails (528x352 at the time): 30,231 bytes per file on average (967,419
+bytes over 32 files), against ~19KB on the α7 V. They are 404x270 now (see
+"Thumbnail size (Windows 11)" below).
 
 ## Nikon NEF, Canon CR3 and OM System / Olympus ORF (raw.pixls.us samples, Windows)
 
@@ -55,8 +56,9 @@ Measured with `handpic-cli bench` / `scan` on one raw.pixls.us sample per body
 
 A preview past the prefix costs one ranged read, not a whole-file read. The
 full-size JPEG is always a ranged read; on CR3 it sits at the start of `mdat`.
-The NEF and CR3 thumbnails come out ~405x270 as on ARW. The ORF thumbnails
-come out 800x600, since the 3200x2400 preview is scaled at the fixed 2/8.
+The NEF and CR3 thumbnails come out 404x270 as on ARW. The ORF thumbnails
+come out 404x303 (800x600 while a RAW preview was scaled at a fixed 2/8; see
+"Thumbnail size (Windows 11)" below).
 
 ## Fujifilm RAF (raw.pixls.us samples, Windows)
 
@@ -75,9 +77,10 @@ compressed and an uncompressed sample per body, plus two crop-mode samples).
 
 A RAF carries one JPEG, so the preview and the 1:1 view decode the same
 image. Since it is far larger than the ~1620x1080 previews of the other
-formats, the RAF thumbnail is decoded with `thumbnail_jpeg_near` towards
+formats, the RAF thumbnail was decoded with `thumbnail_jpeg_near` towards
 `JPEG_THUMBNAIL_LONG_EDGE` as for plain JPEG files, instead of the fixed 2/8
-scale: the thumbnails come out 404 px on the long edge (19.4KB mean, against
+scale the other RAW formats then took (every format takes it now, see
+"Thumbnail size (Windows 11)" below): the thumbnails come out 404 px on the long edge (19.4KB mean, against
 1104x736 and ~111KB at 2/8), and the thumbnail encode drops from 37-107ms to
 16-60ms per file. The per-file scan cost stays high because the sharpness
 score decodes the whole JPEG and, with no AF point read, faces are searched on
@@ -113,6 +116,34 @@ So the sharpness score keeps its full-size decode and the RAF scan was left
 unchanged. See "DCT-scaled decode for the whole-image search (Windows 11)"
 below for the earlier measurement of a scaled decode on the smaller DNG and
 ARW previews.
+
+## Thumbnail size (Windows 11)
+
+`scan` thumbnails every file with `thumbnail_jpeg_near` towards
+`JPEG_THUMBNAIL_LONG_EDGE` (404 px on the long edge): the preview is decoded
+at the smallest `n/8` scale whose long edge is not below 404 px and
+box-averaged down to it. Until 2026-11-24 a RAW preview other than a RAF's
+was decoded at a fixed 2/8, which left a preview larger than the usual
+~1620x1080 well over 404 px: the SIGMA fp L, whose preview tier falls back to
+its full-size JPEG, gave thumbnails of over ten times the pixels of other
+bodies'.
+
+Measured on 2026-11-23 on Windows 11 (i7-13700) with release builds, before
+and after the change. The machine was shared with other sessions' cargo builds
+(CPU load about 100% at times) and the runs were not idle-gated, so treat the
+times as rough. The decode is the strip's per-cell decode of the stored
+thumbnail, the minimum of 5:
+
+| Body (preview) | Before | After |
+|---|---|---|
+| SIGMA fp L (9520x6328) | 2380x1582, 141,610B, encode 815ms, decode 12.80ms | 404x269, 9,829B, encode 405ms, decode 0.31ms |
+| SIGMA fp (6000x4000, 3 files) | 1500x1000, 73-86KB, encode 204-250ms, decode 5.2-5.4ms | 404x270, 11-15KB, encode 109-153ms, decode 0.34-0.37ms |
+| OM System / Olympus ORF E-M10 II (3200x2400, 3 files) | 800x600, 47-74KB, decode 2.1-4.1ms | 404x303, 15-19KB, decode 0.43-0.80ms |
+| Sony ARW ILCE-1M2 (1616x1080) | 404x270, about 8.8KB | identical |
+
+`EXTRACTOR_VERSION` was not bumped for this change, so the rows indexed
+before it keep their larger thumbnails until the file changes or the cache is
+cleared (`Clear Cache` in the settings' Cache page).
 
 ## Per-page preview read
 
