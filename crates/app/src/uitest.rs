@@ -631,7 +631,7 @@ fn a_strip_name_wider_than_its_cell_is_shortened_in_the_middle() {
 
 /// A Clear Cache an MCP client confirmed during a re-listing, whose end, the
 /// idle point, passes while the dialog `ui` shows is up: the clear stays held.
-fn hold_a_clear_past_the_idle_point(ui: &mut Ui) {
+pub(crate) fn hold_a_clear_past_the_idle_point(ui: &mut Ui) {
     ui.update(|view, cx| {
         view.resync.open();
         view.relist(cx);
@@ -654,22 +654,6 @@ fn canceling_the_trash_dialog_drains_a_held_clear() {
     hold_a_clear_past_the_idle_point(&mut ui);
     let running = ui.update(|view, cx| {
         view.dismiss_trash(cx);
-        view.clear.running()
-    });
-    assert!(running);
-    ui.wait_until("the clear's end", |view| !view.clear.running());
-}
-
-#[test]
-fn canceling_a_folder_dialog_drains_a_held_clear() {
-    let mut ui = Ui::open();
-    let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
-    let path = folder.to_string_lossy().into_owned();
-    ui.update(|view, cx| view.folder_op(crate::context::Action::RewriteSidecars, path, cx));
-    ui.wait_until("the rewrite's dialog", |view| view.folderops.dialog_open());
-    hold_a_clear_past_the_idle_point(&mut ui);
-    let running = ui.update(|view, cx| {
-        view.dismiss_folder_dialog(true, cx);
         view.clear.running()
     });
     assert!(running);
