@@ -47,7 +47,7 @@ Scope rules for every step:
 
 ## Steps
 
-- [ ] Step 1: The quit handler waits for a scan a re-listing is stopping (item 1)
+- [x] Step 1: The quit handler waits for a scan a re-listing is stopping (item 1)
   - Done when:
     - The app-level `on_app_quit` handler waits, bounded by `STOP_TIMEOUT`
       in total, for a scan that `list` took out of the holder and is still
@@ -328,3 +328,5 @@ Risks:
   `learnings.md` for the wrap-up to curate.
 
 ## Progress
+
+(2026-11-23) Step 1 complete

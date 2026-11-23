@@ -780,8 +780,12 @@ impl Handpic {
             App::on_app_quit(cx, move |_| {
                 let started = Instant::now();
                 let stopped = running.stop_within(scan::STOP_TIMEOUT);
+                let retired = stopped
+                    .retired
+                    .map_or("none".to_string(), |r| r.to_string());
                 log::info!(
-                    "quit: scan stopped={stopped} in {}ms",
+                    "quit: scan stopped={} retired={retired} in {}ms",
+                    stopped.held,
                     started.elapsed().as_millis()
                 );
                 let stored = stores.drain(sidecar::DRAIN_TIMEOUT);
@@ -3248,7 +3252,7 @@ impl Handpic {
         let (wanted, max) = (self.wanted, self.max);
         let index = self.index.clone().ok();
         let reader = self.reader.clone();
-        let previous = self.scan.take();
+        let previous = self.scan.retire();
         self.scan_status.clear();
         let eviction = self.eviction.take();
         let earlier = self.settled.take();

@@ -352,7 +352,8 @@ runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
 a thread of its own, their progress reaching
 the view through one channel and the status line's `Status` (cleared whenever
 a re-listing stops the scan), the scan held in the `Running` the app's quit
-handler shares, which stops it within `STOP_TIMEOUT` on every quit,
+handler shares, which stops it, and one a re-listing is still stopping,
+within `STOP_TIMEOUT` on every quit,
 `src/strip.rs` is the thumbnail strip's pure
 model (the cells' `Geometry`, the image box, cell and pitch `Geometry::of`
 derives from the strip's height, the scroll offset, the range kept with `RANGE_MARGIN`,
