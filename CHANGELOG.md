@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/minodisk/handpic/compare/v2.0.0...v2.0.1) (2026-11-23)
+
+
+### Bug Fixes
+
+* **app:** ship the executable as Handpic.exe and Contents/MacOS/Handpic ([#1241](https://github.com/minodisk/handpic/issues/1241)) ([3bafc9b](https://github.com/minodisk/handpic/commit/3bafc9baddfce8817f62036e21dbe2eab9beaa04))
+
 ## [2.0.0](https://github.com/minodisk/handpic/compare/v1.10.0...v2.0.0) (2026-11-22)
 
 
