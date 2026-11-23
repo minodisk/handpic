@@ -238,8 +238,16 @@ fn frame(path: &Path) -> Result<Frame> {
             .flatten();
         let mesh_ms = meshed.then(|| t.elapsed().as_secs_f64() * 1000.0);
         let landmarks = mesh.as_ref().and_then(|m| Landmarks::of(&m.points));
-        let centers = landmarks.map_or([face.left_eye, face.right_eye], |l| {
-            [l.left_eye, l.right_eye]
+        // As the scan's `cue_of`: a mesh `eyes::mesh_trusted` turns down
+        // leaves no eye centers, so no `full_sharp`. The EAR, pose, offset
+        // and gap columns stay the raw mesh's, like the `eyes` line's.
+        let trusted = mesh
+            .as_ref()
+            .is_none_or(|m| eyes::mesh_trusted(face, m.presence));
+        let centers = trusted.then(|| {
+            landmarks.map_or([face.left_eye, face.right_eye], |l| {
+                [l.left_eye, l.right_eye]
+            })
         });
         Judged {
             face: *face,
@@ -255,7 +263,8 @@ fn frame(path: &Path) -> Result<Frame> {
                 .and_then(|m| candidate::edge_gap(face, &m.points, w, h)),
             full_sharp: full
                 .as_deref()
-                .and_then(|full| fullsharp::full_eye_sharpness(full, centers, w)),
+                .zip(centers)
+                .and_then(|(full, centers)| fullsharp::full_eye_sharpness(full, centers, w)),
         }
     };
     let (point, crop) = match focus {

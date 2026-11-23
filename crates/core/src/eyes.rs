@@ -856,7 +856,10 @@ mod tests {
         let (sub, win) = crop_rgb(&rgb, w, h, center, side);
         let (points, presence) = landmarks(input_tensor(&sub, win.width, win.height)).unwrap();
         assert_eq!(points.len(), LANDMARKS);
-        println!("presence {presence:.1}");
+        assert!(
+            presence > SIDE_FACE_PRESENCE && presence_judges_eyes(presence),
+            "presence {presence}"
+        );
         for p in &points {
             assert!((0.0..=INPUT as f32).contains(&p[0]), "{p:?}");
             assert!((0.0..=INPUT as f32).contains(&p[1]), "{p:?}");
