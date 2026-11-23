@@ -328,3 +328,5 @@ Risks:
   `learnings.md` for the wrap-up to curate.
 
 ## Progress
+
+(2026-11-23) Step 1 complete
