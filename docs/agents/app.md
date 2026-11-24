@@ -2939,7 +2939,7 @@ screen, no page read out, no scan pass, no folder rename), from
 current page's crop once `zoom.shown` has stamped the page, so `z` paints a
 crop already held (`Toggled::Held`). Zoomed with the current page's crop held,
 it reads the next neighbour's (the first of `prefetch::neighbours` in the
-`heading` direction) into a slot of its own keyed by the file
+`heading` direction, which keeps the paging direction across a wrap) into a slot of its own keyed by the file
 (`Request::ahead`, `ahead_arrived`); `page` makes it the held crop when the
 new current file is that one at the same viewport, so the page shows it
 without a read, and a page onto it while it is still in flight takes it when

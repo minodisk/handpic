@@ -46,9 +46,13 @@ pub struct Heading {
 }
 
 impl Heading {
-    pub fn to(&mut self, index: usize) {
+    /// `len` is the list's length: a move between the first and the last
+    /// file of more than two is the pager wrapping, so it goes on in the
+    /// direction it was paged, not the one the index moved.
+    pub fn to(&mut self, index: usize, len: usize) {
         if index != self.last {
-            self.direction = if index < self.last {
+            let wrapped = len > 2 && self.last.abs_diff(index) == len - 1;
+            self.direction = if (index < self.last) != wrapped {
                 Direction::Back
             } else {
                 Direction::Forward
@@ -367,15 +371,29 @@ mod tests {
     }
 
     #[test]
+    fn the_heading_keeps_the_paging_direction_across_a_wrap() {
+        let mut heading = Heading::default();
+        heading.to(9, 10);
+        heading.to(0, 10);
+        assert_eq!(heading.direction(), FORWARD);
+        heading.to(9, 10);
+        assert_eq!(heading.direction(), Direction::Back);
+        let mut two = Heading::default();
+        two.to(1, 2);
+        two.to(0, 2);
+        assert_eq!(two.direction(), Direction::Back);
+    }
+
+    #[test]
     fn the_heading_follows_the_last_move_and_holds_on_a_reshow() {
         let mut heading = Heading::default();
         assert_eq!(heading.direction(), FORWARD);
-        heading.to(3);
-        heading.to(2);
+        heading.to(3, 10);
+        heading.to(2, 10);
         assert_eq!(heading.direction(), Direction::Back);
-        heading.to(2);
+        heading.to(2, 10);
         assert_eq!(heading.direction(), Direction::Back);
-        heading.to(5);
+        heading.to(5, 10);
         assert_eq!(heading.direction(), FORWARD);
     }
 

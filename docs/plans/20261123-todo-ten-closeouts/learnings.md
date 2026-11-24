@@ -74,10 +74,11 @@
   last file, read after the next one, so `holds(files[1])` still settles.
 - `crowded` needs no change: `plan` keeps only the wanted paths in it, and a
   wrapped neighbour is just another wanted path.
-- `Heading` still reads a `Next` wrap (last to first) as `Back`, since the
-  index fell. The ring then wants the file just left first; it is already
-  held through `keep`, so the next read is still the file after the first.
-  No miss follows from it; left as is.
+- `Heading::to` takes the list length and reads a move between the first
+  and the last file (of more than two) as the pager wrapping, so a `Next` wrap
+  stays `Forward` and a `Previous` wrap stays `Back`. Without it `prefetch_crop`,
+  which takes only the first neighbour, would read the crop of the file just
+  left (Round 1 review, item 1).
 - `prefetch_crop` (the 1:1 crop read ahead while zoomed) takes the first
   neighbour, so it now also reads across the wrap.
 - Local CI and the `--auto 60` re-run were skipped on the user's instruction
