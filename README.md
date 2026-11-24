@@ -21,8 +21,24 @@ verified cameras, see [docs/humans/cameras.md](./docs/humans/cameras.md).
 
 ### Install
 
-Download the file for your OS from the latest release (2.0.0 or later) on the
-[Releases page](https://github.com/minodisk/handpic/releases):
+Run one line in a terminal. It installs the latest release where Handpic
+updates itself, with no first-launch permission step:
+
+- **macOS** (Apple Silicon or Intel; installs `/Applications/Handpic.app`)
+  and **Linux** (x86_64; installs `~/.local/bin/handpic`, needs Python 3):
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/minodisk/handpic/main/install.sh | sh
+  ```
+
+- **Windows** (in PowerShell; installs into `%LOCALAPPDATA%\Programs\Handpic`):
+
+  ```powershell
+  irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex
+  ```
+
+Or download the file for your OS from the latest release (2.0.0 or later) on
+the [Releases page](https://github.com/minodisk/handpic/releases):
 
 | OS                   | File                                                                                    |
 | -------------------- | --------------------------------------------------------------------------------------- |
@@ -31,15 +47,16 @@ Download the file for your OS from the latest release (2.0.0 or later) on the
 | Windows              | `Handpic-<version>-windows-x64-setup.exe` (or the portable `…-windows-x64.zip`)         |
 | Linux                | `Handpic-<version>-linux-x64.tar.gz` with `install.sh` (or `handpic_<version>_amd64.deb`) |
 
-Handpic is not signed by Apple or Microsoft, so the first launch needs your
-permission once:
+Handpic is not signed by Apple or Microsoft, so the first launch of a
+downloaded file needs your permission once:
 
 - **macOS**: on macOS 15 and later, after the first launch is blocked, open
   System Settings → Privacy & Security → Open Anyway. On macOS 14 and earlier,
-  right-click `Handpic.app` → Open.
+  right-click `Handpic.app` → Open. Or run
+  `xattr -d com.apple.quarantine /Applications/Handpic.app` once.
 - **Windows**: in the SmartScreen warning, More info → Run anyway.
 
-After that, Handpic updates itself. How to install each file, and how updates
+Either way, Handpic then updates itself. How to install each file, and how updates
 work, is in [docs/humans/usage.md](./docs/humans/usage.md#installing). To
 build from source instead, see [CONTRIBUTING.md](./CONTRIBUTING.md).
 

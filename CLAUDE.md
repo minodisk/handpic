@@ -639,6 +639,15 @@ test-only `src/uitest.rs` both call (`Ui`, the view opened on GPUI's
 `wait_until`, a bounded real-time wait for the app's own threads; its drop
 quitting the app and removing the folder, and the UI tests).
 
+At the repository root, `install.sh` (POSIX sh, shellchecked by
+`mise run lint`) and `install.ps1` are the one-line installers the docs lead
+with (`curl -fsSL …/main/install.sh | sh`, `irm …/main/install.ps1 | iex`):
+they resolve the latest release, check the download against its
+`SHA256SUMS` and install it where the updater expects it,
+`/Applications/Handpic.app` on macOS, `~/.local/bin/handpic` on Linux
+through the release's `install.sh` asset (`packaging/linux/install.sh`, a
+different script), and the silent per-user setup on Windows.
+
 The `.ts` files a `crates/app` module is called a port of (`sort.ts`,
 `filter.ts`, `focus.ts` and the rest), and the Tauri commands some are ported
 from, were the removed Tauri app's frontend and commands; they are in git

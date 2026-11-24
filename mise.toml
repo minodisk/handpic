@@ -39,7 +39,7 @@ run = """
 set -euo pipefail
 cargo fmt --all -- --check
 cargo fmt --manifest-path crates/app/Cargo.toml --all -- --check
-shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh
+shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh install.sh
 actionlint
 lychee --offline --include-fragments --no-progress --exclude-path 'docs.plans.review-history' '*.md' 'docs/**/*.md' '.claude/**/*.md'
 bash .claude/skills/merge/scripts/check-merge-approval.test.sh

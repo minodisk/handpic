@@ -16,7 +16,21 @@
 
 ### インストール
 
-[Releases ページ](https://github.com/minodisk/handpic/releases)の最新リリース（2.0.0 以降）から、OS に合ったファイルをダウンロードしてください。
+ターミナルで 1 行を実行してください。最新リリースを Handpic が自分でアップデートできる場所にインストールし、最初の起動で許可する手順もありません。
+
+- **macOS**（Apple Silicon または Intel。`/Applications/Handpic.app` をインストールします）と **Linux**（x86_64。`~/.local/bin/handpic` をインストールします。Python 3 が必要です）:
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/minodisk/handpic/main/install.sh | sh
+  ```
+
+- **Windows**（PowerShell で。`%LOCALAPPDATA%\Programs\Handpic` にインストールします）:
+
+  ```powershell
+  irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex
+  ```
+
+または、[Releases ページ](https://github.com/minodisk/handpic/releases)の最新リリース（2.0.0 以降）から、OS に合ったファイルをダウンロードしてください。
 
 | OS                         | ファイル                                                                                    |
 | -------------------------- | ------------------------------------------------------------------------------------------- |
@@ -25,12 +39,12 @@
 | Windows                    | `Handpic-<version>-windows-x64-setup.exe`（またはポータブル版の `…-windows-x64.zip`）       |
 | Linux                      | `Handpic-<version>-linux-x64.tar.gz` と `install.sh`（または `handpic_<version>_amd64.deb`） |
 
-Handpic は Apple や Microsoft の署名を受けていないので、最初の起動で一度だけ許可が必要です。
+Handpic は Apple や Microsoft の署名を受けていないので、ダウンロードしたファイルでは最初の起動で一度だけ許可が必要です。
 
-- **macOS**: macOS 15 以降では、最初の起動がブロックされた後に、システム設定 → プライバシーとセキュリティ →「このまま開く」を選びます。macOS 14 以前では、`Handpic.app` を右クリック →「開く」を選びます。
+- **macOS**: macOS 15 以降では、最初の起動がブロックされた後に、システム設定 → プライバシーとセキュリティ →「このまま開く」を選びます。macOS 14 以前では、`Handpic.app` を右クリック →「開く」を選びます。または、`xattr -d com.apple.quarantine /Applications/Handpic.app` を一度実行します。
 - **Windows**: SmartScreen の警告で「詳細情報」→「実行」を選びます。
 
-その後は Handpic が自分でアップデートします。ファイルごとのインストール方法とアップデートの仕組みは [docs/humans/usage.ja.md](./docs/humans/usage.ja.md#インストール) にあります。ソースからビルドする場合は [CONTRIBUTING.md](./CONTRIBUTING.md)（英語）を参照してください。
+どちらの方法でも、その後は Handpic が自分でアップデートします。ファイルごとのインストール方法とアップデートの仕組みは [docs/humans/usage.ja.md](./docs/humans/usage.ja.md#インストール) にあります。ソースからビルドする場合は [CONTRIBUTING.md](./CONTRIBUTING.md)（英語）を参照してください。
 
 **以前のアプリを使っていた場合**（1.10.0 まで。当時の名前は Riffle）: 以前のアプリはこのアプリへアップデートされません。上の手順で Handpic をインストールしてください。判定はサイドカーにあり、設定は一度だけ引き継ぎます。新しいインストールが引き継ぐものは [docs/humans/usage.ja.md](./docs/humans/usage.ja.md#以前のアプリから) を参照してください。
 
