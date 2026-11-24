@@ -2676,8 +2676,8 @@ mod tests {
             ]
         );
         assert_eq!(restored.failed_items, 2);
-        assert_eq!(bin.calls.into_inner(), [vec!["b.ARW"]]);
         assert!(!bin.exists(Path::new("a.xmp")));
+        assert_eq!(bin.calls.into_inner(), [vec!["b.ARW"]]);
     }
 
     #[test]
@@ -2713,12 +2713,12 @@ mod tests {
             [("fail.ARW", "refused"), ("fail.xmp", RAW_NOT_RESTORED)]
         );
         assert_eq!(restored.failed_items, 1);
+        assert!(!bin.exists(Path::new("fail.xmp")));
         assert_eq!(
             bin.calls.into_inner(),
             [vec!["a.ARW", "fail.ARW", "c.ARW"], vec!["a.xmp"]]
         );
         assert_eq!(bin.one_by_one.into_inner(), ["fail.ARW"]);
-        assert!(!bin.exists(Path::new("fail.xmp")));
     }
 
     #[test]
