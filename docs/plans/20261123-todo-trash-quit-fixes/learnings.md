@@ -58,3 +58,33 @@
   skipped for this step by the user's decision, since this machine runs out
   of memory; only `mise run fmt` ran locally, and the PR's GitHub Actions
   checks verify the build, clippy and the new tests.
+
+## Step 3: a redo of Delete Sidecars clears a closed folder's rows
+
+- Shape: `trash::Trashed` got `owner: Option<PathBuf>` (the RAW a sidecar
+  belongs to, set by `foldersidecars::delete` from each `Doomed`'s `raw`),
+  and what an undo keeps for the redo became `trash::Back { path, owner }`
+  (`Restored::back`, `Runs::undone` / `take_undone`). `Runs::rename_dir`
+  rebases `owner` in both the recorded runs and the undone ones.
+- `redo_run` now takes `index: Option<&Mutex<Index>>` and is a thin caller
+  of `trash::redo_back(runs, index, back, again)`, which runs the move
+  through the `again` closure (the real `move_again`, or `trash::redo` with
+  a fake mover in the test), puts each moved sidecar's owner back on the new
+  run's `Trashed`, records it, and clears `trash::cleared(&moved)` (the
+  owners, each once, grouped by their parent folder) in the index. Only the
+  moved files carry an owner, so a failed sidecar keeps its RAW's row, and a
+  Move to Trash run has no owners and clears nothing.
+- The folder key: `doomed` lists the canonical `dir` with `read_dir`, so a
+  RAW's path is `dir` joined with its name and its parent is `dir` spelled
+  as `delete_run` passes it to `clear_judgments` (the verbatim prefix kept).
+  No separate folder is remembered.
+- A failure of `clear_judgments` after a redo is logged (`log::warn!`), not
+  returned: the files have moved and the new run is recorded, and an `Err`
+  would keep the app from pushing that run on its history.
+- The engine test (`foldersidecars::tests::a_redo_with_the_folder_closed_clears_the_rows_the_undo_left_judged`)
+  runs delete, the undo (`trash::restore` from a fake Trash folder, then
+  `Runs::undone`), a re-judging of the rows as a reopen's reconcile would,
+  and `redo_back` over `trash::redo` with one refused sidecar.
+- Local checks: only `mise run fmt` ran; no build, clippy or tests (user's
+  decision, this machine runs out of memory). The PR's GitHub checks are the
+  first build of this change.

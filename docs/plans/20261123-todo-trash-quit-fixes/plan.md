@@ -121,7 +121,7 @@ Scope rules for every step:
       (`ClearFlow::confirmed`) held while a dialog is opened. The test
       follows the path that exists.
 
-- [ ] Step 3: A redo of Delete Sidecars clears the judgments of a closed folder's rows (item 4)
+- [x] Step 3: A redo of Delete Sidecars clears the judgments of a closed folder's rows (item 4)
   - Done when:
     - A recorded trash run remembers, for each sidecar a `Delete Sidecars…`
       run moved, the RAW it belongs to, through the undo (`Runs::undone`)
@@ -332,3 +332,5 @@ Risks:
 (2026-11-23) Step 1 complete
 
 (2026-11-24) Step 2 complete
+
+(2026-11-24) Step 3 complete

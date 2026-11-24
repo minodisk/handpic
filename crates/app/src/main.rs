@@ -2124,10 +2124,11 @@ impl Handpic {
         self.gate.enter_in_flight();
         self.resync.hold();
         self.trashing = Some((trash::Mode::Trash, 0, entry.count));
-        let (stores, writer, runs, events) = (
+        let (stores, writer, runs, index, events) = (
             self.stores.clone(),
             self.writer.clone(),
             self.runs.clone(),
+            self.index.clone().ok(),
             self.events.clone(),
         );
         let run_id = entry.run_id;
@@ -2139,13 +2140,18 @@ impl Handpic {
                     if let Some(writer) = &writer {
                         writer.flush(sidecar::DRAIN_TIMEOUT);
                     }
-                    handpic_engine::trash::redo_run(&runs, run_id, |done, total| {
-                        let _ = events.unbounded_send(Event::TrashProgress {
-                            mode: trash::Mode::Trash,
-                            done,
-                            total,
-                        });
-                    })
+                    handpic_engine::trash::redo_run(
+                        &runs,
+                        index.as_deref(),
+                        run_id,
+                        |done, total| {
+                            let _ = events.unbounded_send(Event::TrashProgress {
+                                mode: trash::Mode::Trash,
+                                done,
+                                total,
+                            });
+                        },
+                    )
                 })
                 .await;
             log::info!(

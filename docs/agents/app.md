@@ -5134,8 +5134,10 @@ leaves it there.
   leaves it where it was.
 - Rule: the restore (`trash::undo_run`, which lists the Recycle Bin on
   Windows) runs on `background_spawn` with no progress; the redo
-  (`trash::redo_run`) drains the judgment queue and flushes the writer first,
-  as a run does, and reports through `Event::TrashProgress` and `trashed`.
+  (`trash::redo_run`, given the view's index so a redo of Delete Sidecars
+  clears the judgments of a closed folder's rows) drains the judgment queue
+  and flushes the writer first, as a run does, and reports through
+  `Event::TrashProgress` and `trashed`.
   Both hold `Resync` and the gate's in-flight count, so nothing lists under
   them, and a tree open meanwhile waits in `deferred_open`.
 - Rule: when the open folder is one of the run's `dirs` (`opens_target`),

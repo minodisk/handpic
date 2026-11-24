@@ -276,7 +276,8 @@ pub fn delete_preview(
 /// Move every sidecar of `doomed` with `mover`, never stopping at a failure,
 /// which is reported under the RAW's path (the meta pane keys its errors by
 /// the file shown) and leaves the sidecar where it is. Returns the summary
-/// (`moved` lists the sidecars), every file moved in order, for `Runs`, and
+/// (`moved` lists the sidecars), every file moved in order with the RAW it
+/// belongs to (`Trashed::owner`, which a redo clears again), for `Runs`, and
 /// the RAWs that lost a sidecar, whose rows are cleared.
 pub fn delete(
     doomed: Vec<Doomed>,
@@ -299,7 +300,14 @@ pub fn delete(
             sidecars: Vec::new(),
         })
         .collect();
-    let (mut summary, moved) = trash::run(groups, mover, |_, _| {});
+    let (mut summary, mut moved) = trash::run(groups, mover, |_, _| {});
+    for trashed in &mut moved {
+        let path = trashed.path.to_string_lossy();
+        trashed.owner = raw_of
+            .iter()
+            .find(|(sidecar, _)| *sidecar == path)
+            .map(|(_, raw)| PathBuf::from(raw));
+    }
     summary.failed = summary
         .failed
         .into_iter()
@@ -905,6 +913,81 @@ mod tests {
         assert!(fail_xmp.exists());
         assert!(!a_xmp.exists());
         assert!(trash.join("a.ARW.dop").exists());
+    }
+
+    #[test]
+    fn a_redo_with_the_folder_closed_clears_the_rows_the_undo_left_judged() {
+        let f = Fixture::new("delete-redo");
+        let trash = f.dir.join("trash");
+        std::fs::create_dir(&trash).unwrap();
+        let a = f.raw("a.ARW");
+        let b = f.raw("b.ARW");
+        put(&f.dir, "a.xmp", 1);
+        put(&f.dir, "b.xmp", 1);
+        let judge = || {
+            f.row(&a, Some(3), Flag::Pick, None);
+            f.row(&b, Some(2), Flag::Reject, None);
+        };
+        judge();
+        let to_trash = |path: &Path| -> Result<Option<PathBuf>, String> {
+            let to = trash.join(path.file_name().unwrap());
+            std::fs::rename(path, &to).map_err(|e| e.to_string())?;
+            Ok(Some(to))
+        };
+        let runs = Runs::default();
+        let (_, moved, cleared) = delete(doomed(&f.key, SidecarFormat::Xmp).unwrap(), to_trash);
+        let id = runs.record(moved).unwrap();
+        index::lock(&f.index)
+            .clear_judgments(&f.key, &cleared)
+            .unwrap();
+
+        // The undo, as `trash::undo_run` does it, from the fake Trash; a
+        // reopen's reconcile then reads the judgments back from the sidecars.
+        let run = runs.take(id).unwrap();
+        let restored = trash::restore(
+            &run,
+            |t| Some(trash.join(t.path.file_name().unwrap())),
+            Path::exists,
+            |t, at| std::fs::rename(at, t.destination()).map_err(|e| e.to_string()),
+        );
+        assert!(restored.failed.is_empty());
+        runs.undone(id, restored.back);
+        judge();
+
+        let summary = trash::redo_back(
+            &runs,
+            Some(&f.index),
+            runs.take_undone(id).unwrap(),
+            |paths| {
+                trash::redo(
+                    paths,
+                    Path::exists,
+                    |path| {
+                        if path.file_name().unwrap() == "b.xmp" {
+                            return Err("refused".to_string());
+                        }
+                        to_trash(path)
+                    },
+                    |_, _| {},
+                )
+            },
+        );
+
+        let key = |path: &Path| path.to_string_lossy().into_owned();
+        assert_eq!(summary.moved, [key(&f.dir.join("a.xmp"))]);
+        assert_eq!(summary.failed.len(), 1);
+        let rows = index::lock(&f.index).rows_of(&f.key).unwrap();
+        let row = |path: &Path| {
+            rows.iter()
+                .find(|(of, ..)| *of == key(path))
+                .unwrap()
+                .clone()
+        };
+        assert_eq!(row(&a), (key(&a), None, Flag::None, None, true));
+        assert_eq!(row(&b), (key(&b), Some(2), Flag::Reject, None, true));
+        let redone = runs.take(summary.run_id.unwrap()).unwrap();
+        assert_eq!(redone.moved.len(), 1);
+        assert_eq!(redone.moved[0].owner, Some(a.clone()));
     }
 
     #[test]
