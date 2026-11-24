@@ -1662,3 +1662,17 @@ Files: `crates/core/src/resample.rs`, `tools/package/notices.sh`, `README.md`, `
 #### TODO
 
 - [ ] Decide whether `resample.rs` is a derived work of Pillow. If it is, add a Pillow notice file, list it in `tools/package/notices.sh` and name it in both READMEs' License sections. Done when the decision and any added notice are recorded in `docs/agents/app.md`'s license section.
+
+### App: real-device check of the Windows one-line install script (install-scripts)
+
+#### Background
+
+The `install-scripts` feature added `install.sh` (macOS / Linux) and `install.ps1` (Windows) at the repository root, as the primary install method in `README.md` and `docs/humans/usage.md` (and their `.ja.md` pairs). `install.ps1` downloads the latest release's `Handpic-<version>-windows-x64-setup.exe` and `SHA256SUMS`, checks the digest with `Get-FileHash`, and runs the Inno Setup silently. The macOS and Linux scripts were run for real (macOS arm64 against release v2.0.1; Linux in a `debian:stable-slim` container) and `mise run ci:local` passed. `install.ps1` was never run or even parsed: `pwsh` is not on the development Mac, and CI has no PowerShell check. Never exercised: the install itself, the absence of a SmartScreen warning on the setup and on the first launch, and the `irm | iex` behavior in Windows PowerShell 5.1 and PowerShell 7. Plan: `docs/plans/_archived/20261124-install-scripts/plan.md`.
+
+Files: `install.ps1`.
+
+#### TODO
+
+- [ ] On Windows (x64, in Windows PowerShell 5.1 and again in PowerShell 7), run `irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex`. Expect the download and install lines, then `%LOCALAPPDATA%\Programs\Handpic\Handpic.exe` with `unins000.exe` beside it, the Start menu shortcut and the `HKCU` uninstall entry. Expect no SmartScreen warning on the setup or on the first launch of `Handpic.exe`.
+- [ ] On the same Windows machine, force a failure (for example a wrong digest in a local copy of `install.ps1` piped to `iex`). Expect the error to print and the shell to stay open. Expect `$ErrorActionPreference` and `$ProgressPreference` to be unchanged in the session afterwards.
+- [ ] On Windows 11 on Arm (if one is at hand), run the same one-liner. Expect the x64 setup to install and start (the setup allows `x64compatible`).

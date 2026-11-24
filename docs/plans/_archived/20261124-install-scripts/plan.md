@@ -233,3 +233,5 @@ itself afterwards.
   `install.ps1` is still open (see `learnings.md`). Review round 1: on Darwin
   `install.sh` now picks `arm64` via `sysctl hw.optional.arm64` so a Rosetta
   shell installs the native build.
+
+(2026-11-24) Step 1 complete
