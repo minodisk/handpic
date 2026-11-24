@@ -16,11 +16,37 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 
 ### Core: real-device check of the `.dop` flag on a PhotoLab virtual copy
 
-`sidecar-and-keymap-decisions` Step 1 made `dop::read_flag` read a pick on any `Items` entry and `dop::write_rating` write `ShouldProcess` to every item, stamping every item's `ModificationDate`. The tests build a two-item `.dop` from a one-item fixture; no real virtual-copy sidecar was tried, and whether PhotoLab honours the per-item `ModificationDate` is unverified. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/20261123-sidecar-and-keymap-decisions/plan.md`. Files: `crates/core/src/dop.rs`, `docs/agents/photolab.md`.
+`sidecar-and-keymap-decisions` Step 1 made `dop::read_flag` read a pick on any `Items` entry and `dop::write_rating` write `ShouldProcess` to every item, stamping every item's `ModificationDate`. The tests build a two-item `.dop` from a one-item fixture; no real virtual-copy sidecar was tried, and whether PhotoLab honours the per-item `ModificationDate` is unverified. The step's checkbox was ticked on the automated criteria. Plan: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/plan.md`. Files: `crates/core/src/dop.rs`, `docs/agents/photolab.md`.
 
 #### TODO
 
 - [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
+
+### Engine: Move to Trash takes a `.xmp` shared with a RAW that stays
+
+`sidecar-and-keymap-decisions` Step 3 made a date split and a file rename copy a `.xmp` shared by RAWs of one stem (`a.ARW` and `a.NEF`), so neither loses it. Moving one of them to the Trash still takes the shared `.xmp` with it (`trash::groups_of`), so the RAW that stays loses its sidecar. The plan left it out of scope. Plan: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/plan.md` (Trade-offs and risks). Files: `crates/engine/src/trash.rs` (`groups_of`), `crates/engine/src/rename.rs` (`shared_xmps`).
+
+#### TODO
+
+- [ ] Decide whether Move to Trash leaves a shared `.xmp` in place (or copies it into the Trash) when a RAW sharing it stays, and apply it with a test.
+
+### Core: load-sensitive timing bound in `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit`
+
+The test in `crates/core/src/scan.rs` asserts a cancel ends within 1 s. It took 1.14 s and 1.10 s in two of three `mise run ci:local` runs on Windows while the full `handpic-core` suite ran, and passes alone in 0.57 s. `docs/agents/shared-crates.md` ("A cancel or stop test must not bound the scan by wall-clock time") already warns against this shape. Source: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/learnings.md`, Step 1.
+
+#### TODO
+
+- [ ] Reproduce under full-suite load, then make the test wait on an event rather than wall-clock time (or loosen the bound with a reasoned margin). Done when `mise run ci:local` passes on Windows several runs in a row without it failing.
+
+### App: the MCP `get_view` eyes summary carries no openness
+
+`burst-keep-score` Step 4b made the meta pane's `Eyes` row show the openness (0-100 from the EAR) but kept `get_view`'s `state` / `probability` / `pose` fields as planned. Whether `EyesSummary` should carry the EAR or the openness is open.
+
+Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
+
+#### TODO
+
+- [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
 
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
@@ -35,7 +61,7 @@ Run each check with `--settings <fresh test store>`, `--index <fresh test index>
 - [ ] On Windows, open a folder holding `NIKON_D70_Nikon.nef` and `CGO3P_YUN00007.dng` (malformed embedded JPEGs). Expect each strip cell and its hover text to read the libjpeg reason (`libjpeg fatal error: Not a JPEG file: starts with ...`) with no `panic` wording and no path.
 - [ ] On Windows, press `z` on those files. Expect `The 1:1 view of this file could not be shown.` centered over the canvas; paging to a good file shows its crop and no message, and `z` off shows the fit view's own state.
 - [ ] On Windows, drag the strip to `MAX`, then drag the window's bottom edge up. Expect the preview canvas to stay at 240 px or more; dragging the edge back down gives the strip its height back, and after a relaunch the stored height is still `MAX`.
-- [ ] On Windows, run `Rewrite Sidecars from Index…` in a folder with scanned but never-judged files that have no sidecar. Expect the third row to read `N files with no judgment on record (skipped)`.
+- [ ] On Windows, run `Rewrite Sidecars from Index…` in a folder with scanned but never-judged files that have no sidecar. Expect the third row to read `N files skipped (no judgment on record, or a sidecar larger than 4 MiB)` (reworded by `sidecar-and-keymap-decisions` Step 2).
 
 ### App: measure shared_height against the strip wrapper's bounds on Linux (client-side decorations) and macOS
 
