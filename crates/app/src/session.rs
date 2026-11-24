@@ -141,9 +141,43 @@ pub fn place(saved: &Geometry, screens: &[Screen]) -> Option<(usize, Rect)> {
     Some((index, saved.bounds.within(&screens[index].visible)))
 }
 
+/// The default window's size, in logical pixels.
+pub const DEFAULT_SIZE: (f32, f32) = (1600., 1000.);
+
+/// The default window's bounds: `DEFAULT_SIZE`, shrunk to fit, centered in
+/// the primary display's visible area, or at the origin without a display.
+/// `workspace` gives the position in Windows' workspace coordinates, which
+/// `SetWindowPlacement` reads relative to the visible area's corner, so the
+/// visible area's offset from the display's corner is taken back off.
+pub fn default_bounds(primary: Option<&Screen>, workspace: bool) -> Rect {
+    let (width, height) = DEFAULT_SIZE;
+    let Some(screen) = primary else {
+        return Rect {
+            x: 0.,
+            y: 0.,
+            width,
+            height,
+        };
+    };
+    let area = &screen.visible;
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let (dx, dy) = if workspace {
+        (area.x - screen.bounds.x, area.y - screen.bounds.y)
+    } else {
+        (0., 0.)
+    };
+    Rect {
+        x: area.x + (area.width - width) / 2. - dx,
+        y: area.y + (area.height - height) / 2. - dy,
+        width,
+        height,
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Geometry, Rect, Screen, place, startup_folder};
+    use super::{Geometry, Rect, Screen, default_bounds, place, startup_folder};
     use serde_json::json;
     use std::path::{Path, PathBuf};
 
@@ -315,5 +349,67 @@ mod tests {
             place(&saved(rect(10., 10., 4000., 3000.), Some("a")), &screens),
             Some((0, rect(0., 0., 1920., 1040.)))
         );
+    }
+
+    fn taskbar(bounds: Rect, visible: Rect) -> Screen {
+        Screen {
+            uuid: None,
+            bounds,
+            visible,
+        }
+    }
+
+    #[test]
+    fn the_default_is_centered_on_a_display_without_a_taskbar() {
+        let display = rect(0., 0., 5120., 1440.);
+        let screen = taskbar(display, display);
+        let centered = rect(1760., 220., 1600., 1000.);
+        assert_eq!(default_bounds(Some(&screen), false), centered);
+        assert_eq!(default_bounds(Some(&screen), true), centered);
+    }
+
+    #[test]
+    fn the_default_is_centered_above_a_bottom_taskbar() {
+        let screen = taskbar(rect(0., 0., 1920., 1080.), rect(0., 0., 1920., 1040.));
+        let centered = rect(160., 20., 1600., 1000.);
+        assert_eq!(default_bounds(Some(&screen), false), centered);
+        assert_eq!(default_bounds(Some(&screen), true), centered);
+    }
+
+    #[test]
+    fn the_default_is_centered_right_of_a_left_taskbar() {
+        let screen = taskbar(rect(0., 0., 5120., 1440.), rect(62., 0., 5058., 1440.));
+        assert_eq!(
+            default_bounds(Some(&screen), false),
+            rect(1791., 220., 1600., 1000.)
+        );
+    }
+
+    #[test]
+    fn workspace_coordinates_take_the_taskbar_back_off() {
+        let left = taskbar(rect(0., 0., 5120., 1440.), rect(62., 0., 5058., 1440.));
+        assert_eq!(
+            default_bounds(Some(&left), true),
+            rect(1729., 220., 1600., 1000.)
+        );
+        let top = taskbar(rect(0., 0., 1920., 1080.), rect(0., 48., 1920., 1032.));
+        assert_eq!(
+            default_bounds(Some(&top), true),
+            rect(160., 16., 1600., 1000.)
+        );
+        assert_eq!(
+            default_bounds(Some(&top), false),
+            rect(160., 64., 1600., 1000.)
+        );
+    }
+
+    #[test]
+    fn the_default_shrinks_into_a_small_area_and_falls_back_to_the_origin() {
+        let screen = taskbar(rect(0., 0., 1366., 768.), rect(0., 0., 1366., 728.));
+        assert_eq!(
+            default_bounds(Some(&screen), false),
+            rect(0., 0., 1366., 728.)
+        );
+        assert_eq!(default_bounds(None, true), rect(0., 0., 1600., 1000.));
     }
 }

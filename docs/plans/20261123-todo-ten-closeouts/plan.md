@@ -227,7 +227,7 @@ Rules for every step:
     - Check that `Ring`'s `crowded` set still behaves with a wrapped
       neighbour.
 
-- [ ] Step 5: Window and strip defaults: center the default window on the primary display's visible area; record that the strip's image box stays 3:2
+- [x] Step 5: Window and strip defaults: center the default window on the primary display's visible area; record that the strip's image box stays 3:2
   - Done when:
     - `main.rs`'s `window_placement` no longer calls
       `Bounds::centered(None, size(px(1600.), px(1000.)), cx)`: the default
