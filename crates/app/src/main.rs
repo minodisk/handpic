@@ -544,6 +544,8 @@ struct Handpic {
     /// The undo entry whose restore or redo is out, so a second undo or
     /// redo does nothing until it comes back.
     trash_step: Option<u64>,
+    /// How far the undo of a trash run under way got, `(done, total)`.
+    undo_progress: Option<(usize, usize)>,
     /// The judgments and `seen` membership of the files a Move to Trash
     /// took, kept for an undo landing before the re-listing reads them back.
     trashed_state: HashMap<String, (Option<State>, bool)>,
@@ -1027,6 +1029,7 @@ impl Handpic {
             gate: idle::IdleGate::default(),
             runs: Arc::default(),
             trash_step: None,
+            undo_progress: None,
             trashed_state: HashMap::new(),
             trashing: None,
             running_op: None,
@@ -2012,16 +2015,21 @@ impl Handpic {
             return false;
         }
         self.trash_step = Some(entry.id);
+        self.undo_progress = Some((0, 0));
         self.running_op = Some(entry.what.step_labels().0);
         self.write_errors.run_started();
         self.gate.enter_in_flight();
         self.resync.hold();
-        let runs = self.runs.clone();
+        let (runs, events) = (self.runs.clone(), self.events.clone());
         let run_id = entry.run_id;
         let started = Instant::now();
         cx.spawn(async move |this, cx| {
             let result = cx
-                .background_spawn(async move { handpic_engine::trash::undo_run(&runs, run_id) })
+                .background_spawn(async move {
+                    handpic_engine::trash::undo_run(&runs, run_id, |done, total| {
+                        let _ = events.unbounded_send(Event::UndoProgress { done, total });
+                    })
+                })
                 .await;
             log::info!(
                 "trash: undo of run {run_id} in {}ms: {:?}",
@@ -2047,6 +2055,7 @@ impl Handpic {
         cx: &mut Context<Self>,
     ) {
         self.trash_step = None;
+        self.undo_progress = None;
         self.gate.leave_in_flight();
         let mut refresh = false;
         let ok = result.is_ok();
@@ -3671,6 +3680,13 @@ impl Handpic {
                 }
                 return;
             }
+            Event::UndoProgress { done, total } => {
+                if self.undo_progress.is_some() {
+                    self.undo_progress = Some((*done, *total));
+                    cx.notify();
+                }
+                return;
+            }
             Event::Perf(sample) => {
                 self.perf.add_sample(*sample);
                 cx.notify();
@@ -3730,6 +3746,7 @@ impl Handpic {
             | Event::McpState(_)
             | Event::FolderOp(_)
             | Event::TrashProgress { .. }
+            | Event::UndoProgress { .. }
             | Event::Perf(_)
             | Event::Update(_) => {}
         }
@@ -5353,8 +5370,10 @@ impl Handpic {
                 progress: self
                     .trashing
                     .map(|(_, done, total)| (done, total))
+                    .or(self.undo_progress)
                     .or(self.folderops.sequence_progress())
-                    .or(self.folderops.import_progress()),
+                    .or(self.folderops.import_progress())
+                    .or(self.folderops.sidecar_progress()),
                 message: None,
                 dialog: None,
             });
@@ -5691,9 +5710,11 @@ impl Handpic {
     fn progress_circle(&self, cx: &App) -> Option<ProgressCircle> {
         let (done, total) = progress::shown(
             self.trashing.map(|(_, done, total)| (done, total)),
+            self.undo_progress,
             self.folderops
                 .sequence_progress()
-                .or(self.folderops.import_progress()),
+                .or(self.folderops.import_progress())
+                .or(self.folderops.sidecar_progress()),
             self.scan_status.running(),
         )?;
         Some(

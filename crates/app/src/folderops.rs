@@ -83,6 +83,8 @@ pub struct FolderOps {
     importing: Option<String>,
     imported: Option<String>,
     import_progress: Option<(usize, usize)>,
+    /// How far the Rewrite Sidecars or Delete Sidecars run got.
+    sidecar_progress: Option<(usize, usize)>,
     date: DateFolderFlow,
     /// The tree's live inline rename, the rename the gate holds as its row
     /// shows it, the renames in flight and the slow second click.
@@ -182,6 +184,12 @@ impl FolderOps {
         self.sequence_progress
     }
 
+    /// How far the sidecar run got, `(done, total)`: rows rewritten or
+    /// sidecars moved.
+    pub fn sidecar_progress(&self) -> Option<(usize, usize)> {
+        self.sidecar_progress
+    }
+
     /// The pane's import line: the run's note, else its result. It is drawn
     /// as its own line, so it hides no other note.
     pub fn import_note(&self) -> Option<String> {
@@ -192,11 +200,15 @@ impl FolderOps {
 /// A message of a folder operation's run, sent from its thread into the
 /// view's channel.
 #[derive(Clone, Copy, Debug)]
+// Every variant reports a run's progress; the shared postfix is the meaning.
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
     /// How far the sequencing run `run` got.
     SequenceProgress { run: u64, done: usize, total: usize },
     /// How many files the import run `run` has copied.
     ImportProgress { run: u64, done: usize, total: usize },
+    /// How far the sidecar run in flight got.
+    SidecarProgress { done: usize, total: usize },
 }
 
 /// A previewed import: its id, the source and the destination root the run's
@@ -482,15 +494,17 @@ impl Handpic {
         if kind == Kind::Delete {
             self.write_errors.run_started();
         }
+        self.folderops.sidecar_progress = Some((0, 0));
         self.gate.enter_in_flight();
         if self.dir.is_some() {
             self.resync.hold();
         }
-        let (stores, writer, index, runs) = (
+        let (stores, writer, index, runs, events) = (
             self.stores.clone(),
             self.writer.clone(),
             self.index.clone().ok(),
             self.runs.clone(),
+            self.events.clone(),
         );
         let (format, names) = (self.settings.format, self.settings.names.clone());
         let started = Instant::now();
@@ -503,6 +517,12 @@ impl Handpic {
                         writer.flush(sidecar::DRAIN_TIMEOUT);
                     }
                     let dir = canonicalize(&dir);
+                    let progress = |done, total| {
+                        let _ = events.unbounded_send(Event::FolderOp(Message::SidecarProgress {
+                            done,
+                            total,
+                        }));
+                    };
                     let ran = match kind {
                         Kind::Rewrite => Ran::Rewrote(match (writer, index) {
                             (None, _) => Err("the sidecar writer is not running".to_owned()),
@@ -514,6 +534,7 @@ impl Handpic {
                                 format,
                                 &names,
                                 foldersidecars::REWRITE_DRAIN,
+                                progress,
                             ),
                         }),
                         Kind::Delete => Ran::Deleted(foldersidecars::delete_run(
@@ -521,6 +542,7 @@ impl Handpic {
                             format,
                             index.as_deref(),
                             &runs,
+                            progress,
                         )),
                     };
                     (dir, ran)
@@ -542,6 +564,7 @@ impl Handpic {
     /// Trash of sidecars does (`trashed`); a rewrite says what it wrote and
     /// leaves the strip alone, the index being what the strip shows.
     fn sidecars_ran(&mut self, name: &str, dir: String, ran: Ran, cx: &mut Context<Self>) {
+        self.folderops.sidecar_progress = None;
         self.folderops.sidecars.end();
         self.folderops.dialog = None;
         self.follow_folder_dialog(cx);
@@ -1424,6 +1447,13 @@ impl Handpic {
                 if self.folderops.import.accepts(run) {
                     self.folderops.importing = Some(import::progress_status(done, total));
                     self.folderops.import_progress = Some((done, total));
+                    cx.notify();
+                }
+            }
+            // The last message can land after the run came back.
+            Message::SidecarProgress { done, total } => {
+                if self.folderops.sidecar_progress.is_some() {
+                    self.folderops.sidecar_progress = Some((done, total));
                     cx.notify();
                 }
             }

@@ -122,6 +122,40 @@
 - Unchanged and outside this item: `foldersidecars::delete` still moves one
   sidecar per shell operation on Windows (`trash::run` with `trash_one`).
 
+## Step 5: progress for the trash undo and the sidecar runs
+
+- The undo's unit is the item, as the move's is the group: a RAW or JPEG
+  with the sidecars after it, or a sidecar with no RAW before it
+  (`trash::item_starts`, which `restore_chunked` already computed inline and
+  now shares with `restore`). `restore` reports after each item's last file,
+  `restore_chunked` after each chunk (heads and their sidecars), so on
+  Windows the circle moves per `CHUNK` items. `restore_recorded` (macOS)
+  passes the callback through to `restore`.
+- `foldersidecars::rewrite` now hands the writer `REWRITE_BATCH` (32) rows,
+  then `flush`es with what is left of one `bound` deadline and reports
+  `(rows drained, total)`; once a flush times out, the rest are queued with
+  no wait, as before the change everything was, so `Summary.flushed` still
+  means "drained within `REWRITE_DRAIN`" and `failed` still counts the rows
+  left dirty. The writer is one thread writing in order, so a batch's flush
+  only adds one channel round trip per 32 writes; the slowdown was not
+  measured (no local build on this machine).
+- `foldersidecars::delete` passes its callback to `trash::run`, one group per
+  sidecar, so the delete counts sidecars.
+- App: the undo keeps `Handpic.undo_progress` (decision 5, not `trashing`),
+  fed by `Event::UndoProgress` and cleared in `restored`; the sidecar runs
+  keep `FolderOps::sidecar_progress`, fed by `Message::SidecarProgress` and
+  cleared at the top of `sidecars_ran`, which both a rewrite and a delete
+  end through (the delete then goes on into `trashed`). Neither message
+  carries a run id: like `TrashProgress`, a message is taken only while the
+  count is `Some`, since only one such run is out at a time.
+- `progress::shown` gained an `undo` argument between the trash run and the
+  folder operation; the sidecar counts join the folder operation's after the
+  sequencing and import ones. `get_status`'s running `Operation.progress`
+  chains the same counts (decision 6).
+- Local checks: only `cargo fmt` / `mise run fmt` ran; no build, clippy or
+  tests (user's decision, this machine runs out of memory). The PR's GitHub
+  checks are the first build of this change.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 4 timing, Windows 11): measure an Undo of Move to

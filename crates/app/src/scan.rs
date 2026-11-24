@@ -121,6 +121,11 @@ pub enum Event {
         done: usize,
         total: usize,
     },
+    /// How far the undo of a trash run in flight got.
+    UndoProgress {
+        done: usize,
+        total: usize,
+    },
     /// A message of a folder operation's run.
     FolderOp(crate::folderops::Message),
     /// A performance overlay sample from the sampler's thread.
