@@ -251,6 +251,10 @@ mod tests {
             eye_offset: None,
             edge_gap: None,
             full_eye_sharp: None,
+            faces_group: None,
+            faces_judged: None,
+            faces_closed: None,
+            faces_soft: None,
         }
     }
 

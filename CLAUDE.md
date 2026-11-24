@@ -108,8 +108,15 @@ passes on the one scan task: `run_scan` (thumbnail, metadata), then
 `pose_roll` columns with the EAR of the more closed eye and the head pose
 from that same mesh, and, on every frame whose cue judged a face, the
 `full_eye_sharp` column with the sharpness of its eyes on the full JPEG (a
-second read; none when the file holds no JPEG larger than the preview), and streams them as `faces-progress` /
-`faces-done` events; the passes run on worker threads below normal OS
+second read; none when the file holds no JPEG larger than the preview) and
+`faces_group` with the gate count (the confident faces of the judged face's
+size, `allfaces::gate_count`), clearing the row's all-faces counts, and streams them as `faces-progress` /
+`faces-done` events, and holds the third pass, which no caller runs yet:
+`allfaces_todo` (the rows past pass 2 whose `faces_group` is at least the
+given threshold and whose `allfaces_extractor` is not `ALLFACES_VERSION`)
+and `run_allfaces_scan`, which runs core's `extract_face_counts` over them
+and fills the `faces_judged` / `faces_closed` / `faces_soft` columns
+(`AllFacesReady`), all four values carried in `StoredEyes`; the passes run on worker threads below normal OS
 priority (the second lower still) and take the on-screen files first
 through the shared `ScanFocus` handle; it also holds the good-photo rule,
 `StoredEyes::photo_tier`, computed on call from those stored values against

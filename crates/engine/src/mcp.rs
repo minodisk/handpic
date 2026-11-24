@@ -1109,8 +1109,14 @@ impl Companion {
         and color label, its sharpness score, the AF point and frame in sensor coordinates \
         with whether it was focused manually, its orientation and capture time, and its \
         shooting settings (camera, lens, aperture, shutter, ISO, focal length, exposure \
-        bias, focus distance). The photo must be in the open folder; omit the path for the \
-        current photo."
+        bias, focus distance). Its `focus` also holds `faces_group`, how many confident faces \
+        of the judged face's size the whole preview holds, the judged face included (null \
+        before the second pass), and the all-faces counts `faces_judged`, `faces_closed` \
+        and `faces_soft`: the faces whose eyes were judged, those with closed eyes and \
+        those with soft eyes. The counts exist only on a frame whose `faces_group` reached \
+        the group threshold, once the third pass has run on it; null otherwise, \
+        `faces_soft` also when the file holds no larger JPEG. The photo must be in the open \
+        folder; omit the path for the current photo."
     )]
     async fn get_photo(&self, Parameters(args): Parameters<PhotoArgs>) -> CallToolResult {
         tool_result(self.photo(args.path).await)

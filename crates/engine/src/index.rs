@@ -12,11 +12,13 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
+use handpic_core::allfaces::FaceCounts;
 use handpic_core::arw::{Rational, Shot};
 use handpic_core::eyes::{EyeState, Eyes};
 use handpic_core::pose::Pose;
 use handpic_core::scan::{
-    extract_all, extract_analysis_all, is_raw_file, Analysis, Entry, Failure, Priority, ScanFocus,
+    extract_all, extract_analysis_all, extract_face_counts_all, is_raw_file, Analysis, Entry,
+    Failure, Priority, ScanFocus,
 };
 use handpic_core::sharpness::manual_focus;
 use handpic_core::Flag;
@@ -100,8 +102,13 @@ use crate::exif::{exif, Exif};
 /// the empty table and keeps the rest. v27 dropped `embeddings` with the
 /// image embeddings; a v20 to v26 database drops the table in place (no
 /// `VACUUM`: its pages wait on the freelist for the next eviction or clear)
-/// and keeps the rest.
-const SCHEMA_VERSION: i64 = 27;
+/// and keeps the rest. v28 added `files.faces_group`, pass 2's gate count of
+/// the confident faces of the judged face's size, `files.faces_judged`,
+/// `files.faces_closed` and `files.faces_soft`, pass 3's all-faces counts
+/// (`NULL` = unknown), and `files.allfaces_extractor`, the `ALLFACES_VERSION`
+/// they were computed at (`0` = not yet); a v10 to v27 database gains them in
+/// place with an `ALTER TABLE` and keeps `files`, `ratings` and `folders`.
+const SCHEMA_VERSION: i64 = 28;
 
 /// The version of what `handpic_core::scan::extract` produces, stored on every
 /// `files` row. Bump it on any change to that output: ARW/DNG/NEF/CR3/RAF/ORF parsing
@@ -184,7 +191,16 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// (per-burst Spearman 1.000 over 26 bursts); on previews of other makes the
 /// two lumas differ on about half the pixels and a window's score by up to
 /// about 1% (`docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`).
-pub const FACES_VERSION: i64 = 13;
+/// `14` fills `faces_group`, the gate count (`Analysis::gate_count`), which
+/// pass 3 picks its files by (`docs/plans/20261123-all-faces-check/`).
+pub const FACES_VERSION: i64 = 14;
+
+/// The version of what the third pass, `handpic_core::scan::extract_face_counts`,
+/// produces, stored on every `files` row as `allfaces_extractor` next to its
+/// counts. Bump it on any change to those counts (`crates/core/src/allfaces.rs`,
+/// or the cue and the full-size measure they reuse); pass 3 then re-runs on
+/// every row at the gate. A row pass 2 writes or resets goes back to `0`.
+pub const ALLFACES_VERSION: i64 = 1;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on
@@ -367,7 +383,9 @@ impl From<Pose> for EyesPose {
 /// What the second pass stored about the judged face's eyes and head
 /// (`Cue::eyes_ear`, `Cue::pose`, `Cue::eye_offset`, `Cue::edge_gap`), with
 /// the state and the closed probability derived from the EAR. All `None` when
-/// the cue ran no mesh, or before the second pass has run.
+/// the cue ran no mesh, or before the second pass has run. Next to them, the
+/// frame's gate count and the third pass's all-faces counts, which `new`
+/// leaves `None`.
 #[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize)]
 pub struct StoredEyes {
     /// The EAR of the more closed eye.
@@ -387,6 +405,18 @@ pub struct StoredEyes {
     pub edge_gap: Option<f64>,
     /// The sharpness of the eyes on the full JPEG (`Analysis::full_eye_sharp`).
     pub full_eye_sharp: Option<f64>,
+    /// How many confident faces of the judged face's size the whole preview
+    /// holds, the judged face included (`Analysis::gate_count`); `None`
+    /// before the second pass or when its detection failed.
+    pub faces_group: Option<u32>,
+    /// The third pass's counts (`allfaces::FaceCounts`): the faces judged,
+    /// those with closed eyes and those with soft eyes. They exist only on a
+    /// frame whose `faces_group` reached the group threshold pass 3 ran
+    /// with; `None` before it ran or when it failed, `faces_soft` also when
+    /// the file holds no larger JPEG.
+    pub faces_judged: Option<u32>,
+    pub faces_closed: Option<u32>,
+    pub faces_soft: Option<u32>,
 }
 
 impl StoredEyes {
@@ -406,6 +436,10 @@ impl StoredEyes {
             eye_offset,
             edge_gap,
             full_eye_sharp,
+            faces_group: None,
+            faces_judged: None,
+            faces_closed: None,
+            faces_soft: None,
         }
     }
 
@@ -698,7 +732,8 @@ pub struct ScanSummary {
     pub errors: usize,
 }
 
-/// One file the second pass has written, as `faces-progress` reports it.
+/// One file the second pass has written, as `faces-progress` reports it:
+/// its gate count with no all-faces counts, which the write cleared.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct FaceReady {
     pub path: String,
@@ -717,6 +752,18 @@ pub struct FacesRow {
     pub eye_offset: Option<f64>,
     pub edge_gap: Option<f64>,
     pub full_eye_sharp: Option<f64>,
+    pub faces_group: Option<u32>,
+}
+
+/// One file the third pass has written, as `write_face_counts` stores it and
+/// `run_allfaces_scan` reports it: the counts of `StoredEyes`, all `None`
+/// when the file could not be read or its whole-image detection failed.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct AllFacesReady {
+    pub path: String,
+    pub faces_judged: Option<u32>,
+    pub faces_closed: Option<u32>,
+    pub faces_soft: Option<u32>,
 }
 
 /// The folders the age rule of `evict` spares: the ones holding a viewed file
@@ -733,7 +780,7 @@ const INDEXED_FILE: &str = "SELECT path, orientation, capture_time, subsec,
             exposure_den, iso, focal_num, focal_den, ratings.label,
             sharpness, frame_w, frame_h, manual_focus,
             eyes_ear, pose_yaw, pose_pitch, pose_roll, eye_offset, edge_gap,
-            full_eye_sharp
+            full_eye_sharp, faces_group, faces_judged, faces_closed, faces_soft
      FROM files LEFT JOIN ratings USING (path)";
 
 fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
@@ -759,7 +806,13 @@ fn indexed_file(r: &rusqlite::Row<'_>) -> rusqlite::Result<IndexedFile> {
         Some(Focus {
             point,
             manual_focus: r.get(28)?,
-            eyes: StoredEyes::new(r.get(29)?, pose, r.get(33)?, r.get(34)?, r.get(35)?),
+            eyes: StoredEyes {
+                faces_group: r.get(36)?,
+                faces_judged: r.get(37)?,
+                faces_closed: r.get(38)?,
+                faces_soft: r.get(39)?,
+                ..StoredEyes::new(r.get(29)?, pose, r.get(33)?, r.get(34)?, r.get(35)?)
+            },
         })
     } else {
         None
@@ -915,6 +968,7 @@ impl Index {
             24,
             25,
             26,
+            27,
             SCHEMA_VERSION,
         ]
         .contains(&version)
@@ -964,7 +1018,12 @@ impl Index {
                      pose_roll REAL,
                      eye_offset REAL,
                      edge_gap REAL,
-                     full_eye_sharp REAL
+                     full_eye_sharp REAL,
+                     faces_group INTEGER,
+                     faces_judged INTEGER,
+                     faces_closed INTEGER,
+                     faces_soft INTEGER,
+                     allfaces_extractor INTEGER NOT NULL DEFAULT 0
                  );
                  CREATE INDEX IF NOT EXISTS files_dir ON files (dir);
                  CREATE INDEX IF NOT EXISTS files_capture ON files (capture_time, subsec);
@@ -1122,6 +1181,16 @@ impl Index {
         if (20..27).contains(&version) {
             tx.execute_batch("DROP TABLE IF EXISTS embeddings;")
                 .map_err(|e| e.to_string())?;
+        }
+        if (10..28).contains(&version) {
+            tx.execute_batch(
+                "ALTER TABLE files ADD COLUMN faces_group INTEGER;
+                 ALTER TABLE files ADD COLUMN faces_judged INTEGER;
+                 ALTER TABLE files ADD COLUMN faces_closed INTEGER;
+                 ALTER TABLE files ADD COLUMN faces_soft INTEGER;
+                 ALTER TABLE files ADD COLUMN allfaces_extractor INTEGER NOT NULL DEFAULT 0;",
+            )
+            .map_err(|e| e.to_string())?;
         }
         tx.pragma_update(None, "user_version", SCHEMA_VERSION)
             .map_err(|e| e.to_string())?;
@@ -1412,7 +1481,9 @@ impl Index {
         tx.execute(
             "UPDATE files SET faces_extractor = ?2, sharpness = NULL,
                  eyes_ear = NULL, pose_yaw = NULL, pose_pitch = NULL, pose_roll = NULL,
-                 eye_offset = NULL, edge_gap = NULL, full_eye_sharp = NULL
+                 eye_offset = NULL, edge_gap = NULL, full_eye_sharp = NULL,
+                 faces_group = NULL, faces_judged = NULL, faces_closed = NULL,
+                 faces_soft = NULL, allfaces_extractor = 0
              WHERE dir = ?1 AND faces_extractor != ?2
                  AND (error IS NOT NULL OR path LIKE '%.jpg' OR path LIKE '%.jpeg')",
             params![dir, FACES_VERSION],
@@ -1434,15 +1505,19 @@ impl Index {
     }
 
     /// Store the sharpness score, the EAR, the head pose, the eye offset, the
-    /// edge gap and the full-size eye sharpness of each path, `None` for none,
-    /// at `FACES_VERSION`, in a single transaction.
+    /// edge gap, the full-size eye sharpness and the gate count of each path,
+    /// `None` for none, at `FACES_VERSION`, in a single transaction. The row's
+    /// all-faces counts and its `allfaces_extractor` are cleared, so the third
+    /// pass runs on it again.
     pub fn write_faces(&mut self, rows: &[FacesRow]) -> Result<(), String> {
         let tx = self.conn.transaction().map_err(|e| e.to_string())?;
         for row in rows {
             tx.execute(
                 "UPDATE files SET sharpness = ?2, faces_extractor = ?3,
                      eyes_ear = ?4, pose_yaw = ?5, pose_pitch = ?6, pose_roll = ?7,
-                     eye_offset = ?8, edge_gap = ?9, full_eye_sharp = ?10
+                     eye_offset = ?8, edge_gap = ?9, full_eye_sharp = ?10,
+                     faces_group = ?11, faces_judged = NULL, faces_closed = NULL,
+                     faces_soft = NULL, allfaces_extractor = 0
                  WHERE path = ?1",
                 params![
                     row.path,
@@ -1455,6 +1530,56 @@ impl Index {
                     row.eye_offset,
                     row.edge_gap,
                     row.full_eye_sharp,
+                    row.faces_group,
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())
+    }
+
+    /// The files of `dir` the third pass still has to run on, in file-name
+    /// order like `faces_todo`: the rows the second pass has finished at
+    /// `FACES_VERSION` whose gate count (`faces_group`) is at least
+    /// `min_faces` and whose `allfaces_extractor` is not `ALLFACES_VERSION`.
+    /// An error row and a JPEG row have no gate count and are never listed.
+    pub fn allfaces_todo(&self, dir: &str, min_faces: u32) -> Result<Vec<String>, String> {
+        let mut paths: Vec<String> = {
+            let mut stmt = self
+                .conn
+                .prepare(
+                    "SELECT path FROM files WHERE dir = ?1 AND faces_extractor = ?2
+                         AND faces_group >= ?3 AND allfaces_extractor != ?4",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows = stmt
+                .query_map(
+                    params![dir, FACES_VERSION, min_faces, ALLFACES_VERSION],
+                    |r| r.get(0),
+                )
+                .map_err(|e| e.to_string())?;
+            rows.collect::<rusqlite::Result<_>>()
+                .map_err(|e| e.to_string())?
+        };
+        paths.sort_by(|a, b| Path::new(a).file_name().cmp(&Path::new(b).file_name()));
+        Ok(paths)
+    }
+
+    /// Store the all-faces counts of each path, `None` for unknown, at
+    /// `ALLFACES_VERSION`, in a single transaction.
+    pub fn write_face_counts(&mut self, rows: &[AllFacesReady]) -> Result<(), String> {
+        let tx = self.conn.transaction().map_err(|e| e.to_string())?;
+        for row in rows {
+            tx.execute(
+                "UPDATE files SET faces_judged = ?2, faces_closed = ?3, faces_soft = ?4,
+                     allfaces_extractor = ?5
+                 WHERE path = ?1",
+                params![
+                    row.path,
+                    row.faces_judged,
+                    row.faces_closed,
+                    row.faces_soft,
+                    ALLFACES_VERSION,
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -2399,6 +2524,7 @@ where
                 eye_offset: analysis.cue.eye_offset,
                 edge_gap: analysis.cue.edge_gap,
                 full_eye_sharp: analysis.full_eye_sharp,
+                faces_group: analysis.gate_count,
             })
             .collect();
         if let Err(e) = lock(index).write_faces(&rows) {
@@ -2409,13 +2535,16 @@ where
             return;
         }
         lock(&ready).extend(rows.into_iter().map(|row| FaceReady {
-            eyes: StoredEyes::new(
-                row.eyes_ear,
-                row.pose,
-                row.eye_offset,
-                row.edge_gap,
-                row.full_eye_sharp,
-            ),
+            eyes: StoredEyes {
+                faces_group: row.faces_group,
+                ..StoredEyes::new(
+                    row.eyes_ear,
+                    row.pose,
+                    row.eye_offset,
+                    row.edge_gap,
+                    row.full_eye_sharp,
+                )
+            },
             path: row.path,
             sharpness: row.sharpness,
         }));
@@ -2472,6 +2601,122 @@ where
     };
     log::info!(
         "scan faces: dir={dir} files={total} done={} errors={} threads={threads} canceled={} in {}ms",
+        summary.total,
+        summary.errors,
+        cancel.load(Ordering::Relaxed),
+        started.elapsed().as_millis()
+    );
+    summary
+}
+
+/// Run the third pass (`extract_face_counts`) over `paths`, the rows
+/// `allfaces_todo` gives, and store each file's all-faces counts in `index`,
+/// the way `run_faces_scan` runs the second: `BATCH`-sized transactions
+/// through `write_face_counts`, `progress(done, total, ready)` at most every
+/// `progress_interval`, always on the first file and once more after the
+/// trailing flush, where `ready` holds the rows a batch committed since the
+/// previous notification. A file `extract_face_counts` could not read counts
+/// as an error and, like one whose detection failed, is stored with no counts
+/// at `ALLFACES_VERSION`, so it is not retried until that version moves. A
+/// file abandoned mid-pipeline by `cancel` is neither written nor counted,
+/// so it stays on `allfaces_todo`. The same no-panic rule as `run_scan`
+/// holds for `on_item`. Its workers run at `priority` and take the files
+/// `focus` lists first.
+#[allow(clippy::too_many_arguments)]
+pub fn run_allfaces_scan<P>(
+    index: &Mutex<Index>,
+    dir: &str,
+    paths: &[String],
+    threads: usize,
+    priority: Priority,
+    focus: &ScanFocus,
+    cancel: &AtomicBool,
+    progress_interval: Duration,
+    progress: P,
+) -> ScanSummary
+where
+    P: Fn(usize, usize, Vec<AllFacesReady>) + Send + Sync,
+{
+    let total = paths.len();
+    let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
+    let pending: Mutex<Vec<(AllFacesReady, bool)>> = Mutex::new(Vec::new());
+    let done = AtomicUsize::new(0);
+    let errors = AtomicUsize::new(0);
+    let last = Mutex::new(None::<Instant>);
+    let ready: Mutex<Vec<AllFacesReady>> = Mutex::new(Vec::new());
+
+    let flush = |batch: Vec<(AllFacesReady, bool)>| {
+        if batch.is_empty() {
+            return;
+        }
+        let rows: Vec<AllFacesReady> = batch.iter().map(|(row, _)| row.clone()).collect();
+        if let Err(e) = lock(index).write_face_counts(&rows) {
+            log::error!("failed to write an all-faces batch for {dir}: {e}");
+            // Unreadable files are already counted in `on_item`.
+            let newly_failed = batch.iter().filter(|(_, ok)| *ok).count();
+            errors.fetch_add(newly_failed, Ordering::Relaxed);
+            return;
+        }
+        lock(&ready).extend(rows);
+    };
+
+    let on_item = |i: usize, result: Result<Option<FaceCounts>, String>| {
+        let (counts, ok) = match result {
+            Ok(counts) => (counts, true),
+            Err(_) => {
+                errors.fetch_add(1, Ordering::Relaxed);
+                (None, false)
+            }
+        };
+        let row = AllFacesReady {
+            path: paths[i].clone(),
+            faces_judged: counts.map(|c| c.judged),
+            faces_closed: counts.map(|c| c.closed),
+            faces_soft: counts.and_then(|c| c.soft),
+        };
+        let batch = {
+            let mut pending = lock(&pending);
+            pending.push((row, ok));
+            if pending.len() >= BATCH {
+                std::mem::take(&mut *pending)
+            } else {
+                Vec::new()
+            }
+        };
+        flush(batch);
+
+        let done = done.fetch_add(1, Ordering::Relaxed) + 1;
+        let now = Instant::now();
+        let due = {
+            let mut last = lock(&last);
+            if last.is_none_or(|t| now.duration_since(t) >= progress_interval) {
+                *last = Some(now);
+                true
+            } else {
+                false
+            }
+        };
+        if due {
+            progress(done, total, std::mem::take(&mut *lock(&ready)));
+        }
+    };
+
+    let started = Instant::now();
+    match extract_face_counts_all(&path_bufs, threads, priority, focus, on_item, cancel) {
+        Ok(Some(e)) => log::warn!("all-faces scan of {dir} ran at normal priority: {e}"),
+        Ok(None) => {}
+        Err(e) => log::error!("all-faces scan of {dir} failed: {e}"),
+    }
+    flush(std::mem::take(&mut *lock(&pending)));
+    let done_count = done.load(Ordering::Relaxed);
+    progress(done_count, total, std::mem::take(&mut *lock(&ready)));
+
+    let summary = ScanSummary {
+        total: done_count,
+        errors: errors.load(Ordering::Relaxed),
+    };
+    log::info!(
+        "scan allfaces: dir={dir} files={total} done={} errors={} threads={threads} canceled={} in {}ms",
         summary.total,
         summary.errors,
         cancel.load(Ordering::Relaxed),
@@ -2751,6 +2996,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 10;",
                 )
                 .unwrap();
@@ -2939,6 +3189,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 11;",
                 )
                 .unwrap();
@@ -2987,6 +3242,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 12;",
                 )
                 .unwrap();
@@ -3093,6 +3353,7 @@ pub(crate) mod tests {
             eye_offset: None,
             edge_gap: None,
             full_eye_sharp: None,
+            faces_group: None,
         }
     }
 
@@ -3125,6 +3386,7 @@ pub(crate) mod tests {
                     eye_offset: Some(0.0625),
                     edge_gap: Some(-0.125),
                     full_eye_sharp: Some(0.25),
+                    faces_group: Some(6),
                     ..faces_row(&a_path, None)
                 },
                 FacesRow {
@@ -3145,6 +3407,10 @@ pub(crate) mod tests {
                 eye_offset: Some(0.0625),
                 edge_gap: Some(-0.125),
                 full_eye_sharp: Some(0.25),
+                faces_group: Some(6),
+                faces_judged: None,
+                faces_closed: None,
+                faces_soft: None,
             }
         );
         let json = serde_json::to_value(focus).unwrap();
@@ -3158,6 +3424,8 @@ pub(crate) mod tests {
         assert_eq!(json["eye_offset"], 0.0625);
         assert_eq!(json["edge_gap"], -0.125);
         assert_eq!(json["full_eye_sharp"], 0.25);
+        assert_eq!(json["faces_group"], 6);
+        assert!(json["faces_judged"].is_null());
         let open = index.entry(&b_path).unwrap().unwrap().focus.unwrap();
         assert_eq!(open.eyes.eyes, Some(EyeState::Open));
         assert_eq!(open.eyes.pose, None);
@@ -3174,6 +3442,196 @@ pub(crate) mod tests {
         assert!(json["eyes_closed"].is_null());
         assert!(json["eye_offset"].is_null() && json["edge_gap"].is_null());
         assert!(json["full_eye_sharp"].is_null());
+        assert!(json["faces_group"].is_null());
+
+        remove_temp_dir(&dir);
+    }
+
+    fn allfaces_extractor(index: &Index, path: &str) -> i64 {
+        index
+            .conn
+            .query_row(
+                "SELECT allfaces_extractor FROM files WHERE path = ?1",
+                params![path],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    fn counts(path: &str, judged: u32, closed: u32, soft: Option<u32>) -> AllFacesReady {
+        AllFacesReady {
+            path: path.to_string(),
+            faces_judged: Some(judged),
+            faces_closed: Some(closed),
+            faces_soft: soft,
+        }
+    }
+
+    #[test]
+    fn the_face_counts_round_trip_until_the_second_pass_writes_or_resets_the_row() {
+        let dir = temp_dir("face-counts");
+        let a = file(&dir, "a.ARW", b"a");
+        let b = file(&dir, "b.jpg", b"b");
+        let mut index = open(&dir);
+        let dir_name = dir.to_string_lossy().into_owned();
+        index
+            .write_batch(
+                &dir_name,
+                &[(a.clone(), Ok(entry())), (b.clone(), Ok(entry()))],
+            )
+            .unwrap();
+        let a_path = a.path.to_string_lossy().into_owned();
+        let b_path = b.path.to_string_lossy().into_owned();
+        let gated = FacesRow {
+            faces_group: Some(5),
+            ..faces_row(&a_path, None)
+        };
+        index.write_faces(std::slice::from_ref(&gated)).unwrap();
+        index
+            .write_face_counts(&[counts(&a_path, 5, 1, Some(2))])
+            .unwrap();
+
+        let eyes = index.entry(&a_path).unwrap().unwrap().focus.unwrap().eyes;
+        assert_eq!(
+            (
+                eyes.faces_group,
+                eyes.faces_judged,
+                eyes.faces_closed,
+                eyes.faces_soft
+            ),
+            (Some(5), Some(5), Some(1), Some(2))
+        );
+        let json = serde_json::to_value(eyes).unwrap();
+        assert_eq!(json["faces_group"], 5);
+        assert_eq!(json["faces_judged"], 5);
+        assert_eq!(json["faces_closed"], 1);
+        assert_eq!(json["faces_soft"], 2);
+        assert_eq!(allfaces_extractor(&index, &a_path), ALLFACES_VERSION);
+        assert!(index.allfaces_todo(&dir_name, 5).unwrap().is_empty());
+
+        index
+            .write_face_counts(&[counts(&a_path, 3, 0, None)])
+            .unwrap();
+        let eyes = index.entry(&a_path).unwrap().unwrap().focus.unwrap().eyes;
+        assert_eq!(eyes.faces_soft, None, "an unknown soft count is stored");
+
+        index.write_faces(&[gated]).unwrap();
+        let eyes = index.entry(&a_path).unwrap().unwrap().focus.unwrap().eyes;
+        assert_eq!(eyes.faces_group, Some(5));
+        assert_eq!(
+            (eyes.faces_judged, eyes.faces_closed, eyes.faces_soft),
+            (None, None, None),
+            "a second pass write clears the counts"
+        );
+        assert_eq!(allfaces_extractor(&index, &a_path), 0);
+        assert_eq!(
+            index.allfaces_todo(&dir_name, 5).unwrap(),
+            [a_path.as_str()]
+        );
+
+        index
+            .conn
+            .execute(
+                "UPDATE files SET faces_group = 6, faces_judged = 6, faces_closed = 1,
+                     faces_soft = 0, allfaces_extractor = ?2
+                 WHERE path = ?1",
+                params![b_path, ALLFACES_VERSION],
+            )
+            .unwrap();
+        index.faces_todo(&dir_name).unwrap();
+        let (group, judged, version): (Option<u32>, Option<u32>, i64) = index
+            .conn
+            .query_row(
+                "SELECT faces_group, faces_judged, allfaces_extractor FROM files WHERE path = ?1",
+                params![b_path],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            (group, judged, version),
+            (None, None, 0),
+            "a second pass reset clears the gate count and the counts"
+        );
+
+        index
+            .write_batch(&dir_name, &[(a.clone(), Ok(entry()))])
+            .unwrap();
+        let eyes = index.entry(&a_path).unwrap().unwrap().focus.unwrap().eyes;
+        assert_eq!(eyes, StoredEyes::default(), "a first pass write clears all");
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn allfaces_todo_lists_the_rows_at_the_gate_pass_3_has_not_run_on() {
+        let dir = temp_dir("allfaces-todo");
+        let mut index = open(&dir);
+        let dir_name = dir.to_string_lossy().into_owned();
+        let names = [
+            "under.ARW",
+            "at.ARW",
+            "over.ARW",
+            "done.ARW",
+            "pending.ARW",
+            "error.ARW",
+            "view.jpg",
+        ];
+        let files: Vec<FileStat> = names.iter().map(|n| file(&dir, n, b"x")).collect();
+        let rows: Vec<(FileStat, Result<Entry, Failure>)> = files
+            .iter()
+            .map(|f| {
+                let result = if f.path.ends_with("error.ARW") {
+                    Err("broken".into())
+                } else {
+                    Ok(entry())
+                };
+                (f.clone(), result)
+            })
+            .collect();
+        index.write_batch(&dir_name, &rows).unwrap();
+        let path = |name: &str| dir.join(name).to_string_lossy().into_owned();
+        let gated = |name: &str, group: u32| FacesRow {
+            faces_group: Some(group),
+            ..faces_row(&path(name), None)
+        };
+        assert_eq!(index.faces_todo(&dir_name).unwrap().len(), 5);
+        index
+            .write_faces(&[
+                gated("under.ARW", 4),
+                gated("at.ARW", 5),
+                gated("over.ARW", 7),
+                gated("done.ARW", 6),
+            ])
+            .unwrap();
+        index
+            .write_face_counts(&[counts(&path("done.ARW"), 6, 0, Some(0))])
+            .unwrap();
+        index
+            .conn
+            .execute(
+                "UPDATE files SET faces_group = 9 WHERE path = ?1",
+                params![path("pending.ARW")],
+            )
+            .unwrap();
+
+        assert_eq!(
+            index.allfaces_todo(&dir_name, 5).unwrap(),
+            [path("at.ARW"), path("over.ARW")],
+            "under the gate, done, not through pass 2, an error and a JPEG are not listed"
+        );
+        index
+            .write_face_counts(&[
+                counts(&path("at.ARW"), 5, 0, None),
+                counts(&path("over.ARW"), 7, 2, None),
+            ])
+            .unwrap();
+        assert!(index.allfaces_todo(&dir_name, 5).unwrap().is_empty());
+        assert_eq!(
+            index.allfaces_todo(&dir_name, 4).unwrap(),
+            [path("under.ARW")],
+            "a lower threshold lists the row the higher one left"
+        );
+        assert!(index.allfaces_todo("elsewhere", 1).unwrap().is_empty());
 
         remove_temp_dir(&dir);
     }
@@ -3305,6 +3763,11 @@ pub(crate) mod tests {
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
                      UPDATE files SET eye_focus = 0.875, faces_extractor = 6;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 17;",
                 )
                 .unwrap();
@@ -3382,6 +3845,11 @@ pub(crate) mod tests {
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
                      UPDATE files SET eye_focus = 0.875, faces_extractor = 7;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 18;",
                 )
                 .unwrap();
@@ -3459,6 +3927,74 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn a_v27_database_gains_the_all_faces_columns_and_keeps_its_files_ratings_and_folders() {
+        let dir = temp_dir("migrate-v27");
+        let db = dir.join("index.sqlite");
+        let a = file(&dir, "a.ARW", b"a");
+        let a_path = a.path.to_string_lossy().into_owned();
+        {
+            let mut index = open(&dir);
+            index.write_batch("d", &[(a.clone(), Ok(entry()))]).unwrap();
+            index.reconcile("d", std::slice::from_ref(&a)).unwrap();
+            index
+                .write_faces(&[FacesRow {
+                    eyes_ear: Some(0.3),
+                    ..faces_row(&a_path, Some(5.0))
+                }])
+                .unwrap();
+            index.set_last_viewed("d", &a_path).unwrap();
+            index
+                .conn
+                .execute_batch(
+                    "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
+                         ('/rated.ARW', 'd', 4, 1, 1);
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
+                     PRAGMA user_version = 27;",
+                )
+                .unwrap();
+        }
+
+        let mut index = Index::open(&db).unwrap();
+        let version: i64 = index
+            .conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        let entries = index.entries("d").unwrap();
+        assert_eq!(entries.len(), 1, "files are kept");
+        assert_eq!(entries[0].sharpness, Some(5.0));
+        let eyes = entries[0].focus.unwrap().eyes;
+        assert_eq!(eyes.eyes_ear, Some(0.3), "pass 2 values are kept");
+        assert_eq!(
+            (
+                eyes.faces_group,
+                eyes.faces_judged,
+                eyes.faces_closed,
+                eyes.faces_soft
+            ),
+            (None, None, None, None)
+        );
+        assert_eq!(allfaces_extractor(&index, &a_path), 0);
+        assert_eq!(
+            index.dirty_rows("d").unwrap(),
+            [("/rated.ARW".to_string(), Some(4), Flag::Pick, None, true)],
+            "ratings are kept"
+        );
+        assert_eq!(
+            index.last_viewed("d").unwrap().as_deref(),
+            Some(a_path.as_str()),
+            "folders are kept"
+        );
+        assert!(index.reconcile("d", &[a]).unwrap().0.is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
     fn a_v26_database_drops_its_embeddings_and_keeps_the_rest() {
         let dir = temp_dir("migrate-v26");
         let db = dir.join("index.sqlite");
@@ -3487,6 +4023,11 @@ pub(crate) mod tests {
                 .execute_batch(
                     "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
                          ('/rated.ARW', 'd', 4, 1, 1);
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 26;",
                 )
                 .unwrap();
@@ -3542,6 +4083,11 @@ pub(crate) mod tests {
                     "DROP TABLE views;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 20;",
                 )
                 .unwrap();
@@ -3591,6 +4137,11 @@ pub(crate) mod tests {
                      DROP TABLE views;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 21;",
                 )
                 .unwrap();
@@ -3629,6 +4180,11 @@ pub(crate) mod tests {
                      UPDATE folders SET culling_finished = 1, culling_manual = 1;
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 22;",
                 )
                 .unwrap();
@@ -3963,6 +4519,11 @@ pub(crate) mod tests {
                     "INSERT INTO ratings (path, dir, rating, flag, dirty) VALUES
                          ('/rated.ARW', 'd', 4, 1, 1);
                      DROP TABLE folder_counts;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 25;",
                 )
                 .unwrap();
@@ -4107,6 +4668,11 @@ pub(crate) mod tests {
                          ('/rated.ARW', 'd', 4, 1, 1);
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
                      UPDATE files SET eye_focus = 0.875;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 24;",
                 )
                 .unwrap();
@@ -4176,6 +4742,11 @@ pub(crate) mod tests {
                          ('/rated.ARW', 'd', 4, 1, 1);
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 23;",
                 )
                 .unwrap();
@@ -4237,6 +4808,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 14;",
                 )
                 .unwrap();
@@ -4296,6 +4872,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 15;",
                 )
                 .unwrap();
@@ -4363,6 +4944,11 @@ pub(crate) mod tests {
                      ALTER TABLE files DROP COLUMN full_eye_sharp;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 13;",
                 )
                 .unwrap();
@@ -5419,9 +6005,8 @@ pub(crate) mod tests {
                 .all(|e| e.sharpness.is_none()),
             "the first pass does not score"
         );
-        let score = handpic_core::scan::extract_analysis(Path::new(&paths[0]))
-            .unwrap()
-            .sharpness;
+        let analysis = handpic_core::scan::extract_analysis(Path::new(&paths[0])).unwrap();
+        let score = analysis.sharpness;
         assert!(score.is_some());
 
         let reported = Mutex::new(Vec::new());
@@ -5445,7 +6030,10 @@ pub(crate) mod tests {
             .map(|path| FaceReady {
                 path: path.clone(),
                 sharpness: score,
-                eyes: StoredEyes::default(),
+                eyes: StoredEyes {
+                    faces_group: analysis.gate_count,
+                    ..StoredEyes::default()
+                },
             })
             .collect();
         assert_eq!(reported, expected, "every path is reported once");
@@ -5457,7 +6045,8 @@ pub(crate) mod tests {
             .entries("d")
             .unwrap()
             .iter()
-            .all(|e| e.sharpness == score));
+            .all(|e| e.sharpness == score
+                && e.focus.unwrap().eyes.faces_group == analysis.gate_count));
 
         remove_temp_dir(&dir);
     }
@@ -5626,6 +6215,168 @@ pub(crate) mod tests {
         let focus = index.entry(&bad_path).unwrap().unwrap().focus.unwrap();
         assert_eq!(focus.eyes, StoredEyes::default());
         assert!(index.faces_todo("d").unwrap().is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    /// `faces_fixture`'s files, through the second pass with a gate count of 5.
+    fn allfaces_fixture(dir: &Path, count: usize) -> (Mutex<Index>, Vec<String>) {
+        let (index, paths) = faces_fixture(dir, count);
+        let rows: Vec<FacesRow> = paths
+            .iter()
+            .map(|path| FacesRow {
+                faces_group: Some(5),
+                ..faces_row(path, None)
+            })
+            .collect();
+        lock(&index).write_faces(&rows).unwrap();
+        (index, paths)
+    }
+
+    #[test]
+    fn the_all_faces_pass_writes_and_reports_every_path_with_its_counts() {
+        let dir = temp_dir("allfaces-scan");
+        let (index, paths) = allfaces_fixture(&dir, BATCH * 2 + 3);
+        assert_eq!(lock(&index).allfaces_todo("d", 5).unwrap(), paths);
+        let expected = handpic_core::scan::extract_face_counts(Path::new(&paths[0])).unwrap();
+
+        let reported = Mutex::new(Vec::new());
+        let summary = run_allfaces_scan(
+            &index,
+            "d",
+            &paths,
+            2,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            &AtomicBool::new(false),
+            PROGRESS_INTERVAL,
+            |_, _, ready| reported.lock().unwrap().extend(ready),
+        );
+
+        assert_eq!((summary.total, summary.errors), (paths.len(), 0));
+        let mut reported = reported.into_inner().unwrap();
+        reported.sort_by(|a, b| a.path.cmp(&b.path));
+        let ready: Vec<AllFacesReady> = paths
+            .iter()
+            .map(|path| AllFacesReady {
+                path: path.clone(),
+                faces_judged: expected.map(|c| c.judged),
+                faces_closed: expected.map(|c| c.closed),
+                faces_soft: expected.and_then(|c| c.soft),
+            })
+            .collect();
+        assert_eq!(
+            reported, ready,
+            "every path is reported once with its counts"
+        );
+        let index = lock(&index);
+        for row in &ready {
+            assert_eq!(allfaces_extractor(&index, &row.path), ALLFACES_VERSION);
+            let eyes = index.entry(&row.path).unwrap().unwrap().focus.unwrap().eyes;
+            assert_eq!(
+                (eyes.faces_judged, eyes.faces_closed, eyes.faces_soft),
+                (row.faces_judged, row.faces_closed, row.faces_soft)
+            );
+            assert_eq!(eyes.faces_group, Some(5), "the gate count is kept");
+        }
+        assert!(index.allfaces_todo("d", 5).unwrap().is_empty());
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn canceling_the_all_faces_pass_leaves_its_rows_for_the_next() {
+        let dir = temp_dir("allfaces-cancel");
+        let (index, paths) = allfaces_fixture(&dir, BATCH * 4);
+
+        let cancel = AtomicBool::new(false);
+        let reported = Mutex::new(Vec::new());
+        let summary = run_allfaces_scan(
+            &index,
+            "d",
+            &paths,
+            2,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            &cancel,
+            Duration::ZERO,
+            |done, _, ready| {
+                reported
+                    .lock()
+                    .unwrap()
+                    .extend(ready.into_iter().map(|r| r.path));
+                if done >= BATCH {
+                    cancel.store(true, Ordering::Relaxed);
+                }
+            },
+        );
+
+        assert!(summary.total >= BATCH, "the first batch ran");
+        assert!(summary.total < paths.len(), "the rest did not");
+        let index = lock(&index);
+        let mut written: Vec<String> = paths
+            .iter()
+            .filter(|p| allfaces_extractor(&index, p) == ALLFACES_VERSION)
+            .cloned()
+            .collect();
+        written.sort();
+        assert_eq!(written.len(), summary.total, "everything done is written");
+        let left: Vec<String> = paths
+            .iter()
+            .filter(|p| !written.contains(p))
+            .cloned()
+            .collect();
+        assert_eq!(
+            index.allfaces_todo("d", 5).unwrap(),
+            left,
+            "abandoned files are left for the next run"
+        );
+        let mut reported = reported.into_inner().unwrap();
+        reported.sort();
+        assert_eq!(reported, written, "the trailing flush is reported too");
+
+        remove_temp_dir(&dir);
+    }
+
+    #[test]
+    fn an_unreadable_file_in_the_all_faces_pass_is_one_error_stored_with_no_counts() {
+        let dir = temp_dir("allfaces-err");
+        let (index, mut paths) = allfaces_fixture(&dir, 3);
+        let bad = file(&dir, "bad.ARW", b"not a raw file at all");
+        let bad_path = bad.path.to_string_lossy().into_owned();
+        {
+            let mut index = lock(&index);
+            index.write_batch("d", &[(bad, Ok(entry()))]).unwrap();
+            index
+                .write_faces(&[FacesRow {
+                    faces_group: Some(5),
+                    ..faces_row(&bad_path, None)
+                }])
+                .unwrap();
+        }
+        paths.push(bad_path.clone());
+
+        let summary = run_allfaces_scan(
+            &index,
+            "d",
+            &paths,
+            2,
+            Priority::Lowest,
+            &ScanFocus::default(),
+            &AtomicBool::new(false),
+            PROGRESS_INTERVAL,
+            |_, _, _| {},
+        );
+
+        assert_eq!((summary.total, summary.errors), (4, 1));
+        let index = lock(&index);
+        assert_eq!(allfaces_extractor(&index, &bad_path), ALLFACES_VERSION);
+        let eyes = index.entry(&bad_path).unwrap().unwrap().focus.unwrap().eyes;
+        assert_eq!(
+            (eyes.faces_judged, eyes.faces_closed, eyes.faces_soft),
+            (None, None, None)
+        );
+        assert!(index.allfaces_todo("d", 5).unwrap().is_empty());
 
         remove_temp_dir(&dir);
     }
@@ -6074,6 +6825,11 @@ pub(crate) mod tests {
                      ALTER TABLE files ADD COLUMN eye_focus REAL;
                      ALTER TABLE folders DROP COLUMN last_viewed;
                      DROP TABLE views;
+                     ALTER TABLE files DROP COLUMN faces_group;
+                     ALTER TABLE files DROP COLUMN faces_judged;
+                     ALTER TABLE files DROP COLUMN faces_closed;
+                     ALTER TABLE files DROP COLUMN faces_soft;
+                     ALTER TABLE files DROP COLUMN allfaces_extractor;
                      PRAGMA user_version = 16;",
                 )
                 .unwrap();

@@ -170,7 +170,7 @@ not change.
       (`facechoice --check`).
     - No index change in this step; `FACES_VERSION` stays.
 
-- [ ] Step 2: Store the gate count and the counts, and pass 3 in the engine (`handpic-engine`)
+- [x] Step 2: Store the gate count and the counts, and pass 3 in the engine (`handpic-engine`)
   - Done when:
     - `files` has four nullable integer columns (suggested names
       `faces_group` for the gate count, `faces_judged`, `faces_closed`,
