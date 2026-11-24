@@ -164,8 +164,8 @@ pub struct Analysis {
     /// `sharpness::score_preview` of the preview; `None` when it could not be
     /// scored, which does not fail the file, and always for a JPEG file.
     pub sharpness: Option<f64>,
-    /// `fullsharp::full_eye_sharpness` of the judged face's eyes on the full
-    /// JPEG; `None` when the cue judged no face or its mesh was turned down
+    /// `fullsharp::full_eye_sharpnesses` of the judged face's two eyes on the
+    /// full JPEG (the value `full_eye_sharpness` gives); `None` when the cue judged no face or its mesh was turned down
     /// (`eyes::mesh_trusted`, no eye centers), the file has no usable larger
     /// JPEG, or on any failure.
     pub full_eye_sharp: Option<f64>,
@@ -180,7 +180,8 @@ pub struct Analysis {
 
 /// Compute the face cue and the sharpness score of one file from one read of
 /// its preview. The cue runs the face detector and, on the face
-/// nearest the AF point, the face mesh (`candidate::focus_cue_unless`);
+/// nearest the AF point, the face mesh (`candidate::focus_cue_rgb_unless` on
+/// the decode pass 2 keeps);
 /// without a trusted AF point, on the largest confident face of the whole
 /// preview (`eyes::judged_face`, `candidate::face_cue_unless`), whose
 /// full-size RGB decode the sharpness score then takes its luma from. Only
@@ -415,6 +416,9 @@ fn extract_face_counts_unless(
         arw.orientation,
         cancel,
     )?;
+    if others.is_none() {
+        return Some(Ok(None));
+    }
     let eyes: Vec<_> = others.iter().flatten().map(|m| m.eye_centers).collect();
     let width = rgb.as_ref().map_or(0, |(_, w, _)| *w);
     let FullSharps {
