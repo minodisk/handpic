@@ -199,7 +199,26 @@ Streamable HTTP で MCP を話すクライアントなら、上のエンドポ�
 
 ## インストール
 
-Handpic のパッケージは、2.0.0 以降の [Releases ページ](https://github.com/minodisk/handpic/releases)にあります。最新リリースのファイルを使ってください。どのリリースにも、そのリリースの全ファイルの SHA-256 ダイジェストを並べた `SHA256SUMS` があります。ソースからビルドする場合は [CONTRIBUTING.md](../../CONTRIBUTING.md)（英語）を参照してください。
+いちばん手早いのは、ターミナルで 1 行を実行する方法です。GitHub から最新リリースを取得し、何かを変更する前にダウンロードをそのリリースの `SHA256SUMS` と照合して、Handpic が自分でアップデートできる場所にそのユーザー用にインストールします。
+
+- **macOS と Linux**:
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/minodisk/handpic/main/install.sh | sh
+  ```
+
+  macOS（Apple Silicon または Intel）では、`Handpic-<version>-macos-<arch>.tar.gz` からアプリの署名を確かめたうえで `/Applications/Handpic.app` をインストールします。`/Applications` にそのユーザーで書き込める必要があります。このスクリプトは `sudo` を使いません。Linux（x86_64）では、`Handpic-<version>-linux-x64.tar.gz` とリリースの `install.sh` をダウンロードし、それを実行して下と同じように `~/.local/bin/handpic` をインストールします。Python 3 が必要で、root は不要です。リポジトリーのルートにあるこの `install.sh` は、リリースの `install.sh` アセット（ダウンロード済みの Linux の `.tar.gz` を 1 つインストールするもの）とは別物です。
+- **Windows**（PowerShell で）:
+
+  ```powershell
+  irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex
+  ```
+
+  `Handpic-<version>-windows-x64-setup.exe` をダウンロードしてサイレントで実行し、下のインストーラーと同じようにインストールします。
+
+この方法でインストールしたものは、最初の起動での許可（下を参照）が要りません。`curl` や PowerShell は、ブラウザーと違って、ダウンロードしたものにインターネットから来た印を付けないからです。ダイジェストの照合で分かるのは、ダウンロードが壊れていたり途中で切れたりしていないことです。ファイル自体は GitHub から HTTPS で取得します。もう一度実行すると、入っているものの上に最新リリースをインストールし直します。
+
+ファイルを手動でインストールする場合は、2.0.0 以降の [Releases ページ](https://github.com/minodisk/handpic/releases)から取得してください。最新リリースのファイルを使ってください。どのリリースにも、そのリリースの全ファイルの SHA-256 ダイジェストを並べた `SHA256SUMS` があります。ソースからビルドする場合は [CONTRIBUTING.md](../../CONTRIBUTING.md)（英語）を参照してください。
 
 - **macOS**: Apple Silicon は `Handpic-<version>-macos-arm64.dmg`、Intel は `Handpic-<version>-macos-x86_64.dmg` です。ディスクイメージを開き、`Handpic.app` を `Applications` にドラッグします。`/Applications` など書き込めるフォルダーに置いたままにしてください。アップデートはアプリ全体を置き換えるので、ディスクイメージやダウンロードフォルダーの中ではできません。
 - **Windows のインストーラー**: `Handpic-<version>-windows-x64-setup.exe` です。そのユーザーだけに、`%LOCALAPPDATA%\Programs\Handpic` へ、管理者の確認なしでインストールします。
@@ -214,7 +233,7 @@ Handpic のパッケージは、2.0.0 以降の [Releases ページ](https://git
   `install.sh` は何かを変更する前にアーカイブをそのダイジェストと照合し、それから `~/.local/bin/handpic` と、`~/.local/share` の下のデスクトップエントリーとアイコンをそのユーザーにインストールします。Python 3 が必要で、root は不要です。
 - **Linux の `.deb`**: `handpic_<version>_amd64.deb` を `sudo apt install ./handpic_<version>_amd64.deb` でインストールします。自分ではアップデートしません（[アップデート](#アップデート)を参照してください）。
 
-Handpic は Apple や Microsoft の署名を受けていない（公証も Authenticode もない）ので、最初の起動に一手間かかります。
+Handpic は Apple や Microsoft の署名を受けていない（公証も Authenticode もない）ので、ブラウザーでダウンロードしたファイルでは最初の起動に一手間かかります。
 
 - **macOS**: Gatekeeper が最初の起動をブロックします。macOS 15 以降では、ブロックされた後にシステム設定 → プライバシーとセキュリティ →「このまま開く」を選びます。macOS 14 以前では、`Handpic.app` を右クリック →「開く」を選びます。どのバージョンでも、代わりに `xattr -d com.apple.quarantine /Applications/Handpic.app` を実行してもかまいません。
 - **Windows**: セットアップ、またはダウンロードした ZIP から展開した `Handpic.exe` に SmartScreen が警告を出します。「詳細情報」→「実行」を選びます。

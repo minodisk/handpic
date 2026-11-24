@@ -126,6 +126,7 @@ expect none "tools/package/x.sh" "shellcheck tools/package/x.sh"
 expect none "crates/app/packaging/linux/install.sh" "shellcheck crates/app/packaging/linux/install.sh
 clippy app
 test app"
+expect none "install.sh" "shellcheck install.sh"
 expect none ".claude/skills/develop/scripts/commit-push.sh" "shellcheck .claude/skills/develop/scripts/commit-push.sh"
 expect none "scripts/x.sh
 tools/git/sub/x.sh

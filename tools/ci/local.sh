@@ -56,6 +56,7 @@ shellcheck_patterns=(
 	'^tools/ci/[^/]+\.sh$'
 	'^tools/package/[^/]+\.sh$'
 	'^crates/app/packaging/linux/[^/]+\.sh$'
+	'^install\.sh$'
 )
 
 # select_checks <none|moved|all>
@@ -236,7 +237,7 @@ function run_check() {
 	case "${check}" in
 	"fmt root") cargo fmt --all -- --check ;;
 	"fmt app") cargo fmt --manifest-path crates/app/Cargo.toml --all -- --check ;;
-	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh ;;
+	shellcheck-all) shellcheck -x .claude/skills/*/scripts/*.sh tools/git/*.sh tools/stats/*.sh tools/ci/*.sh tools/package/*.sh crates/app/packaging/linux/*.sh install.sh ;;
 	"shellcheck "*)
 		local script="${check#shellcheck }"
 		if [[ -f "${script}" ]]; then

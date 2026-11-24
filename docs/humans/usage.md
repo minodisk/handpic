@@ -1081,7 +1081,42 @@ above. Two examples:
 
 ## Installing
 
-Handpic's packages are on the
+The quickest install is one line in a terminal. It takes the latest release
+from GitHub, checks the download against that release's `SHA256SUMS`
+before it changes anything, and installs Handpic for your user where it
+updates itself:
+
+- **macOS and Linux**:
+
+  ```sh
+  curl -fsSL https://raw.githubusercontent.com/minodisk/handpic/main/install.sh | sh
+  ```
+
+  On macOS (Apple Silicon or Intel) it installs `/Applications/Handpic.app`
+  from `Handpic-<version>-macos-<arch>.tar.gz`, after checking the app's
+  signature. `/Applications` must be writable by your user; the script does
+  not use `sudo`. On Linux (x86_64) it downloads
+  `Handpic-<version>-linux-x64.tar.gz` and the release's `install.sh`, and
+  runs that to install `~/.local/bin/handpic` as below; it needs Python 3,
+  not root. This `install.sh`, at the root of the repository, is not the
+  release's `install.sh` asset, which installs one Linux `.tar.gz` you
+  already downloaded.
+- **Windows**, in PowerShell:
+
+  ```powershell
+  irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex
+  ```
+
+  It downloads `Handpic-<version>-windows-x64-setup.exe` and runs it
+  silently, which installs as the installer below does.
+
+A copy installed this way needs no first-launch permission (see below):
+`curl` and PowerShell do not mark what they download as coming from the
+internet, as a browser does. The digest check catches a broken or cut-short
+download; the files themselves come from GitHub over HTTPS. Running the line
+again reinstalls the latest release over the one you have.
+
+To install a file by hand instead, take it from the
 [Releases page](https://github.com/minodisk/handpic/releases), from 2.0.0
 on. Take the files of the latest release; each release also carries
 `SHA256SUMS`, the SHA-256 digest of every file in it. To build Handpic from
@@ -1115,7 +1150,8 @@ source instead, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
   itself (see [Updating](#updating)).
 
 Handpic is not signed by Apple or Microsoft (no notarization, no
-Authenticode), so the first launch needs one extra step:
+Authenticode), so the first launch of a file downloaded with a browser needs
+one extra step:
 
 - **macOS**: Gatekeeper blocks the first launch. On macOS 15 and later,
   after that blocked attempt, open System Settings → Privacy & Security →
