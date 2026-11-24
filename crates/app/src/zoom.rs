@@ -107,6 +107,8 @@ struct Ahead<C> {
 
 /// The read in flight.
 struct Flight {
+    /// The page it was asked on.
+    seq: u64,
     /// Whether it reads a neighbour ahead.
     ahead: bool,
     /// Whether the view was zoomed when it was asked for.
@@ -213,6 +215,7 @@ impl<C> Zoom<C> {
             return None;
         }
         self.in_flight = Some(Flight {
+            seq: self.seq,
             ahead: ahead.is_some(),
             zoomed: self.on,
             void: false,
@@ -450,10 +453,30 @@ impl<C> Zoom<C> {
         crop: Result<(C, (u32, u32)), String>,
         viewport: (u32, u32),
     ) -> Arrived<C> {
-        let void = self.in_flight.take().is_some_and(|flight| flight.void);
+        let flight = self.in_flight.take();
+        let void = flight.as_ref().is_some_and(|flight| flight.void);
+        let asked = flight
+            .map(|flight| flight.seq)
+            .filter(|seq| *seq != self.seq);
         match crop {
             Ok((crop, requested)) if !void && self.current.as_deref() == Some(path) => {
                 self.hold(crop, requested, viewport)
+            }
+            Ok((crop, requested)) if !void && self.on && asked.is_some() => {
+                // The page passed this neighbour while it was read: draw it
+                // as a stale crop, as `arrived` does, rather than park it.
+                let release = self
+                    .held
+                    .replace(Held {
+                        crop,
+                        seq: asked.unwrap_or_default(),
+                        viewport: requested,
+                    })
+                    .map(|held| held.crop);
+                Arrived::Stale {
+                    release,
+                    request: self.wanted(viewport),
+                }
             }
             Ok((crop, requested)) if !void && self.on => {
                 let release = self
@@ -1009,11 +1032,14 @@ mod tests {
         z.page(Some("c"), VIEW);
         match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
             Arrived::Stale { release, request } => {
-                assert_eq!(release, None);
+                assert_eq!(release, Some(7));
                 assert_eq!(request.map(|r| r.ahead), Some(None));
             }
             other => panic!("{other:?}"),
         }
+        assert_eq!(z.crop(), Some(&8));
+        assert!(!z.placeholder_fits());
+        assert_eq!(z.page(Some("d"), VIEW).0, Vec::<u8>::new());
     }
 
     #[test]
@@ -1126,6 +1152,22 @@ mod tests {
         );
         assert!(z.placeholder_fits());
         assert_eq!(z.page(A, VIEW).1.map(|r| r.seq), Some(9));
+    }
+
+    #[test]
+    fn a_held_key_draws_a_crop_read_ahead_that_the_page_passed() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.page(Some("b"), VIEW);
+        z.page(Some("c"), VIEW);
+        match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
+            Arrived::Stale { release, request } => {
+                assert_eq!(release, Some(7));
+                assert_eq!(request.map(|r| r.ahead), Some(None));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), Some(&8));
     }
 
     #[test]
