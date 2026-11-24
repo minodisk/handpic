@@ -1,6 +1,7 @@
 //! The culling keymap: each action's default keys and the user's overrides
 //! from the `shortcuts` settings key, merged so no key is bound twice: an
-//! override loses only the keys another action already holds.
+//! override takes its keys from the defaults the user has not overridden and
+//! loses only the keys another override already holds.
 
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -265,14 +266,23 @@ impl Keymap {
     }
 
     /// Merge the stored `shortcuts` value over the defaults. Every entry that
-    /// cannot be used is logged and the action keeps its default. A key
-    /// already bound to another action is dropped from the override (logged)
-    /// and the rest apply, so the earlier action keeps that key and
-    /// `overrides` stores only the rest. An override whose every key is bound
-    /// elsewhere is skipped and kept in the stored value (`overrides`), minus
-    /// any modifier-only keys.
+    /// cannot be used is logged and the action keeps its default. A key of a
+    /// usable override first leaves any action with no usable override of
+    /// its own (logged), which keeps its other default keys or is left with
+    /// none, so a key a later version makes a default stays the user's.
+    /// Between overrides, a key already bound to another action is dropped
+    /// from the override (logged) and the rest apply, so the earlier action
+    /// keeps that key and `overrides` stores only the rest. An override whose
+    /// every key is bound elsewhere is skipped and kept in the stored value
+    /// (`overrides`), minus any modifier-only keys.
     pub fn from_overrides(overrides: Option<&Value>) -> Keymap {
-        let mut keymap = Keymap::defaults();
+        Keymap::merge(Keymap::defaults(), overrides)
+    }
+
+    /// `from_overrides` over the given defaults, so a test can supply an
+    /// action with more than one default key.
+    fn merge(defaults: Keymap, overrides: Option<&Value>) -> Keymap {
+        let mut keymap = defaults;
         let Some(overrides) = overrides else {
             return keymap;
         };
@@ -303,6 +313,25 @@ impl Keymap {
                 continue;
             }
             pending.push((i, keys));
+        }
+        // A stored override wins a key over a default the user has not
+        // overridden, so a key a later version makes another action's default
+        // stays the user's. The displaced action keeps its other keys, if any.
+        for j in 0..keymap.bindings.len() {
+            if pending.iter().any(|(i, _)| *i == j) {
+                continue;
+            }
+            let displaced = keymap.bindings[j].action;
+            let mut kept = Vec::new();
+            for key in std::mem::take(&mut keymap.bindings[j].keys) {
+                match pending.iter().find(|(_, keys)| keys.contains(&key)) {
+                    Some(_) => log::warn!(
+                        "removing {key:?} from {displaced}: a stored shortcut asks for it"
+                    ),
+                    None => kept.push(key),
+                }
+            }
+            keymap.bindings[j].keys = kept;
         }
         // An override may need a key that a later override releases (`p` on
         // reject once pick moves off it), so retry until nothing applies.
@@ -425,6 +454,7 @@ impl Keymap {
         }
         keys.remove(at);
         self.inactive.remove(action);
+        self.refill();
         Ok(())
     }
 
@@ -458,7 +488,15 @@ impl Keymap {
         }
         self.bindings[i].keys = defaults;
         self.inactive.remove(action);
+        self.refill();
         Ok(())
+    }
+
+    /// Give an action left keyless by a stored override back the default keys
+    /// an edit has freed, as a reload would: re-derive the keymap from its own
+    /// overrides.
+    fn refill(&mut self) {
+        *self = Keymap::from_overrides(Some(&self.overrides()));
     }
 
     /// Restore every action's default keys.
@@ -468,16 +506,30 @@ impl Keymap {
 
     /// The actions whose keys differ from the default, as stored under the
     /// `shortcuts` settings key. A stored override skipped for a key
-    /// conflict is kept as it was, minus any modifier-only keys.
+    /// conflict is kept as it was, minus any modifier-only keys. An action
+    /// whose keys are its defaults minus those another action holds is not
+    /// stored (so an empty list never is): the override that took those keys
+    /// takes them again on load, and the action stays un-overridden.
     pub fn overrides(&self) -> Value {
-        let defaults = Keymap::defaults();
+        self.overrides_over(&Keymap::defaults())
+    }
+
+    fn overrides_over(&self, defaults: &Keymap) -> Value {
         let mut overrides = self.inactive.clone();
         overrides.extend(
             self.bindings
                 .iter()
                 .zip(&defaults.bindings)
-                .filter(|(b, d)| b.keys != d.keys)
-                .map(|(b, _)| (b.action.to_string(), Value::from(b.keys.clone()))),
+                .enumerate()
+                .filter(|(i, (b, d))| {
+                    let kept: Vec<&String> = d
+                        .keys
+                        .iter()
+                        .filter(|k| self.holder(*i, k).is_none())
+                        .collect();
+                    !b.keys.iter().eq(kept)
+                })
+                .map(|(_, (b, _))| (b.action.to_string(), Value::from(b.keys.clone()))),
         );
         Value::Object(overrides)
     }
@@ -587,10 +639,12 @@ mod tests {
     }
 
     #[test]
-    fn p_on_another_action_is_skipped_while_pick_holds_it() {
+    fn p_on_another_action_takes_it_from_pick() {
         let keymap = Keymap::from_overrides(Some(&json!({"reject": ["p"]})));
-        assert_eq!(keys_of(&keymap, "reject"), vec!["x"]);
+        assert_eq!(keys_of(&keymap, "reject"), vec!["p"]);
+        assert_eq!(keys_of(&keymap, "pick"), Vec::<String>::new());
         assert_eq!(keymap.overrides(), json!({"reject": ["p"]}));
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
 
     #[test]
@@ -603,9 +657,49 @@ mod tests {
     }
 
     #[test]
-    fn a_collision_with_another_default_is_skipped() {
+    fn a_collision_with_another_default_takes_its_key() {
         let keymap = Keymap::from_overrides(Some(&json!({"reject": ["arrowdown"]})));
-        assert_eq!(keymap.bindings(), Keymap::defaults().bindings());
+        assert_eq!(keys_of(&keymap, "reject"), vec!["arrowdown"]);
+        assert_eq!(keys_of(&keymap, "burstNext"), Vec::<String>::new());
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+    }
+
+    #[test]
+    fn an_edit_freeing_a_displaced_key_gives_it_back() {
+        let mut keymap = Keymap::from_overrides(Some(&json!({"reject": ["p"]})));
+        assert!(keys_of(&keymap, "pick").is_empty());
+        keymap.reset("reject").unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), vec!["p"]);
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+
+        let mut keymap = Keymap::from_overrides(Some(&json!({"reject": ["p", "x"]})));
+        keymap.remove("reject", "p").unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), vec!["p"]);
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+    }
+
+    #[test]
+    fn a_displaced_action_keeping_a_key_is_not_stored_as_overridden() {
+        let mut defaults = Keymap::defaults();
+        let i = defaults.index("performance").unwrap();
+        defaults.bindings[i].keys = vec!["d".into(), "shift+d".into()];
+        let stored = json!({"next": ["arrowright", "d"]});
+        let keymap = Keymap::merge(defaults.clone(), Some(&stored));
+        assert_eq!(keys_of(&keymap, "performance"), vec!["shift+d"]);
+        assert_eq!(keymap.overrides_over(&defaults), stored);
+    }
+
+    #[test]
+    fn a_stored_key_stays_when_a_later_version_makes_it_a_default() {
+        for (key, action) in [("d", "performance"), ("e", "peaking")] {
+            let stored = json!({"next": ["arrowright", key]});
+            let keymap = Keymap::from_overrides(Some(&stored));
+            assert_eq!(keys_of(&keymap, "next"), vec!["arrowright", key]);
+            assert_eq!(keys_of(&keymap, action), Vec::<String>::new());
+            assert_eq!(keymap.accelerator_for(action), None);
+            assert_eq!(keymap.overrides(), stored);
+            assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+        }
     }
 
     #[test]
@@ -905,7 +999,8 @@ mod tests {
         let keymap = Keymap::from_overrides(Some(&json!({"reject": ["ctrl+alt+r"]})));
         assert_eq!(keys_of(&keymap, "reject"), vec!["ctrl+alt+r"]);
         let keymap = Keymap::from_overrides(Some(&json!({"reject": ["ctrl+alt+1"]})));
-        assert_eq!(keymap.bindings(), Keymap::defaults().bindings());
+        assert_eq!(keys_of(&keymap, "reject"), vec!["ctrl+alt+1"]);
+        assert_eq!(keys_of(&keymap, "red"), Vec::<String>::new());
     }
 
     #[test]
@@ -1122,6 +1217,21 @@ mod tests {
     }
 
     #[test]
+    fn an_unusable_override_displaces_no_default() {
+        let key = if MACOS { "meta+q" } else { "ctrl+c" };
+        for value in [
+            json!({"reject": [key, "arrowdown"]}),
+            json!({"reject": ["arrowdown", 1]}),
+        ] {
+            assert_eq!(
+                Keymap::from_overrides(Some(&value)),
+                Keymap::defaults(),
+                "{value}"
+            );
+        }
+    }
+
+    #[test]
     fn modified_keys_are_bindable() {
         let mut keymap = Keymap::defaults();
         let mut keys = vec!["shift+j", "ctrl+j", "alt+j", "ctrl+alt+r"];
@@ -1137,13 +1247,13 @@ mod tests {
 
     #[test]
     fn an_inactive_override_survives_unrelated_edits() {
-        let stored = json!({"reject": ["arrowup"]});
+        let stored = json!({"reject": ["r"], "clear": ["r"]});
         let mut keymap = Keymap::from_overrides(Some(&stored));
         assert_eq!(keymap.overrides(), stored);
         keymap.add("zoom", "space").unwrap();
         assert_eq!(
             keymap.overrides(),
-            json!({"reject": ["arrowup"], "zoom": ["z", "space"]})
+            json!({"reject": ["r"], "clear": ["r"], "zoom": ["z", "space"]})
         );
         keymap.remove("zoom", "space").unwrap();
         keymap.reset("zoom").unwrap();
@@ -1152,20 +1262,20 @@ mod tests {
 
     #[test]
     fn editing_or_resetting_an_action_drops_its_inactive_override() {
-        let stored = json!({"reject": ["arrowup"], "clear": ["z"]});
+        let stored = json!({"reject": ["r"], "clear": ["r"]});
         let mut keymap = Keymap::from_overrides(Some(&stored));
-        keymap.add("reject", "r").unwrap();
+        keymap.add("clear", "q").unwrap();
         assert_eq!(
             keymap.overrides(),
-            json!({"reject": ["x", "r"], "clear": ["z"]})
+            json!({"reject": ["r"], "clear": ["0", "q"]})
         );
         let mut keymap = Keymap::from_overrides(Some(&stored));
-        keymap.add("reject", "r").unwrap();
-        keymap.remove("reject", "r").unwrap();
-        assert_eq!(keymap.overrides(), json!({"clear": ["z"]}));
+        keymap.add("clear", "q").unwrap();
+        keymap.remove("clear", "q").unwrap();
+        assert_eq!(keymap.overrides(), json!({"reject": ["r"]}));
         let mut keymap = Keymap::from_overrides(Some(&stored));
-        keymap.reset("reject").unwrap();
-        assert_eq!(keymap.overrides(), json!({"clear": ["z"]}));
+        keymap.reset("clear").unwrap();
+        assert_eq!(keymap.overrides(), json!({"reject": ["r"]}));
         keymap.reset_all();
         assert_eq!(keymap.overrides(), json!({}));
         assert_eq!(keymap, Keymap::defaults());
@@ -1173,9 +1283,9 @@ mod tests {
 
     #[test]
     fn inactive_overrides_round_trip() {
-        let stored = json!({"reject": ["arrowup"]});
+        let stored = json!({"reject": ["r"], "clear": ["r"]});
         let keymap = Keymap::from_overrides(Some(&stored));
-        assert_eq!(keys_of(&keymap, "reject"), vec!["x"]);
+        assert_eq!(keys_of(&keymap, "clear"), vec!["0"]);
         assert_eq!(keymap.overrides(), stored);
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
@@ -1202,30 +1312,34 @@ mod tests {
     }
 
     #[test]
-    fn a_stale_default_in_an_old_store_drops_only_that_key() {
-        let keymap = Keymap::from_overrides(Some(&json!({
+    fn a_stale_default_in_an_old_store_keeps_its_key() {
+        let stored = json!({
             "previous": ["arrowup", "w", "a", "h", "k"],
             "next": ["arrowdown", "s", "n", "l", "j"],
-        })));
-        assert_eq!(keys_of(&keymap, "previous"), vec!["w", "a", "h", "k"]);
-        assert_eq!(keys_of(&keymap, "next"), vec!["s", "n", "l", "j"]);
-        assert_eq!(keys_of(&keymap, "burstPrevious"), vec!["arrowup"]);
-        assert_eq!(keys_of(&keymap, "burstNext"), vec!["arrowdown"]);
+        });
+        let keymap = Keymap::from_overrides(Some(&stored));
         assert_eq!(
-            keymap.overrides(),
-            json!({"previous": ["w", "a", "h", "k"], "next": ["s", "n", "l", "j"]})
+            keys_of(&keymap, "previous"),
+            vec!["arrowup", "w", "a", "h", "k"]
         );
+        assert_eq!(
+            keys_of(&keymap, "next"),
+            vec!["arrowdown", "s", "n", "l", "j"]
+        );
+        assert_eq!(keys_of(&keymap, "burstPrevious"), Vec::<String>::new());
+        assert_eq!(keys_of(&keymap, "burstNext"), Vec::<String>::new());
+        assert_eq!(keymap.overrides(), stored);
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
 
     #[test]
-    fn a_partly_applied_override_frees_its_default_for_another() {
+    fn an_override_taking_a_default_frees_its_own_for_another() {
         let keymap = Keymap::from_overrides(Some(&json!({
             "previous": ["arrowup", "w"],
             "burstFramePrevious": ["arrowleft"],
         })));
-        assert_eq!(keys_of(&keymap, "previous"), vec!["w"]);
-        assert_eq!(keys_of(&keymap, "burstPrevious"), vec!["arrowup"]);
+        assert_eq!(keys_of(&keymap, "previous"), vec!["arrowup", "w"]);
+        assert_eq!(keys_of(&keymap, "burstPrevious"), Vec::<String>::new());
         assert_eq!(keys_of(&keymap, "burstFramePrevious"), vec!["arrowleft"]);
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
@@ -1257,10 +1371,10 @@ mod tests {
 
     #[test]
     fn a_conflicting_override_keeps_only_its_filtered_keys() {
-        let stored = json!({"reject": ["meta", "arrowup"]});
+        let stored = json!({"reject": ["r"], "clear": ["meta", "r"]});
         let keymap = Keymap::from_overrides(Some(&stored));
-        assert_eq!(keys_of(&keymap, "reject"), vec!["x"]);
-        assert_eq!(keymap.overrides(), json!({"reject": ["arrowup"]}));
+        assert_eq!(keys_of(&keymap, "clear"), vec!["0"]);
+        assert_eq!(keymap.overrides(), json!({"reject": ["r"], "clear": ["r"]}));
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
 }

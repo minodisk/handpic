@@ -896,7 +896,9 @@ Combinations the system or the app already use (`Cmd+Q`, `Cmd+,`,
 `Cmd+Tab`, `Ctrl+C` on Windows, any Windows-key combination, ...) are refused,
 and so are `Home`, `End` and `q`, the app's own keys below.
 `Reset all` restores the defaults. A change applies at once and is
-remembered across launches.
+remembered across launches. A key you bound stays yours when a later version
+makes it another action's default; that action is then left without a key
+until you give it one.
 
 While the folder tree has the keyboard, only `open`, `previous`, `next`,
 `toggleStrip`, `toggleLeft`, `toggleRight` and `toggleSides` (by default
