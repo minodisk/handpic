@@ -634,3 +634,4 @@ Made in this revision (planning, 2026-11-24):
   reopened for the rework
 - (2026-11-24) Step 1 complete
 - (2026-11-24) Step 2 complete
+- (2026-11-24) Step 3 complete
