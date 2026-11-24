@@ -69,6 +69,10 @@ install_linux() {
 main() {
 	os="$(uname -s)"
 	arch="$(uname -m)"
+	# Under Rosetta uname reports x86_64 on an Apple Silicon Mac; install the native build.
+	if [ "${os}" = Darwin ] && [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ]; then
+		arch=arm64
+	fi
 	case "${os} ${arch}" in
 	"Darwin arm64" | "Darwin x86_64")
 		tarball_suffix="macos-${arch}"

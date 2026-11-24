@@ -226,3 +226,10 @@ itself afterwards.
   `Handpic.exe`. The plan does not detect or quit a running app.
 
 ## Progress
+
+- Step 1: added `install.sh` (macOS / Linux) and `install.ps1` (Windows), led the
+  README and usage docs with the one-liners and added shellcheck of `install.sh`
+  to CI. The macOS and Linux checks were done; the Windows manual check of
+  `install.ps1` is still open (see `learnings.md`). Review round 1: on Darwin
+  `install.sh` now picks `arm64` via `sysctl hw.optional.arm64` so a Rosetta
+  shell installs the native build.
