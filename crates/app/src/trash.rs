@@ -353,6 +353,51 @@ pub fn carry_stash(
     });
 }
 
+/// Where a pane error line comes from: a failure of a trash-family run (a
+/// move to the Trash, a delete, or the undo or redo of a run), or anything
+/// else (a judgment that failed to be stored or written, a folder
+/// operation's failure).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    Trash,
+    Other,
+}
+
+/// The pane's error lines of the failed writes and runs, one per path and
+/// origin, the newest message replacing the older. The next trash-family
+/// run's start drops the `Trash` lines; the others stay until a folder open
+/// clears them all.
+#[derive(Debug, Default)]
+pub struct Failures(Vec<(Origin, String, String)>);
+
+impl Failures {
+    pub fn push(&mut self, origin: Origin, path: String, message: String) {
+        match self
+            .0
+            .iter_mut()
+            .find(|(o, p, _)| *o == origin && *p == path)
+        {
+            Some(entry) => entry.2 = message,
+            None => self.0.push((origin, path, message)),
+        }
+    }
+
+    pub fn run_started(&mut self) {
+        self.0.retain(|(origin, _, _)| *origin != Origin::Trash);
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// Each line's path and message, in the order they first failed.
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.0
+            .iter()
+            .map(|(_, path, message)| (path.as_str(), message.as_str()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use handpic_engine::trash::{Failure, Summary};
@@ -808,5 +853,60 @@ mod tests {
         assert_eq!(flow.key(Some("escape"), false), Key::Swallow);
         assert_eq!(flow.key(Some("enter"), false), Key::Swallow);
         assert!(flow.running());
+    }
+
+    fn lines(failures: &Failures) -> Vec<(&str, &str)> {
+        failures.iter().collect()
+    }
+
+    #[test]
+    fn a_new_run_drops_the_earlier_trash_failures_and_keeps_the_judgment_lines() {
+        let mut failures = Failures::default();
+        failures.push(Origin::Other, "/a".into(), "store failed".into());
+        failures.push(
+            Origin::Trash,
+            "/a".into(),
+            "could not move to the Trash: x".into(),
+        );
+        failures.push(
+            Origin::Trash,
+            "/b".into(),
+            "could not restore from the Trash: y".into(),
+        );
+        failures.push(Origin::Other, "/c".into(), "sidecar failed".into());
+        assert_eq!(
+            lines(&failures),
+            [
+                ("/a", "store failed"),
+                ("/a", "could not move to the Trash: x"),
+                ("/b", "could not restore from the Trash: y"),
+                ("/c", "sidecar failed"),
+            ]
+        );
+        failures.run_started();
+        assert_eq!(
+            lines(&failures),
+            [("/a", "store failed"), ("/c", "sidecar failed")]
+        );
+        failures.push(Origin::Trash, "/d".into(), "could not delete: z".into());
+        assert_eq!(
+            lines(&failures),
+            [
+                ("/a", "store failed"),
+                ("/c", "sidecar failed"),
+                ("/d", "could not delete: z"),
+            ]
+        );
+        failures.clear();
+        assert!(lines(&failures).is_empty());
+    }
+
+    #[test]
+    fn a_newer_failure_of_the_same_path_and_origin_replaces_the_older() {
+        let mut failures = Failures::default();
+        failures.push(Origin::Other, "/a".into(), "first".into());
+        failures.push(Origin::Other, "/a".into(), "second".into());
+        failures.push(Origin::Trash, "/a".into(), "run".into());
+        assert_eq!(lines(&failures), [("/a", "second"), ("/a", "run")]);
     }
 }

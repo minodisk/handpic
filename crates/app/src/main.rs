@@ -637,9 +637,10 @@ struct Handpic {
     step_note: Option<String>,
     /// The sidecars the open could not read, as `<name>: <message>`.
     notes: Vec<String>,
-    /// The judgments that failed to be stored or written, one per path, the
-    /// newest message replacing the older.
-    write_errors: Vec<(String, String)>,
+    /// The judgments that failed to be stored or written, the folder
+    /// operations' failures and the last trash-family run's, one per path
+    /// and origin.
+    write_errors: trash::Failures,
     /// The `f` overlay's toggle and what it draws.
     marks: overlay::Marks,
     /// Shown images that the next presented frame no longer uses.
@@ -1080,7 +1081,7 @@ impl Handpic {
             selection: Selection::default(),
             step_note: None,
             notes: Vec::new(),
-            write_errors: Vec::new(),
+            write_errors: trash::Failures::default(),
             marks: overlay::Marks::default(),
             retired: Rc::default(),
             pending: Rc::default(),
@@ -1794,6 +1795,7 @@ impl Handpic {
         self.resync.hold();
         self.trashing = Some((mode, 0, paths.len()));
         self.running_op = Some(mode.label());
+        self.write_errors.run_started();
         let (stores, writer, runs, events) = (
             self.stores.clone(),
             self.writer.clone(),
@@ -1896,6 +1898,7 @@ impl Handpic {
                 }
                 for failure in &summary.failed {
                     self.write_failed(
+                        trash::Origin::Trash,
                         failure.path.clone(),
                         format!("{}: {}", mode.failure(), failure.message),
                     );
@@ -2010,6 +2013,7 @@ impl Handpic {
         }
         self.trash_step = Some(entry.id);
         self.running_op = Some(entry.what.step_labels().0);
+        self.write_errors.run_started();
         self.gate.enter_in_flight();
         self.resync.hold();
         let runs = self.runs.clone();
@@ -2051,6 +2055,7 @@ impl Handpic {
                 self.undo.undone(&entry, &restored);
                 for failure in &restored.failed {
                     self.write_failed(
+                        trash::Origin::Trash,
                         failure.path.clone(),
                         format!("could not restore from the Trash: {}", failure.message),
                     );
@@ -2121,6 +2126,7 @@ impl Handpic {
         }
         self.trash_step = Some(entry.id);
         self.running_op = Some(entry.what.step_labels().1);
+        self.write_errors.run_started();
         self.gate.enter_in_flight();
         self.resync.hold();
         self.trashing = Some((trash::Mode::Trash, 0, entry.count));
@@ -3665,7 +3671,7 @@ impl Handpic {
                 return;
             }
             Event::SidecarError { path, message } => {
-                self.write_failed(path.clone(), message.clone());
+                self.write_failed(trash::Origin::Other, path.clone(), message.clone());
                 cx.notify();
                 return;
             }
@@ -4133,7 +4139,7 @@ impl Handpic {
                     this.undo.forget(entry, &path);
                     this.set_state(&path, before);
                     this.refilter(this.current_path(), false, None, cx);
-                    this.write_failed(path, e);
+                    this.write_failed(trash::Origin::Other, path, e);
                     cx.notify();
                 }
             })
@@ -4142,11 +4148,8 @@ impl Handpic {
         .detach();
     }
 
-    fn write_failed(&mut self, path: String, message: String) {
-        match self.write_errors.iter_mut().find(|(p, _)| *p == path) {
-            Some(entry) => entry.1 = message,
-            None => self.write_errors.push((path, message)),
-        }
+    fn write_failed(&mut self, origin: trash::Origin, path: String, message: String) {
+        self.write_errors.push(origin, path, message);
     }
 
     fn current_path(&self) -> Option<String> {

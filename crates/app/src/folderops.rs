@@ -479,6 +479,9 @@ impl Handpic {
             dialog.set_running();
         }
         self.running_op = Some(kind.label());
+        if kind == Kind::Delete {
+            self.write_errors.run_started();
+        }
         self.gate.enter_in_flight();
         if self.dir.is_some() {
             self.resync.hold();
@@ -676,7 +679,7 @@ impl Handpic {
             Err(e) => {
                 self.folderops.sequence.fail();
                 self.record_failed(sequence::LABEL, e.clone());
-                self.write_failed(dir, e);
+                self.write_failed(trash::Origin::Other, dir, e);
             }
         }
         cx.notify();
@@ -762,7 +765,11 @@ impl Handpic {
         self.folderops.sequence_cancel = None;
         self.folderops.sequence_quit = None;
         for failure in &ran.failed {
-            self.write_failed(failure.path.clone(), failure.message.clone());
+            self.write_failed(
+                trash::Origin::Other,
+                failure.path.clone(),
+                failure.message.clone(),
+            );
         }
         self.step_note = sequence::done_status(&ran);
         // The slot may name a trash run that overlapped; that run's end owns it.
@@ -902,7 +909,7 @@ impl Handpic {
             Err(e) => {
                 self.folderops.import.fail();
                 self.record_failed(import::LABEL, e.clone());
-                self.write_failed(dir, e);
+                self.write_failed(trash::Origin::Other, dir, e);
             }
         }
         cx.notify();
@@ -1039,7 +1046,11 @@ impl Handpic {
         self.folderops.import_cancel = None;
         self.folderops.import_quit = None;
         for failure in &ran.failed {
-            self.write_failed(failure.path.clone(), failure.message.clone());
+            self.write_failed(
+                trash::Origin::Other,
+                failure.path.clone(),
+                failure.message.clone(),
+            );
         }
         self.folderops.imported = Some(import::done_status(&ran));
         // The slot may name a trash run that overlapped; that run's end owns it.
@@ -1287,6 +1298,7 @@ impl Handpic {
         };
         for failure in &split.failed {
             self.write_failed(
+                trash::Origin::Other,
                 failure.path.clone(),
                 format!("could not move: {}", failure.message),
             );
