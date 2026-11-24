@@ -126,6 +126,7 @@ impl Ui {
             view.scan_priorities = Priorities {
                 extract: Priority::Normal,
                 faces: Priority::Normal,
+                allfaces: Priority::Normal,
             };
             view.scan.clone()
         });

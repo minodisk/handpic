@@ -114,11 +114,15 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   while more than one file is selected, by `· K selected`.
   Hovering a cell's name band shows its color label's name, and hovering a
   cell whose file failed to scan shows the error. While a folder is scanned (`scanning N / M`, then
-  `analyzing N / M`), the scan takes the shown file and the strip's visible
+  `analyzing N / M`, then, on a folder with group photos,
+  `checking faces N / M`), the scan takes the shown file and the strip's visible
   cells first, following paging and scrolling, so their thumbnails, then
-  their focus marks, arrive before the rest. Both passes
-  run below normal OS priority, the second lower still, so the viewer and the
-  rest of the machine come first when they compete for the CPU.
+  their focus marks, arrive before the rest. The third pass runs only on the
+  frames where the second counted at least five confident faces of about the
+  judged face's size, and checks the eyes of every face of those frames; a
+  folder without such a frame has no third pass. All passes
+  run below normal OS priority, the second and the third lower still, so the
+  viewer and the rest of the machine come first when they compete for the CPU.
   Several files can be selected: `Cmd+click` (`Ctrl+click` on Windows and
   Linux) adds or removes one file without changing the file shown (the shown
   file itself always stays selected), `Shift+click` selects every file from the

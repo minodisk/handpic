@@ -17,7 +17,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use handpic_core::{Flag, eyes::EyeState};
 use handpic_engine::{
     exif::Exif,
-    index::{FaceReady, Focus, IndexedFile},
+    index::{AllFacesReady, FaceReady, Focus, IndexedFile},
 };
 use serde_json::{Value, json};
 
@@ -384,6 +384,19 @@ pub fn apply_face_ready(facts: &mut HashMap<String, Facts>, ready: &[FaceReady])
         facts.sharpness = item.sharpness;
         if let Some(focus) = facts.focus.as_mut() {
             focus.eyes = item.eyes;
+        }
+    }
+}
+
+/// Patch each of pass 3's `ready` files' counts into its facts' focus, as
+/// `apply_face_ready` patches pass 2's: a file without facts or without a
+/// focus is left alone.
+pub fn apply_face_counts(facts: &mut HashMap<String, Facts>, ready: &[AllFacesReady]) {
+    for item in ready {
+        if let Some(focus) = facts.get_mut(&item.path).and_then(|f| f.focus.as_mut()) {
+            focus.eyes.faces_judged = item.faces_judged;
+            focus.eyes.faces_closed = item.faces_closed;
+            focus.eyes.faces_soft = item.faces_soft;
         }
     }
 }
@@ -1239,6 +1252,46 @@ mod tests {
         );
         assert_eq!(facts["J.JPG"].sharpness, Some(0.5));
         assert_eq!(facts["A.ARW"].sharpness, Some(0.5));
+    }
+
+    #[test]
+    fn a_pass_3_file_takes_its_counts_and_keeps_its_pass_2_values() {
+        let before = with(|f| f.eyes.faces_group = Some(6));
+        let mut facts = HashMap::from([
+            ("J.JPG".to_string(), facts(1)),
+            (
+                "A.ARW".to_string(),
+                Facts {
+                    focus: Some(before),
+                    ..facts(1)
+                },
+            ),
+        ]);
+        let counts = |path: &str| AllFacesReady {
+            path: path.into(),
+            faces_judged: Some(6),
+            faces_closed: Some(1),
+            faces_soft: None,
+        };
+        apply_face_counts(
+            &mut facts,
+            &[counts("J.JPG"), counts("A.ARW"), counts("B.ARW")],
+        );
+        let eyes = facts["A.ARW"].focus.unwrap().eyes;
+        assert_eq!(
+            (eyes.faces_judged, eyes.faces_closed, eyes.faces_soft),
+            (Some(6), Some(1), None)
+        );
+        assert_eq!(
+            StoredEyes {
+                faces_judged: None,
+                faces_closed: None,
+                ..eyes
+            },
+            before.eyes
+        );
+        assert!(facts["J.JPG"].focus.is_none());
+        assert!(!facts.contains_key("B.ARW"));
     }
 
     #[test]

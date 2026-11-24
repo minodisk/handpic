@@ -1360,8 +1360,9 @@ impl Companion {
     #[tool(
         description = "What Handpic's status row and pane notes tell the user: `idle` (nothing \
         under way), the open `folder`, a folder `opening` once a run ends, whether a `listing` \
-        or a `scan` pass (`scanning` or `analyzing`, with done / total) is under way, whether a \
-        run on the open folder's files is `running`, the status line's text, the pane's \
+        or a `scan` pass (`scanning`, `analyzing` or `checking faces`, with done / total) is \
+        under way, whether a run on the open folder's files is `running`, the status line's \
+        text, the pane's \
         `notes` and `errors`, the `operation` under way, else the last one to end (its \
         `name`, such as `Move to Trash`, `Undo Move to Trash`, `Delete Sidecars`, `Import` or \
         `Rename…`, its `state`: `previewing`, `awaiting_confirmation` in Handpic's dialog \

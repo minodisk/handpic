@@ -111,7 +111,7 @@ from that same mesh, and, on every frame whose cue judged a face, the
 second read; none when the file holds no JPEG larger than the preview) and
 `faces_group` with the gate count (the confident faces of the judged face's
 size, `allfaces::gate_count`), clearing the row's all-faces counts, and streams them as `faces-progress` /
-`faces-done` events, and holds the third pass, which no caller runs yet:
+`faces-done` events, and the third pass, which the app runs after it:
 `allfaces_todo` (the rows past pass 2 whose `faces_group` is at least the
 given threshold and whose `allfaces_extractor` is not `ALLFACES_VERSION`)
 and `run_allfaces_scan`, which runs core's `extract_face_counts` over them
@@ -381,9 +381,15 @@ index with the whole listing once the launch's eviction is over (`Eviction`,
 which every listing waits on), reads back the changed sidecars
 (`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
 to the writer with no debounce) and
-runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
+runs pass 1 (`index::run_scan`), then pass 2 (`index::run_faces_scan`) and
+then, on the rows `allfaces_todo` gives at `GROUP_MIN_FACES` (5), pass 3
+(`index::run_allfaces_scan`, at pass 2's `Priority::Lowest`, none started
+when no row is at the gate, `FacesDone` then ending the scan, else
+`AllFacesDone`) on
 a thread of its own, their progress reaching
-the view through one channel and the status line's `Status` (cleared whenever
+the view through one channel (pass 3's rows patched into the `Facts` by
+`filter::apply_face_counts`) and the status line's `Status`
+(`scanning`, `analyzing`, then `checking faces`, cleared whenever
 a re-listing stops the scan), the scan held in the `Running` the app's quit
 handler shares, which stops it, and one a re-listing is still stopping,
 within `STOP_TIMEOUT` on every quit,
@@ -452,7 +458,8 @@ by `get_view` (`filter`, `filter_offers`, `panes`, `overlays`), `open_folder`
 through `open_from_tree` (the open folder not reopened), `tree_folder` through
 `tree_toggle` and the tree menu's `folder_action` on the drawn row of the
 path, `reveal` through `folder_action` / `files_action`, `Status`, the
-`get_status` answer of the status line, the scan pass, a listing or run under
+`get_status` answer of the status line, the scan pass (pass 3's
+`checking faces` too), a listing or run under
 way, the pane's notes (`pane_notes`, `pane_errors`) and the `Operation` under
 way or last ended (asking, held, running with done / total, finished,
 failed), `trash_photos`, the strip menu's Move to Trash / Delete Permanently
@@ -631,7 +638,7 @@ as a 120 px band along the bottom of the preview canvas over the fit view
 and the 1:1 crop alike), `src/progress.rs` the window's one progress indicator
 (`fraction`, a port of `progress.ts`'s `progressWidth`, and `shown`, a Move to
 Trash / Delete Permanently run before the undo of one before a folder
-operation's run before the scan's running pass), which the window draws as a gpui-component
+operation's run before the scan's running pass, any of its three), which the window draws as a gpui-component
 `ProgressCircle` in the status row's `StatusBar`, right of the position,
 and `src/panels.rs` the panes shown (`Panels`, a
 port of `panels.ts` and the Tauri `panels_setting`: `toggle`, `toggle_sides`,
