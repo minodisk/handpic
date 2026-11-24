@@ -2941,7 +2941,15 @@ renames hold, else by the canonical `dir`); it is asked after a
 current result (read or hit), a settled prefetch, a `refilter` that leaves the
 current file shown, `FacesDone` and a failed folder rename (`rename_ran`'s
 `Err` arm; a successful one reopens the folder, which refills the ring).
-`--no-prefetch` turns the ring off. `PREFETCH_PIXEL_CAP` counts decoded
+`--no-prefetch` turns the ring off. A ring miss on a JPEG-only folder is the
+number the ring hides: with `--no-prefetch` the 50 MP Leica exports take
+about 115 ms p50 per page (`decode` about 100 ms at 1/8 scale) and the 26 MP
+Sony exports about 50 ms, against 9-13 ms p50 with the ring on at one press a
+second. Fancy upsampling off plus `DctMethod::IntegerFast` did not cut
+`decode` (96.62 to 99.87 ms median), because at 1/8 and 2/8 the time is the
+entropy decode, so do not retry decoder settings for it
+(`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`, Step 4).
+`PREFETCH_PIXEL_CAP` counts decoded
 pixels, which are about the canvas's size since the fit view decodes at a
 reduced scale (see "The fit view decodes at the canvas's DCT scale" below).
 

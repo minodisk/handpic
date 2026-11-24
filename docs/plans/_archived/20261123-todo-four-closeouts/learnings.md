@@ -108,3 +108,10 @@
   luma-vs-Y check in `no-af-decode.md`. Files: `crates/core/src/scan.rs`
   (`cue`, `score`), `crates/core/src/candidate.rs` (`focus_cue_unless`),
   `crates/core/src/sharpness.rs` (`score_gray`).
+- CI: the `app (macos-latest)` job can exceed its 30-minute
+  `timeout-minutes` (`.github/workflows/ci.yml`) on a cold build cache: on
+  #1272 the "Lint and test the app" step had passed (1103 tests) and the job
+  was cancelled in "Bundle and check Handpic.app", which recompiles the gpui
+  crates; a rerun passed. The same job was also the last to finish on #1256
+  and #1260. Raise the limit or avoid the bundle step's second build. Done
+  when a cold-cache macOS app job finishes inside its limit.

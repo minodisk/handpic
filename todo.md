@@ -225,6 +225,30 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
 
 Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/core/src/arw.rs`, `crates/engine/src/index.rs`, `crates/app/src/burst.rs`.
 
+---
+
+### Core: decide which score ranks frames within a burst, the AF-frame window or the eye-midpoint window
+
+#### Background
+
+`todo-four-closeouts` Step 2 compared, over faced, face-tracked Sony frames, today's stored `sharpness` (the AF-frame window) with the eye-midpoint window it replaced. Over 69 bursts of 2026-09-19, 2026-09-13-a and 2026-09-13-b, the median per-burst Spearman was 0.500, the 10th percentile -0.420, and the same top frame came out in 62% of bursts, against a bar of 0.9 and 80%. The scoring was kept as is (Trade-offs 2 (a)). The check is not the exact pre-#334 pipeline. Plan: `docs/plans/_archived/20261123-todo-four-closeouts/plan.md`, numbers in `burst-rank.md` beside it. Files: `crates/core/src/sharpness.rs` (`score`, `eye_af_frame`), `crates/engine/src/index.rs` (`FACES_VERSION`), `crates/app/src/burst.rs`.
+
+#### TODO
+
+- [ ] Decide whether the score that ranks frames within a burst returns to the eye-midpoint window (with a `FACES_VERSION` bump) or whether the burst ranking reads `full_eye_sharp` instead, or keep the AF-frame window and record why.
+
+---
+
+### Core: a file with a trusted AF point still decodes its preview twice in pass 2
+
+#### Background
+
+`todo-four-closeouts` Step 3 made a faced no-AF file score from the cue's RGB decode (`FACES_VERSION` 13), but left the files with a trusted AF point alone: they still decode the preview twice (full-size RGB for the cue's crop, grayscale for the score). Reusing the RGB's luma would save a grayscale decode (about 4-5 ms on a 1616x1080 ARW preview) per file. On ARW, CR3, NEF, RAF and ORF previews the BT.601 luma of the RGB differs from mozjpeg's Y channel on about half the pixels (score 0.1-1.1% off), so it needs its own ranking check on Sony bursts and a `FACES_VERSION` bump. Plan: `docs/plans/_archived/20261123-todo-four-closeouts/plan.md`, luma-vs-Y check in `no-af-decode.md` beside it. Files: `crates/core/src/scan.rs` (`cue`, `score`), `crates/core/src/candidate.rs` (`focus_cue_unless`), `crates/core/src/sharpness.rs` (`score_gray`).
+
+#### TODO
+
+- [ ] Measure the saving and the within-burst Spearman of the luma-reuse score on real Sony bursts with a trusted AF point (`handpic-cli features`, `burst_spearman.py` from the plan folder), and adopt it with a `FACES_VERSION` bump only if the ranking holds, otherwise record "measured, not adopted".
+
 ### Core: the review of the closed-eyes labels is still open
 
 `closed-eyes-detection` (`docs/plans/_archived/20261007-closed-eyes-detection/plan.md`) set the closed-eyes threshold (0.137) and measured its AUCs on a truth set the agent labeled. The user's review of its `closed` faces is still open. Files: `crates/core/src/eyes.rs`, `docs/plans/_archived/20261007-closed-eyes-detection/eyes-truth.md`.
@@ -1477,11 +1501,12 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 #### Background
 
-`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency).
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency). `todo-four-closeouts` (`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`) saw it exceed the limit: on #1272 the "Lint and test the app" step had passed (1103 tests) and the job was cancelled in "Bundle and check Handpic.app", which recompiles the gpui crates, and a rerun passed. The same job was also the last to finish on #1256 and #1260.
 
 #### TODO
 
 - [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
+- [ ] Raise the job's `timeout-minutes` in `.github/workflows/ci.yml` or avoid the bundle step's second gpui build. Done when a cold-cache macOS app job finishes inside its limit.
 
 ---
 
