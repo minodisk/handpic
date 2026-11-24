@@ -33,10 +33,6 @@ pub const READ_SLOTS: usize = 2;
 /// longer; past this the process exits with the scan still running.
 pub const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// The gate count a frame needs for pass 3 to check all its faces, until it
-/// is a setting.
-pub const GROUP_MIN_FACES: u32 = 5;
-
 /// The OS priority of each pass's workers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Priorities {
@@ -520,7 +516,9 @@ impl Scan {
     /// Run `index::run_scan`, `index::run_faces_scan` and then, on the files
     /// at the gate, `index::run_allfaces_scan` on a thread of their own: they
     /// block for as long as the folder takes, which would hold one of GPUI's
-    /// background threads.
+    /// background threads. `group_min_faces` is the group threshold in force
+    /// when the scan starts; a later change waits for the next listing.
+    #[allow(clippy::too_many_arguments)]
     pub fn start(
         id: u64,
         index: Arc<Mutex<Index>>,
@@ -528,6 +526,7 @@ impl Scan {
         todo: Vec<FileStat>,
         focus: ScanFocus,
         priorities: Priorities,
+        group_min_faces: u32,
         events: UnboundedSender<Event>,
     ) -> Self {
         let cancel = Arc::new(AtomicBool::new(false));
@@ -580,7 +579,7 @@ impl Scan {
                         });
                     },
                 );
-                let todo = allfaces_todo(&index, &dir, &cancel);
+                let todo = allfaces_todo(&index, &dir, group_min_faces, &cancel);
                 let _ = events.unbounded_send(Event::FacesDone {
                     scan: id,
                     summary,
@@ -751,14 +750,19 @@ fn run_faces_pass(
     )
 }
 
-/// The files pass 3 runs on, `Index::allfaces_todo` at `GROUP_MIN_FACES`;
-/// none once canceled or when they could not be listed.
-fn allfaces_todo(index: &Mutex<Index>, dir: &str, cancel: &AtomicBool) -> Vec<String> {
+/// The files pass 3 runs on, `Index::allfaces_todo` at `min_faces`; none
+/// once canceled or when they could not be listed.
+fn allfaces_todo(
+    index: &Mutex<Index>,
+    dir: &str,
+    min_faces: u32,
+    cancel: &AtomicBool,
+) -> Vec<String> {
     if cancel.load(Ordering::Relaxed) {
         return Vec::new();
     }
     index::lock(index)
-        .allfaces_todo(dir, GROUP_MIN_FACES)
+        .allfaces_todo(dir, min_faces)
         .unwrap_or_else(|e| {
             log::error!("failed to list the all-faces pass of {dir}: {e}");
             Vec::new()
@@ -768,9 +772,10 @@ fn allfaces_todo(index: &Mutex<Index>, dir: &str, cancel: &AtomicBool) -> Vec<St
 #[cfg(test)]
 mod tests {
     use super::{
-        Event, Eviction, GROUP_MIN_FACES, Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped,
+        Event, Eviction, Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped,
         faces_threads_for, list, natural_order, threads_for,
     };
+    use crate::group;
     use handpic_core::{
         Flag,
         arw::Shot,
@@ -937,9 +942,14 @@ mod tests {
         path
     }
 
-    /// What a scan of `dir` with nothing for pass 1 sends, in order, each
-    /// message by its kind and, for pass 3's, the files it names.
-    fn scan_events(index: Arc<Mutex<Index>>, dir: &str) -> Vec<(&'static str, Vec<String>)> {
+    /// What a scan of `dir` with nothing for pass 1 sends at the group
+    /// threshold `min_faces`, in order, each message by its kind and, for
+    /// pass 2's and pass 3's rows, the files it names.
+    fn scan_events_at(
+        index: Arc<Mutex<Index>>,
+        dir: &str,
+        min_faces: u32,
+    ) -> Vec<(&'static str, Vec<String>)> {
         let (events, received) = futures::channel::mpsc::unbounded();
         let scan = Scan::start(
             9,
@@ -948,11 +958,15 @@ mod tests {
             Vec::new(),
             ScanFocus::default(),
             Priorities::APP,
+            min_faces,
             events,
         );
         let sent = futures::executor::block_on_stream(received)
             .filter_map(|event| match event {
                 Event::Done { .. } => Some(("done", Vec::new())),
+                Event::FacesProgress { ready, .. } if !ready.is_empty() => {
+                    Some(("faces-ready", ready.into_iter().map(|r| r.path).collect()))
+                }
                 Event::FacesDone { checking, .. } => {
                     Some(("faces-done", vec![checking.to_string()]))
                 }
@@ -971,6 +985,51 @@ mod tests {
         sent
     }
 
+    fn scan_events(index: Arc<Mutex<Index>>, dir: &str) -> Vec<(&'static str, Vec<String>)> {
+        scan_events_at(index, dir, group::DEFAULT)
+    }
+
+    #[test]
+    fn a_lowered_threshold_runs_pass_3_on_the_rows_that_now_meet_it_alone() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().to_string_lossy().into_owned();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        let under = gated(&index, &dir, "A.ARW", 2);
+        let three = gated(&index, &dir, "B.ARW", 3);
+        let four = gated(&index, &dir, "C.ARW", 4);
+        let at = gated(&index, &dir, "D.ARW", 5);
+        assert_eq!(
+            scan_events_at(index.clone(), &dir, 5),
+            [
+                ("done", Vec::new()),
+                ("faces-done", vec!["1".to_owned()]),
+                ("allfaces-ready", vec![at]),
+                ("allfaces-done", Vec::new()),
+            ]
+        );
+        let sent = scan_events_at(index.clone(), &dir, 3);
+        assert!(
+            sent.iter().all(|(kind, _)| *kind != "faces-ready"),
+            "pass 2 runs on nothing: {sent:?}"
+        );
+        assert_eq!(sent[1], ("faces-done", vec!["2".to_owned()]));
+        let mut checked: Vec<String> = sent
+            .iter()
+            .filter(|(kind, _)| *kind == "allfaces-ready")
+            .flat_map(|(_, paths)| paths.clone())
+            .collect();
+        checked.sort();
+        assert_eq!(checked, [three, four]);
+        assert_eq!(sent.last().unwrap().0, "allfaces-done");
+        assert_eq!(
+            index.lock().unwrap().allfaces_todo(&dir, 2).unwrap(),
+            [under],
+            "the row under the lowered threshold is left for a lower one"
+        );
+    }
+
     #[test]
     fn pass_3_runs_after_pass_2_on_the_rows_at_the_gate() {
         let temp = tempfile::tempdir().unwrap();
@@ -978,8 +1037,8 @@ mod tests {
         let index = Arc::new(Mutex::new(
             Index::open(&temp.path().join("index.sqlite")).unwrap(),
         ));
-        gated(&index, &dir, "A.ARW", GROUP_MIN_FACES - 1);
-        let at = gated(&index, &dir, "B.ARW", GROUP_MIN_FACES);
+        gated(&index, &dir, "A.ARW", group::DEFAULT - 1);
+        let at = gated(&index, &dir, "B.ARW", group::DEFAULT);
         assert_eq!(
             scan_events(index.clone(), &dir),
             [
@@ -993,7 +1052,7 @@ mod tests {
             index
                 .lock()
                 .unwrap()
-                .allfaces_todo(&dir, GROUP_MIN_FACES)
+                .allfaces_todo(&dir, group::DEFAULT)
                 .unwrap()
                 .is_empty(),
             "the unreadable file is stored and not retried"
@@ -1007,7 +1066,7 @@ mod tests {
         let index = Arc::new(Mutex::new(
             Index::open(&temp.path().join("index.sqlite")).unwrap(),
         ));
-        gated(&index, &dir, "A.ARW", GROUP_MIN_FACES - 1);
+        gated(&index, &dir, "A.ARW", group::DEFAULT - 1);
         assert_eq!(
             scan_events(index, &dir),
             [("done", Vec::new()), ("faces-done", vec!["0".to_owned()])]
@@ -1034,6 +1093,7 @@ mod tests {
             Vec::new(),
             ScanFocus::default(),
             Priorities::APP,
+            group::DEFAULT,
             events,
         );
         assert_eq!(
@@ -1108,6 +1168,7 @@ mod tests {
             Vec::new(),
             ScanFocus::default(),
             Priorities::APP,
+            group::DEFAULT,
             events,
         ));
         let stopping = running.retire().unwrap();

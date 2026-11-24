@@ -308,6 +308,7 @@ reads the engine's settings store, a new one seeded once from a Tauri
 `settings.json`, only read (`--import-settings <path>`, else, without
 `--settings`, the `IDENTIFIER` folder's under the config dir, else a
 `LEGACY_IDENTIFIERS` one's), into the sidecar format, the label names, the keymap, auto-advance, the
+group threshold (`groupMinFaces`, `group::from_setting`), the
 sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import root and pattern, the shown panes, their widths (`panelWidths`), the strip's height (`stripHeight`), the theme (`theme`), `lastFolder`, `windowBounds` and the last automatic update check (`updateCheckedAt`), and writes them back in order on one thread
 (`Writes`, drained on quit), `src/session.rs` what a launch restores
 (`startup_folder`: the command line's folder, else the remembered
@@ -327,6 +328,16 @@ and `burst_frame_step`, the `burstPrevious` / `burstNext` and
 `burstFramePrevious` / `burstFrameNext` moves over the shown files' ids;
 `reject_rest`, the `rejectRest` changes: the current file's other burst
 members over `all` not rejected yet, stars and label kept),
+`src/group.rs` the group threshold (the gate count a frame needs for pass
+3, `DEFAULT` 5 within `MIN` 2 and `MAX` 20; `from_setting`, the
+`groupMinFaces` value; `parse` and `valid`, the modal's and
+`set_settings`' rule, `FIELD_REFUSAL` and `RANGE_REFUSAL`) and `shown`, a frame's all-faces
+`Counts` as the app shows them: the stored counts when the stored gate
+count is at or above the threshold, else unknown, which the meta pane, the
+strip and the filter read them through; the window's
+`set_group_min_faces` writes it, refilters and, on a lowering, re-lists the
+open folder as a watcher change does, so pass 3 picks up the rows that now
+meet it, a raise starting nothing,
 `src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
 `filter.ts`: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
@@ -358,7 +369,7 @@ rules of `modal.ts` less Tab, which `Root` takes, the keymap edits refusing `APP
 its entity, opened on `ctrl+,` (`meta+,` on macOS) as a full-window, opaque, occluding layer the window draws beside its own root `div` over the still-painted main layout, its box under a focus trap (closed by Escape or its `×`; `tab` / `shift+tab` captured as a shortcut through a `NoAction` key context),
 its body gpui-component's `Settings` (a searchable sidebar of pages, a text field letting its keys through by the `Input` key context, a pointer press cancelling a capture) over its controls (`Button`,
 `Switch`, `Radio`, `Select`, `Kbd`, `Input`, `InputGroup`),
-holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch, the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpEnabled` switch (`Let MCP clients connect`), which starts and stops the server live, the server's URL in a read-only `Input` and its state (`mcp_status`), and its `mcpAllowDestructive` switch, both switches only the user flips, the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`, and the Updates page's running version and install kind, its phase, `Check for Updates`, `Restart Now` and `Open Release Page`,
+holding the Sidecar page's format radios and label names (`Input` fields, the Lightroom language a `Select` showing the preset in force, whose choice applies that preset's names), the Culling page's auto-advance switch and, under it, the group threshold (`Faces in a group photo`, a `NumberInput` over the view's own state, committed on Enter, blur or a step, `group_change` / `group_stepped`, a value outside 2 to 20 refused in the status line), the Keyboard Shortcuts page (its rows grouped under `Filmstrip`, `Judgment`, `Preview`, `Panes` and `General`, each key a `Kbd`), which replaces the keymap and `Bindings` live, the Cache page's index size and `Clear Cache`, the Import page's root (a read-only `Input` with `Choose…` in one `InputGroup`, `prompt_for_paths`) and validated pattern, the MCP page's `mcpEnabled` switch (`Let MCP clients connect`), which starts and stops the server live, the server's URL in a read-only `Input` and its state (`mcp_status`), and its `mcpAllowDestructive` switch, both switches only the user flips, the Appearance page's System / Light / Dark radios (`MODES`) and its light and dark theme `Select`s (`theme_change`), applied live and written to `theme`, and the Updates page's running version and install kind, its phase, `Check for Updates`, `Restart Now` and `Open Release Page`,
 `src/update.rs` that Updates page's pure parts and the update flow (`Updates`: the phases `Idle`, `Checking`, `Available`, `Downloading`, `Verifying`, `ReadyToRestart` and `Failed` set around the engine's `update::check` and `update::install`, which the window runs on threads of their own, their answers arriving as `scan::Event::Update`; a portable or tarball install downloaded, verified and installed without asking, an Inno Setup install's setup staged by `update::stage_setup` and kept in `Staged`, any other kind given the release page; the version this process installed never checked or installed again; `launch_checks`, a release build's launch check, not under `--auto` and at most once an hour by the store's `updateCheckedAt`; the texts, the pane's restart notice and the `update` state `get_status` reports), whose `Restart Now` the window runs as GPUI's `cx.restart()` on the executable the launch found, after the quit handlers' drains, or, on an Inno Setup install, as `cx.quit()` with `relaunch` set, a last quit handler starting the staged setup on every quit (`update::run_setup`), the staging folder cleared at launch,
 `src/cache.rs` that Cache page's pure parts (its texts and confirmation, `on_disk_bytes`, the index file with its `-wal` and `-shm`, and `ClearFlow`, a press held for the view's idle point, asked, re-checked and run, dropped when the settings close, or an MCP confirm run or held without asking, `confirmed`), whose clear the window runs as `Index::clear` off the UI thread under the gate's in-flight count, then re-lists the open folder and re-reads the tree's cached counts,
 `src/keys.rs` names a GPUI keystroke the keymap's way (`key_name`, a port of
@@ -382,7 +393,9 @@ which every listing waits on), reads back the changed sidecars
 (`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
 to the writer with no debounce) and
 runs pass 1 (`index::run_scan`), then pass 2 (`index::run_faces_scan`) and
-then, on the rows `allfaces_todo` gives at `GROUP_MIN_FACES` (5), pass 3
+then, on the rows `allfaces_todo` gives at the group threshold
+`Scan::start` is given (the `groupMinFaces` setting in force when the scan
+starts; a later lowering's re-listing picks up the rest), pass 3
 (`index::run_allfaces_scan`, at pass 2's `Priority::Lowest`, none started
 when no row is at the gate, `FacesDone` then ending the scan, else
 `AllFacesDone`) on
@@ -482,9 +495,11 @@ else its confirmation opened through `press_clear`, `cancel_operation`, the dial
 or import run's cancel or the `Pending` forgotten,
 answered while the view drops keys, and `wait_for_idle`,
 answered by the view's `observe_self` once `Status::idle`, else at its
-timeout, `get_settings`, what the settings modal shows, `set_settings`, the
+timeout, `get_settings`, what the settings modal shows (`group_min_faces`
+among it), `set_settings`, the
 modal's own `settingsview::Change`s by its rules, which the view's
 `apply_setting` applies as it does the modal's (never `mcpAllowDestructive`,
+a `group_min_faces` outside 2 to 20 or not an integer refused,
 refused while a folder operation runs), and `Busy`, which refuses every request but the reads (`READS`) while
 `key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer

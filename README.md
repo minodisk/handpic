@@ -190,7 +190,9 @@ DxO PhotoLab.
   priority, so the viewer comes first when they compete for the CPU; a third
   pass, `checking faces` on the status line, then checks the eyes of every
   face of the frames where the second counted at least five confident faces
-  of about the judged face's size); the strip marks each bright green or gray file
+  of about the judged face's size, a number the settings' `Culling` page
+  sets from 2 to 20, lowering it checking the open folder's frames that now
+  qualify); the strip marks each bright green or gray file
   with an icon at the cell's bottom-left in the mark's color (a smiling face
   on a good photo, a frowning face on gray, none on white), the meta pane
   shows the full-size sharpness of those eyes as `Eye focus`, whether that

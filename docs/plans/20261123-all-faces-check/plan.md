@@ -287,7 +287,7 @@ not change.
     - `hold.rs`'s `PaintHold` and the read slots need no change: pass 3's
       reads go through the same `ReadSlots` inside the core runner.
 
-- [ ] Step 4: The group threshold setting and the rescan trigger (`handpic-app`, `handpic-engine`)
+- [x] Step 4: The group threshold setting and the rescan trigger (`handpic-app`, `handpic-engine`)
   - Done when:
     - The settings store has a new key (suggested `groupMinFaces`, an
       integer from 2 to 20, default 5; a missing or invalid value is the

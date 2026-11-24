@@ -56,6 +56,7 @@ use crate::{
     dialog::{Button, Dialog},
     exif::{GROUPS, Group, Groups},
     filter::{self, Facts, FilterState, OutputState},
+    group,
     history::Top,
     import,
     judgment::State,
@@ -1965,9 +1966,9 @@ fn reveal(view: &View, args: &Value) -> Result<Action, String> {
 }
 
 /// What the settings modal shows: the sidecar format, the label names with
-/// the Lightroom language whose preset they are, auto-advance, the keymap,
-/// the import root and pattern, the theme and the themes to choose from, and
-/// `mcpAllowDestructive`.
+/// the Lightroom language whose preset they are, auto-advance, the group
+/// threshold, the keymap, the import root and pattern, the theme and the
+/// themes to choose from, and `mcpAllowDestructive`.
 pub fn get_settings(settings: &Settings) -> Value {
     let names: Map<String, Value> = LABEL_COLORS
         .iter()
@@ -1986,6 +1987,7 @@ pub fn get_settings(settings: &Settings) -> Value {
             .map(|preset| json!({ "code": preset.code, "name": preset.name }))
             .collect::<Vec<_>>(),
         "auto_advance": settings.auto_advance,
+        "group_min_faces": settings.group_min_faces,
         "shortcuts": settings
             .keymap
             .bindings()
@@ -2186,6 +2188,15 @@ fn set_settings(view: &View, args: &Value) -> Result<Option<Action>, String> {
     {
         changes.push(SettingChange::AutoAdvance(on));
     }
+    if let Some(n) = given_field(args, "group_min_faces") {
+        let n = n
+            .as_u64()
+            .and_then(group::valid)
+            .ok_or(group::RANGE_REFUSAL)?;
+        if n != settings.group_min_faces {
+            changes.push(SettingChange::GroupMinFaces(n));
+        }
+    }
     if let Some(shortcuts) = given_field(args, "shortcuts") {
         let keymap = edited_keymap(settings, shortcuts)?;
         if keymap != settings.keymap {
@@ -2351,6 +2362,7 @@ mod tests {
         dialog::{Content, Dialog, Style},
         exif::{Group, Groups},
         filter::{EyesItem, Facts, FilterFlag, FilterState, OutputState},
+        group,
         history::Top,
         judgment::State,
         menu::{self, Toggle},
@@ -4719,6 +4731,7 @@ mod tests {
             json!({ "code": "en", "name": i18n::presets()[0].name })
         );
         assert_eq!(reply["auto_advance"], true);
+        assert_eq!(reply["group_min_faces"], 5);
         let pick = reply["shortcuts"]
             .as_array()
             .unwrap()
@@ -4971,6 +4984,36 @@ mod tests {
                 &defaults
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn set_settings_takes_a_group_threshold_from_2_to_20_and_refuses_others() {
+        let defaults = settings::defaults();
+        assert_eq!(
+            changes(json!({ "group_min_faces": 3 }), &defaults),
+            [SettingChange::GroupMinFaces(3)]
+        );
+        assert_eq!(
+            changes(json!({ "group_min_faces": 20 }), &defaults),
+            [SettingChange::GroupMinFaces(20)]
+        );
+        assert_eq!(set(json!({ "group_min_faces": 5 }), &defaults), Ok(None));
+        for refused in [json!(1), json!(21), json!(4.5), json!(-3), json!("7")] {
+            assert_eq!(
+                set(json!({ "group_min_faces": refused }), &defaults),
+                Err(group::RANGE_REFUSAL.into()),
+                "{refused}"
+            );
+        }
+        let files = paths(&["/d/a.ARW"]);
+        let running = View {
+            folder_op: true,
+            ..view(&files)
+        };
+        assert_eq!(
+            ask("set_settings", json!({ "group_min_faces": 3 }), &running),
+            Err("a folder operation is under way in Handpic; try again once it ends".into())
         );
     }
 

@@ -13,7 +13,7 @@ use handpic_engine::{
 };
 
 use crate::{
-    context,
+    context, group,
     theme::{self, Mode},
 };
 
@@ -163,6 +163,27 @@ pub fn root_note(root: &str) -> Option<&'static str> {
 pub fn pattern_change(stored: &str, committed: &str) -> Result<Option<String>, String> {
     import::validate_pattern(committed)?;
     Ok((committed != stored).then(|| committed.to_owned()))
+}
+
+/// The Culling page's group threshold field, its label and note.
+pub const GROUP_LABEL: &str = "Faces in a group photo";
+pub const GROUP_NOTE: &str = "Every face's eyes are checked on a frame with at least this many confident faces of the focused face's size (2 to 20). Lowering it checks the open folder's frames that now qualify.";
+
+/// The write a committed group threshold asks for: none when it is the one in
+/// force, the refusal's reason when it is not a whole number from 2 to 20
+/// (the one in force is kept).
+pub fn group_change(current: u32, committed: &str) -> Result<Option<u32>, String> {
+    let n = group::parse(committed)?;
+    Ok((n != current).then_some(n))
+}
+
+/// The value a step button or an arrow key gives the field showing `text`:
+/// one more or one less than its value, else than `current`, kept within
+/// `group::MIN` and `group::MAX`.
+pub fn group_stepped(current: u32, text: &str, up: bool) -> u32 {
+    let from = group::parse(text).unwrap_or(current);
+    let next = if up { from + 1 } else { from - 1 };
+    next.clamp(group::MIN, group::MAX)
 }
 
 /// Whether the box's handler stops a key. With a text field focused, a key
@@ -472,9 +493,9 @@ mod tests {
     use super::{
         APP_KEYS, Edit, FORMATS, IMPORT_PATTERN_EXAMPLES, IMPORT_SPECIFIERS, MODES, ModalKey,
         OPEN_TIP, SHORTCUT_GROUPS, SettingsModal, ShortcutGroup, TABS, display_key, edit,
-        format_change, known_group, label_change, label_names_of, label_texts, mcp_port,
-        mcp_status, mcp_url, mode_change, pattern_change, preset_of, root_note, shortcut_group,
-        shortcut_label, shortcut_rows, stops, theme_change, writes_xmp,
+        format_change, group_change, group_stepped, known_group, label_change, label_names_of,
+        label_texts, mcp_port, mcp_status, mcp_url, mode_change, pattern_change, preset_of,
+        root_note, shortcut_group, shortcut_label, shortcut_rows, stops, theme_change, writes_xmp,
     };
     use crate::theme::{Mode, NEUTRAL, Setting};
 
@@ -529,6 +550,26 @@ mod tests {
         assert_eq!(pattern_change("%Y/%F", "%Y/%F"), Ok(None));
         assert!(pattern_change("%Y/%F", "%H").is_err());
         assert!(pattern_change("%Y/%F", "%Y//%d").is_err());
+    }
+
+    #[test]
+    fn a_committed_group_threshold_is_written_when_in_range_and_new() {
+        assert_eq!(group_change(5, "3"), Ok(Some(3)));
+        assert_eq!(group_change(5, " 20 "), Ok(Some(20)));
+        assert_eq!(group_change(5, "5"), Ok(None));
+        for refused in ["1", "21", "4.5", "", "x"] {
+            assert!(group_change(5, refused).is_err(), "{refused}");
+        }
+    }
+
+    #[test]
+    fn a_step_moves_the_shown_value_by_one_within_the_range() {
+        assert_eq!(group_stepped(5, "5", true), 6);
+        assert_eq!(group_stepped(5, "8", false), 7);
+        assert_eq!(group_stepped(5, "", true), 6);
+        assert_eq!(group_stepped(5, "40", false), 4);
+        assert_eq!(group_stepped(20, "20", true), 20);
+        assert_eq!(group_stepped(2, "2", false), 2);
     }
 
     #[test]

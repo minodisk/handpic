@@ -119,7 +119,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   cells first, following paging and scrolling, so their thumbnails, then
   their focus marks, arrive before the rest. The third pass runs only on the
   frames where the second counted at least five confident faces of about the
-  judged face's size, and checks the eyes of every face of those frames; a
+  judged face's size (the number is a setting, see **Group photos**), and
+  checks the eyes of every face of those frames; a
   folder without such a frame has no third pass. All passes
   run below normal OS priority, the second and the third lower still, so the
   viewer and the rest of the machine come first when they compete for the CPU.
@@ -789,6 +790,18 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   drops out of the active filter already hands the cursor to the next file, so
   it is not skipped twice. A judgment on more than one selected
   file does not advance.
+- **Group photos**: `Faces in a group photo` on the settings' `Culling`
+  page, under the auto-advance switch, is how many confident faces of about
+  the judged face's size, that face included, a frame needs for the third
+  pass to check the eyes of every face on it: a whole number from 2 to 20,
+  5 by default. It applies when you press Enter, leave the field or press
+  its `-` / `+`; a value outside 2 to 20 is refused and the one in force
+  stays. Lowering it checks the open folder's frames that now qualify (a
+  re-scan in which only the third pass has work, after the scan under way
+  if one is) and every other folder's at its next open; raising it starts
+  nothing, and the frames under the new number are treated as unchecked.
+  The second pass stores that count for every frame either way, so a change
+  never re-runs it.
 - **Clear Cache**: the `Cache` page of the settings shows how much disk
   the folder index takes, and `Clear Cache` empties it after a confirmation. It
   removes the cached thumbnails and metadata of every folder ever opened; your

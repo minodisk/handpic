@@ -884,6 +884,13 @@ pub struct SettingsArgs {
     /// Move to the next photo after a star, reject or pick.
     #[serde(skip_serializing_if = "Option::is_none")]
     auto_advance: Option<bool>,
+    /// The group threshold, a whole number from 2 to 20: how many confident
+    /// faces of the judged face's size (`get_photo`'s `faces_group`) a frame
+    /// needs for every face's eyes to be checked. A lower one checks the
+    /// open folder's frames that now meet it; a higher one hides the counts
+    /// of the frames under it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group_min_faces: Option<u32>,
     /// Keyboard shortcut edits, applied in order.
     #[serde(skip_serializing_if = "Option::is_none")]
     shortcuts: Option<Vec<ShortcutEdit>>,
@@ -907,8 +914,8 @@ fn settings(args: SettingsArgs) -> Reply {
     }
     switches(
         args,
-        "sidecar_format, label_names, label_language, auto_advance, shortcuts, import_root, \
-        import_pattern, theme",
+        "sidecar_format, label_names, label_language, auto_advance, group_min_faces, shortcuts, \
+        import_root, import_pattern, theme",
     )
 }
 
@@ -1114,8 +1121,10 @@ impl Companion {
         before the second pass), and the all-faces counts `faces_judged`, `faces_closed` \
         and `faces_soft`: the faces whose eyes were judged, those with closed eyes and \
         those with soft eyes. The counts exist only on a frame whose `faces_group` reached \
-        the group threshold, once the third pass has run on it; null otherwise, \
-        `faces_soft` also when the file holds no larger JPEG. The photo must be in the open \
+        the group threshold (`get_settings`' `group_min_faces`), once the third pass has run \
+        on it; null otherwise, `faces_soft` also when the file holds no larger JPEG. They are \
+        reported as stored, not hidden when the threshold was raised later, so compare \
+        `faces_group` with `group_min_faces`. The photo must be in the open \
         folder; omit the path for the current photo."
     )]
     async fn get_photo(&self, Parameters(args): Parameters<PhotoArgs>) -> CallToolResult {
@@ -1514,7 +1523,9 @@ impl Companion {
         description = "What Handpic's settings show: the `sidecar_format` (with the \
         `sidecar_formats`), the `label_names` written as `xmp:Label` per color and the \
         `label_language` whose Lightroom preset they are (null when none; the presets in \
-        `label_languages`), `auto_advance`, the keyboard `shortcuts` (each action, its label \
+        `label_languages`), `auto_advance`, `group_min_faces` (the group threshold: how many \
+        confident faces of the judged face's size a frame needs for every face's eyes to be \
+        checked, 2 to 20), the keyboard `shortcuts` (each action, its label \
         and its keys), the `import_root` (null while not set) and `import_pattern`, the \
         `theme` (mode, light and dark theme; the choices in `themes`), and \
         `mcp_allow_destructive`, which only the user can change. `mcp_enabled` is not here: \
@@ -1531,7 +1542,10 @@ impl Companion {
         format switch writes the pending judgments and re-reads the open folder; the label \
         names apply only while the format writes XMP; a shortcut edit refuses a key bound to \
         another action, one of the app's own keys or an action's last key; an invalid import \
-        pattern is refused; the theme applies at once. Remembered for the next launch. \
+        pattern is refused; the theme applies at once; a `group_min_faces` outside 2 to 20 is \
+        refused, and lowering it checks every face of the open folder's frames that now meet it \
+        (the third pass, which `get_status` and `wait_for_idle` follow) while raising it starts \
+        nothing. Remembered for the next launch. \
         `mcp_allow_destructive` cannot be set here. Refused while a folder operation runs. \
         Returns the settings, as `get_settings` does."
     )]
@@ -2260,6 +2274,10 @@ mod tests {
         assert_eq!(
             settings_args(json!({ "auto_advance": false })),
             Ok(json!({ "auto_advance": false }))
+        );
+        assert_eq!(
+            settings_args(json!({ "group_min_faces": 3 })),
+            Ok(json!({ "group_min_faces": 3 }))
         );
     }
 

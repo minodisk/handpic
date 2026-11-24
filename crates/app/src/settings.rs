@@ -24,6 +24,7 @@ use serde_json::{Map, Value};
 use crate::{
     datadir::{self, IDENTIFIER, LEGACY_IDENTIFIERS},
     filter::Stored,
+    group,
     panels::Panels,
     panewidths::PaneWidths,
     session::Geometry,
@@ -36,6 +37,9 @@ pub struct Settings {
     pub names: LabelNames,
     pub keymap: Keymap,
     pub auto_advance: bool,
+    /// The gate count a frame needs for pass 3 to check all its faces
+    /// (`groupMinFaces`, by `group::from_setting`).
+    pub group_min_faces: u32,
     /// The strip's order at startup; the sort menu writes it back.
     pub sort: SortKey,
     /// The strip's filter at startup, its remembered sections; the filter
@@ -289,6 +293,7 @@ fn from_values(values: &Map<String, Value>) -> Settings {
             .get("autoAdvance")
             .and_then(Value::as_bool)
             .unwrap_or(true),
+        group_min_faces: group::from_setting(values.get("groupMinFaces")),
         sort: SortKey::from_setting(values.get("sortOrder").and_then(Value::as_str)),
         filter: Stored::from_setting(values.get("filter")),
         mcp_enabled: mcp::mcp_enabled_setting(values.get("mcpEnabled")),
@@ -604,6 +609,24 @@ mod tests {
     fn a_non_boolean_auto_advance_is_on() {
         let dir = tempfile::tempdir().unwrap();
         assert!(seeded(dir.path(), "s", r#"{"autoAdvance":"no"}"#).auto_advance);
+    }
+
+    #[test]
+    fn the_group_threshold_is_read_with_its_rule() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(
+            seeded(dir.path(), "set", r#"{"groupMinFaces":3}"#).group_min_faces,
+            3
+        );
+        assert_eq!(
+            seeded(dir.path(), "low", r#"{"groupMinFaces":1}"#).group_min_faces,
+            5
+        );
+        assert_eq!(
+            seeded(dir.path(), "odd", r#"{"groupMinFaces":"7"}"#).group_min_faces,
+            5
+        );
+        assert_eq!(seeded(dir.path(), "none", "{}").group_min_faces, 5);
     }
 
     #[test]
