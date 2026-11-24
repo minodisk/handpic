@@ -300,7 +300,11 @@ mod tests {
                 points[i] = [cx + dx, cy + dy];
             }
         }
-        Mesh { points, pose: None }
+        Mesh {
+            points,
+            pose: None,
+            presence: 0.0,
+        }
     }
 
     #[test]

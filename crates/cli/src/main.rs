@@ -506,7 +506,7 @@ fn scan_dir(dir: &Path, threads: Option<usize>) -> Result<()> {
 }
 
 /// The header of `features`, the column names of `features_line`.
-const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsharpness\tcue_side\taf\tjudged_side\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap\tanalysis_ms\teyes_ms\teye_af\teye_mid";
+const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsharpness\tcue_side\taf\tjudged_side\tear\teyes_open\tyaw\tpitch\troll\teye_offset\tedge_gap\tgate\tanalysis_ms\teyes_ms\teye_af\teye_mid";
 
 /// Dump every feature of every RAW file of the given folders (not recursive,
 /// each folder's sorted) on a pool of `threads` threads: `FEATURES_HEADER`,
@@ -1781,7 +1781,7 @@ mod tests {
                     sharpness: Some(98.76543),
                 }),
             ),
-            "2026-09-19\ta.ARW\t2026:09:19 10:11:12\t345\tPick\tPick\t123.4568\t96.6\taf\t96.6\t0.2123\t0.9877\t-12.3\t4.1\t0.0\t0.0457\t0.2500\t40.0\t85.1\t1\t98.7654"
+            "2026-09-19\ta.ARW\t2026:09:19 10:11:12\t345\tPick\tPick\t123.4568\t96.6\taf\t96.6\t0.2123\t0.9877\t-12.3\t4.1\t0.0\t0.0457\t0.2500\t3\t40.0\t85.1\t1\t98.7654"
         );
         let unknown = Ok(scan::Analysis::default());
         let no_face = Ok(EyesFeatures {
@@ -1809,7 +1809,7 @@ mod tests {
         );
         assert_eq!(
             line,
-            "2026-05-22\tb.DNG\t2026:05:22 08:00:00\t-\t-\tNone\t-\t-\tnoaf\t-\t-\t-\t-\t-\t-\t-\t-\t30.0\t50.0\t0\t-"
+            "2026-05-22\tb.DNG\t2026:05:22 08:00:00\t-\t-\tNone\t-\t-\tnoaf\t-\t-\t-\t-\t-\t-\t-\t-\t-\t30.0\t50.0\t0\t-"
         );
         assert_eq!(
             line.split('\t').count(),
@@ -1828,7 +1828,7 @@ mod tests {
         );
         assert_eq!(
             failed,
-            "x\tc.ARW\terr\terr\terr\t-\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\t1.0\t2.0\terr\terr"
+            "x\tc.ARW\terr\terr\terr\t-\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\terr\t1.0\t2.0\terr\terr"
         );
     }
 

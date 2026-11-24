@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use crate::allfaces::{self, FaceCounts, Measured, Reading, MAX_FACES};
 use crate::arw::{Arw, FocusLocation, Shot};
 use crate::candidate::{face_cue_unless, focus_cue_rgb_unless, luma, Cue};
-use crate::decode::{decode_rgb, thumbnail_jpeg, thumbnail_jpeg_near};
+use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
