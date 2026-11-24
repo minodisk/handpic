@@ -130,7 +130,7 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
     - Undo: neither a split nor a file rename is recorded in `trash::Runs` or the app's history, so there is nothing to extend.
     - `rename::file_plan` has no caller in `crates/app` today (the companion refuses `rename_file` with `not_in_app`), so its change is covered by the engine tests alone.
 
-- [ ] Step 4: a stored shortcut override wins over an un-overridden default (`fix(engine)`)
+- [x] Step 4: a stored shortcut override wins over an un-overridden default (`fix(engine)`)
   - Done when:
     - `Keymap::from_overrides` gives a stored override every key it asks for that is held by a default action with no usable stored override of its own. That action keeps its remaining default keys, or has none, and each such move is logged at `log::warn!` naming the key and both actions.
     - Two overrides that want the same key are resolved as today (first in action order; the other applies in part or stays inactive).

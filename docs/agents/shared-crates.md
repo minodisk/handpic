@@ -107,17 +107,24 @@ because `reject` comes before `pick`, so `p` still looked taken.
   dropped, so once the outer retry settles, recompute every partly applied
   action's keys as its originally requested keys filtered by what is free
   at that point (never a conflict, since only free keys are added).
-- Adding a new default key (`DEFAULTS`) wins over any stored override that
-  holds the same key. `from_overrides` drops that key from the user's action
-  silently on upgrade. In tests, a stored override that uses an arbitrary key
-  (for example `a_stale_default_in_an_old_store_drops_only_that_key` used `d`)
-  fails once a default takes that key, so use a key no default holds. A
+- A stored override wins a key over a default action the user has not
+  overridden (no usable stored override of its own): before the retries,
+  `from_overrides` takes every key a usable override asks for off such an
+  action and logs the move at `warn`, naming the key and both actions. So a
+  key a later version adds to `DEFAULTS` stays on the user's action, and the
+  new default's action keeps its other keys or has none. The rule cannot tell
+  a new default from an old one: `{"reject": ["p"]}` leaves `pick` without a
+  key. An invalid or forbidden override displaces nothing. `overrides()`
+  never stores an action with no keys (`parse_keys` refuses an empty list);
+  the load derives it again. To build an inactive override in a test, use two
+  overrides that want one key, since a default's key is now always taken. A
   main-view key that the folder tree swallows is absent from
   `TREE_PASSTHROUGH` (`crates/app/src/treekeys.rs`).
 - Source: `docs/plans/_archived/20260920-pick-shortcut-editable/learnings.md`,
   Step 1; `docs/plans/20260929-shortcut-override-partial-conflict/learnings.md`,
   Step 1; `docs/plans/_archived/20261011-performance-graph-overlay/learnings.md`,
-  Step 3.
+  Step 3; `docs/plans/20261123-sidecar-and-keymap-decisions/learnings.md`,
+  Step 4.
 
 ### Volume listing: dedupe home by canonical path, plus a macOS-only ancestor rule (Hit)
 

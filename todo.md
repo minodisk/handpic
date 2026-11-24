@@ -545,17 +545,6 @@ The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run
 - [ ] Record each sidecar's RAW in the trash run (for example in `trash::Trashed`), so that a redo clears the index rows of a closed folder.
 - [ ] Add a test covering delete, undo, then redo with another folder open.
 
-### Shortcuts: a newly added default key silently displaces a user's stored override
-
-#### Background
-
-`performance-graph-overlay` added the default key `d`, and `focus-peaking` added `e`. `Keymap::from_overrides` gives a key already held by a default precedence over a partly applicable stored override. A user whose stored `shortcuts` override bound `d` or `e` to another action (for example a WASD-style layout on `next`) therefore loses that key silently on upgrade. It surfaced when `a_stale_default_in_an_old_store_drops_only_that_key` failed in CI; that test's arbitrary `d` was changed to `e`, and `focus-peaking` then changed it to `n` when `e` became `peaking`'s default, but the real-user case is unaddressed. Plans: `docs/plans/_archived/20261011-performance-graph-overlay/plan.md`, `docs/plans/_archived/20261108-focus-peaking/plan.md`. Files: `crates/engine/src/shortcuts.rs` (`DEFAULTS`, `from_overrides`).
-
-#### TODO
-
-- [ ] Decide whether a newly added default should yield to an existing override, or whether the drop should be logged at `warn` (or both).
-- [ ] Implement the chosen behavior with a Rust test covering an old store that binds the new default's key to another action.
-
 ### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
 
 #### Background

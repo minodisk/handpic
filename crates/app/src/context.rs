@@ -735,4 +735,25 @@ mod tests {
             assert_eq!(folder_title(r"\\?\D:\"), r"D:\");
         }
     }
+
+    #[test]
+    fn an_action_a_stored_override_left_without_keys_binds_and_shows_none() {
+        use crate::keys::Bindings;
+        use crate::settingsmodal::{ShortcutGroup, shortcut_rows};
+        use handpic_engine::shortcuts::Keymap;
+        use serde_json::json;
+
+        let keymap = Keymap::from_overrides(Some(&json!({"reject": ["p"]})));
+        let keys = Bindings::new(&keymap);
+        assert_eq!(keys.action_for("p"), Some("reject"));
+        assert_eq!(keys.action_for("x"), None);
+        let bindings = keymap.bindings();
+        let pick = shortcut_rows(&bindings, ShortcutGroup::Judgment)
+            .into_iter()
+            .find(|b| b.action == "pick")
+            .unwrap();
+        assert!(pick.keys.is_empty());
+        assert_eq!(shortcut_of(&bindings, "pick"), "");
+        assert_eq!(shortcut_of(&bindings, "reject"), "p");
+    }
 }
