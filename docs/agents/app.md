@@ -4262,12 +4262,24 @@ pixels, `maximized` and the display's UUID as text; `from_setting` reads a
 malformed value, a non-finite position or size or a size that is not positive
 as nothing), and `place`, which picks the display (the saved UUID's when the
 saved bounds intersect it, else the first display they intersect, else none:
-the centered 1600x1000 default) and moves and shrinks the bounds into that
-display's visible bounds. `main()` passes that display's `display_id` with
+the default) and moves and shrinks the bounds into that display's visible
+bounds. `main()` passes that display's `display_id` with
 `WindowBounds::Maximized` or `Windowed`: on Windows GPUI keeps given bounds
 only when their center is on the `display_id`'s display (else the primary
 one's) and otherwise silently uses its own default size, so the display and
-the clamp are both needed.
+the clamp are both needed. The default is `default_bounds`: 1600x1000,
+shrunk to fit, centered in the primary display's visible area (the user's
+decision, 2026-11-23), opened `Windowed` with no `display_id`.
+
+- Rule: on Windows the default's position is given in workspace coordinates.
+  GPUI hands the bounds to `SetWindowPlacement` as `rcNormalPosition`, which
+  Windows reads relative to the visible area's corner, so GPUI's own
+  `Bounds::centered` (the visible area's center in screen coordinates) landed
+  one taskbar width off when the taskbar is docked left or at the top.
+  `default_bounds` takes the visible area's offset from the display's corner
+  back off when its `workspace` argument is set (`cfg!(windows)`), so both
+  cases are unit-tested on every platform. The restore path (`place`) is
+  unchanged.
 
 - Rule: `lastFolder` is the Tauri app's key and plain-string value, so a store
   seeded from a Tauri `settings.json` reopens the Tauri app's last folder on
@@ -4308,7 +4320,9 @@ the clamp are both needed.
   revealed the folder in the tree at that file with the same index, and a
   folder argument overrode it; `--auto 3` opened at 1616x1008 outer
   (1600x1000 client), vertically centered and 93 px right of the display's
-  center with the taskbar docked left (the pending question in `todo.md`).
+  center with the taskbar docked left: 31 px (the visible area's center) plus
+  62 px (the taskbar), the workspace-coordinate offset `default_bounds` now
+  takes off. The fixed default is not measured on the host yet.
 - Not seen yet: a second monitor (with a different scale factor), and the
   taskbar docked at the top (the
   restore bounds are in workspace coordinates there, the clamp compares them
@@ -4811,7 +4825,10 @@ means the cells' height, so it needed no migration. `Strip` holds the cells' `st
 the box plus the border, the pitch the cell plus the 8 px gap. At 128 that is
 the Tauri strip's 144 x 96 box, 146 x 114 cell and 154 px pitch. Only the
 image box scales; the name, the stars, the flag dot, the burst badge and the
-face icon keep their sizes.
+face icon keep their sizes. The box stays 3:2 and the default 144 x 96
+rather than the 144 x 144 of the Tauri strip's `img`, which held a portrait
+thumbnail at 96 x 144 (the user's decision, 2026-11-23): a portrait shows at
+64 x 96 by default, and a taller strip enlarges it.
 
 - Rule: every reader of the strip's layout takes the current geometry:
   `Strip`'s offset, range, hit test, request order and content width read

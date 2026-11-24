@@ -313,8 +313,10 @@ sort key, the remembered filter, `mcpEnabled`, `mcpAllowDestructive`, the import
 (`startup_folder`: the command line's folder, else the remembered
 `lastFolder` while still a directory; `Geometry`, the window's restore
 bounds, maximized state and display UUID under `windowBounds`; `place`, the
-saved display, else one the bounds intersect, else the centered default,
-with the bounds clamped into its visible area; all off under `--auto`), the
+saved display, else one the bounds intersect, else the default,
+with the bounds clamped into its visible area; all off under `--auto`;
+`default_bounds`, that default, 1600x1000 centered in the primary display's
+visible area, in Windows' workspace coordinates on Windows), the
 folder written on every open, the geometry on quit, `src/sort.rs` the strip's order (`SortKey`: name by `natord`,
 capture time then subsec, rating with a reject after the unrated;
 `order_files`, a port of `sort.ts`, which the window's one `refilter` applies

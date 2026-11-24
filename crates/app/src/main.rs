@@ -7648,7 +7648,7 @@ fn window_geometry(window: &Window, cx: &App) -> session::Geometry {
 }
 
 /// Where the window opens: the saved geometry placed on a display, else
-/// centered at 1600x1000.
+/// `session::default_bounds` on the primary display.
 fn window_placement(
     saved: Option<&session::Geometry>,
     cx: &App,
@@ -7665,7 +7665,16 @@ fn window_placement(
     let Some((saved, (index, rect))) =
         saved.and_then(|saved| Some((saved, session::place(saved, &screens)?)))
     else {
-        let bounds = Bounds::centered(None, size(px(1600.), px(1000.)), cx);
+        let primary = cx.primary_display().map(|display| session::Screen {
+            uuid: None,
+            bounds: rect_of(display.bounds()),
+            visible: rect_of(display.visible_bounds()),
+        });
+        let rect = session::default_bounds(primary.as_ref(), cfg!(windows));
+        let bounds = Bounds::new(
+            point(px(rect.x), px(rect.y)),
+            size(px(rect.width), px(rect.height)),
+        );
         return (None, WindowBounds::Windowed(bounds));
     };
     let bounds = Bounds::new(

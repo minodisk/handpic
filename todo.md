@@ -606,14 +606,6 @@ Files: `crates/app/src/focus.rs` (`scan_focus_paths`), `crates/app/src/main.rs` 
 
 - [ ] On the SATA SSD (`D:`), with nothing else reading it, repeat the 2026-11-23 method: equal cold copies (`robocopy /J`, one per run, under `D:\Photos\tests\`), a settled disk, pause on against off alternated, at least two runs each, and record `read` p50 / p95 next to Tauri's in `docs/agents/app.md`, saying whether the pause shortens the read there.
 
-### App: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
-
-`gpui-strip-index` built the plan's 144x96 image box, but the Tauri strip's `img` was 144x144 (its `style.css`'s `.cell img`, `object-fit: contain` inside a 168 px cell), so a portrait thumbnail (orientation 6 / 8) shows at 64x96 in the app's strip against 96x144 in the Tauri one. Since `native-strip-resize` the strip's height is draggable and the image box is derived from it (`strip::Geometry::of`, a 3:2 box; 144x96 at the default 128 px), so a taller strip enlarges portrait thumbnails too, but the box stays 3:2 and the default stays 144x96. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/strip.rs` (`Geometry`), `crates/app/src/main.rs` (`paint_strip`).
-
-#### TODO
-
-- [ ] Decide whether the default strip height, or the box's aspect, changes so the app's cell matches the Tauri size, now that the user can drag the strip taller (`stripheight.rs` `DEFAULT`, `strip::Geometry`).
-
 ### App: `present` p95 rose from about 0.2 ms to 0.55-0.85 ms on ARW with the strip
 
 In `gpui-strip-index` Step 5's A/B (`results.md`), `present`'s p95 on the ARW compare folder rose with the strip while RAF was unchanged. It is not gated and stays under 1 ms. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/main.rs` (`paint_strip`).
@@ -730,16 +722,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 #### TODO
 
 - [ ] On Windows with a second monitor, ideally with a different scale factor, move the window there, quit, relaunch, both windowed and maximized. Expected: the window comes back on that monitor, windowed and maximized respectively.
-
-### App: the `--auto` default window is not centered when the taskbar is docked left
-
-#### Background
-
-On Windows 11 on 2026-11-21, on one 5120x1440 display with the taskbar docked left (62 px), `--auto 3 <folder>` opened the window at 1616x1008 outer (1600x1000 client), vertically centered but 93 px right of the display's center. The default comes from `Bounds::centered(None, size(px(1600.), px(1000.)), cx)`. Files: `crates/app/src/main.rs` (the default window bounds), `crates/app/src/session.rs` (`place`).
-
-#### TODO
-
-- [ ] Decide whether the default placement should center on the display's work area (the visible bounds) or on the whole display, measure where `Bounds::centered` puts the window with the taskbar at the bottom and at the left, and change the default if the decision differs from what is measured.
 
 ### App: real-device checks of the status row's StatusBar and progress circle
 

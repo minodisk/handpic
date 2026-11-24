@@ -86,6 +86,27 @@
   GitHub checks verify. `docs/agents/app.md`'s "A prefetch hit leaves only
   the frame" marks its numbers as from before the wrap.
 
+## Step 5
+
+- GPUI's `Bounds::centered` already centers on the visible bounds
+  (`display.visible_bounds().center()`), in screen coordinates. The 93 px
+  comes from GPUI's Windows backend: `retrieve_window_placement` puts the
+  bounds into `WINDOWPLACEMENT::rcNormalPosition`, which `SetWindowPlacement`
+  reads as workspace coordinates (relative to the work area's corner), so a
+  left taskbar's 62 px is added again: 31 (visible-area center offset) + 62.
+  `session::default_bounds(primary, workspace)` subtracts the visible area's
+  offset from the display's corner when `workspace` is set (`cfg!(windows)`
+  in `window_placement`). A top taskbar would shift the default down the same
+  way; a bottom taskbar has no offset, which is why the usual layout looked
+  right.
+- The restore path (`place`) was left as is, per the plan: its round-trip
+  works because GPUI's restore bounds come from `GetWindowPlacement`, also
+  workspace coordinates.
+- Local CI was skipped on the user's instruction (a slow host): only
+  `mise run fmt` ran; `cargo test` / clippy were not run locally and the
+  PR's GitHub checks verify. The `--auto` hand check of the window's
+  rectangle on this host was not done (no local build); it is deferred below.
+
 ## Deferred issues (todo candidates)
 
 - Re-measure the prefetch ring after the wrap. Basis: Step 4's Done-when
@@ -96,3 +117,20 @@
   `keypressToPixels` under "A prefetch hit leaves only the frame" in
   `docs/agents/app.md`, replacing the "from before the wrap" note. Files:
   `crates/app/src/prefetch.rs`, `docs/agents/app.md`.
+- Pending manual check (Step 5, Windows): the default window after
+  `default_bounds`. Basis: Step 5's Done-when ("On the Windows host,
+  `--auto` ... checked from the window's rectangle"), not run because no
+  local build was made; the step was ticked on the automated criteria (unit
+  tests in `crates/app/src/session.rs`, the PR's GitHub checks). Steps: on
+  Windows 11, with no `windowBounds` used (`--auto 3 <folder>`), open the
+  app (a) with the taskbar at the bottom and (b) with the taskbar docked left
+  (Settings > Personalization > Taskbar, or a tool that docks it), and read
+  the window's outer rectangle (e.g. with `GetWindowRect` or a screenshot).
+  Expected: in both cases the 1600x1000 client is centered in the visible
+  area (the display less the taskbar), horizontally and vertically, within
+  the frame's few px; with the left taskbar no longer 93 px right of the
+  display's center but 31 px right (the visible area's center). Record the
+  result under "A launch restores the last folder and the window" in
+  `docs/agents/app.md`, replacing "The fixed default is not measured on the
+  host yet". Files: `crates/app/src/session.rs` (`default_bounds`),
+  `crates/app/src/main.rs` (`window_placement`).
