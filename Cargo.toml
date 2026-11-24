@@ -3,5 +3,8 @@ members = ["crates/cli", "crates/core", "crates/engine"]
 exclude = ["crates/app"]
 resolver = "2"
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 [profile.release]
 opt-level = 3

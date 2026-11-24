@@ -418,3 +418,20 @@ in Discussions. If they do not, open an issue from the
 
 - Building from source: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Performance measurements: [docs/humans/performance.md](./docs/humans/performance.md)
+
+## License
+
+Handpic is licensed under either of
+
+- MIT license ([LICENSE-MIT](./LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](./LICENSE-APACHE))
+
+at your option.
+
+The third-party material bundled in the repository follows its own license:
+
+- The YuNet face detection model: MIT, [crates/core/models/LICENSE](./crates/core/models/LICENSE)
+- The MediaPipe Face Landmarker model and the ported face geometry data: Apache-2.0, [crates/core/models/LICENSE-mediapipe](./crates/core/models/LICENSE-mediapipe)
+- The themes vendored from gpui-kit: Apache-2.0, [crates/app/themes/LICENSE](./crates/app/themes/LICENSE)
+- The GPUI crates: Apache-2.0, [crates/app/packaging/NOTICE-gpui](./crates/app/packaging/NOTICE-gpui)
+- The Lucide icons and the two icons derived from them: ISC, [crates/app/LICENSE-lucide](./crates/app/LICENSE-lucide)

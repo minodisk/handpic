@@ -345,8 +345,8 @@ copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
 `gpui-pre-reqwest`), and the Apache-2.0 text of
 their `LICENSE-APACHE`), `crates/app/LICENSE-lucide`, the themes' `LICENSE`
 as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`
-and `LICENSE-mediapipe`. The repository has no project
-`LICENSE` file, so none is shipped.
+and `LICENSE-mediapipe`, and Handpic's own license texts, the root
+`LICENSE-MIT` and `LICENSE-APACHE` (Handpic is `MIT OR Apache-2.0`).
 
 - Rule: every package gets its notices from `notices.sh`, never a list of
   its own; a new bundled asset under another license adds its notice there.

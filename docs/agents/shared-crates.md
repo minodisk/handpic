@@ -1452,6 +1452,19 @@ moved asset: a `git grep 'app/icons'` over the whole tree, not only the plan's
 listed files, found `tools/package/linux.sh` reading an icon the plan missed.
 Source: `docs/plans/_archived/20261118-remove-tauri/learnings.md`, Steps 1 and 4.
 
+### Workspace-inherited package metadata resolves for `crates/app` too (Measured)
+
+`crates/app` is a separate Cargo workspace, but it takes `handpic-core` and
+`handpic-engine` by path. Their `license.workspace = true` (or any other
+`*.workspace = true` key from the repository root's `[workspace.package]`)
+still resolves against the root manifest in that build, so no literal
+fallback key is needed in those crates. Check it with
+`cargo metadata --manifest-path crates/app/Cargo.toml`, which should report
+the same value for `handpic-app`, `handpic-core` and `handpic-engine`. Neither
+`Cargo.lock` changed. After a license change, `bash tools/package/notices.sh <tmp>`
+should list `LICENSE-MIT` and `LICENSE-APACHE` beside the existing notices.
+Source: `docs/plans/_archived/20261124-dual-license/learnings.md`, Step 1.
+
 ## Verification
 
 ### Write a performance number with its measurement conditions (Hit, twice)

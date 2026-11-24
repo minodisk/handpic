@@ -211,7 +211,8 @@ checked-in test key pair no released build trusts;
 `release.yml` through `workflow_call`) builds the
 release binary per platform and packages it with the scripts of
 `tools/package/` (`version.sh`, the crate's `[package].version`; `notices.sh`,
-the license notices every package ships into one `licenses/` folder;
+the license notices every package ships into one `licenses/` folder, the
+root `LICENSE-MIT` and `LICENSE-APACHE` among them;
 `macos.sh`, the ad hoc signed `Handpic-<version>-macos-<arch>.dmg` and the
 updater's `Handpic-<version>-macos-<arch>.tar.gz` holding `Handpic.app`, also
 `mise run app:package:macos`; `windows.sh`, the per-user Inno Setup
