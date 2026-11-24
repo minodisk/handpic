@@ -1692,3 +1692,30 @@ Files: `crates/app/src/main.rs`, `crates/app/src/settingsview.rs`, `docs/agents/
   4. Start a shortcut capture on the Keyboard Shortcuts page, then drag the window by the title bar: the capture state still reads sensibly.
 - [ ] On Windows and on Linux, on a device, open the settings with `ctrl+,`. Expect the window controls (minimize / maximize / close) at the title bar's right and the window drag to work while the settings are open.
 - [ ] On any platform, drop a file or folder onto the title bar while the settings are open and record whether it opens that folder under the settings (expected from the hit test: it does). Then update `docs/agents/app.md`'s pointer rule from Inferred to Measured.
+
+### App: real-device check of the strip's closed-eyes mark (eyes-mark-tier-mcp)
+
+#### Background
+
+The `eyes-mark-tier-mcp` feature (Step 2) added a closed-eyes mark to the strip cell: Lucide's `eye-off` in amber (`CLOSED_EYES_COLOR`, `0xffb347`), painted by `paint_face_icon` in a fixed slot right of the face focus icon at the image box's bottom-left, and shown when `mark::closed_eyes_mark` finds the judged face's stored eye state closed. The unit tests of `closed_eyes_mark`, the icon path tests (`every_icon_path_loads_an_svg`) and `mise run ci:local` cover the rule and the icon. Nobody has watched the running window: whether the marks agree with the meta pane and the filter on a real folder, whether the mark appears live during pass 2, and its placement at the minimum strip height were never exercised. The Step 2 checkbox was ticked on the automated criteria only. The mark judges one face (nearest the AF point, else the largest confident one); a face under 60 px is not judged. Plan: `docs/plans/_archived/20261123-eyes-mark-tier-mcp/plan.md`.
+
+Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/src/mark.rs` (`closed_eyes_mark`).
+
+#### TODO
+
+- [ ] On Windows (any platform works; Windows is the author's), open a folder of RAW files with people and let pass 2 finish. Expect the strip cells showing the amber `eye-off` mark at the bottom-left to be exactly the files whose meta pane `Eyes` row says closed, and exactly the files the filter menu's `Eyes` > `Closed` keeps.
+- [ ] On Windows, on a fresh `--index`, watch the strip while the status row shows `analyzing N / M`. Expect the mark to appear on cells live as pass 2 reaches them, with no re-listing.
+- [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
+- [ ] On macOS and Linux, when at hand, repeat the checks above.
+
+### Docs: CLAUDE.md's `src/ondemand.rs` description names an `eyes_of` that does not exist in the GPUI app
+
+#### Background
+
+`CLAUDE.md` describes the engine's `src/ondemand.rs` as "behind the app's `faces_of` and `eyes_of`". The `eyes-mark-tier-mcp` Step 4 checked the callers of `ondemand::read_eyes`: there is no `eyes_of` in the GPUI app, and the on-demand eyes go through `overlay::judge` (the only caller, reached from `analyze_current` in `main.rs` on a ticket from `Marks::wanted_eyes`). `faces_of` does exist, in `crates/app/src/faces.rs` / `companion.rs`. Plan: `docs/plans/_archived/20261123-eyes-mark-tier-mcp/plan.md`.
+
+Files: `CLAUDE.md`, `crates/app/src/overlay.rs`.
+
+#### TODO
+
+- [ ] Reword the `src/ondemand.rs` description in `CLAUDE.md` so it names `overlay::judge` (and `faces_of`) instead of `eyes_of`.
