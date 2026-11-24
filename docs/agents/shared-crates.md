@@ -618,6 +618,15 @@ retried.
   scan of each folder, and keeps `ratings`. Stale rows are deleted by
   `reconcile` right away, so the folder shows placeholders until its rescan
   fills them in.
+- A bump can be skipped only by an explicit user decision, and the skip is
+  recorded. The `thumbnail_jpeg_near` change (the fixed 2/8 scale replaced by a
+  near-size scale; NEF and CR3 ~1620x1080 previews went from 405x270 to 404x270)
+  and the Leica M (Typ 240) MakerNote preview shipped without a bump: rows
+  indexed before keep their old thumbnails or tiers until the file changes or
+  Clear Cache, and `docs/humans/performance.md` says so. Without such a
+  decision, bump. Where an unbumped change is shipped, state in the plan that
+  it is a recorded exception (source:
+  `../plans/_archived/20261123-close-measured-todos/learnings.md`, Steps 2 and 3).
 - Parallel branches each bump `EXTRACTOR_VERSION` from the same base, so
   the merge conflict is a number collision. When you rebase or resolve, take
   the next free number above main's (a branch cut at 11 whose sibling landed
