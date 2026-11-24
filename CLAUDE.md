@@ -333,8 +333,8 @@ members over `all` not rejected yet, stars and label kept),
 `groupMinFaces` value; `parse` and `valid`, the modal's and
 `set_settings`' rule, `FIELD_REFUSAL` and `RANGE_REFUSAL`) and `shown`, a frame's all-faces
 `Counts` as the app shows them: the stored counts when the stored gate
-count is at or above the threshold, else unknown, which the meta pane, the
-strip and the filter read them through; the window's
+count is at or above the threshold, else unknown, which the meta pane,
+strip and filter of Steps 5 and 6 are to read them through (only the tests do so far); the window's
 `set_group_min_faces` writes it, refilters and, on a lowering, re-lists the
 open folder as a watcher change does, so pass 3 picks up the rows that now
 meet it, a raise starting nothing,
