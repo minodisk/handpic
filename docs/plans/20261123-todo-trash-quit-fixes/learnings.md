@@ -88,3 +88,63 @@
 - Local checks: only `mise run fmt` ran; no build, clippy or tests (user's
   decision, this machine runs out of memory). The PR's GitHub checks are the
   first build of this change.
+
+## Step 4: the undo restores in chunks on Windows
+
+- Shape: `trash::restore` was split into the per-file decisions and a
+  `tally` of the results (the `Restored` bookkeeping: `restored`, `failed`,
+  `back`, `failed_items`), which the new `restore_chunked` shares, so the two
+  cannot drift apart. `restore_chunked` takes the run's items (a RAW or JPEG
+  with the sidecars after it, a sidecar with no RAW before it alone) `CHUNK`
+  at a time: one `restore_many` for their heads, then one for the sidecars of
+  the heads that came back; the sidecars of a head that did not stay in the
+  Trash (`held_back`, the same `RAW_NOT_RESTORED` / `NOT_IN_TRASH` rule).
+  `restore_chunk` (the restore's `move_chunk`) leaves out a file whose
+  destination exists or that the Trash no longer holds, since one collision
+  refuses the whole `restore_all`, and after a failed call counts a file now
+  at its destination as back and retries the rest through the per-item
+  `restore_item` (the old closure of `restore_run`, unchanged).
+- `restore_run` picks the strategy through `restore_listed`: chunked under
+  `cfg(windows)`, `restore` elsewhere on non-macOS; macOS keeps
+  `restore_recorded`. A file with `restore_to` set never joins a chunk
+  (decision 3).
+- The tests drive `restore_chunked` and `restore` against the same fake Trash
+  and disk (`Bin`) and assert that both give the same outcome, then check the
+  chunk calls and the per-file retries.
+- Local checks: only `cargo fmt` ran; no build, clippy or tests (user's
+  decision, this machine runs out of memory). The PR's GitHub checks are the
+  first build of this change.
+- The Windows timing was not taken: the throwaway bench's release build
+  (`handpic-engine` by path, `CARGO_BUILD_JOBS=2`, 7 GB free at its start)
+  was stopped by the harness for low system memory before it finished. Nothing
+  touched the Recycle Bin: the bench never ran, no bench folder was created,
+  and the scratch worktree of the branch's base was removed.
+- Unchanged and outside this item: `foldersidecars::delete` still moves one
+  sidecar per shell operation on Windows (`trash::run` with `trash_one`).
+
+## Deferred issues (todo candidates)
+
+- Pending manual check (Step 4 timing, Windows 11): measure an Undo of Move to
+  Trash of at least 600 files before and after
+  `perf(engine): restore an undo of Move to Trash in chunks on Windows`
+  (`crates/engine/src/trash.rs`, `restore_chunked`). Method (plan decision 2):
+  a throwaway program outside the repository depending on `handpic-engine` by
+  path (release build), which writes bench copies (e.g. 404 synthetic `.ARW`
+  plus 202 `.xmp`, 606 files) into a new folder on the measured volume (D:,
+  as the baseline), calls `trash::trash_listed` then times
+  `trash::undo_run`; built once against the branch's base and once against
+  the change. Safety: bench copies only, never the user's photos; record the
+  Recycle Bin item count before and after (`Shell.Application`
+  `Namespace(10).Items().Count`); afterwards delete exactly the orphaned `$I`
+  files in `D:\$Recycle.Bin\<SID>` naming the bench folder with no `$R`
+  partner; never turn on `mcpAllowDestructive`. Expected: the undo well under
+  the 85.6 s / 605 files (141 ms a file) baseline, in the region of the move's
+  chunked 7 ms a file; record total and ms per file for both builds in this
+  file. It runs without the watcher and the index, unlike the baseline. The
+  Step 4 checkbox was ticked on the code and test criteria; this measurement
+  was skipped because the bench build ran the machine out of memory.
+- `foldersidecars::delete` (Delete Sidecars…) still moves one sidecar per
+  shell operation on Windows (`trash::run` with `trash_one` in
+  `crates/engine/src/foldersidecars.rs`); chunking it like `trash_listed`'s
+  `run_chunked` would speed a large run up. Seen while planning this plan
+  (item 5's investigation), outside its five items.

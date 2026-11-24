@@ -624,28 +624,49 @@ pub fn restore<I>(
     exists: impl Fn(&Path) -> bool,
     mut mover: impl FnMut(&Trashed, I) -> Result<(), String>,
 ) -> Restored {
-    let mut restored = Restored::default();
     let mut raw_back = true;
+    let results = run
+        .moved
+        .iter()
+        .map(|trashed| {
+            let is_media = is_media(&trashed.path);
+            let result = if !is_media && !raw_back {
+                Err(held_back(&mut in_trash, trashed))
+            } else if exists(trashed.destination()) {
+                Err(ALREADY_EXISTS.to_string())
+            } else {
+                match in_trash(trashed) {
+                    Some(item) => mover(trashed, item),
+                    None => Err(NOT_IN_TRASH.to_string()),
+                }
+            };
+            if is_media {
+                raw_back = result.is_ok();
+            }
+            result
+        })
+        .collect();
+    tally(run, results)
+}
+
+/// The failure of a sidecar whose RAW did not come back: left in the Trash,
+/// or not in it.
+fn held_back<I>(in_trash: &mut impl FnMut(&Trashed) -> Option<I>, trashed: &Trashed) -> String {
+    match in_trash(trashed) {
+        Some(_) => RAW_NOT_RESTORED.to_string(),
+        None => NOT_IN_TRASH.to_string(),
+    }
+}
+
+/// The `Restored` of `run` from the outcome of each of its files, in order.
+fn tally(run: &TrashRun, results: Vec<Result<(), String>>) -> Restored {
+    let mut restored = Restored::default();
     let mut item_failed = None;
-    for trashed in &run.moved {
+    for (trashed, result) in run.moved.iter().zip(results) {
         let is_media = is_media(&trashed.path);
         let destination = trashed.destination();
         let path = destination.to_string_lossy().into_owned();
-        let result = if !is_media && !raw_back {
-            Err(match in_trash(trashed) {
-                Some(_) => RAW_NOT_RESTORED.to_string(),
-                None => NOT_IN_TRASH.to_string(),
-            })
-        } else if exists(destination) {
-            Err(ALREADY_EXISTS.to_string())
-        } else {
-            match in_trash(trashed) {
-                Some(item) => mover(trashed, item),
-                None => Err(NOT_IN_TRASH.to_string()),
-            }
-        };
         if is_media {
-            raw_back = result.is_ok();
             item_failed = Some(false);
         }
         if result.is_err() && item_failed != Some(true) {
@@ -668,6 +689,118 @@ pub fn restore<I>(
         }
     }
     restored
+}
+
+/// `restore` for a platform where one call restores many files far faster
+/// than one call per file (Windows), with the same outcome: the items of the
+/// run (a RAW or JPEG with the sidecars after it, a sidecar with no RAW
+/// before it alone) are taken `CHUNK` at a time, their RAWs, JPEGs and lone
+/// sidecars put back in one `restore_many`, then the sidecars of the RAWs
+/// that came back in another. A file whose folder was renamed since the run
+/// (`Trashed::restore_to`) goes through `mover` on its own.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub fn restore_chunked<I: Clone>(
+    run: &TrashRun,
+    mut in_trash: impl FnMut(&Trashed) -> Option<I>,
+    exists: impl Fn(&Path) -> bool,
+    mut restore_many: impl FnMut(Vec<I>) -> Result<(), String>,
+    mut mover: impl FnMut(&Trashed, I) -> Result<(), String>,
+) -> Restored {
+    let moved = &run.moved;
+    let mut starts = Vec::new();
+    let mut after_media = false;
+    for (index, trashed) in moved.iter().enumerate() {
+        let media = is_media(&trashed.path);
+        if media || !after_media {
+            starts.push(index);
+        }
+        after_media |= media;
+    }
+    let mut results: Vec<Option<Result<(), String>>> = vec![None; moved.len()];
+    for (chunk_index, chunk) in starts.chunks(CHUNK).enumerate() {
+        let heads = restore_chunk(
+            moved,
+            chunk,
+            &mut in_trash,
+            &exists,
+            &mut restore_many,
+            &mut mover,
+        );
+        let after = starts.get((chunk_index + 1) * CHUNK).copied();
+        let mut sidecars = Vec::new();
+        for (position, (&start, result)) in chunk.iter().zip(heads).enumerate() {
+            let end = chunk
+                .get(position + 1)
+                .copied()
+                .or(after)
+                .unwrap_or(moved.len());
+            if result.is_ok() {
+                sidecars.extend(start + 1..end);
+            } else {
+                for (sidecar, trashed) in moved.iter().enumerate().take(end).skip(start + 1) {
+                    results[sidecar] = Some(Err(held_back(&mut in_trash, trashed)));
+                }
+            }
+            results[start] = Some(result);
+        }
+        let followers = restore_chunk(
+            moved,
+            &sidecars,
+            &mut in_trash,
+            &exists,
+            &mut restore_many,
+            &mut mover,
+        );
+        for (sidecar, result) in sidecars.into_iter().zip(followers) {
+            results[sidecar] = Some(result);
+        }
+    }
+    tally(run, results.into_iter().flatten().collect())
+}
+
+/// The outcome of each of `moved[indices]`, in order, as `restore` decides
+/// it. A file whose destination `exists` or that `in_trash` finds no item
+/// for fails without reaching `restore_many`, which would refuse the whole
+/// call for one collision. `restore_many` can fail having put back some of
+/// the files, so after a failure a file at its destination came back, and
+/// the rest go through `mover` one at a time so that each failure names its
+/// file.
+fn restore_chunk<I: Clone>(
+    moved: &[Trashed],
+    indices: &[usize],
+    in_trash: &mut impl FnMut(&Trashed) -> Option<I>,
+    exists: &impl Fn(&Path) -> bool,
+    restore_many: &mut impl FnMut(Vec<I>) -> Result<(), String>,
+    mover: &mut impl FnMut(&Trashed, I) -> Result<(), String>,
+) -> Vec<Result<(), String>> {
+    let mut results = Vec::with_capacity(indices.len());
+    let mut batch = Vec::new();
+    for (position, &index) in indices.iter().enumerate() {
+        let trashed = &moved[index];
+        results.push(if exists(trashed.destination()) {
+            Err(ALREADY_EXISTS.to_string())
+        } else {
+            match in_trash(trashed) {
+                None => Err(NOT_IN_TRASH.to_string()),
+                Some(item) if trashed.restore_to.is_some() => mover(trashed, item),
+                Some(item) => {
+                    batch.push((position, item));
+                    Ok(())
+                }
+            }
+        });
+    }
+    let all_back = batch.is_empty()
+        || restore_many(batch.iter().map(|(_, item)| item.clone()).collect()).is_ok();
+    if !all_back {
+        for (position, item) in batch {
+            let trashed = &moved[indices[position]];
+            if !exists(trashed.destination()) {
+                results[position] = mover(trashed, item);
+            }
+        }
+    }
+    results
 }
 
 /// Move `paths`, what an undo brought back (each RAW followed by its
@@ -1006,13 +1139,8 @@ pub fn cleared(moved: &[Trashed]) -> Vec<(String, Vec<String>)> {
 }
 
 /// Restore `run` from the Trash listed once, each file matched by its
-/// original path (the newest item of a path) and restored on its own, so one
-/// missing or colliding item cannot fail the others. The Trash puts a file
-/// back at its original path, and the Windows Recycle Bin fails when that
-/// folder is gone, so for a file whose folder was renamed since the missing
-/// folders are created first (`create_missing`), the file is put back
-/// and then moved into the renamed folder (`relocate`), which removes
-/// exactly the folders created.
+/// original path (the newest item of a path), so one missing or colliding
+/// item cannot fail the others (see `restore_listed`).
 #[cfg(not(target_os = "macos"))]
 fn restore_run(run: &TrashRun) -> Restored {
     let items = match ::trash::os_limited::list() {
@@ -1020,28 +1148,58 @@ fn restore_run(run: &TrashRun) -> Restored {
         Err(e) => return Restored::none(run, &format!("could not list the Trash: {e}")),
     };
     let mut items = newest_by_path(items);
-    restore(
+    restore_listed(run, |trashed| items.remove(&trash_key(&trashed.path)))
+}
+
+/// Restore `run` in chunks: a shell operation costs far more than the files
+/// it restores.
+#[cfg(windows)]
+fn restore_listed(
+    run: &TrashRun,
+    in_trash: impl FnMut(&Trashed) -> Option<::trash::TrashItem>,
+) -> Restored {
+    restore_chunked(
         run,
-        |trashed| items.remove(&trash_key(&trashed.path)),
+        in_trash,
         Path::exists,
-        |trashed, item| {
-            let created = match (&trashed.restore_to, trashed.path.parent()) {
-                (Some(_), Some(parent)) => create_missing(parent)?,
-                _ => Vec::new(),
-            };
-            if let Err(e) = ::trash::os_limited::restore_all([item]) {
-                remove_created(&created);
-                return Err(match e {
-                    ::trash::Error::RestoreCollision { .. } => ALREADY_EXISTS.to_string(),
-                    e => e.to_string(),
-                });
-            }
-            match &trashed.restore_to {
-                Some(to) => relocate(&trashed.path, to, &created),
-                None => Ok(()),
-            }
-        },
+        |items| ::trash::os_limited::restore_all(items).map_err(|e| e.to_string()),
+        restore_item,
     )
+}
+
+/// Restore `run` one file at a time: `restore_all` is a loop of single
+/// restores on Linux.
+#[cfg(all(not(windows), not(target_os = "macos")))]
+fn restore_listed(
+    run: &TrashRun,
+    in_trash: impl FnMut(&Trashed) -> Option<::trash::TrashItem>,
+) -> Restored {
+    restore(run, in_trash, Path::exists, restore_item)
+}
+
+/// Restore one file from the Trash. The Trash puts a file back at its
+/// original path, and the Windows Recycle Bin fails when that folder is
+/// gone, so for a file whose folder was renamed since the missing folders
+/// are created first (`create_missing`), the file is put back and then moved
+/// into the renamed folder (`relocate`), which removes exactly the folders
+/// created.
+#[cfg(not(target_os = "macos"))]
+fn restore_item(trashed: &Trashed, item: ::trash::TrashItem) -> Result<(), String> {
+    let created = match (&trashed.restore_to, trashed.path.parent()) {
+        (Some(_), Some(parent)) => create_missing(parent)?,
+        _ => Vec::new(),
+    };
+    if let Err(e) = ::trash::os_limited::restore_all([item]) {
+        remove_created(&created);
+        return Err(match e {
+            ::trash::Error::RestoreCollision { .. } => ALREADY_EXISTS.to_string(),
+            e => e.to_string(),
+        });
+    }
+    match &trashed.restore_to {
+        Some(to) => relocate(&trashed.path, to, &created),
+        None => Ok(()),
+    }
 }
 
 /// Restore `run` from the locations its files got in the Trash, recorded by
@@ -1106,9 +1264,9 @@ fn move_again(paths: Vec<PathBuf>, progress: impl FnMut(usize, usize)) -> (Summa
 mod tests {
     use super::{
         cleared, create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked,
-        relocate, remove_one, restore, restore_recorded, run, run_chunked, trash_key, Back, Group,
-        Restored, Runs, Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS,
-        NOT_IN_TRASH, RAW_NOT_RESTORED,
+        relocate, remove_one, restore, restore_chunked, restore_recorded, run, run_chunked,
+        trash_key, Back, Group, Restored, Runs, Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK,
+        GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
     };
     use crate::listing::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
@@ -2384,5 +2542,243 @@ mod tests {
         assert_eq!(summary.failed.len(), 1);
         assert_eq!(summary.failed[0].path, key(&dir.join("b.ARW")));
         assert_eq!(summary.failed[0].message, GONE);
+    }
+
+    /// A Trash and a disk of paths for the restores: `restore_many` puts back
+    /// every item it can, going on past a `fail` file, then errs, as the
+    /// Windows shell does, and `put_back` refuses a `fail` file. The chunk
+    /// calls and the files put back one at a time are kept.
+    struct Bin {
+        trash: RefCell<Vec<String>>,
+        disk: RefCell<Vec<PathBuf>>,
+        calls: RefCell<Vec<Vec<String>>>,
+        one_by_one: RefCell<Vec<String>>,
+    }
+
+    impl Bin {
+        fn new(trash: &[&str], disk: &[&str]) -> Self {
+            Bin {
+                trash: RefCell::new(trash.iter().map(|path| path.to_string()).collect()),
+                disk: RefCell::new(disk.iter().map(PathBuf::from).collect()),
+                calls: RefCell::new(Vec::new()),
+                one_by_one: RefCell::new(Vec::new()),
+            }
+        }
+
+        fn in_trash(&self, trashed: &Trashed) -> Option<String> {
+            let path = key(&trashed.path);
+            let mut trash = self.trash.borrow_mut();
+            let at = trash.iter().position(|item| *item == path)?;
+            Some(trash.remove(at))
+        }
+
+        fn exists(&self, path: &Path) -> bool {
+            self.disk.borrow().iter().any(|on_disk| on_disk == path)
+        }
+
+        fn restore_many(&self, items: Vec<String>) -> Result<(), String> {
+            self.calls.borrow_mut().push(items.clone());
+            let mut result = Ok(());
+            for item in items {
+                if item.contains("fail") {
+                    result = Err("Some operations were aborted".to_string());
+                } else {
+                    self.disk.borrow_mut().push(PathBuf::from(item));
+                }
+            }
+            result
+        }
+
+        fn put_back(&self, trashed: &Trashed, item: String) -> Result<(), String> {
+            if item.contains("fail") {
+                return Err("refused".to_string());
+            }
+            self.disk
+                .borrow_mut()
+                .push(trashed.destination().to_path_buf());
+            Ok(())
+        }
+    }
+
+    type Outcome = (Vec<String>, Vec<(String, String)>, Vec<Back>, usize);
+
+    fn outcome(restored: &Restored) -> Outcome {
+        (
+            restored.restored.clone(),
+            restored
+                .failed
+                .iter()
+                .map(|f| (f.path.clone(), f.message.clone()))
+                .collect(),
+            restored.back.clone(),
+            restored.failed_items,
+        )
+    }
+
+    /// `restore_chunked` of `run` against a Trash holding `trash` and a disk
+    /// holding `disk`, checked to give what `restore` gives against the same.
+    fn restore_in_chunks(run: &TrashRun, trash: &[&str], disk: &[&str]) -> (Restored, Bin) {
+        let plain_bin = Bin::new(trash, disk);
+        let plain = restore(
+            run,
+            |trashed| plain_bin.in_trash(trashed),
+            |path| plain_bin.exists(path),
+            |trashed, item| plain_bin.put_back(trashed, item),
+        );
+        let bin = Bin::new(trash, disk);
+        let chunked = restore_chunked(
+            run,
+            |trashed| bin.in_trash(trashed),
+            |path| bin.exists(path),
+            |items| bin.restore_many(items),
+            |trashed, item| {
+                bin.one_by_one.borrow_mut().push(item.clone());
+                bin.put_back(trashed, item)
+            },
+        );
+        assert_eq!(outcome(&chunked), outcome(&plain));
+        (chunked, bin)
+    }
+
+    #[test]
+    fn a_chunked_restore_puts_back_the_raws_then_their_sidecars() {
+        let run = trash_run(&["a.ARW", "a.xmp", "a.ARW.dop", "b.DNG"]);
+        let (restored, bin) =
+            restore_in_chunks(&run, &["a.ARW", "a.xmp", "a.ARW.dop", "b.DNG"], &[]);
+        assert_eq!(restored.restored, ["a.ARW", "b.DNG"]);
+        assert!(restored.failed.is_empty());
+        assert_eq!(
+            back_paths(&restored),
+            ["a.ARW", "a.xmp", "a.ARW.dop", "b.DNG"].map(PathBuf::from)
+        );
+        assert_eq!(
+            bin.calls.into_inner(),
+            [vec!["a.ARW", "b.DNG"], vec!["a.xmp", "a.ARW.dop"]]
+        );
+        assert!(bin.one_by_one.into_inner().is_empty());
+    }
+
+    #[test]
+    fn a_chunked_restore_never_overwrites_and_keeps_a_colliding_raws_sidecars() {
+        let run = trash_run(&["a.ARW", "a.xmp", "b.ARW", "b.xmp"]);
+        let (restored, bin) = restore_in_chunks(
+            &run,
+            &["a.ARW", "a.xmp", "b.ARW", "b.xmp"],
+            &["a.ARW", "b.xmp"],
+        );
+        assert_eq!(restored.restored, ["b.ARW"]);
+        assert_eq!(
+            failures(&restored),
+            [
+                ("a.ARW", ALREADY_EXISTS),
+                ("a.xmp", RAW_NOT_RESTORED),
+                ("b.xmp", ALREADY_EXISTS)
+            ]
+        );
+        assert_eq!(restored.failed_items, 2);
+        assert!(!bin.exists(Path::new("a.xmp")));
+        assert_eq!(bin.calls.into_inner(), [vec!["b.ARW"]]);
+    }
+
+    #[test]
+    fn a_chunked_restore_reports_what_the_trash_no_longer_holds() {
+        let run = trash_run(&["a.ARW", "a.xmp", "b.ARW", "b.xmp", "c.ARW", "c.xmp"]);
+        let (restored, bin) = restore_in_chunks(&run, &["a.ARW", "b.ARW", "b.xmp", "c.xmp"], &[]);
+        assert_eq!(restored.restored, ["a.ARW", "b.ARW"]);
+        assert_eq!(
+            failures(&restored),
+            [
+                ("a.xmp", NOT_IN_TRASH),
+                ("c.ARW", NOT_IN_TRASH),
+                ("c.xmp", RAW_NOT_RESTORED)
+            ]
+        );
+        assert_eq!(
+            bin.calls.into_inner(),
+            [vec!["a.ARW", "b.ARW"], vec!["b.xmp"]]
+        );
+    }
+
+    #[test]
+    fn a_failed_raw_of_a_chunk_is_retried_alone_and_keeps_its_sidecars() {
+        let run = trash_run(&["a.ARW", "a.xmp", "fail.ARW", "fail.xmp", "c.ARW"]);
+        let (restored, bin) = restore_in_chunks(
+            &run,
+            &["a.ARW", "a.xmp", "fail.ARW", "fail.xmp", "c.ARW"],
+            &[],
+        );
+        assert_eq!(restored.restored, ["a.ARW", "c.ARW"]);
+        assert_eq!(
+            failures(&restored),
+            [("fail.ARW", "refused"), ("fail.xmp", RAW_NOT_RESTORED)]
+        );
+        assert_eq!(restored.failed_items, 1);
+        assert!(!bin.exists(Path::new("fail.xmp")));
+        assert_eq!(
+            bin.calls.into_inner(),
+            [vec!["a.ARW", "fail.ARW", "c.ARW"], vec!["a.xmp"]]
+        );
+        assert_eq!(bin.one_by_one.into_inner(), ["fail.ARW"]);
+    }
+
+    #[test]
+    fn a_chunk_call_that_fails_part_way_keeps_what_came_back() {
+        let run = trash_run(&["a.ARW", "fail.xmp", "b.ARW", "b.xmp"]);
+        let (restored, bin) =
+            restore_in_chunks(&run, &["a.ARW", "fail.xmp", "b.ARW", "b.xmp"], &[]);
+        assert_eq!(failures(&restored), [("fail.xmp", "refused")]);
+        assert_eq!(
+            back_paths(&restored),
+            ["a.ARW", "b.ARW", "b.xmp"].map(PathBuf::from)
+        );
+        assert_eq!(
+            bin.calls.into_inner(),
+            [vec!["a.ARW", "b.ARW"], vec!["fail.xmp", "b.xmp"]]
+        );
+        assert_eq!(bin.one_by_one.into_inner(), ["fail.xmp"]);
+    }
+
+    #[test]
+    fn a_chunked_run_of_sidecars_alone_goes_in_one_call() {
+        let run = trash_run(&["a.xmp", "a.ARW.dop", "b.xmp"]);
+        let (restored, bin) = restore_in_chunks(&run, &["a.xmp", "b.xmp"], &[]);
+        assert!(restored.restored.is_empty());
+        assert_eq!(failures(&restored), [("a.ARW.dop", NOT_IN_TRASH)]);
+        assert_eq!(restored.failed_items, 1);
+        assert_eq!(bin.calls.into_inner(), [vec!["a.xmp", "b.xmp"]]);
+    }
+
+    #[test]
+    fn a_run_longer_than_a_chunk_is_restored_chunk_by_chunk() {
+        let names: Vec<String> = (0..2 * CHUNK + 1)
+            .flat_map(|i| [format!("{i:03}.ARW"), format!("{i:03}.xmp")])
+            .collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let run = trash_run(&names);
+        let (restored, bin) = restore_in_chunks(&run, &names, &[]);
+        assert_eq!(restored.restored.len(), 2 * CHUNK + 1);
+        assert_eq!(restored.back.len(), names.len());
+        let sizes: Vec<usize> = bin.calls.into_inner().iter().map(Vec::len).collect();
+        assert_eq!(sizes, [CHUNK, CHUNK, CHUNK, CHUNK, 1, 1]);
+    }
+
+    #[test]
+    fn a_file_of_a_renamed_folder_is_restored_on_its_own() {
+        let mut run = trash_run(&["old/a.ARW", "old/a.xmp", "old/b.ARW"]);
+        for trashed in &mut run.moved[..2] {
+            trashed.restore_to = Some(Path::new("new").join(trashed.path.file_name().unwrap()));
+        }
+        let (restored, bin) =
+            restore_in_chunks(&run, &["old/a.ARW", "old/a.xmp", "old/b.ARW"], &[]);
+        assert_eq!(
+            back_paths(&restored),
+            [
+                Path::new("new").join("a.ARW"),
+                Path::new("new").join("a.xmp"),
+                PathBuf::from("old/b.ARW")
+            ]
+        );
+        assert_eq!(bin.calls.into_inner(), [vec!["old/b.ARW"]]);
+        assert_eq!(bin.one_by_one.into_inner(), ["old/a.ARW", "old/a.xmp"]);
     }
 }

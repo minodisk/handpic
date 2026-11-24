@@ -122,7 +122,8 @@ JPEG alone, and moves them to the OS trash, RAW first, in chunks on Windows
 (`run_chunked`), reporting through a callback the app's `trash-progress`
 events come from, recording every run that moved something in `Runs`, the
 newest 100, which `trash_rejected_undo` takes one from to restore its files,
-RAW before its sidecars, never overwriting, keeping what came back for
+RAW before its sidecars, never overwriting, in chunks on Windows
+(`restore_chunked`), keeping what came back for
 `trash_rejected_redo` to move to the Trash again), `src/output.rs` which of a
 folder's files have an export in its `Output` or `Output-sequenced` subfolder,
 by file stem, with PhotoLab's copy and DeepPRIME suffixes (no answer without
