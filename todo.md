@@ -38,16 +38,6 @@ The test in `crates/core/src/scan.rs` asserts a cancel ends within 1 s. It took 
 
 - [ ] Reproduce under full-suite load, then make the test wait on an event rather than wall-clock time (or loosen the bound with a reasoned margin). Done when `mise run ci:local` passes on Windows several runs in a row without it failing.
 
-### App: the MCP `get_view` eyes summary carries no openness
-
-`burst-keep-score` Step 4b made the meta pane's `Eyes` row show the openness (0-100 from the EAR) but kept `get_view`'s `state` / `probability` / `pose` fields as planned. Whether `EyesSummary` should carry the EAR or the openness is open.
-
-Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
-
-#### TODO
-
-- [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
-
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
 #### Background
