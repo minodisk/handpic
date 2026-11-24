@@ -2939,7 +2939,7 @@ screen, no page read out, no scan pass, no folder rename), from
 current page's crop once `zoom.shown` has stamped the page, so `z` paints a
 crop already held (`Toggled::Held`). Zoomed with the current page's crop held,
 it reads the next neighbour's (the first of `prefetch::neighbours` in the
-`heading` direction) into a slot of its own keyed by the file
+`heading` direction, which keeps the paging direction across a wrap) into a slot of its own keyed by the file
 (`Request::ahead`, `ahead_arrived`); `page` makes it the held crop when the
 new current file is that one at the same viewport, so the page shows it
 without a read, and a page onto it while it is still in flight takes it when
@@ -2989,8 +2989,9 @@ it lands. One read is in flight across both, and each slot holds one crop.
 
 `prefetch.rs` ports `prefetch.ts`: `Ring` holds the decoded previews of the
 current file's two neighbours (the next one in the paging direction first,
-none across the pager's wrap), at most `PREFETCH_PIXEL_CAP` (32 MP, 128 MB of
-BGRA) in all, the image on screen not counted. `request` takes the current
+wrapping at the ends of the list as the pager's `Next` / `Previous` do, never
+the current file and no file twice), at most `PREFETCH_PIXEL_CAP` (32 MP,
+128 MB of BGRA) in all, the image on screen not counted. `request` takes the current
 file from the ring before it reads; a hit does everything `loaded`'s current
 arm does (`show_current`: the cleared status note, meta pane, `marks.show`, `zoom.shown`,
 `analyze_current`, `start_dwell`, the `page` line with `source=prefetch`) but
@@ -3020,6 +3021,10 @@ reduced scale (see "The fit view decodes at the canvas's DCT scale" below).
   through `keep`, and only after another image replaced it. Only what a ring
   method returns is retired, so an image in the ring never reaches `retired`
   (whose `cx.drop_image` would pull its texture).
+- Rule: an entry handed back through `keep` keeps its GPU texture; it is not
+  released on `keep` and uploaded again on the next hit, a decision for
+  paging speed over memory (a hit's `paint` stays flat, at the cost of the
+  private bytes measured in "A prefetch hit leaves only the frame").
 - Rule: `opened` (a folder open and a re-listing, which may have changed any
   file's bytes) clears the ring and marks the shown image not keepable;
   `refilter` calls `retain` with the new `files`. Whichever plan adds rename,
@@ -5916,6 +5921,10 @@ re-reading the newest file, and the overlay has few pages to compete with. See
 
 ### A prefetch hit leaves only the frame (Measured)
 
+These numbers are from before `neighbours` wrapped at the ends of the list
+(`../plans/20261123-todo-ten-closeouts/plan.md`, Step 4); the run was not
+repeated after it, so the wraps' 3 misses below should now be hits.
+
 Release, `--auto 60` on the 20-file compare folders, warm index. Three runs
 with the prefetch ring alternated with three under `--no-prefetch` in one
 session (a busy machine, ARW noisy). Median p50 / p95 `keypressToPixels`:
@@ -5930,7 +5939,8 @@ slow the current page, so it stays there. Memory peaks on RAF: about
 and the GPU textures that kept entries still hold. See
 [the plan's learnings](../plans/_archived/20261114-gpui-prefetch/learnings.md).
 
-- Rule: count hits from the `page` line's `source=prefetch`. A prefetch run's
-  p95 is the wraps' reads; read the hits' latency from the p50.
+- Rule: count hits from the `page` line's `source=prefetch`. In the runs
+  above, from before the wrap, a prefetch run's p95 was the wraps' reads;
+  read the hits' latency from the p50.
 - Rule: prefetch does not run while a scan pass runs. An A/B of the ring
   needs a warm index whose scan ends before the first press.

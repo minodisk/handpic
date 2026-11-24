@@ -62,3 +62,37 @@
   hanging (the steps before `test app` had passed, since it got that far;
   only the output's last 30 lines were kept, all passing tests). The fix was
   committed without another run, the PR's GitHub checks verifying it.
+
+## Step 4
+
+- `prefetch::neighbours` now wraps with the pager's arithmetic
+  (`(index + 1) % len`, `(index + len - 1) % len`), drops the current file and
+  a duplicate (1 file: none; 2 files: one), and returns nothing for an index
+  past the list. Every other `Ring` test kept its expectations: they use
+  inner indices of the 4-file list or the 1- and 2-file lists, whose wanted
+  sets did not change. The UI tests' rings (3 files, index 0) now also want the
+  last file, read after the next one, so `holds(files[1])` still settles.
+- `crowded` needs no change: `plan` keeps only the wanted paths in it, and a
+  wrapped neighbour is just another wanted path.
+- `Heading::to` takes the list length and reads a move between the first
+  and the last file (of more than two) as the pager wrapping, so a `Next` wrap
+  stays `Forward` and a `Previous` wrap stays `Back`. Without it `prefetch_crop`,
+  which takes only the first neighbour, would read the crop of the file just
+  left (Round 1 review, item 1).
+- `prefetch_crop` (the 1:1 crop read ahead while zoomed) takes the first
+  neighbour, so it now also reads across the wrap.
+- Local CI and the `--auto 60` re-run were skipped on the user's instruction
+  (a slow host); `cargo test` / clippy were not run locally and the PR's
+  GitHub checks verify. `docs/agents/app.md`'s "A prefetch hit leaves only
+  the frame" marks its numbers as from before the wrap.
+
+## Deferred issues (todo candidates)
+
+- Re-measure the prefetch ring after the wrap. Basis: Step 4's Done-when
+  (`--auto 60` re-run "if feasible"), skipped on this host. On the 20-file
+  compare folders with a release build and a warm index, run `--auto 60`
+  with the ring on and under `--no-prefetch`, count `source=prefetch` hits
+  (expected 60 of 60 rather than 57) and record p50 / p95
+  `keypressToPixels` under "A prefetch hit leaves only the frame" in
+  `docs/agents/app.md`, replacing the "from before the wrap" note. Files:
+  `crates/app/src/prefetch.rs`, `docs/agents/app.md`.

@@ -46,9 +46,13 @@ pub struct Heading {
 }
 
 impl Heading {
-    pub fn to(&mut self, index: usize) {
+    /// `len` is the list's length: a move between the first and the last
+    /// file of more than two is the pager wrapping, so it goes on in the
+    /// direction it was paged, not the one the index moved.
+    pub fn to(&mut self, index: usize, len: usize) {
         if index != self.last {
-            self.direction = if index < self.last {
+            let wrapped = len > 2 && self.last.abs_diff(index) == len - 1;
+            self.direction = if (index < self.last) != wrapped {
                 Direction::Back
             } else {
                 Direction::Forward
@@ -67,17 +71,26 @@ fn key(path: impl AsRef<Path>) -> String {
 }
 
 /// The files to hold around `index`, the next one in the paging direction
-/// first.
+/// first, wrapping at the ends of the list as the pager's `Next` and
+/// `Previous` do.
 pub fn neighbours(files: &[impl AsRef<Path>], index: usize, direction: Direction) -> Vec<String> {
-    let (ahead, behind) = match direction {
-        Direction::Forward => (index.checked_add(1), index.checked_sub(1)),
-        Direction::Back => (index.checked_sub(1), index.checked_add(1)),
+    let len = files.len();
+    if index >= len {
+        return Vec::new();
+    }
+    let next = (index + 1) % len;
+    let previous = (index + len - 1) % len;
+    let order = match direction {
+        Direction::Forward => [next, previous],
+        Direction::Back => [previous, next],
     };
-    [ahead, behind]
-        .into_iter()
-        .flatten()
-        .filter_map(|at| files.get(at).map(key))
-        .collect()
+    let mut picked: Vec<usize> = Vec::with_capacity(2);
+    for neighbour in order {
+        if neighbour != index && !picked.contains(&neighbour) {
+            picked.push(neighbour);
+        }
+    }
+    picked.into_iter().map(|at| key(&files[at])).collect()
 }
 
 struct Pending {
@@ -337,22 +350,50 @@ mod tests {
     }
 
     #[test]
-    fn stops_at_the_ends_of_the_list() {
-        assert_eq!(neighbours(&FILES, 0, FORWARD), ["b"]);
-        assert_eq!(neighbours(&FILES, 3, FORWARD), ["c"]);
-        assert_eq!(neighbours(&FILES, 0, Direction::Back), ["b"]);
+    fn wraps_at_the_ends_of_the_list_as_the_pager_does() {
+        assert_eq!(neighbours(&FILES, 3, FORWARD), ["a", "c"]);
+        assert_eq!(neighbours(&FILES, 3, Direction::Back), ["c", "a"]);
+        assert_eq!(neighbours(&FILES, 0, FORWARD), ["b", "d"]);
+        assert_eq!(neighbours(&FILES, 0, Direction::Back), ["d", "b"]);
+    }
+
+    #[test]
+    fn a_short_list_never_names_the_current_file_or_a_file_twice() {
+        let none: [&str; 0] = [];
+        assert!(neighbours(&none, 0, FORWARD).is_empty());
+        assert!(neighbours(&["a"], 0, FORWARD).is_empty());
+        assert!(neighbours(&["a"], 0, Direction::Back).is_empty());
+        assert_eq!(neighbours(&["a", "b"], 0, FORWARD), ["b"]);
+        assert_eq!(neighbours(&["a", "b"], 1, Direction::Back), ["a"]);
+        assert_eq!(neighbours(&["a", "b", "c"], 0, FORWARD), ["b", "c"]);
+        assert_eq!(neighbours(&["a", "b", "c"], 2, FORWARD), ["a", "b"]);
+        assert_eq!(neighbours(&["a", "b", "c"], 0, Direction::Back), ["c", "b"]);
+    }
+
+    #[test]
+    fn the_heading_keeps_the_paging_direction_across_a_wrap() {
+        let mut heading = Heading::default();
+        heading.to(9, 10);
+        heading.to(0, 10);
+        assert_eq!(heading.direction(), FORWARD);
+        heading.to(9, 10);
+        assert_eq!(heading.direction(), Direction::Back);
+        let mut two = Heading::default();
+        two.to(1, 2);
+        two.to(0, 2);
+        assert_eq!(two.direction(), Direction::Back);
     }
 
     #[test]
     fn the_heading_follows_the_last_move_and_holds_on_a_reshow() {
         let mut heading = Heading::default();
         assert_eq!(heading.direction(), FORWARD);
-        heading.to(3);
-        heading.to(2);
+        heading.to(3, 10);
+        heading.to(2, 10);
         assert_eq!(heading.direction(), Direction::Back);
-        heading.to(2);
+        heading.to(2, 10);
         assert_eq!(heading.direction(), Direction::Back);
-        heading.to(5);
+        heading.to(5, 10);
         assert_eq!(heading.direction(), FORWARD);
     }
 

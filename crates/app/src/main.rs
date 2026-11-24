@@ -4555,7 +4555,7 @@ impl Handpic {
     fn take_held(&mut self, cx: &mut Context<Self>) -> Option<Held> {
         let path = self.current_path()?;
         let index = self.pager.current();
-        self.heading.to(index);
+        self.heading.to(index, self.files.len());
         let ring = self.prefetch.as_mut()?;
         let held = ring.take(&path);
         let given = ring.plan(&self.files, index, self.heading.direction());

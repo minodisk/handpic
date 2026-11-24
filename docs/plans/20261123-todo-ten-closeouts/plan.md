@@ -195,7 +195,7 @@ Rules for every step:
       `Arc<Mutex<Option<JoinHandle<()>>>>`) closes it. Keep the `settled`
       chain as it is for the previous scan's stop.
 
-- [ ] Step 4: Prefetch: `neighbours` wraps like the pager; record that kept entries keep their texture
+- [x] Step 4: Prefetch: `neighbours` wraps like the pager; record that kept entries keep their texture
   - Done when:
     - `prefetch::neighbours` wraps as `Pager::go` does on `Next` / `Previous`:
       at the last file the next neighbour is the first file, at the first
@@ -286,3 +286,4 @@ Rules for every step:
 - (2026-11-24) Step 1 complete
 - (2026-11-24) Step 2 complete
 - (2026-11-24) Step 3 complete
+- (2026-11-25) Step 4 complete

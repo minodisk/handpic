@@ -721,26 +721,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 - [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
 
-### App: kept prefetch-ring entries keep their GPU texture
-
-#### Background
-
-`gpui-prefetch`'s memory measurement on the RAF folder showed about +110 MB working set and about +300 MB private bytes with the ring on, against the cap's 128 MB of BGRA (two 4416x2944 neighbours are 104 MB). An image that was painted and then handed back through `Ring::keep` holds its GPU texture until it is retired, because only a retired image gets `cx.drop_image`. Releasing the texture on `keep` and uploading it again on the next hit would trade memory for `paint` on a hit (which did not grow in the A/B). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/main.rs` (`present`), `crates/app/src/prefetch.rs`.
-
-#### TODO
-
-- [ ] Decide whether to release a kept entry's texture on `keep`. Measure private bytes and `paint` on a hit on the RAF copy with and without the release.
-
-### App: the prefetch ring never covers the wrap from the last file to the first
-
-#### Background
-
-`prefetch::neighbours` stops at the ends of the list, a faithful port of `prefetch.ts`, but the app's `Pager` wraps on `Next` / `Previous`. The press from the last file to the first therefore pays a full read. In `gpui-prefetch`'s `--auto 60` runs on 20 files, those 3 misses in 60 presses set the p95 at a read's latency (RAF 56 ms against a hit's 14 ms p50). Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/prefetch.rs`, `crates/app/src/pager.rs`.
-
-#### TODO
-
-- [ ] Decide whether `neighbours` should wrap when the pager does. If so, make it wrap with unit tests, and re-run `--auto 60` to check that the p95 falls.
-
 ### App: real-device check of the restored window on a second monitor (gpui-session-restore)
 
 #### Background
