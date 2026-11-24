@@ -81,6 +81,30 @@
   flakiness and had the step committed with the PR's GitHub checks as the
   check; this step's own tests all passed.
 
+## Step 4: the on-demand model run, closed as already met
+
+- Confirmed in the code (Option A, no production change):
+  `ondemand::read_eyes` has one caller, `overlay::judge`
+  (`crates/app/src/overlay.rs`), whose one caller is `analyze_current` in
+  `crates/app/src/main.rs`, which runs it only on a ticket from
+  `Marks::wanted_eyes`. That returns one only while the overlay is on, the
+  shown image is the current file's and the file is a RAW file (and it is
+  neither judged nor any judgment in flight). No other crate calls it (the
+  engine's `mcp.rs` uses only `read_preview`; the CLI none).
+- No other reader waits for the run when stored values exist: the meta pane
+  reads the window's `Facts` (`meta.rs`), the `Eyes` filter and the strip's
+  `closed_eyes_mark` read `Focus.eyes`, and `get_view` answers from
+  `Focus.eyes` when its state is `Some`, reading `View.eyes` (the on-demand
+  cache) only in the `else` branch.
+- The existing `no_eyes_are_judged_or_drawn_while_off_or_on_a_jpeg` used the
+  fixture focus with no stored values, so it was extended with a RAW file
+  whose answered focus holds a stored EAR: no judgment is requested once the
+  overlay is off.
+- `CLAUDE.md`'s `src/ondemand.rs` description still says the module is
+  "behind the app's `faces_of` and `eyes_of`"; `faces_of` is in
+  `crates/app/src/faces.rs` / `companion.rs` but no `eyes_of` exists in the
+  GPUI app. Left as is (out of this step's scope).
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, closed-eyes strip mark): on a real folder of
@@ -95,3 +119,7 @@
   `closed_eyes_mark`, the icon tests, `mise run ci:local`). Files:
   `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`),
   `crates/app/src/mark.rs`.
+- `CLAUDE.md`'s `src/ondemand.rs` description names the app's `eyes_of`,
+  which does not exist in the GPUI app (the on-demand eyes go through
+  `overlay::judge`). Basis: Step 4's verification of the `read_eyes`
+  callers. Files: `CLAUDE.md`, `crates/app/src/overlay.rs`.

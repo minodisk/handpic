@@ -198,16 +198,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Decision's shares rest on the agent's labels; if labels change,
       re-run `compare.py` in that plan folder and update `compare.md` and
       the Decision if a number moves.
-- [ ] Skip the second model run in `ondemand::read_eyes` for a file whose
-      scan already stored the EAR and pose (the `mesh-eyes-index` work stores
-      them, and the meta pane reads them). The on-demand judgment still runs
-      for the shown file because the `f` overlay's face mesh needs the 478
-      points, and it is the fallback for files with no stored value (face
-      under 60 px, or a file pass 2 has not reached). Reusing the scan's
-      mesh needs the points stored or a path that runs the model only while
-      `f` is on. Files: `crates/engine/src/ondemand.rs` (`read_eyes`),
-      `crates/app/src/overlay.rs`, `crates/engine/src/index.rs`,
-      `crates/core/src/eyes.rs`.
 - [ ] Suggest the sharpest-eye frame within a burst group. Measured and not
       shipped (`docs/plans/20261008-burst-keep-score/`, Decision 1, `results.md` and `fit.md`): the user
       picks within a burst by timing, not by a technical feature; the

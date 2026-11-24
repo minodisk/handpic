@@ -791,7 +791,13 @@ largest face at or above 0.8, and none below a 60 px face side. For that
 face the second pass stores the eye aspect ratio
 and the head pose from the mesh it already runs for the focus candidate cue
 (no extra model run), and the meta pane's `Eyes` row and the filter menu's
-`Eyes` section read those. Measured on
+`Eyes` section read those, as do the strip's closed-eyes mark and the MCP
+`get_view` tool's `eyes`. The on-demand run is only the `f` overlay's mesh
+source, since the mesh's 478 points are not stored, and `get_view`'s fallback
+for a file with no stored eye state: it runs only while the overlay is on and
+only for the shown RAW file, so a file whose scan stored the eye aspect ratio
+and pose costs no second model run with the overlay off, and no reader waits
+for it. Measured on
 2026-10-07 on the same Windows 11 machine, release builds, one thread, on
 `main` at `392f9c25` (the size before from the same day's build before the
 model was called):
@@ -861,7 +867,7 @@ focus candidate cue and the sharpness score:
 | Whole-preview face search without a trusted AF point (~17ms at 320x320; ~64ms at 640x448 on Windows, after a 3/8 decode of ~5ms instead of the full-size ~14ms) | first | second |
 | Focus candidate cue (crop detection + face mesh eye regions, eye window fallback) | second | second |
 | HDR PQ CR3 HEVC decode (65-125ms) | up to three times per file | twice per file (thumbnail, analysis) |
-| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) stays for the shown file's overlay |
+| Closed-eyes judgment (Face Landmarker v2, ~35-45ms per face) | - | the mesh and the pose solve also run in the second pass for the cue (~29ms per face on one thread), which stores the AF face's eye aspect ratio and head pose for the meta pane and the `Eyes` filter; the on-demand judgment (`ondemand::read_eyes`) runs only for the shown RAW file while the `f` overlay is on, as its mesh source and `get_view`'s fallback |
 
 A file with no trusted AF point and a confident face decodes its preview
 twice in the second pass, not three times: the 3/8 decode of the whole-image

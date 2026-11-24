@@ -146,7 +146,10 @@ fn micros(since: std::time::Instant) -> u32 {
 /// scaled whole-image decode, so the face is one the focus mark draws, and
 /// the crop comes from a second, full-size decode. `current` is asked
 /// before the detection and before the model, and a `false` stops the
-/// judgment as superseded.
+/// judgment as superseded. The app runs it only for the shown RAW file while
+/// the `f` overlay is on, as the overlay's mesh source (the scan stores the
+/// EAR and pose, not the points) and `get_view`'s fallback; every other
+/// reader takes the stored values.
 pub fn read_eyes(path: &Path, current: impl Fn() -> bool) -> Result<EyesResponse, String> {
     use handpic_core::{decode, eyes, faces};
     raw_only(path, "eye state judgment")?;

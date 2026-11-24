@@ -742,6 +742,13 @@ mod tests {
         marks.judged_eyes(path, ticket, Some(Some(judgment())));
         marks.toggle();
         assert!(marks.mark(Some("a.arw")).is_none());
+        let mut marks = shown("b.arw");
+        let mut stored = focus();
+        stored.eyes = StoredEyes::new(Some(0.1), None, None, None, None);
+        let ticket = marks.reading();
+        marks.answer(ticket, "b.arw".into(), Some(stored));
+        marks.toggle();
+        assert!(marks.wanted_eyes(Some("b.arw")).is_none());
     }
 
     #[test]
