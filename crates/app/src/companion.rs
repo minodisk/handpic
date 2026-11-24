@@ -61,6 +61,7 @@ use crate::{
     judgment::State,
     keys,
     menu::{self, Toggle},
+    meta,
     panels::Panels,
     rename,
     selection::{self, Selection},
@@ -1438,6 +1439,7 @@ pub fn get_view(view: &View) -> Value {
                         EyeState::Closed => "closed",
                     },
                     "probability": stored.eyes_closed,
+                    "openness": stored.eyes_ear.map(meta::shown_openness),
                     "pose": stored.pose,
                 }),
             );
@@ -1448,6 +1450,7 @@ pub fn get_view(view: &View) -> Value {
                     json!({
                         "state": eyes.state,
                         "probability": eyes.probability,
+                        "openness": meta::shown_openness(eyes.ear),
                         "pose": eyes.pose,
                     })
                 }),
@@ -2671,6 +2674,7 @@ mod tests {
                 "eyes": {
                     "state": "closed",
                     "probability": 0.9,
+                    "openness": 0,
                     "pose": { "yaw": 40.0, "pitch": -5.0, "roll": 2.0 },
                 },
             })
@@ -2792,11 +2796,38 @@ mod tests {
             json!({
                 "state": "open",
                 "probability": Eyes::from_ear(0.35).probability,
+                "openness": 78,
                 "pose": { "yaw": 10.0, "pitch": -5.0, "roll": 3.0 },
             })
         );
         let closed = eyes_of(with_focus(focus(0.1)), None);
         assert_eq!(closed["eyes"]["state"], "closed");
+    }
+
+    #[test]
+    fn reports_the_openness_the_meta_pane_shows_clamped_at_both_ends() {
+        let openness = |ear| eyes_of(with_focus(focus(ear)), None)["eyes"]["openness"].clone();
+        assert_eq!(openness(0.35), json!(78));
+        assert_eq!(openness(0.05), json!(0));
+        assert_eq!(openness(0.6), json!(100));
+        let judged = |ear| {
+            let judgment = EyesJudgment {
+                state: "open",
+                probability: 0.1,
+                ear,
+                pose: None,
+                mesh: EyesMesh {
+                    width: 1616,
+                    height: 1080,
+                    points: Vec::new(),
+                },
+            };
+            eyes_of(with_focus(not_scanned()), Some(Some(Arc::new(judgment))))["eyes"]["openness"]
+                .clone()
+        };
+        assert_eq!(judged(0.35), json!(78));
+        assert_eq!(judged(0.05), json!(0));
+        assert_eq!(judged(0.6), json!(100));
     }
 
     #[test]

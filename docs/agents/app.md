@@ -5093,7 +5093,13 @@ listing itself ran has no scan yet; `opened` cancels the scan it starts when
   dialog is asking is dropped, as the Tauri closure checked `trashFlow.busy`.
 - Rule: the run's result goes to the pane: `trashed_status` in the
   `step_note` line (the Tauri `note`), each failure through `write_failed`
-  (`<name>: could not move to the Trash: <message>`), and after a delete the
+  (`<name>: could not move to the Trash: <message>`), kept apart from the
+  judgment write failures and the folder operations' in `trash::Failures` by
+  their `Origin`: the next trash-family run's start (`run_trash`,
+  `undo_trash`, `redo_trash`, past their guards, and a `Delete Sidecars…`
+  run's) drops the `Trash` lines, the undo's `could not restore from the
+  Trash` ones included, while the `Other` lines stay until a folder open
+  clears both, and after a delete the
   deleted files' judgments leave both histories (`Undo::without_paths`). A
   move whose `Summary::run_id` is set pushes its run on the undo history
   (see the next entry).

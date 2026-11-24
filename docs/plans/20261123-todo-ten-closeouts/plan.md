@@ -117,7 +117,7 @@ Rules for every step:
     - `crates/engine` changes, so `ci:local` also checks the root workspace's
       `handpic-engine`.
 
-- [ ] Step 2: MCP surface: `get_view`'s eyes carry `openness`, and a new trash run clears the earlier run's failure lines
+- [x] Step 2: MCP surface: `get_view`'s eyes carry `openness`, and a new trash run clears the earlier run's failure lines
   - Done when:
     - `get_view`'s `eyes` object carries `openness`, the integer 0 to 100 the
       meta pane's `Eyes` row shows (`js_round(openness(ear))` from
@@ -284,3 +284,4 @@ Rules for every step:
 
 
 - (2026-11-24) Step 1 complete
+- (2026-11-24) Step 2 complete

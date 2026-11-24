@@ -547,7 +547,9 @@ pointer, `src/trash.rs` the strip's `Move to Trash…` /
 dialog's `swallowed_by_delete` and `confirms_delete`, `progress_status`,
 `trashed_status` and `TrashFlow`, idle / asking / running with the button
 the dialog opens on and what a key does in it; for the undo,
-`restored_status`, `restored_into`, `still_held` and `opens_target`), which
+`restored_status`, `restored_into`, `still_held` and `opens_target`; `Failures`,
+the pane's error lines of the failed writes and runs, a trash run's lines
+dropped when the next one starts), which
 the window opens as a gpui-component `Dialog` in `Root`'s layer through
 `src/modal.rs` (`Modal`, the open and close that follow a flow after the
 current update, the shell with the component's own closing, backdrop and

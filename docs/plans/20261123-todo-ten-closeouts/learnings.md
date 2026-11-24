@@ -17,3 +17,26 @@
   and the companion's own mode check (`set_view_refuses_compare_as_an_unknown_mode`).
 - A heredoc passed through the Bash tool lost a `\` before a newline in a
   Python edit script; scripts written with the Write tool kept it.
+
+## Step 2
+
+- `openness` is shared as `meta::shown_openness` (the rounded integer, a
+  `u8`), which the meta pane's `Eyes` row and `get_view` both call; the
+  private `openness` / `js_round` stay where they were. The stored answer
+  reads it from `StoredEyes::eyes_ear`, the judgment's from
+  `EyesJudgment::ear`.
+- The trash failure lines live in one tagged list, `trash::Failures`, keyed
+  by (origin, path): a trash failure no longer replaces the same path's
+  judgment line, so the next run's `run_started` drops only the `Trash` lines
+  and "judgment lines stay" holds for a path that has both. The pane's order
+  is still the order each line first failed.
+- `write_failed` has more callers than the plan listed: `folderops.rs` pushes
+  the sequencer's, the import's and the date split's failures. They are
+  `Origin::Other` (kept as before, cleared only by a folder open), so the
+  origins are `Trash` / `Other` rather than run / judgment.
+- `run_started` is called in `run_trash`, `undo_trash` and `redo_trash`
+  after their guards (where the run really starts), so a run held by the
+  gate or a dialog still asking clears nothing. A `Delete Sidecars…` run's
+  start (`run_sidecars` with `Kind::Delete`) calls it too: its result ends
+  through `trashed` and its failures are `Trash` lines, the same family as
+  its redo.

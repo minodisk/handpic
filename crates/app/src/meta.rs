@@ -63,6 +63,11 @@ fn openness(ear: f64) -> f64 {
     ((ear - EYES_CLOSED_EAR) / (EYES_WIDE_OPEN_EAR - EYES_CLOSED_EAR)).clamp(0., 1.) * 100.
 }
 
+/// The openness the `Eyes` row shows, rounded to an integer 0 to 100.
+pub fn shown_openness(ear: f64) -> u8 {
+    js_round(openness(ear)) as u8
+}
+
 fn degrees(angle: f64) -> String {
     format!("{}°", js_round(angle))
 }
@@ -118,7 +123,7 @@ pub fn analysis(
                     EyeState::Closed => "Closed",
                     EyeState::Open => "Open",
                 };
-                format!("{state} · {}", js_round(openness(ear)))
+                format!("{state} · {}", shown_openness(ear))
             }),
         ),
         ("Eyes closed", eyes.eyes_closed.map(percent)),

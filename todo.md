@@ -22,16 +22,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 
 - [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
 
-### App: the MCP `get_view` eyes summary carries no openness
-
-`burst-keep-score` Step 4b made the meta pane's `Eyes` row show the openness (0-100 from the EAR) but kept `get_view`'s `state` / `probability` / `pose` fields as planned. Whether `EyesSummary` should carry the EAR or the openness is open.
-
-Files: `crates/app/src/companion.rs` (the `eyes` of `get_view`).
-
-#### TODO
-
-- [ ] Decide whether `get_view`'s eyes summary carries the EAR or the openness, and add it with its test.
-
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
 #### Background
@@ -728,17 +718,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 #### TODO
 
 - [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
-
-### App: the pane's error list keeps an earlier Move to Trash failure after later operations finish
-
-#### Background
-
-Seen on Windows 11 on 2026-11-21: after a Move to Trash listed a failure, `get_status`'s `errors` (the pane's notes, `pane_errors`) still held that line after later operations had finished.
-Files: `crates/app/src/main.rs` (`pane_errors`), `crates/app/src/companion.rs` (`Status`).
-
-#### TODO
-
-- [ ] Decide whether a new run clears the earlier run's failure lines, and apply it.
 
 ### App: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
 

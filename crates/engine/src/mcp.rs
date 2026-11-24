@@ -1086,7 +1086,8 @@ impl Companion {
         tell them apart) and a photo with no focus data (a JPEG). It also carries `eyes`, the \
         judgment of the eyes of the face nearest the AF point (else the largest confident \
         face): `state` (open or closed), `probability` (the probability the eyes are closed, \
-        0 to 1) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
+        0 to 1), `openness` (the integer 0 to 100 the meta pane's Eyes row shows, 0 at closed \
+        and 100 at wide open) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
         the image's right, pitch positive up, roll positive clockwise on screen; null when it \
         could not be fitted). `eyes` comes from the scan's second pass once it has stored the \
         judgment; before that, or when the second pass judged no face, from the `f` overlay's \
