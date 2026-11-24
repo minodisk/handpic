@@ -320,9 +320,8 @@ impl Keymap {
             let mut kept = Vec::new();
             for key in std::mem::take(&mut keymap.bindings[j].keys) {
                 match pending.iter().find(|(_, keys)| keys.contains(&key)) {
-                    Some((i, _)) => log::warn!(
-                        "moving {key:?} from {displaced} to {}: a stored shortcut binds it",
-                        keymap.bindings[*i].action
+                    Some(_) => log::warn!(
+                        "removing {key:?} from {displaced}: a stored shortcut asks for it"
                     ),
                     None => kept.push(key),
                 }
@@ -450,6 +449,7 @@ impl Keymap {
         }
         keys.remove(at);
         self.inactive.remove(action);
+        self.refill();
         Ok(())
     }
 
@@ -483,7 +483,15 @@ impl Keymap {
         }
         self.bindings[i].keys = defaults;
         self.inactive.remove(action);
+        self.refill();
         Ok(())
+    }
+
+    /// Give an action left keyless by a stored override back the default keys
+    /// an edit has freed, as a reload would: re-derive the keymap from its own
+    /// overrides.
+    fn refill(&mut self) {
+        *self = Keymap::from_overrides(Some(&self.overrides()));
     }
 
     /// Restore every action's default keys.
@@ -636,6 +644,20 @@ mod tests {
         let keymap = Keymap::from_overrides(Some(&json!({"reject": ["arrowdown"]})));
         assert_eq!(keys_of(&keymap, "reject"), vec!["arrowdown"]);
         assert_eq!(keys_of(&keymap, "burstNext"), Vec::<String>::new());
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+    }
+
+    #[test]
+    fn an_edit_freeing_a_displaced_key_gives_it_back() {
+        let mut keymap = Keymap::from_overrides(Some(&json!({"reject": ["p"]})));
+        assert!(keys_of(&keymap, "pick").is_empty());
+        keymap.reset("reject").unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), vec!["p"]);
+        assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+
+        let mut keymap = Keymap::from_overrides(Some(&json!({"reject": ["p", "x"]})));
+        keymap.remove("reject", "p").unwrap();
+        assert_eq!(keys_of(&keymap, "pick"), vec!["p"]);
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
     }
 
