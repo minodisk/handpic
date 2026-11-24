@@ -221,7 +221,7 @@ Scope rules for every step:
       (`trash::run` with `trash_one`). That is outside this item; note it in
       `learnings.md`, do not change it.
 
-- [ ] Step 5: The trash undo, Rewrite Sidecars and Delete Sidecars runs report progress to the bar (item 3)
+- [x] Step 5: The trash undo, Rewrite Sidecars and Delete Sidecars runs report progress to the bar (item 3)
   - Done when:
     - `trash::undo_run`, `foldersidecars::rewrite` and
       `foldersidecars::delete_run` each take a `(done, total)` callback,

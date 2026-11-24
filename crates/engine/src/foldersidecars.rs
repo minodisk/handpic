@@ -14,7 +14,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use handpic_core::xmp::LabelNames;
 use handpic_core::Flag;
@@ -29,6 +29,10 @@ use crate::trash::{self, Failure, Group, Runs, Trashed};
 /// quit; a folder of thousands of files on Windows takes minutes (each write
 /// is a read, a temp write, `sync_all` and a rename with retries).
 pub const REWRITE_DRAIN: Duration = Duration::from_secs(10 * 60);
+
+/// How many rows a rewrite hands to the writer before it waits for them and
+/// reports its progress.
+pub const REWRITE_BATCH: usize = 32;
 
 /// What the rewrite's confirmation dialog counts: the
 /// rows with a judgment, the rows without one (whose existing sidecar is
@@ -132,8 +136,11 @@ pub fn preview(
     })
 }
 
-/// Mark the rows of `targets` dirty, hand each to `writer` with no debounce
-/// and wait for it to drain, at most `bound`. `dir` is canonical.
+/// Mark the rows of `targets` dirty, hand them to `writer` with no debounce,
+/// `REWRITE_BATCH` at a time, and wait for each batch to drain, at most
+/// `bound` in all; once the bound is reached the rest are handed over
+/// without a wait. `progress` is called after each batch drained with the
+/// rows written and their total. `dir` is canonical.
 pub fn rewrite(
     dir: &str,
     index: &Arc<Mutex<Index>>,
@@ -141,23 +148,35 @@ pub fn rewrite(
     format: SidecarFormat,
     names: &LabelNames,
     bound: Duration,
+    mut progress: impl FnMut(usize, usize),
 ) -> Result<Summary, String> {
     let (rows, skipped) = targets(dir, index, format)?;
     let paths: Vec<String> = rows.into_iter().map(|(path, ..)| path).collect();
     let dirty = index::lock(index).mark_dirty(dir, &paths)?;
     let total = dirty.len();
-    for (path, rating, flag, label, label_known) in dirty {
-        writer.set_now(
-            PathBuf::from(path),
-            rating,
-            flag,
-            label,
-            label_known,
-            format,
-            names.clone(),
-        )?;
+    let deadline = Instant::now() + bound;
+    let mut flushed = true;
+    let mut done = 0;
+    for batch in dirty.chunks(REWRITE_BATCH) {
+        for (path, rating, flag, label, label_known) in batch.iter().cloned() {
+            writer.set_now(
+                PathBuf::from(path),
+                rating,
+                flag,
+                label,
+                label_known,
+                format,
+                names.clone(),
+            )?;
+        }
+        if flushed {
+            flushed = writer.flush(deadline.saturating_duration_since(Instant::now()));
+            if flushed {
+                done += batch.len();
+                progress(done, total);
+            }
+        }
     }
-    let flushed = writer.flush(bound);
     let wanted: HashSet<&str> = paths.iter().map(String::as_str).collect();
     let failed = index::lock(index)
         .dirty_rows(dir)?
@@ -282,6 +301,7 @@ pub fn delete_preview(
 pub fn delete(
     doomed: Vec<Doomed>,
     mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
+    progress: impl FnMut(usize, usize),
 ) -> (trash::Summary, Vec<Trashed>, Vec<String>) {
     let raw_of: Vec<(String, String)> = doomed
         .iter()
@@ -300,7 +320,7 @@ pub fn delete(
             sidecars: Vec::new(),
         })
         .collect();
-    let (mut summary, mut moved) = trash::run(groups, mover, |_, _| {});
+    let (mut summary, mut moved) = trash::run(groups, mover, progress);
     for trashed in &mut moved {
         let path = trashed.path.to_string_lossy();
         trashed.owner = raw_of
@@ -339,14 +359,17 @@ pub fn delete(
 /// running scan and holds that refusal across the call (the app's
 /// idle gate), and drains the sidecar writer first, since a judgment still in
 /// its debounce window would mint a sidecar right after the delete.
+/// `progress` is called after each sidecar with the sidecars done and their
+/// total.
 pub fn delete_run(
     dir: &str,
     format: SidecarFormat,
     index: Option<&Mutex<Index>>,
     runs: &Runs,
+    progress: impl FnMut(usize, usize),
 ) -> Result<trash::Summary, String> {
     let doomed = doomed(dir, format)?;
-    let (mut summary, moved, cleared) = delete(doomed, trash::trash_one);
+    let (mut summary, moved, cleared) = delete(doomed, trash::trash_one, progress);
     summary.run_id = runs.record(moved);
     if let Some(index) = index {
         index::lock(index).clear_judgments(dir, &cleared)?;
@@ -417,6 +440,14 @@ mod tests {
         }
 
         fn rewrite(&self, format: SidecarFormat) -> Summary {
+            self.rewrite_counting(format, |_, _| {})
+        }
+
+        fn rewrite_counting(
+            &self,
+            format: SidecarFormat,
+            progress: impl FnMut(usize, usize),
+        ) -> Summary {
             let summary = rewrite(
                 &self.key,
                 &self.index,
@@ -424,6 +455,7 @@ mod tests {
                 format,
                 &LabelNames::default(),
                 Duration::from_secs(30),
+                progress,
             )
             .unwrap();
             let errors = index::lock(&self.errors);
@@ -453,6 +485,30 @@ mod tests {
 </x:xmpmeta>
 <?xpacket end="w"?>"#
             .to_string()
+    }
+
+    #[test]
+    fn a_rewrite_reports_progress_per_batch() {
+        let f = Fixture::new("rewrite-progress");
+        for at in 0..REWRITE_BATCH + 1 {
+            let raw = f.raw(&format!("{at:03}.ARW"));
+            f.row(&raw, Some(3), Flag::None, None);
+        }
+        let mut progress = Vec::new();
+
+        let summary = f.rewrite_counting(SidecarFormat::Xmp, |done, total| {
+            progress.push((done, total));
+        });
+
+        assert_eq!(summary.written, REWRITE_BATCH + 1);
+        assert!(summary.flushed);
+        assert_eq!(
+            progress,
+            [
+                (REWRITE_BATCH, REWRITE_BATCH + 1),
+                (REWRITE_BATCH + 1, REWRITE_BATCH + 1)
+            ]
+        );
     }
 
     #[test]
@@ -889,16 +945,21 @@ mod tests {
         let a_dop = put(&f.dir, "a.ARW.dop", 1);
         let fail_xmp = put(&f.dir, "fail.xmp", 1);
         let doomed = doomed(&f.key, SidecarFormat::Both).unwrap();
+        let mut progress = Vec::new();
 
-        let (summary, moved, cleared) = delete(doomed, |path| {
-            let name = path.file_name().unwrap();
-            if name.to_string_lossy().contains("fail") {
-                return Err("refused".to_string());
-            }
-            let to = trash.join(name);
-            std::fs::rename(path, &to).map_err(|e| e.to_string())?;
-            Ok(Some(to))
-        });
+        let (summary, moved, cleared) = delete(
+            doomed,
+            |path| {
+                let name = path.file_name().unwrap();
+                if name.to_string_lossy().contains("fail") {
+                    return Err("refused".to_string());
+                }
+                let to = trash.join(name);
+                std::fs::rename(path, &to).map_err(|e| e.to_string())?;
+                Ok(Some(to))
+            },
+            |done, total| progress.push((done, total)),
+        );
 
         let key = |path: &Path| path.to_string_lossy().into_owned();
         assert_eq!(
@@ -910,6 +971,7 @@ mod tests {
         assert_eq!(summary.failed[0].path, key(&fail));
         assert_eq!(summary.failed[0].message, "fail.xmp: refused");
         assert_eq!(cleared, [key(&a)]);
+        assert_eq!(progress, [(1, 3), (2, 3), (3, 3)]);
         assert!(fail_xmp.exists());
         assert!(!a_xmp.exists());
         assert!(trash.join("a.ARW.dop").exists());
@@ -935,7 +997,11 @@ mod tests {
             Ok(Some(to))
         };
         let runs = Runs::default();
-        let (_, moved, cleared) = delete(doomed(&f.key, SidecarFormat::Xmp).unwrap(), to_trash);
+        let (_, moved, cleared) = delete(
+            doomed(&f.key, SidecarFormat::Xmp).unwrap(),
+            to_trash,
+            |_, _| {},
+        );
         let id = runs.record(moved).unwrap();
         index::lock(&f.index)
             .clear_judgments(&f.key, &cleared)
@@ -949,6 +1015,7 @@ mod tests {
             |t| Some(trash.join(t.path.file_name().unwrap())),
             Path::exists,
             |t, at| std::fs::rename(at, t.destination()).map_err(|e| e.to_string()),
+            |_, _| {},
         );
         assert!(restored.failed.is_empty());
         runs.undone(id, restored.back);

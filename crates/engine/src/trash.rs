@@ -618,17 +618,24 @@ pub const RAW_NOT_RESTORED: &str = "left in the Trash: its RAW could not be rest
 /// in the Trash (each reported, as not in the Trash when it is not), the
 /// mirror of `run`'s rule: a reject sidecar restored next to a different file
 /// that took the RAW's name would pin the judgment on that file.
+/// `progress` is called after each item (see `item_starts`) with the items
+/// done and their total.
 pub fn restore<I>(
     run: &TrashRun,
     mut in_trash: impl FnMut(&Trashed) -> Option<I>,
     exists: impl Fn(&Path) -> bool,
     mut mover: impl FnMut(&Trashed, I) -> Result<(), String>,
+    mut progress: impl FnMut(usize, usize),
 ) -> Restored {
+    let starts = item_starts(&run.moved);
+    let total = starts.len();
+    let mut done = 0;
     let mut raw_back = true;
     let results = run
         .moved
         .iter()
-        .map(|trashed| {
+        .enumerate()
+        .map(|(at, trashed)| {
             let is_media = is_media(&trashed.path);
             let result = if !is_media && !raw_back {
                 Err(held_back(&mut in_trash, trashed))
@@ -643,10 +650,29 @@ pub fn restore<I>(
             if is_media {
                 raw_back = result.is_ok();
             }
+            if at + 1 == run.moved.len() || starts.binary_search(&(at + 1)).is_ok() {
+                done += 1;
+                progress(done, total);
+            }
             result
         })
         .collect();
     tally(run, results)
+}
+
+/// Where each item of `moved` starts: a RAW or JPEG, which the sidecars
+/// after it belong to, or a sidecar with no RAW before it, alone.
+fn item_starts(moved: &[Trashed]) -> Vec<usize> {
+    let mut starts = Vec::new();
+    let mut after_media = false;
+    for (index, trashed) in moved.iter().enumerate() {
+        let media = is_media(&trashed.path);
+        if media || !after_media {
+            starts.push(index);
+        }
+        after_media |= media;
+    }
+    starts
 }
 
 /// The failure of a sidecar whose RAW did not come back: left in the Trash,
@@ -697,7 +723,8 @@ fn tally(run: &TrashRun, results: Vec<Result<(), String>>) -> Restored {
 /// before it alone) are taken `CHUNK` at a time, their RAWs, JPEGs and lone
 /// sidecars put back in one `restore_many`, then the sidecars of the RAWs
 /// that came back in another. A file whose folder was renamed since the run
-/// (`Trashed::restore_to`) goes through `mover` on its own.
+/// (`Trashed::restore_to`) goes through `mover` on its own. `progress` is
+/// called after each chunk with the items done and their total.
 #[cfg_attr(not(windows), allow(dead_code))]
 pub fn restore_chunked<I: Clone>(
     run: &TrashRun,
@@ -705,17 +732,11 @@ pub fn restore_chunked<I: Clone>(
     exists: impl Fn(&Path) -> bool,
     mut restore_many: impl FnMut(Vec<I>) -> Result<(), String>,
     mut mover: impl FnMut(&Trashed, I) -> Result<(), String>,
+    mut progress: impl FnMut(usize, usize),
 ) -> Restored {
     let moved = &run.moved;
-    let mut starts = Vec::new();
-    let mut after_media = false;
-    for (index, trashed) in moved.iter().enumerate() {
-        let media = is_media(&trashed.path);
-        if media || !after_media {
-            starts.push(index);
-        }
-        after_media |= media;
-    }
+    let starts = item_starts(moved);
+    let mut done = 0;
     let mut results: Vec<Option<Result<(), String>>> = vec![None; moved.len()];
     for (chunk_index, chunk) in starts.chunks(CHUNK).enumerate() {
         let heads = restore_chunk(
@@ -754,6 +775,8 @@ pub fn restore_chunked<I: Clone>(
         for (sidecar, result) in sidecars.into_iter().zip(followers) {
             results[sidecar] = Some(result);
         }
+        done += chunk.len();
+        progress(done, starts.len());
     }
     tally(run, results.into_iter().flatten().collect())
 }
@@ -872,7 +895,7 @@ fn redo_groups(paths: Vec<PathBuf>) -> Vec<Group> {
 /// the same name), so this also requires the file's `(dev, ino)` to still
 /// match the one recorded right after the move.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-pub fn restore_recorded(run: &TrashRun) -> Restored {
+pub fn restore_recorded(run: &TrashRun, progress: impl FnMut(usize, usize)) -> Restored {
     restore(
         run,
         |trashed| {
@@ -884,6 +907,7 @@ pub fn restore_recorded(run: &TrashRun) -> Restored {
         },
         Path::exists,
         |trashed, at| std::fs::rename(at, trashed.destination()).map_err(|e| e.to_string()),
+        progress,
     )
 }
 
@@ -1052,10 +1076,15 @@ pub fn delete_listed(
 /// from, RAW before its sidecars, never overwriting (see `restore`). An
 /// unknown run is `RUN_GONE`; a run is forgotten once undone, whatever came
 /// back, and what came back (the `Restored`'s `back`) is kept in `runs` for
-/// `redo_run` under the same id.
-pub fn undo_run(runs: &Runs, run_id: u64) -> Result<Restored, String> {
+/// `redo_run` under the same id. `progress` is called after each item (a RAW
+/// or JPEG with its sidecars, or a sidecar alone), or each chunk on Windows.
+pub fn undo_run(
+    runs: &Runs,
+    run_id: u64,
+    progress: impl FnMut(usize, usize),
+) -> Result<Restored, String> {
     let run = runs.take(run_id).ok_or_else(|| RUN_GONE.to_string())?;
-    let restored = restore_run(&run);
+    let restored = restore_run(&run, progress);
     runs.undone(run.id, restored.back.clone());
     Ok(restored)
 }
@@ -1142,13 +1171,17 @@ pub fn cleared(moved: &[Trashed]) -> Vec<(String, Vec<String>)> {
 /// original path (the newest item of a path), so one missing or colliding
 /// item cannot fail the others (see `restore_listed`).
 #[cfg(not(target_os = "macos"))]
-fn restore_run(run: &TrashRun) -> Restored {
+fn restore_run(run: &TrashRun, progress: impl FnMut(usize, usize)) -> Restored {
     let items = match ::trash::os_limited::list() {
         Ok(items) => items,
         Err(e) => return Restored::none(run, &format!("could not list the Trash: {e}")),
     };
     let mut items = newest_by_path(items);
-    restore_listed(run, |trashed| items.remove(&trash_key(&trashed.path)))
+    restore_listed(
+        run,
+        |trashed| items.remove(&trash_key(&trashed.path)),
+        progress,
+    )
 }
 
 /// Restore `run` in chunks: a shell operation costs far more than the files
@@ -1157,6 +1190,7 @@ fn restore_run(run: &TrashRun) -> Restored {
 fn restore_listed(
     run: &TrashRun,
     in_trash: impl FnMut(&Trashed) -> Option<::trash::TrashItem>,
+    progress: impl FnMut(usize, usize),
 ) -> Restored {
     restore_chunked(
         run,
@@ -1164,6 +1198,7 @@ fn restore_listed(
         Path::exists,
         |items| ::trash::os_limited::restore_all(items).map_err(|e| e.to_string()),
         restore_item,
+        progress,
     )
 }
 
@@ -1173,8 +1208,9 @@ fn restore_listed(
 fn restore_listed(
     run: &TrashRun,
     in_trash: impl FnMut(&Trashed) -> Option<::trash::TrashItem>,
+    progress: impl FnMut(usize, usize),
 ) -> Restored {
-    restore(run, in_trash, Path::exists, restore_item)
+    restore(run, in_trash, Path::exists, restore_item, progress)
 }
 
 /// Restore one file from the Trash. The Trash puts a file back at its
@@ -1205,8 +1241,8 @@ fn restore_item(trashed: &Trashed, item: ::trash::TrashItem) -> Result<(), Strin
 /// Restore `run` from the locations its files got in the Trash, recorded by
 /// `trash_one`.
 #[cfg(target_os = "macos")]
-fn restore_run(run: &TrashRun) -> Restored {
-    restore_recorded(run)
+fn restore_run(run: &TrashRun, progress: impl FnMut(usize, usize)) -> Restored {
+    restore_recorded(run, progress)
 }
 
 /// The mover of `trash_listed`. On macOS it goes through
@@ -1338,6 +1374,7 @@ mod tests {
                 asked.push(item);
                 Ok(())
             },
+            |_, _| {},
         );
         (restored, asked)
     }
@@ -1410,6 +1447,7 @@ mod tests {
                     Ok(())
                 }
             },
+            |_, _| {},
         );
         assert_eq!(restored.restored, ["b.ARW"]);
         assert_eq!(
@@ -1561,7 +1599,7 @@ mod tests {
                 reused.clone(),
             ],
         };
-        let restored = restore_recorded(&run);
+        let restored = restore_recorded(&run, |_, _| {});
         assert_eq!(
             restored.restored,
             [back.path.to_string_lossy().into_owned()]
@@ -1819,6 +1857,7 @@ mod tests {
                 asked.push((item, key(t.destination())));
                 Ok(())
             },
+            |_, _| {},
         );
         assert_eq!(restored.restored, ["new/a.ARW"]);
         assert_eq!(failures(&restored), [("new/b.ARW", ALREADY_EXISTS)]);
@@ -2624,6 +2663,7 @@ mod tests {
             |trashed| plain_bin.in_trash(trashed),
             |path| plain_bin.exists(path),
             |trashed, item| plain_bin.put_back(trashed, item),
+            |_, _| {},
         );
         let bin = Bin::new(trash, disk);
         let chunked = restore_chunked(
@@ -2635,6 +2675,7 @@ mod tests {
                 bin.one_by_one.borrow_mut().push(item.clone());
                 bin.put_back(trashed, item)
             },
+            |_, _| {},
         );
         assert_eq!(outcome(&chunked), outcome(&plain));
         (chunked, bin)
@@ -2780,5 +2821,47 @@ mod tests {
         );
         assert_eq!(bin.calls.into_inner(), [vec!["old/b.ARW"]]);
         assert_eq!(bin.one_by_one.into_inner(), ["old/a.ARW", "old/a.xmp"]);
+    }
+
+    #[test]
+    fn a_restore_reports_progress_per_item_a_failed_raw_included() {
+        let run = trash_run(&["x.xmp", "a.ARW", "a.xmp", "b.ARW", "b.xmp", "c.JPG"]);
+        let mut progress = Vec::new();
+        let restored = restore(
+            &run,
+            |t| Some(t.path.clone()),
+            |_| false,
+            |t, _| {
+                if t.path == Path::new("a.ARW") {
+                    Err("refused".to_string())
+                } else {
+                    Ok(())
+                }
+            },
+            |done, total| progress.push((done, total)),
+        );
+        assert_eq!(restored.restored, ["b.ARW", "c.JPG"]);
+        assert_eq!(progress, [(1, 4), (2, 4), (3, 4), (4, 4)]);
+    }
+
+    #[test]
+    fn a_chunked_restore_reports_progress_per_chunk() {
+        let names: Vec<String> = (0..CHUNK + 1)
+            .flat_map(|i| [format!("{i:03}.ARW"), format!("{i:03}.xmp")])
+            .collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let run = trash_run(&names);
+        let bin = Bin::new(&names, &[]);
+        let mut progress = Vec::new();
+        let restored = restore_chunked(
+            &run,
+            |trashed| bin.in_trash(trashed),
+            |path| bin.exists(path),
+            |items| bin.restore_many(items),
+            |trashed, item| bin.put_back(trashed, item),
+            |done, total| progress.push((done, total)),
+        );
+        assert_eq!(restored.restored.len(), CHUNK + 1);
+        assert_eq!(progress, [(CHUNK, CHUNK + 1), (CHUNK + 1, CHUNK + 1)]);
     }
 }

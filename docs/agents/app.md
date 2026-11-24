@@ -985,7 +985,8 @@ The folder operations' bodies take their state the same way:
 `rename::rename_folder` and `datefolder::split_folder` take a
 `rename::Context` (the `&Watch`, the `&TreeWatch`, the optional index and the
 `&Runs`), `datefolder::plan_of` the optional index, and
-`foldersidecars::delete_run` the index and the `&Runs`. None of them checks
+`foldersidecars::delete_run` the index, the `&Runs` and a `progress(done,
+total)` callback, as `foldersidecars::rewrite` does. None of them checks
 for a scan or drains the sidecar writer: the Tauri app's wrappers flushed the
 writer and held a `Scans` lock across the call, and the app guards the
 call with its own gate.
@@ -3842,7 +3843,8 @@ the `page` line and goes into `Summary`. A stale preview drawn on the way
 `shown`, which picks the `(done, total)` the indicator shows when several
 operations run: a Move to Trash, Delete Permanently or trash redo run first
 (`Handpic.trashing`, the counts the pane's note is formatted from with
-`trash::progress_status`), then a folder operation's run, then the scan's
+`trash::progress_status`), then the undo of a trash run
+(`Handpic.undo_progress`), then a folder operation's run, then the scan's
 running pass (`scan::Status::running`, pass 1's before pass 2's, the two
 sharing the one indicator). `main.rs`'s `progress_circle` draws it as
 gpui-component's `ProgressCircle` (`Size::Small`, 12 px, the row's text
@@ -3882,9 +3884,10 @@ choosing the circle.
   track ring shows there.
 - Rule: the circle adds no `notify` or timer of its own; it is redrawn by the
   notifies the scan's `Progress` / `FacesProgress`, the trash's
-  `TrashProgress` and the folder runs' `SequenceProgress` / `ImportProgress`
-  already make, and it goes wherever `scan_status.clear()`,
-  `trashing = None` and the folder runs' ends do. Its value's transition does request animation
+  `TrashProgress`, the undo's `UndoProgress` and the folder runs'
+  `SequenceProgress` / `ImportProgress` / `SidecarProgress` already make,
+  and it goes wherever `scan_status.clear()`, `trashing = None`,
+  `undo_progress = None` and the folder runs' ends do. Its value's transition does request animation
   frames for 180 ms after each change. Seen (2026-11-22, Windows 11): at
   pass 2's start the full ring drained to empty within about 240 ms (frames 80 ms apart, consistent with the 180 ms animation) and filled
   again, judged to read as a reset; paging during pass 2 took 12 to 29 ms
@@ -3907,10 +3910,24 @@ choosing the circle.
   by `folder_op_message` and cleared in `sequence_ran` / `import_ran`, which
   every end, a cancel included, passes through; no re-listing stops either
   run.
-- The trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress
-  callback in the engine (`trash::undo_run`, `foldersidecars`), so the
-  circle shows nothing for them. A new operation needs a `(done, total)`
-  callback before it can feed it.
+- The undo of a trash run feeds it through `shown`'s `undo` argument:
+  `trash::undo_run`'s callback (per item, a RAW or JPEG with its sidecars or
+  a sidecar alone, or per chunk on Windows) sends `Event::UndoProgress` into
+  `Handpic.undo_progress`, set to `(0, 0)` in `undo_trash` and cleared in
+  `restored`, which a failure passes through too. It does not set
+  `trashing`, which words the pane's note, disables the strip menu's trash
+  items, refuses `confirm_trash` and is the companion's `trashing`.
+- Rewrite Sidecars and Delete Sidecars feed it after the sequencing and
+  import counts: `FolderOps`' `sidecar_progress()`, set to `(0, 0)` in
+  `run_sidecars`, updated by `folder_op_message`'s `SidecarProgress` and
+  cleared at the top of `sidecars_ran`, which both runs end through, a
+  failure included. The rewrite counts rows written:
+  `foldersidecars::rewrite` hands the writer `REWRITE_BATCH` rows at a time
+  and reports after each batch drained, all under the one `REWRITE_DRAIN`
+  deadline; the delete counts sidecars moved.
+- `get_status`'s `Operation.progress` reports the same counts as the
+  circle while the run's `running_op` is set.
+- A new operation needs a `(done, total)` callback before it can feed it.
 
 ### The status row is gpui-component's `StatusBar` with its defaults (Inferred)
 
@@ -5139,7 +5156,8 @@ leaves it there.
   refusal other than `RUN_GONE` / `UNDONE_GONE` (`trash::still_held`)
   leaves it where it was.
 - Rule: the restore (`trash::undo_run`, which lists the Recycle Bin on
-  Windows) runs on `background_spawn` with no progress; the redo
+  Windows) runs on `background_spawn`, reporting through
+  `Event::UndoProgress` into `undo_progress`, not `trashing`; the redo
   (`trash::redo_run`, given the view's index so a redo of Delete Sidecars
   clears the judgments of a closed folder's rows) drains the judgment queue
   and flushes the writer first, as a run does, and reports through
