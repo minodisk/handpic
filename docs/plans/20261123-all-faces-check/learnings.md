@@ -107,6 +107,29 @@
   full JPEG though the counts ignore that reading (no EAR, no `Reading`).
   It costs a full read only when no other face is measured; left as is.
 
+## Step 2: Store the gate count and the counts, and pass 3 in the engine
+
+- `FACES_VERSION` was already 13 on `main` when this step started (the
+  no-AF luma change moved it after the plan was written), so the bump that
+  fills `faces_group` is 14, not the plan's 12.
+- The migration tests from v10 to v26 build their old database by dropping
+  columns from a fresh one, so each gained the five `DROP COLUMN`s of the
+  new columns; without them `prepare`'s `ADD COLUMN` fails and the index is
+  discarded.
+- `StoredEyes::new` kept its five arguments and leaves the four new fields
+  `None`; `indexed_file` and `run_faces_scan` set them by struct update. The
+  app's `new` callers compile unchanged; only the two full `StoredEyes`
+  literals in its tests (`filter.rs`, `mark.rs`) needed the fields.
+- One type, `AllFacesReady`, is both `write_face_counts`'s row and the
+  runner's progress row, since the two hold the same values.
+- `extract_face_counts` returning `Ok(None)` (the whole-image detection or a
+  decode failed) is stored like an unreadable file, no counts at
+  `ALLFACES_VERSION`, but not counted as an error, the way pass 2 treats a
+  failed decode.
+- An error row and a JPEG row stay off `allfaces_todo` because nothing gives
+  them a gate count: `faces_todo`'s reset and the first pass's rewrite
+  clear `faces_group`, so the query needs no extension check of its own.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under

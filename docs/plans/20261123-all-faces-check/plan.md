@@ -170,7 +170,7 @@ not change.
       (`facechoice --check`).
     - No index change in this step; `FACES_VERSION` stays.
 
-- [ ] Step 2: Store the gate count and the counts, and pass 3 in the engine (`handpic-engine`)
+- [x] Step 2: Store the gate count and the counts, and pass 3 in the engine (`handpic-engine`)
   - Done when:
     - `files` has four nullable integer columns (suggested names
       `faces_group` for the gate count, `faces_judged`, `faces_closed`,
@@ -633,3 +633,4 @@ Made in this revision (planning, 2026-11-24):
   as a new pass 3, the threshold setting and the rescan trigger; Step 1
   reopened for the rework
 - (2026-11-24) Step 1 complete
+- (2026-11-24) Step 2 complete
