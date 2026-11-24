@@ -17,7 +17,7 @@ use handpic_core::{
 };
 use handpic_engine::{
     diagnostics::invariant,
-    index::{self, FaceReady, FileStat, Index, ScanSummary},
+    index::{self, AllFacesReady, FaceReady, FileStat, Index, ScanSummary},
     listing::{canonicalize, read_listing, stat_sidecars},
     output,
     sidecar::{self, SidecarError, SidecarFormat, Writer},
@@ -33,19 +33,26 @@ pub const READ_SLOTS: usize = 2;
 /// longer; past this the process exits with the scan still running.
 pub const STOP_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// The gate count a frame needs for pass 3 to check all its faces, until it
+/// is a setting.
+pub const GROUP_MIN_FACES: u32 = 5;
+
 /// The OS priority of each pass's workers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Priorities {
     pub extract: Priority,
     pub faces: Priority,
+    pub allfaces: Priority,
 }
 
 impl Priorities {
     /// The app's: pass 1 below normal, pass 2 lower still, so the viewer's
-    /// preview decode and the UI win the cores they contend for.
+    /// preview decode and the UI win the cores they contend for. Pass 3 runs
+    /// at pass 2's level, the lowest `Priority` names, after it by order.
     pub const APP: Self = Self {
         extract: Priority::BelowNormal,
         faces: Priority::Lowest,
+        allfaces: Priority::Lowest,
     };
 }
 
@@ -95,10 +102,26 @@ pub enum Event {
         ready: Vec<FaceReady>,
     },
     /// Pass 2 ended, also when it was canceled, had nothing to do or could
-    /// not list its files: the scan is over.
+    /// not list its files. The scan is over unless pass 3 has files.
     FacesDone {
         scan: u64,
         #[expect(dead_code, reason = "the engine's `scan faces:` line reports it")]
+        summary: ScanSummary,
+        /// The files pass 3 runs on next; with none it does not run.
+        checking: usize,
+    },
+    /// Pass 3's progress.
+    AllFacesProgress {
+        scan: u64,
+        done: usize,
+        total: usize,
+        /// The files written since the previous message.
+        ready: Vec<AllFacesReady>,
+    },
+    /// Pass 3 ended, also when it was canceled: the scan is over.
+    AllFacesDone {
+        scan: u64,
+        #[expect(dead_code, reason = "the engine's `scan allfaces:` line reports it")]
         summary: ScanSummary,
     },
     /// The folder watcher saw the folder change; the canonical path.
@@ -219,12 +242,13 @@ fn file_name(path: &Path) -> String {
         .into_owned()
 }
 
-/// The status line's scan: pass 1's or pass 2's `(done, total)` while it
-/// runs.
+/// The status line's scan: pass 1's, pass 2's or pass 3's `(done, total)`
+/// while it runs.
 #[derive(Default)]
 pub struct Status {
     progress: Option<(usize, usize)>,
     analyzing: Option<(usize, usize)>,
+    checking: Option<(usize, usize)>,
 }
 
 impl Status {
@@ -232,6 +256,7 @@ impl Status {
     pub fn started(&mut self, total: usize) {
         self.progress = Some((0, total));
         self.analyzing = None;
+        self.checking = None;
     }
 
     pub fn extracting(&mut self, done: usize, total: usize) {
@@ -248,40 +273,47 @@ impl Status {
         self.analyzing = Some((done, total));
     }
 
-    /// Pass 2 ended, or the scan was stopped: no scan runs.
+    /// Pass 2 ended and pass 3 runs on `total` files.
+    pub fn analyzed(&mut self, total: usize) {
+        self.analyzing = None;
+        self.checking = Some((0, total));
+    }
+
+    pub fn checking(&mut self, done: usize, total: usize) {
+        self.checking = Some((done, total));
+    }
+
+    /// The last pass ended, or the scan was stopped: no scan runs.
     pub fn clear(&mut self) {
         self.progress = None;
         self.analyzing = None;
+        self.checking = None;
     }
 
-    /// Pass 1 or pass 2 is running.
+    /// Pass 1, pass 2 or pass 3 is running.
     pub fn scanning(&self) -> bool {
-        self.progress.is_some() || self.analyzing.is_some()
+        self.pass().is_some()
     }
 
-    /// The running pass's `(done, total)`, pass 1's before pass 2's.
+    /// The running pass's `(done, total)`, pass 1's before pass 2's before
+    /// pass 3's.
     pub fn running(&self) -> Option<(usize, usize)> {
-        self.progress.or(self.analyzing)
+        self.pass().map(|(_, done, total)| (done, total))
     }
 
     /// The running pass as the status line names it, with its
     /// `(done, total)`.
     pub fn pass(&self) -> Option<(&'static str, usize, usize)> {
-        match (self.progress, self.analyzing) {
-            (Some((done, total)), _) => Some(("scanning", done, total)),
-            (None, Some((done, total))) => Some(("analyzing", done, total)),
-            (None, None) => None,
-        }
+        let named = |name, pass: Option<(usize, usize)>| pass.map(|(d, t)| (name, d, t));
+        named("scanning", self.progress)
+            .or(named("analyzing", self.analyzing))
+            .or(named("checking faces", self.checking))
     }
 
     /// What the status line says of the running pass.
     pub fn suffix(&self) -> Option<String> {
-        if let Some((done, total)) = self.progress {
-            Some(format!("  scanning {done}/{total}"))
-        } else {
-            self.analyzing
-                .map(|(done, total)| format!("  analyzing {done}/{total}"))
-        }
+        self.pass()
+            .map(|(name, done, total)| format!("  {name} {done}/{total}"))
     }
 }
 
@@ -380,7 +412,7 @@ impl Running {
     }
 
     /// `Scan::cancel` on the held scan, which stays held: it still ends
-    /// through `Done` and `FacesDone`.
+    /// through `Done` and `FacesDone`, then `AllFacesDone` once pass 3 runs.
     pub fn cancel(&self) {
         if let Some(scan) = self.held().scan.as_ref() {
             scan.cancel();
@@ -436,7 +468,8 @@ impl Stopping {
     }
 }
 
-/// A running scan over one folder: pass 1, then pass 2 on the same thread.
+/// A running scan over one folder: pass 1, then pass 2, then pass 3 on the
+/// same thread.
 pub struct Scan {
     pub id: u64,
     focus: ScanFocus,
@@ -484,9 +517,10 @@ impl Scan {
         })
     }
 
-    /// Run `index::run_scan` and then `index::run_faces_scan` on a thread of
-    /// their own: they block for as long as the folder takes, which would hold
-    /// one of GPUI's background threads.
+    /// Run `index::run_scan`, `index::run_faces_scan` and then, on the files
+    /// at the gate, `index::run_allfaces_scan` on a thread of their own: they
+    /// block for as long as the folder takes, which would hold one of GPUI's
+    /// background threads.
     pub fn start(
         id: u64,
         index: Arc<Mutex<Index>>,
@@ -546,7 +580,39 @@ impl Scan {
                         });
                     },
                 );
-                let _ = events.unbounded_send(Event::FacesDone { scan: id, summary });
+                let todo = allfaces_todo(&index, &dir, &cancel);
+                let _ = events.unbounded_send(Event::FacesDone {
+                    scan: id,
+                    summary,
+                    checking: todo.len(),
+                });
+                if todo.is_empty() {
+                    return;
+                }
+                let summary = index::run_allfaces_scan(
+                    &index,
+                    &dir,
+                    &todo,
+                    faces_threads(),
+                    priorities.allfaces,
+                    &focus,
+                    &cancel,
+                    index::PROGRESS_INTERVAL,
+                    |done, total, ready| {
+                        invariant!(
+                            done <= total,
+                            "scan progress within total",
+                            "dir={dir} scan_id={id} done={done} total={total}"
+                        );
+                        let _ = events.unbounded_send(Event::AllFacesProgress {
+                            scan: id,
+                            done,
+                            total,
+                            ready,
+                        });
+                    },
+                );
+                let _ = events.unbounded_send(Event::AllFacesDone { scan: id, summary });
             })
         };
         Self {
@@ -564,7 +630,8 @@ impl Scan {
     }
 
     /// Cancel without waiting: the workers finish the stage they are on and
-    /// the thread still sends `Done` and `FacesDone`.
+    /// the thread still sends `Done` and `FacesDone`, then `AllFacesDone`
+    /// once pass 3 runs.
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Relaxed);
     }
@@ -684,15 +751,33 @@ fn run_faces_pass(
     )
 }
 
+/// The files pass 3 runs on, `Index::allfaces_todo` at `GROUP_MIN_FACES`;
+/// none once canceled or when they could not be listed.
+fn allfaces_todo(index: &Mutex<Index>, dir: &str, cancel: &AtomicBool) -> Vec<String> {
+    if cancel.load(Ordering::Relaxed) {
+        return Vec::new();
+    }
+    index::lock(index)
+        .allfaces_todo(dir, GROUP_MIN_FACES)
+        .unwrap_or_else(|e| {
+            log::error!("failed to list the all-faces pass of {dir}: {e}");
+            Vec::new()
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        Eviction, Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped, faces_threads_for,
-        list, natural_order, threads_for,
+        Event, Eviction, GROUP_MIN_FACES, Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped,
+        faces_threads_for, list, natural_order, threads_for,
     };
-    use handpic_core::{Flag, scan::ScanFocus};
+    use handpic_core::{
+        Flag,
+        arw::Shot,
+        scan::{Entry, ScanFocus},
+    };
     use handpic_engine::{
-        index::Index,
+        index::{self, FacesRow, Index},
         sidecar::{DRAIN_TIMEOUT, SidecarFormat, Writer, label_names_setting},
     };
     use std::{
@@ -765,6 +850,26 @@ mod tests {
         status.clear();
         assert!(!status.scanning());
         assert_eq!(status.suffix(), None);
+        status.started(10);
+        status.extracted();
+        status.analyzed(3);
+        assert!(status.scanning());
+        status.checking(1, 3);
+        assert_eq!(status.suffix().as_deref(), Some("  checking faces 1/3"));
+        status.clear();
+        assert!(!status.scanning());
+        assert_eq!(status.suffix(), None);
+    }
+
+    #[test]
+    fn a_new_scan_drops_the_last_scans_third_pass() {
+        let mut status = Status::default();
+        status.analyzed(3);
+        status.started(10);
+        assert_eq!(status.pass(), Some(("scanning", 0, 10)));
+        status.extracted();
+        status.analyzing(2, 2);
+        assert_eq!(status.pass(), Some(("analyzing", 2, 2)));
     }
 
     #[test]
@@ -779,6 +884,10 @@ mod tests {
         assert_eq!(status.running(), Some((0, 0)));
         status.analyzing(4, 9);
         assert_eq!(status.running(), Some((4, 9)));
+        status.analyzed(3);
+        assert_eq!(status.running(), Some((0, 3)));
+        status.checking(2, 3);
+        assert_eq!(status.running(), Some((2, 3)));
         status.clear();
         assert_eq!(status.running(), None);
     }
@@ -793,8 +902,116 @@ mod tests {
         status.extracted();
         status.analyzing(4, 9);
         assert_eq!(status.pass(), Some(("analyzing", 4, 9)));
+        status.analyzed(3);
+        status.checking(1, 3);
+        assert_eq!(status.pass(), Some(("checking faces", 1, 3)));
         status.clear();
         assert_eq!(status.pass(), None);
+    }
+
+    /// A row through pass 2 with `group` as its gate count.
+    fn gated(index: &Mutex<Index>, dir: &str, name: &str, group: u32) -> String {
+        let path = PathBuf::from(dir).join(name);
+        fs::write(&path, b"not a raw file").unwrap();
+        let stat = index::stat(&path).unwrap();
+        let entry = Entry {
+            orientation: 1,
+            shot: Shot::default(),
+            thumbnail: vec![0xff, 0xd8, 0xff, 0xd9],
+        };
+        let mut index = index.lock().unwrap();
+        index.write_batch(dir, &[(stat, Ok(entry))]).unwrap();
+        let path = path.to_string_lossy().into_owned();
+        index
+            .write_faces(&[FacesRow {
+                path: path.clone(),
+                sharpness: None,
+                eyes_ear: None,
+                pose: None,
+                eye_offset: None,
+                edge_gap: None,
+                full_eye_sharp: None,
+                faces_group: Some(group),
+            }])
+            .unwrap();
+        path
+    }
+
+    /// What a scan of `dir` with nothing for pass 1 sends, in order, each
+    /// message by its kind and, for pass 3's, the files it names.
+    fn scan_events(index: Arc<Mutex<Index>>, dir: &str) -> Vec<(&'static str, Vec<String>)> {
+        let (events, received) = futures::channel::mpsc::unbounded();
+        let scan = Scan::start(
+            9,
+            index,
+            dir.to_owned(),
+            Vec::new(),
+            ScanFocus::default(),
+            Priorities::APP,
+            events,
+        );
+        let sent = futures::executor::block_on_stream(received)
+            .filter_map(|event| match event {
+                Event::Done { .. } => Some(("done", Vec::new())),
+                Event::FacesDone { checking, .. } => {
+                    Some(("faces-done", vec![checking.to_string()]))
+                }
+                Event::AllFacesProgress { ready, .. } if !ready.is_empty() => {
+                    assert!(ready.iter().all(|r| r.faces_judged.is_none()));
+                    Some((
+                        "allfaces-ready",
+                        ready.into_iter().map(|r| r.path).collect(),
+                    ))
+                }
+                Event::AllFacesDone { .. } => Some(("allfaces-done", Vec::new())),
+                _ => None,
+            })
+            .collect();
+        assert!(scan.stop_within(STOP_TIMEOUT));
+        sent
+    }
+
+    #[test]
+    fn pass_3_runs_after_pass_2_on_the_rows_at_the_gate() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().to_string_lossy().into_owned();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        gated(&index, &dir, "A.ARW", GROUP_MIN_FACES - 1);
+        let at = gated(&index, &dir, "B.ARW", GROUP_MIN_FACES);
+        assert_eq!(
+            scan_events(index.clone(), &dir),
+            [
+                ("done", Vec::new()),
+                ("faces-done", vec!["1".to_owned()]),
+                ("allfaces-ready", vec![at]),
+                ("allfaces-done", Vec::new()),
+            ]
+        );
+        assert!(
+            index
+                .lock()
+                .unwrap()
+                .allfaces_todo(&dir, GROUP_MIN_FACES)
+                .unwrap()
+                .is_empty(),
+            "the unreadable file is stored and not retried"
+        );
+    }
+
+    #[test]
+    fn a_folder_with_no_row_at_the_gate_runs_no_pass_3() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().to_string_lossy().into_owned();
+        let index = Arc::new(Mutex::new(
+            Index::open(&temp.path().join("index.sqlite")).unwrap(),
+        ));
+        gated(&index, &dir, "A.ARW", GROUP_MIN_FACES - 1);
+        assert_eq!(
+            scan_events(index, &dir),
+            [("done", Vec::new()), ("faces-done", vec!["0".to_owned()])]
+        );
     }
 
     #[test]

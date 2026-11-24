@@ -3066,10 +3066,16 @@ starts). The thread starts on every open
 with an index, even when pass 1 has nothing to do, so rows below
 `FACES_VERSION` still get pass 2; a no-op pass costs one `faces_todo` query.
 `Event::FacesDone` is sent also when the pass was canceled, had nothing to do
-or `faces_todo` failed, so the view always learns the scan is over. The first
+or `faces_todo` failed, so the view always learns pass 2 is over. The first
 non-empty batch's file names go to the log as `scan faces first:`.
+`FacesDone` carries how many files pass 3 runs on (`allfaces_todo` at
+`GROUP_MIN_FACES`, listed after pass 2 and skipped once canceled): with none
+it ends the scan and no pass 3 starts, else the status line turns to
+`checking faces 0/N` and `Event::AllFacesDone`, also sent on a cancel, ends
+it.
 
-- Rule: the deferred resync (`finished`) runs at `FacesDone`, not at pass 1's
+- Rule: the deferred resync (`finished`) runs at the scan's end (`FacesDone`
+  with no pass 3, else `AllFacesDone`), not at pass 1's
   `Done`, as the Tauri frontend drained its deferred rescan at `faces-done`. A
   re-listing during pass 2 would be harmless (a canceled file keeps its old
   `faces_extractor`, so the next scan resumes it) but would restart the pass;

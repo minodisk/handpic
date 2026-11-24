@@ -186,8 +186,11 @@ DxO PhotoLab.
   sharpness score barely told picks from the rest on such frames.
   The camera's face tracking no longer colors the mark. The cue is computed
   in a second pass right after the thumbnails, so the marks turn from white
-  as it runs, the files on screen first (both passes run below normal
-  priority, so the viewer comes first when they compete for the CPU); the strip marks each bright green or gray file
+  as it runs, the files on screen first (the passes run below normal
+  priority, so the viewer comes first when they compete for the CPU; a third
+  pass, `checking faces` on the status line, then checks the eyes of every
+  face of the frames where the second counted at least five confident faces
+  of about the judged face's size); the strip marks each bright green or gray file
   with an icon at the cell's bottom-left in the mark's color (a smiling face
   on a good photo, a frowning face on gray, none on white), the meta pane
   shows the full-size sharpness of those eyes as `Eye focus`, whether that

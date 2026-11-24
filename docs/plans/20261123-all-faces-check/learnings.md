@@ -130,6 +130,34 @@
   them a gate count: `faces_todo`'s reset and the first pass's rewrite
   clear `faces_group`, so the query needs no extension check of its own.
 
+## Step 3: Run pass 3 in the app and show it in the status line
+
+- `Priority` has no level below `Lowest` on any platform (Windows
+  `THREAD_PRIORITY_LOWEST`, macOS utility at -5, Linux nice 10), and adding
+  one is a core change, so pass 3 runs at `Priority::Lowest` like pass 2
+  (`Priorities::allfaces`) and comes after it by order only.
+- `FacesDone` used to mean "the scan is over" (`finished`, the held run's
+  drain, the prefetch). To keep a folder without frames at the gate exactly
+  as before and avoid a moment between the passes where `scanning()` is
+  false, the scan thread lists `allfaces_todo` before it sends `FacesDone`
+  and puts the count in it (`checking`): 0 ends the scan there and no pass 3
+  event follows; otherwise the status turns to `checking faces 0/N` at once
+  and `AllFacesDone` ends the scan.
+- The status line's name for pass 3 is `checking faces`; `get_status`
+  reports the same string as its `scan.pass`, as it does for the other two.
+- A pass 3 row is laid over the facts with its own `pending_counts` after
+  `pending_faces`, so a snapshot read before it was written still gets it.
+  The refilter on a pass 3 row runs only while an `Eyes` item is checked,
+  the section Step 6 adds the counts' items to; nothing filters on the
+  counts yet.
+- The scan-level test seeds rows past pass 2 through the engine's public
+  `write_batch` and `write_faces` with a `faces_group`, so pass 1 and pass 2
+  have nothing to do; the unreadable file gives pass 3 a row with no counts,
+  which still reaches the channel and leaves `allfaces_todo` empty.
+- Per the user's standing rule (2026-11-24), `mise run ci:local` and local
+  cargo builds were not run; the build, clippy and the tests are left to
+  the PR's GitHub checks. Only `mise run fmt` ran.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under

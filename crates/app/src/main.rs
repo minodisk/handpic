@@ -409,6 +409,8 @@ struct Handpic {
     /// Pass 2 files reported since the last read of the index, laid over a
     /// snapshot read before they were written.
     pending_faces: Vec<handpic_engine::index::FaceReady>,
+    /// Pass 3's, laid over it after them.
+    pending_counts: Vec<handpic_engine::index::AllFacesReady>,
     /// The sort key the user has; a view-only folder is in capture order
     /// whatever it is (`viewonly::sort_for`).
     sort: SortKey,
@@ -958,6 +960,7 @@ impl Handpic {
             facts: HashMap::new(),
             bursts: HashMap::new(),
             pending_faces: Vec::new(),
+            pending_counts: Vec::new(),
             sort: settings.sort,
             filter: {
                 let mut filter = FilterState::default();
@@ -3370,6 +3373,7 @@ impl Handpic {
         let listed_count = listed.files.len();
         self.listing += 1;
         self.pending_faces.clear();
+        self.pending_counts.clear();
         self.order += 1;
         self.view_only = viewonly::is_view_only(&listed.files);
         if self.view_only && self.menus.open() == Some(Which::Sort) {
@@ -3663,7 +3667,9 @@ impl Handpic {
             Event::Progress { scan, .. }
             | Event::Done { scan, .. }
             | Event::FacesProgress { scan, .. }
-            | Event::FacesDone { scan, .. } => *scan,
+            | Event::FacesDone { scan, .. }
+            | Event::AllFacesProgress { scan, .. }
+            | Event::AllFacesDone { scan, .. } => *scan,
             Event::Changed(dir) => return self.changed(dir, cx),
             Event::TreeChanged(dir) => return self.tree_folder_changed(dir.clone(), cx),
             Event::Mcp(request) => return self.mcp_request(request.clone(), cx),
@@ -3732,10 +3738,26 @@ impl Handpic {
                     self.read_focus(cx);
                 }
             }
-            Event::FacesDone { .. } => {
+            Event::FacesDone { checking: 0, .. } | Event::AllFacesDone { .. } => {
                 self.scan_status.clear();
                 self.finished(cx);
                 self.request_prefetch(cx);
+            }
+            Event::FacesDone { checking, .. } => self.scan_status.analyzed(checking),
+            Event::AllFacesProgress {
+                done, total, ready, ..
+            } => {
+                self.scan_status.checking(done, total);
+                filter::apply_face_counts(&mut self.facts, &ready);
+                self.pending_counts.extend(ready.iter().cloned());
+                if !self.filter.eyes.is_empty() {
+                    self.refilter(self.current_path(), true, None, cx);
+                }
+                if let Some(current) = self.current_path()
+                    && ready.iter().any(|r| r.path == current)
+                {
+                    self.read_focus(cx);
+                }
             }
             Event::Changed(_)
             | Event::TreeChanged(_)
@@ -3805,6 +3827,7 @@ impl Handpic {
         };
         let listing = self.listing;
         self.pending_faces.clear();
+        self.pending_counts.clear();
         cx.spawn(async move |this, cx| {
             let entries = cx
                 .background_spawn(async move { entries_of(&reader, &dir) })
@@ -3814,8 +3837,10 @@ impl Handpic {
                     && listing == this.listing
                 {
                     this.set_entries(entries);
-                    // Pass 2 files written after the snapshot was read.
+                    // Pass 2 and pass 3 files written after the snapshot was
+                    // read.
                     filter::apply_face_ready(&mut this.facts, &this.pending_faces);
+                    filter::apply_face_counts(&mut this.facts, &this.pending_counts);
                     this.refilter(this.current_path(), true, None, cx);
                     this.mark_strip();
                     cx.notify();
@@ -4193,7 +4218,7 @@ impl Handpic {
         .collect()
     }
 
-    /// Pass 1 or pass 2 is running.
+    /// Pass 1, pass 2 or pass 3 is running.
     fn scanning(&self) -> bool {
         self.scan_status.scanning()
     }
@@ -4596,7 +4621,8 @@ impl Handpic {
     /// and no page read is out. Skipped while a scan pass runs, so the scan
     /// is not slowed by reads the user may never look at, and while a
     /// folder rename is in flight: on Windows a read holding a file of the
-    /// folder open refuses the rename, and `FacesDone` drains a held one.
+    /// folder open refuses the rename, and the scan's end (`FacesDone` or
+    /// `AllFacesDone`) drains a held one.
     fn request_prefetch(&mut self, cx: &mut Context<Self>) {
         if !self.prefetch_open() {
             return;

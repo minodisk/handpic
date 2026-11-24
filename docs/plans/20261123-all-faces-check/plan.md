@@ -240,7 +240,7 @@ not change.
     - No caller in this step: the app starts pass 3 in Step 3. The app
       crate builds unchanged (new `StoredEyes` fields aside).
 
-- [ ] Step 3: Run pass 3 in the app and show it in the status line (`handpic-app`)
+- [x] Step 3: Run pass 3 in the app and show it in the status line (`handpic-app`)
   - Done when:
     - The scan task runs pass 3 after pass 2 on the same thread, on the
       rows the todo query gives for the default threshold (5, a named
@@ -634,3 +634,4 @@ Made in this revision (planning, 2026-11-24):
   reopened for the rework
 - (2026-11-24) Step 1 complete
 - (2026-11-24) Step 2 complete
+- (2026-11-24) Step 3 complete

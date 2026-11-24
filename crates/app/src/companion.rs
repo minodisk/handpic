@@ -4070,6 +4070,21 @@ mod tests {
     }
 
     #[test]
+    fn get_status_reports_the_third_pass_and_is_not_idle_while_it_runs() {
+        let status = Status {
+            scan: Some(("checking faces", 1, 3)),
+            line: "a.ARW  checking faces 1/3".into(),
+            ..Status::default()
+        };
+        let answer = get_status(&status);
+        assert_eq!(
+            answer["scan"],
+            json!({ "pass": "checking faces", "done": 1, "total": 3 })
+        );
+        assert_eq!(answer["idle"], json!(false));
+    }
+
+    #[test]
     fn get_status_reports_the_operation_and_waits_while_it_asks_is_held_or_runs() {
         let operation = |state, progress, message: Option<&str>| Status {
             operation: Some(Operation {
