@@ -61,7 +61,7 @@ Rules for every step:
 
 ## Steps
 
-- [ ] Step 1: Keyboard and MCP: remove `compare` everywhere, and let the settings key through the tree's gate
+- [x] Step 1: Keyboard and MCP: remove `compare` everywhere, and let the settings key through the tree's gate
   - Done when:
     - The keymap has no `compare` action: it is gone from
       `crates/engine/src/shortcuts.rs`'s `DEFAULTS` (and its
@@ -282,3 +282,5 @@ Rules for every step:
 
 ## Progress
 
+
+- (2026-11-24) Step 1 complete

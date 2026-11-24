@@ -408,7 +408,7 @@ over a snapshot of the view: the strip's selection, its targets as
 (`burstOf`, each frame's sharpness from the `Facts`), the coverage table
 (`Coverage`: every keymap action, right-click item, menu item, folder
 operation and settings page mapped to its tool, to a tool refused with
-`not_in_app` until the feature lands (compare, `rename_file`) or to the
+`not_in_app` until the feature lands (`rename_file`) or to the
 reason it has none, tested against the keymap's actions),
 `set_judgment`'s changes, one undo
 entry through the judgment keys' view, row and writer path, the `Key` a
@@ -527,7 +527,8 @@ click in its pane and hands back on `escape` or a press elsewhere,
 `src/treekeys.rs` the keymap actions that still run while the tree has the
 keyboard (`TREE_PASSTHROUGH`, `tree_gate`, after `treekeys.ts` but also
 letting the strip's `previous` / `next` through, so Left / Right page the
-strip, unlike the Tauri app),
+strip, unlike the Tauri app; the settings key, no keymap action, passes
+ahead of it in the window's handler),
 `src/context.rs` the
 right-click menus (a port of `context.ts`: the items with their action, label,
 shortcut (the keymap's key name, which the window draws as `Kbd` text), checked and disabled state, `folder_groups`, the tree's reveal,

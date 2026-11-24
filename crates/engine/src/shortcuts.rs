@@ -70,7 +70,6 @@ const DEFAULTS: &[(&str, &[&str])] = &[
     ("focus", &["f"]),
     ("zoom", &["z"]),
     ("grayscale", &["g"]),
-    ("compare", &["v"]),
     ("performance", &["d"]),
     ("peaking", &["e"]),
     ("rate1", &["1"]),
@@ -656,7 +655,6 @@ mod tests {
             ("focus", "f"),
             ("zoom", "z"),
             ("grayscale", "g"),
-            ("compare", "v"),
             ("performance", "d"),
             ("peaking", "e"),
             ("rate1", "1"),
@@ -869,6 +867,22 @@ mod tests {
         };
         assert_eq!(others(&keymap), others(&Keymap::defaults()));
         assert_eq!(keymap.overrides(), json!({"pick": ["q"]}));
+    }
+
+    #[test]
+    fn a_store_with_the_retired_compare_action_still_loads() {
+        let stored = json!({"compare": ["v"], "zoom": ["v"]});
+        let keymap = Keymap::from_overrides(Some(&stored));
+        assert_eq!(keys_of(&keymap, "zoom"), vec!["v"]);
+        let others = |keymap: &Keymap| {
+            keymap
+                .bindings()
+                .into_iter()
+                .filter(|b| b.action != "zoom")
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(others(&keymap), others(&Keymap::defaults()));
+        assert_eq!(keymap.overrides(), json!({"zoom": ["v"]}));
     }
 
     #[test]
