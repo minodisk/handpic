@@ -277,7 +277,13 @@ impl Keymap {
     /// every key is bound elsewhere is skipped and kept in the stored value
     /// (`overrides`), minus any modifier-only keys.
     pub fn from_overrides(overrides: Option<&Value>) -> Keymap {
-        let mut keymap = Keymap::defaults();
+        Keymap::merge(Keymap::defaults(), overrides)
+    }
+
+    /// `from_overrides` over the given defaults, so a test can supply an
+    /// action with more than one default key.
+    fn merge(defaults: Keymap, overrides: Option<&Value>) -> Keymap {
+        let mut keymap = defaults;
         let Some(overrides) = overrides else {
             return keymap;
         };
@@ -502,17 +508,29 @@ impl Keymap {
     /// The actions whose keys differ from the default, as stored under the
     /// `shortcuts` settings key. A stored override skipped for a key
     /// conflict is kept as it was, minus any modifier-only keys. An action
-    /// left with no keys is not stored: an empty list does not load, and the
-    /// override that took its key takes it again on load.
+    /// whose keys are its defaults minus those another action holds is not
+    /// stored (so an empty list never is): the override that took those keys
+    /// takes them again on load, and the action stays un-overridden.
     pub fn overrides(&self) -> Value {
-        let defaults = Keymap::defaults();
+        self.overrides_over(&Keymap::defaults())
+    }
+
+    fn overrides_over(&self, defaults: &Keymap) -> Value {
         let mut overrides = self.inactive.clone();
         overrides.extend(
             self.bindings
                 .iter()
                 .zip(&defaults.bindings)
-                .filter(|(b, d)| !b.keys.is_empty() && b.keys != d.keys)
-                .map(|(b, _)| (b.action.to_string(), Value::from(b.keys.clone()))),
+                .enumerate()
+                .filter(|(i, (b, d))| {
+                    let kept: Vec<&String> = d
+                        .keys
+                        .iter()
+                        .filter(|k| self.holder(*i, k).is_none())
+                        .collect();
+                    !b.keys.iter().eq(kept)
+                })
+                .map(|(_, (b, _))| (b.action.to_string(), Value::from(b.keys.clone()))),
         );
         Value::Object(overrides)
     }
@@ -659,6 +677,17 @@ mod tests {
         keymap.remove("reject", "p").unwrap();
         assert_eq!(keys_of(&keymap, "pick"), vec!["p"]);
         assert_eq!(Keymap::from_overrides(Some(&keymap.overrides())), keymap);
+    }
+
+    #[test]
+    fn a_displaced_action_keeping_a_key_is_not_stored_as_overridden() {
+        let mut defaults = Keymap::defaults();
+        let i = defaults.index("performance").unwrap();
+        defaults.bindings[i].keys = vec!["d".into(), "shift+d".into()];
+        let stored = json!({"next": ["arrowright", "d"]});
+        let keymap = Keymap::merge(defaults.clone(), Some(&stored));
+        assert_eq!(keys_of(&keymap, "performance"), vec!["shift+d"]);
+        assert_eq!(keymap.overrides_over(&defaults), stored);
     }
 
     #[test]

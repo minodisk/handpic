@@ -115,8 +115,9 @@ because `reject` comes before `pick`, so `p` still looked taken.
   new default's action keeps its other keys or has none. The rule cannot tell
   a new default from an old one: `{"reject": ["p"]}` leaves `pick` without a
   key. An invalid or forbidden override displaces nothing. `overrides()`
-  never stores an action with no keys (`parse_keys` refuses an empty list);
-  the load derives it again. To build an inactive override in a test, use two
+  never stores an action whose keys are its defaults minus those another
+  action holds (so never an empty list, which `parse_keys` refuses); the load
+  derives it again and the action stays un-overridden. To build an inactive override in a test, use two
   overrides that want one key, since a default's key is now always taken. A
   main-view key that the folder tree swallows is absent from
   `TREE_PASSTHROUGH` (`crates/app/src/treekeys.rs`).
