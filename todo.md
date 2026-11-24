@@ -1615,6 +1615,7 @@ Files: `install.ps1`.
 - [ ] Route the delete through a chunked move like `trash_listed`'s `run_chunked`, keeping the per-sidecar `(done, total)` progress and each `Trashed`'s `owner`.
 - [ ] Add a unit test with a fake mover showing the outcome (moved and failed files, the recorded run, each `Trashed`'s `owner`) matches the per-file path.
 - [ ] On Windows, record a timing of a large sidecar delete before and after, and check that the progress circle still moves.
+
 ### App: real-device check of the group threshold setting (all-faces-check Step 4)
 
 `all-faces-check` Step 4 added the `groupMinFaces` setting (2 to 20, default 5) to the GPUI app's (`crates/app`) settings modal, Culling page, as `Faces in a group photo` under the auto-advance switch. Pass 3 takes its threshold from it, and lowering it re-lists the open folder so pass 3 runs on the rows that now qualify. Unit and scan-level tests plus CI cover the parse, the range, the visibility rule and the lowering trigger. Nobody has driven the number field in the running app. The step was ticked on the automated criteria only. gpui-component's own number field was not used, because it commits on every keystroke. This is a custom `NumberInput` committed on Enter, blur or a step. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs` (`set_group_min_faces`).
