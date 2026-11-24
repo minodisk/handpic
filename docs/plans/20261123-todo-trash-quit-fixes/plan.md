@@ -334,3 +334,5 @@ Risks:
 (2026-11-24) Step 2 complete
 
 (2026-11-24) Step 3 complete
+
+(2026-11-24) Step 4 complete (timing measurement pending)
