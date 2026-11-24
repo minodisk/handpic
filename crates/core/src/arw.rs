@@ -754,7 +754,18 @@ pub fn parse_noted(buf: &[u8]) -> Result<(Arw, Option<FarNote>)> {
             } else if fallback {
                 if let Ok(Some((_, ifd))) = leica_note_ifd(&buf[at..end], t.little_endian()) {
                     if let Some(e) = note_preview(&ifd) {
-                        take_note_preview(&mut arw, e);
+                        if e.offset.saturating_add(e.length) <= buf.len() {
+                            take_note_preview(&mut arw, e);
+                        } else {
+                            // The JPEG is past `buf`: only the reader knows
+                            // the file's length, so it decides.
+                            far = Some(FarNote {
+                                offset: at,
+                                length: count,
+                                little_endian: t.little_endian(),
+                                fallback,
+                            });
+                        }
                     }
                 }
             }
@@ -1610,7 +1621,8 @@ pub(crate) mod tests {
     #[test]
     fn a_leica_note_preview_is_taken_over_a_thumbnail_strip() {
         let note_at = 4096;
-        let buf = leica_dng(&[], note_at, note_at + 1024, 386_048);
+        let mut buf = leica_dng(&[], note_at, note_at + 1024, 386_048);
+        buf.resize(note_at + 1024 + 386_048, 0);
         let (a, far) = parse_noted(&buf).unwrap();
         assert_eq!(far, None);
         assert_eq!(at(a.preview), Some((note_at + 1024, 386_048)));
@@ -1622,6 +1634,18 @@ pub(crate) mod tests {
         let a = parse(&buf).unwrap();
         assert_eq!(at(a.preview), Some(LEICA_STRIP));
         assert_eq!(at(a.full), Some(LEICA_STRIP));
+    }
+
+    #[test]
+    fn a_leica_note_preview_past_the_end_of_the_file_keeps_the_strip() {
+        let note_at = 4096;
+        let buf = leica_dng(&[], note_at, note_at + 1024, 386_048);
+        let (mut a, far) = parse_noted(&buf).unwrap();
+        let far = far.unwrap();
+        far.take(&mut a, &buf[note_at..], buf.len() as u64);
+        assert_eq!(at(a.preview), Some(LEICA_STRIP));
+        assert_eq!(at(a.full), Some(LEICA_STRIP));
+        assert_eq!(a.shot.focus_distance_mm, Some(LEICA_DISTANCE));
     }
 
     #[test]

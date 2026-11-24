@@ -176,9 +176,11 @@ file, so the bounded prefix never holds it.
   (`take_note_preview`): the note gives no pixel size, so the comparison is
   by bytes, as in the older Sony fallback above. A Leica DNG with a strip of
   at least 1600 px (M10, M11, Q, SL, CL, X) keeps its strips.
-- Ranged read: when the note runs past the buffer, `parse_noted` hands back a
+- Ranged read: when the note runs past the buffer, or its `PreviewImage` JPEG
+  does (the fallback applies), `parse_noted` hands back a
   `FarNote` (offset, length, byte order, whether the fallback applies)
-  instead of failing; `reader::parse_raw` reads the note's first
+  instead of failing or taking it unchecked (a JPEG within the buffer is taken
+  at once); `reader::parse_raw` reads the note's first
   `NOTE_HEAD_LIMIT` (4 KiB) bytes by range and `FarNote::take` finishes the
   parse from them: `FocusDistance` always (the whole-file read used to give
   it), the `PreviewImage` under the rule above unless it runs past the end
