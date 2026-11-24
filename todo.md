@@ -49,14 +49,6 @@ Run each check with `--settings <fresh test store>`, `--index <fresh test index>
 - [ ] On macOS, do the same measurement and expect the same result.
 - [ ] Replace the "unmeasured" sentence in `docs/agents/app.md`'s strip-height section with the result.
 
-### App: a deep-row focus point still exceeds the 50ms budget
-
-A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to pixels (n=2, before the #56 and #60 fixes); see "The 1:1 focus check path" in docs/humans/performance.md. Options are prefetching the neighboring files' crops (Phase 4's ring buffer) or a DCT-scaled placeholder; nothing is chosen. The measurement was the Tauri app's; the app's 1:1 view (`crates/app/src/zoom.rs`) reads the crop through the same `crates/core/src/partial.rs`.
-
-#### TODO
-
-- [ ] Retake the deep-row measurement on the app's 1:1 view, then decide between crop prefetch and a DCT-scaled placeholder.
-
 ### App: the macOS / Linux manual checks for Move to Trash are still open
 
 The strip's `Move to Trash…` moves files through the engine's mover and records `trash::Runs` runs, and that mover has never been run by a human on macOS or Linux (the app checks in `### App: real-device checks of the folder tree, the strip's selection and right-click menu, and Move to Trash undo / redo` are Windows only). On macOS the mover is `trash::trash_file` (`crates/engine/src/trash.rs`, `undo-trash-rejected` #547), which calls `NSFileManager.trashItemAtURL` directly rather than the `trash` crate's `DeleteMethod::NsFileManager`; one point is specifically unverified: whether the Trash's "Put Back" entry is actually created, since the `trash` crate documents that on some macOS systems files moved through `NSFileManager` get no "Put Back" entry (trash-rs#14); dragging them out of the Trash still restores them. Files: `crates/engine/src/trash.rs`, `crates/app/src/trash.rs`, `crates/app/src/main.rs`. Sources: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md` Step 2 (#547) and `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`.

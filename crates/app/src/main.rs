@@ -167,7 +167,7 @@ use tree::{
 };
 use treekeys::Gate;
 use viewed::{Batch, Batches, Dwell, Latest, VIEW_DWELL_MS};
-use zoom::{Arrived, Zoom};
+use zoom::{Arrived, Toggled, Zoom};
 
 const AUTO_SETTLE: Duration = Duration::from_secs(2);
 /// How long the preview canvas's size holds before the fit images are
@@ -681,7 +681,7 @@ struct Handpic {
     /// The `wait_for_idle` calls waiting for the view to be idle, by id.
     idle_waiters: Vec<u64>,
     /// The decoded neighbours of the current file, `None` under
-    /// `--no-prefetch`.
+    /// `--no-prefetch`, which also turns the 1:1 crop's read ahead off.
     prefetch: Option<Ring<Held>>,
     /// The update flow, the build's feed and keys, and the executable as
     /// the launch found it (on Linux `current_exe` names the replaced file
@@ -4583,15 +4583,10 @@ impl Handpic {
     /// folder rename is in flight: on Windows a read holding a file of the
     /// folder open refuses the rename, and `FacesDone` drains a held one.
     fn request_prefetch(&mut self, cx: &mut Context<Self>) {
-        let on_screen = self.screen.as_ref().map(|s| s.path.as_str());
-        if self.pager.in_flight()
-            || self.scanning()
-            || self.renaming()
-            || on_screen.is_none()
-            || on_screen != self.current_path().as_deref()
-        {
+        if !self.prefetch_open() {
             return;
         }
+        self.prefetch_crop(cx);
         let index = self.pager.current();
         let Some(ring) = &mut self.prefetch else {
             return;
@@ -4609,6 +4604,33 @@ impl Handpic {
             this.update(cx, |this, cx| this.prefetched(loaded, cx)).ok();
         })
         .detach();
+    }
+
+    /// Whether a read ahead may start: the prefetch is on, the current
+    /// file's preview is on screen, no page read is out, no scan pass runs
+    /// and no folder rename is in flight.
+    fn prefetch_open(&self) -> bool {
+        let on_screen = self.screen.as_ref().map(|s| s.path.as_str());
+        self.prefetch.is_some()
+            && !self.pager.in_flight()
+            && !self.scanning()
+            && !self.renaming()
+            && on_screen.is_some()
+            && on_screen == self.current_path().as_deref()
+    }
+
+    /// Read a 1:1 crop ahead under the ring's gate: the current file's, so a
+    /// `z` paints one already held, and while zoomed the next neighbour's.
+    fn prefetch_crop(&mut self, cx: &mut Context<Self>) {
+        if !self.prefetch_open() {
+            return;
+        }
+        let next =
+            prefetch::neighbours(&self.files, self.pager.current(), self.heading.direction())
+                .into_iter()
+                .next();
+        let request = self.zoom.prefetch(self.viewport.get(), next.as_deref());
+        self.send_crop(request, cx);
     }
 
     /// The prefetch in flight ended; its scan pause ends with it.
@@ -4647,6 +4669,8 @@ impl Handpic {
         if let Some(screen) = &mut self.screen {
             screen.keepable = false;
         }
+        let crops = self.zoom.relisted();
+        self.retire(crops.into_iter().map(|crop| crop.image));
         if let Some(ring) = &mut self.prefetch {
             let given = ring.clear();
             self.give_up(given, cx);
@@ -4863,18 +4887,27 @@ impl Handpic {
     }
 
     fn toggle_zoom(&mut self, cx: &mut Context<Self>) {
-        let request = self
+        match self
             .zoom
-            .toggle(!self.files.is_empty(), self.viewport.get(), Instant::now());
-        self.send_crop(request, cx);
+            .toggle(!self.files.is_empty(), self.viewport.get(), Instant::now())
+        {
+            Toggled::Read(request) => self.send_crop(Some(request), cx),
+            Toggled::Held(key) => {
+                *self.zoom_pending.borrow_mut() =
+                    self.zoom.crop().map(|crop| zoom::Timed::of(key, crop));
+                self.prefetch_crop(cx);
+            }
+            Toggled::Nothing => {}
+        }
         cx.notify();
     }
 
     /// Another file or listing is current: zoomed, read the new crop while the
     /// held one stays on screen; otherwise drop the held crop.
     fn zoom_page(&mut self, cx: &mut Context<Self>) {
-        let (old, request) = self.zoom.page(!self.files.is_empty(), self.viewport.get());
-        self.retire(old.map(|crop| crop.image));
+        let current = self.current_path();
+        let (old, request) = self.zoom.page(current.as_deref(), self.viewport.get());
+        self.retire(old.into_iter().map(|crop| crop.image));
         self.zoom_timer = None;
         self.send_crop(request, cx);
     }
@@ -4888,24 +4921,36 @@ impl Handpic {
     fn crop_arrived(
         &mut self,
         seq: u64,
+        ahead: Option<String>,
         crop: Result<(zoom::Crop, (u32, u32)), String>,
         keypress: Option<Instant>,
         cx: &mut Context<Self>,
     ) {
-        let timed = crop
+        let stages = crop
             .as_ref()
             .ok()
-            .zip(keypress)
-            .map(|((c, _), key)| zoom::Timed {
-                key,
-                read: c.read,
-                decode: c.decode,
-                orient: c.orient,
-            });
-        match self.zoom.arrived(seq, crop, self.viewport.get()) {
-            Arrived::Shown { release, resized } => {
+            .map(|(c, _)| (c.read, c.decode, c.orient));
+        let viewport = self.viewport.get();
+        let arrived = match &ahead {
+            Some(path) => self.zoom.ahead_arrived(path, crop, viewport),
+            None => self.zoom.arrived(seq, crop, viewport),
+        };
+        match arrived {
+            Arrived::Shown {
+                release,
+                resized,
+                keypress: waited,
+            } => {
                 self.retire(release.map(|crop| crop.image));
-                *self.zoom_pending.borrow_mut() = timed;
+                *self.zoom_pending.borrow_mut() =
+                    stages
+                        .zip(keypress.or(waited))
+                        .map(|((read, decode, orient), key)| zoom::Timed {
+                            key,
+                            read,
+                            decode,
+                            orient,
+                        });
                 if resized {
                     self.zoom_resized(cx);
                 }
@@ -4919,7 +4964,9 @@ impl Handpic {
                 let name = file_name(&self.files[self.pager.current()]);
                 self.fail(&format!("{name}: {error}"));
             }
+            Arrived::Missed => {}
         }
+        self.prefetch_crop(cx);
         cx.notify();
     }
 
@@ -4955,6 +5002,8 @@ impl Handpic {
     /// is one.
     fn fit_settled(&mut self, cx: &mut Context<Self>) {
         let canvas = self.viewport.get();
+        let crops = self.zoom.fit(canvas);
+        self.retire(crops.into_iter().map(|crop| crop.image));
         if let Some(ring) = &mut self.prefetch {
             let given = ring.release(|held: &Held| {
                 !fitscale::serves(decoded_size(&held.image), held.upright, canvas)

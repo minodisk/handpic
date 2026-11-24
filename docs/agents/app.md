@@ -2921,7 +2921,56 @@ so `z` never opens on another file's crop.
   the current file's crop; a single press went old crop at 37 ms to new crop
   from 85 ms with no black or placeholder frame, and `z` off / on reused the
   crop with no new `zoom` line
-  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`).
+  (`docs/plans/_archived/20261122-windows-device-checks-8/results.md`). That
+  last part no longer holds: a `z` that shows a held crop now prints one (see
+  the next section).
+
+### The 1:1 crop is read ahead of `z` (Measured)
+
+`Zoom::prefetch` reads a crop before it is asked for, under the prefetch
+ring's gate (`prefetch_open`: the ring on, the current file's preview on
+screen, no page read out, no scan pass, no folder rename), from
+`request_prefetch` and after every crop that lands. Not zoomed, it reads the
+current page's crop once `zoom.shown` has stamped the page, so `z` paints a
+crop already held (`Toggled::Held`). Zoomed with the current page's crop held,
+it reads the next neighbour's (the first of `prefetch::neighbours` in the
+`heading` direction) into a slot of its own keyed by the file
+(`Request::ahead`, `ahead_arrived`); `page` makes it the held crop when the
+new current file is that one at the same viewport, so the page shows it
+without a read, and a page onto it while it is still in flight takes it when
+it lands. One read is in flight across both, and each slot holds one crop.
+
+- Rule: every `z` that turns the view on over a held crop of this page and
+  viewport prints one `zoom` line (`Timed::of`, the crop's own `read`,
+  `decode` and `orient`, which a read ahead paid before the press), and a `z`
+  pressed while a read is in flight is kept (`waiting`) and handed to the
+  `Shown` of this page's crop, or to the current page's read a stale or
+  neighbour arrival asks for, so it prints one too. A page drops a waiting
+  press.
+- Rule: a crop read ahead goes when it no longer matches: the neighbour's on
+  any page that does not land on it at the same viewport, on a re-listing
+  (`relisted`, from `clear_ring`, which also voids a read in flight for it)
+  and when the settled viewport differs (`fit`, from `fit_settled`); not
+  zoomed, the current page's goes the same way. Zoomed, a re-listing keeps
+  the current page's crop, as before.
+- Rule: a failed read ahead shows nothing. Not zoomed it is `Arrived::Missed`
+  and `failed` stops a retry until `z`, which reads again and shows the error
+  as before; a neighbour's failure is remembered (`ahead_failed`) until a
+  re-listing, and a page onto it reads it as the current page's.
+- Rule: a crop read for an earlier page while not zoomed is released on
+  arrival even if `z` came since (`Flight::zoomed`), so a fresh `z` never opens
+  on another file's crop.
+- Rule: `--no-prefetch` turns the read ahead off with the ring, so a
+  same-session A/B of the 1:1 view is a `--no-prefetch` run against a
+  default one.
+- Measured on Windows 11 on 2026-11-24 (release build, shared machine, α7 V
+  ARWs, `z` once per file): `keypressToPixels` p50 11-13 ms and p95 under
+  19 ms on both the deep-row and the shallow-row set, 0 of 80 presses over
+  50 ms, against 44-50 / 54-65 ms on the deep set under `--no-prefetch` in the
+  same session; the `page` lines of single and held `→` presses were not
+  slower (see "Reading the crop ahead of `z` (Windows 11)" in
+  `docs/humans/performance.md` and
+  `docs/plans/_archived/20261123-close-measured-todos/learnings.md`).
 
 ### The prefetch ring holds the decoded neighbours (Inferred)
 
@@ -2941,7 +2990,7 @@ renames hold, else by the canonical `dir`); it is asked after a
 current result (read or hit), a settled prefetch, a `refilter` that leaves the
 current file shown, `FacesDone` and a failed folder rename (`rename_ran`'s
 `Err` arm; a successful one reopens the folder, which refills the ring).
-`--no-prefetch` turns the ring off. A ring miss on a JPEG-only folder is the
+`--no-prefetch` turns the ring off, and the 1:1 crop's read ahead with it. A ring miss on a JPEG-only folder is the
 number the ring hides: with `--no-prefetch` the 50 MP Leica exports take
 about 115 ms p50 per page (`decode` about 100 ms at 1/8 scale) and the 26 MP
 Sony exports about 50 ms, against 9-13 ms p50 with the ring on at one press a
