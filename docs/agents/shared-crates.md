@@ -110,7 +110,7 @@ because `reject` comes before `pick`, so `p` still looked taken.
 - A stored override wins a key over a default action the user has not
   overridden (no usable stored override of its own): before the retries,
   `from_overrides` takes every key a usable override asks for off such an
-  action and logs the move at `warn`, naming the key and both actions. So a
+  action and logs the move at `warn`, naming the key and the displaced action (not the override that ends up with it, which only the retries settle). So a
   key a later version adds to `DEFAULTS` stays on the user's action, and the
   new default's action keeps its other keys or has none. The rule cannot tell
   a new default from an old one: `{"reject": ["p"]}` leaves `pick` without a

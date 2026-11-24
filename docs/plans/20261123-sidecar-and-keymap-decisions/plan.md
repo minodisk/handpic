@@ -132,7 +132,7 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 
 - [x] Step 4: a stored shortcut override wins over an un-overridden default (`fix(engine)`)
   - Done when:
-    - `Keymap::from_overrides` gives a stored override every key it asks for that is held by a default action with no usable stored override of its own. That action keeps its remaining default keys, or has none, and each such move is logged at `log::warn!` naming the key and both actions.
+    - `Keymap::from_overrides` gives a stored override every key it asks for that is held by a default action with no usable stored override of its own. That action keeps its remaining default keys, or has none, and each such move is logged at `log::warn!` naming the key and the displaced action (not the override that ends up with it, which only the retries settle; the log line is emitted before the retries).
     - Two overrides that want the same key are resolved as today (first in action order; the other applies in part or stays inactive).
     - An invalid or forbidden override still displaces nothing.
     - An action left without keys loads back the same way: `overrides()` never stores an empty key list (`parse_keys` refuses one), and `Keymap::from_overrides(Some(&keymap.overrides())) == keymap` holds for the new cases.
