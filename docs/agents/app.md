@@ -2772,9 +2772,11 @@ An index an earlier build kept under another folder is not picked up; pass
 `index::run_scan` blocks for the whole pass and has its own rayon pool. On
 `cx.background_spawn` it would hold one of GPUI's background threads, which
 the preview decode needs, for as long as the folder takes. `scan.rs` spawns a
-thread per scan; a new open cancels and joins the previous one, and the first
-scan joins the launch's eviction thread before it reconciles, so the
-`VACUUM` never races it.
+thread per scan; a new open cancels and joins the previous one, and every
+listing waits for the launch's eviction thread before it reconciles
+(`scan::Eviction`, a shared handle the first waiter joins under its lock, so
+a listing whose task was dropped before the join leaves the next one
+waiting), so the `VACUUM` never races it.
 
 ### The hot list is set before the scan's workers start (Measured)
 
@@ -2789,8 +2791,10 @@ committed batch was the 20 files of the strip's range around 199 plus 0 and 1
 a GPUI `Task` cancels it).
 
 - Rule: an index write from the view (`set_last_viewed`, `mark_viewed`) goes
-  through the writer on `cx.background_spawn`, one in flight (`viewed.rs`);
-  a failure is logged, never shown.
+  through the writer on `cx.background_spawn`, one in flight (`viewed.rs`),
+  the values pushed meanwhile kept per folder (`Latest` the latest file of
+  each, `Batches` the files of each), so leaving a folder while a write is
+  out does not lose its position; a failure is logged, never shown.
 - Rule: `Index::evict` drops a folder whose `opened_at` is over 30 days old
   with its `last_viewed`; seeding a test index by hand needs a current
   `opened_at`.
@@ -4404,7 +4408,9 @@ strip needed one because `uniform_list` is vertical only.
   first folder's watcher.
 - Rule: listings settle in order. Each one's background task first awaits the
   previous listing's `settled` signal (a oneshot kept on `Handpic`), then stops
-  the previous scan and joins the launch's eviction, then signals its own, so a
+  the previous scan and waits for the launch's eviction (`scan::Eviction`,
+  which every listing waits on itself, since a dropped sender resolves
+  `settled` too), then signals its own, so a
   second open never reconciles or scans while an earlier listing is still
   stopping the old scan or the eviction is still deleting rows.
 - Rule: `ListItem` puts its children in a block `div().w_full()`, so a tree

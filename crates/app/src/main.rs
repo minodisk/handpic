@@ -83,7 +83,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
-    thread::{self, JoinHandle},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -449,10 +449,10 @@ struct Handpic {
     thumbs: Thumbs,
     /// The strip spans the window, so this is the window's width.
     strip_width: f32,
-    /// The launch's eviction, which the first scan waits for.
-    eviction: Option<JoinHandle<()>>,
+    /// The launch's eviction, which every listing waits for.
+    eviction: scan::Eviction,
     /// Resolves once the latest listing has stopped the previous scan and
-    /// joined the eviction, which the next listing waits for first.
+    /// waited for the eviction, which the next listing waits for first.
     settled: Option<futures::channel::oneshot::Receiver<()>>,
     slots: ReadSlots,
     scan: Running,
@@ -594,7 +594,7 @@ struct Handpic {
     order: u64,
     watch: Arc<Watch>,
     resync: Resync,
-    last_viewed: Latest<(String, String)>,
+    last_viewed: Latest,
     viewed: Batches,
     dwell: Dwell,
     /// The running dwell clock; dropping it stops it.
@@ -735,7 +735,7 @@ impl Handpic {
             this.zoom_resized(cx);
         })
         .detach();
-        let eviction = index.as_ref().ok().map(|index| {
+        let eviction = scan::Eviction::new(index.as_ref().ok().map(|index| {
             let index = index.clone();
             thread::spawn(move || {
                 match index::lock(&index).evict(index::now_secs(), index::EVICT_POLICY) {
@@ -743,7 +743,7 @@ impl Handpic {
                     Err(e) => log::error!("failed to evict stale folders from the index: {e}"),
                 }
             })
-        });
+        }));
         // The scan's callbacks run on its own threads, which cannot touch the
         // entity; they only send, and this task applies on the main thread.
         let (events, mut received) = mpsc::unbounded();
@@ -3267,7 +3267,7 @@ impl Handpic {
         let reader = self.reader.clone();
         let previous = self.scan.retire();
         self.scan_status.clear();
-        let eviction = self.eviction.take();
+        let eviction = self.eviction.clone();
         let earlier = self.settled.take();
         let (settle, settled) = futures::channel::oneshot::channel::<()>();
         self.settled = Some(settled);
@@ -3288,9 +3288,7 @@ impl Handpic {
                     if let Some(previous) = previous {
                         previous.stop();
                     }
-                    if let Some(eviction) = eviction {
-                        let _ = eviction.join();
-                    }
+                    eviction.wait();
                     let _ = settle.send(());
                     // Watched before the listing, so a change during it is
                     // not missed; under `watching_lock`, so a later open's
@@ -4338,7 +4336,7 @@ impl Handpic {
         let (Some(dir), Some(path)) = (self.dir.clone(), self.current_path()) else {
             return;
         };
-        if let Some(value) = self.last_viewed.push((dir, path)) {
+        if let Some(value) = self.last_viewed.push(&dir, &path) {
             self.write_last_viewed(value, cx);
         }
     }

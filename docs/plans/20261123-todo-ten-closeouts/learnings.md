@@ -40,3 +40,25 @@
   start (`run_sidecars` with `Kind::Delete`) calls it too: its result ends
   through `trashed` and its failures are `Trash` lines, the same family as
   its redo.
+
+## Step 3
+
+- `Latest` is no longer generic: its one user pushed `(dir, path)`, and the
+  per-folder pending list needs the folder as the key, so `push(dir, path)`
+  follows `Batches`' shape (each folder once, in first-push order, the
+  latest file of each).
+- The launch eviction is `scan::Eviction` (`Arc<Mutex<Option<JoinHandle>>>`,
+  cloned into every listing's background task): the first waiter takes the
+  handle and joins it under the lock, so a second waiter blocks on the lock
+  until the join ends. `uitest.rs`'s `opens_with_no_folder` reads it through
+  `Eviction::is_finished`. The `settled` oneshot chain is unchanged.
+- `Eviction::is_finished` is `#[cfg(test)]`: only the UI test and the unit test read it, and clippy's `dead-code` failed the first `ci:local` run without it.
+- The first draft of `every_waiter_waits_for_the_eviction` deadlocked: it
+  called `is_finished` while a waiter held the lock through its join, so the
+  release was never sent (the run showed the test "running for over 60
+  seconds"). `is_finished` blocks while a listing joins; the test checks the
+  thread's own `done` flag before the release instead. The second
+  `ci:local` run was killed by the harness for low memory with that test
+  hanging (the steps before `test app` had passed, since it got that far;
+  only the output's last 30 lines were kept, all passing tests). The fix was
+  committed without another run, the PR's GitHub checks verifying it.

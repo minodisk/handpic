@@ -280,6 +280,34 @@ impl Status {
     }
 }
 
+/// The launch's eviction, which every listing waits for before it reconciles:
+/// the first waiter joins the thread under the lock, so a later one blocks
+/// until the eviction is over, whether or not an earlier listing's task got
+/// that far.
+#[derive(Clone, Default)]
+pub struct Eviction(Arc<Mutex<Option<JoinHandle<()>>>>);
+
+impl Eviction {
+    pub fn new(thread: Option<JoinHandle<()>>) -> Self {
+        Self(Arc::new(Mutex::new(thread)))
+    }
+
+    /// Block until the eviction has ended.
+    pub fn wait(&self) {
+        let mut thread = index::lock(&self.0);
+        if let Some(thread) = thread.take() {
+            let _ = thread.join();
+        }
+    }
+
+    #[cfg(test)]
+    pub fn is_finished(&self) -> bool {
+        index::lock(&self.0)
+            .as_ref()
+            .is_none_or(JoinHandle::is_finished)
+    }
+}
+
 /// The view's scan, shared with the app's quit handler, which can outlive the
 /// view, and the scans a re-listing took from it that are still stopping.
 #[derive(Clone, Default)]
@@ -654,8 +682,8 @@ fn run_faces_pass(
 #[cfg(test)]
 mod tests {
     use super::{
-        Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped, faces_threads_for, list,
-        natural_order, threads_for,
+        Eviction, Priorities, Running, STOP_TIMEOUT, Scan, Status, Stopped, faces_threads_for,
+        list, natural_order, threads_for,
     };
     use handpic_core::{Flag, scan::ScanFocus};
     use handpic_engine::{
@@ -673,6 +701,44 @@ mod tests {
         thread,
         time::Duration,
     };
+
+    #[test]
+    fn every_waiter_waits_for_the_eviction() {
+        let (release, held) = mpsc::channel::<()>();
+        let done = Arc::new(AtomicBool::new(false));
+        let eviction = Eviction::new(Some(thread::spawn({
+            let done = done.clone();
+            move || {
+                let _ = held.recv();
+                done.store(true, Ordering::SeqCst);
+            }
+        })));
+        let (ended, waited) = mpsc::channel();
+        for _ in 0..2 {
+            let (eviction, done, ended) = (eviction.clone(), done.clone(), ended.clone());
+            thread::spawn(move || {
+                eviction.wait();
+                ended.send(done.load(Ordering::SeqCst)).unwrap();
+            });
+        }
+        assert_eq!(
+            waited.recv_timeout(Duration::from_millis(100)),
+            Err(RecvTimeoutError::Timeout)
+        );
+        assert!(!done.load(Ordering::SeqCst));
+        release.send(()).unwrap();
+        assert_eq!(waited.recv_timeout(STOP_TIMEOUT), Ok(true));
+        assert_eq!(waited.recv_timeout(STOP_TIMEOUT), Ok(true));
+        assert!(eviction.is_finished());
+        eviction.wait();
+    }
+
+    #[test]
+    fn no_eviction_is_no_wait() {
+        let eviction = Eviction::default();
+        assert!(eviction.is_finished());
+        eviction.wait();
+    }
 
     #[test]
     fn a_stop_leaves_no_scan_on_the_status_line() {

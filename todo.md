@@ -719,22 +719,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 
 - [ ] On Windows, run the app with MCP on a test port as `docs/agents/app.md` prescribes. Rename a folder in the tree and, while the rename is in flight (a slow share helps), call `open_folder` on it: expect `A folder is being renamed; try again in a moment.`
 
-### App: the coalescing `last_viewed` writer can lose folder A's position when B is opened and paged first
-
-The coalescing `last_viewed` writer (`viewed::Latest`) keeps one pending value across folders. A position pushed in folder A while a write is out is replaced by B's first push if B is opened and paged before that write settles, so A reopens one file earlier. The Tauri `lastViewedWriter` had the same shape. Found in `gpui-tree-trash` Step 2's second-open review of `opened`. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. Files: `crates/app/src/viewed.rs`.
-
-#### TODO
-
-- [ ] Decide whether to key the pending value by folder (or flush on a folder switch), and fix the writer if so.
-
-### App: a second open started before the first listing joins the launch eviction can scan before the eviction runs
-
-The launch's eviction (`eviction`, joined by the first listing only) is not awaited by a second open started before the first listing joined it, so that listing's `Scan::prepare` may run before the eviction. It is only reachable by opening two folders within the eviction's run at launch. Found in `gpui-tree-trash` Step 2's concurrent-open guard. Plan: `docs/plans/_archived/20261113-gpui-tree-trash/plan.md`. File: `crates/app/src/main.rs` (`list`).
-
-#### TODO
-
-- [ ] Decide whether every listing should wait for the eviction (or the eviction should be a shared future), or accept the race as unreachable in practice.
-
 ### App: kept prefetch-ring entries keep their GPU texture
 
 #### Background

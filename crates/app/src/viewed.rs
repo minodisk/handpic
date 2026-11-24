@@ -5,37 +5,36 @@ use std::collections::HashSet;
 pub const VIEW_DWELL_MS: u64 = 500;
 
 /// Serializes the `set_last_viewed` writes: one in flight at a time, and only
-/// the latest value pushed meanwhile is written once it settles, so two
-/// writes cannot land out of order and a held-down arrow key collapses into a
-/// few. The Tauri frontend's `lastViewedWriter`.
-pub struct Latest<T> {
-    pending: Option<T>,
+/// the latest file pushed meanwhile for each folder is written once it
+/// settles, folder by folder in the order they were first pushed, so two
+/// writes cannot land out of order, a held-down arrow key collapses into a
+/// few, and a folder left while a write was out still gets its position. The
+/// Tauri frontend's `lastViewedWriter`, kept per folder.
+#[derive(Default)]
+pub struct Latest {
+    /// `(dir, path)`, each folder once, in the order first pushed.
+    pending: Vec<(String, String)>,
     in_flight: bool,
 }
 
-impl<T> Default for Latest<T> {
-    fn default() -> Self {
-        Self {
-            pending: None,
-            in_flight: false,
+impl Latest {
+    /// The `(dir, path)` to write now, `None` while a write is out.
+    pub fn push(&mut self, dir: &str, path: &str) -> Option<(String, String)> {
+        match self.pending.iter_mut().find(|(d, _)| d == dir) {
+            Some((_, latest)) => *latest = path.to_owned(),
+            None => self.pending.push((dir.to_owned(), path.to_owned())),
         }
-    }
-}
-
-impl<T> Latest<T> {
-    /// The value to write now, `None` while a write is out.
-    pub fn push(&mut self, value: T) -> Option<T> {
-        self.pending = Some(value);
         if self.in_flight { None } else { self.next() }
     }
 
-    /// The write out has ended, failed or not. The value to write next.
-    pub fn settled(&mut self) -> Option<T> {
+    /// The write out has ended, failed or not. The `(dir, path)` to write
+    /// next.
+    pub fn settled(&mut self) -> Option<(String, String)> {
         self.next()
     }
 
-    fn next(&mut self) -> Option<T> {
-        let value = self.pending.take();
+    fn next(&mut self) -> Option<(String, String)> {
+        let value = (!self.pending.is_empty()).then(|| self.pending.remove(0));
         self.in_flight = value.is_some();
         value
     }
@@ -151,21 +150,40 @@ mod tests {
         }
     }
 
+    fn at(dir: &str, path: &str) -> Option<(String, String)> {
+        Some((dir.into(), path.into()))
+    }
+
     #[test]
     fn latest_writes_at_once_when_idle() {
         let mut latest = Latest::default();
-        assert_eq!(latest.push("/d/a.ARW"), Some("/d/a.ARW"));
+        assert_eq!(latest.push("/d", "/d/a.ARW"), at("/d", "/d/a.ARW"));
     }
 
     #[test]
     fn latest_keeps_only_the_latest_value_while_one_is_in_flight() {
         let mut latest = Latest::default();
-        assert_eq!(latest.push("/d/a.ARW"), Some("/d/a.ARW"));
-        assert_eq!(latest.push("/d/b.ARW"), None);
-        assert_eq!(latest.push("/d/c.ARW"), None);
-        assert_eq!(latest.settled(), Some("/d/c.ARW"));
+        assert_eq!(latest.push("/d", "/d/a.ARW"), at("/d", "/d/a.ARW"));
+        assert_eq!(latest.push("/d", "/d/b.ARW"), None);
+        assert_eq!(latest.push("/d", "/d/c.ARW"), None);
+        assert_eq!(latest.settled(), at("/d", "/d/c.ARW"));
         assert_eq!(latest.settled(), None);
-        assert_eq!(latest.push("/e/a.ARW"), Some("/e/a.ARW"));
+        assert_eq!(latest.push("/e", "/e/a.ARW"), at("/e", "/e/a.ARW"));
+    }
+
+    #[test]
+    fn latest_keeps_each_folder_pushed_while_one_is_in_flight() {
+        let mut latest = Latest::default();
+        assert_eq!(latest.push("/x", "/x/a.ARW"), at("/x", "/x/a.ARW"));
+        assert_eq!(latest.push("/d", "/d/a.ARW"), None);
+        assert_eq!(latest.push("/e", "/e/a.ARW"), None);
+        assert_eq!(latest.push("/e", "/e/b.ARW"), None);
+        assert_eq!(latest.push("/d", "/d/b.ARW"), None);
+        assert_eq!(latest.settled(), at("/d", "/d/b.ARW"));
+        assert_eq!(latest.push("/e", "/e/c.ARW"), None);
+        assert_eq!(latest.settled(), at("/e", "/e/c.ARW"));
+        assert_eq!(latest.settled(), None);
+        assert_eq!(latest.push("/d", "/d/c.ARW"), at("/d", "/d/c.ARW"));
     }
 
     #[test]
