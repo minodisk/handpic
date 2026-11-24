@@ -117,7 +117,9 @@ not change.
       new model plan).
     - What stays from the first version: `allfaces` (`candidates`,
       `measured`, `measure_unless`, `counts`, `MAX_FACES`, the
-      `MAX_EYE_OFFSET` mesh-fit gate), the caller-owned preview decode
+      `MAX_EYE_OFFSET` mesh-fit gate, which also turns down a mesh
+      `eyes::mesh_trusted` distrusts or one under `EYES_MIN_PRESENCE`, as
+      the cue does), the caller-owned preview decode
       (`focus_cue_rgb_unless`), the one-pass eye crops
       (`partial::decode_crops`, `fullsharp::full_eye_sharpnesses`, which
       pass 2 keeps for the judged face's two eyes), the 640x448 input of
@@ -442,6 +444,15 @@ Made at plan approval (2026-11-23), each the recommended option:
 - The soft threshold is `LOW_BELOW`.
 - `Anyone soft` is included in the filter step.
 - The release PR is held until the last step is merged.
+
+Made by the user on 2026-11-24, after `main` added the face mesh presence
+rules (`eyes::mesh_trusted`, `EYES_MIN_PRESENCE`):
+
+- The all-faces counts apply the same rules as the face cue: a candidate
+  whose mesh is untrusted (a side face under `SIDE_FACE_PRESENCE`) or whose
+  presence is under `EYES_MIN_PRESENCE` is neither judged nor closed, and its
+  eyes are not measured for soft (`allfaces::measured`). The judged face
+  already follows them through the cue's EAR.
 
 Made by the user on 2026-11-24, after Step 1's measurement:
 

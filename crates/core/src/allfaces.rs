@@ -19,8 +19,12 @@
 //! not overlap the judged face (an IoU above `faces::NMS_THRESHOLD`), which is
 //! counted from the cue's own mesh instead. The largest come first, at most
 //! `MAX_FACES` faces per frame with the judged one. A candidate counts only
-//! when its mesh fits the face (`MAX_EYE_OFFSET`); the judged face always
-//! counts when the cue has its EAR. See the all-faces-check plan's
+//! when its mesh fits the face (`MAX_EYE_OFFSET`) and the model's presence
+//! logit backs it as it backs the cue's EAR: a side face's mesh
+//! `eyes::mesh_trusted` turns down, or a presence under
+//! `eyes::EYES_MIN_PRESENCE` (`eyes::presence_judges_eyes`), leaves the face
+//! uncounted and its eyes unmeasured. The judged face counts when the cue has
+//! its EAR, which the same two rules withhold. See the all-faces-check plan's
 //! `measurement.md`.
 //! Everything is in the preview's stored (unrotated) coordinates.
 
@@ -28,7 +32,9 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::candidate::{mesh_eye_centers, mesh_eye_offset, meshes_face};
-use crate::eyes::{mesh_of, more_closed_ear, EyeState, Eyes, Mesh};
+use crate::eyes::{
+    mesh_of, mesh_trusted, more_closed_ear, presence_judges_eyes, EyeState, Eyes, Mesh,
+};
 use crate::faces::{iou, Face, NMS_THRESHOLD};
 use crate::fullsharp::LOW_BELOW;
 use crate::sharpness::FACE_CONFIDENCE;
@@ -57,7 +63,7 @@ pub const GATE_LOW_RES_CONFIDENCE: f32 = 0.6;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FaceCounts {
     /// The faces judged: the cue's face when it has an EAR, and every
-    /// candidate whose mesh fits.
+    /// candidate `measured` accepts.
     pub judged: u32,
     /// Those whose more closed eye `Eyes::from_ear` reads as closed.
     pub closed: u32,
@@ -122,9 +128,14 @@ pub fn candidates(faces: &[Face], judged: Option<&Face>, limit: usize) -> Vec<Fa
     found
 }
 
-/// What `mesh` gives of `face`, when the mesh fits it (`MAX_EYE_OFFSET`) and
+/// What `mesh` gives of `face`, when the mesh is believed
+/// (`eyes::mesh_trusted`), its presence judges the eyes
+/// (`eyes::presence_judges_eyes`), it fits the face (`MAX_EYE_OFFSET`) and
 /// both its EAR and its eye centers are finite.
 pub fn measured(face: &Face, mesh: &Mesh) -> Option<Measured> {
+    if !mesh_trusted(face, mesh.presence) || !presence_judges_eyes(mesh.presence) {
+        return None;
+    }
     if mesh_eye_offset(face, &mesh.points)? > MAX_EYE_OFFSET {
         return None;
     }
@@ -176,7 +187,8 @@ pub fn counts(readings: &[Reading], full_read: bool) -> FaceCounts {
 mod tests {
     use super::*;
     use crate::eyes::{
-        EYES_CLOSED_EAR, EYES_MIN_FACE, LANDMARKS, LEFT_EYE_CONTOUR, RIGHT_EYE_CONTOUR,
+        EYES_CLOSED_EAR, EYES_MIN_FACE, EYES_MIN_PRESENCE, LANDMARKS, LEFT_EYE_CONTOUR,
+        RIGHT_EYE_CONTOUR, SIDE_FACE_EYE_DISTANCE, SIDE_FACE_PRESENCE,
     };
 
     fn face(x: f32, side: f32, score: f32) -> Face {
@@ -337,6 +349,41 @@ mod tests {
             ..f
         };
         assert!(measured(&empty, &on).is_none());
+    }
+
+    #[test]
+    fn a_mesh_the_presence_does_not_back_is_not_measured() {
+        let f = face(0.0, 100.0, 0.9);
+        let at = |presence: f32| Mesh {
+            presence,
+            ..mesh(f.left_eye, f.right_eye, 20.0, 6.0)
+        };
+        assert!(measured(&f, &at(EYES_MIN_PRESENCE)).is_some());
+        assert!(
+            measured(&f, &at(EYES_MIN_PRESENCE.next_down())).is_none(),
+            "under the presence floor the eyes are not judged"
+        );
+        assert!(measured(&f, &at(f32::NAN)).is_none());
+        // A side face: its eye landmarks 0.1 of the side apart.
+        let side = Face {
+            left_eye: (45.0, 40.0),
+            right_eye: (55.0, 40.0),
+            ..f
+        };
+        assert!(crate::eyes::eye_distance(&side).unwrap() < SIDE_FACE_EYE_DISTANCE);
+        let on_side = |presence: f32| Mesh {
+            presence,
+            ..mesh(side.left_eye, side.right_eye, 6.0, 2.0)
+        };
+        assert!(measured(&side, &on_side(SIDE_FACE_PRESENCE)).is_some());
+        assert!(
+            measured(&side, &on_side(SIDE_FACE_PRESENCE.next_down())).is_none(),
+            "a side face's mesh under the side face presence is not believed"
+        );
+        assert!(
+            measured(&f, &at(SIDE_FACE_PRESENCE.next_down())).is_some(),
+            "a frontal face's mesh is believed under it"
+        );
     }
 
     #[test]

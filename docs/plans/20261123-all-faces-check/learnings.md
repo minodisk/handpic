@@ -96,6 +96,17 @@
 - The first version's deferred "pass 2 about doubles" is resolved by this
   rework (the 640x448 run left pass 2) and was taken off the list below.
 
+- After `main` added the face mesh presence rules to the cue, the judged
+  face already followed them (it counts only with the cue's EAR, which they
+  withhold), but the other faces did not: `allfaces::measured` now turns
+  down an untrusted mesh and one under `EYES_MIN_PRESENCE` as well. On the
+  828 measured files it drops 9 faces (1 closed, 5 soft readings); see
+  measurement.md.
+- When the cue's mesh is under the presence floor but trusted, the judged
+  face keeps its eye centers, so `full_sharps` still measures its eyes on the
+  full JPEG though the counts ignore that reading (no EAR, no `Reading`).
+  It costs a full read only when no other face is measured; left as is.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under

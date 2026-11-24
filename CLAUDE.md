@@ -34,7 +34,8 @@ and over the cue's own whole-image search from `FACE_CONFIDENCE` without
 one; `candidates`: the other whole-image faces at
 `FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not overlapping the judged
 face, the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
-counted only within `MAX_EYE_OFFSET`; `counts`, the `FaceCounts` of faces
+counted only within `MAX_EYE_OFFSET` and, as the cue's EAR, never an
+untrusted one or one under the presence floor; `counts`, the `FaceCounts` of faces
 judged, closed by `EYES_CLOSED_EAR` and soft under `LOW_BELOW`, the soft
 count unknown without the full JPEG), which `scan::extract_face_counts`
 measures on one file outside pass 2 (the cue recomputed, the whole preview

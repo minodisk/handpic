@@ -168,6 +168,26 @@ one counts on the 640x448 detection its cue already runs.
   now: 0 differing values. `facechoice --check` (the stored
   `full_eye_sharp`): 0 mismatches of 146, 282, 300 and 100 files.
 
+## The presence rules on the other faces (2026-11-24)
+
+`main` added the face mesh presence rules to the cue (`eyes::mesh_trusted`,
+`EYES_MIN_PRESENCE`); `allfaces::measured` now applies them to the other
+faces too. `handpic-cli allfaces` (release, 4 threads) on the same 828 files,
+built from `79b9b3ee` (before) and with the rule (after). Totals over the
+folder's files, before -> after:
+
+| Folder | Files changed | Faces judged | Closed | Soft | Frames with a closed face | Frames with a soft face |
+| --- | --- | --- | --- | --- | --- | --- |
+| `2026-02-01` | 1 | 101 -> 100 | 14 -> 13 | 14 -> 13 | 12 -> 12 | 12 -> 12 |
+| `2026-09-19` | 4 | 275 -> 271 | 23 -> 23 | 44 -> 42 | 21 -> 21 | 42 -> 40 |
+| `2026-11-07` slice | 3 | 354 -> 351 | 63 -> 63 | 115 -> 113 | 57 -> 57 | 89 -> 87 |
+| `2026-10-03` first 100 | 1 | 109 -> 108 | 41 -> 41 | 46 -> 46 | 33 -> 33 | 37 -> 37 |
+
+Nine faces in nine files left the count, one per file: one closed reading
+(`2026-02-01/L1005758.DNG`, 2 closed -> 1) and five soft ones. No frame
+lost its only closed face; four frames lost their only soft face
+(`2026-09-19/_DSC1939`, `_DSC3859`, `2026-11-07/_DSC1504`, `_DSC1585`).
+
 ## The low-resolution input
 
 The gate count of every AF frame of `2026-09-19` (282), the `2026-11-07`
