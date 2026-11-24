@@ -1384,12 +1384,43 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 #### Background
 
-`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency). `todo-four-closeouts` (`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`) saw it exceed the limit: on #1272 the "Lint and test the app" step had passed (1103 tests) and the job was cancelled in "Bundle and check Handpic.app", which recompiles the gpui crates, and a rerun passed. The same job was also the last to finish on #1256 and #1260.
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency). `todo-four-closeouts` (`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`) saw it exceed the limit: on #1272 the "Lint and test the app" step had passed (1103 tests) and the job was cancelled in "Bundle and check Handpic.app", which recompiles the gpui crates, and a rerun passed. The same job was also the last to finish on #1256 and #1260. `todo-ten-closeouts` (`docs/plans/_archived/20261123-todo-ten-closeouts/plan.md`) saw it again: the `app (macos-latest)` job was cancelled at the 30-minute limit on #1267 and #1286, and a rerun passed at 28m33s, 1m27s under the limit. So a cold-cache run now exceeds 30 minutes more often than not, and the limit is no longer a margin to watch but a recurring failure.
 
 #### TODO
 
 - [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
-- [ ] Raise the job's `timeout-minutes` in `.github/workflows/ci.yml` or avoid the bundle step's second gpui build. Done when a cold-cache macOS app job finishes inside its limit.
+- [ ] Raise the job's `timeout-minutes` in `.github/workflows/ci.yml` or avoid the bundle step's second gpui build (the 28m33s pass leaves no room to wait). Done when a cold-cache macOS app job finishes inside its limit on three consecutive PRs.
+
+---
+
+### App: real-device check of the default window's centering on the visible area (todo-ten-closeouts)
+
+#### Background
+
+`todo-ten-closeouts` Step 5 replaced `Bounds::centered` for the default window with `session::default_bounds(primary, workspace)`, which centers 1600x1000 in the primary display's visible area. On Windows (`cfg!(windows)` in `window_placement`) it subtracts the visible area's offset from the display's corner, because GPUI's Windows backend hands the bounds to `SetWindowPlacement` as workspace coordinates. The earlier measurement (one 5120x1440 display, a 62 px left taskbar) put the window 93 px right of the display's center: 31 px (the visible area's center offset) plus the taskbar's 62 px. The unit tests in `crates/app/src/session.rs` and the PR's GitHub checks cover the formula; the window's real rectangle was never read, because no local build was made on that host. Plan: `docs/plans/_archived/20261123-todo-ten-closeouts/plan.md`.
+
+Files: `crates/app/src/session.rs` (`default_bounds`), `crates/app/src/main.rs` (`window_placement`), `docs/agents/app.md` ("A launch restores the last folder and the window").
+
+#### TODO
+
+- [ ] On Windows 11, with no `windowBounds` used (`--auto 3 <folder>`, a fresh `--settings` store), open the app with the taskbar at the bottom and read the window's outer rectangle (`GetWindowRect` or a screenshot). Expect the 1600x1000 client centered in the visible area (the display less the taskbar), within the frame's few px.
+- [ ] On Windows 11, repeat with the taskbar docked left. Expect the window centered in the visible area, 31 px right of the display's center, no longer 93 px right of it.
+- [ ] Record the result under "A launch restores the last folder and the window" in `docs/agents/app.md`, replacing "The fixed default is not measured on the host yet". If the window is off-center, file a fix item.
+
+---
+
+### App: re-measure the prefetch ring after the wrap (todo-ten-closeouts)
+
+#### Background
+
+`todo-ten-closeouts` Step 4 made `prefetch::neighbours` wrap like the pager (`(index + 1) % len`, `(index + len - 1) % len`), so the ring also holds the neighbour across the first / last file. The unit tests cover the logic. The step's `--auto 60` re-run was skipped on the user's instruction (a slow host), so the numbers under "A prefetch hit leaves only the frame" in `docs/agents/app.md` are still marked as from before the wrap (57 of 60 hits). Plan: `docs/plans/_archived/20261123-todo-ten-closeouts/plan.md`.
+
+Files: `crates/app/src/prefetch.rs`, `docs/agents/app.md`.
+
+#### TODO
+
+- [ ] On the 20-file compare folders with a release build and a warm index, run `--auto 60` with the ring on and again under `--no-prefetch`. Count the `source=prefetch` hits (expect 60 of 60, against 57 before the wrap) and read p50 / p95 `keypressToPixels`.
+- [ ] Record the hit count and p50 / p95 under "A prefetch hit leaves only the frame" in `docs/agents/app.md`, replacing the "from before the wrap" note.
 
 ---
 
