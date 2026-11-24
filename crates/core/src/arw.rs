@@ -63,6 +63,10 @@ const TAG_LEICA_FOCUS_DISTANCE: u16 = 0x0304;
 /// container's byte order.
 const LEICA_HEADER: &[u8] = b"LEICA\0";
 const LEICA_HEADER_LEN: usize = 8;
+/// Leica MakerNote `PreviewImage`, an UNDEFINED JPEG whose value is its file
+/// offset: 1472x976 on the M (Typ 240) and the M Monochrom (Typ 246), whose
+/// strips hold only a 160x120 one.
+const TAG_LEICA_PREVIEW_IMAGE: u16 = 0x0300;
 /// Sigma MakerNote AF point, `SHORT[2]` (x, y) written by the Sigma BF.
 const TAG_SIGMA_AF_POINT: u16 = 0x0147;
 /// A Sigma MakerNote is `SIGMA\0\0\0` plus two version bytes, then a plain IFD.
@@ -227,6 +231,42 @@ pub struct Shot {
     pub iso: Option<u32>,
 }
 
+/// A Leica MakerNote that runs past the buffer `parse_noted` was given: where
+/// it is, for a ranged read of its head that `FarNote::take` finishes the
+/// parse with (the M (Typ 240) / M Monochrom (Typ 246) note sits tens of MB
+/// into the file).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FarNote {
+    pub offset: usize,
+    pub length: usize,
+    little_endian: bool,
+    /// No strip JPEG reached `PREVIEW_MIN_WIDTH`, so the note's
+    /// `PreviewImage` may be taken (`take_note_preview`).
+    fallback: bool,
+}
+
+impl FarNote {
+    /// Read the note out of `head`, its first bytes, into `arw` as
+    /// `parse_noted` would have out of a whole file: `FocusDistance`, and the
+    /// `PreviewImage` unless it runs past `file_len`. A `head` that holds no
+    /// Leica IFD leaves `arw` as it is.
+    pub fn take(self, arw: &mut Arw, head: &[u8], file_len: u64) {
+        let Ok(Some((t, ifd))) = leica_note_ifd(head, self.little_endian) else {
+            return;
+        };
+        arw.shot.focus_distance_mm = ifd
+            .iter()
+            .find(|e| e.0 == TAG_LEICA_FOCUS_DISTANCE)
+            .and_then(|e| integer(&t, e));
+        let Some(e) = note_preview(&ifd).filter(|_| self.fallback) else {
+            return;
+        };
+        if (e.offset as u64).saturating_add(e.length as u64) <= file_len {
+            take_note_preview(arw, e);
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Arw {
     /// The small preview in IFD0 (Sony 1616x1080).
@@ -362,7 +402,9 @@ fn maker_note_ifd(t: &Tiff, entries: &[Entry], make: Option<&str>) -> Result<Opt
         return Ok(None);
     };
     let (at, count) = (entry.1 as usize, entry.3 as usize);
-    if count <= 4 {
+    // A Leica note is never a Sony one, and the M (Typ 240)'s lies past the
+    // bounded prefix, which must not fail the parse (`FarNote`).
+    if count <= 4 || is_leica(make) {
         // Too short to hold an IFD, and such a value is inline anyway.
         return Ok(None);
     }
@@ -613,6 +655,12 @@ fn sigma_af_point(
 }
 
 pub fn parse(buf: &[u8]) -> Result<Arw> {
+    Ok(parse_noted(buf)?.0)
+}
+
+/// `parse`, plus the Leica MakerNote it would take the preview from when
+/// that note's IFD lies past `buf`.
+pub fn parse_noted(buf: &[u8]) -> Result<(Arw, Option<FarNote>)> {
     let t = &Tiff::new(buf, 0, buf.len())?;
     let (ifd0, next) = read_ifd(t, t.u32(4)? as usize)?;
 
@@ -666,6 +714,7 @@ pub fn parse(buf: &[u8]) -> Result<Arw> {
     // by size: the largest is the 1:1 tier, and the smallest one wide enough
     // for the preview pane is the preview (skipping tiny thumbnails), falling
     // back to the 1:1 JPEG when nothing else qualifies.
+    let mut fallback = false;
     let (preview, full) = if preview.is_none() && full.is_none() && !strips.is_empty() {
         let area = |s: &(Embedded, u32, u32)| u64::from(s.1) * u64::from(s.2);
         let big = strips.iter().max_by_key(|s| area(s)).map(|s| s.0);
@@ -674,6 +723,7 @@ pub fn parse(buf: &[u8]) -> Result<Arw> {
             .filter(|s| s.1 >= PREVIEW_MIN_WIDTH)
             .min_by_key(|s| area(s))
             .map(|s| s.0);
+        fallback = small.is_none();
         (small.or(big), big)
     } else {
         match (preview, full) {
@@ -682,13 +732,84 @@ pub fn parse(buf: &[u8]) -> Result<Arw> {
         }
     };
 
-    Ok(Arw {
+    let leica = is_leica(shot.make.as_deref());
+    let mut arw = Arw {
         preview,
         full,
         orientation,
         shot,
         hevc: false,
-    })
+    };
+    let mut far = None;
+    if leica {
+        if let Some((at, count)) = maker_note_at(t, &ifd0)? {
+            let end = at.saturating_add(count);
+            if end > buf.len() {
+                far = Some(FarNote {
+                    offset: at,
+                    length: count,
+                    little_endian: t.little_endian(),
+                    fallback,
+                });
+            } else if fallback {
+                if let Ok(Some((_, ifd))) = leica_note_ifd(&buf[at..end], t.little_endian()) {
+                    if let Some(e) = note_preview(&ifd) {
+                        take_note_preview(&mut arw, e);
+                    }
+                }
+            }
+        }
+    }
+    Ok((arw, far))
+}
+
+fn is_leica(make: Option<&str>) -> bool {
+    make.is_some_and(|m| m.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("LEICA")))
+}
+
+/// The MakerNote's file offset and length, from IFD0's ExifIFD.
+fn maker_note_at(t: &Tiff, ifd0: &[Entry]) -> Result<Option<(usize, usize)>> {
+    let Some((at, _)) = find(ifd0, TAG_EXIF_IFD) else {
+        return Ok(None);
+    };
+    let (exif_ifd, _) = read_ifd(t, at as usize)?;
+    Ok(find(&exif_ifd, TAG_MAKER_NOTE).map(|(at, count)| (at as usize, count as usize)))
+}
+
+/// A Leica MakerNote's IFD, out of `note`, the note's bytes from its start
+/// (the offsets in it are the file's). `None` for another maker's note; an
+/// error when `note` ends before its header or IFD does.
+fn leica_note_ifd(note: &[u8], little_endian: bool) -> Result<Option<(Tiff<'_>, Vec<Entry>)>> {
+    let header = note
+        .get(..LEICA_HEADER.len())
+        .ok_or_else(|| anyhow!("Leica MakerNote header out of range"))?;
+    if header != LEICA_HEADER {
+        return Ok(None);
+    }
+    let t = Tiff::with_order(note, 0, note.len(), little_endian)?;
+    let (ifd, _) = read_ifd(&t, LEICA_HEADER_LEN)?;
+    Ok(Some((t, ifd)))
+}
+
+/// A Leica MakerNote IFD's `PreviewImage`.
+fn note_preview(ifd: &[Entry]) -> Option<Embedded> {
+    ifd.iter()
+        .find(|e| e.0 == TAG_LEICA_PREVIEW_IMAGE && e.2 == TYPE_UNDEFINED && e.3 > 0)
+        .map(|e| Embedded {
+            offset: e.1 as usize,
+            length: e.3 as usize,
+            codec: Codec::Jpeg,
+        })
+}
+
+/// Take a Leica MakerNote's `PreviewImage` as both tiers of an `arw` whose
+/// strip JPEGs all fall short of `PREVIEW_MIN_WIDTH`, when it is longer in
+/// bytes than the largest of them (no tag gives its pixel size).
+fn take_note_preview(arw: &mut Arw, e: Embedded) {
+    if arw.full.is_none_or(|f| e.length > f.length) {
+        arw.preview = Some(e);
+        arw.full = Some(e);
+    }
 }
 
 impl Arw {
@@ -698,7 +819,7 @@ impl Arw {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// Serialize one IFD: entry count, the entries, and a null next-IFD link.
@@ -1422,6 +1543,127 @@ mod tests {
         assert_eq!(shot.focus_distance_mm, Some(921));
         assert!(shot.focus.is_none());
         assert!(shot.af_tracking.is_none() && shot.focus_frame.is_none());
+    }
+
+    /// The offset and length of the 160x120 strip JPEG in `leica_dng`'s IFD0.
+    pub(crate) const LEICA_STRIP: (usize, usize) = (2048, 100);
+    /// The `FocusDistance` of `leica_dng`'s note.
+    pub(crate) const LEICA_DISTANCE: u32 = 921;
+
+    /// A Leica-made little-endian DNG like the M (Typ 240)'s: IFD0 holds the
+    /// `LEICA_STRIP` JPEG, the SubIFDs `subs`, and a Leica MakerNote at
+    /// `note_at` the `LEICA_DISTANCE` and a `PreviewImage` of `preview_len`
+    /// bytes at `preview_at`. The file ends with the note.
+    pub(crate) fn leica_dng(
+        subs: &[Vec<(u16, u16, u32, u32)>],
+        note_at: usize,
+        preview_at: usize,
+        preview_len: usize,
+    ) -> Vec<u8> {
+        let make = b"Leica Camera AG\0";
+        let ifd0 = |exif_at: usize| {
+            let (strip_at, strip_len) = LEICA_STRIP;
+            let mut e = strip_entries(
+                160,
+                120,
+                PHOTOMETRIC_YCBCR,
+                strip_at as u32,
+                strip_len as u32,
+            );
+            e.push((
+                TAG_MAKE,
+                TYPE_ASCII,
+                make.len() as u32,
+                (exif_at + ifd_len(1)) as u32,
+            ));
+            e.push((TAG_EXIF_IFD, TYPE_LONG, 1, exif_at as u32));
+            e
+        };
+        let exif_at = tiff_with_sub_ifds(&ifd0(0), subs).len();
+        let note = leica_note(&[
+            (
+                TAG_LEICA_PREVIEW_IMAGE,
+                TYPE_UNDEFINED,
+                preview_len as u32,
+                preview_at as u32,
+            ),
+            (TAG_LEICA_FOCUS_DISTANCE, TYPE_LONG, 1, LEICA_DISTANCE),
+        ]);
+        let mut buf = tiff_with_sub_ifds(&ifd0(exif_at), subs);
+        buf.extend_from_slice(&ifd(&[(
+            TAG_MAKER_NOTE,
+            TYPE_UNDEFINED,
+            note.len() as u32,
+            note_at as u32,
+        )]));
+        buf.extend_from_slice(make);
+        assert!(buf.len() <= LEICA_STRIP.0 && LEICA_STRIP.0 + LEICA_STRIP.1 <= note_at);
+        buf.resize(note_at, 0);
+        buf.extend_from_slice(&note);
+        buf
+    }
+
+    fn at(e: Option<Embedded>) -> Option<(usize, usize)> {
+        e.map(|e| (e.offset, e.length))
+    }
+
+    #[test]
+    fn a_leica_note_preview_is_taken_over_a_thumbnail_strip() {
+        let note_at = 4096;
+        let buf = leica_dng(&[], note_at, note_at + 1024, 386_048);
+        let (a, far) = parse_noted(&buf).unwrap();
+        assert_eq!(far, None);
+        assert_eq!(at(a.preview), Some((note_at + 1024, 386_048)));
+        assert_eq!(at(a.full), Some((note_at + 1024, 386_048)));
+        assert_eq!(a.shot.focus_distance_mm, Some(LEICA_DISTANCE));
+
+        // A note JPEG no longer than the strip is not taken.
+        let buf = leica_dng(&[], note_at, note_at + 1024, LEICA_STRIP.1);
+        let a = parse(&buf).unwrap();
+        assert_eq!(at(a.preview), Some(LEICA_STRIP));
+        assert_eq!(at(a.full), Some(LEICA_STRIP));
+    }
+
+    #[test]
+    fn a_leica_note_is_ignored_when_a_strip_reaches_the_preview_width() {
+        let subs = [
+            strip_entries(1620, 1080, PHOTOMETRIC_YCBCR, 3000, 50),
+            strip_entries(640, 480, PHOTOMETRIC_YCBCR, 3100, 20),
+        ];
+        let note_at = 4096;
+        let buf = leica_dng(&subs, note_at, 5000, 386_048);
+        let (a, far) = parse_noted(&buf).unwrap();
+        assert_eq!(far, None);
+        assert_eq!(at(a.preview), Some((3000, 50)));
+        assert_eq!(at(a.full), Some((3000, 50)));
+
+        // Past the buffer too: the note gives its focus distance only.
+        let (mut a, far) = parse_noted(&buf[..note_at]).unwrap();
+        far.unwrap().take(&mut a, &buf[note_at..], 1 << 20);
+        assert_eq!(at(a.preview), Some((3000, 50)));
+        assert_eq!(at(a.full), Some((3000, 50)));
+        assert_eq!(a.shot.focus_distance_mm, Some(LEICA_DISTANCE));
+    }
+
+    #[test]
+    fn a_leica_note_past_the_buffer_is_handed_back() {
+        let note_at = 4096;
+        let buf = leica_dng(&[], note_at, note_at + 1024, 386_048);
+        let (mut a, far) = parse_noted(&buf[..note_at + 16]).unwrap();
+        let far = far.unwrap();
+        assert_eq!((far.offset, far.length), (note_at, buf.len() - note_at));
+        assert_eq!(at(a.preview), Some(LEICA_STRIP));
+        assert_eq!(a.shot.focus_distance_mm, None);
+
+        far.take(&mut a, &buf[note_at..], (note_at + 1024 + 386_048) as u64);
+        assert_eq!(at(a.preview), Some((note_at + 1024, 386_048)));
+        assert_eq!(at(a.full), Some((note_at + 1024, 386_048)));
+        assert_eq!(a.shot.focus_distance_mm, Some(LEICA_DISTANCE));
+
+        // A JPEG running past the end of the file is not taken.
+        let (mut a, _) = parse_noted(&buf[..note_at + 16]).unwrap();
+        far.take(&mut a, &buf[note_at..], (note_at + 1024) as u64);
+        assert_eq!(at(a.full), Some(LEICA_STRIP));
     }
 
     #[test]

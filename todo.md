@@ -494,19 +494,6 @@ PhotoLab's database holding the old folder.
 
 - [ ] On macOS, open a large RAW folder with a cold index in the app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
-### Core: the Leica M (Typ 240) DNGs show only their 160x120 JPEG in the fit view and the 1:1 view
-
-#### Background
-
-Seen on Windows 11 on 2026-11-22 (results in `docs/plans/_archived/20261122-windows-device-checks-orf-dng/results.md`): the three Leica M (Typ 240) DNG samples open, but the only JPEG `arw::parse` finds in them is 160x120 (`page` lines `jpegKB=9..13 px=160x120`). The fit view is that image upscaled, visibly blocky, and the 1:1 view shows it as a 160x120 picture in the middle of the canvas; the orientation is right in both. The app says nowhere that the preview is small. `arw::parse` looks only at IFDs with a JPEG offset and length (0x0201 / 0x0202) and at single-strip YCbCr `Compression=7` IFDs, so a preview stored another way (uncompressed, or in the MakerNote) would be missed; whether these files hold one was not checked. An ORF that holds only a 160x120 thumbnail is refused with `no embedded preview` instead (`docs/agents/raw-metadata-parsing.md`). What pass 2 reads from a 160x120 preview (sharpness, faces) was not looked at.
-Files: `crates/core/src/arw.rs` (`parse`, `strip_jpeg`, `PREVIEW_MIN_WIDTH`), `crates/app/src/zoom.rs`.
-
-#### TODO
-
-- [ ] Check with exiftool whether the Leica M (Typ 240) DNGs carry a preview larger than 160x120 that `arw::parse` misses, and read it if so. If they do not, decide what the app does with a thumbnail-only DNG: show it as now, say that the preview is small, or refuse it as the ORF reader does.
-
----
-
 ### Engine: a redo of Delete Sidecars… leaves a closed folder's rows judged
 
 #### Background

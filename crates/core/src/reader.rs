@@ -28,6 +28,10 @@ pub const HEAD_LIMIT: usize = 1 << 20;
 /// `PRVW` / `THMB` are neither a JPEG nor the HEVC `hevc::to_jpeg` decodes.
 pub const HEVC_UNSUPPORTED: &str = "HDR PQ (HEIF) CR3: its HEVC preview is not supported yet";
 
+/// How much of a Leica MakerNote past the prefix is read for its header and
+/// IFD: the M (Typ 240)'s 32 entries take 394 bytes.
+const NOTE_HEAD_LIMIT: usize = 4096;
+
 /// Read at most `limit` bytes from the start of `path`.
 pub fn read_head(path: &Path, limit: usize) -> Result<Vec<u8>> {
     head_of(&mut File::open(path)?, limit)
@@ -54,8 +58,9 @@ pub fn read_preview(path: &Path) -> Result<(Arw, Vec<u8>)> {
     })
 }
 
-/// Parse `buf` with the parser for `path`'s container, chosen by extension.
-fn parse_raw(path: &Path, buf: &[u8]) -> Result<Arw> {
+/// Parse `buf` with the parser for `path`'s container, chosen by extension,
+/// reading the head of a Leica MakerNote past `buf` from `file` by range.
+fn parse_raw(path: &Path, buf: &[u8], file: &mut File) -> Result<Arw> {
     let is = |ext: &str| {
         path.extension()
             .is_some_and(|e| e.eq_ignore_ascii_case(ext))
@@ -69,7 +74,27 @@ fn parse_raw(path: &Path, buf: &[u8]) -> Result<Arw> {
     } else if is("orf") {
         orf::parse(buf)
     } else {
-        arw::parse(buf)
+        let (mut arw, far) = arw::parse_noted(buf)?;
+        if let Some(far) = far {
+            take_far_note(file, &mut arw, far);
+        }
+        Ok(arw)
+    }
+}
+
+/// Finish `arw` with the preview of the Leica MakerNote `far`. A note that
+/// cannot be read leaves `arw` with its strip JPEGs, as before the note was
+/// read at all.
+fn take_far_note(file: &mut File, arw: &mut Arw, far: arw::FarNote) {
+    let Ok(file_len) = file.metadata().map(|m| m.len()) else {
+        return;
+    };
+    let mut head = vec![0u8; far.length.min(NOTE_HEAD_LIMIT)];
+    let read = file
+        .seek(SeekFrom::Start(far.offset as u64))
+        .and_then(|_| file.read_exact(&mut head));
+    if read.is_ok() {
+        far.take(arw, &head, file_len);
     }
 }
 
@@ -150,7 +175,8 @@ fn read_embedded(path: &Path, kind: Kind) -> Result<(Arw, Vec<u8>)> {
 /// short to parse. A JPEG's prefix is too short when it holds no complete
 /// Exif segment.
 pub fn read_metadata(path: &Path) -> Result<Arw> {
-    let head = read_head(path, HEAD_LIMIT)?;
+    let mut file = File::open(path)?;
+    let head = head_of(&mut file, HEAD_LIMIT)?;
     let bounded = head.len() == HEAD_LIMIT;
     if is_jpeg_file(path) {
         if bounded && !jpeg::has_exif(&head) {
@@ -158,9 +184,9 @@ pub fn read_metadata(path: &Path) -> Result<Arw> {
         }
         return jpeg::parse(&head);
     }
-    match parse_raw(path, &head) {
+    match parse_raw(path, &head, &mut file) {
         Ok(arw) => Ok(arw),
-        Err(_) if bounded => parse_raw(path, &std::fs::read(path)?),
+        Err(_) if bounded => parse_raw(path, &std::fs::read(path)?, &mut file),
         Err(e) => Err(e),
     }
 }
@@ -172,7 +198,7 @@ fn embedded_from(
     bounded: bool,
     kind: Kind,
 ) -> Result<(Arw, Vec<u8>, Codec)> {
-    let arw = parse_raw(path, buf)?;
+    let arw = parse_raw(path, buf, file)?;
     let e = kind.pick(&arw).ok_or_else(|| {
         if arw.hevc {
             anyhow!(HEVC_UNSUPPORTED)
@@ -606,6 +632,36 @@ mod tests {
         let (_, out) = read_full(&path).unwrap();
         assert_eq!(out, jpeg);
         assert!(read_metadata(&path).unwrap().preview.is_some());
+        std::fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn a_leica_dng_reads_its_maker_note_preview_by_range_past_the_prefix() {
+        use crate::arw::tests::{leica_dng, LEICA_DISTANCE, LEICA_STRIP};
+        let jpeg = [5u8; 4096];
+        let note_at = HEAD_LIMIT + 4096;
+        let jpeg_at = note_at + 4096;
+        let mut file = leica_dng(&[], note_at, jpeg_at, jpeg.len());
+        file.resize(jpeg_at, 0);
+        file.extend_from_slice(&jpeg);
+        let path = temp_file("far-note.DNG", &file);
+        let (a, out) = read_preview(&path).unwrap();
+        assert_eq!(out, jpeg);
+        assert_eq!(a.preview.map(|e| e.offset), Some(jpeg_at));
+        let (_, out) = read_full(&path).unwrap();
+        assert_eq!(out, jpeg);
+        let a = read_metadata(&path).unwrap();
+        assert_eq!(
+            a.full.map(|e| (e.offset, e.length)),
+            Some((jpeg_at, jpeg.len()))
+        );
+        assert_eq!(a.shot.focus_distance_mm, Some(LEICA_DISTANCE));
+
+        // A note JPEG past the end of the file leaves the strip JPEG.
+        file.truncate(jpeg_at + 16);
+        std::fs::write(&path, &file).unwrap();
+        let a = read_metadata(&path).unwrap();
+        assert_eq!(a.preview.map(|e| (e.offset, e.length)), Some(LEICA_STRIP));
         std::fs::remove_file(&path).unwrap();
     }
 

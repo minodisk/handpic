@@ -165,7 +165,7 @@ distance stays out of scope.
       `learnings.md`.
     - Commit type `perf(core)` or `feat(core)`.
 
-- [ ] Step 3: Read the Leica MakerNote preview of the M (Typ 240) DNGs, and
+- [x] Step 3: Read the Leica MakerNote preview of the M (Typ 240) DNGs, and
       close todo item 4
   - Done when:
     - The three samples

@@ -176,6 +176,14 @@ full-size JPEG, only the 1616x1080 preview (1920x1080 on the ZV-E10) and a
 160x120 thumbnail. Their 1:1 view shows that preview at its own size, as ORF
 does, not the sensor's pixels.
 
+The Leica M (Typ 240) and M Monochrom (Typ 246) are not listed (both were
+released before 2016), but their DNGs open. Their DNG previews hold only a
+160x120 JPEG, so Handpic takes the 1472x976 JPEG in their MakerNote as the
+preview and as the 1:1 view, which shows that JPEG at its own size, as ORF
+does. A folder of these files indexed before Handpic read that JPEG keeps its
+160x120 thumbnails and the values measured on them until the file changes or
+the cache is cleared (`Clear Cache` in the settings' Cache page).
+
 - **AF point**: the focus mark is drawn there, the 1:1 focus check opens
   centered on it, and sharpness is scored around it. Faces are then ignored,
   even when the point lies outside every face. Without one, there is no focus
