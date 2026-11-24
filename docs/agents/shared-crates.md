@@ -124,7 +124,7 @@ because `reject` comes before `pick`, so `p` still looked taken.
 - Source: `docs/plans/_archived/20260920-pick-shortcut-editable/learnings.md`,
   Step 1; `docs/plans/20260929-shortcut-override-partial-conflict/learnings.md`,
   Step 1; `docs/plans/_archived/20261011-performance-graph-overlay/learnings.md`,
-  Step 3; `docs/plans/20261123-sidecar-and-keymap-decisions/learnings.md`,
+  Step 3; `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/learnings.md`,
   Step 4.
 
 ### Volume listing: dedupe home by canonical path, plus a macOS-only ancestor rule (Hit)
@@ -389,6 +389,24 @@ the plan).
   longer keeps them until its next open. A sidecar whose move failed keeps
   its RAW's row, and a `Move to Trash` run clears nothing.
 - Source: `docs/plans/_archived/20261005-folder-sidecars/learnings.md`,
+  Step 2.
+
+### A bulk sidecar rewrite must skip what `reconcile_of` skips (Hit)
+
+`sidecar::reconcile_of` leaves a sidecar larger than `MAX_SIDECAR_BYTES`
+(4 MiB) alone. `foldersidecars::targets` (`Rewrite Sidecars from Index…`) did
+not apply that test, so the writer patched such a file and failed with `no
+rdf:Description element`. A new bulk writer over existing sidecars needs the
+same size check that `reconcile_of` makes, using the shared constant and
+`trash::sidecars_of` for the format's kinds. In `targets` it runs after the "no
+row" refusal and before `mark_dirty`. A folder whose rows are all oversize
+still opens the dialog on 0 files, and `Summary::skipped` and
+`Preview::skipped` count the oversize ones with the no-judgment ones.
+
+- Test: a file of filler at exactly `MAX_SIDECAR_BYTES` is not skipped, so the
+  writer patches it and fails. Build the boundary test from a real XMP packet
+  padded with whitespace before `<?xpacket end`.
+- Source: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/learnings.md`,
   Step 2.
 
 ### A new kind of primary file in a trash run: check `trash::restore`'s notion of "primary" (Hit)
