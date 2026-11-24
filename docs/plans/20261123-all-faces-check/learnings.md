@@ -158,6 +158,38 @@
   cargo builds were not run; the build, clippy and the tests are left to
   the PR's GitHub checks. Only `mise run fmt` ran.
 
+## Step 4: The group threshold setting and the rescan trigger
+
+- gpui-component's settings number field (`SettingField::number`) calls
+  its setter on every `InputEvent::Change` with the parsed value clamped
+  into `min..=max`, so typing `15` would first commit `2` (the `1` clamped),
+  and a lowered commit re-lists the folder. The field is a custom
+  `SettingField::render` over the view's own `InputState` drawn as
+  `NumberInput`, committed on Enter / blur like the pattern field.
+- The `InputState` carries no `step`, `min` or `max`: with them a blur
+  clamps the text before `InputEvent::Blur` (so `25` would commit `20`
+  where the plan wants it refused), and a step button replaces the text
+  silently (`replace_text_in_range_silent`, no `Change`). Without a step
+  `apply_number_step` emits `NumberInputEvent::Step`, which the view takes
+  (`settingsmodal::group_stepped`) and commits at once within 2 to 20.
+- The trigger on lowering is the watcher's path (`changed`): a re-listing
+  now when idle, else once the listing or scan under way ends. `Scan::start`
+  takes the threshold at the scan's start, so a value lowered during a
+  scan reaches pass 3 through that re-listing. `Scan::start` went to eight
+  arguments, so it carries `#[allow(clippy::too_many_arguments)]` like the
+  engine's runners.
+- The visibility rule (`group::shown`) has no production caller until
+  Steps 5 and 6; it and `Counts` carry `#[cfg_attr(not(test),
+  allow(dead_code))]` (an `expect` could go unfulfilled on `Counts` if the
+  allowed function counts as a live root).
+- The default stays 5, as the user decided; the deferred item about the
+  7-person `L1005161.DNG` counting 4 is left as it was.
+- `python3` from Git Bash hung on a heredoc edit (CLAUDE.md warns of this);
+  the edits went through the Edit tool instead.
+- Per the user's standing rule (2026-11-24), `mise run ci:local` and local
+  cargo builds were not run; the build, clippy and the tests are left to
+  the PR's GitHub checks. Only `mise run fmt` ran.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under
@@ -179,3 +211,16 @@
   eight spectators on the bench behind. A frame like that passes the gate
   and pays pass 3. Basis: Step 1 rework's look at the frames at 5 or more.
   Files: `crates/core/src/allfaces.rs` (`gate_count`).
+- Pending manual check (Step 4, any desktop platform, the running app): open
+  the settings (`ctrl+,`), Culling page. Expected: `Faces in a group photo`
+  under the auto-advance switch shows 5 on a fresh store; typing `3` and
+  Enter (or Tab away) applies it and, with a folder open, the status line
+  shows `checking faces` only when some frame's `faces_group` is 3 or 4;
+  `-` / `+` step by one within 2 to 20 and apply at once; typing `25` or
+  `1` and Enter shows the refusal in the status line and the field goes
+  back to the value in force; Escape in the field commits it and closes;
+  typed digits are not taken as shortcuts; the value survives a restart.
+  The step's checkbox was ticked on the automated criteria (unit and
+  scan-level tests, left to GHA). Basis: Step 4's number field, which no
+  test drives. Files: `crates/app/src/settingsview.rs`,
+  `crates/app/src/main.rs` (`set_group_min_faces`).

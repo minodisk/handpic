@@ -19,6 +19,7 @@ mod fitscale;
 mod focus;
 mod folderops;
 mod grayscale;
+mod group;
 mod history;
 mod hold;
 mod icons;
@@ -2863,6 +2864,7 @@ impl Handpic {
                 self.settings.auto_advance = on;
                 self.settings.writes.set("autoAdvance", on.into());
             }
+            Change::GroupMinFaces(n) => self.set_group_min_faces(n, cx),
             Change::SidecarFormat(format) => {
                 // A sidecar preview counted the sidecars of the format before.
                 if format != self.settings.format {
@@ -2932,6 +2934,24 @@ impl Handpic {
             | Change::OpenReleasePage(_)
             | Change::Closed => {}
         }
+    }
+
+    /// The group threshold changed: written, and the counts it shows change
+    /// for the rows already loaded. A lower one re-lists the open folder as a
+    /// change the watcher saw does, now or once the listing or scan under
+    /// way ends, so pass 3 runs on the rows that now meet it while passes 1
+    /// and 2 find nothing to do; another folder gets the same at its next
+    /// open. A higher one starts nothing.
+    fn set_group_min_faces(&mut self, n: u32, cx: &mut Context<Self>) {
+        let lowered = n < self.settings.group_min_faces;
+        log::info!("group threshold: {} -> {n}", self.settings.group_min_faces);
+        self.settings.group_min_faces = n;
+        self.settings.writes.set("groupMinFaces", n.into());
+        self.refilter(self.current_path(), true, None, cx);
+        if lowered && let Some(dir) = self.dir.clone() {
+            self.changed(&dir, cx);
+        }
+        cx.notify();
     }
 
     /// The settings' sidecar format switch: the next judgment is queued in
@@ -3494,6 +3514,7 @@ impl Handpic {
                     todo,
                     focus,
                     self.scan_priorities,
+                    self.settings.group_min_faces,
                     self.events.clone(),
                 );
                 self.scan.put(scan);

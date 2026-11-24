@@ -2247,6 +2247,10 @@ A change is emitted as a `settingsview::Change`; the window applies it in its
 `subscribe_in` callback, the setting changes through `apply_setting`, which
 `set_settings` runs too (the main view stays the owner of the values):
 `AutoAdvance` sets `settings.auto_advance` and writes `autoAdvance`,
+`GroupMinFaces` (the Culling page's number field under it) sets
+`settings.group_min_faces`, writes `groupMinFaces`, refilters and, when
+lowered, re-lists the open folder through the watcher's path (`changed`), so
+pass 3 runs on the rows that now meet it once any scan under way ends,
 `McpAllowDestructive` (the MCP page's one switch, off by default, which lets
 an MCP client run the recoverable destructive operations without the app's
 dialog) sets `settings.mcp_allow_destructive` and writes
@@ -2436,7 +2440,8 @@ not open.
   `LABEL_NAMES_NOTE` as its description, one item per color, then a
   `Lightroom language` item, the Tauri `aria-label`, holding the `Select`
   (`.small()`, 160 px wide)); the Culling page the auto-advance
-  switch; the Keyboard Shortcuts page one titled group per
+  switch and the `Faces in a group photo` `NumberInput` (`.small()`, 120 px
+  wide, `GROUP_NOTE` as its description); the Keyboard Shortcuts page one titled group per
   `settingsmodal::SHORTCUT_GROUPS` entry (`Filmstrip`, `Judgment`,
   `Preview`, `Panes`, `General`) of one item per action, then an untitled
   group holding only `Reset all`;
@@ -3069,7 +3074,8 @@ with an index, even when pass 1 has nothing to do, so rows below
 or `faces_todo` failed, so the view always learns pass 2 is over. The first
 non-empty batch's file names go to the log as `scan faces first:`.
 `FacesDone` carries how many files pass 3 runs on (`allfaces_todo` at
-`GROUP_MIN_FACES`, listed after pass 2 and skipped once canceled): with none
+the group threshold `Scan::start` was given, the `groupMinFaces` setting
+when the scan started, listed after pass 2 and skipped once canceled): with none
 it ends the scan and no pass 3 starts, else the status line turns to
 `checking faces 0/N` and `Event::AllFacesDone`, also sent on a cancel, ends
 it.

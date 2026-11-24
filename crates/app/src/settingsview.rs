@@ -9,7 +9,7 @@ use gpui_kit::component::{
     button::{Button, ButtonVariants},
     input::{
         Input, InputEvent, InputGroup, InputGroupAddon, InputGroupAddonAlignment, InputGroupButton,
-        InputState,
+        InputState, NumberInput, NumberInputEvent, StepAction,
     },
     kbd::Kbd,
     radio::Radio,
@@ -70,6 +70,8 @@ type Themes = SelectState<SearchableVec<SharedString>>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Change {
     AutoAdvance(bool),
+    /// A committed group threshold within the range and not the one in force.
+    GroupMinFaces(u32),
     SidecarFormat(SidecarFormat),
     /// The normalized names after a commit that changed them.
     LabelNames(LabelNames),
@@ -101,6 +103,10 @@ pub struct SettingsView {
     model: SettingsModal,
     /// The values shown, read from the main view on every open.
     auto_advance: bool,
+    group_min_faces: u32,
+    /// The Culling page's group threshold field, committed on Enter or blur
+    /// and at once on a step.
+    group_field: Entity<InputState>,
     format: SidecarFormat,
     keymap: Keymap,
     label_names: LabelNames,
@@ -165,6 +171,31 @@ impl SettingsView {
             }
         })
         .detach();
+        // No step, minimum or maximum on the state: the field emits its steps
+        // for `group_stepped`, and a blur does not clamp a refused value.
+        let group_field = cx.new(|cx| InputState::new(window, cx));
+        cx.subscribe_in(
+            &group_field,
+            window,
+            |this, _, event: &InputEvent, window, cx| {
+                if commits(event) {
+                    this.commit_group_field(window, cx);
+                }
+            },
+        )
+        .detach();
+        cx.subscribe_in(
+            &group_field,
+            window,
+            |this, field, event: &NumberInputEvent, window, cx| {
+                let NumberInputEvent::Step(action) = event;
+                let text = field.read(cx).value().to_string();
+                let up = matches!(action, StepAction::Increment);
+                let stepped = settingsmodal::group_stepped(this.group_min_faces, &text, up);
+                this.commit_group(&stepped.to_string(), window, cx);
+            },
+        )
+        .detach();
         let names: Vec<SharedString> = i18n::presets()
             .iter()
             .map(|preset| preset.name.clone().into())
@@ -199,6 +230,8 @@ impl SettingsView {
             focus: cx.focus_handle(),
             model: SettingsModal::default(),
             auto_advance: true,
+            group_min_faces: crate::group::DEFAULT,
+            group_field,
             format: SidecarFormat::default(),
             keymap: Keymap::defaults(),
             label_names: LabelNames::default(),
@@ -237,6 +270,9 @@ impl SettingsView {
             return;
         }
         self.auto_advance = settings.auto_advance;
+        self.group_min_faces = settings.group_min_faces;
+        let group = self.group_min_faces.to_string();
+        show(&self.group_field, &group, window, cx);
         self.format = settings.format;
         self.keymap = settings.keymap.clone();
         self.show_names(settings.names.clone(), window, cx);
@@ -344,6 +380,30 @@ impl SettingsView {
         cx.notify();
     }
 
+    /// The group threshold field committed, as a name field does.
+    fn commit_group_field(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let text = self.group_field.read(cx).value().to_string();
+        self.commit_group(&text, window, cx);
+    }
+
+    /// A new threshold within the range is handed to the main view; a
+    /// refused one shows its reason in the status line. The field shows the
+    /// threshold in force either way.
+    fn commit_group(&mut self, text: &str, window: &mut Window, cx: &mut Context<Self>) {
+        match settingsmodal::group_change(self.group_min_faces, text) {
+            Ok(Some(n)) => {
+                self.status = None;
+                self.group_min_faces = n;
+                cx.emit(Change::GroupMinFaces(n));
+            }
+            Ok(None) => {}
+            Err(e) => self.status = Some(e.into()),
+        }
+        let shown = self.group_min_faces.to_string();
+        show(&self.group_field, &shown, window, cx);
+        cx.notify();
+    }
+
     /// An example pattern button: it fills the field and commits.
     fn use_pattern(&mut self, pattern: &str, window: &mut Window, cx: &mut Context<Self>) {
         show(&self.pattern_field, pattern, window, cx);
@@ -388,7 +448,7 @@ impl SettingsView {
     fn editing(&self, window: &Window, cx: &gpui_kit::App) -> bool {
         self.name_fields
             .iter()
-            .chain([&self.pattern_field])
+            .chain([&self.pattern_field, &self.group_field])
             .any(|field| field.focus_handle(cx).is_focused(window))
     }
 
@@ -429,6 +489,8 @@ impl SettingsView {
                 // action propagates, so the key goes on to here.
                 if self.pattern_field.focus_handle(cx).is_focused(window) {
                     self.commit_pattern_field(cx);
+                } else if self.group_field.focus_handle(cx).is_focused(window) {
+                    self.commit_group_field(window, cx);
                 } else if self.editing(window, cx) {
                     self.commit_name_fields(window, cx);
                 }
@@ -707,16 +769,35 @@ impl SettingsView {
         )
     }
 
+    /// The auto-advance switch and, under it, the group threshold as a
+    /// number field over the view's own state, so a value is applied only
+    /// when committed.
     fn culling(&self, page: SettingPage, view: &Entity<Self>) -> SettingPage {
         let checked = self.auto_advance;
         let view = view.clone();
-        page.group(SettingGroup::new().item(SettingItem::new(
-            "Auto-advance after a star, reject or pick",
-            SettingField::switch(
-                move |_| checked,
-                move |_, cx| view.update(cx, |this, cx| this.flip_auto_advance(cx)),
-            ),
-        )))
+        let group_field = self.group_field.clone();
+        page.group(
+            SettingGroup::new()
+                .item(SettingItem::new(
+                    "Auto-advance after a star, reject or pick",
+                    SettingField::switch(
+                        move |_| checked,
+                        move |_, cx| view.update(cx, |this, cx| this.flip_auto_advance(cx)),
+                    ),
+                ))
+                .item(
+                    SettingItem::new(
+                        settingsmodal::GROUP_LABEL,
+                        SettingField::render(move |_, _, _| {
+                            NumberInput::new(&group_field)
+                                .small()
+                                .w(px(120.))
+                                .accessibility_label(settingsmodal::GROUP_LABEL)
+                        }),
+                    )
+                    .description(settingsmodal::GROUP_NOTE),
+                ),
+        )
     }
 
     /// One titled group per `SHORTCUT_GROUPS` entry, each holding one item per
