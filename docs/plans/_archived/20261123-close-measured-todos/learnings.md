@@ -152,3 +152,27 @@
   while zoomed to show the next file's crop without a wait. Step 4's
   checkbox was ticked on the automated criteria (unit tests and the ARW
   retake).
+
+## Manual checks after the wrap-up (2026-11-25)
+
+Both pending manual checks were run on Windows 11 with a release build of
+main at `0586a476`, each with a fresh `--index`; CPU load before each run was
+0-7 %.
+
+- Leica M (Typ 240) / M Monochrom (Typ 246), the four sample DNGs: every
+  `page` line reads `px=1472x976` (MP006646 `orientation=8`, decoded 920x610
+  in the portrait fit; the others `orientation=1`, decoded 1288x854); pass 1
+  and pass 2 finished with 0 errors. Turned by Orientation 8, the extracted
+  MP006646 JPEG has its sky on top, so the fit view is upright. `z` on each
+  file printed a `zoom` line (decode 2.9-4.1ms, keypressToPixels
+  2.6-13.1ms).
+- View-only JPEG folder (500 hardlinks of ten 12 MB 7805x6244 JPEGs),
+  `--auto 30`, read ahead on vs `--no-prefetch`, alternated twice:
+  `page` keypressToPixels p50 132.6 / 117.4ms vs 161.4 / 161.4ms, p95
+  201.5 / 242.3ms vs 232.9 / 241.2ms. Driven keys (held `→` for 5 s, then
+  zoomed paging and `z` after each settled page): `page` p50 117.1 vs
+  177.4ms, p95 249.7 vs 245.2ms, max 391.0 vs 365.5ms; `z` after a settled
+  page 7.6-14.9ms with the read ahead against 63.7-97.7ms without. Paging
+  is no slower with the read ahead, so no RAW-only gate is needed.
+  `--no-prefetch` also turns the preview ring off, so the `page` gap is
+  partly the ring's.
