@@ -279,6 +279,10 @@ fn extract_analysis_unless(
     }))
 }
 
+/// `cue_and_gate`'s answer: the cue, the faces the score falls back to, the
+/// gate count and the score taken on the cue's decode.
+type CueAndGate = (Cue, Vec<Face>, Option<u32>, Option<f64>);
+
 /// Pass 2's cue of `preview`, the faces its score falls back to and its gate
 /// count. With the AF point `focus` the cue's detection runs around it, the
 /// score needs no faces and the gate count takes a `faces::GATE_INPUT` search
@@ -292,7 +296,7 @@ fn cue_and_gate(
     orientation: u16,
     focus: Option<FocusLocation>,
     cancel: &AtomicBool,
-) -> Option<(Cue, Vec<Face>, Option<u32>, Option<f64>)> {
+) -> Option<CueAndGate> {
     match focus {
         Some(at) => {
             let (cue, _) = af_cue(preview, orientation, at, cancel)?;
@@ -608,6 +612,7 @@ fn whole_image_detection(preview: &[u8], orientation: u16) -> Option<Detection> 
 /// `detection` (the largest at or above `sharpness::FACE_CONFIDENCE`), on one
 /// full-size decode of `preview`. No detection or no such face is an unknown
 /// cue with no decode; a decode failure or a panic is an unknown cue.
+#[cfg(test)]
 fn whole_image_cue(
     preview: &[u8],
     orientation: u16,
@@ -1819,7 +1824,7 @@ mod tests {
             y: 2000,
         };
         let (got, runs, meshes) = runs_of(|| cue_and_gate(&preview, 1, Some(focus), &never));
-        let (cue, faces, gate) = got.unwrap();
+        let (cue, faces, gate, _) = got.unwrap();
         assert_eq!(
             (runs, meshes),
             ((1, 0, 0), 0),
@@ -1854,13 +1859,13 @@ mod tests {
         let (got, runs, _) = runs_of(|| cue_and_gate(&jpeg(640, 480), 1, None, &never));
         assert_eq!(runs, (0, 1, 0), "no search of its own");
         assert_eq!(
-            got.map(|(cue, _, gate)| (cue.face, gate)),
+            got.map(|(cue, _, gate, _)| (cue.face, gate)),
             Some((None, Some(0)))
         );
         let (got, runs, _) = runs_of(|| cue_and_gate(b"not a jpeg", 1, None, &never));
         assert_eq!(runs, (0, 0, 0));
         assert_eq!(
-            got.map(|(_, _, gate)| gate),
+            got.map(|(_, _, gate, _)| gate),
             Some(None),
             "a failed detection is unknown"
         );
@@ -2489,8 +2494,7 @@ mod tests {
         let shy = scored(FACE_CONFIDENCE.next_down(), 40.0);
         let faces = [small, large, shy];
         let found = whole(faces.to_vec());
-        let (cue, rgb) =
-            whole_image_cue_rgb(&jpeg(64, 48), 1, found.clone(), &never).unwrap();
+        let (cue, rgb) = whole_image_cue_rgb(&jpeg(64, 48), 1, found.clone(), &never).unwrap();
         assert_eq!(cue.face, Some(large));
         assert_eq!(cue.detection, found);
         let rgb = rgb.expect("the cue's decode");
