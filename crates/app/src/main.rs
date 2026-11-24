@@ -2939,7 +2939,8 @@ impl Handpic {
     /// The group threshold changed: written, and the counts it shows change
     /// for the rows already loaded, since the meta pane and the strip's
     /// closed-eyes mark read them through `group::shown` with it on the
-    /// redraw. A lower one re-lists the open folder as a
+    /// redraw, and the filter's `Anyone closed` / `Anyone soft` on the
+    /// refilter. A lower one re-lists the open folder as a
     /// change the watcher saw does, now or once the listing or scan under
     /// way ends, so pass 3 runs on the rows that now meet it while passes 1
     /// and 2 find nothing to do; another folder gets the same at its next
@@ -3568,7 +3569,12 @@ impl Handpic {
             self.judgments.get(path).unwrap_or(&unjudged),
             facts,
             mark::af_eye_state(focus),
-            focus.and_then(|f| f.eyes.eyes),
+            filter::EyesFacts {
+                state: focus.and_then(|f| f.eyes.eyes),
+                counts: focus.map_or_else(group::Counts::default, |f| {
+                    group::shown(&f.eyes, self.settings.group_min_faces)
+                }),
+            },
             filter::output_of(self.outputs.as_ref(), &self.outputs_listing, path),
         )
     }
