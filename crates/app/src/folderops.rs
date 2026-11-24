@@ -200,6 +200,8 @@ impl FolderOps {
 /// A message of a folder operation's run, sent from its thread into the
 /// view's channel.
 #[derive(Clone, Copy, Debug)]
+// Every variant reports a run's progress; the shared postfix is the meaning.
+#[allow(clippy::enum_variant_names)]
 pub enum Message {
     /// How far the sequencing run `run` got.
     SequenceProgress { run: u64, done: usize, total: usize },
