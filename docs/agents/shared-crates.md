@@ -356,6 +356,15 @@ camera file names like `DSC00001.ARW` across cards). Record the file's
 identity at trash time (on Unix, `(dev, ino)` via `MetadataExt`) alongside
 its trashed-to path, and require it to still match before renaming back.
 
+On Windows the undo restores in chunks (`trash::restore_chunked`, one
+`restore_all` per `CHUNK` items' RAWs, then one per their sidecars) and keeps
+`restore`'s outcome exactly: the two share the per-file rules and the
+`tally` of the results, a chunk leaves out a file whose destination exists or
+that the Trash no longer holds (one collision refuses the whole
+`restore_all`), a failed chunk call counts a file now at its destination as
+back and retries the rest one at a time, and a file of a renamed folder
+(`restore_to`) always goes one at a time.
+
 - Source: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md`,
   Steps 1-2.
 

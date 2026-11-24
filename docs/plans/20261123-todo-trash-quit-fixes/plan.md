@@ -159,7 +159,7 @@ Scope rules for every step:
     - Other constructors of `Trashed` are only in `trash.rs` itself (`run`,
       `trashed`, the tests).
 
-- [ ] Step 4: Undo of Move to Trash restores in chunks on Windows, with its timing recorded (item 5)
+- [x] Step 4: Undo of Move to Trash restores in chunks on Windows, with its timing recorded (item 5)
   - Done when:
     - On Windows, `trash::undo_run` restores a run in chunks of one shell
       operation each, not one operation per file, keeping `restore`'s rules:
