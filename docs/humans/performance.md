@@ -280,7 +280,7 @@ the output scale. Turning off fancy upsampling and using the fast integer
 IDCT did not change `decode` (96.6 to 99.9 ms median). The 10-file folder's
 p95 with the ring on is one such miss a run (n=8). Per-run numbers, the
 500-file folder and the conditions are in
-[`jpeg-preview.md`](../plans/20261123-todo-four-closeouts/jpeg-preview.md).
+[`jpeg-preview.md`](../plans/_archived/20261123-todo-four-closeouts/jpeg-preview.md).
 
 ## Folder scan throughput
 
@@ -879,7 +879,7 @@ those files at 286.6 -> 245.2ms on `2026-02-01` (72 files) and 226.5 ->
 211.3ms on `2026-09-05` (204 files), a median saving of 13.4 and 16.2ms per
 file; on those Leica M11-P DNGs the score did not change at all. Every other
 file is scored as before. See
-`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`.
+`docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`.
 
 The first pass writes the rows in small batches (10) as their thumbnails finish, so the
 thumbnails appear at the speed of the read and the thumbnail encode, and the

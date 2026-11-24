@@ -183,7 +183,7 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// 276 faced no-AF Leica DNGs of two real folders it did not move at all
 /// (per-burst Spearman 1.000 over 26 bursts); on previews of other makes the
 /// two lumas differ on about half the pixels and a window's score by up to
-/// about 1% (`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`).
+/// about 1% (`docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`).
 pub const FACES_VERSION: i64 = 13;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read

@@ -624,8 +624,17 @@ retried.
   Since `FACES_VERSION` 13 the sharpness score of such a file is taken on
   the luma of that RGB decode (`sharpness::score_gray`) instead of a
   grayscale decode of its own, which took back a median 13-16 ms per file
-  (`docs/plans/20261123-todo-four-closeouts/no-af-decode.md`); a file whose
-  RGB decode fails still scores through its own decode. A
+  (`docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`); a file whose
+  RGB decode fails still scores through its own decode. The 1.000
+  per-burst Spearman measured for it over 26 bursts of the `2026-02-01` /
+  `2026-09-05` Leica DNG folders is trivial: on Leica M11-P DNG previews
+  `candidate::luma` of mozjpeg's RGB output equals its grayscale (Y) output
+  on every pixel, so no score changed. On ARW, CR3, NEF, RAF and ORF
+  previews the two differ on about half the pixels (score 0.1-1.1% off),
+  and no real burst of faced no-AF frames of those makes exists on this
+  host, so their ranking is unchecked. Before extending the luma reuse to
+  another make, or to a file with a trusted AF point, run a ranking check on
+  its bursts and bump `FACES_VERSION`. A
   file with no face pays nothing, because `whole_image_cue` returns
   `Cue::unknown()` before any decode. The face-free frame itself stays
   Neutral: the sharpness score did not separate picks from non-picks
@@ -1488,6 +1497,17 @@ single file.
   claim and copied forward as one.
 - State what was actually measured next to the number, and say plainly what
   still needs a real-folder measurement.
+- Keep a run's raw output, or at least its logged sizes (the `page` line's
+  `decoded=` / `px=`), next to the plan before the scratchpad goes. A scale
+  or size derived from code (`fitscale::scale_for`) put the JPEG pages at the
+  wrong DCT scale and the file sizes at 37-60 MP where the logged fields said
+  36-50 MP. Warm the page cache with an untimed run before timed ones (a
+  first `features` run took 423 s against 119-140 s once the DNGs' full JPEGs
+  were cached). A fresh index on a large folder makes the scan's reads
+  contend with page reads (`read` 50-75 ms), so finish the scan, or discount
+  those runs, first. Compare per-file `analysis_ms` savings as medians of
+  per-file medians over alternated runs, because `full_eye_sharp`'s full-JPEG
+  read makes single files noisy.
 - For a copy or write benchmark the destination is a condition too. A nearly
   full, DRAM-less SATA SSD lost its write cache under sustained writes, so
   throughput fell run after run with identical settings (21.6 then 8.1 MB/s)
