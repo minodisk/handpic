@@ -478,12 +478,14 @@ pub enum FaceFocusItem {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "snake_case")]
 #[schemars(crate = "rmcp::schemars")]
 pub enum EyesItem {
     Open,
     Closed,
     Unknown,
+    AnyoneClosed,
+    AnyoneSoft,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, JsonSchema)]
@@ -536,7 +538,10 @@ pub struct FilterArgs {
     /// The `Face focus` items: `good`, `neutral`, `low`.
     #[serde(skip_serializing_if = "Option::is_none")]
     face_focus: Option<Vec<FaceFocusItem>>,
-    /// The `Eyes` items: `open`, `closed`, `unknown`.
+    /// The `Eyes` items: `open`, `closed`, `unknown` (the judged face's eye
+    /// state), `anyone_closed` and `anyone_soft` (at least one face with
+    /// closed or soft eyes by the all-faces counts, never a frame under the
+    /// group threshold).
     #[serde(skip_serializing_if = "Option::is_none")]
     eyes: Option<Vec<EyesItem>>,
     /// `output` and / or `no_output`; only when the folder offers them.
@@ -1271,7 +1276,12 @@ impl Companion {
         replaces its checks (an empty list unchecks it), a section left out keeps them, and \
         `reset` unchecks everything first. Within a section any checked item passes; across \
         sections all must. The output and EXIF sections take only what `get_view`'s \
-        `filter_offers` lists for the open folder. The current photo stays when the filter \
+        `filter_offers` lists for the open folder. The eyes section's `open`, `closed` and \
+        `unknown` read the judged face's eye state; `anyone_closed` and `anyone_soft` pass a \
+        photo where at least one face has closed or soft eyes by the all-faces counts \
+        (`get_photo`'s `faces_closed` / `faces_soft`), which a photo whose `faces_group` is \
+        under `get_settings`' `group_min_faces` never has, so they never pass it. The \
+        current photo stays when the filter \
         still shows it, else the nearest shown one becomes current. Returns the new view, as \
         `get_view` does (its `filter`)."
     )]
@@ -2104,6 +2114,15 @@ mod tests {
             filter_args(json!({ "reset": true })),
             Ok(json!({ "reset": true }))
         );
+    }
+
+    #[test]
+    fn filter_forwards_the_anyone_eyes_items() {
+        assert_eq!(
+            filter_args(json!({ "eyes": ["open", "anyone_closed", "anyone_soft"] })),
+            Ok(json!({ "eyes": ["open", "anyone_closed", "anyone_soft"] }))
+        );
+        assert!(filter_args(json!({ "eyes": ["anyoneclosed"] })).is_err());
     }
 
     #[test]

@@ -392,7 +392,12 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   `Eyes` section: `Open`, `Closed`, or `Unknown` for a file with no stored
   state, such as one with no face found, with a face under about 60 pixels,
   with a side face whose face mesh is not believed or a face mesh of very low
-  face presence, or not reached by the second pass yet), whether the file was exported
+  face presence, or not reached by the second pass yet; and `Anyone closed`
+  and `Anyone soft`, the frames where the third pass counted at least one face
+  with closed eyes, or with soft eyes, among all the faces it judged, which a
+  frame under the group number never is, nor one the third pass has not
+  reached yet; checked with `Open`, `Closed` or `Unknown`, a frame matching
+  any of them shows), whether the file was exported
   (the `Output` section, described below),
   camera, lens, aperture, shutter speed, ISO and focal length (grouped into
   ranges such as `24–35 mm`). The color

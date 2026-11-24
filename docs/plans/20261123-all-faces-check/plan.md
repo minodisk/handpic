@@ -395,7 +395,7 @@ not change.
     - The existing face focus icon and its color (`af_eye_state`) do not
       change.
 
-- [ ] Step 6: Filter by anyone's eyes, in the menu and over MCP (`handpic-app`, `handpic-engine`)
+- [x] Step 6: Filter by anyone's eyes, in the menu and over MCP (`handpic-app`, `handpic-engine`)
   - Done when:
     - The filter menu's `Eyes` section has an `Anyone closed` item and an
       `Anyone soft` item that pass a frame whose closed (soft) count is at

@@ -201,7 +201,9 @@ DxO PhotoLab.
   for the judged face, and the filter menu's `Face focus` section (`Good` / `Neutral` /
   `Low`) narrows the strip by the state, its `Eyes` section (`Open` / `Closed` / `Unknown`) by the stored eye
   state (a file without one, such as a shot with no face found, is
-  `Unknown`). A frame whose judged face (the one nearest the AF point, else
+  `Unknown`), and by its `Anyone closed` / `Anyone soft` items, the frames
+  where the third pass found at least one face with closed or soft eyes
+  (never a frame under the group number). A frame whose judged face (the one nearest the AF point, else
   the largest confident face) the same pass stored as `Closed` gets an
   amber eye-off icon at the cell's bottom-left, right of the face icon's
   place, filling in as the pass runs; on a frame that reached the group

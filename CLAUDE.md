@@ -336,15 +336,19 @@ members over `all` not rejected yet, stars and label kept),
 `set_settings`' rule, `FIELD_REFUSAL` and `RANGE_REFUSAL`) and `shown`, a frame's all-faces
 `Counts` as the app shows them: the stored counts when the stored gate
 count is at or above the threshold, else unknown, which the meta pane's
-count rows and the strip's closed-eyes mark read them through (the filter
-to follow); the window's
+count rows, the strip's closed-eyes mark and the filter's `Anyone closed` /
+`Anyone soft` read them through; the window's
 `set_group_min_faces` writes it, refilters and, on a lowering, re-lists the
 open folder as a watcher change does, so pass 3 picks up the rows that now
 meet it, a raise starting nothing,
 `src/filter.rs` the strip's filter (`FilterState` and `passes`, a port of
 `filter.ts`: flags, stars, labels,
 orientation, `Face focus`, `Eyes`, `Output` and the per-folder EXIF groups
-`src/exif.rs` builds (a port of `exif.ts`); `Stored`, the
+`src/exif.rs` builds (a port of `exif.ts`); the `Eyes` section's
+`EyesItem`s match an `EyesFacts`, the judged face's stored eye state
+(`Open`, `Closed`, `Unknown`) and the `group::shown` counts
+(`AnyoneClosed`, `AnyoneSoft`, a count of at least 1), a file passing
+when any checked item matches; `Stored`, the
 `filter_setting` rule over the stored `filter`, and back (`stored`,
 `setting`); `anchor_after_filter`, the
 file a refilter or a re-listing lands on; the listed files' `Facts` and
@@ -352,7 +356,8 @@ file a refilter or a re-listing lands on; the listed files' `Facts` and
 `src/menu.rs` the strip header's `Sort ▾` and `Filter ▾` menus (`sort_rows` and
 `filter_rows`, after `index.html`'s `#sort-menu` and `#filter-menu`
 without the `Face focus` help, the filter menu heading every section, its
-rating rows from 5 stars down and each kind its own lead; `apply`, what a
+rating rows from 5 stars down, its `Eyes` section ending in `Anyone closed`
+and `Anyone soft`, and each kind its own lead; `apply`, what a
 click on an item does, the window writing the changed sort or filter;
 `Menus`, which one is open), which the window draws as
 `deferred` / `anchored` popovers above their gpui-component `Button`s at

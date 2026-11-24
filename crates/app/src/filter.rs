@@ -5,7 +5,9 @@
 //! colors matches no item. `Face focus` partitions the files like the focus
 //! mark's states (`mark::af_eye_state`), a file the pass has not reached being
 //! `Neutral`; `Eyes` reads the AF face's stored eye state, a file without one
-//! being `Unknown`. A file whose export state is not known passes neither
+//! being `Unknown`, and the all-faces counts `group::shown` gives
+//! (`Anyone closed`, `Anyone soft`), a frame under the group threshold
+//! matching neither; a file passes it when any checked item matches. A file whose export state is not known passes neither
 //! `Output` item. An EXIF group's checked labels match the file's label in
 //! that group (`exif::exif_key`), a file without one failing it; the EXIF
 //! checks are per session and dropped when their label leaves the folder.
@@ -23,6 +25,7 @@ use serde_json::{Value, json};
 
 use crate::{
     exif::{self, Group, Groups},
+    group::Counts,
     judgment::State,
     mark::MarkState,
 };
@@ -81,22 +84,36 @@ pub fn orientation_of(tag: u16) -> Orientation {
 pub type AfEye = MarkState;
 
 /// One item of the `Eyes` section: the stored eye state, `Unknown` without
-/// one.
+/// one, or a frame where at least one face has closed (`AnyoneClosed`) or
+/// soft (`AnyoneSoft`) eyes by its all-faces counts, which a frame under the
+/// group threshold does not have.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EyesItem {
     Open,
     Closed,
     Unknown,
+    AnyoneClosed,
+    AnyoneSoft,
 }
 
 impl EyesItem {
-    pub fn of(eyes: Option<EyeState>) -> Self {
-        match eyes {
-            Some(EyeState::Open) => Self::Open,
-            Some(EyeState::Closed) => Self::Closed,
-            None => Self::Unknown,
+    fn matches(self, eyes: EyesFacts) -> bool {
+        match self {
+            Self::Open => eyes.state == Some(EyeState::Open),
+            Self::Closed => eyes.state == Some(EyeState::Closed),
+            Self::Unknown => eyes.state.is_none(),
+            Self::AnyoneClosed => eyes.counts.closed.is_some_and(|n| n > 0),
+            Self::AnyoneSoft => eyes.counts.soft.is_some_and(|n| n > 0),
         }
     }
+}
+
+/// What the `Eyes` section reads of a file: the judged face's stored eye
+/// state and the all-faces counts as `group::shown` gives them.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EyesFacts {
+    pub state: Option<EyeState>,
+    pub counts: Counts,
 }
 
 /// One item of the `Output` section: whether a file has an export.
@@ -248,6 +265,8 @@ impl Stored {
                 "open" => Some(EyesItem::Open),
                 "closed" => Some(EyesItem::Closed),
                 "unknown" => Some(EyesItem::Unknown),
+                "anyone_closed" => Some(EyesItem::AnyoneClosed),
+                "anyone_soft" => Some(EyesItem::AnyoneSoft),
                 _ => None,
             }),
         }
@@ -292,10 +311,12 @@ pub const CANDIDATES: [(AfEye, &str); 3] = [
     (MarkState::Neutral, "neutral"),
     (MarkState::Low, "low"),
 ];
-pub const EYES: [(EyesItem, &str); 3] = [
+pub const EYES: [(EyesItem, &str); 5] = [
     (EyesItem::Open, "open"),
     (EyesItem::Closed, "closed"),
     (EyesItem::Unknown, "unknown"),
+    (EyesItem::AnyoneClosed, "anyone_closed"),
+    (EyesItem::AnyoneSoft, "anyone_soft"),
 ];
 
 pub const LABELS: &[&str] = &[
@@ -326,7 +347,7 @@ pub fn passes(
     judgment: &State,
     facts: Option<&Facts>,
     af_eye: AfEye,
-    eyes: Option<EyeState>,
+    eyes: EyesFacts,
     output: Option<OutputState>,
 ) -> bool {
     let flag = match judgment.flag {
@@ -345,7 +366,7 @@ pub fn passes(
         && (state.orientations.is_empty()
             || facts.is_some_and(|f| state.orientations.contains(&orientation_of(f.orientation))))
         && (state.candidates.is_empty() || state.candidates.contains(&af_eye))
-        && (state.eyes.is_empty() || state.eyes.contains(&EyesItem::of(eyes)))
+        && (state.eyes.is_empty() || state.eyes.iter().any(|item| item.matches(eyes)))
         && (state.outputs.is_empty() || output.is_some_and(|o| state.outputs.contains(&o)))
         && state.exif.iter().all(|(group, labels)| {
             exif::exif_key(facts.and_then(|f| f.exif.as_ref()), *group)
@@ -499,6 +520,14 @@ mod tests {
     use serde_json::json;
 
     const NEUTRAL: AfEye = MarkState::Neutral;
+    const NO_EYES: EyesFacts = EyesFacts {
+        state: None,
+        counts: Counts {
+            judged: None,
+            closed: None,
+            soft: None,
+        },
+    };
 
     #[allow(clippy::too_many_arguments)]
     fn state(
@@ -564,7 +593,7 @@ mod tests {
 
     /// `passes` with the judgment alone.
     fn judgment_passes(s: &FilterState, j: &State) -> bool {
-        passes(s, j, None, NEUTRAL, None, None)
+        passes(s, j, None, NEUTRAL, NO_EYES, None)
     }
 
     use FilterFlag::{Picked, Rejected, Untagged};
@@ -826,7 +855,7 @@ mod tests {
 
     fn shaped(s: &FilterState, tag: Option<u16>) -> bool {
         let f = tag.map(facts);
-        passes(s, &unjudged(), f.as_ref(), NEUTRAL, None, None)
+        passes(s, &unjudged(), f.as_ref(), NEUTRAL, NO_EYES, None)
     }
 
     fn shapes(o: &[Orientation]) -> FilterState {
@@ -877,7 +906,7 @@ mod tests {
         assert!(shaped(&s, Some(6)));
         assert!(!shaped(&s, Some(1)));
         let f = facts(6);
-        assert!(!passes(&s, &picked_two(), Some(&f), NEUTRAL, None, None));
+        assert!(!passes(&s, &picked_two(), Some(&f), NEUTRAL, NO_EYES, None));
     }
 
     fn items(c: &[AfEye]) -> FilterState {
@@ -885,7 +914,7 @@ mod tests {
     }
 
     fn eyed(s: &FilterState, af_eye: AfEye) -> bool {
-        passes(s, &unjudged(), Some(&facts(1)), af_eye, None, None)
+        passes(s, &unjudged(), Some(&facts(1)), af_eye, NO_EYES, None)
     }
 
     fn candidate() -> Focus {
@@ -1036,7 +1065,7 @@ mod tests {
     fn face_focus_ands_with_the_other_groups() {
         let flagged = state(&[Untagged], &[], &[], &[], &[Good], &[], &[]);
         assert!(eyed(&flagged, Good));
-        assert!(!passes(&flagged, &picked_two(), None, Good, None, None));
+        assert!(!passes(&flagged, &picked_two(), None, Good, NO_EYES, None));
     }
 
     fn eye_items(e: &[EyesItem]) -> FilterState {
@@ -1044,7 +1073,101 @@ mod tests {
     }
 
     fn eyes_pass(s: &FilterState, eyes: Option<EyeState>) -> bool {
+        counted_pass(s, eyes, Counts::default())
+    }
+
+    fn counted_pass(s: &FilterState, state: Option<EyeState>, counts: Counts) -> bool {
+        let eyes = EyesFacts { state, counts };
         passes(s, &unjudged(), Some(&facts(1)), NEUTRAL, eyes, None)
+    }
+
+    fn counts(closed: Option<u32>, soft: Option<u32>) -> Counts {
+        Counts {
+            judged: Some(6),
+            closed,
+            soft,
+        }
+    }
+
+    #[test]
+    fn anyone_closed_passes_a_closed_count_of_at_least_one() {
+        let s = eye_items(&[EyesItem::AnyoneClosed]);
+        assert!(counted_pass(&s, OPEN, counts(Some(1), Some(0))));
+        assert!(counted_pass(&s, None, counts(Some(3), None)));
+        assert!(!counted_pass(&s, CLOSED, counts(Some(0), Some(2))));
+        assert!(!counted_pass(&s, CLOSED, counts(None, Some(2))));
+        assert!(!counted_pass(&s, CLOSED, Counts::default()));
+    }
+
+    #[test]
+    fn anyone_soft_passes_a_soft_count_of_at_least_one() {
+        let s = eye_items(&[EyesItem::AnyoneSoft]);
+        assert!(counted_pass(&s, OPEN, counts(Some(0), Some(1))));
+        assert!(!counted_pass(&s, OPEN, counts(Some(2), Some(0))));
+        assert!(!counted_pass(&s, OPEN, counts(Some(2), None)));
+        assert!(!counted_pass(&s, None, Counts::default()));
+    }
+
+    #[test]
+    fn a_frame_under_the_group_threshold_matches_neither_anyone_item() {
+        let stored = |group| StoredEyes {
+            faces_group: Some(group),
+            faces_judged: Some(6),
+            faces_closed: Some(2),
+            faces_soft: Some(1),
+            ..StoredEyes::new(None, None, None, None, None)
+        };
+        for item in [EyesItem::AnyoneClosed, EyesItem::AnyoneSoft] {
+            let s = eye_items(&[item]);
+            let pass =
+                |group, min| counted_pass(&s, OPEN, crate::group::shown(&stored(group), min));
+            assert!(pass(5, 5), "{item:?}");
+            assert!(!pass(4, 5), "{item:?}");
+            assert!(!pass(6, 7), "{item:?}");
+        }
+    }
+
+    #[test]
+    fn the_anyone_items_or_with_the_eye_states() {
+        let s = eye_items(&[EyesItem::Open, EyesItem::AnyoneClosed]);
+        assert!(counted_pass(&s, OPEN, Counts::default()));
+        assert!(counted_pass(&s, CLOSED, counts(Some(1), None)));
+        assert!(!counted_pass(&s, CLOSED, counts(Some(0), None)));
+        let s = eye_items(&[EyesItem::Closed, EyesItem::AnyoneSoft]);
+        assert!(counted_pass(&s, CLOSED, Counts::default()));
+        assert!(counted_pass(&s, OPEN, counts(None, Some(1))));
+        assert!(!counted_pass(&s, OPEN, counts(Some(1), Some(0))));
+        let s = eye_items(&[EyesItem::Unknown, EyesItem::AnyoneClosed]);
+        assert!(counted_pass(&s, None, Counts::default()));
+        assert!(counted_pass(&s, OPEN, counts(Some(2), None)));
+        assert!(!counted_pass(&s, OPEN, counts(Some(0), None)));
+    }
+
+    #[test]
+    fn the_anyone_items_and_with_the_other_groups() {
+        let both = state(
+            &[Untagged],
+            &[],
+            &[],
+            &[],
+            &[Good],
+            &[EyesItem::AnyoneClosed],
+            &[],
+        );
+        let f = facts(1);
+        let blink = EyesFacts {
+            state: OPEN,
+            counts: counts(Some(1), None),
+        };
+        let check = |j: &State, af_eye| passes(&both, j, Some(&f), af_eye, blink, None);
+        assert!(check(&unjudged(), Good));
+        assert!(!check(&unjudged(), Low));
+        assert!(!check(&picked_two(), Good));
+        let clean = EyesFacts {
+            counts: counts(Some(0), None),
+            ..blink
+        };
+        assert!(!passes(&both, &unjudged(), Some(&f), Good, clean, None));
     }
 
     const OPEN: Option<EyeState> = Some(EyeState::Open);
@@ -1101,7 +1224,13 @@ mod tests {
             &[],
         );
         let f = facts(1);
-        let check = |j: &State, af_eye, eyes| passes(&both, j, Some(&f), af_eye, eyes, None);
+        let check = |j: &State, af_eye, state| {
+            let eyes = EyesFacts {
+                state,
+                counts: Counts::default(),
+            };
+            passes(&both, j, Some(&f), af_eye, eyes, None)
+        };
         assert!(check(&unjudged(), Good, CLOSED));
         assert!(!check(&unjudged(), Low, CLOSED));
         assert!(!check(&picked_two(), Good, CLOSED));
@@ -1113,7 +1242,7 @@ mod tests {
     }
 
     fn output_passes(s: &FilterState, output: Option<OutputState>) -> bool {
-        passes(s, &unjudged(), Some(&facts(1)), NEUTRAL, None, output)
+        passes(s, &unjudged(), Some(&facts(1)), NEUTRAL, NO_EYES, output)
     }
 
     use OutputState::{No, Yes};
@@ -1154,7 +1283,7 @@ mod tests {
     fn output_ands_with_the_other_groups() {
         let both = state(&[Untagged], &[], &[], &[], &[], &[], &[No]);
         let f = facts(1);
-        let check = |j: &State| passes(&both, j, Some(&f), NEUTRAL, None, Some(No));
+        let check = |j: &State| passes(&both, j, Some(&f), NEUTRAL, NO_EYES, Some(No));
         assert!(check(&unjudged()));
         assert!(!check(&picked_two()));
     }
@@ -1475,6 +1604,40 @@ mod tests {
         assert_eq!(Stored::from_setting(Some(&extra)), valid);
     }
 
+    #[test]
+    fn the_anyone_items_round_trip_through_the_stored_value() {
+        let s = eye_items(&[
+            EyesItem::AnyoneSoft,
+            EyesItem::Closed,
+            EyesItem::AnyoneClosed,
+        ]);
+        let stored = s.stored();
+        assert_eq!(
+            stored.eyes,
+            [
+                EyesItem::Closed,
+                EyesItem::AnyoneClosed,
+                EyesItem::AnyoneSoft
+            ]
+        );
+        let value = stored.setting();
+        assert_eq!(
+            value["eyes"],
+            json!(["closed", "anyone_closed", "anyone_soft"])
+        );
+        assert_eq!(Stored::from_setting(Some(&value)), stored);
+        let mut restored = FilterState::default();
+        restored.apply_stored(&Stored::from_setting(Some(&value)));
+        assert_eq!(restored, s);
+        assert_eq!(
+            Stored::from_setting(Some(
+                &json!({"eyes": ["anyone_soft", "anyone", "anyone_soft"]})
+            ))
+            .eyes,
+            [EyesItem::AnyoneSoft]
+        );
+    }
+
     fn exif_facts() -> Facts {
         Facts {
             exif: Some(Exif {
@@ -1500,7 +1663,7 @@ mod tests {
     }
 
     fn exif_passes(s: &FilterState, facts: Option<&Facts>) -> bool {
-        passes(s, &unjudged(), facts, NEUTRAL, None, None)
+        passes(s, &unjudged(), facts, NEUTRAL, NO_EYES, None)
     }
 
     #[test]

@@ -202,6 +202,8 @@ pub fn filter_rows(filter: &FilterState, output_known: bool, groups: &Groups) ->
         (EyesItem::Open, "Open"),
         (EyesItem::Closed, "Closed"),
         (EyesItem::Unknown, "Unknown"),
+        (EyesItem::AnyoneClosed, "Anyone closed"),
+        (EyesItem::AnyoneSoft, "Anyone soft"),
     ] {
         rows.push(item(Label::Text(text), Lead::None, Toggle::Eyes(eyes)));
     }
@@ -440,6 +442,8 @@ mod tests {
                 "Open",
                 "Closed",
                 "Unknown",
+                "Anyone closed",
+                "Anyone soft",
                 "---",
                 "# Output",
                 "Output",
@@ -580,6 +584,7 @@ mod tests {
         filter.orientations.insert(Orientation::Portrait);
         filter.candidates.insert(MarkState::Low);
         filter.eyes.insert(EyesItem::Unknown);
+        filter.eyes.insert(EyesItem::AnyoneSoft);
         filter.outputs.insert(OutputState::No);
         assert_eq!(
             checked(&filter_rows(&filter, true, &Groups::default())),
@@ -592,6 +597,7 @@ mod tests {
                 Toggle::Orientation(Orientation::Portrait),
                 Toggle::Candidate(MarkState::Low),
                 Toggle::Eyes(EyesItem::Unknown),
+                Toggle::Eyes(EyesItem::AnyoneSoft),
                 Toggle::Output(OutputState::No),
             ]
             .map(Action::Toggle)
@@ -789,7 +795,10 @@ mod tests {
             ]
         );
         let without_output = texts(&filter_rows(&FilterState::default(), false, &groups()));
-        let eyes = without_output.iter().position(|t| t == "Unknown").unwrap();
+        let eyes = without_output
+            .iter()
+            .position(|t| t == "Anyone soft")
+            .unwrap();
         assert_eq!(without_output[eyes + 1..], all[output + 1..]);
     }
 

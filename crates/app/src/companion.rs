@@ -3648,6 +3648,54 @@ mod tests {
     }
 
     #[test]
+    fn set_filter_checks_the_anyone_eyes_items_and_get_view_reports_them() {
+        let filter = FilterState {
+            eyes: HashSet::from([EyesItem::Open]),
+            ..FilterState::default()
+        };
+        let view = View {
+            filter: &filter,
+            ..view(&[])
+        };
+        let Ok(Some(Action::Menu(actions))) = ask(
+            "set_filter",
+            json!({ "eyes": ["anyone_soft", "open", "anyone_closed"] }),
+            &view,
+        ) else {
+            panic!("set_filter gave no menu clicks");
+        };
+        assert_eq!(
+            actions,
+            [
+                menu::Action::Toggle(Toggle::Eyes(EyesItem::AnyoneClosed)),
+                menu::Action::Toggle(Toggle::Eyes(EyesItem::AnyoneSoft)),
+            ]
+        );
+        let got = filtered(
+            json!({ "eyes": ["anyone_soft", "open", "anyone_closed"] }),
+            &view,
+        );
+        assert_eq!(
+            got.eyes,
+            HashSet::from([EyesItem::Open, EyesItem::AnyoneClosed, EyesItem::AnyoneSoft])
+        );
+        let after = View {
+            filter: &got,
+            ..self::view(&[])
+        };
+        assert_eq!(
+            get_view(&after)["filter"]["eyes"],
+            json!(["open", "anyone_closed", "anyone_soft"])
+        );
+        assert_eq!(
+            ask("set_filter", json!({ "eyes": ["anyone"] }), &view),
+            Err(
+                "eyes must be an array of open, closed, unknown, anyone_closed, anyone_soft".into()
+            )
+        );
+    }
+
+    #[test]
     fn set_filter_takes_an_empty_exif_section_as_unchecking_it() {
         let groups = lens_groups();
         let filter = FilterState {

@@ -214,6 +214,25 @@
   cargo builds were not run; the build, clippy and the tests are left to the
   PR's GitHub checks. Only `mise run fmt` ran.
 
+## Step 6: Filter by anyone's eyes, in the menu and over MCP
+
+- `EyesItem::of` mapped a file to exactly one item, a partition; with
+  `AnyoneClosed` / `AnyoneSoft` a frame can match several, so `of` became
+  `EyesItem::matches` and `passes` takes an `EyesFacts` (the stored eye
+  state and the `group::shown` counts) in place of the bare
+  `Option<EyeState>`. The view builds it with the threshold in force, so a
+  threshold change's existing refilter and pass 3's (already gated on an
+  `Eyes` item being checked) cover the new items with no extra plumbing.
+- The stored and MCP names are `anyone_closed` / `anyone_soft`; the engine's
+  `mcp::EyesItem` moved from `rename_all = "lowercase"` to `snake_case`,
+  which leaves `open`, `closed` and `unknown` as they were.
+- `companion.rs` needed no production change: `filter_of`, `items` and the
+  menu-click diff go through `filter::EYES` and `Toggle::Eyes(_)`, and the
+  coverage table maps `Toggle::Eyes(_)` as a whole.
+- Per the user's standing rule (2026-11-24), `mise run ci:local` and local
+  cargo builds were not run; the build, clippy and the tests are left to the
+  PR's GitHub checks. Only `mise run fmt` ran.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under
@@ -263,4 +282,19 @@
   step's checkbox was ticked on the automated criteria (unit tests, left to
   GHA). Basis: Step 5's meta rows and strip mark, which no test paints.
   Files: `crates/app/src/meta.rs`, `crates/app/src/mark.rs`,
+  `crates/app/src/main.rs`.
+- Pending manual check (Step 6, any desktop platform, the running app, a
+  real group photo folder such as the `2026-11-07` team-sport ARW folder):
+  open the folder, let the scan finish (`checking faces` gone from the
+  status line), then check `Filter ▾` > `Eyes` > `Anyone closed`. Expected:
+  the strip narrows to the frames whose meta pane `Faces with closed eyes`
+  is at least 1 (each a real blink on some face, or a false closed reading
+  worth noting), no frame whose `Similar faces` is under `Faces in a group
+  photo` stays; `Anyone soft` likewise against `Faces with soft eyes`;
+  adding `Open` widens the strip to those frames plus the open-eyed ones;
+  raising the number in the settings past a shown frame's `Similar faces`
+  hides it at once; the checks survive a restart. The step's checkbox was
+  ticked on the automated criteria (unit tests, left to GHA). Basis: Step
+  6's filter items, which no test drives through a real scan. Files:
+  `crates/app/src/filter.rs`, `crates/app/src/menu.rs`,
   `crates/app/src/main.rs`.
