@@ -2,6 +2,7 @@
 name = "handpic-engine"
 version = "2.0.1"
 edition = "2021"
+license.workspace = true
 
 [dependencies]
 handpic-core = { path = "../core" }

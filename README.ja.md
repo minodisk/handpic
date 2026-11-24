@@ -173,3 +173,18 @@ Handpic で付けたスター、フラグ、カラーラベルがソフト上で
 
 - ソースからのビルド: [CONTRIBUTING.md](./CONTRIBUTING.md)（英語）
 - パフォーマンス計測: [docs/humans/performance.ja.md](./docs/humans/performance.ja.md)
+
+## ライセンス
+
+Handpic は次のいずれかのライセンスで提供します。どちらを選ぶかは利用者の任意です。
+
+- MIT ライセンス（[LICENSE-MIT](./LICENSE-MIT)）
+- Apache License, Version 2.0（[LICENSE-APACHE](./LICENSE-APACHE)）
+
+リポジトリに同梱しているサードパーティの素材は、それぞれのライセンスに従います。
+
+- YuNet 顔検出モデル: MIT、[crates/core/models/LICENSE](./crates/core/models/LICENSE)
+- MediaPipe Face Landmarker モデルと移植した顔ジオメトリのデータ: Apache-2.0、[crates/core/models/LICENSE-mediapipe](./crates/core/models/LICENSE-mediapipe)
+- gpui-kit から取り込んだテーマ: Apache-2.0、[crates/app/themes/LICENSE](./crates/app/themes/LICENSE)
+- GPUI のクレート: Apache-2.0、[crates/app/packaging/NOTICE-gpui](./crates/app/packaging/NOTICE-gpui)
+- Lucide のアイコンとそれを元にした 2 つのアイコン: ISC、[crates/app/LICENSE-lucide](./crates/app/LICENSE-lucide)

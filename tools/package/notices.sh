@@ -19,6 +19,8 @@ notices=(
 	"crates/app/themes/LICENSE:LICENSE-themes"
 	"crates/core/models/LICENSE:LICENSE-yunet"
 	"crates/core/models/LICENSE-mediapipe:LICENSE-mediapipe"
+	"LICENSE-MIT:LICENSE-MIT"
+	"LICENSE-APACHE:LICENSE-APACHE"
 )
 
 mkdir -p "${dest}"
