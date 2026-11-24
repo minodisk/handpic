@@ -14,7 +14,8 @@ pub struct Args {
     pub log: Option<PathBuf>,
     /// The MCP companion's port when `mcpEnabled` is on, for a test run.
     pub mcp_port: Option<u16>,
-    /// Turns the prefetch ring off, for an A/B run.
+    /// Turns the prefetch ring and the 1:1 crop's read ahead off, for an A/B
+    /// run.
     pub no_prefetch: bool,
 }
 

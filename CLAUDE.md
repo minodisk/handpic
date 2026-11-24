@@ -414,7 +414,7 @@ file's two neighbours, the paging direction's first, under
 `PREFETCH_PIXEL_CAP`, each image either in the ring or on screen, cleared on
 an open or a re-listing and narrowed by `retain` on a `refilter`, the
 entries the canvas outgrew given up by `release`; off under
-`--no-prefetch`), `src/fitscale.rs` the `n/8` DCT scale the fit view's
+`--no-prefetch`, which also turns the 1:1 crop's read ahead off), `src/fitscale.rs` the `n/8` DCT scale the fit view's
 preview is decoded at (`scale_for`, the smallest whose decoded size is not
 below the source's fit in the preview canvas, 8 for an unknown canvas;
 `serves`, whether a decoded image still covers a canvas, which a settled
@@ -533,8 +533,14 @@ canvas, the no-folder message opening the folder picker on a click, and `src/zoo
 `crop_size` and the crop read, a port of the Tauri `focus_crop`, turned
 upright on the CPU; the `Zoom` state machine of `toggleZoom` / `requestCrop`,
 one read in flight, an earlier page's crop held on screen until the current
-one arrives, a resize re-cut after `CROP_RESIZE_DEBOUNCE` and
-`read_failed`, the current page's read failed with no crop of it held; and where
+one arrives, a resize re-cut after `CROP_RESIZE_DEBOUNCE`,
+`read_failed`, the current page's read failed with no crop of it held, and
+the read ahead (`prefetch`) under the prefetch ring's gate: the current
+page's crop once its preview is shown, so a `z` paints one held (`Toggled::Held`)
+or waits for the read in flight, its `zoom` line printed either way, and
+while zoomed the next neighbour's (`ahead_arrived`), which a page onto it
+shows without a read, each dropped by a page elsewhere, a re-listing
+(`relisted`) or another viewport (`fit`), a failed one silent until `z`; and where
 the crop and the scaled-preview placeholder are painted, one JPEG pixel per
 device pixel with the focus point at the canvas center), `src/tree.rs` the
 left pane's folder tree (a port of the state half of `tree.ts`: the roots,

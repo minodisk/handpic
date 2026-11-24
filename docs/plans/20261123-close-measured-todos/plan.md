@@ -244,7 +244,7 @@ distance stays out of scope.
     - The Typ 240 / 246 `FocusDistance` the same note would give is out of
       scope.
 
-- [ ] Step 4: Prefetch the 1:1 crop in the app, retake the deep / shallow
+- [x] Step 4: Prefetch the 1:1 crop in the app, retake the deep / shallow
       measurement, and close todo item 1
   - Done when:
     - Once the current page's preview is on screen, the app reads its crop
@@ -399,3 +399,4 @@ distance stays out of scope.
 (2026-11-24) Step 1 complete
 (2026-11-24) Step 2 complete
 (2026-11-24) Step 3 complete
+(2026-11-24) Step 4 complete

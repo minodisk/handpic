@@ -32,24 +32,31 @@ pub fn crop_size(orientation: u16, width: usize, height: usize) -> (usize, usize
     }
 }
 
-/// A crop to read: for which page, at which viewport in device pixels, and
-/// the `z` press it answers, if any.
+/// A crop to read: for which page, at which viewport in device pixels, the
+/// `z` press it answers, if any, and the neighbour it reads ahead, if it is
+/// not the current page's.
 #[derive(Debug, PartialEq)]
 pub struct Request {
     pub seq: u64,
     pub viewport: (u32, u32),
     pub keypress: Option<Instant>,
+    pub ahead: Option<String>,
 }
 
 /// What a crop that came back asks of the view.
 #[derive(Debug, PartialEq)]
 pub enum Arrived<C> {
     /// It is the current page's and is now held; `release` is the one it
-    /// replaced, and `resized` says the viewport changed while it was read.
-    Shown { release: Option<C>, resized: bool },
-    /// It is another page's: held in place of the one in `release` while
-    /// zoomed (released itself otherwise, and nothing held for a failed
-    /// read), and the current page's read, if zoomed.
+    /// replaced, `resized` says the viewport changed while it was read, and
+    /// `keypress` is a `z` pressed while it was in flight.
+    Shown {
+        release: Option<C>,
+        resized: bool,
+        keypress: Option<Instant>,
+    },
+    /// It is another page's or a neighbour's: held in place of the one in
+    /// `release` while zoomed (released itself otherwise, and nothing held
+    /// for a failed read), and the current page's read, if zoomed.
     Stale {
         release: Option<C>,
         request: Option<Request>,
@@ -57,6 +64,31 @@ pub enum Arrived<C> {
     /// The current page's read failed; `release` is a held crop of another
     /// page.
     Failed { error: String, release: Option<C> },
+    /// The current page's read failed while not zoomed: nothing to show, and
+    /// the next `z` reads it again.
+    Missed,
+}
+
+/// What `z` asks of the view.
+#[derive(Debug, PartialEq)]
+pub enum Toggled {
+    /// Nothing to read: turned off, no files, or the press waits for the read
+    /// in flight.
+    Nothing,
+    /// The crop held for this page and viewport is shown; the press, for its
+    /// `zoom` line.
+    Held(Instant),
+    Read(Request),
+}
+
+#[cfg(test)]
+impl Toggled {
+    pub fn read(self) -> Option<Request> {
+        match self {
+            Self::Read(request) => Some(request),
+            _ => None,
+        }
+    }
 }
 
 struct Held<C> {
@@ -66,20 +98,50 @@ struct Held<C> {
     viewport: (u32, u32),
 }
 
+/// A neighbour's crop read ahead while zoomed.
+struct Ahead<C> {
+    crop: C,
+    path: String,
+    viewport: (u32, u32),
+}
+
+/// The read in flight.
+struct Flight {
+    /// The page it was asked on.
+    seq: u64,
+    /// The neighbour it reads ahead, if any.
+    ahead: Option<String>,
+    /// Whether a page landed on that neighbour while it was read.
+    passed: bool,
+    /// Whether the view was zoomed when it was asked for.
+    zoomed: bool,
+    /// A re-listing came since: its crop may be of bytes no longer there.
+    void: bool,
+}
+
 /// The 1:1 view's state, a port of the Tauri frontend's `toggleZoom` /
-/// `requestCrop`: one read in flight, the last crop read while zoomed (the
-/// current page's or, during a held key, an earlier page's until the current
-/// one arrives), and the current page's preview facts the placeholder needs.
+/// `requestCrop`: one read in flight, the last crop read (the current page's,
+/// read ahead once its preview is shown, or, during a held key while zoomed,
+/// an earlier page's until the current one arrives), the next neighbour's
+/// crop read ahead while zoomed, and the current page's preview facts the
+/// placeholder needs.
 pub struct Zoom<C> {
     on: bool,
     /// Bumped by every page and listing; a crop carries the one it was read
     /// for.
     seq: u64,
-    in_flight: bool,
+    /// The current page's file, which a neighbour's crop is matched against.
+    current: Option<String>,
+    in_flight: Option<Flight>,
     held: Option<Held<C>>,
+    ahead: Option<Ahead<C>>,
     shown: Option<(u64, Option<FocusLocation>, u16)>,
     /// The page whose last read failed.
     failed: Option<u64>,
+    /// The neighbour whose read ahead failed.
+    ahead_failed: Option<String>,
+    /// A `z` pressed while a read was in flight, with its page.
+    waiting: Option<(u64, Instant)>,
 }
 
 impl<C> Default for Zoom<C> {
@@ -87,10 +149,14 @@ impl<C> Default for Zoom<C> {
         Self {
             on: false,
             seq: 0,
-            in_flight: false,
+            current: None,
+            in_flight: None,
             held: None,
+            ahead: None,
             shown: None,
             failed: None,
+            ahead_failed: None,
+            waiting: None,
         }
     }
 }
@@ -141,64 +207,197 @@ impl<C> Zoom<C> {
             .map(|(_, focus, orientation)| (focus, orientation))
     }
 
-    fn request(&mut self, viewport: (u32, u32), keypress: Option<Instant>) -> Option<Request> {
-        if self.in_flight {
+    fn request(
+        &mut self,
+        viewport: (u32, u32),
+        keypress: Option<Instant>,
+        ahead: Option<String>,
+    ) -> Option<Request> {
+        if self.in_flight.is_some() {
             return None;
         }
-        self.in_flight = true;
+        self.in_flight = Some(Flight {
+            seq: self.seq,
+            ahead: ahead.clone(),
+            passed: false,
+            zoomed: self.on,
+            void: false,
+        });
         Some(Request {
             seq: self.seq,
             viewport,
             keypress,
+            ahead,
         })
     }
 
-    /// `z`. Turning on reuses the crop held for this page and viewport, else
-    /// asks for one.
-    pub fn toggle(
-        &mut self,
-        has_files: bool,
-        viewport: (u32, u32),
-        now: Instant,
-    ) -> Option<Request> {
-        if !has_files {
-            return None;
-        }
-        self.on = !self.on;
-        self.failed = None;
+    /// The `z` that waited for the read in flight, if it was pressed on the
+    /// current page.
+    fn take_waiting(&mut self) -> Option<Instant> {
+        self.waiting
+            .take()
+            .filter(|(seq, _)| *seq == self.seq)
+            .map(|(_, key)| key)
+    }
+
+    /// The current page's read while zoomed without its crop, answering a
+    /// waiting `z`.
+    fn wanted(&mut self, viewport: (u32, u32)) -> Option<Request> {
         if !self.on || self.holds(viewport) {
             return None;
         }
-        self.request(viewport, Some(now))
+        let keypress = self.take_waiting();
+        self.request(viewport, keypress, None)
     }
 
-    /// Another page or listing is current. Zoomed, the held crop stays on
-    /// screen until the new page's arrives, which is asked for; otherwise,
-    /// or when an empty listing leaves the view, it is released.
-    pub fn page(&mut self, has_files: bool, viewport: (u32, u32)) -> (Option<C>, Option<Request>) {
-        self.seq += 1;
+    /// `z`. Turning on shows the crop held for this page and viewport, else
+    /// waits for the read in flight, else asks for one.
+    pub fn toggle(&mut self, has_files: bool, viewport: (u32, u32), now: Instant) -> Toggled {
         if !has_files {
+            return Toggled::Nothing;
+        }
+        self.on = !self.on;
+        self.failed = None;
+        self.waiting = None;
+        if !self.on {
+            return Toggled::Nothing;
+        }
+        if self.holds(viewport) {
+            return Toggled::Held(now);
+        }
+        if self.in_flight.is_some() {
+            self.waiting = Some((self.seq, now));
+            return Toggled::Nothing;
+        }
+        self.request(viewport, Some(now), None)
+            .map_or(Toggled::Nothing, Toggled::Read)
+    }
+
+    /// The read to make ahead of a `z` once the current page's preview is on
+    /// screen: not zoomed, the current page's crop; zoomed with it held, the
+    /// crop of `next`, the neighbour in the paging direction. A failed read
+    /// is not retried until a `z`, a page or a listing.
+    pub fn prefetch(&mut self, viewport: (u32, u32), next: Option<&str>) -> Option<Request> {
+        if self.in_flight.is_some() || self.preview().is_none() {
+            return None;
+        }
+        if !self.holds(viewport) {
+            if self.on || self.failed == Some(self.seq) {
+                return None;
+            }
+            return self.request(viewport, None, None);
+        }
+        let next = next.filter(|_| self.on)?;
+        if self.ahead_failed.as_deref() == Some(next)
+            || self
+                .ahead
+                .as_ref()
+                .is_some_and(|ahead| ahead.path == next && ahead.viewport == viewport)
+        {
+            return None;
+        }
+        self.request(viewport, None, Some(next.to_owned()))
+    }
+
+    /// Another page or listing is current, `current` its file (`None` for an
+    /// empty listing, which leaves the view). A neighbour's crop read for it
+    /// at this viewport becomes the held one; any other is released. Zoomed,
+    /// the held crop otherwise stays on screen until the new page's arrives,
+    /// which is asked for; not zoomed, it is released.
+    pub fn page(
+        &mut self,
+        current: Option<&str>,
+        viewport: (u32, u32),
+    ) -> (Vec<C>, Option<Request>) {
+        self.seq += 1;
+        self.waiting = None;
+        self.current = current.map(str::to_owned);
+        if let Some(flight) = &mut self.in_flight
+            && current.is_some()
+            && flight.ahead.as_deref() == current
+        {
+            flight.passed = true;
+        }
+        if current.is_none() {
             self.on = false;
         }
-        if !self.on {
-            return (self.held.take().map(|held| held.crop), None);
+        let mut release = Vec::new();
+        if let Some(ahead) = self.ahead.take() {
+            if current == Some(ahead.path.as_str()) && ahead.viewport == viewport {
+                let held = Held {
+                    crop: ahead.crop,
+                    seq: self.seq,
+                    viewport,
+                };
+                release.extend(self.held.replace(held).map(|held| held.crop));
+                return (release, None);
+            }
+            release.push(ahead.crop);
         }
-        (None, self.request(viewport, None))
+        if !self.on {
+            release.extend(self.held.take().map(|held| held.crop));
+            return (release, None);
+        }
+        (release, self.request(viewport, None, None))
     }
 
-    /// A read for `seq` came back; `viewport` is the one now.
+    /// A re-listing, which may have changed any file's bytes: the
+    /// neighbour's crop goes, and not zoomed, the held crop too; a read in
+    /// flight for either is voided.
+    pub fn relisted(&mut self) -> Vec<C> {
+        let mut release: Vec<C> = self
+            .ahead
+            .take()
+            .map(|ahead| ahead.crop)
+            .into_iter()
+            .collect();
+        self.ahead_failed = None;
+        if !self.on {
+            release.extend(self.held.take().map(|held| held.crop));
+            self.failed = None;
+        }
+        if let Some(flight) = &mut self.in_flight
+            && (flight.ahead.is_some() || !flight.zoomed || !self.on)
+        {
+            flight.void = true;
+        }
+        release
+    }
+
+    /// The viewport settled at `viewport`: the neighbour's crop and, not
+    /// zoomed, the held crop go when cut for another.
+    pub fn fit(&mut self, viewport: (u32, u32)) -> Vec<C> {
+        let mut release: Vec<C> = self
+            .ahead
+            .take_if(|ahead| ahead.viewport != viewport)
+            .map(|ahead| ahead.crop)
+            .into_iter()
+            .collect();
+        if !self.on {
+            release.extend(
+                self.held
+                    .take_if(|held| held.viewport != viewport)
+                    .map(|held| held.crop),
+            );
+        }
+        release
+    }
+
+    /// A read of page `seq` came back; `viewport` is the one now.
     pub fn arrived(
         &mut self,
         seq: u64,
         crop: Result<(C, (u32, u32)), String>,
         viewport: (u32, u32),
     ) -> Arrived<C> {
-        self.in_flight = false;
-        if seq != self.seq {
-            if !self.on {
+        let flight = self.in_flight.take();
+        let void = flight.as_ref().is_some_and(|flight| flight.void);
+        let zoomed = flight.is_some_and(|flight| flight.zoomed);
+        if void || seq != self.seq {
+            if void || !self.on || !zoomed {
                 return Arrived::Stale {
                     release: crop.ok().map(|(crop, _)| crop),
-                    request: None,
+                    request: self.wanted(viewport),
                 };
             }
             let release = crop.ok().and_then(|(crop, requested)| {
@@ -212,27 +411,17 @@ impl<C> Zoom<C> {
             });
             return Arrived::Stale {
                 release,
-                request: self.request(viewport, None),
+                request: self.wanted(viewport),
             };
         }
         match crop {
-            Ok((crop, requested)) => {
-                self.failed = None;
-                let release = self
-                    .held
-                    .replace(Held {
-                        crop,
-                        seq,
-                        viewport: requested,
-                    })
-                    .map(|held| held.crop);
-                Arrived::Shown {
-                    release,
-                    resized: self.on && requested != viewport,
-                }
-            }
+            Ok((crop, requested)) => self.hold(crop, requested, viewport),
             Err(error) => {
                 self.failed = Some(seq);
+                self.waiting = None;
+                if !self.on {
+                    return Arrived::Missed;
+                }
                 Arrived::Failed {
                     error,
                     release: if self.placeholder_fits() {
@@ -240,6 +429,92 @@ impl<C> Zoom<C> {
                     } else {
                         self.held.take().map(|held| held.crop)
                     },
+                }
+            }
+        }
+    }
+
+    /// Hold `crop`, cut at `requested`, as the current page's.
+    fn hold(&mut self, crop: C, requested: (u32, u32), viewport: (u32, u32)) -> Arrived<C> {
+        self.failed = None;
+        let release = self
+            .held
+            .replace(Held {
+                crop,
+                seq: self.seq,
+                viewport: requested,
+            })
+            .map(|held| held.crop);
+        Arrived::Shown {
+            release,
+            resized: self.on && requested != viewport,
+            keypress: self.take_waiting(),
+        }
+    }
+
+    /// A read ahead of the neighbour `path` came back; `viewport` is the one
+    /// now. Paged onto meanwhile, it is the current page's crop; zoomed, it
+    /// is held for the next page. A failure shows nothing and is not read
+    /// ahead again.
+    pub fn ahead_arrived(
+        &mut self,
+        path: &str,
+        crop: Result<(C, (u32, u32)), String>,
+        viewport: (u32, u32),
+    ) -> Arrived<C> {
+        let flight = self.in_flight.take();
+        let void = flight.as_ref().is_some_and(|flight| flight.void);
+        let moved = flight.as_ref().map(|flight| (flight.seq, flight.passed));
+        match crop {
+            Ok((crop, requested)) if !void && self.current.as_deref() == Some(path) => {
+                self.hold(crop, requested, viewport)
+            }
+            Ok((crop, requested))
+                if !void && self.on && moved.is_some_and(|(_, passed)| passed) =>
+            {
+                // The page landed on this neighbour and left it while it was
+                // read: draw it as a stale crop, as `arrived` does, under
+                // the seq it was asked on, which is never current again.
+                let release = self
+                    .held
+                    .replace(Held {
+                        crop,
+                        seq: moved.map_or(0, |(seq, _)| seq),
+                        viewport: requested,
+                    })
+                    .map(|held| held.crop);
+                Arrived::Stale {
+                    release,
+                    request: self.wanted(viewport),
+                }
+            }
+            Ok((crop, requested))
+                if !void && self.on && moved.is_none_or(|(seq, _)| seq == self.seq) =>
+            {
+                let release = self
+                    .ahead
+                    .replace(Ahead {
+                        crop,
+                        path: path.to_owned(),
+                        viewport: requested,
+                    })
+                    .map(|ahead| ahead.crop);
+                Arrived::Stale {
+                    release,
+                    request: self.wanted(viewport),
+                }
+            }
+            Ok((crop, _)) => Arrived::Stale {
+                release: Some(crop),
+                request: self.wanted(viewport),
+            },
+            Err(_) => {
+                if !void {
+                    self.ahead_failed = Some(path.to_owned());
+                }
+                Arrived::Stale {
+                    release: None,
+                    request: self.wanted(viewport),
                 }
             }
         }
@@ -256,7 +531,7 @@ impl<C> Zoom<C> {
         if !self.on || seq != self.seq || self.holds(viewport) {
             return None;
         }
-        self.request(viewport, None)
+        self.request(viewport, None, None)
     }
 }
 
@@ -402,26 +677,29 @@ pub fn read(path: &Path, viewport: (u32, u32)) -> Result<Crop, String> {
 }
 
 /// Read the crop `request` asks for on the background executor, then hand
-/// it to the view.
-pub fn send(request: Request, path: PathBuf, cx: &mut Context<Handpic>) {
+/// it to the view: the neighbour's it reads ahead, else `current`'s.
+pub fn send(request: Request, current: PathBuf, cx: &mut Context<Handpic>) {
     let Request {
         seq,
         viewport,
         keypress,
+        ahead,
     } = request;
+    let path = ahead.as_ref().map_or(current, PathBuf::from);
     cx.spawn(async move |this, cx| {
         let crop = cx
             .background_spawn(async move { guarded(|| read(&path, viewport)) })
             .await;
         this.update(cx, |this, cx| {
-            this.crop_arrived(seq, crop.map(|c| (c, viewport)), keypress, cx);
+            this.crop_arrived(seq, ahead, crop.map(|c| (c, viewport)), keypress, cx);
         })
         .ok();
     })
     .detach();
 }
 
-/// The stages of a crop a `z` press asked for, printed once it is on screen.
+/// The stages of a crop a `z` press shows, printed once it is on screen. A
+/// crop read ahead of the press carries the stages of that read.
 pub struct Timed {
     pub key: Instant,
     pub read: Duration,
@@ -430,6 +708,15 @@ pub struct Timed {
 }
 
 impl Timed {
+    pub fn of(key: Instant, crop: &Crop) -> Self {
+        Self {
+            key,
+            read: crop.read,
+            decode: crop.decode,
+            orient: crop.orient,
+        }
+    }
+
     pub fn line(&self, presented: Instant) -> String {
         format!(
             "zoom read={} decode={} orient={} keypressToPixels={}",
@@ -512,12 +799,13 @@ mod tests {
     use handpic_core::arw::FocusLocation;
 
     use super::{
-        Arrived, CROP_MAX, Rect, Request, Zoom, canvas_center, crop_origin, crop_size, placeholder,
-        upright_point,
+        Arrived, CROP_MAX, Rect, Request, Toggled, Zoom, canvas_center, crop_origin, crop_size,
+        placeholder, upright_point,
     };
     use crate::orient::rotate_bgra;
 
     const VIEW: (u32, u32) = (800, 600);
+    const A: Option<&str> = Some("a");
 
     #[test]
     fn a_quarter_turn_swaps_the_viewport_and_the_cap_bounds_each_axis() {
@@ -529,7 +817,7 @@ mod tests {
     }
 
     fn on(z: &mut Zoom<u8>, now: Instant) -> Request {
-        z.toggle(true, VIEW, now).unwrap()
+        z.toggle(true, VIEW, now).read().unwrap()
     }
 
     #[test]
@@ -538,13 +826,287 @@ mod tests {
         let now = Instant::now();
         assert_eq!(
             z.toggle(true, VIEW, now),
-            Some(Request {
+            Toggled::Read(Request {
                 seq: 0,
                 viewport: VIEW,
-                keypress: Some(now)
+                keypress: Some(now),
+                ahead: None
             })
         );
         assert!(z.is_on());
+    }
+
+    /// A zoom on page `current` whose preview is on screen, not zoomed.
+    fn shown_on(current: &str) -> Zoom<u8> {
+        let mut z = Zoom::<u8>::default();
+        z.page(Some(current), VIEW);
+        z.shown(None, 1);
+        z
+    }
+
+    #[test]
+    fn the_current_pages_crop_is_read_ahead_once_its_preview_is_shown() {
+        let mut z = Zoom::<u8>::default();
+        z.page(A, VIEW);
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
+        z.shown(None, 1);
+        assert_eq!(
+            z.prefetch(VIEW, Some("b")),
+            Some(Request {
+                seq: 1,
+                viewport: VIEW,
+                keypress: None,
+                ahead: None
+            })
+        );
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
+        assert_eq!(
+            z.arrived(1, Ok((7, VIEW)), VIEW),
+            Arrived::Shown {
+                release: None,
+                resized: false,
+                keypress: None
+            }
+        );
+        assert!(!z.is_on());
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
+    }
+
+    #[test]
+    fn z_on_a_crop_read_ahead_shows_it_with_its_press() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, None).unwrap();
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        let now = Instant::now();
+        assert_eq!(z.toggle(true, VIEW, now), Toggled::Held(now));
+        assert!(z.is_on());
+        assert_eq!(z.crop(), Some(&7));
+    }
+
+    #[test]
+    fn z_while_the_read_ahead_is_in_flight_waits_for_it_and_takes_its_press() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, None).unwrap();
+        let now = Instant::now();
+        assert_eq!(z.toggle(true, VIEW, now), Toggled::Nothing);
+        assert!(z.is_on());
+        assert_eq!(
+            z.arrived(r.seq, Ok((7, VIEW)), VIEW),
+            Arrived::Shown {
+                release: None,
+                resized: false,
+                keypress: Some(now)
+            }
+        );
+    }
+
+    #[test]
+    fn z_after_a_page_while_an_earlier_read_ahead_is_in_flight_reads_with_its_press() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, None).unwrap();
+        z.page(Some("b"), VIEW);
+        let now = Instant::now();
+        assert_eq!(z.toggle(true, VIEW, now), Toggled::Nothing);
+        match z.arrived(r.seq, Ok((7, VIEW)), VIEW) {
+            Arrived::Stale { release, request } => {
+                assert_eq!(release, Some(7));
+                assert_eq!(request.unwrap().keypress, Some(now));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), None);
+    }
+
+    #[test]
+    fn a_crop_read_ahead_goes_with_a_page_a_listing_or_another_viewport() {
+        let read = || {
+            let mut z = shown_on("a");
+            let r = z.prefetch(VIEW, None).unwrap();
+            z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+            z
+        };
+
+        let mut z = read();
+        assert_eq!(z.page(Some("b"), VIEW), (vec![7], None));
+
+        let mut z = read();
+        assert_eq!(z.relisted(), vec![7]);
+        assert_eq!(z.crop(), None);
+
+        let mut z = read();
+        assert!(z.fit(VIEW).is_empty());
+        assert_eq!(z.fit((900, 700)), vec![7]);
+        assert_eq!(z.crop(), None);
+    }
+
+    #[test]
+    fn a_read_ahead_in_flight_over_a_listing_is_dropped() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, None).unwrap();
+        z.relisted();
+        assert_eq!(
+            z.arrived(r.seq, Ok((7, VIEW)), VIEW),
+            Arrived::Stale {
+                release: Some(7),
+                request: None
+            }
+        );
+        assert_eq!(z.crop(), None);
+        assert!(z.prefetch(VIEW, None).is_some());
+    }
+
+    #[test]
+    fn a_failed_read_ahead_shows_nothing_and_fails_again_on_z() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, None).unwrap();
+        assert_eq!(z.arrived(r.seq, Err("bad".into()), VIEW), Arrived::Missed);
+        assert!(!z.read_failed());
+        assert_eq!(z.prefetch(VIEW, None), None);
+        let r = z.toggle(true, VIEW, Instant::now()).read().unwrap();
+        assert_eq!(
+            z.arrived(r.seq, Err("bad".into()), VIEW),
+            Arrived::Failed {
+                error: "bad".into(),
+                release: None
+            }
+        );
+        assert!(z.read_failed());
+    }
+
+    /// Zoomed on `a` with its crop 7 held and its preview on screen.
+    fn zoomed_on_a() -> Zoom<u8> {
+        let mut z = shown_on("a");
+        let r = on(&mut z, Instant::now());
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        z
+    }
+
+    #[test]
+    fn zoomed_the_next_neighbours_crop_is_read_ahead_and_a_page_onto_it_shows_it() {
+        let mut z = zoomed_on_a();
+        let r = z.prefetch(VIEW, Some("b")).unwrap();
+        assert_eq!(r.ahead.as_deref(), Some("b"));
+        assert_eq!(
+            z.ahead_arrived("b", Ok((8, VIEW)), VIEW),
+            Arrived::Stale {
+                release: None,
+                request: None
+            }
+        );
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
+        assert_eq!(z.page(Some("b"), VIEW), (vec![7], None));
+        assert_eq!(z.crop(), Some(&8));
+        assert!(z.placeholder_fits());
+        assert!(!z.read_failed());
+    }
+
+    #[test]
+    fn zoomed_a_page_elsewhere_drops_the_neighbours_crop_and_reads() {
+        let mut z = zoomed_on_a();
+        let r = z.prefetch(VIEW, Some("b")).unwrap();
+        z.ahead_arrived("b", Ok((8, VIEW)), VIEW);
+        let (release, request) = z.page(Some("c"), VIEW);
+        assert_eq!(release, vec![8]);
+        assert_eq!(request.map(|q| q.seq), Some(r.seq + 1));
+        assert_eq!(z.crop(), Some(&7));
+    }
+
+    #[test]
+    fn zoomed_a_neighbours_crop_for_another_viewport_is_not_used() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.ahead_arrived("b", Ok((8, VIEW)), VIEW);
+        let (release, request) = z.page(Some("b"), (900, 700));
+        assert_eq!(release, vec![8]);
+        assert!(request.is_some());
+    }
+
+    #[test]
+    fn zoomed_a_page_onto_the_neighbour_in_flight_takes_its_crop_when_it_lands() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        assert_eq!(z.page(Some("b"), VIEW), (vec![], None));
+        assert_eq!(
+            z.ahead_arrived("b", Ok((8, VIEW)), VIEW),
+            Arrived::Shown {
+                release: Some(7),
+                resized: false,
+                keypress: None
+            }
+        );
+        assert!(z.placeholder_fits());
+    }
+
+    #[test]
+    fn zoomed_a_neighbours_crop_landing_after_a_page_elsewhere_is_released() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.page(Some("c"), VIEW);
+        match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
+            Arrived::Stale { release, request } => {
+                assert_eq!(release, Some(8));
+                assert_eq!(request.map(|r| r.ahead), Some(None));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), Some(&7));
+        assert_eq!(z.page(Some("d"), VIEW).0, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn zoomed_a_page_back_before_the_neighbours_crop_lands_does_not_draw_it() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.page(Some("0"), VIEW);
+        match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
+            Arrived::Stale { release, .. } => assert_eq!(release, Some(8)),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), Some(&7));
+    }
+
+    #[test]
+    fn zoomed_a_failed_neighbour_shows_nothing_and_is_not_read_ahead_again() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        assert_eq!(
+            z.ahead_arrived("b", Err("bad".into()), VIEW),
+            Arrived::Stale {
+                release: None,
+                request: None
+            }
+        );
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
+        assert!(!z.read_failed());
+        assert!(z.page(Some("b"), VIEW).1.is_some());
+    }
+
+    #[test]
+    fn zoomed_a_listing_drops_the_neighbours_crop_and_its_read() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.ahead_arrived("b", Ok((8, VIEW)), VIEW);
+        assert_eq!(z.relisted(), vec![8]);
+        assert_eq!(z.crop(), Some(&7));
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.relisted();
+        assert_eq!(
+            z.ahead_arrived("b", Ok((9, VIEW)), VIEW),
+            Arrived::Stale {
+                release: Some(9),
+                request: None
+            }
+        );
+        assert_eq!(z.page(Some("b"), VIEW).1.map(|r| r.ahead), Some(None));
+    }
+
+    #[test]
+    fn not_zoomed_no_neighbour_is_read_ahead() {
+        let mut z = shown_on("a");
+        let r = z.prefetch(VIEW, Some("b")).unwrap();
+        assert_eq!(r.ahead, None);
+        z.arrived(r.seq, Ok((7, VIEW)), VIEW);
+        assert_eq!(z.prefetch(VIEW, Some("b")), None);
     }
 
     #[test]
@@ -552,12 +1114,13 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        assert_eq!(z.toggle(true, VIEW, Instant::now()), None);
+        assert_eq!(z.toggle(true, VIEW, Instant::now()), Toggled::Nothing);
         assert!(!z.is_on());
-        assert_eq!(z.toggle(true, VIEW, Instant::now()), None);
+        let now = Instant::now();
+        assert_eq!(z.toggle(true, VIEW, now), Toggled::Held(now));
         assert_eq!(z.crop(), Some(&7));
-        assert!(z.toggle(true, VIEW, Instant::now()).is_none());
-        assert!(z.toggle(true, (900, 600), Instant::now()).is_some());
+        assert_eq!(z.toggle(true, VIEW, Instant::now()), Toggled::Nothing);
+        assert!(z.toggle(true, (900, 600), Instant::now()).read().is_some());
     }
 
     #[test]
@@ -565,19 +1128,20 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        let (release, request) = z.page(true, VIEW);
-        assert_eq!(release, None);
+        let (release, request) = z.page(A, VIEW);
+        assert!(release.is_empty());
         assert_eq!(
             request,
             Some(Request {
                 seq: 1,
                 viewport: VIEW,
-                keypress: None
+                keypress: None,
+                ahead: None
             })
         );
         assert_eq!(z.crop(), Some(&7));
         assert!(!z.placeholder_fits());
-        assert_eq!(z.page(true, VIEW), (None, None));
+        assert_eq!(z.page(A, VIEW), (vec![], None));
         assert!(z.is_on());
     }
 
@@ -587,8 +1151,8 @@ mod tests {
         let mut r = on(&mut z, Instant::now());
         let mut held = None;
         for crop in 1..=4u8 {
-            assert_eq!(z.page(true, VIEW), (None, None));
-            assert_eq!(z.page(true, VIEW), (None, None));
+            assert_eq!(z.page(A, VIEW), (vec![], None));
+            assert_eq!(z.page(A, VIEW), (vec![], None));
             match z.arrived(r.seq, Ok((crop, VIEW)), VIEW) {
                 Arrived::Stale { release, request } => {
                     assert_eq!(release, held);
@@ -605,18 +1169,35 @@ mod tests {
             z.arrived(r.seq, Ok((9, VIEW)), VIEW),
             Arrived::Shown {
                 release: Some(4),
-                resized: false
+                resized: false,
+                keypress: None
             }
         );
         assert!(z.placeholder_fits());
-        assert_eq!(z.page(true, VIEW).1.map(|r| r.seq), Some(9));
+        assert_eq!(z.page(A, VIEW).1.map(|r| r.seq), Some(9));
+    }
+
+    #[test]
+    fn a_held_key_draws_a_crop_read_ahead_that_the_page_passed() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.page(Some("b"), VIEW);
+        z.page(Some("c"), VIEW);
+        match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
+            Arrived::Stale { release, request } => {
+                assert_eq!(release, Some(7));
+                assert_eq!(request.map(|r| r.ahead), Some(None));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), Some(&8));
     }
 
     #[test]
     fn a_stale_crop_held_does_not_count_as_the_current_pages() {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
-        z.page(true, VIEW);
+        z.page(A, VIEW);
         assert!(matches!(
             z.arrived(r.seq, Ok((7, VIEW)), VIEW),
             Arrived::Stale {
@@ -624,11 +1205,14 @@ mod tests {
                 ..
             }
         ));
-        z.in_flight = false;
+        z.in_flight = None;
         assert_eq!(z.settled(1, VIEW).map(|r| r.seq), Some(1));
-        z.in_flight = false;
-        z.toggle(true, VIEW, Instant::now());
-        assert_eq!(z.toggle(true, VIEW, Instant::now()).map(|r| r.seq), Some(1));
+        z.in_flight = None;
+        z.toggle(true, VIEW, Instant::now()).read();
+        assert_eq!(
+            z.toggle(true, VIEW, Instant::now()).read().map(|r| r.seq),
+            Some(1)
+        );
         assert_eq!(z.crop(), Some(&7));
     }
 
@@ -640,7 +1224,7 @@ mod tests {
         assert!(z.placeholder_fits());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
         assert!(z.placeholder_fits());
-        z.page(true, VIEW);
+        z.page(A, VIEW);
         assert!(!z.placeholder_fits());
     }
 
@@ -649,8 +1233,8 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        let r = z.page(true, VIEW).1.unwrap();
-        z.page(true, VIEW);
+        let r = z.page(A, VIEW).1.unwrap();
+        z.page(A, VIEW);
         match z.arrived(r.seq, Err("bad".into()), VIEW) {
             Arrived::Stale { release, request } => {
                 assert_eq!(release, None);
@@ -666,7 +1250,7 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        let r = z.page(true, VIEW).1.unwrap();
+        let r = z.page(A, VIEW).1.unwrap();
         assert_eq!(
             z.arrived(r.seq, Err("bad".into()), VIEW),
             Arrived::Failed {
@@ -698,18 +1282,18 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        z.toggle(true, VIEW, Instant::now());
-        assert_eq!(z.page(true, VIEW), (Some(7), None));
+        z.toggle(true, VIEW, Instant::now()).read();
+        assert_eq!(z.page(A, VIEW), (vec![7], None));
         assert_eq!(z.crop(), None);
-        assert!(z.toggle(true, VIEW, Instant::now()).is_some());
+        assert!(z.toggle(true, VIEW, Instant::now()).read().is_some());
     }
 
     #[test]
     fn one_request_is_in_flight_at_a_time() {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
-        assert_eq!(z.page(true, VIEW).1, None);
-        assert_eq!(z.page(true, VIEW).1, None);
+        assert_eq!(z.page(A, VIEW).1, None);
+        assert_eq!(z.page(A, VIEW).1, None);
         match z.arrived(r.seq, Ok((7, VIEW)), VIEW) {
             Arrived::Stale { release, request } => {
                 assert_eq!(release, None);
@@ -717,15 +1301,15 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
-        assert_eq!(z.page(true, VIEW).1, None);
+        assert_eq!(z.page(A, VIEW).1, None);
     }
 
     #[test]
     fn a_stale_result_while_not_zoomed_is_released_and_asks_for_nothing() {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
-        z.toggle(true, VIEW, Instant::now());
-        z.page(true, VIEW);
+        z.toggle(true, VIEW, Instant::now()).read();
+        z.page(A, VIEW);
         assert_eq!(
             z.arrived(r.seq, Ok((7, VIEW)), VIEW),
             Arrived::Stale {
@@ -735,7 +1319,7 @@ mod tests {
         );
         assert_eq!(z.crop(), None);
         let r = on(&mut z, Instant::now());
-        z.page(true, VIEW);
+        z.page(A, VIEW);
         match z.arrived(r.seq, Err("bad".into()), VIEW) {
             Arrived::Stale { release, request } => {
                 assert_eq!(release, None);
@@ -756,7 +1340,7 @@ mod tests {
                 release: None
             }
         );
-        assert!(z.page(true, VIEW).1.is_some());
+        assert!(z.page(A, VIEW).1.is_some());
     }
 
     #[test]
@@ -770,7 +1354,7 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        let r = z.page(true, VIEW).1.unwrap();
+        let r = z.page(A, VIEW).1.unwrap();
         z.arrived(r.seq, Err("bad".into()), VIEW);
         assert!(z.read_failed());
     }
@@ -795,7 +1379,7 @@ mod tests {
         };
 
         let mut z = failed();
-        let r = z.page(true, VIEW).1.unwrap();
+        let r = z.page(A, VIEW).1.unwrap();
         assert!(!z.read_failed());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
         assert!(!z.read_failed());
@@ -807,9 +1391,9 @@ mod tests {
         assert!(!z.read_failed());
 
         let mut z = failed();
-        z.toggle(true, VIEW, Instant::now());
+        z.toggle(true, VIEW, Instant::now()).read();
         assert!(!z.read_failed());
-        assert!(z.toggle(true, VIEW, Instant::now()).is_some());
+        assert!(z.toggle(true, VIEW, Instant::now()).read().is_some());
         assert!(!z.read_failed());
     }
 
@@ -824,7 +1408,8 @@ mod tests {
             z.arrived(r.seq, Ok((7, VIEW)), now),
             Arrived::Shown {
                 release: None,
-                resized: true
+                resized: true,
+                keypress: None
             }
         );
         assert_eq!(z.settled(0, now).map(|r| r.viewport), Some(now));
@@ -832,7 +1417,8 @@ mod tests {
             z.arrived(0, Ok((8, now)), now),
             Arrived::Shown {
                 release: Some(7),
-                resized: false
+                resized: false,
+                keypress: None
             }
         );
         assert_eq!(z.settled(0, now), None);
@@ -845,10 +1431,10 @@ mod tests {
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
         let seq = z.resized().unwrap();
-        let r = z.page(true, VIEW).1.unwrap();
+        let r = z.page(A, VIEW).1.unwrap();
         z.arrived(r.seq, Ok((8, VIEW)), VIEW);
         assert_eq!(z.settled(seq, (900, 700)), None);
-        z.toggle(true, VIEW, Instant::now());
+        z.toggle(true, VIEW, Instant::now()).read();
         assert_eq!(z.settled(r.seq, (900, 700)), None);
     }
 
@@ -857,9 +1443,9 @@ mod tests {
         let mut z = Zoom::<u8>::default();
         let r = on(&mut z, Instant::now());
         z.arrived(r.seq, Ok((7, VIEW)), VIEW);
-        assert_eq!(z.page(false, VIEW), (Some(7), None));
+        assert_eq!(z.page(None, VIEW), (vec![7], None));
         assert!(!z.is_on());
-        assert_eq!(z.toggle(false, VIEW, Instant::now()), None);
+        assert_eq!(z.toggle(false, VIEW, Instant::now()).read(), None);
         assert!(!z.is_on());
     }
 
@@ -874,7 +1460,7 @@ mod tests {
         };
         z.shown(Some(focus), 6);
         assert_eq!(z.preview(), Some((Some(focus), 6)));
-        z.page(true, VIEW);
+        z.page(A, VIEW);
         assert_eq!(z.preview(), None);
     }
 

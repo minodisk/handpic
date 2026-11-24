@@ -1033,8 +1033,10 @@ two runs apart.
 Per-page latency is printed instead: run Handpic from a terminal, and each
 page turn a key asked for prints a `page wait=… read=… decode=… orient=…
 hop=… frameWait=… paint=… present=… keypressToPixels=… jpegKB=… px=WxH
-decoded=WxH orientation=… source=… file=…` line on standard output (a 1:1 crop prints a
-`zoom read=… decode=… orient=… keypressToPixels=…` line). `wait` is the
+decoded=WxH orientation=… source=… file=…` line on standard output (a `z`
+that shows a 1:1 crop prints a `zoom read=… decode=… orient=…
+keypressToPixels=…` line, whose `read`, `decode` and `orient` for a crop read
+ahead of the press are that earlier read's). `wait` is the
 time from the key to the read's request, `read`, `decode` and `orient` the
 preview's read (the pause of the scan's reads included), decode and turn
 upright (all 0 for `source=prefetch`, a preview read ahead), `hop` the hand
@@ -1061,7 +1063,8 @@ The read and decode of one zoom keypress, on one α7 V ARW (Orientation 8,
 page cache, in-process, release build, n=20, medians.** Measured against the
 functions the CLI and the app both call. The turn upright and the drawing
 are not included; the app prints them as a `zoom` line (see "Measuring on
-your own folder" above), and no end-to-end number is recorded here yet.
+your own folder" above), and the end-to-end numbers on Windows are in
+"Reading the crop ahead of `z` (Windows 11)" below.
 
 | Step | Median |
 |------|--------|
@@ -1075,6 +1078,55 @@ low in the frame costs four times one at the top, and 44ms leaves little of
 a 50ms budget for the rest. Re-encoding that crop as a JPEG with
 `mozjpeg::Compress`'s defaults measured 49ms at q85, more than the decode it
 follows.
+
+### Reading the crop ahead of `z` (Windows 11)
+
+Since the crop's row is the cost, the app now reads the crop before `z` asks
+for it. Once the current file's preview is on screen it reads that file's crop
+in the background, so a `z` paints a crop it already holds, and while zoomed
+it reads the next file's crop in the paging direction, so a page onto it shows
+it without a read. It follows the preview prefetch: it does not run while a
+scan pass runs, and `--no-prefetch` turns it off with the preview ring.
+
+The deep / shallow measurement, GPUI app, release build, on α7 V ARWs
+(`JpgFromRaw` 7008x4672 baseline 4:2:2, Orientation 8) in the default
+1600x1000 window: `z` once per file (`z`, 900ms, `z`, 300ms, `→`, 700ms), 20
+presses per run over a 19-file set (the last press wraps to the first file),
+the focus row's mean at 0.94 of the JPEG's height for the deep set and 0.06
+for the shallow one, each run on a fresh index whose scan ended before the
+first press. **Not idle-gated: the machine was shared with other sessions'
+cargo builds.** The before runs were taken on 2026-11-23 under load up to
+about 100 %; the 2026-11-24 runs saw a CPU load of 2-50 % (five samples
+averaged) just before each run.
+
+| Runs (two per row) | `keypressToPixels` p50 | p95 | Over 50ms | `decode` p50 |
+|---|---|---|---|---|
+| Deep, before (2026-11-23) | 72-77ms | 84-88ms | 38 of 40 | 55-58ms |
+| Deep, `--no-prefetch` (2026-11-24) | 44-50ms | 54-65ms | 15 of 40 | 32-39ms |
+| Deep, read ahead (2026-11-24) | 11.3-11.5ms | 18.0-18.7ms | 0 of 40 | 31-32ms |
+| Shallow, before (2026-11-23) | 32-35ms | 36-37ms | 0 of 40 | 18-19ms |
+| Shallow, `--no-prefetch` (2026-11-24) | 21-27ms | 27-34ms | 0 of 40 | 9-11ms |
+| Shallow, read ahead (2026-11-24) | 10.5-12.9ms | 17.5-18.4ms | 0 of 40 | 9.4-9.5ms |
+
+With the read ahead, every press found its crop held, and the press costs a
+frame whatever the focus row. `decode` is the crop's own decode, which for a
+crop read ahead ran before the press. The `--no-prefetch` runs are the
+same-session before: their lower numbers than the 2026-11-23 ones show how
+much the load moved, not a change in the read. Paging did not get slower: the
+`page` lines of the same runs' `→` presses kept a p50 of 9.5-12.4ms and a p95
+of 17.3-18.9ms (11.2-13.5 / 19.6-27.0ms before), and a held `→` measured the
+same with and without the crop read (p50 10.6-11.5ms either way).
+
+The other option was dropped. The JPEG has no restart markers (no DRI, no
+RST), so a deep row cannot be reached without entropy-decoding the rows above
+it; the app already paints the fit view's preview, scaled up, as the
+placeholder until the crop arrives; and a DCT-scaled decode is not faster
+(see "Fujifilm RAF (raw.pixls.us samples, Windows)" above).
+
+What the read ahead does not cover: a `z` pressed before the background read
+ends still waits for the rest of it, a `z` during a scan pass is not read
+ahead and costs what it did before, and neither is a `z` under
+`--no-prefetch`.
 
 ## What the sidecar pass adds to a folder open
 

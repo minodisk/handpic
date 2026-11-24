@@ -82,6 +82,57 @@
   into `\0` and then a NUL byte in `arw.rs`; byte strings with `\0` are safer
   to edit with the Edit tool.
 
+## Step 4
+
+- Shape: `Zoom` keeps one read in flight across the current page's crop and
+  the neighbour's (`Request::ahead`, `Flight`), and a second slot (`Ahead`)
+  keyed by the file path, as planned. `toggle` now returns `Toggled`
+  (`Held(press)` for the `zoom` line of a held crop), `page` takes the current
+  file's path and returns a `Vec` of crops to release, `Arrived::Shown`
+  carries a `z` that waited for the read in flight, and a not-zoomed failure
+  is the new `Arrived::Missed`. `request_prefetch`'s gate became
+  `prefetch_open`, shared with `prefetch_crop`, which `crop_arrived` and a
+  `Toggled::Held` also call so the neighbour's read follows the current crop.
+- A crop read for an earlier page while not zoomed is now released on arrival
+  even when `z` came since (`Flight::zoomed`): without it, a `z` pressed on
+  file B while A's read ahead was still out would have held A's crop on B's
+  page (the held-key rule keeps stale crops only for a chain that was zoomed).
+- The viewport drop runs in `fit_settled` (after `FIT_RESIZE_DEBOUNCE`), not in
+  `zoom_resized`: the window-bounds observer calls `zoom_resized` before the
+  canvas has stored its new size, so `viewport` there is still the old one.
+- The `zoom` line's format is unchanged; for a held crop it prints the crop's
+  own `read` / `decode` / `orient` (paid before the press), which
+  `performance.md`'s "Measuring on your own folder" now says.
+- Retake driver: `drive.ps1` gained `-Extra` for `--no-prefetch`. Passing an
+  empty array from a PowerShell `if` expression gives `$null`, which made
+  `Start-Process` fail on every run (no log, "no window"); the driver now
+  filters empty entries. The `skipped` line is the driver's own output, not
+  the app's log, so waiting on it in the log never ends.
+- The deep set (`D:\Photos\tests\20261123-zoom-deep-row\deep`) holds 19
+  ARWs, not 20; the 20th press wraps to the first file, in the before runs too.
+- Retake, 2026-11-24, release build, fresh index per run (the scan ended about
+  1 s after the open, before the first `z` at 5 s), CPU load sampled just
+  before each run: read ahead runs 7 / 2 / 23 / 8 %, `--no-prefetch` runs 16 /
+  18 / 50 / 11 %. `zoom` `keypressToPixels` p50 / p95 / over 50ms:
+  - read ahead: deep-1 11.3 / 18.0 / 0, shallow-1 10.5 / 17.5 / 0, deep-2
+    11.5 / 18.7 / 0, shallow-2 12.9 / 18.4 / 0;
+  - `--no-prefetch`: deep-1 43.8 / 54.0 / 5, shallow-1 21.1 / 27.4 / 0,
+    deep-2 50.4 / 64.6 / 10, shallow-2 26.8 / 34.2 / 0;
+  - before (2026-11-23 logs, recomputed): deep 76.5 / 88.1 / 20 and 71.8 /
+    83.6 / 18, shallow 31.9 / 36.5 / 0 and 34.9 / 36.8 / 0.
+- `page` lines (the `→` presses of the same runs, 20 each):
+  - read ahead: p50 9.5 / 11.9 / 12.4 / 11.5ms, p95 17.6 / 18.9 / 18.6 /
+    17.3ms, 19 of 20 `source=prefetch` each;
+  - before: p50 13.5 / 12.3 / 12.2 / 11.2ms, p95 27.0 / 19.6 / 20.7 / 20.9ms;
+  - `--no-prefetch`: all `source=read`, p50 14.6-19.4ms.
+  Paging did not get slower. A held `→` (two 3 s holds at a 33ms repeat, deep
+  set, about 126 pages per run) on the previous release exe (built 2026-11-23,
+  before Steps 2 and 3, no crop read ahead) against this one: p50 10.8 / 11.5
+  vs 11.0 / 10.6ms, p95 18.1 / 18.9 vs 18.1 / 17.4ms. So no settle delay was
+  added.
+- The deep set's `JpgFromRaw` (and a shallow one's) carries no DRI and no RST
+  marker, checked on three extracted JPEGs.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Windows 11, the app): open `D:\Photos\samples\DNG`'s
@@ -92,3 +143,12 @@
   `px=1472x976`, and `z` to show that JPEG at its own size around the
   center. Step 3's checkbox was ticked on the automated criteria (unit tests,
   the `info` sweep, the probe).
+- Pending manual check (Windows 11, the app, Step 4): open a view-only
+  JPEG-only folder (a folder of plain `.jpg` files, no RAW) and page through
+  it with single and held `→` presses, then zoomed (`z`) with `→`. The crop
+  read ahead reads and partially decodes the whole JPEG there, so expect
+  paging to stay as smooth as with `--no-prefetch` (compare the `page`
+  lines), `z` to paint a crop at once once a page has settled, and a page
+  while zoomed to show the next file's crop without a wait. Step 4's
+  checkbox was ticked on the automated criteria (unit tests and the ARW
+  retake).
