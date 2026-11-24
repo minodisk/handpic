@@ -2937,7 +2937,9 @@ impl Handpic {
     }
 
     /// The group threshold changed: written, and the counts it shows change
-    /// for the rows already loaded. A lower one re-lists the open folder as a
+    /// for the rows already loaded, since the meta pane and the strip's
+    /// closed-eyes mark read them through `group::shown` with it on the
+    /// redraw. A lower one re-lists the open folder as a
     /// change the watcher saw does, now or once the listing or scan under
     /// way ends, so pass 3 runs on the rows that now meet it while passes 1
     /// and 2 find nothing to do; another folder gets the same at its next
@@ -4576,6 +4578,7 @@ impl Handpic {
                     ),
                     closed_eyes: mark::closed_eyes_mark(
                         self.facts.get(key.as_ref()).and_then(|f| f.focus.as_ref()),
+                        self.settings.group_min_faces,
                     ),
                     burst: self.strip.burst(index),
                 }
@@ -5245,7 +5248,11 @@ impl Handpic {
                 .and_then(|p| self.facts.get(p.to_string_lossy().as_ref()));
             let focus = facts.and_then(|f| f.focus.as_ref());
             let maker_note = meta::af_rows(focus.and_then(|f| f.point.as_ref()));
-            let analysis = meta::analysis(focus, facts.and_then(|f| f.sharpness));
+            let analysis = meta::analysis(
+                focus,
+                facts.and_then(|f| f.sharpness),
+                self.settings.group_min_faces,
+            );
             let (name, meta, error) = match shown {
                 Shown::Read(meta) => (&meta.name, Some(meta.as_ref()), None),
                 Shown::Failed { name, error } => (name, None, Some(error)),

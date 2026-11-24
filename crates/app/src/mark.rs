@@ -7,7 +7,7 @@
 use handpic_core::eyes::EyeState;
 use handpic_engine::{index::Focus, ondemand::FaceBox};
 
-use crate::icons;
+use crate::{group, icons};
 
 /// `fullsharp::LOW_BELOW`: a frame under it on the full-size JPEG is low.
 pub const LOW_FULL_EYE_SHARP: f64 = 0.110;
@@ -80,13 +80,18 @@ pub fn af_eye_state(focus: Option<&Focus>) -> MarkState {
     }
 }
 
-/// Whether the strip cell draws the closed-eyes mark: today when the stored
-/// eye state of the judged face is closed, never without a focus (a JPEG) or
-/// before pass 2 reaches the file. Named for the mark, not the face, so a
-/// rule over every face can widen it without touching the cell or its
-/// painting.
-pub fn closed_eyes_mark(focus: Option<&Focus>) -> bool {
-    focus.is_some_and(|f| f.eyes.eyes == Some(EyeState::Closed))
+/// Whether the strip cell draws the closed-eyes mark: when the stored eye
+/// state of the judged face is closed, or when pass 3 found at least one face
+/// with closed eyes on a frame whose gate count meets `min_faces` (the counts
+/// as `group::shown` gives them, so never on a frame under the gate); never
+/// without a focus (a JPEG) or before pass 2 reaches the file.
+pub fn closed_eyes_mark(focus: Option<&Focus>, min_faces: u32) -> bool {
+    focus.is_some_and(|f| {
+        f.eyes.eyes == Some(EyeState::Closed)
+            || group::shown(&f.eyes, min_faces)
+                .closed
+                .is_some_and(|n| n > 0)
+    })
 }
 
 /// `None` without a recorded point or for a manual-focus shot, whose recorded
@@ -475,14 +480,55 @@ mod tests {
 
     #[test]
     fn the_closed_eyes_mark_shows_for_closed_eyes_only() {
-        assert!(closed_eyes_mark(Some(&eyes(Some(EyeState::Closed)))));
-        assert!(!closed_eyes_mark(Some(&eyes(Some(EyeState::Open)))));
-        assert!(!closed_eyes_mark(Some(&eyes(None))));
+        let at = group::DEFAULT;
+        assert!(closed_eyes_mark(Some(&eyes(Some(EyeState::Closed))), at));
+        assert!(!closed_eyes_mark(Some(&eyes(Some(EyeState::Open))), at));
+        assert!(!closed_eyes_mark(Some(&eyes(None)), at));
     }
 
     #[test]
     fn the_closed_eyes_mark_is_off_without_a_focus_as_on_a_jpeg() {
-        assert!(!closed_eyes_mark(None));
+        assert!(!closed_eyes_mark(None, group::DEFAULT));
+    }
+
+    fn group_of(state: Option<EyeState>, gate: Option<u32>, closed: Option<u32>) -> Focus {
+        let mut focus = eyes(state);
+        focus.eyes.faces_group = gate;
+        focus.eyes.faces_judged = closed.map(|_| 6);
+        focus.eyes.faces_closed = closed;
+        focus
+    }
+
+    #[test]
+    fn the_closed_eyes_mark_shows_when_anyone_at_the_gate_is_closed() {
+        let open = Some(EyeState::Open);
+        assert!(closed_eyes_mark(Some(&group_of(open, Some(5), Some(1))), 5));
+        assert!(closed_eyes_mark(Some(&group_of(open, Some(6), Some(3))), 5));
+        assert!(closed_eyes_mark(Some(&group_of(None, Some(5), Some(1))), 5));
+        assert!(!closed_eyes_mark(
+            Some(&group_of(open, Some(5), Some(0))),
+            5
+        ));
+        assert!(!closed_eyes_mark(Some(&group_of(open, Some(5), None)), 5));
+    }
+
+    #[test]
+    fn the_closed_eyes_mark_ignores_the_counts_under_the_gate() {
+        let open = Some(EyeState::Open);
+        assert!(!closed_eyes_mark(
+            Some(&group_of(open, Some(4), Some(1))),
+            5
+        ));
+        assert!(!closed_eyes_mark(
+            Some(&group_of(open, Some(5), Some(1))),
+            6
+        ));
+        assert!(!closed_eyes_mark(Some(&group_of(open, None, Some(1))), 2));
+        let closed = Some(EyeState::Closed);
+        assert!(closed_eyes_mark(
+            Some(&group_of(closed, Some(4), Some(1))),
+            5
+        ));
     }
 
     #[test]

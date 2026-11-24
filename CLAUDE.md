@@ -335,8 +335,9 @@ members over `all` not rejected yet, stars and label kept),
 `groupMinFaces` value; `parse` and `valid`, the modal's and
 `set_settings`' rule, `FIELD_REFUSAL` and `RANGE_REFUSAL`) and `shown`, a frame's all-faces
 `Counts` as the app shows them: the stored counts when the stored gate
-count is at or above the threshold, else unknown, which the meta pane,
-strip and filter of Steps 5 and 6 are to read them through (only the tests do so far); the window's
+count is at or above the threshold, else unknown, which the meta pane's
+count rows and the strip's closed-eyes mark read them through (the filter
+to follow); the window's
 `set_group_min_faces` writes it, refilters and, on a lowering, re-lists the
 open folder as a watcher change does, so pass 3 picks up the rows that now
 meet it, a raise starting nothing,
@@ -418,7 +419,8 @@ the flag dot, the dimmed reject and the label's `Tint`, and its hover texts'
 rest of the cell), which the window draws along its bottom edge on
 a `canvas` with each cell's face focus icon (`MarkState::icon`) at the
 image box's bottom-left and, in a fixed slot right of it, the closed-eyes
-mark (`mark::closed_eyes_mark`, Lucide's `eye-off`), under
+mark (`mark::closed_eyes_mark` at the group threshold in force, Lucide's
+`eye-off`), under
 transparent region `div`s that show those texts as gpui-component `Tooltip`s
 and under gpui-component's horizontal scrollbar, whose handle is
 `src/stripbar.rs`'s `StripBar` (a `ScrollbarHandle` over the strip's offset
@@ -516,7 +518,7 @@ landing where `filter::anchor_after_filter` puts it, the strip keeping the same 
 (`carried_indices`), `src/mark.rs` the port of `focus.ts`'s mark states
 (`af_eye_state`: Good / Neutral / Low, Good being the engine's
 `StoredEyes::photo_tier`, which holds the rule and its cuts, Low being
-`full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `closed_eyes_mark`, the strip cell's closed-eyes mark rule (the judged face's stored eye state closed), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
+`full_eye_sharp` under `LOW_FULL_EYE_SHARP`; `MarkState`'s `color` and the strip cell's `icon`), `closed_eyes_mark`, the strip cell's closed-eyes mark rule (the judged face's stored eye state closed, or a closed count of at least 1 as `group::shown` gives it at the threshold, so none from the counts under the gate), `focus_mark`, `upright_point` and the face boxes' `face_marks`,
 `face_label` and `face_label_at`, `src/faces.rs` the port of `faces.ts`'s
 `FaceCache` (each path detected once, kept by path, a clear dropping the
 answers issued before it), `src/eyes.rs` the port of `eyes.ts`'s `EyesCache`
@@ -538,10 +540,13 @@ bounds, `src/meta.rs` the right-hand meta pane's rows (`groups`,
 a port of `meta.ts`'s `metaGroups` over the engine's `exif::Metadata`, which
 `load` builds next to the preview: the `EXIF` and `Maker note` groups, the
 latter also carrying the index's AF point and frame (`af_rows`) after
-`AF tracking`, and an `Analysis` group (`analysis`) of every value pass 1 and
-pass 2 stored for the shown file: `metaGroups`' rows with its labels and
+`AF tracking`, and an `Analysis` group (`analysis`) of every value passes 1
+to 3 stored for the shown file: `metaGroups`' rows with its labels and
 strings, the full-size eye score named `Eye focus`, the closed probability, the EAR, the mesh's eye
-offset, the edge gap and the preview's sharpness; both from the window's
+offset, the edge gap, the preview's sharpness, the gate count as `Similar
+faces` on every frame, and pass 3's `Faces judged`, `Faces with closed eyes`
+and `Faces with soft eyes` through `group::shown` at the group threshold,
+none under the gate; both from the window's
 `Facts` of the file, never the on-demand eyes judgment; `name_segments`, the
 file name heading cut after each `_`, `-` and space), `src/viewonly.rs`
 whether a folder is JPEG-only and so view-only (`is_view_only`, a port of

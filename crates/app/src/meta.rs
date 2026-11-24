@@ -1,12 +1,14 @@
 //! The meta pane's rows grouped by where each value comes from, a port of
 //! `meta.ts`'s `metaGroups`: the standard EXIF/TIFF tags, the vendor
 //! MakerNote with the AF point and frame the index stored (`af_rows`), and
-//! the app's own analysis (`analysis`): every value pass 1 and pass 2 stored
+//! the app's own analysis (`analysis`): every value passes 1 to 3 stored
 //! for the file, never the on-demand eyes judgment `metaGroups` falls back to.
 
 use handpic_core::eyes::{EYES_CLOSED_EAR, EyeState};
 use handpic_engine::exif::Metadata;
 use handpic_engine::index::{Focus, FocusPoint, GOOD_FULL_EYE_SHARP};
+
+use crate::group;
 
 pub const EXIF_HEADING: &str = "EXIF";
 pub const MAKER_NOTE_HEADING: &str = "Maker note";
@@ -95,14 +97,18 @@ pub fn af_rows(point: Option<&FocusPoint>) -> Vec<(&'static str, Option<String>)
 
 /// The `Analysis` rows from the values the scan stored: `metaGroups`' rows
 /// with the same labels and strings, the full-size eye score as `Eye focus`,
-/// each computed value it does not show next to the one it derives from, and
-/// the preview's sharpness.
+/// each computed value it does not show next to the one it derives from, the
+/// preview's sharpness, then the group check: the stored gate count as
+/// `Similar faces` whatever `min_faces` is, and pass 3's counts as
+/// `group::shown` gives them at `min_faces`, so none under the gate.
 pub fn analysis(
     focus: Option<&Focus>,
     sharpness: Option<f64>,
+    min_faces: u32,
 ) -> Vec<(&'static str, Option<String>)> {
     let eyes = focus.map(|f| f.eyes).unwrap_or_default();
     let pose = eyes.pose;
+    let counts = group::shown(&eyes, min_faces);
     let fixed = |v: f64| format!("{v:.3}");
     vec![
         (
@@ -134,6 +140,13 @@ pub fn analysis(
         ("Mesh eye offset", eyes.eye_offset.map(fixed)),
         ("Edge gap", eyes.edge_gap.map(fixed)),
         ("Sharpness", sharpness.map(|s| format!("{s:.1}"))),
+        ("Similar faces", eyes.faces_group.map(|n| n.to_string())),
+        ("Faces judged", counts.judged.map(|n| n.to_string())),
+        (
+            "Faces with closed eyes",
+            counts.closed.map(|n| n.to_string()),
+        ),
+        ("Faces with soft eyes", counts.soft.map(|n| n.to_string())),
     ]
 }
 
@@ -381,14 +394,14 @@ mod tests {
 
     /// The rows the scan's values give, in the order shown.
     fn shown(focus: Option<&Focus>, sharpness: Option<f64>) -> Vec<(&'static str, String)> {
-        analysis(focus, sharpness)
+        analysis(focus, sharpness, group::DEFAULT)
             .into_iter()
             .filter_map(|(l, v)| v.map(|v| (l, v)))
             .collect()
     }
 
     fn value(focus: &Focus, label: &str) -> Option<String> {
-        analysis(Some(focus), None)
+        analysis(Some(focus), None, group::DEFAULT)
             .into_iter()
             .find(|(l, _)| *l == label)
             .and_then(|(_, v)| v)
@@ -397,7 +410,7 @@ mod tests {
     #[test]
     fn splits_sony_like_input_into_exif_maker_note_and_analysis() {
         let meta = sony();
-        let analysis = analysis(Some(&sharp_eyes()), None);
+        let analysis = analysis(Some(&sharp_eyes()), None, group::DEFAULT);
         let groups = groups(Some(&meta), &[], &analysis);
         let headings: Vec<_> = groups.iter().map(|g| g.heading).collect();
         assert_eq!(
@@ -438,7 +451,7 @@ mod tests {
 
     #[test]
     fn shows_only_the_analysis_group_without_metadata() {
-        let analysis = analysis(Some(&sharp_eyes()), None);
+        let analysis = analysis(Some(&sharp_eyes()), None, group::DEFAULT);
         let groups = groups(None, &[], &analysis);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].heading, ANALYSIS_HEADING);
@@ -448,7 +461,7 @@ mod tests {
     #[test]
     fn leaves_out_the_analysis_group_without_a_value() {
         let meta = sony();
-        let none = analysis(None, None);
+        let none = analysis(None, None, group::DEFAULT);
         let headings: Vec<_> = groups(Some(&meta), &[], &none)
             .iter()
             .map(|g| g.heading)
@@ -591,6 +604,73 @@ mod tests {
         assert_eq!(shown(None, Some(98.04)), [("Sharpness", "98.0".to_owned())]);
     }
 
+    fn group_eyes(
+        gate: Option<u32>,
+        judged: Option<u32>,
+        closed: Option<u32>,
+        soft: Option<u32>,
+    ) -> Focus {
+        with_eyes(StoredEyes {
+            faces_group: gate,
+            faces_judged: judged,
+            faces_closed: closed,
+            faces_soft: soft,
+            ..StoredEyes::default()
+        })
+    }
+
+    fn group_rows(focus: &Focus, min_faces: u32) -> Vec<(&'static str, String)> {
+        analysis(Some(focus), None, min_faces)
+            .into_iter()
+            .filter_map(|(l, v)| v.map(|v| (l, v)))
+            .collect()
+    }
+
+    #[test]
+    fn a_frame_at_the_gate_shows_its_gate_count_and_counts_last() {
+        let f = group_eyes(Some(6), Some(5), Some(1), Some(0));
+        assert_eq!(
+            group_rows(&f, 5),
+            [
+                ("Similar faces", "6".to_owned()),
+                ("Faces judged", "5".to_owned()),
+                ("Faces with closed eyes", "1".to_owned()),
+                ("Faces with soft eyes", "0".to_owned()),
+            ]
+        );
+        let at = group_eyes(Some(5), Some(5), Some(0), Some(2));
+        assert_eq!(group_rows(&at, 5).len(), 4);
+    }
+
+    #[test]
+    fn a_frame_under_the_gate_shows_similar_faces_alone() {
+        let f = group_eyes(Some(4), Some(4), Some(1), Some(1));
+        assert_eq!(group_rows(&f, 5), [("Similar faces", "4".to_owned())]);
+        let raised = group_eyes(Some(6), Some(5), Some(1), Some(0));
+        assert_eq!(group_rows(&raised, 7), [("Similar faces", "6".to_owned())]);
+        let unchecked = group_eyes(Some(1), None, None, None);
+        assert_eq!(
+            group_rows(&unchecked, 2),
+            [("Similar faces", "1".to_owned())]
+        );
+    }
+
+    #[test]
+    fn leaves_out_each_count_row_while_it_is_unknown() {
+        let soft_unknown = group_eyes(Some(5), Some(5), Some(0), None);
+        assert_eq!(
+            group_rows(&soft_unknown, 5),
+            [
+                ("Similar faces", "5".to_owned()),
+                ("Faces judged", "5".to_owned()),
+                ("Faces with closed eyes", "0".to_owned()),
+            ]
+        );
+        let not_yet = group_eyes(Some(5), None, None, None);
+        assert_eq!(group_rows(&not_yet, 5), [("Similar faces", "5".to_owned())]);
+        assert!(group_rows(&group_eyes(None, None, None, None), 2).is_empty());
+    }
+
     #[test]
     fn no_value_or_only_an_af_point_gives_no_analysis_group() {
         assert!(shown(None, None).is_empty());
@@ -598,7 +678,7 @@ mod tests {
             point: Some(POINT),
             ..focus()
         };
-        let analysis = analysis(Some(&point), None);
+        let analysis = analysis(Some(&point), None, group::DEFAULT);
         assert!(groups(None, &[], &analysis).is_empty());
     }
 
@@ -633,7 +713,7 @@ mod tests {
     #[test]
     fn the_af_rows_show_without_metadata_before_the_analysis() {
         let af = af_rows(Some(&POINT));
-        let analysis = analysis(None, Some(1.));
+        let analysis = analysis(None, Some(1.), group::DEFAULT);
         let groups = groups(None, &af, &analysis);
         let headings: Vec<_> = groups.iter().map(|g| g.heading).collect();
         assert_eq!(headings, [MAKER_NOTE_HEADING, ANALYSIS_HEADING]);

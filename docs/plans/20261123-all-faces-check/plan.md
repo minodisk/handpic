@@ -353,7 +353,7 @@ not change.
     - On any change of the value, `refilter` and redraw, since the
       visibility rule's answer changes for rows already loaded.
 
-- [ ] Step 5: Show the counts: the meta pane's rows and the strip cell's mark (`handpic-app`)
+- [x] Step 5: Show the counts: the meta pane's rows and the strip cell's mark (`handpic-app`)
   - Done when:
     - The meta pane's `Analysis` group shows a `Similar faces` row, the
       stored gate count, whenever it is known, on a frame under the gate
@@ -636,3 +636,4 @@ Made in this revision (planning, 2026-11-24):
 - (2026-11-24) Step 2 complete
 - (2026-11-24) Step 3 complete
 - (2026-11-25) Step 4 complete
+- (2026-11-25) Step 5 complete

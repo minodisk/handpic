@@ -204,8 +204,15 @@ DxO PhotoLab.
   `Unknown`). A frame whose judged face (the one nearest the AF point, else
   the largest confident face) the same pass stored as `Closed` gets an
   amber eye-off icon at the cell's bottom-left, right of the face icon's
-  place, filling in as the pass runs; it
-  judges that one face only, and a face under 60 px is not judged. The mark also draws the faces
+  place, filling in as the pass runs; on a frame that reached the group
+  number, the same icon also marks a blink the third pass found on any
+  face, and the meta pane shows `Faces judged`, `Faces with closed eyes`
+  and `Faces with soft eyes` (faces of 60 px or more and a detection score
+  of 0.8 or more, at most eight, so a frame without the mark can still hold
+  an unjudged blink), next to `Similar faces`, the second pass's count of
+  same-size faces, shown on every frame to help choose the number; off the
+  group frames the icon judges the one face only, and a face under 60 px is
+  not judged. The mark also draws the faces
   Handpic detects near the AF point as a cyan box with a cyan dot on each eye,
   the nose tip and the mouth corners and a label beside it (the detection
   score, the box size and the distance between the eyes, in preview pixels),
