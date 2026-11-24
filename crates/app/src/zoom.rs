@@ -109,8 +109,10 @@ struct Ahead<C> {
 struct Flight {
     /// The page it was asked on.
     seq: u64,
-    /// Whether it reads a neighbour ahead.
-    ahead: bool,
+    /// The neighbour it reads ahead, if any.
+    ahead: Option<String>,
+    /// Whether a page landed on that neighbour while it was read.
+    passed: bool,
     /// Whether the view was zoomed when it was asked for.
     zoomed: bool,
     /// A re-listing came since: its crop may be of bytes no longer there.
@@ -216,7 +218,8 @@ impl<C> Zoom<C> {
         }
         self.in_flight = Some(Flight {
             seq: self.seq,
-            ahead: ahead.is_some(),
+            ahead: ahead.clone(),
+            passed: false,
             zoomed: self.on,
             void: false,
         });
@@ -309,6 +312,12 @@ impl<C> Zoom<C> {
         self.seq += 1;
         self.waiting = None;
         self.current = current.map(str::to_owned);
+        if let Some(flight) = &mut self.in_flight
+            && current.is_some()
+            && flight.ahead.as_deref() == current
+        {
+            flight.passed = true;
+        }
         if current.is_none() {
             self.on = false;
         }
@@ -348,7 +357,7 @@ impl<C> Zoom<C> {
             self.failed = None;
         }
         if let Some(flight) = &mut self.in_flight
-            && (flight.ahead || !flight.zoomed || !self.on)
+            && (flight.ahead.is_some() || !flight.zoomed || !self.on)
         {
             flight.void = true;
         }
@@ -455,21 +464,22 @@ impl<C> Zoom<C> {
     ) -> Arrived<C> {
         let flight = self.in_flight.take();
         let void = flight.as_ref().is_some_and(|flight| flight.void);
-        let asked = flight
-            .map(|flight| flight.seq)
-            .filter(|seq| *seq != self.seq);
+        let moved = flight.as_ref().map(|flight| (flight.seq, flight.passed));
         match crop {
             Ok((crop, requested)) if !void && self.current.as_deref() == Some(path) => {
                 self.hold(crop, requested, viewport)
             }
-            Ok((crop, requested)) if !void && self.on && asked.is_some() => {
-                // The page passed this neighbour while it was read: draw it
-                // as a stale crop, as `arrived` does, rather than park it.
+            Ok((crop, requested))
+                if !void && self.on && moved.is_some_and(|(_, passed)| passed) =>
+            {
+                // The page landed on this neighbour and left it while it was
+                // read: draw it as a stale crop, as `arrived` does, under
+                // the seq it was asked on, which is never current again.
                 let release = self
                     .held
                     .replace(Held {
                         crop,
-                        seq: asked.unwrap_or_default(),
+                        seq: moved.map_or(0, |(seq, _)| seq),
                         viewport: requested,
                     })
                     .map(|held| held.crop);
@@ -478,7 +488,9 @@ impl<C> Zoom<C> {
                     request: self.wanted(viewport),
                 }
             }
-            Ok((crop, requested)) if !void && self.on => {
+            Ok((crop, requested))
+                if !void && self.on && moved.is_none_or(|(seq, _)| seq == self.seq) =>
+            {
                 let release = self
                     .ahead
                     .replace(Ahead {
@@ -1026,20 +1038,31 @@ mod tests {
     }
 
     #[test]
-    fn zoomed_a_neighbours_crop_landing_after_a_page_elsewhere_asks_for_the_current() {
+    fn zoomed_a_neighbours_crop_landing_after_a_page_elsewhere_is_released() {
         let mut z = zoomed_on_a();
         z.prefetch(VIEW, Some("b")).unwrap();
         z.page(Some("c"), VIEW);
         match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
             Arrived::Stale { release, request } => {
-                assert_eq!(release, Some(7));
+                assert_eq!(release, Some(8));
                 assert_eq!(request.map(|r| r.ahead), Some(None));
             }
             other => panic!("{other:?}"),
         }
-        assert_eq!(z.crop(), Some(&8));
-        assert!(!z.placeholder_fits());
+        assert_eq!(z.crop(), Some(&7));
         assert_eq!(z.page(Some("d"), VIEW).0, Vec::<u8>::new());
+    }
+
+    #[test]
+    fn zoomed_a_page_back_before_the_neighbours_crop_lands_does_not_draw_it() {
+        let mut z = zoomed_on_a();
+        z.prefetch(VIEW, Some("b")).unwrap();
+        z.page(Some("0"), VIEW);
+        match z.ahead_arrived("b", Ok((8, VIEW)), VIEW) {
+            Arrived::Stale { release, .. } => assert_eq!(release, Some(8)),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(z.crop(), Some(&7));
     }
 
     #[test]

@@ -2953,11 +2953,14 @@ it lands. One read is in flight across both, and each slot holds one crop.
   and when the settled viewport differs (`fit`, from `fit_settled`); not
   zoomed, the current page's goes the same way. Zoomed, a re-listing keeps
   the current page's crop, as before.
-- Rule: a neighbour's crop that lands after the page has moved past it (the
-  read was asked on an earlier page and is not the current file) is not parked
-  in the slot: zoomed, it is held as a stale crop under the seq it was asked
-  on, like `arrived`'s zoomed-stale branch, so a held key still draws each
-  crop before chasing the current page.
+- Rule: a neighbour's crop that lands after a page landed on that neighbour
+  and left it (`Flight::passed`, set by `page` when the current file is the
+  read's neighbour) is not parked in the slot: zoomed, it is held as a stale
+  crop under the seq it was asked on, like `arrived`'s zoomed-stale branch,
+  so a held key still draws each crop it paged through before chasing the
+  current page. When no page landed on the neighbour (a reverse key, a
+  click, a refilter) and the page has moved, the crop is released and the
+  held one stays.
 - Rule: a failed read ahead shows nothing. Not zoomed it is `Arrived::Missed`
   and `failed` stops a retry until `z`, which reads again and shows the error
   as before; a neighbour's failure is remembered (`ahead_failed`) until a
