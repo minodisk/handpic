@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use crate::arw::{Arw, FocusLocation, Shot};
 use crate::candidate::{face_cue_unless, focus_cue_unless, Cue};
-use crate::decode::{decode_rgb, thumbnail_jpeg, thumbnail_jpeg_near};
+use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
 use crate::faces::{detect_around, Detection, Face};
 use crate::fullsharp::full_eye_sharpness;
@@ -19,8 +19,8 @@ use crate::sharpness::{eye_af_frame, score_preview, trusted_focus};
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
 
-/// The long edge a JPEG file's or a RAF's thumbnail aims at: the ARW
-/// thumbnail's.
+/// The long edge every file's thumbnail aims at, whatever the size of its
+/// preview: a 1616x1080 ARW preview's 2/8.
 const JPEG_THUMBNAIL_LONG_EDGE: usize = 404;
 
 /// Whether `path` has a RAW extension Handpic lists: `.ARW`, `.CR3`, `.DNG`,
@@ -97,6 +97,8 @@ fn extract_unless(
 ) -> Option<Result<Entry, Failure>> {
     let read = {
         let _slot = slots.acquire(cancel)?;
+        #[cfg(test)]
+        tests::cancel_mid_read(cancel);
         read_preview(path)
     };
     let (arw, preview) = match read {
@@ -127,23 +129,12 @@ fn extract_unless(
     if canceled(cancel) {
         return None;
     }
-    let jpeg = is_jpeg_file(path);
-    // A RAF's one embedded JPEG is 4000 to 4416 px wide, which 2/8 would
-    // leave at over 1000.
-    let near = jpeg
-        || path
-            .extension()
-            .is_some_and(|e| e.eq_ignore_ascii_case("raf"));
     // mozjpeg aborts through a panic, not an error return, when the bytes are
     // not a JPEG. A single corrupt file out of thousands must cost that file
     // and nothing else, so the decode runs inside `catch_unwind`. Nothing here
     // is shared or observable after a panic, hence `AssertUnwindSafe`.
     let thumbnail = match catch_unwind(AssertUnwindSafe(|| {
-        if near {
-            thumbnail_jpeg_near(&preview, JPEG_THUMBNAIL_LONG_EDGE, THUMBNAIL_QUALITY)
-        } else {
-            thumbnail_jpeg(&preview, THUMBNAIL_QUALITY)
-        }
+        thumbnail_jpeg_near(&preview, JPEG_THUMBNAIL_LONG_EDGE, THUMBNAIL_QUALITY)
     })) {
         Ok(Ok(thumbnail)) => thumbnail,
         Ok(Err(e)) => return Some(Err(failed(e.to_string()))),
@@ -247,6 +238,8 @@ fn extract_analysis_unless(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
+        #[cfg(test)]
+        tests::cancel_mid_read(cancel);
         read_preview(path)
     };
     let (arw, preview) = match read {
@@ -1195,6 +1188,61 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    thread_local! {
+        static CANCEL_MID_READ: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Set `cancel` inside the read's slot when this thread asked for it
+    /// (`MidRead`).
+    pub(super) fn cancel_mid_read(cancel: &AtomicBool) {
+        if CANCEL_MID_READ.get() {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// Turns `cancel_mid_read` on for this thread until dropped.
+    struct MidRead;
+
+    impl MidRead {
+        fn on() -> Self {
+            CANCEL_MID_READ.set(true);
+            MidRead
+        }
+    }
+
+    impl Drop for MidRead {
+        fn drop(&mut self) {
+            CANCEL_MID_READ.set(false);
+        }
+    }
+
+    #[test]
+    fn a_file_canceled_during_its_read_is_not_delivered() {
+        let dir = dir("cancel-read");
+        let good = write(&dir, "good.ARW", &fixture(1, &jpeg(64, 48)));
+        let bad = write(&dir, "bad.ARW", &fixture(6, &[0u8; 512]));
+        let slots = ReadSlots::default();
+        let mid_read = MidRead::on();
+        for path in [&good, &bad] {
+            let cancel = AtomicBool::new(false);
+            assert!(
+                extract_unless(path, &cancel, &slots).is_none(),
+                "{}",
+                path.display()
+            );
+            assert!(cancel.load(Ordering::Relaxed));
+            let cancel = AtomicBool::new(false);
+            assert!(
+                extract_analysis_unless(path, &cancel, &slots).is_none(),
+                "{}",
+                path.display()
+            );
+            assert!(cancel.load(Ordering::Relaxed));
+        }
+        drop(mid_read);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
     #[test]
     fn a_file_canceled_mid_pipeline_is_not_delivered() {
         let dir = dir("cancel-mid");
@@ -1339,6 +1387,9 @@ mod tests {
     const SETTLE: Duration = Duration::from_millis(150);
     /// A pause no test outlasts.
     const LONG_PAUSE: Duration = Duration::from_secs(60);
+    /// Only a scan that ignores its cancel waits this long, well under
+    /// `LONG_PAUSE`.
+    const HANG: Duration = Duration::from_secs(30);
 
     fn fixtures(name: &str, n: usize) -> (PathBuf, Vec<PathBuf>) {
         let dir = dir(name);
@@ -1515,14 +1566,20 @@ mod tests {
             std::thread::scope(|s| {
                 let paused = on_pause.then(|| slots.pause());
                 let slot = (!on_pause).then(|| slots.acquire(&cancel));
-                let scan = s.spawn(|| pass(false, &paths, &slots, &cancel, &seen));
+                let (alive, ended) = std::sync::mpsc::channel::<()>();
+                let scan = s.spawn(|| {
+                    let _alive = alive;
+                    pass(false, &paths, &slots, &cancel, &seen)
+                });
                 std::thread::sleep(SETTLE);
-                let canceled = Instant::now();
                 cancel.store(true, Ordering::Relaxed);
-                scan.join().unwrap();
-                let took = canceled.elapsed();
-                assert!(took < Duration::from_secs(1), "took {took:?}");
+                let hung = matches!(
+                    ended.recv_timeout(HANG),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+                );
                 drop((paused, slot));
+                assert!(!hung, "the scan ended while held, paused: {on_pause}");
+                scan.join().unwrap();
             });
             assert_eq!(sorted(seen), Vec::<usize>::new(), "paused: {on_pause}");
         }
@@ -1732,6 +1789,17 @@ mod tests {
         assert_eq!(e.orientation, 8);
         let d = mozjpeg::Decompress::new_mem(&e.thumbnail).unwrap();
         assert_eq!((d.width(), d.height()), (JPEG_THUMBNAIL_LONG_EDGE, 270));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_raw_thumbnail_aims_at_the_long_edge_whatever_the_preview_size() {
+        let dir = dir("near");
+        for ((w, h), want) in [((3200, 2400), (404, 303)), ((1616, 1080), (404, 270))] {
+            let e = extract(&write(&dir, &format!("{w}.DNG"), &fixture(1, &jpeg(w, h)))).unwrap();
+            let d = mozjpeg::Decompress::new_mem(&e.thumbnail).unwrap();
+            assert_eq!((d.width(), d.height()), want, "{w}x{h}");
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

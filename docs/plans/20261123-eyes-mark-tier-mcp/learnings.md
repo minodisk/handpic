@@ -51,6 +51,36 @@
   `the_catalog_paths_equal_their_icon_names` and
   `every_icon_path_loads_an_svg` cover it.
 
+## Step 3: `get_view`'s eyes from the stored values
+
+- `get_view` reads the current file's `Facts.focus.eyes` (`StoredEyes`) and
+  answers from it when `eyes` (the state) is `Some`, naming the state by a
+  `match` on `handpic_core::eyes::EyeState` in `companion.rs` (`index.rs`'s
+  `serialize_eyes` is private, and `ondemand.rs` has its own match); else it
+  falls back to `View.eyes`, the on-demand judgment, as before.
+- The stored row cannot tell "pass 2 has not reached the file" from "pass 2
+  meshed no face" (both a default `StoredEyes`), so the absence tests build
+  both from `StoredEyes::default()`, told apart only by the preview's
+  sharpness score being set or not.
+- The old description's "judged a moment after showing it" was already wrong
+  in the GPUI app: the on-demand judgment runs only while the `f` overlay is
+  on. The new wording names the overlay.
+- `README.md` / `README.ja.md` do not say when `eyes` appears, and
+  `CLAUDE.md`'s `companion.rs` description does not mention the eyes, so
+  neither changed.
+
+- `mise run ci:local` failed three times, each on a different timing-sensitive
+  test in a file this step does not touch, all passing when run alone, on a
+  host under memory pressure (an earlier run was killed for low memory):
+  `sidecar::tests::a_judgment_under_both_lands_in_the_xmp_and_the_dop` /
+  `a_partial_both_write_records_the_xmp_stat_so_a_reopen_still_replays_the_dop`,
+  then `sidecar::tests::an_unknown_label_under_both_keeps_the_newest_sidecars_label_in_both_files`
+  (`crates/engine/src/sidecar.rs`), then
+  `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped`
+  (`crates/app/src/scan.rs`). The user accepted them as load-related
+  flakiness and had the step committed with the PR's GitHub checks as the
+  check; this step's own tests all passed.
+
 ## Deferred issues (todo candidates)
 
 - Pending manual check (Step 2, closed-eyes strip mark): on a real folder of

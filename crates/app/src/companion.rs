@@ -30,7 +30,7 @@
 //! `context_coverage`, `menu_coverage`, `folder_op_coverage`,
 //! `page_coverage` and `OTHER`) maps
 //! every user-facing action to its tool, to a tool refused until the
-//! app has the feature (`not_in_app`: compare and file rename), or to the
+//! app has the feature (`not_in_app`: file rename), or to the
 //! reason it has none.
 
 use std::{
@@ -41,7 +41,7 @@ use std::{
 };
 
 use gpui_kit::component::ThemeMode;
-use handpic_core::{Flag, i18n, xmp::LabelNames};
+use handpic_core::{Flag, eyes::EyeState, i18n, xmp::LabelNames};
 use handpic_engine::shortcuts::Keymap;
 use handpic_engine::{
     import::{self as importer, ImportSettings},
@@ -78,7 +78,6 @@ use crate::{
 
 /// The Tauri app's features Handpic does not have yet, each with its
 /// tool, which refuses with `not_in_app` (D6).
-const COMPARE: &str = "compare";
 const FILE_RENAME: &str = "file rename";
 /// The tools whose whole call is a feature not in the app yet.
 const UNPORTED_TOOLS: [(&str, &str); 1] = [("rename_file", FILE_RENAME)];
@@ -96,7 +95,7 @@ pub fn not_in_app(feature: &str) -> String {
 /// of the app. Only its tests read it, which keep it complete.
 #[cfg(test)]
 pub mod coverage {
-    use super::{COMPARE, FILE_RENAME, FolderOp};
+    use super::{FILE_RENAME, FolderOp};
     use crate::{
         context,
         menu::{self, Toggle},
@@ -145,13 +144,6 @@ pub mod coverage {
         ("focus", Coverage::Tool("set_overlays")),
         ("zoom", Coverage::Tool("set_view")),
         ("grayscale", Coverage::Tool("set_overlays")),
-        (
-            "compare",
-            Coverage::NotImplemented {
-                tool: "set_view",
-                feature: COMPARE,
-            },
-        ),
         ("performance", Coverage::Tool("set_overlays")),
         ("peaking", Coverage::Tool("set_overlays")),
         ("rate1", Coverage::Tool("set_judgment")),
@@ -363,8 +355,9 @@ pub struct View<'a> {
     pub groups: &'a Groups,
     pub panes: Panels,
     pub overlays: Overlays,
-    /// The current file's eyes: `None` not judged yet, `Some(None)` judged
-    /// with the eyes unknown.
+    /// The current file's on-demand eyes judgment: `None` not judged yet,
+    /// `Some(None)` judged with the eyes unknown. `get_view` falls back to it
+    /// when the index holds no stored eye state for the file.
     pub eyes: Option<Option<Arc<EyesJudgment>>>,
     /// The open folder holds only JPEGs.
     pub view_only: bool,
@@ -1425,16 +1418,30 @@ pub fn get_view(view: &View) -> Value {
         let mut current = Map::new();
         current.insert("path".into(), json!(path.to_string_lossy()));
         current.insert("position".into(), json!(view.index + 1));
-        let good = view
+        let focus = view
             .facts
             .get(path.to_string_lossy().as_ref())
-            .and_then(|f| f.focus)
-            .is_some_and(|f| f.eyes.photo_tier());
+            .and_then(|f| f.focus);
+        let good = focus.is_some_and(|f| f.eyes.photo_tier());
         current.insert(
             "photo_tier".into(),
             if good { json!("good") } else { Value::Null },
         );
-        if let Some(eyes) = &view.eyes {
+        if let Some(stored) = focus.map(|f| f.eyes)
+            && let Some(state) = stored.eyes
+        {
+            current.insert(
+                "eyes".into(),
+                json!({
+                    "state": match state {
+                        EyeState::Open => "open",
+                        EyeState::Closed => "closed",
+                    },
+                    "probability": stored.eyes_closed,
+                    "pose": stored.pose,
+                }),
+            );
+        } else if let Some(eyes) = &view.eyes {
             current.insert(
                 "eyes".into(),
                 eyes.as_ref().map_or(Value::Null, |eyes| {
@@ -1461,7 +1468,6 @@ pub fn get_view(view: &View) -> Value {
         "current": current,
         "selected": targets(view),
         "mode": if view.zoomed { "zoom" } else { "normal" },
-        "compare_active": null,
         "burst": burst,
         "sort": viewonly::sort_for(view.view_only, view.sort).setting(),
         "filtered": view.filter.is_active(),
@@ -1562,13 +1568,10 @@ fn select_photos(view: &View, paths: &Value) -> Result<Action, String> {
 fn set_view(view: &View, mode: &Value) -> Result<Option<Action>, String> {
     let mode = mode
         .as_str()
-        .filter(|mode| ["normal", "zoom", "compare"].contains(mode))
-        .ok_or("mode must be one of normal, zoom, compare")?;
+        .filter(|mode| ["normal", "zoom"].contains(mode))
+        .ok_or("mode must be one of normal, zoom")?;
     if mode != "normal" && view.files.is_empty() {
         return Err(NOTHING_SHOWN.into());
-    }
-    if mode == "compare" {
-        return Err(not_in_app(COMPARE));
     }
     Ok(((mode == "zoom") != view.zoomed).then_some(Action::ToggleZoom))
 }
@@ -2358,13 +2361,13 @@ mod tests {
         trash::{self, Target},
         tree::Row,
     };
-    use handpic_core::{Flag, i18n, xmp::LabelNames};
+    use handpic_core::{Flag, eyes::Eyes, i18n, xmp::LabelNames};
     use handpic_engine::{
         index::{EyesPose, Focus, StoredEyes},
         ondemand::{EyesJudgment, EyesMesh},
     };
     use handpic_engine::{shortcuts::Keymap, sidecar::SidecarFormat};
-    use serde_json::{Value, json};
+    use serde_json::{Map, Value, json};
     use std::{
         collections::{HashMap, HashSet},
         path::PathBuf,
@@ -2443,7 +2446,6 @@ mod tests {
                 "current": null,
                 "selected": [],
                 "mode": "normal",
-                "compare_active": null,
                 "burst": [],
                 "sort": "name",
                 "filtered": false,
@@ -2744,6 +2746,96 @@ mod tests {
         assert_eq!(current["photo_tier"], Value::Null);
         assert!(current.as_object().unwrap().contains_key("photo_tier"));
         assert_eq!(tier_of(None), Value::Null);
+    }
+
+    fn eyes_of(
+        facts: Option<Facts>,
+        eyes: Option<Option<Arc<EyesJudgment>>>,
+    ) -> Map<String, Value> {
+        let files = paths(&["/d/a.ARW"]);
+        let facts: HashMap<String, Facts> = facts
+            .into_iter()
+            .map(|f| ("/d/a.ARW".to_owned(), f))
+            .collect();
+        let Value::Object(current) = get_view(&View {
+            facts: &facts,
+            eyes,
+            ..view(&files)
+        })["current"]
+            .clone()
+        else {
+            panic!("no current photo");
+        };
+        current
+    }
+
+    fn with_focus(focus: Option<Focus>) -> Option<Facts> {
+        Some(Facts {
+            focus,
+            ..sharp(0.5)
+        })
+    }
+
+    fn not_scanned() -> Option<Focus> {
+        Some(Focus {
+            point: None,
+            manual_focus: false,
+            eyes: StoredEyes::default(),
+        })
+    }
+
+    #[test]
+    fn answers_the_eyes_from_the_stored_values_without_a_judgment() {
+        let current = eyes_of(with_focus(focus(0.35)), None);
+        assert_eq!(
+            current["eyes"],
+            json!({
+                "state": "open",
+                "probability": Eyes::from_ear(0.35).probability,
+                "pose": { "yaw": 10.0, "pitch": -5.0, "roll": 3.0 },
+            })
+        );
+        let closed = eyes_of(with_focus(focus(0.1)), None);
+        assert_eq!(closed["eyes"]["state"], "closed");
+    }
+
+    #[test]
+    fn the_stored_eyes_win_over_a_differing_judgment() {
+        let current = eyes_of(with_focus(focus(0.35)), judged(None));
+        assert_eq!(current["eyes"]["state"], "open");
+        assert_eq!(
+            current["eyes"]["probability"],
+            json!(Eyes::from_ear(0.35).probability)
+        );
+        let unknown = eyes_of(with_focus(focus(0.35)), Some(None));
+        assert_eq!(unknown["eyes"]["state"], "open");
+    }
+
+    #[test]
+    fn falls_back_to_the_judgment_without_a_stored_state() {
+        let current = eyes_of(with_focus(not_scanned()), judged(None));
+        assert_eq!(current["eyes"]["state"], "closed");
+        assert_eq!(current["eyes"]["probability"], 0.9);
+        let unknown = eyes_of(with_focus(not_scanned()), Some(None));
+        assert_eq!(unknown["eyes"], Value::Null);
+        assert!(unknown.contains_key("eyes"));
+    }
+
+    #[test]
+    fn leaves_the_eyes_key_out_without_a_stored_state_or_a_judgment() {
+        let unreached = eyes_of(
+            Some(Facts {
+                focus: not_scanned(),
+                sharpness: None,
+                ..sharp(0.5)
+            }),
+            None,
+        );
+        assert!(!unreached.contains_key("eyes"));
+        let no_mesh = eyes_of(with_focus(not_scanned()), None);
+        assert!(!no_mesh.contains_key("eyes"));
+        let jpeg = eyes_of(with_focus(None), None);
+        assert!(!jpeg.contains_key("eyes"));
     }
 
     #[test]
@@ -3108,11 +3200,11 @@ mod tests {
     }
 
     #[test]
-    fn set_view_refuses_compare() {
+    fn set_view_refuses_compare_as_an_unknown_mode() {
         let files = paths(&["/d/a", "/d/b"]);
         assert_eq!(
             ask("set_view", json!({ "mode": "compare" }), &view(&files)),
-            Err("compare is not implemented in Handpic yet".into())
+            Err("mode must be one of normal, zoom".into())
         );
     }
 
@@ -3121,7 +3213,7 @@ mod tests {
         let view = view(&[]);
         assert_eq!(
             ask("set_view", json!({ "mode": "grid" }), &view),
-            Err("mode must be one of normal, zoom, compare".into())
+            Err("mode must be one of normal, zoom".into())
         );
         assert_eq!(
             ask("set_view", json!({ "mode": "zoom" }), &view),
@@ -3780,14 +3872,11 @@ mod tests {
     fn every_feature_not_in_the_app_is_refused_with_the_shared_message() {
         let files = paths(&["/d/a", "/d/b"]);
         let view = view(&files);
-        let calls = [
-            ("compare", "set_view", json!({ "mode": "compare" })),
-            (
-                "file rename",
-                "rename_file",
-                json!({ "path": "/d/a", "name": "b" }),
-            ),
-        ];
+        let calls = [(
+            "file rename",
+            "rename_file",
+            json!({ "path": "/d/a", "name": "b" }),
+        )];
         let mut listed: Vec<(&str, &str)> = covered()
             .into_iter()
             .filter_map(|c| match c {

@@ -198,19 +198,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       Decision's shares rest on the agent's labels; if labels change,
       re-run `compare.py` in that plan folder and update `compare.md` and
       the Decision if a number moves.
-- [ ] Repoint the MCP `get_view` tool's `eyes` answer to the stored values.
-      Pass 2 now stores the EAR and the pose of the face it meshes (the
-      `mesh-eyes-index` work: `eyes_ear`, `eyes`, `eyes_closed` and `pose` on
-      `Focus` / `FaceReady`, `docs/plans/_archived/20261008-mesh-eyes-index/plan.md`),
-      but the app's `get_view`'s `eyes` still comes from the on-demand
-      judgment (`EyesCache`), so it answers only for a file already shown
-      (see `docs/plans/_archived/20261008-mcp-eyes-pose/plan.md`, written for
-      the Tauri app). Answer from the stored values when present, falling
-      back to the on-demand judgment, and keep the `eyes` key absent from
-      `get_view` until a file is judged. Done when `get_view` answers from
-      the stored values and a test covers the key's absence before a
-      judgment. Files: `crates/app/src/companion.rs`,
-      `crates/app/src/eyes.rs`.
 - [ ] Skip the second model run in `ondemand::read_eyes` for a file whose
       scan already stored the EAR and pose (the `mesh-eyes-index` work stores
       them, and the meta pane reads them). The on-demand judgment still runs
@@ -320,33 +307,6 @@ Files: `.claude/agents/pr-runner.md`
 #### TODO
 
 - [ ] On the next real `/pr` run, read the `pr-runner` subagent transcript (the subagent `.jsonl` files under the Claude Code project directory for that session). Confirm that every `.claude/skills/**/scripts` call, especially `wait-pr-actionable.sh`, has exactly the text in its code block with no pipe, `tail`, redirect, `; echo exit=$?`, `${PIPESTATUS[...]}` or chaining, and that none waited long before starting or was moved to the background after the script finished. If a decorated call appears, strengthen the wording in `.claude/agents/pr-runner.md` §4.
-
-### Core: SIGMA fp L strip thumbnails have over ten times the pixels of other bodies'
-
-SIGMA fp L DNGs have no strip JPEG at or above `PREVIEW_MIN_WIDTH` (1600)
-below the 9520x6328 full-size one, so the preview tier falls back to the
-full-size JPEG. The strip does not decode that per thumbnail: at scan time
-`thumbnail_jpeg` decodes the preview tier at 2/8 scale and re-encodes it,
-the index caches the result, and the strip's thumbnail read
-(`crates/app/src/thumbs.rs`) reads the cache. But 2/8 of 9520x6328 is about 2380x1582 (about 3.8 MP), more than
-ten times the pixels of the ~404x270 thumbnail of other bodies, so each
-strip cell costs more to read and to decode. Each scan also
-decodes the ~60 MP JPEG (at 2/8 scale) once per file. OM System / Olympus
-ORFs have the same cost on a smaller scale: their only JPEG is 3200x2400, so
-the fixed 2/8 gives 800x600 thumbnails, about four times the pixels of the
-~404x270 ones (`crates/core/src/orf.rs`; decided in
-`docs/plans/_archived/20260930-olympus-orf/plan.md` to leave `scan.rs`
-alone for now). Files: `crates/core/src/decode.rs` (`thumbnail_jpeg`), `crates/core/src/scan.rs`,
-`crates/engine/src/index.rs`, `crates/app/src/thumbs.rs`,
-`crates/core/src/arw.rs` (`PREVIEW_MIN_WIDTH`, tier selection).
-
-#### TODO
-
-- [ ] Measure strip thumbnail load time on a SIGMA fp L folder (per-cell
-      read and decode).
-- [ ] Candidate fix, not decided: cap the thumbnail size, e.g. pick a
-      larger DCT scale-down (`d.scale(n)`) when the preview is large, or
-      resize to the normal thumbnail width.
 
 ### Core: Nikon DX-crop and non-standard-crop AF point mapping is unverified
 
@@ -566,18 +526,6 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 - [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
 
-### Engine: a split moves a shared sidecar with whichever RAW moves first
-
-#### Background
-
-Two RAWs sharing a stem (`a.ARW` and `a.NEF`) share `a.xmp`. `Rename by Capture Date…` moves that sidecar with whichever RAW moves first, which leaves the other RAW without it when the two have different dates. This is the same ambiguity `rename::file_plan` has. Plan: docs/plans/_archived/20261104-rename-folder-by-capture-date/plan.md.
-
-Files: `crates/engine/src/datefolder.rs` (`move_plan`), `crates/engine/src/rename.rs`.
-
-#### TODO
-
-- [ ] Decide whether a sidecar shared by RAWs of different dates should be refused, copied, or left. Apply the same rule to `rename::file_plan` if it changes.
-
 ### Agents: `test (ubuntu-latest)` hangs on docs-only commits
 
 #### Background
@@ -660,16 +608,6 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 #### TODO
 
 - [ ] Decide the cap: keep 2 everywhere (the SATA preview wait), raise it (which costs SATA the waits above), or pick it per drive (how the drive kind would be told apart is open). Done when `READ_SLOTS`, or its replacement, and the guide's read cap section say which.
-
-### Core: test the scan's post-read cancel check
-
-#### Background
-
-`a_file_canceled_mid_pipeline_is_not_delivered` stops at `ReadSlots::acquire` returning `None`, because nothing can set the flag during the read without a hook in `read_preview`, so the first post-read cancel check in `extract_unless` and `extract_analysis_unless` is untested. File: `crates/core/src/scan.rs`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`.
-
-#### TODO
-
-- [ ] Add a test-only hook or a reader stub that sets `cancel` during the read, and a test that a file canceled mid-read is not delivered, in both `extract_unless` and `extract_analysis_unless`.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
@@ -755,14 +693,6 @@ In `gpui-zoom-peaking`'s Step 2 smoke run, two 4 s zoomed holds of `→` took pr
 
 - [ ] Hold `→` zoomed for longer runs (Task Manager, Details, Commit size) and check whether private bytes plateau. If they do not, find the crop or `RenderImage` that is not released (check `retired`).
 
-### Core: `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit` hits its 1 s bound under parallel load
-
-During `gpui-judgments`' local `mise run ci`, this test took 2.91 s against its 1 s wall-clock bound under parallel load; run alone it took 0.38 s. The bound measures the machine's load as much as the cancel. Plan: `docs/plans/_archived/20261110-gpui-judgments/plan.md`. Files: `crates/core/src/scan.rs` (the test, around line 1441).
-
-#### TODO
-
-- [ ] Loosen the bound, or wait on a condition (the scan's end) instead of the wall clock, and confirm `mise run ci` passes with full parallelism.
-
 ### App: real-device checks of the f focus mark, face boxes and face mesh
 
 `gpui-focus-marks` added pass 2, the `f` focus mark, the face boxes with landmark dots and labels, and the on-demand eye judgment with the face mesh to the GPUI app (`crates/app`). CI and the unit tests cover the pure ports (`mark.rs`, `faces.rs`, `eyes.rs`, `facemesh.rs`), and logged coordinates from debug runs matched hand computations. Nobody has put the GPUI window beside the Tauri app, because no screenshots were possible. The status line's `analyzing done/total` text and a folder switch mid-pass 2 from the UI were not checked either. Seen on Windows 11 on 2026-11-23 (results in `docs/plans/_archived/20261123-windows-device-checks-mcp-visual/results.md`): the user judged the `f` overlay OK by eye on the eight files, with no reference Tauri build at hand and so not side by side: the AF crosshair and frame bright green on `_DSC1758`, gray on `_DSC1616`, white on the rest and no AF mark on `ILCE-6400_DSC00405`; nine face boxes with cyan dots and labels on `_DSC1758`; the magenta mesh on `DSC03068` (closed eyes, no iris rings), `DSC00405`, `DSC01340` (orientation 6) and `_DSC1758`; the labels of small adjacent faces overlap on `_DSC1616` / `_DSC1758`, which the user accepted; the status line went `scanning N/8`, `analyzing N/8`, then empty. Plan: `docs/plans/_archived/20261110-gpui-focus-marks/plan.md`. Files: `crates/app/src/mark.rs`, `crates/app/src/overlay.rs`, `crates/app/src/faces.rs`, `crates/app/src/eyes.rs`, `crates/app/src/facemesh.rs`, `crates/app/src/main.rs`.
@@ -819,14 +749,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 #### TODO
 
 - [ ] On Windows, the Japanese IME in a label name field. Run on a folder of RAW copies with a fresh `--index`, `--settings` and `--log`, format XMP. Ctrl+, → Sidecar; with the Japanese IME on, type a name in the Yellow field: the composition is underlined, the candidate window sits at the field, Enter commits the composition (not the field), a second Enter commits the field.
-
-### App: the settings-store tests are flaky on CI
-
-After #1020 merged, main's CI `app` job failed in `settings::tests::reads_the_stored_values` and `settings::tests::a_stored_recommended_is_not_rewritten_by_the_load`. A stored `sidecarFormat` of `both` read back as `xmp`. Rerunning the job passed (run 43465601803). The tests come from the settings store (#1008 / #1012), not `gpui-companions`. The likely cause is the store's writer thread not having flushed the seed before the reopen. Found during `docs/plans/_archived/20261113-gpui-companions/plan.md`. Files: `crates/app/src/settings.rs`.
-
-#### TODO
-
-- [ ] Make the tests wait for the writer (or write the seed synchronously) so they pass repeatedly. Done when both tests pass across many repeated runs.
 
 ### App: real-device checks of the folder tree and Move to Trash… left open (gpui-tree-trash)
 
@@ -899,16 +821,6 @@ The launch's eviction (`eviction`, joined by the first listing only) is not awai
 #### TODO
 
 - [ ] Decide whether `neighbours` should wrap when the pager does. If so, make it wrap with unit tests, and re-run `--auto 60` to check that the p95 falls.
-
-### App: `scan::tests::a_bounded_stop_reports_an_ended_scan_stopped` is flaky on a loaded machine
-
-#### Background
-
-The test failed once in four `cargo test` runs of the app workspace during `gpui-prefetch`, with no change near `scan.rs`, and passed on the reruns. It is probably a timing-bound `stop_within` on a loaded machine. Plan: `docs/plans/_archived/20261114-gpui-prefetch/plan.md`. Files: `crates/app/src/scan.rs`.
-
-#### TODO
-
-- [ ] Find what the test's timing bound depends on, and make the test independent of machine load (or widen the bound).
 
 ### App: real-device check of the restored window on a second monitor (gpui-session-restore)
 
@@ -1203,17 +1115,6 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `tree_row`), `crates/app/src/folde
   - Pending name: a held rename's long pending name (clock icon, italic) truncates like any other name.
   - Inset edge: a click and a right-click on a row's inset edge behave as on the row.
 - [ ] Once the three are confirmed, drop the "not yet observed" remainder from the folder tree rule in `docs/agents/app.md` ("a tree row takes `w_full()`"). If a point fails, correct the rule with the observed behavior and, per the plan's risk note, record what the layout actually does in `learnings.md` before trying anything wider.
-
-### App: `ctrl+,` does not open the settings while the folder tree holds the keyboard
-
-#### Background
-
-Seen on Windows 11 on 2026-11-21: after a click on a tree row, or after an inline rename, `ctrl+,` does nothing; after Escape it opens the settings. The title bar's gear button opens them throughout. The tree's gate lets through only `TREE_PASSTHROUGH`.
-Files: `crates/app/src/treekeys.rs` (`TREE_PASSTHROUGH`, `tree_gate`), `crates/app/src/main.rs` (`key_down`).
-
-#### TODO
-
-- [ ] Decide whether `ctrl+,` should pass the tree's gate; if so, let it through and pin it in `treekeys.rs`'s test.
 
 ### App: real-device check of the meta pane's `Analysis` group and the AF rows in `Maker note`
 
@@ -1593,18 +1494,6 @@ Files: `crates/app/src/main.rs` (the title bar in `impl Render for Riffle`, `TIT
 #### TODO
 
 - [ ] On Windows 11 (`mise run app:dev` or a debug build of `crates/app`), expect "Handpic" next to the icon to read at 14 px with the icon still 16 px. (Not judged by eye on 2026-11-23; the rest of this check passed.)
-
----
-
-### App: the keymap's `compare` action is bound to `v` and listed, but does nothing
-
-The keymap still has the `compare` action bound to `v`, and the `Keyboard Shortcuts` page lists it as `Compare frames`. The app does nothing on it (`key: compare is not handled yet` in the debug log). The remove-tauri plan's Step 5 left `v` out of `usage.md`'s key table. Plan: `docs/plans/_archived/20261118-remove-tauri/plan.md`.
-
-Files: `crates/engine/src/shortcuts.rs`, `crates/app/src/settingsmodal.rs`, `crates/app/src/main.rs` (`key_down`), `docs/humans/usage.md`.
-
-#### TODO
-
-- [ ] Either hide unimplemented actions on the `Keyboard Shortcuts` page, or implement compare.
 
 ---
 

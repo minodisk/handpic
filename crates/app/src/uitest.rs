@@ -442,6 +442,46 @@ fn the_settings_modal_drops_the_paging_keys_until_escape_closes_it() {
     ui.wait_idle("the next file's preview", 2);
 }
 
+#[test]
+fn the_settings_key_opens_the_settings_from_the_tree_but_not_from_a_rename() {
+    let mut ui = Ui::open();
+    let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    let open = if cfg!(target_os = "macos") {
+        "cmd-,"
+    } else {
+        "ctrl-,"
+    };
+    let settings = ui.read(|view| view.settings_view.clone());
+    let is_open = |ui: &Ui| settings.read_with(&ui.cx, |settings, _| settings.is_open());
+    ui.update(|view, cx| view.set_tree_keys(true, cx));
+    ui.cx.simulate_keystrokes(open);
+    assert!(is_open(&ui));
+    ui.cx.simulate_keystrokes("escape");
+    assert!(!is_open(&ui));
+    ui.read(|view| assert!(view.tree_keys));
+
+    let path = folder.to_string_lossy().into_owned();
+    let view = ui.view.clone().unwrap();
+    view.update_in(&mut ui.cx, |view, window, cx| {
+        if !view.tree_rows.iter().any(|row| row.path == path) {
+            view.tree_rows.push(crate::tree::Row {
+                depth: 0,
+                path: path.clone(),
+                name: "photos".into(),
+                expanded: false,
+                expandable: false,
+                raw_count: None,
+                failed: None,
+            });
+        }
+        view.start_rename(path, None, window, cx);
+        assert!(view.rename_owns_keys());
+    });
+    ui.cx.run_until_parked();
+    ui.cx.simulate_keystrokes(open);
+    assert!(!is_open(&ui));
+}
+
 /// Flips the MCP page's server switch as a click does.
 fn flip_mcp(ui: &mut Ui) {
     let settings = ui.read(|view| view.settings_view.clone());
@@ -627,4 +667,35 @@ fn a_strip_name_wider_than_its_cell_is_shortened_in_the_middle() {
         "{long}"
     );
     assert_eq!(short.as_ref(), "DSC00416.ARW");
+}
+
+/// A Clear Cache an MCP client confirmed during a re-listing, whose end, the
+/// idle point, passes while the dialog `ui` shows is up: the clear stays held.
+pub(crate) fn hold_a_clear_past_the_idle_point(ui: &mut Ui) {
+    ui.update(|view, cx| {
+        view.resync.open();
+        view.relist(cx);
+        view.confirmed_clear(cx);
+        assert!(view.clear.waiting());
+    });
+    ui.wait_until("the re-listing's end", |view| !view.clear_busy());
+    ui.read(|view| assert!(view.clear.waiting(), "drained under a dialog"));
+}
+
+#[test]
+fn canceling_the_trash_dialog_drains_a_held_clear() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
+    ui.update(|view, cx| {
+        let paths = [view.files[0].to_string_lossy().into_owned()];
+        view.confirm_trash(&paths, crate::trash::Mode::Trash, cx);
+        assert!(view.trash.busy());
+    });
+    hold_a_clear_past_the_idle_point(&mut ui);
+    let running = ui.update(|view, cx| {
+        view.dismiss_trash(cx);
+        view.clear.running()
+    });
+    assert!(running);
+    ui.wait_until("the clear's end", |view| !view.clear.running());
 }

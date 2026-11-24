@@ -86,8 +86,8 @@ A `redo` that moves files to the trash again runs only while the user allows des
 operations, and is refused otherwise. \
 `cancel_operation` cancels what the user's Cancel would. Run them only when the user asks. A \
 call that changes anything is refused while the user has Handpic's settings, a dialog or a \
-folder rename open; try again once they are done. Compare and file rename have their tools \
-but are refused: the app does not have them yet. Suggest judgments and explain them; write \
+folder rename open; try again once they are done. File rename has its tool \
+but is refused: the app does not have it yet. Suggest judgments and explain them; write \
 them only when the user asks you to.";
 
 type Reply = Result<Value, String>;
@@ -319,14 +319,12 @@ pub struct SelectArgs {
 pub enum ViewMode {
     Normal,
     Zoom,
-    Compare,
 }
 
 #[derive(Debug, serde::Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct ViewArgs {
-    /// `normal` for the fitted preview, `zoom` for the 1:1 focus check, or
-    /// `compare` for side-by-side panes.
+    /// `normal` for the fitted preview, or `zoom` for the 1:1 focus check.
     mode: ViewMode,
 }
 
@@ -352,7 +350,7 @@ fn present<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Option<Strin
 #[schemars(crate = "rmcp::schemars")]
 pub struct JudgmentArgs {
     /// The photos' paths as `get_view` reports them; the selection when
-    /// omitted, or the active pane in compare.
+    /// omitted.
     paths: Option<Vec<String>>,
     /// Stars from 1 to 5, or 0 to clear them; kept when omitted.
     rating: Option<u8>,
@@ -1077,8 +1075,7 @@ impl Companion {
     #[tool(
         description = "What Handpic is showing now: the open folder, the number of photos \
         visible after the filter, the current photo and its 1-based position, the selected \
-        paths, the view mode (normal, zoom for the 1:1 focus check, or compare), the active \
-        compare pane, the sort order, whether a filter is active, and the current photo's \
+        paths, the view mode (normal, or zoom for the 1:1 focus check), the sort order, whether a filter is active, and the current photo's \
         burst (empty when it is not part of one) with each frame's sharpness score, stars \
         (null when unrated), pick / reject flag, color label, and whether the filter shows it \
         (a frame it hides cannot be shown or selected). The current photo carries \
@@ -1091,9 +1088,12 @@ impl Companion {
         face): `state` (open or closed), `probability` (the probability the eyes are closed, \
         0 to 1) and `pose` (the head pose in degrees: yaw positive when the face turns toward \
         the image's right, pitch positive up, roll positive clockwise on screen; null when it \
-        could not be fitted). `eyes` is null when the photo has no face to judge (none found, \
-        too small, or a failure), and absent until Handpic has judged the photo, which it does \
-        a moment after showing it (never in a JPEG-only folder): call again shortly."
+        could not be fitted). `eyes` comes from the scan's second pass once it has stored the \
+        judgment; before that, or when the second pass judged no face, from the `f` overlay's \
+        judgment of the shown photo, and it is null when that judgment found no face to judge \
+        (none found, too small, or a failure). `eyes` is absent until one of the two has \
+        judged the photo (never in a JPEG-only folder); after `wait_for_idle`, a missing \
+        `eyes` with the `f` overlay off means the second pass judged no face."
     )]
     async fn get_view(&self) -> CallToolResult {
         tool_result(
@@ -1143,8 +1143,7 @@ impl Companion {
 
     #[tool(
         description = "Select one or more photos in Handpic's filmstrip; the first becomes the \
-        current photo. Judgments and compare apply to the selection (compare shows its first \
-        four). Every path must be in the open folder and not hidden by the filter. Returns \
+        current photo. Judgments apply to the selection. Every path must be in the open folder and not hidden by the filter. Returns \
         the new view, as `get_view` does."
     )]
     async fn select_photos(&self, Parameters(args): Parameters<SelectArgs>) -> CallToolResult {
@@ -1156,11 +1155,9 @@ impl Companion {
     }
 
     #[tool(
-        description = "Switch Handpic's view mode: `normal` for the fitted preview, `zoom` for \
-        the 1:1 focus check of the current photo, or `compare` for the selected photos (2 to \
-        4) side by side, or the current photo and its burst's first good frame (else its first \
-        frame) when only one is selected. Compare fails when there are fewer than two photos \
-        to compare. Returns the new view, as `get_view` does."
+        description = "Switch Handpic's view mode: `normal` for the fitted preview, or `zoom` \
+        for the 1:1 focus check of the current photo. Returns the new view, as `get_view` \
+        does."
     )]
     async fn set_view(&self, Parameters(args): Parameters<ViewArgs>) -> CallToolResult {
         tool_result(
@@ -1176,7 +1173,7 @@ impl Companion {
         undo, and is written to each photo's sidecar. Omitted fields keep each photo's own \
         value; a rating of 0 clears the stars and a null label clears the label. Applies to \
         the given paths (in the open folder and not hidden by the filter), or to the \
-        selection when omitted (the active pane in compare). Write only when the user asks. \
+        selection when omitted. Write only when the user asks. \
         Returns each photo's resulting stars (null when unrated), flag and label."
     )]
     async fn set_judgment(&self, Parameters(args): Parameters<JudgmentArgs>) -> CallToolResult {
@@ -2048,6 +2045,14 @@ mod tests {
             json!({ "to": "burst_frame_next" })
         );
         assert!(serde_json::from_value::<NavigateArgs>(json!({ "to": "up" })).is_err());
+    }
+
+    #[test]
+    fn set_view_takes_normal_or_zoom_and_refuses_compare() {
+        let args: ViewArgs = serde_json::from_value(json!({ "mode": "zoom" })).unwrap();
+        assert_eq!(json!({ "mode": args.mode }), json!({ "mode": "zoom" }));
+        assert!(serde_json::from_value::<ViewArgs>(json!({ "mode": "normal" })).is_ok());
+        assert!(serde_json::from_value::<ViewArgs>(json!({ "mode": "compare" })).is_err());
     }
 
     #[test]

@@ -668,7 +668,7 @@ mod tests {
         sync::{
             Arc, Mutex,
             atomic::{AtomicBool, Ordering},
-            mpsc,
+            mpsc::{self, RecvTimeoutError},
         },
         thread,
         time::Duration,
@@ -739,7 +739,7 @@ mod tests {
             retired: None,
         };
         assert_eq!(running.stop_within(STOP_TIMEOUT), none);
-        running.put(Scan::start(
+        let scan = Scan::start(
             7,
             index,
             temp.path().to_string_lossy().into_owned(),
@@ -747,7 +747,13 @@ mod tests {
             ScanFocus::default(),
             Priorities::APP,
             events,
-        ));
+        );
+        assert_eq!(
+            scan.ended.recv_timeout(Duration::from_secs(60)),
+            Err(RecvTimeoutError::Disconnected),
+            "the empty scan ends"
+        );
+        running.put(scan);
         assert!(running.is(7));
         assert_eq!(running.stop_within(STOP_TIMEOUT), none);
         assert!(!running.is(7));

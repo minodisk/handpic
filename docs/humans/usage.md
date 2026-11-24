@@ -45,8 +45,9 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   the folder it matches (see the fixed keys under [Keys](#keys)).
   `ArrowLeft` / `ArrowRight` are not tree keys: they page the strip as
   usual. While the tree has the keyboard the other culling keys are off:
-  only the `open` key, the strip's previous / next and the pane toggles
-  (`Alt+Cmd+Arrow` / `Ctrl+Alt+Arrow` and `Tab` by default) still run,
+  only the `open` key, the strip's previous / next, the pane toggles
+  (`Alt+Cmd+Arrow` / `Ctrl+Alt+Arrow` and `Tab` by default) and
+  `CmdOrCtrl+,` (the settings) still run,
   until `Escape`, a click elsewhere or hiding the left pane hands the keys
   back.
   Right-clicking a folder opens a menu whose first item shows the folder
@@ -589,7 +590,10 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
     file count. `Run` creates those folders next to the original folder, in
     its parent, and moves each dated file into its date's folder, a RAW
     file with its `.xmp` and `.dop` sidecars (whichever exist) and a JPEG
-    alone. Its stars, flag, color label, thumbnail and metadata follow
+    alone. A `.xmp` that RAW files of one name share (`a.ARW` and `a.NEF`
+    with one `a.xmp`) ends up beside each of them: it is copied into a date
+    folder while another of those RAW files stays behind, and moved with the
+    last one. Its stars, flag, color label, thumbnail and metadata follow
     it, so nothing is re-extracted. The undated files stay in the original
     folder, and the dialog lists them; the subfolders stay too. A file that
     fails to move stays where it was, its error listed, and the others
@@ -898,7 +902,8 @@ While the folder tree has the keyboard, only `open`, `previous`, `next`,
 `toggleStrip`, `toggleLeft`, `toggleRight` and `toggleSides` (by default
 `Cmd+O` / `Ctrl+O`, `ArrowLeft` / `ArrowRight`, `Alt+Cmd+Arrow` /
 `Ctrl+Alt+Arrow` and `Tab`) still run, whatever keys they are bound
-to; every other action is ignored until the tree lets go of the keyboard.
+to, and `CmdOrCtrl+,` still opens the settings; every other action is
+ignored until the tree lets go of the keyboard.
 The tree's own keys below come first, and every printable character is
 type-ahead there, so one of those actions rebound to a plain character
 (`l`, say) does not fire while the tree has the keyboard.
@@ -1021,7 +1026,7 @@ settings store takes its value over from an earlier install's (see
 
 | Tool | What it does |
 |------|--------------|
-| `get_view` | What Handpic is showing: the open folder, how many photos the filter leaves, the current photo and its position, the selection, the view mode (`normal` or `zoom`), the sort, the filter's checks and what it offers for the folder, the panes and overlays shown, the current photo's burst with each frame's sharpness score, stars, flag and label, the current photo's `photo_tier`: `good` when it is a good photo (the bright green focus mark), else null, also before the scan's second pass reaches it (call `wait_for_idle` first to tell the two apart) and for a JPEG, and the current photo's `eyes`: whether its eyes are open or closed, the probability they are closed (0 to 1), and the head pose (yaw, pitch and roll in degrees, signed as the meta pane's `Yaw`, `Pitch` and `Roll`, null when it could not be fitted); `eyes` is null when there is no face to judge, and absent until the photo has been judged a moment after it is shown (never in a JPEG-only folder) |
+| `get_view` | What Handpic is showing: the open folder, how many photos the filter leaves, the current photo and its position, the selection, the view mode (`normal` or `zoom`), the sort, the filter's checks and what it offers for the folder, the panes and overlays shown, the current photo's burst with each frame's sharpness score, stars, flag and label, the current photo's `photo_tier`: `good` when it is a good photo (the bright green focus mark), else null, also before the scan's second pass reaches it (call `wait_for_idle` first to tell the two apart) and for a JPEG, and the current photo's `eyes`: whether its eyes are open or closed, the probability they are closed (0 to 1), and the head pose (yaw, pitch and roll in degrees, signed as the meta pane's `Yaw`, `Pitch` and `Roll`, null when it could not be fitted); `eyes` is there once the scan's second pass has stored it, or, before that or when that pass judged no face, once the `f` overlay has judged the shown photo; it is null when the overlay's judgment found no face to judge, and absent until one of the two has judged the photo (never in a JPEG-only folder), so a photo with no face has no `eyes` while the overlay is off |
 | `get_photo` | One photo's stars, flag and label, sharpness score, AF point and frame, manual focus, orientation, capture time and shooting settings (camera, lens, aperture, shutter, ISO, focal length, exposure bias, focus distance); the current photo when no path is given |
 | `get_preview` | A small upright JPEG of one photo, scaled from the embedded preview (never the RAW) to a long edge of 1024 pixels, or of the requested size from 256 to 1616 |
 | `show_photo` | Show one photo, as clicking it in the filmstrip does |
@@ -1048,8 +1053,8 @@ same path as the judgment keys: fields it is not given keep each photo's own
 value, the strip updates at once, the change is one step for the undo key,
 and the sidecar is written as a key press writes it. Auto-advance does not
 apply to it. The server's instructions ask the assistant to suggest
-judgments and to write them only when you ask. Asking for compare or a file
-rename is refused: this app does not have them.
+judgments and to write them only when you ask. Asking for a file rename is
+refused: this app does not have it.
 
 Any client that speaks MCP over Streamable HTTP connects to the endpoint
 above. Two examples:
