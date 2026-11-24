@@ -377,7 +377,8 @@ trash runs stay), `src/selection.rs` the strip's
 multi-selection (`Selection`, a port of `selection.ts`: `click`, `extend`,
 `all`, `prune`, `settle`, `restore`, `targets` and `judgments`, a command's
 changes over the targets, its value decided from the current file), `src/scan.rs` lists a folder with its sidecars and reads which of its files have an export (`outputs`, for the filter's `Output` section), reconciles the
-index with the whole listing, reads back the changed sidecars
+index with the whole listing once the launch's eviction is over (`Eviction`,
+which every listing waits on), reads back the changed sidecars
 (`sidecar::reconcile_of`, skipped in a view-only folder, its dirty rows handed
 to the writer with no debounce) and
 runs pass 1 (`index::run_scan`) and then pass 2 (`index::run_faces_scan`) on
@@ -480,7 +481,7 @@ modal's own `settingsview::Change`s by its rules, which the view's
 refused while a folder operation runs), and `Busy`, which refuses every request but the reads (`READS`) while
 `key_down` drops keys), and `src/viewed.rs` the
 pure parts of remembering the folder: the coalescing `set_last_viewed` writer
-(`Latest`, which the next open resumes at), the per-folder `mark_viewed`
+(`Latest`, one pending file per folder, which the next open resumes at), the per-folder `mark_viewed`
 batches (`Batches`) and the `VIEW_DWELL_MS` dwell of a decoded preview
 (`Dwell`), and `src/resync.rs` when a change the engine's folder watcher
 (`watch::Watch`, its callback sending into the same channel) reports

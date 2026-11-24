@@ -6,7 +6,7 @@ use std::{
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
-    thread::{self, JoinHandle},
+    thread,
     time::{Duration, Instant},
 };
 
@@ -312,9 +312,7 @@ impl Drop for Ui {
 #[test]
 fn opens_with_no_folder() {
     let mut ui = Ui::open();
-    ui.wait_until("the index eviction", |view| {
-        view.eviction.as_ref().is_none_or(JoinHandle::is_finished)
-    });
+    ui.wait_until("the index eviction", |view| view.eviction.is_finished());
     ui.read(|view| {
         assert!(view.index.is_ok());
         assert!(view.dir.is_none());

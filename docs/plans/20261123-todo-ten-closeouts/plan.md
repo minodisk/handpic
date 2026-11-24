@@ -162,7 +162,7 @@ Rules for every step:
     - `trashed` also ends a redo of Delete Sidecars… (`What::Sidecars`), which
       runs through `redo_trash`; it is part of the same family.
 
-- [ ] Step 3: Folder open bookkeeping: `Latest` keeps a pending value per folder, and every listing waits for the launch eviction
+- [x] Step 3: Folder open bookkeeping: `Latest` keeps a pending value per folder, and every listing waits for the launch eviction
   - Done when:
     - `viewed::Latest` keeps one pending value per folder: a position pushed
       in folder A while a write is out is still written after B's first push,
@@ -285,3 +285,4 @@ Rules for every step:
 
 - (2026-11-24) Step 1 complete
 - (2026-11-24) Step 2 complete
+- (2026-11-24) Step 3 complete
