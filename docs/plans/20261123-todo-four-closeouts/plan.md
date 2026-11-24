@@ -128,7 +128,7 @@ Rules for every step:
     - State in `burst-rank.md` that this is not the exact pre-#334 pipeline
       (Trade-offs 6).
 
-- [ ] Step 3: Score a faced no-AF-point file from the cue's RGB decode instead of a third decode
+- [x] Step 3: Score a faced no-AF-point file from the cue's RGB decode instead of a third decode
   - Done when:
     - The per-file `analysis_ms` of faced no-AF files was measured before and
       after with `handpic-cli features <dir> 1` (one thread, release, warm
@@ -298,3 +298,4 @@ Rules for every step:
 - (2026-11-23) Step 1 complete
 - (2026-11-23) Step 2 complete
 - (2026-11-23) Step 4 complete
+- (2026-11-24) Step 3 complete

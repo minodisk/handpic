@@ -18,7 +18,10 @@
 //! 3. Neither: the maximum over a grid of tiles covering the preview, so a
 //!    frame sharp anywhere ranks above one sharp nowhere.
 //!
-//! Only meaningful relative to other frames.
+//! Only meaningful relative to other frames. `score_preview` decodes the
+//! preview to grayscale (the JPEG's Y channel); `score_gray` scores luma the
+//! caller already has, which the scan passes on path 2 from the BT.601 luma
+//! of the face cue's RGB decode, so those two inputs can differ slightly.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -199,24 +202,34 @@ fn score(
     let (w, h) = (d.width(), d.height());
     let gray: Vec<u8> = d.read_scanlines()?;
     d.finish()?;
+    score_gray(&gray, w, h, focus, frame, faces)
+}
+
+/// `score_preview` on an already decoded `width` x `height` luma image, one
+/// byte per pixel, in the stored orientation of the preview `faces` were
+/// found on.
+pub fn score_gray(
+    gray: &[u8],
+    w: usize,
+    h: usize,
+    focus: Option<FocusLocation>,
+    frame: Option<FocusFrame>,
+    faces: &[Face],
+) -> Result<f64> {
     if w < 3 || h < 3 {
         bail!("a {w}x{h} preview has no interior pixel to score");
     }
     let point = focus.map(|f| focus_point(w, h, Some(f)));
     if let (Some(f), Some(frame), Some(p)) = (focus, frame, point) {
         let side = frame_side(frame, f.sensor_w, w);
-        return Ok(laplacian_variance(
-            &gray,
-            w,
-            window_at(w, h, p.0, p.1, side),
-        ));
+        return Ok(laplacian_variance(gray, w, window_at(w, h, p.0, p.1, side)));
     }
     let window = match (point, chosen_face(faces)) {
         (Some(p), _) => window_at(w, h, p.0, p.1, WINDOW),
         (None, Some(face)) => eye_window(w, h, face),
-        (None, None) => return Ok(tile_max(&gray, w, h)),
+        (None, None) => return Ok(tile_max(gray, w, h)),
     };
-    Ok(laplacian_variance(&gray, w, window))
+    Ok(laplacian_variance(gray, w, window))
 }
 
 #[cfg(test)]
@@ -523,6 +536,40 @@ mod tests {
             score_preview(&sharp, None, None, &f).unwrap(),
             score_preview(&sharp, None, None, &[]).unwrap()
         );
+    }
+
+    #[test]
+    fn a_decoded_luma_scores_as_its_preview_does_on_every_path() {
+        let (w, h) = (1000, 700);
+        let sharp = jpeg(&portrait(w, h), w, h);
+        let mut d = mozjpeg::Decompress::new_mem(&sharp)
+            .unwrap()
+            .grayscale()
+            .unwrap();
+        let decoded: Vec<u8> = d.read_scanlines().unwrap();
+        d.finish().unwrap();
+        let f = [face(100.0, 100.0, 200.0, 0.95)];
+        let point = Some(focus_at(w, h, 850, 550));
+        let frame = Some(FocusFrame {
+            width: 300,
+            height: 200,
+        });
+        for (focus, frame, faces) in [
+            (None, None, &[][..]),
+            (None, None, &f[..]),
+            (point, None, &f[..]),
+            (point, frame, &f[..]),
+        ] {
+            assert_eq!(
+                score_gray(&decoded, w, h, focus, frame, faces).unwrap(),
+                score_preview(&sharp, focus, frame, faces).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn a_luma_too_small_to_score_is_an_error() {
+        assert!(score_gray(&[0u8; 4], 2, 2, None, None, &[]).is_err());
     }
 
     #[test]
