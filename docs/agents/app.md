@@ -2440,7 +2440,8 @@ not open.
   `LABEL_NAMES_NOTE` as its description, one item per color, then a
   `Lightroom language` item, the Tauri `aria-label`, holding the `Select`
   (`.small()`, 160 px wide)); the Culling page the auto-advance
-  switch; the Keyboard Shortcuts page one titled group per
+  switch and the `Faces in a group photo` `NumberInput` (`.small()`, 120 px
+  wide, `GROUP_NOTE` as its description); the Keyboard Shortcuts page one titled group per
   `settingsmodal::SHORTCUT_GROUPS` entry (`Filmstrip`, `Judgment`,
   `Preview`, `Panes`, `General`) of one item per action, then an untitled
   group holding only `Reset all`;

@@ -799,7 +799,7 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   stays. Lowering it checks the open folder's frames that now qualify (a
   re-scan in which only the third pass has work, after the scan under way
   if one is) and every other folder's at its next open; raising it starts
-  nothing, and the frames under the new number are treated as unchecked.
+  nothing, and no screen applies the new number to the counts yet.
   The second pass stores that count for every frame either way, so a change
   never re-runs it.
 - **Clear Cache**: the `Cache` page of the settings shows how much disk

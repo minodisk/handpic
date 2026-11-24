@@ -887,8 +887,9 @@ pub struct SettingsArgs {
     /// The group threshold, a whole number from 2 to 20: how many confident
     /// faces of the judged face's size (`get_photo`'s `faces_group`) a frame
     /// needs for every face's eyes to be checked. A lower one checks the
-    /// open folder's frames that now meet it; a higher one hides the counts
-    /// of the frames under it.
+    /// open folder's frames that now meet it; raising it starts nothing, and
+    /// `get_photo` still reports the stored counts, so compare `faces_group`
+    /// with it.
     #[serde(skip_serializing_if = "Option::is_none")]
     group_min_faces: Option<u32>,
     /// Keyboard shortcut edits, applied in order.
