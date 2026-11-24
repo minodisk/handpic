@@ -346,8 +346,11 @@ given RAW's move will actually succeed, but a sidecar's fate depends on it:
 sidecars only come back when their RAW does (mirroring `trash::run`'s own
 rule), otherwise a reject sidecar could land next to an unrelated file that
 took the RAW's freed name. So `trash::restore` plans and performs the
-restore in one pure function taking `(run, in_trash, exists, mover)`,
-rather than returning a plan struct to execute later.
+restore in one pure function taking `(run, in_trash, exists, mover,
+progress)`, rather than returning a plan struct to execute later. `progress`
+is a `(done, total)` callback counted in items (`trash::item_starts`: a RAW
+or JPEG with the sidecars after it, or a sidecar alone), called after each
+item's last file; `restore_chunked` calls it once per chunk instead.
 
 Also, a file existing at the recorded trashed-to path is not enough to call
 it "still in the Trash and safe to restore": the OS trash can hand a freed
@@ -363,7 +366,12 @@ On Windows the undo restores in chunks (`trash::restore_chunked`, one
 that the Trash no longer holds (one collision refuses the whole
 `restore_all`), a failed chunk call counts a file now at its destination as
 back and retries the rest one at a time, and a file of a renamed folder
-(`restore_to`) always goes one at a time.
+(`restore_to`) always goes one at a time. Measured on NTFS with 600 files
+(300 RAWs with sidecars): about 140 ms a file before the chunked restore and
+6.5 ms after, roughly 22x (the bench excludes the app's watcher, index and
+re-listing). Source:
+`docs/plans/_archived/20261123-todo-trash-quit-fixes/learnings.md`, "Step 4
+follow-up".
 
 - Source: `docs/plans/_archived/20260928-undo-trash-rejected/learnings.md`,
   Steps 1-2.

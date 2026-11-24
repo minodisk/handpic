@@ -156,29 +156,33 @@
   tests (user's decision, this machine runs out of memory). The PR's GitHub
   checks are the first build of this change.
 
+## Step 4 follow-up: Windows timing of an Undo of Move to Trash (measured 2026-11-24)
+
+On D: (NTFS, the volume of the archived trash-bench baseline), an Undo of 600 files took 83.9 s and 88.3 s before the chunked restore (`0723c2cf^`, b4b5f0fa) and 3.99 s and 3.82 s after it (`0723c2cf`): about 140 ms a file before, 6.5 ms after, roughly 22x faster. Every run put all 600 files back with no failures.
+
+| Run | Files | Undo total | ms/file | RAWs restored | Failed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| after-1 | 600 | 3,990 ms | 6.7 | 300 | 0 |
+| before-1 | 600 | 83,910 ms | 139.9 | 300 | 0 |
+| after-2 | 600 | 3,820 ms | 6.4 | 300 | 0 |
+| before-2 | 600 | 88,270 ms | 147.1 | 300 | 0 |
+
+- Method: a throwaway bench outside the repository per version (worktrees at each commit, release build, `CARGO_BUILD_JOBS=2`), listing a fresh folder with `listing::read_listing`, moving it with `trash::trash_listed`, and timing only `trash::undo_run` with `Instant`. Runs alternated after, before, after, before.
+- File set: synthetic only, 300 `B0000.ARW`…`B0299.ARW` (10 KB of zeros) each with a `.xmp` sidecar, a new folder per run under `D:\handpic-undo-bench`.
+- Against the in-app baseline of 85.6 s for 605 files (141 ms a file), the before build matches closely, so the per-operation shell cost dominates. The after build is near the chunked move's 7 ms a file.
+- Caveat: the bench excludes the app's folder watcher, the index, the UI and the re-listing after the undo, so an in-app undo of ~600 files takes somewhat longer than 4 s.
+- Safety: the Recycle Bin held 303 items before and after every run. Each run left exactly 600 orphaned `$I` files naming the bench folder (the separate `todo.md` item), and exactly those were deleted. `mcpAllowDestructive` and the settings store were not touched.
+
 ## Deferred issues (todo candidates)
 
-- Pending manual check (Step 4 timing, Windows 11): measure an Undo of Move to
-  Trash of at least 600 files before and after
-  `perf(engine): restore an undo of Move to Trash in chunks on Windows`
-  (`crates/engine/src/trash.rs`, `restore_chunked`). Method (plan decision 2):
-  a throwaway program outside the repository depending on `handpic-engine` by
-  path (release build), which writes bench copies (e.g. 404 synthetic `.ARW`
-  plus 202 `.xmp`, 606 files) into a new folder on the measured volume (D:,
-  as the baseline), calls `trash::trash_listed` then times
-  `trash::undo_run`; built once against the branch's base and once against
-  the change. Safety: bench copies only, never the user's photos; record the
-  Recycle Bin item count before and after (`Shell.Application`
-  `Namespace(10).Items().Count`); afterwards delete exactly the orphaned `$I`
-  files in `D:\$Recycle.Bin\<SID>` naming the bench folder with no `$R`
-  partner; never turn on `mcpAllowDestructive`. Expected: the undo well under
-  the 85.6 s / 605 files (141 ms a file) baseline, in the region of the move's
-  chunked 7 ms a file; record total and ms per file for both builds in this
-  file. It runs without the watcher and the index, unlike the baseline. The
-  Step 4 checkbox was ticked on the code and test criteria; this measurement
-  was skipped because the bench build ran the machine out of memory.
-- `foldersidecars::delete` (Delete Sidecars…) still moves one sidecar per
-  shell operation on Windows (`trash::run` with `trash_one` in
-  `crates/engine/src/foldersidecars.rs`); chunking it like `trash_listed`'s
-  `run_chunked` would speed a large run up. Seen while planning this plan
-  (item 5's investigation), outside its five items.
+- Issue heading: `Engine: Delete Sidecars… still moves one sidecar per shell operation on Windows`.
+  `foldersidecars::delete` still moves each sidecar alone (`trash::run` with
+  `trash_one` in `crates/engine/src/foldersidecars.rs`). The same
+  per-operation cost was measured at about 140 ms a file for the undo, against
+  about 6.5-7 ms a file once chunked (Step 4 follow-up). Change: route the
+  delete through a chunked move like `trash_listed`'s `run_chunked`, keeping
+  the per-sidecar `(done, total)` progress Step 5 added. Done when: a Windows
+  timing of a large sidecar delete before and after is recorded; the outcome
+  (moved and failed files, the recorded run, each `Trashed`'s `owner`)
+  matches the per-file path in a unit test with a fake mover; the progress
+  circle still moves. Seen while planning this plan, outside its five items.
