@@ -889,7 +889,10 @@ of at least 5) and `run_faces_scan` `Priority::Lowest`
 (`LOWEST_RELATIVE_PRIORITY`), nice of at least 10), its UI tests
 `Priority::Normal` to both (see `docs/agents/app.md`); the CLI passes
 `Priority::Normal`, which makes no call, so its numbers stay comparable with
-`docs/humans/performance.md`.
+`docs/humans/performance.md`. `Priority` has no level below `Lowest` on any
+platform, and adding one is a core change, so pass 3 (`run_allfaces_scan`,
+`Priorities::allfaces`) runs at `Priority::Lowest` like pass 2 and follows it
+by order only.
 
 - Why lowered at all: priority only matters under contention, so an idle
   machine still gives every worker a full core, while the viewer's preview

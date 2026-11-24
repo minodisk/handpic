@@ -2382,6 +2382,18 @@ not open.
   register no `KeyBinding`. The component's own strings
   (`Settings.search_placeholder`, the no-results texts) come from its
   `rust_i18n` locales; nothing calls `set_locale`, so they are English.
+- Rule: a number setting is a custom field over the view's own `InputState`
+  drawn as `NumberInput`, not `SettingField::number`. The component's number
+  field calls its setter on every `InputEvent::Change` with the value clamped
+  into `min..=max`, so typing `15` would first commit `2`, and a setting
+  whose commit re-lists the folder (`Faces in a group photo`) would fire per
+  keystroke. Give the `InputState` no `step`, `min` or `max`: with them a blur
+  clamps the text before `InputEvent::Blur` (`25` would commit `20` where the
+  rule is to refuse it), and a step button replaces the text silently, with no
+  `Change`. Without a step, `apply_number_step` emits `NumberInputEvent::Step`,
+  which the view takes (`settingsmodal::group_stepped`) and commits at once
+  within the range. Commit on Enter / blur / step, and refuse an out-of-range
+  value in the status line.
 - Rule: Enter and Space on a focused control come for free: the Base
   `Button` and `Radio` under the components are `div`s with `on_click`, which
   turn a key down then up of either into a `ClickEvent::Keyboard` (`div.rs`),
