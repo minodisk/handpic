@@ -192,7 +192,7 @@ file, so the bounded prefix never holds it.
 - Index: `EXTRACTOR_VERSION` was not bumped, so rows indexed before keep
   their 160x120 thumbnails and pass-2 values until the file changes or
   `Clear Cache`.
-- Source: [close-measured-todos learnings, Step 3](../plans/20261123-close-measured-todos/learnings.md#step-3).
+- Source: [close-measured-todos learnings, Step 3](../plans/_archived/20261123-close-measured-todos/learnings.md#step-3).
 
 ### Sony `FocusFrameSize` is `UNDEFINED[6]` on real files (Hit)
 

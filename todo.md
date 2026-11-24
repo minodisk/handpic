@@ -1622,3 +1622,27 @@ Files: `install.ps1`.
 - [ ] Route the delete through a chunked move like `trash_listed`'s `run_chunked`, keeping the per-sidecar `(done, total)` progress and each `Trashed`'s `owner`.
 - [ ] Add a unit test with a fake mover showing the outcome (moved and failed files, the recorded run, each `Trashed`'s `owner`) matches the per-file path.
 - [ ] On Windows, record a timing of a large sidecar delete before and after, and check that the progress circle still moves.
+
+### App: real-device check of the Leica M (Typ 240) and M Monochrom (Typ 246) MakerNote preview (close-measured-todos)
+
+#### Background
+
+`close-measured-todos` Step 3 made the reader take the Leica MakerNote JPEG (tag 0x0300, 1472x976, stored unrotated) as both the preview and the 1:1 tier of the M (Typ 240) and M Monochrom (Typ 246) DNGs, in place of the 160x120 IFD0 strip, through the bounded read plus ranged reads (no whole-file read). The unit tests (`arw.rs`, `reader.rs`), the `handpic-cli info` sweep over the 60 Leica DNGs in `D:\Photos\samples\DNG` (only these four files changed) and a throwaway probe against a whole-file parse cover it, and `focusbox` decodes each preview at 1472x976. Nobody opened them in the app: neither the fit view nor the 1:1 view was seen, and the orientation was checked by eye only on the extracted JPEG of MP006646 (Orientation 8). `EXTRACTOR_VERSION` was not bumped, so a folder indexed earlier keeps its old rows until Clear Cache. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261123-close-measured-todos/plan.md`.
+
+Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `docs/agents/raw-metadata-parsing.md`, `docs/humans/cameras.md`.
+
+#### TODO
+
+- [ ] On Windows 11, open `D:\Photos\samples\DNG`'s three Leica M (Typ 240) DNGs (`LEICA_M_(Typ_240)_MP006646.DNG`, `M_(Typ_240)_ADG_RPUsubmit_compressed_L1006373.DNG`, `M_(Typ_240)_ADG_RPUsubmit_uncompressed_L1006374.DNG`) and the M Monochrom (Typ 246) one (`M_Monochrom_(Typ_246)_M2462362.DNG`) in a fresh index (`--index` to a new file, or `Clear Cache` first), run from a terminal so the `page` lines show. Expect the fit view to show the 1472x976 MakerNote JPEG, sharp rather than an upscaled 160x120, and upright (MP006646 is Orientation 8); the `page` lines to read `px=1472x976`; and `z` to show that JPEG at its own size around the center.
+
+### App: real-device check of the 1:1 crop read ahead on a view-only JPEG folder (close-measured-todos)
+
+#### Background
+
+`close-measured-todos` Step 4 made the app read the current page's 1:1 crop in the background once its preview is shown, and the next neighbour's crop in the paging direction while zoomed, behind the preview ring's gate (off during a scan pass and under `--no-prefetch`). The unit tests in `zoom.rs` and the 2026-11-24 retake on α7 V ARW folders cover it (deep and shallow `keypressToPixels` p50 about 11-13ms with 0 of 80 over 50ms, and the `page` lines no slower, also under a held `→`). A view-only JPEG-only folder was never exercised: there the "full JPEG" is the whole file, so the read ahead reads and partially decodes the whole JPEG per settled page. The step's checkbox was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261123-close-measured-todos/plan.md`.
+
+Files: `crates/app/src/zoom.rs`, `crates/app/src/main.rs` (`show_current`, `toggle_zoom`, `zoom_page`, `prefetch_crop`, `crop_arrived`).
+
+#### TODO
+
+- [ ] On Windows 11, open a view-only JPEG-only folder (plain `.jpg` files, no RAW), run from a terminal so the `page` and `zoom` lines show, and page through it with single and held `→` presses, then zoomed (`z`) with `→`. Compare the `page` lines with a `--no-prefetch` run of the same folder. Expect paging as smooth as with `--no-prefetch`, `z` to paint a crop at once once a page has settled, and a page while zoomed to show the next file's crop without a wait.
