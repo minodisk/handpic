@@ -20,9 +20,10 @@ Step 1 and "App binary size"; they are not repeated here.
 ### Ignore the model's fixed-size shape annotations and pin the input (Hit)
 
 The YuNet ONNX file carries `value_info` and output shapes for a 640 px input.
-Handpic feeds it 320x320 (`INPUT`) and 640x448 / 448x640 (`WHOLE_INPUT`), and
-with a different input fact tract fails to unify the annotated shapes against
-the inferred ones. `build` therefore loads with
+Handpic feeds it 320x320 (`INPUT`), 640x448 / 448x640 (`WHOLE_INPUT`) and
+320x224 / 224x320 (`GATE_INPUT`), one optimized plan each, and with a
+different input fact tract fails to unify the annotated shapes against the
+inferred ones. `build` therefore loads with
 `tract_onnx::onnx().with_ignore_value_info(true)
 .with_ignore_output_shapes(true)` and then pins the input with
 `with_input_fact(0, f32::fact([1, 3, height, width]).into())`.
