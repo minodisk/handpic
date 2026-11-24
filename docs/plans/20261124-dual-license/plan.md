@@ -170,3 +170,9 @@ is no compatibility issue.
   assessed; out of scope here.
 
 ## Progress
+
+- 2026-11-24: Step 1 done. Handpic is licensed under MIT OR Apache-2.0
+  (license files and manifests updated in commit `30324346`). Not yet
+  verified: `mise run ci:local` was stopped for host memory pressure and is
+  left to the PR's GitHub Actions, and the post-merge `gh api ... .license`
+  check is still pending (both recorded in `learnings.md`).
