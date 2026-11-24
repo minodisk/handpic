@@ -470,17 +470,6 @@ PhotoLab's database holding the old folder.
 
 - [ ] On macOS, open a large RAW folder with a cold index in the app and page through it while `scanning N / M` and then `analyzing N / M` run. Expect the analysis pass (`QOS_CLASS_UTILITY` at relative priority -5) not to crawl and paging to stay as responsive as on Windows (compare the `page` timing lines in `Handpic.log`); if paging suffers, lower `LOWEST_RELATIVE_PRIORITY` in `crates/core/src/scan.rs` and update the priority entry in `docs/agents/shared-crates.md`. No `ran at normal priority` warning may appear in the log.
 
-### Engine: a redo of Delete Sidecars… leaves a closed folder's rows judged
-
-#### Background
-
-The folder-sidecars feature added `Delete Sidecars…`. A redo (`trash::redo_run`) moves the sidecars to the Trash again but writes no index row. When the target folder is open, the app's resync clears the judgments. When another folder is open, the rows keep the judgments that the undo's rescan restored, until the folder is next opened and its reconcile clears them. A `Rewrite Sidecars from Index…` run in between would mint the sidecars again. Fixing it needs the run to remember each sidecar's RAW, for example in `trash::Trashed`. Plan: `docs/plans/_archived/20261005-folder-sidecars/plan.md`. Files: `crates/engine/src/trash.rs` (`redo_run`), `crates/engine/src/foldersidecars.rs`, `crates/app/src/main.rs`.
-
-#### TODO
-
-- [ ] Record each sidecar's RAW in the trash run (for example in `trash::Trashed`), so that a redo clears the index rows of a closed folder.
-- [ ] Add a test covering delete, undo, then redo with another folder open.
-
 ### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
 
 #### Background
@@ -554,17 +543,6 @@ Files: `crates/engine/src/trash.rs` (`undo_run`, `restore`).
 #### TODO
 
 - [ ] Check whether Explorer's own restore cleans up its `$I`, and whether the crate (or Riffle after `restore_all`) can remove the orphan.
-
-### Engine: Undo of Move to Trash is still one shell operation per item
-
-#### Background
-
-After `trash-over-scan` Step 4 chunked the move, an Undo (`trash::undo_run`) is still per-item, one shell operation each. Timed in the app on Windows 11 on 2026-11-21: an Undo of a 605-file move took 85.6 s (141 ms a file) against 2.4 s for the move. One `restore_all` for the whole run took 1 s for 150 files in the bench, but `trash::restore`'s per-file rule (a sidecar waits on its RAW, never overwrite) would need the same treatment `run_chunked` gave `run`. See `docs/plans/_archived/20261106-trash-over-scan/trash-bench.md`.
-Files: `crates/engine/src/trash.rs` (`restore`, `undo_run`).
-
-#### TODO
-
-- [ ] Restore in chunks while keeping the RAW-before-sidecar and never-overwrite rules (the baseline to beat: 85.6 s for 605 files, 141 ms a file, against 2.4 s for the move).
 
 ### Engine: Delete Permanently cannot remove a read-only file on some platforms
 
@@ -687,14 +665,6 @@ Test files are under `D:\Photos\tests\20261110-gpui-pass2\marks\`. Run `mise run
 
 - [ ] On Windows, hold `→` with `f` on and check that the log's `eyes` lines name only files the paging stopped on or passed slowly. (Not run on 2026-11-23: the run pressed no key.)
 - [ ] On Windows, on a folder of a few hundred RAW files with a fresh `--index`, check that switching to another folder mid-pass 2 from the folder tree stops it (reopening the first folder resumes the remaining files). (Not run on 2026-11-23; the status line's `scanning` then `analyzing` and its clean end were seen.)
-
-### App: quitting while a re-listing is stopping the previous scan does not wait for that scan
-
-The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.md`) made every quit path stop the held scan with a bounded wait (`scan::Running::stop_within`, `STOP_TIMEOUT`) in the app-level `on_app_quit` handler. `list` moves the previous scan out of the holder into a background task that calls the unbounded `Scan::stop`. If the user quits while that task is still winding the scan down, the holder is empty, so the handler does not wait for it. The process can then exit before that scan's `scan faces:` line, and its write transaction may be cut. This was left out as rare and as needing more state, and the hand check did not exercise it. Files: `crates/app/src/scan.rs`, `crates/app/src/main.rs`, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Let the quit handler also wait, bounded by `STOP_TIMEOUT`, for a scan that a re-listing is stopping in the background (for example by keeping that scan, or a join signal for it, in the shared holder until its stop returns), and log the outcome on the `quit:` line.
 
 ### App: real-device checks of the strip's sort order, the filter and the filter / sort menus
 
@@ -825,16 +795,6 @@ Files: `crates/app/src/main.rs` (`status_row`, `progress_circle`), `crates/app/s
 
 - [ ] On Windows, record the preview canvas with the progress circle shown and gone in the pane layouts not yet recorded: the right pane hidden, both side panes hidden (`toggleSides`) and the strip alone hidden. Expect the canvas not to resize when the circle appears or disappears.
 - [ ] On macOS and Linux, repeat the menu, scan and Move to Trash checks above when at hand.
-
-### App: the trash undo, Rewrite Sidecars and Delete Sidecars runs have no progress callback
-
-`gpui-progress-bars` feeds the bar from the scan and from Move to Trash / Delete Permanently / trash redo. `trash::undo_run` takes no progress callback, and neither do the Rewrite Sidecars from Index and Delete Sidecars runs, so the bar shows nothing for them (`redo_run` has one and already feeds the bar). Plan: `docs/plans/_archived/20261114-gpui-progress-bars/plan.md`.
-
-Files: `crates/engine/src/trash.rs`, `crates/engine/src/foldersidecars.rs`, `crates/app/src/progress.rs`.
-
-#### TODO
-
-- [ ] Add a `(done, total)` callback to `trash::undo_run` and to the `foldersidecars` rewrite and delete runs, and feed the bar from them in `crates/app`.
 
 ### App: real-device checks of the burst bands, badges, burst keys and reject the rest
 
@@ -1526,18 +1486,6 @@ Files: `crates/app/src/main.rs`, `crates/app/src/logger.rs`, `docs/agents/app.md
 
 ---
 
-### App: a held Clear Cache is not drained when a trash or folder dialog that was up at its idle point is canceled
-
-#### Background
-
-Found auditing the idle points for the `todo-seven-small-fixes` plan (item 5, held Clear Cache). `drain_clear` returns early while `trash.busy()` or `folderops.dialog_open()`. The dialogs' Cancel / Escape paths (`follow_trash`, `follow_folder_dialog`) do not call it. A Clear Cache held when its idle point came while such a dialog was up therefore waits for the next listing's `finished`, or for the user's next press, which asks at once. Files: `crates/app/src/main.rs` (`drain_clear`, `follow_trash`), `crates/app/src/folderops.rs` (`follow_folder_dialog`). Source: `docs/plans/_archived/20261121-todo-seven-small-fixes/learnings.md` (Deferred issues).
-
-#### TODO
-
-- [ ] Call `drain_clear` at the end of the trash dialog's cancel path (`follow_trash`) and of `follow_folder_dialog`'s cancel path, and check that a held clear asks once the dialog closes. Cover the guard with a test (`ClearFlow::idle` in `crates/app/src/cache.rs`, or a UI test in `src/uitest.rs`) and update the `drain_clear` paragraph of `docs/agents/app.md` (around line 1886).
-
----
-
 ### App: real-device check of Handpic installed beside Riffle 1.10.0 on Windows (native-release)
 
 #### Background
@@ -1686,3 +1634,15 @@ Files: `install.ps1`.
 - [ ] On Windows (x64, in Windows PowerShell 5.1 and again in PowerShell 7), run `irm https://raw.githubusercontent.com/minodisk/handpic/main/install.ps1 | iex`. Expect the download and install lines, then `%LOCALAPPDATA%\Programs\Handpic\Handpic.exe` with `unins000.exe` beside it, the Start menu shortcut and the `HKCU` uninstall entry. Expect no SmartScreen warning on the setup or on the first launch of `Handpic.exe`.
 - [ ] On the same Windows machine, force a failure (for example a wrong digest in a local copy of `install.ps1` piped to `iex`). Expect the error to print and the shell to stay open. Expect `$ErrorActionPreference` and `$ProgressPreference` to be unchanged in the session afterwards.
 - [ ] On Windows 11 on Arm (if one is at hand), run the same one-liner. Expect the x64 setup to install and start (the setup allows `x64compatible`).
+
+### Engine: Delete Sidecars… still moves one sidecar per shell operation on Windows
+
+#### Background
+
+`foldersidecars::delete` still moves each sidecar alone (`trash::run` with `trash_one`) on Windows. The `todo-trash-quit-fixes` plan measured the same per-operation cost for the Undo of Move to Trash at about 140 ms a file, against about 6.5-7 ms a file once restored in chunks (600 files: 83.9 s and 88.3 s before, 3.99 s and 3.82 s after). Seen while planning that plan, outside its five items. Plan: `docs/plans/_archived/20261123-todo-trash-quit-fixes/plan.md`. Files: `crates/engine/src/foldersidecars.rs` (`delete`), `crates/engine/src/trash.rs` (`run`, `run_chunked`, `trash_one`).
+
+#### TODO
+
+- [ ] Route the delete through a chunked move like `trash_listed`'s `run_chunked`, keeping the per-sidecar `(done, total)` progress and each `Trashed`'s `owner`.
+- [ ] Add a unit test with a fake mover showing the outcome (moved and failed files, the recorded run, each `Trashed`'s `owner`) matches the per-file path.
+- [ ] On Windows, record a timing of a large sidecar delete before and after, and check that the progress circle still moves.
