@@ -15,7 +15,7 @@ use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
 use crate::reader::{read_full, read_metadata, read_preview};
-use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
+use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus, FACE_CONFIDENCE};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
@@ -312,7 +312,7 @@ fn cue_and_gate(
             let (cue, rgb) = whole_image_cue_rgb(preview, orientation, detection, cancel)?;
             let gate = faces
                 .as_ref()
-                .map(|f| allfaces::gate_count(f, cue.face.as_ref()));
+                .map(|f| allfaces::gate_count(f, cue.face.as_ref(), FACE_CONFIDENCE));
             let faces = faces.unwrap_or_default();
             let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
             Some((cue, faces, gate, scored))
@@ -321,8 +321,9 @@ fn cue_and_gate(
 }
 
 /// The gate count of an AF frame whose cue is `cue`, over a whole-preview
-/// search of `preview` at `faces::GATE_INPUT`: 0 with no search when the cue
-/// judged no face, `None` when the search failed or panicked.
+/// search of `preview` at `faces::GATE_INPUT`, faces counted from
+/// `allfaces::GATE_LOW_RES_CONFIDENCE`: 0 with no search when the cue judged
+/// no face, `None` when the search failed or panicked.
 fn af_gate_count(preview: &[u8], orientation: u16, cue: &Cue) -> Option<u32> {
     let Some(judged) = &cue.face else {
         return Some(0);
@@ -332,7 +333,11 @@ fn af_gate_count(preview: &[u8], orientation: u16, cue: &Cue) -> Option<u32> {
     }))
     .ok()
     .and_then(Result::ok)?;
-    Some(allfaces::gate_count(&detection.faces, Some(judged)))
+    Some(allfaces::gate_count(
+        &detection.faces,
+        Some(judged),
+        allfaces::GATE_LOW_RES_CONFIDENCE,
+    ))
 }
 
 /// The all-faces check of the file at `path` (`allfaces`): its counts of the
@@ -1165,7 +1170,6 @@ mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
     use crate::eyes::MESH_CALLS;
-    use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 

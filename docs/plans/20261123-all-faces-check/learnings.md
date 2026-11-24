@@ -82,8 +82,12 @@
   `2026-11-07` slice).
 - What does fix it is the score floor: the small faces are found at 0.6 to
   0.8. 320x224 with a 0.6 floor counts about as many faces as 640x448 at
-  0.8 (884 against 909 on the `2026-11-07` slice). Not adopted, since the
-  plan's rule is one floor (0.8) on both paths; listed below as a decision.
+  0.8 (884 against 909 on the `2026-11-07` slice). The user decided on
+  2026-11-24: 0.6 (`allfaces::GATE_LOW_RES_CONFIDENCE`) on the AF path's
+  320x224 run only, 0.8 kept on the 640x448 path. A release build with it
+  gave the scratch sweep's gate counts on every AF frame of the three
+  folders and left every other `features` value and the `2026-02-01` gate
+  counts unchanged.
 - No measured folder holds a posed group photo on a body with an AF point;
   the frames the gate passes at 5 or more are basketball frames with
   players, a bench or spectators of the judged player's size. The posed
@@ -102,19 +106,10 @@
   `NMS_THRESHOLD` IoU is counted twice (1 of 258 AF frames on
   `2026-09-19`). A matching rule by eye landmarks instead of IoU would close
   it. Files: `crates/core/src/allfaces.rs` (`candidates`).
-- Decision needed: the gate's score floor on the low-resolution run. At
-  0.8 (the plan's rule, as implemented) the 320x224 gate count is about half
-  the 640x448 one on team-sport frames and opens at N = 5 on almost no AF
-  frame; a 0.6 floor on that run alone (or on both paths) brings it level
-  with 640x448 at the same cost. Changing it is a `FACES_VERSION` matter
-  once Step 2 stores the count, so decide before Step 2 merges. Basis: Step
-  1 rework's sweep (measurement.md, "Not adopted: a lower score floor for
-  the gate"). Files: `crates/core/src/allfaces.rs` (`gate_count`),
-  `crates/core/src/scan.rs` (`af_gate_count`), `crates/core/src/faces.rs`
-  (`GATE_INPUT`).
 - The default N = 5 passes no posed group photo of the measured folders:
   the 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 floor (three
-  faces at 0.64-0.75). Revisit the default (Step 4) or the floor above.
+  faces at 0.64-0.75; that frame has no AF point, so the AF path's 0.6
+  floor does not apply). Revisit the default (Step 4).
   Basis: Step 1 rework (measurement.md). Files: the app's setting (Step 4),
   `crates/core/src/allfaces.rs`.
 - The size band does not tell a group from a background row at the same

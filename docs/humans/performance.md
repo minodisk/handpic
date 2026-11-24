@@ -785,9 +785,11 @@ pass, from the profile below). So pass 2 on an AF file costs about what it
 did before this work: +5.9 ms on the one-person set and -7.4 ms on the
 group set, within the spread of the runs. A frame whose cue judged no face
 runs no such detection, and a frame without an AF point pays nothing for
-its gate count. 320x224 loses the small faces: on the team-sport frames it counts
-about half the faces the 640x448 run counts at the gate's 0.8 score floor;
-the sizes tried and what each counts are in the all-faces-check plan's
+its gate count. At 320x224 the small faces score lower: at 0.8 the run
+counted about half the faces the 640x448 run counts on the team-sport
+frames, so it counts from 0.6 (`allfaces::GATE_LOW_RES_CONFIDENCE`), where
+it counts about as many; the 640x448 path keeps 0.8. The sizes and floors
+tried and what each counts are in the all-faces-check plan's
 `measurement.md`.
 
 The entry point costs about what pass 2 cost with the first version of the

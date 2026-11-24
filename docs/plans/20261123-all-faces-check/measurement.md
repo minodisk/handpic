@@ -191,9 +191,9 @@ member 50 px tall on the 1616 px preview is 10 px at 320x224, where YuNet's
 score falls under 0.8.
 
 Chosen: 320x224 (`faces::GATE_INPUT`), the only input within the plan's
-cost estimate (15 to 20 ms). At the plan's score floor it counts about half
-the faces the 640x448 run counts on the team-sport frames, so the gate
-rarely opens on an AF frame:
+cost estimate (15 to 20 ms). At the plan's score floor (0.8) it counts
+about half the faces the 640x448 run counts on the team-sport frames, so
+the gate rarely opens on an AF frame:
 
 | Frames at the gate count | N >= 3 | N >= 4 | N >= 5 |
 | --- | --- | --- | --- |
@@ -211,7 +211,7 @@ holds a posed group photo. The posed group of `2026-02-01`, the 7-person
 `L1005161.DNG` (no AF point, so the 640x448 path), counts 4: three of its
 seven faces score 0.64 to 0.75.
 
-### Not adopted: a lower score floor for the gate
+### The score floor of the low-resolution run (decided: 0.6)
 
 The low-resolution run finds most of the missing faces at scores between
 0.6 (the detection's own floor) and 0.8. With the gate's floor lowered on
@@ -226,7 +226,23 @@ the AF path only (a scratch build; the plan's rule keeps 0.8 on both):
 
 320x224 at 0.6 counts about as many faces as 640x448 at 0.8 for a quarter
 of the cost, missing 20 of the 49 frames at 5 or more across the three
-folders and adding some of its own. It would make the two paths count by
-different floors, which the plan does not have, so it is left to a decision
-(see `learnings.md`). On `L1005161.DNG` a 0.6 floor on the 640x448 path
-would count all 7 faces.
+folders and adding some of its own. On `L1005161.DNG` a 0.6 floor on the
+640x448 path would count all 7 faces.
+
+Decided by the user on 2026-11-24: 0.6 (`allfaces::GATE_LOW_RES_CONFIDENCE`)
+on the AF path's 320x224 run only; the path without an AF point keeps the
+640x448 search at 0.8. A release build with it (`handpic-cli features`, 8
+threads) gave the scratch sweep's gate count on every AF frame of the three
+folders (0 differences of 682), and every other `features` value and every
+gate count of `2026-02-01` (the no-AF path) stayed as before. Frames at the
+gate count with the decided floors:
+
+| Frames at the gate count | N >= 3 | N >= 4 | N >= 5 |
+| --- | --- | --- | --- |
+| `2026-09-19`, 320x224 at 0.6 (640x448 at 0.8) | 63 (51) | 26 (17) | 8 (3) |
+| `2026-11-07` slice, 320x224 at 0.6 (640x448 at 0.8) | 181 (180) | 99 (98) | 37 (44) |
+| `2026-10-03` first 100, 320x224 at 0.6 (640x448 at 0.8) | 35 (21) | 14 (8) | 6 (2) |
+| `2026-02-01`, no AF point, 640x448 at 0.8 | 9 | 3 | 0 |
+
+The frames at 5 or more are still the basketball frames (players, a bench,
+spectators), as with 640x448: no AF folder holds a posed group photo.

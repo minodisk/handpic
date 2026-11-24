@@ -136,10 +136,13 @@ not change.
       is self-contained: a path in, counts out.
     - `PASS_SLOTS` is set only inside `extract_analysis_unless` today; the
       entry point sets it the same way so `yield_to_pause` works in it.
-    - The gate count, one rule for both paths, over a whole-preview
-      detection's faces in stored preview coordinates: the judged face
-      (`Cue::face`) counts as one; every face of the detection that scores
-      at least `sharpness::FACE_CONFIDENCE` (0.8), has a box long side
+    - The gate count, one rule for both paths but the score floor, over a
+      whole-preview detection's faces in stored preview coordinates: the
+      judged face (`Cue::face`) counts as one; every face of the detection
+      that scores at least the floor (`sharpness::FACE_CONFIDENCE`, 0.8, on
+      the 640x448 search of a frame without an AF point;
+      `allfaces::GATE_LOW_RES_CONFIDENCE`, 0.6, on the 320x224 search of a
+      frame with one, decided after the measurement), has a box long side
       within 0.5x to 2x of the judged face's, and does not overlap the
       judged face (IoU above `faces::NMS_THRESHOLD`, the rule `candidates`
       already uses) counts as one more. No judged face gives 0. A failed
@@ -453,6 +456,11 @@ Made by the user on 2026-11-24, after Step 1's measurement:
   least N confident faces of a size similar to the judged face. Under the
   gate the counts are unknown, so `Anyone closed` / `Anyone soft` never
   match the frame and its count rows are hidden.
+- The gate's score floor (after Step 1's rework measurement): 0.6
+  (`allfaces::GATE_LOW_RES_CONFIDENCE`) on the AF path's 320x224 run only,
+  where the small faces score 0.6 to 0.8 and 0.8 counted about half the
+  faces the 640x448 search counts; the path without an AF point keeps the
+  640x448 search at 0.8 (`FACE_CONFIDENCE`).
 - The gate counts over the whole preview on both paths. On an AF frame the
   count comes from a cheap low-resolution YuNet run over the whole preview
   (e.g. 320x224; Step 1 measures the cost and picks the input size). A
@@ -526,7 +534,10 @@ Made in this revision (planning, 2026-11-24):
   is unaffected. Step 1 measures, per input size, how often the
   low-resolution count is under N where the 640x448 count is not, and picks
   the size against its cost. What is left after that is the user's lever: a
-  lower N.
+  lower N. (Measured: at 0.8 320x224 counted about half the faces; with the
+  0.6 floor decided for that run it counts about as many as 640x448 at 0.8,
+  and misses 20 of the 49 frames 640x448 puts at N = 5, adding others of
+  its own.)
 - **The gate count is slightly stricter on an AF frame.** An AF frame
   counts on the low-resolution detection and a frame without an AF point on
   the 640x448 one, so the same group can count one or two faces fewer on a
