@@ -455,7 +455,7 @@ mod tests {
     #[test]
     fn the_output_section_is_hidden_without_an_answer() {
         let rows = filter_rows(&FilterState::default(), false, &Groups::default());
-        assert_eq!(texts(&rows).last().map(String::as_str), Some("Unknown"));
+        assert_eq!(texts(&rows).last().map(String::as_str), Some("Anyone soft"));
         assert!(
             !items(&rows)
                 .iter()
