@@ -18,7 +18,7 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 
-use crate::index::SidecarStat;
+use crate::index::{Index, SidecarStat};
 use crate::sidecar::SidecarFormat;
 
 /// One RAW and the sidecars that exist on disk for it, in the order they are
@@ -64,6 +64,9 @@ pub struct Trashed {
     /// since the run (`Runs::rename_dir`); `None` puts it back at `path`,
     /// which stays the key the Trash is looked up by.
     pub restore_to: Option<PathBuf>,
+    /// The RAW a sidecar `Delete Sidecars…` moved belongs to, whose judgments
+    /// a redo clears; `None` for every file of a `Move to Trash` run.
+    pub owner: Option<PathBuf>,
 }
 
 impl Trashed {
@@ -103,7 +106,15 @@ pub struct Runs(Mutex<RunsState>);
 struct RunsState {
     next_id: u64,
     runs: Vec<TrashRun>,
-    undone: Vec<(u64, Vec<PathBuf>)>,
+    undone: Vec<(u64, Vec<Back>)>,
+}
+
+/// One file an undo brought back: where it is now and the RAW it belongs to
+/// when a `Delete Sidecars…` run moved it (`Trashed::owner`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Back {
+    pub path: PathBuf,
+    pub owner: Option<PathBuf>,
 }
 
 impl Runs {
@@ -134,7 +145,7 @@ impl Runs {
     /// Keep the files the undo of run `id` brought back, in the recorded
     /// order, for its redo, dropping the oldest past `MAX_RUNS`. Nothing
     /// back keeps nothing.
-    pub fn undone(&self, id: u64, back: Vec<PathBuf>) {
+    pub fn undone(&self, id: u64, back: Vec<Back>) {
         if back.is_empty() {
             return;
         }
@@ -147,7 +158,7 @@ impl Runs {
 
     /// Remove and return the files the undo of run `id` brought back: a
     /// redone run is forgotten, whatever the outcome of its move.
-    pub fn take_undone(&self, id: u64) -> Option<Vec<PathBuf>> {
+    pub fn take_undone(&self, id: u64) -> Option<Vec<Back>> {
         let mut state = crate::index::lock(&self.0);
         let at = state.undone.iter().position(|(undone, _)| *undone == id)?;
         Some(state.undone.remove(at).1)
@@ -157,7 +168,8 @@ impl Runs {
     /// `Index::rename_dir` takes them): a recorded file under `old` is put
     /// back under `new` by its undo, still looked up in the Trash by its
     /// original path, and an undone run's files, which sit on disk under
-    /// the renamed folder now, are redone from there.
+    /// the renamed folder now, are redone from there. The RAW a sidecar
+    /// belongs to follows too, as the index's rows do.
     pub fn rename_dir(&self, old: &str, new: &str) {
         if old == new {
             return;
@@ -175,14 +187,20 @@ impl Runs {
             if let Some(to) = rebase(trashed.destination()) {
                 trashed.restore_to = (to != trashed.path).then_some(to);
             }
+            if let Some(owner) = trashed.owner.as_deref().and_then(rebase) {
+                trashed.owner = Some(owner);
+            }
         }
-        for path in state
+        for back in state
             .undone
             .iter_mut()
             .flat_map(|(_, back)| back.iter_mut())
         {
-            if let Some(to) = rebase(path) {
-                *path = to;
+            if let Some(to) = rebase(&back.path) {
+                back.path = to;
+            }
+            if let Some(owner) = back.owner.as_deref().and_then(rebase) {
+                back.owner = Some(owner);
             }
         }
     }
@@ -198,7 +216,7 @@ pub struct Restored {
     /// Every file, RAW or sidecar, that came back, in the recorded order:
     /// what a redo moves to the Trash again.
     #[serde(skip)]
-    pub back: Vec<PathBuf>,
+    pub back: Vec<Back>,
     /// How many items of the run have a failed file, a RAW (or JPEG) with
     /// its sidecars counting as one item and a sidecar with no RAW before it
     /// as one of its own: what the pane's note counts as failed.
@@ -331,6 +349,7 @@ pub fn run(
                     trashed_at,
                     trashed_id,
                     restore_to: None,
+                    owner: None,
                 });
             }
             Err(message) => {
@@ -349,6 +368,7 @@ pub fn run(
                         trashed_at,
                         trashed_id,
                         restore_to: None,
+                        owner: None,
                     });
                 }
                 Err(message) => summary.failed.push(Failure {
@@ -564,6 +584,7 @@ fn trashed(path: PathBuf, trashed_at: Option<PathBuf>) -> Trashed {
         trashed_at,
         trashed_id,
         restore_to: None,
+        owner: None,
     }
 }
 
@@ -635,7 +656,10 @@ pub fn restore<I>(
         }
         match result {
             Ok(()) => {
-                restored.back.push(destination.to_path_buf());
+                restored.back.push(Back {
+                    path: destination.to_path_buf(),
+                    owner: trashed.owner.clone(),
+                });
                 if is_media {
                     restored.restored.push(path);
                 }
@@ -906,20 +930,79 @@ pub fn undo_run(runs: &Runs, run_id: u64) -> Result<Restored, String> {
 /// Move the files the undo of run `run_id` brought back to the Trash again,
 /// exactly those, RAW before its sidecars (see `redo`); a file gone
 /// meanwhile is a failure. The move is recorded in `runs` as a new run, whose
-/// id the `Summary` carries. An unknown run is `UNDONE_GONE`; it is forgotten
-/// once redone. `progress` is called after each group moved, or each chunk
-/// on Windows (see `move_again`).
+/// id the `Summary` carries, and the judgments of the RAWs whose sidecars a
+/// `Delete Sidecars…` run moved again are cleared in `index` (see
+/// `redo_back`). An unknown run is `UNDONE_GONE`; it is forgotten once
+/// redone. `progress` is called after each group moved, or each chunk on
+/// Windows (see `move_again`). The caller holds off a scan, as for
+/// `foldersidecars::delete_run`.
 pub fn redo_run(
     runs: &Runs,
+    index: Option<&Mutex<Index>>,
     run_id: u64,
     progress: impl FnMut(usize, usize),
 ) -> Result<Summary, String> {
-    let paths = runs
+    let back = runs
         .take_undone(run_id)
         .ok_or_else(|| UNDONE_GONE.to_string())?;
-    let (mut summary, moved) = move_again(paths, progress);
+    Ok(redo_back(runs, index, back, |paths| {
+        move_again(paths, progress)
+    }))
+}
+
+/// Move `back` to the Trash again with `again` and record the run in `runs`,
+/// each moved sidecar keeping the RAW it belongs to, so it can be undone and
+/// redone again, then clear in `index` the judgments of those RAWs (see
+/// `cleared`), as `foldersidecars::delete_run` does: a folder that is not
+/// open has no reconcile to clear them. A failure to clear is logged; the
+/// files moved all the same.
+pub fn redo_back(
+    runs: &Runs,
+    index: Option<&Mutex<Index>>,
+    back: Vec<Back>,
+    again: impl FnOnce(Vec<PathBuf>) -> (Summary, Vec<Trashed>),
+) -> Summary {
+    let owners: HashMap<PathBuf, PathBuf> = back
+        .iter()
+        .filter_map(|back| Some((back.path.clone(), back.owner.clone()?)))
+        .collect();
+    let (mut summary, mut moved) = again(back.into_iter().map(|back| back.path).collect());
+    for trashed in &mut moved {
+        trashed.owner = owners.get(&trashed.path).cloned();
+    }
+    let to_clear = cleared(&moved);
     summary.run_id = runs.record(moved);
-    Ok(summary)
+    if let Some(index) = index {
+        let mut index = crate::index::lock(index);
+        for (dir, raws) in &to_clear {
+            if let Err(e) = index.clear_judgments(dir, raws) {
+                log::warn!("could not clear the judgments of {dir} after a redo: {e}");
+            }
+        }
+    }
+    summary
+}
+
+/// The RAWs whose sidecars `moved` holds (`Trashed::owner`), each once,
+/// under their folder, as `Index::clear_judgments` takes them: the RAW's
+/// path is its folder's listing joined with its name, so its parent is the
+/// folder as the index spells it. A `Move to Trash` run gives none.
+pub fn cleared(moved: &[Trashed]) -> Vec<(String, Vec<String>)> {
+    let mut cleared: Vec<(String, Vec<String>)> = Vec::new();
+    for owner in moved.iter().filter_map(|trashed| trashed.owner.as_deref()) {
+        let dir = owner
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .to_string_lossy()
+            .into_owned();
+        let raw = owner.to_string_lossy().into_owned();
+        match cleared.iter_mut().find(|(of, _)| *of == dir) {
+            Some((_, raws)) if raws.contains(&raw) => {}
+            Some((_, raws)) => raws.push(raw),
+            None => cleared.push((dir, vec![raw])),
+        }
+    }
+    cleared
 }
 
 /// Restore `run` from the Trash listed once, each file matched by its
@@ -1022,10 +1105,10 @@ fn move_again(paths: Vec<PathBuf>, progress: impl FnMut(usize, usize)) -> (Summa
 #[cfg(test)]
 mod tests {
     use super::{
-        create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked, relocate,
-        remove_one, restore, restore_recorded, run, run_chunked, trash_key, Group, Restored, Runs,
-        Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH,
-        RAW_NOT_RESTORED,
+        cleared, create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked,
+        relocate, remove_one, restore, restore_recorded, run, run_chunked, trash_key, Back, Group,
+        Restored, Runs, Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS,
+        NOT_IN_TRASH, RAW_NOT_RESTORED,
     };
     use crate::listing::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
@@ -1067,6 +1150,7 @@ mod tests {
             trashed_at: None,
             trashed_id: None,
             restore_to: None,
+            owner: None,
         }
     }
 
@@ -1100,6 +1184,14 @@ mod tests {
         (restored, asked)
     }
 
+    fn back_paths(restored: &Restored) -> Vec<PathBuf> {
+        restored.back.iter().map(|back| back.path.clone()).collect()
+    }
+
+    fn back(path: PathBuf, owner: Option<PathBuf>) -> Back {
+        Back { path, owner }
+    }
+
     fn failures(restored: &Restored) -> Vec<(&str, &str)> {
         restored
             .failed
@@ -1116,7 +1208,7 @@ mod tests {
         assert!(restored.failed.is_empty());
         assert_eq!(asked, ["a.ARW", "a.xmp", "a.ARW.dop", "b.DNG"]);
         assert_eq!(
-            restored.back,
+            back_paths(&restored),
             ["a.ARW", "a.xmp", "a.ARW.dop", "b.DNG"].map(PathBuf::from)
         );
     }
@@ -1126,7 +1218,7 @@ mod tests {
         let run = trash_run(&["a.ARW", "a.xmp", "b.ARW", "b.xmp", "c.ARW", "c.xmp"]);
         let (restored, _) = restore_with(&run, &["a.ARW", "b.ARW", "b.xmp", "c.ARW"], &["a.ARW"]);
         assert_eq!(
-            restored.back,
+            back_paths(&restored),
             ["b.ARW", "b.xmp", "c.ARW"].map(PathBuf::from)
         );
     }
@@ -1273,6 +1365,7 @@ mod tests {
                 trashed_at: Some(at.clone()),
                 trashed_id: super::file_id(&at),
                 restore_to: None,
+                owner: None,
             }
         };
         let back = recorded("a.ARW");
@@ -1286,6 +1379,7 @@ mod tests {
             trashed_at: Some(trash.join("c.ARW")),
             trashed_id: Some((0, 0)),
             restore_to: None,
+            owner: None,
         };
         let reused = Trashed {
             // A different file now occupies the recorded name (macOS Trash
@@ -1296,6 +1390,7 @@ mod tests {
             trashed_at: Some(trash.join("d.ARW")),
             trashed_id: Some((0, 0)),
             restore_to: None,
+            owner: None,
         };
         write(&reused.trashed_at.clone().unwrap());
         let run = TrashRun {
@@ -1417,11 +1512,12 @@ mod tests {
         let runs = Runs::default();
         runs.undone(1, Vec::new());
         assert_eq!(runs.take_undone(1), None);
+        let a = || vec![back(PathBuf::from("a.ARW"), None)];
         for id in 0..=MAX_RUNS as u64 {
-            runs.undone(id, vec![PathBuf::from("a.ARW")]);
+            runs.undone(id, a());
         }
         assert_eq!(runs.take_undone(0), None);
-        assert_eq!(runs.take_undone(1), Some(vec![PathBuf::from("a.ARW")]));
+        assert_eq!(runs.take_undone(1), Some(a()));
         assert_eq!(runs.take_undone(1), None);
     }
 
@@ -1482,24 +1578,68 @@ mod tests {
         let shoot = photos.join("shoot");
         let day1 = photos.join("day1");
         let runs = Runs::default();
-        let back = vec![
-            shoot.join("a.ARW"),
-            shoot.join("a.xmp"),
-            photos.join("shoot2").join("c.ARW"),
+        let backs = vec![
+            back(shoot.join("a.ARW"), None),
+            back(shoot.join("a.xmp"), None),
+            back(shoot.join("b.xmp"), Some(shoot.join("b.ARW"))),
+            back(photos.join("shoot2").join("c.ARW"), None),
         ];
-        runs.undone(1, back.clone());
-        runs.undone(2, back.clone());
+        runs.undone(1, backs.clone());
+        runs.undone(2, backs.clone());
         runs.rename_dir(&key(&shoot), &key(&shoot));
-        assert_eq!(runs.take_undone(2), Some(back.clone()));
+        assert_eq!(runs.take_undone(2), Some(backs.clone()));
         runs.rename_dir(&key(&shoot), &key(&day1));
         assert_eq!(
             runs.take_undone(1),
             Some(vec![
-                day1.join("a.ARW"),
-                day1.join("a.xmp"),
-                photos.join("shoot2").join("c.ARW"),
+                back(day1.join("a.ARW"), None),
+                back(day1.join("a.xmp"), None),
+                back(day1.join("b.xmp"), Some(day1.join("b.ARW"))),
+                back(photos.join("shoot2").join("c.ARW"), None),
             ])
         );
+    }
+
+    #[test]
+    fn a_folder_rename_moves_the_raw_a_recorded_sidecar_belongs_to() {
+        let shoot = Path::new("photos").join("shoot");
+        let day1 = Path::new("photos").join("day1");
+        let runs = Runs::default();
+        let id = runs
+            .record(vec![Trashed {
+                owner: Some(shoot.join("a.ARW")),
+                ..trashed(&key(&shoot.join("a.xmp")))
+            }])
+            .unwrap();
+        runs.rename_dir(&key(&shoot), &key(&day1));
+        let moved = runs.take(id).unwrap().moved;
+        assert_eq!(moved[0].owner, Some(day1.join("a.ARW")));
+        assert_eq!(moved[0].restore_to, Some(day1.join("a.xmp")));
+    }
+
+    #[test]
+    fn a_redo_clears_each_raw_whose_sidecar_moved_once_and_a_move_to_trash_none() {
+        let a = Path::new("shoot").join("a.ARW");
+        let b = Path::new("shoot").join("b.ARW");
+        let c = Path::new("other").join("c.ARW");
+        let sidecar = |path: &str, owner: &Path| Trashed {
+            owner: Some(owner.to_path_buf()),
+            ..trashed(path)
+        };
+        let moved = [
+            sidecar("shoot/a.xmp", &a),
+            sidecar("shoot/a.ARW.dop", &a),
+            sidecar("shoot/b.xmp", &b),
+            sidecar("other/c.xmp", &c),
+        ];
+        assert_eq!(
+            cleared(&moved),
+            [
+                ("shoot".to_string(), vec![key(&a), key(&b)]),
+                ("other".to_string(), vec![key(&c)]),
+            ]
+        );
+        assert!(cleared(&[trashed("shoot/a.ARW"), trashed("shoot/a.xmp")]).is_empty());
     }
 
     #[test]
@@ -1524,7 +1664,10 @@ mod tests {
         );
         assert_eq!(restored.restored, ["new/a.ARW"]);
         assert_eq!(failures(&restored), [("new/b.ARW", ALREADY_EXISTS)]);
-        assert_eq!(restored.back, ["new/a.ARW", "new/a.xmp"].map(PathBuf::from));
+        assert_eq!(
+            back_paths(&restored),
+            ["new/a.ARW", "new/a.xmp"].map(PathBuf::from)
+        );
         assert_eq!(
             asked,
             [
@@ -1600,12 +1743,14 @@ mod tests {
                     trashed_at: Some(trash.join("ok.ARW")),
                     trashed_id: super::file_id(&trash.join("ok.ARW")),
                     restore_to: None,
+                    owner: None,
                 },
                 Trashed {
                     path: dir.join("ok.xmp"),
                     trashed_at: Some(trash.join("ok.xmp")),
                     trashed_id: super::file_id(&trash.join("ok.xmp")),
                     restore_to: None,
+                    owner: None,
                 },
             ]
         );
@@ -1938,7 +2083,7 @@ mod tests {
         assert!(restored.failed.is_empty());
         assert_eq!(asked, ["a.xmp", "a.ARW.dop", "b.xmp"]);
         assert_eq!(
-            restored.back,
+            back_paths(&restored),
             ["a.xmp", "a.ARW.dop", "b.xmp"].map(PathBuf::from)
         );
     }

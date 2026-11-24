@@ -365,10 +365,12 @@ recording a new kind of run in `Runs`, run its undo and redo in a unit test
 rather than reasoning from the code (both of these were "read, not run" in
 the plan).
 
-- A redo writes no index row (it cannot tell which RAW a
-  sidecar path belongs to), so a redo of a sidecar delete relies on the open
-  folder's resync to clear the judgments; a closed folder keeps them until
-  its next open.
+- A recorded sidecar keeps the RAW it belongs to (`Trashed::owner`), through
+  the undo (`Back`) and into the run a redo records, and `trash::redo_run`
+  clears the judgments of the RAWs whose sidecars it moved again
+  (`trash::redo_back`, `Index::clear_judgments`), so a closed folder no
+  longer keeps them until its next open. A sidecar whose move failed keeps
+  its RAW's row, and a `Move to Trash` run clears nothing.
 - Source: `docs/plans/_archived/20261005-folder-sidecars/learnings.md`,
   Step 2.
 
