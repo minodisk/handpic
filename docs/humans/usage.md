@@ -227,9 +227,16 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   whole preview) the pass stored with closed eyes (the `Closed` of the meta
   pane's `Eyes` row and of the filter's `Eyes` section) also gets an amber
   Lucide `eye-off` right of that icon's place, which stays put whether or
-  not the face icon is drawn. It judges that one face only: a blinking
-  bystander gets no mark, and neither does a face under about 60 pixels on
-  the embedded preview, which is not judged. A profile or a downcast look can
+  not the face icon is drawn. On a group photo, a frame whose `Similar
+  faces` count reached the `Faces in a group photo` number (see **Group
+  photos**), the same mark also shows once the third pass (`checking faces`)
+  has found closed eyes on any face of the frame, filling in as that pass
+  runs and following the number when you change it. Elsewhere it judges the
+  one face only: a blinking bystander gets no mark. Either way a face under
+  about 60 pixels on the embedded preview is not judged, and on a group
+  photo neither is a face the detector scores under 0.8 or one past the
+  eight largest, so a frame without the mark is not proof that nobody
+  blinked. A profile or a downcast look can
   read as closed, as the `Eyes` row can. It is a
   cue, not a verdict: AF on a person in the
   background gives a sharp face and a false good, and the back of a
@@ -360,7 +367,17 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   behind two of the good photo's cuts: how far the face mesh's eyes sit from
   the eye points the face detector found, and how close the face and its
   eyes come to the frame's edge. `Sharpness` is the preview's sharpness score (see
-  **Sharpness score**).
+  **Sharpness score**). `Similar faces` is the second pass's count of
+  confident faces whose size is within half to twice the judged face's, that
+  face included, shown on every frame that has one so you can choose the
+  `Faces in a group photo` number (see **Group photos**). On a frame whose
+  count reached that number, the third pass's counts follow: `Faces judged`
+  (the judged face and the other faces of 60 pixels or more with a detection
+  score of 0.8 or more, at most eight, whose face mesh fits), `Faces with
+  closed eyes` and `Faces with soft eyes` (eyes under 0.110 on the full-size
+  JPEG; left out for a file with no JPEG larger than the preview). Each is
+  left out until the pass reaches the frame, and all three are on a frame
+  under the number.
 - **Filter menu**: narrows the strip by pick flag, stars, color label,
   orientation (`Portrait` / `Landscape`), the focus mark's state (the
   `Face focus` section, each item with the strip's icon of its state: `Good`
@@ -799,7 +816,9 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   stays. Lowering it checks the open folder's frames that now qualify (a
   re-scan in which only the third pass has work, after the scan under way
   if one is) and every other folder's at its next open; raising it starts
-  nothing, and no screen applies the new number to the counts yet.
+  nothing. The meta pane's count rows and the strip's closed-eyes mark
+  follow the number at once: raising it hides the counts of the frames now
+  under it.
   The second pass stores that count for every frame either way, so a change
   never re-runs it.
 - **Clear Cache**: the `Cache` page of the settings shows how much disk

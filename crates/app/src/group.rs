@@ -39,9 +39,6 @@ pub fn parse(text: &str) -> Result<u32, String> {
 }
 
 /// A frame's all-faces counts as the app shows them.
-// The meta pane, the strip and the filter are to read the counts through
-// `shown`; until then only the tests do.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Counts {
     pub judged: Option<u32>,
@@ -52,7 +49,6 @@ pub struct Counts {
 /// The stored counts when the stored gate count is at or above `min_faces`,
 /// else unknown: pass 3 may have run under a lower threshold, and its counts
 /// are not shown for a frame the threshold in force leaves out.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn shown(eyes: &StoredEyes, min_faces: u32) -> Counts {
     if eyes.faces_group.is_none_or(|group| group < min_faces) {
         return Counts::default();

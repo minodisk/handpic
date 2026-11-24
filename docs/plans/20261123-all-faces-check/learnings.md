@@ -190,6 +190,30 @@
   cargo builds were not run; the build, clippy and the tests are left to
   the PR's GitHub checks. Only `mise run fmt` ran.
 
+## Step 5: Show the counts in the meta pane and on the strip cell
+
+- The strip cell already had a closed-eyes mark from the
+  `eyes-mark-tier-mcp` plan, built for this step to widen: its one rule
+  (`mark::closed_eyes_mark`) now also takes the group threshold and turns on
+  for a closed count of at least 1 through `group::shown`. No new icon, slot
+  or `StripCell` field. "Never on a frame under the gate" holds for the
+  counts' part; the judged face's own closed state still marks any frame, as
+  before this step (the single judged-face behavior does not change).
+- Both readers run at render time with `self.settings.group_min_faces`, so
+  the pass 3 rows (`AllFacesProgress`, then the event handler's
+  `cx.notify()`) and a threshold change (`set_group_min_faces`'s
+  `cx.notify()`) redraw them with no extra plumbing; that made the doc
+  comment on `set_group_min_faces` true, and it now names the readers.
+- With real callers in place, `group::Counts` and `group::shown` lost their
+  `#[cfg_attr(not(test), allow(dead_code))]`; every field of `Counts` is read
+  (`judged` and `soft` by the meta pane, `closed` by both).
+- The count rows sit at the end of the `Analysis` group, after `Sharpness`:
+  `Similar faces`, `Faces judged`, `Faces with closed eyes`, `Faces with soft
+  eyes`.
+- Per the user's standing rule (2026-11-24), `mise run ci:local` and local
+  cargo builds were not run; the build, clippy and the tests are left to the
+  PR's GitHub checks. Only `mise run fmt` ran.
+
 ## Deferred issues (todo candidates)
 
 - On ARW team-sport folders 24-48% of the confident faces are under
@@ -224,3 +248,19 @@
   scan-level tests, left to GHA). Basis: Step 4's number field, which no
   test drives. Files: `crates/app/src/settingsview.rs`,
   `crates/app/src/main.rs` (`set_group_min_faces`).
+- Pending manual check (Step 5, any desktop platform, the running app, a
+  real group photo folder such as the `2026-11-07` team-sport ARW folder):
+  open the folder and let the scan finish (`checking faces` gone from the
+  status line). Expected: on a frame whose meta pane `Similar faces` is at
+  or above `Faces in a group photo`, the `Analysis` group ends with `Faces
+  judged`, `Faces with closed eyes` and `Faces with soft eyes` that agree
+  with what the photo shows (blinks counted, a soft back row counted), and
+  the amber `eye-off` mark sits on the strip cell exactly when that closed
+  count is at least 1 or the judged face is closed; on a frame under the
+  number only `Similar faces` shows and no mark comes from the counts;
+  raising the number past a marked frame's `Similar faces` hides its count
+  rows and its counts' mark at once, lowering it back brings them back. The
+  step's checkbox was ticked on the automated criteria (unit tests, left to
+  GHA). Basis: Step 5's meta rows and strip mark, which no test paints.
+  Files: `crates/app/src/meta.rs`, `crates/app/src/mark.rs`,
+  `crates/app/src/main.rs`.
