@@ -113,8 +113,9 @@ the given folders, each folder's burst debounced into one call of the `spawn`
 callback, and `with_released`, which a folder rename runs under), `src/ondemand.rs`
 the faces and the eye judgment of the shown file, read on demand rather than
 at scan time and touching neither the index nor `ReadSlots` (`read_preview`, `read_faces`,
-`read_eyes`, whose `current` check stops a superseded judgment, and the
-`raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
+`read_eyes`, whose `current` check stops a superseded judgment, run only
+for the shown RAW file while the `f` overlay is on, as its mesh source and
+`get_view`'s fallback, and the `raw_only` guard), behind the app's `faces_of` and `eyes_of`, `src/trash.rs` the
 move behind the strip's `Move to Trash…` (it groups the given files of one
 folder, each RAW with the `.xmp` and `.dop` sidecars that exist for it and a
 JPEG alone, and moves them to the OS trash, RAW first, in chunks on Windows

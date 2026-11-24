@@ -263,7 +263,7 @@ widens the rule and reuses the mark.
       and `leaves_the_eyes_key_out_until_the_file_has_been_judged` keep
       their meaning for the fallback path.
 
-- [ ] Step 4: Close out the on-demand model run for files with stored values (todo item 4)
+- [x] Step 4: Close out the on-demand model run for files with stored values (todo item 4)
   - Done when:
     - It is confirmed in the code, and recorded in this folder's
       `learnings.md`, that the Face Landmarker run of `ondemand::read_eyes`
