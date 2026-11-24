@@ -895,9 +895,38 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   the same disk. Close the app before measuring. The harness,
   `preview_during_pass_1_on_a_real_folder`, was a test of the earlier app's crate and
   left with it.
-- The cap was measured on a SATA SSD only. NVMe is untested (no RAW folder on
-  it), and a drive that needs deep queues for throughput may lose some at a cap
-  of 2. HDR PQ CR3 is untested too.
+- On NVMe the numbers do not confirm cap 2: at 22 pass 1 ran about 2 to 3
+  times faster and the preview read was no slower. Measured on 2026-11-23
+  with the app itself (release build of `3918064c`, `READ_SLOTS` patched to
+  22 for the cap 22 runs, the pause on in all), cold copies (`robocopy /J`,
+  one per run) of 1800 α7 V ARW (76.1 GB) on the NVMe `CT1000P5PSSD8` (C:,
+  about 80 % full), 22 threads, a fresh index per run. The preview reads are
+  the `page` lines' `read` of jumps through the MCP companion's
+  `show_photo` to files at least 100 past pass 1's done count, 40 files
+  apart (so neither the scan nor the prefetch had read them), while pass 1
+  ran; ms/file is the `scan extract` line's time over its files. Other
+  sessions on the host were compiling, so the total CPU load sampled just
+  before each launch is given; the runs were alternated:
+
+  | Cap | CPU before | Probes | Read p50 (ms) | Read p95 (ms) | ms/file |
+  | --- | ---------- | ------ | ------------- | ------------- | ------- |
+  | 22  | 28-88 %    | 11     | 11.8          | 15.6          | 2.49    |
+  | 22  | 55-69 %    | 11     | 21.7          | 65.4          | 2.39    |
+  | 22  | 12-13 %    | 7      | 10.3          | 11.1          | 1.53    |
+  | 2   | 67-78 %    | 0      | -             | -             | 5.63    |
+  | 2   | 100 %      | 28     | 14.6          | 39.2          | 11.09   |
+  | 2   | 37-43 %    | 18     | 11.0          | 13.6          | 5.50    |
+  | 2   | 9-10 %     | 16     | 8.8           | 10.2          | 4.19    |
+  | 2   | 12-14 %    | 16     | 9.6           | 15.1          | 4.46    |
+
+  The first cap 2 run's jumps missed their files (a driver bug), so it has
+  only its ms/file. A p95 over 7 to 18 probes is the top one or two reads.
+  At comparable load (about 10 %: the last row of cap 22, the last two of
+  cap 2) pass 1 took 2.8 s against 7.5 and 8.0 s for 1800 files, and the
+  read p50 stayed about 9 to 10 ms either way: the NVMe drive served the
+  preview read as fast behind 22 reads in flight as behind 2. `READ_SLOTS`
+  was not changed; which cap to ship (one cap, or one per drive kind) is an
+  open decision. HDR PQ CR3 is untested.
 - The cap also covers `hevc::to_jpeg` until the read is split from it:
   `read_preview` ends in that decode (65-125 ms of CPU per HDR PQ CR3), so at a
   cap of 2 such a folder pays a calculated 33-63 ms/file, and a preview read
@@ -913,7 +942,8 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   flag is a plain `AtomicBool` with no notifier and the scan's cancel has no
   handle on the slots. `acquire` then returns `None` and the worker abandons
   the file, as `extract_unless` does at its other stages.
-- Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2.
+- Source: `docs/plans/_archived/20261107-preview-read-gate/learnings.md`, Step 2;
+  the NVMe runs: `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1.
 
 ### Scan, on-demand faces and eyes: timings taken through the earlier app (Measured)
 
@@ -1171,8 +1201,50 @@ eventually true; it is not on a rename path. A notify upgrade must re-check
 that `configure` still queues behind `Unwatch` (loop the `treewatch` tests
 under load).
 
-Only rename was measured this way, not delete: don't assume the same
-ancestor-pinning applies to deletion without measuring it.
+Re-checked on notify 8.2.2, the version `crates/app/Cargo.lock` resolves
+(the root lock stays at 8.2.0, which CI's `treewatch` tests run), on
+2026-11-23. The source: `unwatch` still only sends `Action::Unwatch`,
+`configure` still sends `Action::Configure` with a reply channel on the same
+channel and blocks on the reply, and the server loop still handles the
+actions in order, `Unwatch` running `stop_watch` before it reaches the
+`Configure` behind it. What 8.2.2 changed is inside `stop_watch`: it sets a
+`stopping` flag first, waits for the cancelled read's completion and only
+then closes the directory handle (8.2.0 closed it before the wait), and when
+`CancelIo` fails it logs an error and leaks the handle rather than closing
+it, so in that branch the folder's ancestors stay pinned and a rename would
+still be refused; `Drop` now wakes the server before sending `Stop`. The run:
+a scratch binary on `notify = "=8.2.2"` that creates `a\b`, watches `b`
+`NonRecursive`, unwatches it and renames `a` at once, 300 times per batch,
+three batches, with 24 busy threads loading every core: without
+`configure` the rename failed 2, 0 and 4 times (6 in 900), with `configure`
+between the `unwatch` and the rename 0 times in 900. So `watch::settle`
+holds on 8.2.2. Whether to align the two locks, so CI covers the shipped
+version, is still open.
+
+Delete was measured the same way on 2026-11-23 (Windows 11, NTFS, a
+scratch binary on notify 8.2.2 and again on 8.2.0, the same results; a
+`NonRecursive` watch held throughout on a canonical temp folder):
+
+| What was deleted (watch held)              | `std::fs` delete                     | Shell delete to the Recycle Bin (`trash::delete`)        |
+| ------------------------------------------ | ------------------------------------ | -------------------------------------------------------- |
+| The watched folder itself, empty           | `remove_dir` succeeds                | not run                                                  |
+| The watched folder itself, with files      | `remove_dir_all` succeeds            | succeeds                                                 |
+| The parent of the watched folder           | `remove_dir_all` succeeds            | fails, `0x80270021` ("access denied to the source")      |
+| The grandparent of the watched folder      | `remove_dir_all` succeeds            | fails, `0x80270021`                                      |
+
+Every `std::fs` delete left the name gone at once: `exists()` was false and
+a folder of the same name could be created again while the watch was still
+held, so no delete-pending name lingered (Rust's `remove_dir_all` deletes
+with POSIX semantics on Windows). The watcher reported `Remove(Any)` events
+for the files it saw go and nothing for the folder itself; trashing the
+watched folder reported `Modify(Any)` for its files. A failed shell delete
+left the folder in place, its name still taken. A rename
+of the same shapes in the same run reproduced the result above (the folder
+itself renamed, its parent refused with os error 5). So deleting is like
+renaming for the user: a file manager's delete to the Recycle Bin, a move,
+cannot take a folder holding a watched one; a permanent delete through
+`std::fs` can. A file manager's permanent delete (Shift+Delete) was not
+measured.
 
 Trashing (not renaming) a file inside a watched folder needs no such care: a
 throwaway test put a `notify::recommended_watcher` `NonRecursive` watch on a
@@ -1185,7 +1257,8 @@ open has no watch at all.
 - Source: `docs/plans/_archived/20260928-tree-live-watch/learnings.md`, Step 1;
   the asynchronous release is from
   `docs/plans/_archived/20260929-treewatch-unwatch-barrier/learnings.md`,
-  Step 1; the trash check is from
+  Step 1; the delete measurement and the 8.2.2 re-check are from
+  `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1; the trash check is from
   `docs/plans/_archived/20260928-trash-rejected-from-tree/learnings.md`, Step 1.
 
 ### `Writer::set` / `set_now` carry `#[allow(clippy::too_many_arguments)]`, not a parameter struct (Hit)

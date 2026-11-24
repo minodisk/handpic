@@ -59,22 +59,6 @@ Run each check with `--settings <fresh test store>`, `--index <fresh test index>
 - [ ] On macOS, do the same measurement and expect the same result.
 - [ ] Replace the "unmeasured" sentence in `docs/agents/app.md`'s strip-height section with the result.
 
-### Docs: the "Focus candidate pass" numbers in docs/humans/performance.md are missing the app's own scan/faces log lines
-
-Step 3 of `docs/plans/_archived/20260925-focus-candidate/plan.md` asked for the
-`scan extract` / `scan faces` log lines of one app open of the 2134-file
-Sony folder to be recorded in `docs/humans/performance.md` "Focus candidate pass",
-alongside the CLI numbers already there (`riffle-cli scan` and a CLI
-subcommand removed since). The implementing agent could not drive the GUI, so only the CLI
-numbers are recorded; `docs/humans/performance.md` says so in a note under the
-section.
-
-#### TODO
-
-- [ ] Open the 2134-file Sony folder once in the app and record its
-      `scan extract` / `scan faces` log lines in `docs/humans/performance.md`
-      "Focus candidate pass", next to the existing CLI numbers.
-
 ### App: a deep-row focus point still exceeds the 50ms budget
 
 A focus point in a deep row of the unrotated JPEG measured 58-65ms keypress to pixels (n=2, before the #56 and #60 fixes); see "The 1:1 focus check path" in docs/humans/performance.md. Options are prefetching the neighboring files' crops (Phase 4's ring buffer) or a DCT-scaled placeholder; nothing is chosen. The measurement was the Tauri app's; the app's 1:1 view (`crates/app/src/zoom.rs`) reads the crop through the same `crates/core/src/partial.rs`.
@@ -436,22 +420,6 @@ Files: `docs/humans/cameras.md`.
 - [ ] Find an AF-C sample of a person from the α9 III and α7CR (portrait orientation if possible), and turn their `–` for AF point / AF frame size into `✓` if the point lands on the subject.
 - [ ] Confirm orientation on a portrait ARW sample and record the result in `docs/humans/cameras.md`.
 
-### Engine: measure whether a `notify` watch blocks deleting a folder on Windows
-
-`docs/plans/_archived/20260928-tree-live-watch/plan.md` (Step 1) measured only
-rename on Windows with `notify` 8.2: a watch pins the watched folder's
-ancestors against rename, not the folder itself. Delete was never measured,
-so `docs/humans/usage.md` and the plan's Trade-offs section say "rename" only.
-
-#### TODO
-
-- [ ] Using the same scratch-binary approach as the Step 1 rename
-      measurement, measure on Windows whether deleting a watched folder
-      itself, or a folder with a watched descendant, succeeds with `notify`
-      8.2. Record the result next to the rename measurement and update
-      `docs/humans/usage.md` and `docs/agents/shared-crates.md` to match (or confirm
-      they need no change).
-
 ### Engine: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
 `crates/engine/src/photolab.rs` looks up the registered Uuids on macOS too
@@ -633,13 +601,13 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
 
-### App: measure the scan's read cap on NVMe
+### App: decide the scan's read cap now that NVMe was measured
 
-`READ_SLOTS` (2) was picked on a SATA SSD; no RAW folder was on the NVMe (`C:`) at the time. A shallower queue costs more on a drive that needs deep queues for throughput, so cap 2 may slow the thumbnail fill there. The harness the cap was measured with (`preview_during_pass_1_on_a_real_folder`) was a test of the Tauri crate and left with it. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/scan.rs` (`READ_SLOTS`), `docs/agents/shared-crates.md` (the read cap section).
+`READ_SLOTS` (2) was picked on a SATA SSD (preview read p50 14-16 ms at 2, 20-25 ms at 4, 29-57 ms at 8, 154-156 ms uncapped at 22, pass 1 about 7 ms/file at every cap but 1). On 2026-11-23 the app measured the NVMe `CT1000P5PSSD8` (C:) on cold copies of 1800 α7 V ARW with the pause on: at cap 22 pass 1 ran 1.53-2.49 ms/file and the read of a file pass 1 had not read was 10.3-21.7 ms p50 over three runs; at cap 2 it ran 4.19-11.09 ms/file (4.19 and 4.46 at about 10 % CPU load, against 1.53 for cap 22 at the same load) with 8.8-14.6 ms p50 over four runs. So on NVMe cap 2 costs pass 1 two to three times its speed and buys no shorter preview read. `READ_SLOTS` was not changed. Numbers and method: `docs/agents/shared-crates.md` ("The scan's reads are capped and yield to the preview's at the disk"), `docs/plans/_archived/20261123-todo-measurements/learnings.md`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/scan.rs` (`READ_SLOTS`), `docs/agents/shared-crates.md`.
 
 #### TODO
 
-- [ ] Put an unopened RAW folder on the NVMe, close the app and measure the preview read during pass 1 at caps 22 and 2 on cold data (a new harness, or the app's `page` timing lines). Done when `docs/agents/shared-crates.md`'s read cap section has the numbers and the cap is confirmed or changed.
+- [ ] Decide the cap: keep 2 everywhere (the SATA preview wait), raise it (which costs SATA the waits above), or pick it per drive (how the drive kind would be told apart is open). Done when `READ_SLOTS`, or its replacement, and the guide's read cap section say which.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
@@ -650,16 +618,6 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 #### TODO
 
 - [ ] Time `handpic-cli features` (or a pass 2 in the app) on a freshly mounted card or after a reboot, with the same 8 threads and release build as Step 3, and compare it with the warm figures. If the second read is a noticeable share of the cost, consider reusing the first read's bytes.
-
-### Engine: re-check that notify 8.2.2 still queues `configure` behind `Unwatch` when the app starts using `watch`
-
-#### Background
-
-`gpui-backend-crate` Step 4 moved the folder watcher into `crates/engine/src/watch.rs`, with `settle` moved in from `treewatch.rs`. `crates/app/Cargo.lock` resolves `notify` to 8.2.2, while the root `Cargo.lock` stays at 8.2.0. `docs/agents/shared-crates.md` says a notify upgrade must re-check that `configure` still queues behind `Unwatch`, which `watch::settle` relies on. Nothing in CI covers this on 8.2.2. The app now calls `watch::set` for the open folder's resync (`gpui-strip-index` Step 4, `crates/app/src/main.rs`), but `settle`'s `configure` barrier matters only for the rename path, so the re-check is still open. The resync's hand-runs (a copy and a delete in the watched folder) behaved as expected on 8.2.2 but did not exercise `Unwatch` / `configure` queuing. Plan: `docs/plans/_archived/20261109-gpui-backend-crate/plan.md`, `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/engine/src/watch.rs`, `crates/app/Cargo.lock`, `docs/agents/shared-crates.md`.
-
-#### TODO
-
-- [ ] When the app first uses `watch` (the ports' rename path), re-check on notify 8.2.2 that `configure` still queues behind `Unwatch`, so that `watch::settle` still holds. Either pin the app lock to the version the root lock holds, or confirm the queuing behavior and note the version in `docs/agents/shared-crates.md`.
 
 ### App: real-device checks of the strip, the scan progress, the resume and the resync
 
@@ -686,13 +644,13 @@ Files: `crates/app/src/focus.rs` (`scan_focus_paths`), `crates/app/src/main.rs` 
 
 - [ ] Reproduce on a JPEG folder with a fresh index, find whether the hot list misses the cells in view or their finished thumbnails are not read back until the pass ends, and fix it.
 
-### App: measure the scan pause in `load` with presses on files pass 1 has not read yet
+### App: measure the scan pause in `load` on the SATA SSD with presses on files pass 1 has not read yet
 
-`gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. The one 336.75 ms read without the pause came on a disk slowed by 40 GB of just-written copies, so it proves nothing. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file. Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md` (`results.md` in the same folder). Files: `crates/app/src/main.rs` (`load`), `crates/app/src/focus.rs`, `crates/app/src/args.rs` (`--auto`).
+`gpui-strip-index` Step 5's during-scan run stepped to the next file, which the hot list had already made the scan read (a cache hit of about 1 ms), so `ReadSlots::pause` around `read_preview` showed no effect at p50 / p95. Tauri's figure (14-16 ms read wait at cap 2 with the pause) is for a read of an unscanned file on the SATA SSD. On 2026-11-23 the comparison was made on the NVMe drive instead: release builds at cap 2, pause on against off, MCP `show_photo` jumps to files pass 1 had not read, cold copies of 1800 ARW, and the pause made no measurable difference (8.8-9.6 against 9.3 ms p50 at about 10 % CPU load; `docs/agents/app.md`, "A preview holds the scan's pause until its image is painted"). The SATA runs could not be taken: another process was reading `D:` at 250 to 480 MB/s throughout (`docs/plans/_archived/20261123-todo-measurements/learnings.md`, with the driver and the pause-off patch). Plan: `docs/plans/_archived/20261110-gpui-strip-index/plan.md`. Files: `crates/app/src/main.rs` (`load`), `docs/agents/app.md`.
 
 #### TODO
 
-- [ ] Run `--auto` with presses that land on unread files (a jump such as `End`, or a stride), on equal cold copies (`robocopy /J`, one per run) and a settled disk, pause on against off, and record `read` p50 / p95 next to Tauri's. Done when `docs/agents/app.md` says whether the pause shortens the read.
+- [ ] On the SATA SSD (`D:`), with nothing else reading it, repeat the 2026-11-23 method: equal cold copies (`robocopy /J`, one per run, under `D:\Photos\tests\`), a settled disk, pause on against off alternated, at least two runs each, and record `read` p50 / p95 next to Tauri's in `docs/agents/app.md`, saying whether the pause shortens the read there.
 
 ### App: decide whether the strip's image box grows from 144x96 to the Tauri strip's 144x144
 
@@ -756,27 +714,23 @@ The native-scan-stop work (`docs/plans/_archived/20261113-native-scan-stop/plan.
 
 ### App: real-device checks of the strip's sort order, the filter and the filter / sort menus
 
-`gpui-filter-sort` added the strip's sort order, the filter (flags, stars, labels, orientation, `Face focus`, `Eyes`, `Output`) and the status row's `Sort ▾` / `Filter ▾` menus to the GPUI app (`crates/app`). CI, the unit tests (`sort.rs`, `filter.rs`, `menu.rs`) and debug `--auto` runs covered the page order and the log lines headlessly. Clicks and key presses cannot be driven by `--auto`, so nobody has watched the strip's drawing, pressed a judgment key under a sort or a filter, or clicked a menu. On Windows 11 on 2026-11-22 the sort order, the filter through the judgment keys and undo, `Face focus` and `Eyes`, both menus and the `Output` section were exercised on a debug build with synthetic input (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`); what is left open is in the boxes below. The good set of `faces` is now `ILCE-1M2_sony_a1_ii_03` and `_DSC1758` (`DSC00405` is no longer Good; the rule changed after the check was written), the mark is the green `scan-face` icon rather than an `f` mark, and a click on a strip cell that closes the filter menu also selects the cell. Windows only. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/sort.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`.
+`gpui-filter-sort` added the strip's sort order, the filter (flags, stars, labels, orientation, `Face focus`, `Eyes`, `Output`) and the status row's `Sort ▾` / `Filter ▾` menus to the GPUI app (`crates/app`). CI, the unit tests (`sort.rs`, `filter.rs`, `menu.rs`) and debug `--auto` runs covered the page order and the log lines headlessly. Clicks and key presses cannot be driven by `--auto`, so nobody has watched the strip's drawing, pressed a judgment key under a sort or a filter, or clicked a menu. On Windows 11 on 2026-11-22 the sort order, the filter through the judgment keys and undo, `Face focus` and `Eyes`, both menus and the `Output` section were exercised on a debug build with synthetic input (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`). On 2026-11-23 the MCP companion (a `--features screenshot` debug build, `get_view` and `screenshot`) covered the `Face focus` box, a pick then `Picked`, and `Sort ▾` rating on a folder longer than the strip (results in `docs/agents/app.md` and `docs/plans/_archived/20261123-todo-measurements/learnings.md`); what is left open is in the boxes below, the parts that need a real mouse or keyboard. The good set of `faces` is now `ILCE-1M2_sony_a1_ii_03` and `_DSC1758` (`DSC00405` is no longer Good; the rule changed after the check was written), the mark is the green `scan-face` icon rather than an `f` mark, and a click on a strip cell that closes the filter menu also selects the cell. Windows only. Plan: `docs/plans/_archived/20261113-gpui-filter-sort/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/main.rs`, `crates/app/src/sort.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build`, then run `target\debug\handpic.exe <folder> --index <fresh path> --settings <fresh .sqlite path> --import-settings <file>`, with a fresh index and settings store per run (the store is seeded from the `--import-settings` JSON only when new); "with `settings-x.json`" below means `--import-settings` that file. The folders and settings files below are copies under `D:\Photos\tests\20261113-filter-sort\`; use only those, and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`. Record what was seen in `docs/agents/app.md`, above all whether a click inside the deferred popover reaches its `on_click` before the strip's `on_mouse_down`.
 
 #### TODO
 
-- [ ] `Face focus` (Step 3): open `faces` with `settings-filter-good.json` on a fresh index. The strip starts empty and fills in while pass 2's `analyzing n / m` runs, ending with `ILCE-1M2_sony_a1_ii_03` and `_DSC1758`.
-- [ ] The menus (Steps 3 and 4): open `menu\raw` with `settings-name.json`. If `Filter ▾` can be made to open over a strip cell, a click on an item does not also select the cell under it (in the 2026-11-22 run the menu opened upward over the preview and the meta pane and never overlapped the strip). With the filter menu open, hold `→` on a real keyboard: the pager pages continuously. On `menu\faces`, pick one file with `p` and check `Picked`: the strip narrows to it. `Sort ▾` then `Rating` on a folder longer than the strip: the current file stays current and in view.
+- [ ] The menus (Steps 3 and 4): open `menu\raw` with `settings-name.json`. If `Filter ▾` can be made to open over a strip cell, a click on an item does not also select the cell under it (in the 2026-11-22 run the menu opened upward over the preview and the meta pane and never overlapped the strip). With the filter menu open, hold `→` on a real keyboard: the pager pages continuously.
 
 ### App: real-device checks of the EXIF filter sections and the refilter fixes
 
-`gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the strip position (then the meta pane's `n / total`, now the status bar's, see `native-status-position`) follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. On Windows 11 on 2026-11-22, on a copy of `sort\raw` (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`), the menu listed `Camera`, `Aperture`, `Shutter speed`, `ISO` and `Focal length` with the folder's values in order and scrolled (no `Lens`: the compacts record none); camera items widened the strip (OR), an ISO item narrowed it (AND) and `Reset` cleared all; a copied-in ILCE-6400 RAW added its item, and deleting that only file dropped its check; under `untagged` a `p` changed the position from `3 / 5 (6)` to `3 / 4 (6)` in the first frame captured; `Reset` from a filter hiding every file came back to the file shown before; the settings file was untouched. What is left open is in the boxes below. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/exif.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`, `crates/app/src/main.rs`.
+`gpui-exif-filter` added the per-folder EXIF sections (`Camera`, `Lens`, `Aperture`, `Shutter speed`, `ISO`, `Focal length`) to the GPUI app's filter menu, made the strip position (then the meta pane's `n / total`, now the status bar's, see `native-status-position`) follow a refilter that hides the shown file, and kept the anchor across an empty list (`filter::KeptAnchor`). CI, the unit tests (`exif.rs`, `filter.rs`, `menu.rs`) and one debug `--auto` run covered the build, the group order, the check semantics and the pure rules headlessly. Clicks and judgment keys cannot be driven by `--auto`, so no one has opened the menu, checked an item or pressed `p` under a filter. On Windows 11 on 2026-11-22, on a copy of `sort\raw` (results in `docs/plans/_archived/20261122-windows-device-checks-4/learnings.md`), the menu listed `Camera`, `Aperture`, `Shutter speed`, `ISO` and `Focal length` with the folder's values in order and scrolled (no `Lens`: the compacts record none); camera items widened the strip (OR), an ISO item narrowed it (AND) and `Reset` cleared all; a copied-in ILCE-6400 RAW added its item, and deleting that only file dropped its check; under `untagged` a `p` changed the position from `3 / 5 (6)` to `3 / 4 (6)` in the first frame captured; `Reset` from a filter hiding every file came back to the file shown before; the settings file was untouched. On 2026-11-23 the MCP companion (a `--features screenshot` debug build, `get_view`, `set_filter`, `set_judgment` and `screenshot`) saw the `lens` section listed after `camera` in `filter_offers.exif` once pass 1 of a fresh index ended, the name follow the position under `untagged` after a `set_judgment` pick, the uncheck from a filter hiding every file come back to the file shown before, and six picks under `untagged` plus `Face focus` during pass 2 end on the current file's image (results in `docs/agents/app.md` and `docs/plans/_archived/20261123-todo-measurements/learnings.md`). What is left open is in the box below: no tool opens the menu. Windows only. Plan: `docs/plans/_archived/20261113-gpui-exif-filter/plan.md` (the pending manual checks in `learnings.md` in the same folder). Files: `crates/app/src/exif.rs`, `crates/app/src/filter.rs`, `crates/app/src/menu.rs`, `crates/app/src/main.rs`.
 
 Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" mise exec -- cargo build`, then run `target\debug\handpic.exe <folder> --index <fresh path> --settings <file>`, with a fresh index per run. Use only copies under `D:\Photos\tests\` (a folder with several cameras, such as `D:\Photos\tests\20261113-filter-sort\sort\raw`), and never open a folder under `D:\Photos\` outside `D:\Photos\tests\`.
 
 #### TODO
 
-- [ ] On Windows, on a folder whose files record a lens, the filter menu shows a `Lens` section after `Camera`. On a fresh index the sections appear once pass 1 ends.
-- [ ] On Windows, under the `untagged` filter, after `p` on the current file the name follows the status bar's position when the next preview arrives.
-- [ ] On Windows, with a filter that hides every file, unchecking the item (not `Reset`) comes back to the file shown before, not the first one.
-- [ ] On Windows, on a fresh index with `untagged` plus a `Face focus` item checked, press `p` repeatedly while pass 2 runs: the image on screen must always end up the current file's, never a judged file's left behind (the `shown_after` fix in `refilter`, found by reading only; the race is timing-dependent and may not show either way).
+- [ ] On Windows, on a folder whose files record a lens, open `Filter ▾` and see the `Lens` section drawn after `Camera` (the sections' order and their appearance at the end of pass 1 were seen through `get_view` on 2026-11-23; the drawn menu was not).
 
 ### App: `Camera` / `Lens` order is a case-insensitive compare, not the Tauri `localeCompare`
 
@@ -810,7 +764,6 @@ Build in `crates/app` with `PATH="/c/Users/daisu/AppData/Local/bin/NASM:$PATH" m
 - [ ] On Windows, the rest of the strip's right-click menu (Step 6). With the strip's menu open on `...\menu\`, a press on the preview or `escape` closes it, and a left click on a cell closes it and still pages.
 - [ ] On Windows, the rest of Move to Trash… and Delete Permanently… (Step 7). With the dialog open, clicks on the tree, strip and status menus do nothing. On `...\trash-large` with a fresh `--index`, during pass 1 pick `Move to Trash…` and confirm: the dialog closes at once, the pane says `Move to Trash: waiting for the scan to finish` and `moving to Trash 0 / 1` shows briefly (both too short-lived to capture on 2026-11-22). Repeat but open another test folder from the tree before the scan ends: nothing is moved and the waiting note goes. Judge a file, then `Delete Permanently…` it: the earlier judgment is no longer undoable.
 - [ ] On Windows, the rest of Trash undo / redo (Steps 5 and 8). On the `Ctrl+Shift+Z` redo of a trash run, `moving to Trash 0 / 1` shows briefly (too short-lived to capture on 2026-11-22). After a restore by `Ctrl+Z` the strip shows the file with its three stars. After a cross-folder undo (trash in `a`, open `b`, `Ctrl+Z`), reopening `a` lists the restored file. With several files selected, Ctrl-click a middle one: it drops out and the focus stays on the current file.
-
 
 ### App: real-device check of `open_folder` refused during a rename over MCP
 
@@ -1147,20 +1100,6 @@ Files: `crates/app/src/main.rs` (`tree_pane`, `meta_pane`, `render`), `crates/ap
 - [ ] On Windows, drag the thumbs of the settings modal's lists (the `Lightroom language` `Select` list, the Keyboard Shortcuts page), of `Filter ▾` and of the strip's right-click menu in a short window, and make the folder (tree) right-click menu overflow in a short window and scroll it. Expect their scrollbars to behave as before. Wheel scrolling of the first four, with the thumb moving, was seen on 2026-11-22; `Sort ▾` holds three rows and does not overflow.
 - [ ] On macOS and Linux, when at hand, repeat the checks above (the learnings call for Windows first and ideally the other two).
 
-### Dev setup: check that a plain `mise install` adds rust-analyzer to an already installed toolchain
-
-#### Background
-
-The `mise-rust-analyzer` feature added `rust-analyzer` to the rust `components` in the root `mise.toml` and in `crates/app/mise.toml`, so that `mise install` installs the component for both toolchains (Claude Code's rust-analyzer LSP plugin failed with "rust-analyzer was not found"). The automated checks passed. On the author's host, mise reported `rust@<version>` as already installed and the component was already present for both toolchains before the change. So no one has measured whether a host whose toolchain lacks the component gets it from a plain `mise install`, or whether `mise install --force rust` is needed. Plan: `docs/plans/_archived/20261115-mise-rust-analyzer/plan.md`.
-
-Files: `mise.toml`, `crates/app/mise.toml`.
-
-#### TODO
-
-- [ ] At the repository root, run `mise current rust` (expect `1.97.1` or the current resolved version). Run `rustup component remove rust-analyzer --toolchain <resolved version>`, then a plain `mise install`, then `rustup component list --installed --toolchain <resolved version>`. Expected result: the list includes `rust-analyzer-<host triple>`. Pass the resolved full version to rustup, not `1.97`, because rustup treats `1.97` as a separate toolchain and auto-installs it.
-- [ ] In `crates/app`, run `rustup component remove rust-analyzer --toolchain 1.98.1`, then a plain `mise install`, then `rustup component list --installed --toolchain 1.98.1`. Expected result: the list includes `rust-analyzer-<host triple>`.
-- [ ] Record the result. If a plain `mise install` is not enough, add a `mise install --force rust` line to the setup docs (`docs/agents/app.md` or the README setup section).
-
 ### App: real-device check of the folder tree rows' name truncation inside the pane
 
 #### Background
@@ -1367,15 +1306,37 @@ Files: `crates/app/src/mark.rs` (`MarkState::color`), `crates/app/src/main.rs` (
 
 - [ ] Give the menu's `Good` icon a green that reads on light and dark menu surfaces, leaving the strip's and the `f` overlay's green over the photo as is, and check it on screen.
 
-### App: check the upstream licenses of the shipped gpui-component themes before packaging (native-themes)
+### App: remove the three shipped themes with no license and keep the two CC BY-SA 4.0 themes with attribution (native-themes)
 
-The 21 vendored files in `crates/app/themes/` carry no license of their own. Upstream (longbridge/gpui-kit) ships them in its Apache-2.0 repository, but each adapts a third-party scheme (iTerm2-Color-Schemes, Zed's Ayu, Catppuccin, Solarized, Tokyo Night, Twilight / MacroMates and others) whose own license was not checked one by one. `crates/app/themes/LICENSE` holds only the source, the per-file author / url table and the Apache-2.0 text, and `docs/agents/app.md`'s license section does not mention the gap. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
+The 21 vendored files in `crates/app/themes/` come from gpui-kit's Apache-2.0 repository, but each adapts a third-party scheme. On 2026-11-23 every scheme's own upstream license was checked and noted in `crates/app/themes/LICENSE`, with the MIT and Apache-2.0 notices added (`docs/agents/app.md`, "The license notices are due at packaging"; `docs/plans/_archived/20261123-todo-measurements/learnings.md`). Five files were not settled, and 2.0.1 already ships them. Decided on 2026-11-23: remove `alduin.json` (no license in its repository or `alduin.vim`), `adventure.json` (iTerm2-Color-Schemes is MIT as a collection but leaves each theme's terms to its author; Adventure's, hongzimao, and Adventure Time's, zdj, state none) and `kibble.json` (credited to no one in the collection's `CREDITS.md`), in a separate PR that ships in the next normal release; keep `harper.json` (Jan T. Sott) and `fahrenheit.json` (a port of fcpg's vim-fahrenheit), both Creative Commons Attribution-ShareAlike 4.0, with their attribution. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
 
-Files: `crates/app/themes/LICENSE`, `docs/agents/app.md`.
+Files: `crates/app/themes/`, `crates/app/themes/LICENSE`, `crates/app/src/theme.rs`, `docs/agents/app.md`.
 
 #### TODO
 
-- [ ] Check each adapted scheme's license and add any missing attribution to `crates/app/themes/LICENSE`, or drop a theme whose license is incompatible. Record the result in the guide's license section. Done when every file in `crates/app/themes/` has a checked upstream license noted in `LICENSE` and the guide's license section states the result.
+- [ ] Delete `alduin.json`, `adventure.json` and `kibble.json` from `crates/app/themes/`; drop their rows and notes from `crates/app/themes/LICENSE` and the guide's license section (`docs/agents/app.md`, "The license notices are due at packaging", and the "gpui-kit's 21 theme files" sentence, now 18); update every other place that names the 21 files or 36 themes, and any test or `theme.rs` list that names them. Fall back to `NEUTRAL` for a stored theme name that is no longer shipped (check `theme.rs`'s existing rule covers it). Ship it in the next normal release (no hotfix).
+- [ ] Keep `harper.json` and `fahrenheit.json`: confirm `crates/app/themes/LICENSE` carries each one's author, source and the CC BY-SA 4.0 name and link, and rewrite its "open decision" wording to state that they are kept under share-alike with attribution.
+
+### Engine: align the two `notify` locks so CI tests the version the app ships
+
+The `treewatch` / `watch` tests run in CI on the root `Cargo.lock`'s notify 8.2.0, while the app ships what `crates/app/Cargo.lock` resolves, notify 8.2.2. On 2026-11-23 the re-check confirmed that `configure` still queues behind `Unwatch` on 8.2.2 (a scratch binary, 900 iterations under 24 spinning threads: 6 failures without `configure`, 0 with it; the engine's own `treewatch` tests were not run against 8.2.2; `docs/agents/shared-crates.md`). Moving the root lock to 8.2.2, or pinning the app lock to 8.2.0, is a lock change the measurement plan did not make. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md` (Trade-offs, "Item 2: which lock is right").
+
+Files: `Cargo.lock`, `crates/app/Cargo.lock`, `crates/engine/src/watch.rs`, `docs/agents/shared-crates.md`.
+
+#### TODO
+
+- [ ] Decide which lock moves (root to 8.2.2, or app pinned to 8.2.0), make the change, and run the engine's `treewatch`, `watch` and `rename` tests on the chosen version looped under load.
+- [ ] Update the version statement in `docs/agents/shared-crates.md` ("A `notify` watch on Windows ...") to match.
+
+### Engine: measure a file manager's permanent delete (Shift+Delete) of a folder holding a watched one on Windows
+
+The 2026-11-23 measurement showed that `std::fs` deletes of a watched folder or its ancestors succeed, and that the shell's move to the Recycle Bin of an ancestor is refused (`0x80270021`). The shell's permanent delete (Shift+Delete in Explorer) was not measured, and `docs/humans/usage.md` would describe it if it behaves differently. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md`.
+
+Files: `docs/agents/shared-crates.md`, `docs/humans/usage.md`, `docs/humans/usage.ja.md`.
+
+#### TODO
+
+- [ ] On Windows, with a `notify` watch held on a folder (non-recursive, as `treewatch.rs` does), permanently delete its parent and its grandparent through the shell (a scratch `SHFileOperation` / `IFileOperation` call without the recycle flag, or Explorer's Shift+Delete). Record whether it succeeds, whether the folder is really gone, and the watcher's events, in `docs/agents/shared-crates.md`. Update `usage.md` and `usage.ja.md` only if the result differs from "free".
 
 ### App: real-device checks of the right-click menus drawn as gpui-kit's PopupMenu (native-context-menu)
 
@@ -1644,7 +1605,6 @@ Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/ap
 - [ ] Decide and record the choice. Done when the matching Rule in `docs/agents/app.md` ("a branch dispatch ... runs that branch's `release.yml` with the production key") is updated or removed.
 
 ---
-
 
 ### Develop: check intervening commits before restoring a file from an old commit in a revert (revert-page-present-now)
 

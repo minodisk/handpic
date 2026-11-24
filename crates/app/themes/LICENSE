@@ -28,6 +28,125 @@ spaceduck.json      Spaceduck       Guillermo Rodriguez   https://github.com/pin
 tokyonight.json     Tokyo           Folke Lemaitre        https://github.com/folke/tokyonight.nvim
 twilight.json       Twilight        MacroMates            https://macromates.com
 
+The license of each scheme's own upstream, checked on 2026-11-23 (the
+notices the licenses require follow the notes):
+
+adventure.json      undetermined (1)
+alduin.json         undetermined (2)
+asciinema.json      Apache-2.0 (3)
+aurora.json         Apache-2.0, gpui-kit's own (Longbridge)
+ayu.json            MIT (4)
+catppuccin.json     MIT
+everforest.json     MIT
+fahrenheit.json     CC-BY-SA-4.0 (5)
+flexoki.json        MIT
+gruvbox.json        MIT (6)
+harper.json         CC-BY-SA-4.0 (7)
+hybrid.json         MIT (8)
+jellybeans.json     MIT
+kibble.json         undetermined (9)
+macos-classic.json  MIT
+mellifluous.json    MIT
+molokai.json        MIT (10)
+solarized.json      MIT (11)
+spaceduck.json      MIT
+tokyonight.json     Apache-2.0
+twilight.json       TextMate bundle license (12)
+
+(1) The iTerm2-Color-Schemes repository is MIT (Copyright (c) 2011 to
+    Present Mark Badolato), but its LICENSE says that license covers the
+    collection and that "the copyright/license for each individual theme
+    belongs to the author of that theme". Its CREDITS.md credits Adventure
+    to hongzimao (https://github.com/hongzimao/iTerm2-Color-Schemes, a fork
+    that states no license of its own) and Adventure Time, the file's
+    second theme, to zdj (https://github.com/zdj/themes, no license
+    stated). The authors' own terms could not be determined.
+(2) Neither the repository nor its colors/alduin.vim states a license (the
+    file names its author, Alessandro Yorba). Could not be determined.
+(3) The palette is the asciinema theme of asciinema-player
+    (https://github.com/asciinema/asciinema-player,
+    src/less/themes/_asciinema.less: the foreground, the background and the
+    six base colors match), Apache-2.0, Copyright 2011-2021 Marcin Kulik.
+    The project ships no NOTICE file.
+(4) Zed's assets/themes/LICENSES at that commit credits Ayu to
+    https://github.com/dempfi/ayu, MIT, Copyright (c) 2016 Ike Ku.
+(5) CREDITS.md of iTerm2-Color-Schemes: created by jonascarpay, based on
+    fcpg's vim-fahrenheit (https://github.com/fcpg/vim-fahrenheit), whose
+    README licenses it under Creative Commons Attribution-ShareAlike 4.0
+    International. Whether an adaptation under share-alike terms may ship
+    in this app is an open decision.
+(6) The repository has no LICENSE file; its README's License section says
+    MIT/X11 and names no copyright holder (colors/gruvbox.vim: Author
+    morhetz). Zed's assets/themes/LICENSES reproduces the MIT text for
+    Gruvbox with a placeholder copyright line.
+(7) CREDITS.md of iTerm2-Color-Schemes credits idleberg
+    (https://github.com/idleberg/Harper-iTerm2), whose README says "This
+    work by Jan T. Sott is licensed under a Creative Commons
+    Attribution-ShareAlike 4.0 Unported License". Whether an adaptation
+    under share-alike terms may ship in this app is an open decision.
+(8) The header of colors/hybrid.vim: Maintainer Andrew Wong (w0ng), License
+    MIT, no copyright line. Its palette is credited there to
+    Tomorrow-Night.vim (https://github.com/chriskempson/vim-tomorrow-theme).
+(9) The collection is MIT as in (1), but CREDITS.md credits Kibble to no
+    one, so its author's terms could not be determined.
+(10) The repository's LICENSE.md: "monokai theme copyright Wimer
+    Hazenberg." (no license stated for Monokai itself), then MIT for
+    molokai.vim.
+(11) The site links https://github.com/altercation/solarized, MIT.
+(12) https://github.com/textmate/themes.tmbundle (Themes/Twilight.tmTheme,
+    author Michael Sheets). Its README puts its files under: "Permission to
+    copy, use, modify, sell and distribute this software is granted. This
+    software is provided "as is" without express or implied warranty, and
+    with no claim as to its suitability for any purpose."
+
+The MIT schemes, each under the MIT License with its copyright line as
+given upstream, the license text reproduced once after the list:
+
+- Ayu: Copyright (c) 2016 Ike Ku
+- Catppuccin: Copyright (c) 2021 Catppuccin
+- Everforest: Copyright (c) 2019 sainnhe
+- Flexoki: Copyright (c) 2023 Steph Ango
+- Gruvbox: morhetz (Pavel Pertsev); no copyright line given upstream
+- Hybrid: Andrew Wong (w0ng); no copyright line given upstream
+- Jellybeans: Copyright (c) 2009-2019 NanoTech
+- macOS Classic: Copyright (c) 2023 Jason Lee.
+- Mellifluous: Copyright (c) 2024 Ramojus Lapinskas
+- Molokai: Copyright (c) 2011 Tomas Restrepo (monokai theme copyright
+  Wimer Hazenberg)
+- Solarized: Copyright (c) 2011 Ethan Schoonover
+- Spaceduck: Copyright (c) 2020 pineapplegiant
+- iTerm2-Color-Schemes, the collection Adventure, Fahrenheit, Harper and
+  Kibble come from: Copyright (c) 2011 to Present Mark Badolato
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and associated documentation files (the
+    "Software"), to deal in the Software without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software, and to
+    permit persons to whom the Software is furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+The Apache-2.0 schemes: Asciinema (asciinema-player, Copyright 2011-2021
+Marcin Kulik) and Tokyo Night (https://github.com/folke/tokyonight.nvim,
+Folke Lemaitre; its LICENSE carries no copyright line and the project no
+NOTICE file), both under the Apache License, Version 2.0, whose text is
+reproduced below.
+
+Harper (Jan T. Sott) and Fahrenheit (fcpg's vim-fahrenheit, ported by
+jonascarpay) are licensed upstream under Creative Commons
+Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/.
+
 ---
 
 Copyright 2024 - 2026 Longbridge <https://longbridge.com>

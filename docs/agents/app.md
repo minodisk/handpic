@@ -321,6 +321,24 @@ gpui-kit's `themes/` at tag v0.9.1 (commit `39ab849a`), under the same
 Apache-2.0; their `LICENSE` names that source, each file's own `author` and
 `url` (the color scheme it adapts) and carries the license text.
 
+Each adapted scheme's own upstream license was checked on 2026-11-23 and is
+noted per file in that `LICENSE`, with the copyright lines its MIT and
+Apache-2.0 upstreams require: MIT for Ayu, Catppuccin, Everforest,
+Flexoki, Gruvbox, Hybrid, Jellybeans, macOS Classic, Mellifluous, Molokai,
+Solarized and Spaceduck; Apache-2.0 for Asciinema (asciinema-player's
+palette), Aurora (gpui-kit's own) and Tokyo Night; the TextMate themes
+bundle's permissive notice for Twilight. Not settled, and still shipped
+(2.0.1 already ships all 21):
+
+- Undetermined: `alduin.json` (no license in its repository or its
+  `alduin.vim`), `adventure.json` (iTerm2-Color-Schemes is MIT as a
+  collection but leaves each theme's terms to its author: Adventure's,
+  hongzimao, and Adventure Time's, zdj, state none) and `kibble.json`
+  (credited to no one in the collection's `CREDITS.md`).
+- Creative Commons Attribution-ShareAlike 4.0: `harper.json` (Jan T. Sott)
+  and `fahrenheit.json` (a port of fcpg's vim-fahrenheit). Whether a
+  share-alike adaptation may ship in the app is undecided.
+
 `tools/package/notices.sh <dir>` copies the set every package ships into one
 `licenses/` folder: `crates/app/packaging/NOTICE-gpui` (the GPUI crates'
 copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
@@ -1884,6 +1902,26 @@ last, and a JPEG folder under `"name"` paged in capture order.
   before. Deleting the file behind a checked EXIF item dropped the check and
   the item. Not run: the pass-2 race of `shown_after`
   (`../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
+- Seen (2026-11-23, Windows 11, a debug build with `--features screenshot`
+  driven through the MCP companion, the state read with `get_view` and the
+  drawn frame with `screenshot`): `set_judgment` pick on `_DSC1616` of the
+  fixture's `menu\faces`, then `set_filter` `Picked`, narrowed the strip to
+  that one cell (`1 / 1 (8)`). On a 40-file folder longer than the strip,
+  `set_sort` rating kept the current file current (`32 / 40`) and its
+  outlined cell in view, and so did the switch back to name with a 3-star
+  file current (`36 / 40`). Under `untagged` a `set_judgment` pick of the
+  current file (the judgment keys' view, row and writer path, not the `p`
+  key itself) landed on the next file, and 1.2 s later the meta pane's name
+  heading was that file's next to `1 / 4 (6)`, three times in a row. From a
+  filter that hid every file (`Picked` and `Red`), unchecking the two
+  items through `set_filter` (the menu's toggles through `apply_menu`, not
+  its `Reset`) came back to the file shown before, `DSC-RX0M2` at `3 / 6`,
+  not the first. Six picks under `untagged` plus `Face focus` `Neutral` on
+  a fresh index while pass 2 ran (40 ARW, batches landing between the
+  presses) each ended with the meta pane, the image and the outlined cell
+  on `get_view`'s current file: the `shown_after` race did not show in six
+  presses
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### The `Face focus` state is `mark.rs`'s port of `focus.ts` (Inferred)
 
@@ -1904,6 +1942,13 @@ last, and a JPEG folder under `"name"` paged in capture order.
   the rule moved to the full-size eye sharpness must not expect the old set;
   re-derive the expected files from the current `photo_tier`
   (`../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
+- Seen (2026-11-23, Windows 11, through the MCP companion on a fresh index):
+  the same filter showed an empty strip and `No files match the current
+  filter.  analyzing n/8` while pass 2 ran, then the two files with their
+  green icons (`1 / 2 (8)`). The strip filled in one step at the end of the
+  pass, not file by file: pass 2 writes its rows `BATCH` (10) at a time, so
+  an 8-file folder refilters once
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 - Source: `docs/plans/20261115-full-eye-sharp-only/plan.md`, Step 3.
 
 ### The bursts are regrouped with the entries and marked with the judgments (Inferred)
@@ -2126,6 +2171,14 @@ dimmed, shows capture order and keeps the stored key.
   button's staying closed; the strip cell press also selects that cell; the
   pager and `e` / `f` / `z` work with the filter menu open (results in
   `../plans/_archived/20261122-windows-device-checks-4/learnings.md`).
+- Seen (2026-11-23, Windows 11, through the MCP companion's `get_view`):
+  the EXIF sections the menu builds from (`filter_offers.exif`) were empty
+  through pass 1 of a fresh 1000-ARW index and appeared once it ended, in
+  the order `camera`, `lens`, `aperture`, `shutter`, `iso`, `focal`, with
+  the folder's one lens; on the fixture's `faces` folder `lens` listed six
+  lenses after the five cameras. No tool opens the menu, so the drawn
+  sections were not seen
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### The icons are Lucide SVGs served by one `AssetSource` (Inferred)
 
@@ -2763,6 +2816,36 @@ yet the paint) cut RAF's A - B from +5.08 to +1.94 ms at 3 pass 2 threads, the
 
 - Rule: anything new on the preview's path between the read and the paint
   runs while the pause is held; keep it there rather than after the release.
+- Measured on Windows 11 on 2026-11-23, on NVMe only: the pause made no
+  measurable difference to the read of a file pass 1 had not read. Release
+  builds of `3918064c` at the shipped cap 2, pause on (unpatched) against
+  pause off (`load` pausing a throwaway `ReadSlots` instead), alternated, a
+  cold `robocopy /J` copy of 1800 α7 V ARW on the NVMe `CT1000P5PSSD8` per
+  run; the reads are the `page` lines' `read` of MCP `show_photo` jumps to
+  files at least 100 past pass 1's done count, 40 apart, during pass 1
+  (the method of `shared-crates.md`'s read cap section, whose cap 2 rows are
+  the pause-on runs here). Other sessions were compiling; the CPU load
+  sampled before each launch:
+
+  | Pause | CPU before | Probes | Read p50 (ms) | Read p95 (ms) | ms/file |
+  | ----- | ---------- | ------ | ------------- | ------------- | ------- |
+  | on    | 100 %      | 28     | 14.6          | 39.2          | 11.09   |
+  | on    | 37-43 %    | 18     | 11.0          | 13.6          | 5.50    |
+  | on    | 9-10 %     | 16     | 8.8           | 10.2          | 4.19    |
+  | on    | 12-14 %    | 16     | 9.6           | 15.1          | 4.46    |
+  | off   | 21-24 %    | 14     | 8.3           | 9.4           | 4.01    |
+  | off   | 64-92 %    | 23     | 16.3          | 21.7          | 6.78    |
+  | off   | 11-12 %    | 16     | 9.3           | 17.3          | 4.26    |
+
+  At about 10 % load the read p50 was 8.8 to 9.6 ms with the pause and 9.3
+  ms without; the spread follows the machine's load, not the pause. Tauri's
+  figure (14-16 ms p50 at cap 2 with the pause) was taken on the SATA SSD.
+  The SATA runs could not be
+  taken that day: another process was reading `D:` at 250 to 480 MB/s
+  throughout, and the two runs made under it (26.6 ms p50 pause on; 47.5
+  ms/file and only 2 of 36 jumps landing pause off) are not comparable.
+  Whether the pause shortens the read on SATA is still open
+  (`../plans/_archived/20261123-todo-measurements/learnings.md`).
 
 ### A held key draws each stale preview before chasing the current file (Measured)
 
