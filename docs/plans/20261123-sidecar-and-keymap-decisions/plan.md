@@ -174,3 +174,4 @@ Each step removes its own `todo.md` section and nothing else in that file, becau
 - (2026-11-23) Step 1 complete
 - (2026-11-23) Step 2 complete
 - (2026-11-24) Step 3 complete
+- (2026-11-24) Step 4 complete
