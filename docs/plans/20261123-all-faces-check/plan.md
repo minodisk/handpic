@@ -633,3 +633,4 @@ Made in this revision (planning, 2026-11-24):
   as a new pass 3, the threshold setting and the rescan trigger; Step 1
   reopened for the rework
 - (2026-11-24) Step 1 complete
+- (2026-11-24) Step 2 complete
