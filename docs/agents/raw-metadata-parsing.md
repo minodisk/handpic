@@ -126,6 +126,11 @@ lacks the `SONY` header **and** `Make` is present and does not start with
 - Testing: a synthetic non-Sony note must set `Make` (the tests use
   `Leica Camera AG`); without it the Sony parse reads the note's first bytes
   (`LE`) as an entry count and errors.
+- A `Make` starting with `LEICA` (`is_leica`) is turned away before the gate
+  looks at the note's bytes. The gate's `MakerNote out of range` check
+  otherwise fails the bounded parse of an M (Typ 240) DNG, whose note lies
+  tens of MB in, and sent every read of those files to the whole-file retry
+  (see the next section but one).
 - Source: [leica-dng-support learnings, Steps 1 and 3](../plans/_archived/20260918-leica-dng-support/learnings.md#step-1).
 
 ### Leica: `LEICA\0` header, an IFD at offset 8, `FocusDistance` in millimeters (Hit)
@@ -151,6 +156,43 @@ own `FNumber` is 1.0 on M-mount lenses and is not read.
   Leica parse reads it.
 - Source: [leica-dng-support learnings, Step 3](../plans/_archived/20260918-leica-dng-support/learnings.md#step-3)
   (the exiftool comparison over the samples).
+
+### Leica M (Typ 240) / M Monochrom (Typ 246): the preview is in the MakerNote, past the prefix (Measured)
+
+The four samples' strips hold only a 160x120 JPEG (IFD0, `Compression=7`);
+the SubIFD is the raw data. Their MakerNote's tag 0x0300 (`PreviewImage`,
+`TAG_LEICA_PREVIEW_IMAGE`) is a 1472x976 JPEG: UNDEFINED, the count its
+length (275 to 515 KB, padded past the JPEG's EOI to a sector), the value its
+**file** offset (the note at `0x159a000`, the JPEG at `0x159b000` in
+MP006646). exiftool warns "Possibly incorrect maker notes offsets (fix by
+-102?)", which does not apply to this tag. The JPEG is stored unrotated, like
+the strip, with no Exif orientation of its own, so `Arw.orientation`
+(IFD0's, 8 on MP006646) turns it. The note itself sits 21 to 48 MB into the
+file, so the bounded prefix never holds it.
+
+- Rule: `parse_noted` takes the note's JPEG as both `preview` and `full`
+  only in the DNG strip branch when no strip reaches `PREVIEW_MIN_WIDTH`, and
+  only when it is longer in bytes than the largest strip
+  (`take_note_preview`): the note gives no pixel size, so the comparison is
+  by bytes, as in the older Sony fallback above. A Leica DNG with a strip of
+  at least 1600 px (M10, M11, Q, SL, CL, X) keeps its strips.
+- Ranged read: when the note runs past the buffer, or its `PreviewImage` JPEG
+  does (the fallback applies), `parse_noted` hands back a
+  `FarNote` (offset, length, byte order, whether the fallback applies)
+  instead of failing or taking it unchecked (a JPEG within the buffer is taken
+  at once); `reader::parse_raw` reads the note's first
+  `NOTE_HEAD_LIMIT` (4 KiB) bytes by range and `FarNote::take` finishes the
+  parse from them: `FocusDistance` always (the whole-file read used to give
+  it), the `PreviewImage` under the rule above unless it runs past the end
+  of the file. The JPEG is then range-read like any other `Embedded`. A note
+  that cannot be read leaves the strips.
+- Before this, `maker_note_ifd`'s range check failed the bounded parse of
+  these files, so every read of them was a whole-file read (23 to 48 MB),
+  and still showed only the 160x120 JPEG. Now no read of them is.
+- Index: `EXTRACTOR_VERSION` was not bumped, so rows indexed before keep
+  their 160x120 thumbnails and pass-2 values until the file changes or
+  `Clear Cache`.
+- Source: [close-measured-todos learnings, Step 3](../plans/20261123-close-measured-todos/learnings.md#step-3).
 
 ### Sony `FocusFrameSize` is `UNDEFINED[6]` on real files (Hit)
 
