@@ -1,5 +1,53 @@
 # Changelog
 
+## [2.1.0](https://github.com/minodisk/handpic/compare/v2.0.1...v2.1.0) (2026-11-25)
+
+
+### Features
+
+* add one-line install scripts for macOS, Linux and Windows ([#1279](https://github.com/minodisk/handpic/issues/1279)) ([19fe1c8](https://github.com/minodisk/handpic/commit/19fe1c8f1104277ceb3137bdd60101a5ccddb309))
+* **app:** add the group threshold setting and re-check on lowering ([#1294](https://github.com/minodisk/handpic/issues/1294)) ([472ec0e](https://github.com/minodisk/handpic/commit/472ec0e597ef707ef1349904a1fe507f849c6b07))
+* **app:** answer get_view's eyes from the stored values ([#1270](https://github.com/minodisk/handpic/issues/1270)) ([df4c428](https://github.com/minodisk/handpic/commit/df4c428979f522fc073da02726637bacc5b0ec52))
+* **app:** center the default window in the visible area ([#1293](https://github.com/minodisk/handpic/issues/1293)) ([c3c8658](https://github.com/minodisk/handpic/commit/c3c86588ded566e4dc9d0a1993ff259a729d2a93))
+* **app:** filter by anyone's closed or soft eyes in the menu and over MCP ([#1297](https://github.com/minodisk/handpic/issues/1297)) ([a31266b](https://github.com/minodisk/handpic/commit/a31266be540812f50a9fc68d24bd361884479a5b))
+* **app:** mark closed eyes on the strip cell ([#1257](https://github.com/minodisk/handpic/issues/1257)) ([d6e0e70](https://github.com/minodisk/handpic/commit/d6e0e705e6b2f379ca78eb0e005a6e248a889443))
+* **app:** remove compare from the keymap and MCP, and let the settings key through the tree's gate ([#1267](https://github.com/minodisk/handpic/issues/1267)) ([547c0ae](https://github.com/minodisk/handpic/commit/547c0aed82c7ae72b0238158b624ef72835e4009))
+* **app:** report the eyes' openness in get_view and clear earlier trash failures on a new run ([#1280](https://github.com/minodisk/handpic/issues/1280)) ([b4b5f0f](https://github.com/minodisk/handpic/commit/b4b5f0fa7bf1b9209e9e38ddfeaf975b759e14f5))
+* **app:** run pass 3 after pass 2 and show it in the status line ([#1290](https://github.com/minodisk/handpic/issues/1290)) ([1458c20](https://github.com/minodisk/handpic/commit/1458c20f93c2421c145dfd3f1078f1960310dd95))
+* **app:** show progress for the trash undo and the sidecar runs ([#1285](https://github.com/minodisk/handpic/issues/1285)) ([e1ef15e](https://github.com/minodisk/handpic/commit/e1ef15e99553a19f3e61757db0062289562842e2))
+* **app:** show the all-faces counts in the meta pane and the strip mark ([#1296](https://github.com/minodisk/handpic/issues/1296)) ([ee1936b](https://github.com/minodisk/handpic/commit/ee1936bbaf11a91fcfc28bd5b14a182dd7728b68))
+* **app:** wrap the prefetch ring's neighbours like the pager ([#1292](https://github.com/minodisk/handpic/issues/1292)) ([4d75bc0](https://github.com/minodisk/handpic/commit/4d75bc061ab555b414599d0bfb428b1ccd94469c))
+* **cli:** add the eye-midpoint score to features and check the burst ranking ([#1256](https://github.com/minodisk/handpic/issues/1256)) ([5a45d78](https://github.com/minodisk/handpic/commit/5a45d78ac0a9c71372e1d4f888bc3b56d64c441d))
+* **core:** gate the all-faces check behind a low-resolution count in pass 2 ([#1276](https://github.com/minodisk/handpic/issues/1276)) ([d576061](https://github.com/minodisk/handpic/commit/d576061cd591c5497804010d12fa7a91f06477d8))
+* **core:** read the face mesh presence logit and distrust side-face meshes ([#1264](https://github.com/minodisk/handpic/issues/1264)) ([f45337a](https://github.com/minodisk/handpic/commit/f45337a55a7682620e9a7fbfa2153c11ea365c4d))
+* **core:** read the Leica MakerNote preview of the M (Typ 240) DNGs ([#1277](https://github.com/minodisk/handpic/issues/1277)) ([476f44a](https://github.com/minodisk/handpic/commit/476f44a587234f3707bb24a8c01d688e2f9e7393))
+* **engine:** derive the good-photo tier and report it in get_view ([#1255](https://github.com/minodisk/handpic/issues/1255)) ([5b345b0](https://github.com/minodisk/handpic/commit/5b345b0686cfffac8dd6cd01e6f862b8f25e935e))
+* **engine:** store the gate count and the all-faces counts, and add pass 3 ([#1288](https://github.com/minodisk/handpic/issues/1288)) ([9b05d6d](https://github.com/minodisk/handpic/commit/9b05d6d72e2a1e6d1b14b22539578bdef48f2983))
+
+
+### Bug Fixes
+
+* **agents:** close five agent-workflow todo items ([#1251](https://github.com/minodisk/handpic/issues/1251)) ([3f6950d](https://github.com/minodisk/handpic/commit/3f6950db1dde6bc8231885437c98a1060ce2076f))
+* **app:** drain a held Clear Cache when a blocking dialog is canceled ([#1266](https://github.com/minodisk/handpic/issues/1266)) ([4777220](https://github.com/minodisk/handpic/commit/47772205b580ae1b7525dc92c36072347f297a89))
+* **app:** fix the thumbnail panic text, the black 1:1 view, the rewrite row and the strip in a short window ([#1253](https://github.com/minodisk/handpic/issues/1253)) ([eb658f9](https://github.com/minodisk/handpic/commit/eb658f9977ce1ebe78f5e2ffd59bab5927adff31))
+* **app:** keep the last viewed file per folder and make every listing wait for the eviction ([#1286](https://github.com/minodisk/handpic/issues/1286)) ([4019a4a](https://github.com/minodisk/handpic/commit/4019a4a2ca82995100dd13776799894b7ea71404))
+* **app:** keep the title bar above the settings layer ([#1300](https://github.com/minodisk/handpic/issues/1300)) ([f14c1d2](https://github.com/minodisk/handpic/commit/f14c1d204d0caf275b587d402dfc4efbafa403f1))
+* **app:** wait for a scan a re-listing is stopping on quit ([#1261](https://github.com/minodisk/handpic/issues/1261)) ([9e63778](https://github.com/minodisk/handpic/commit/9e637782e2dd26ce84fe8a7deeb9bc7800ffa48e))
+* **core:** read and write the .dop flag across PhotoLab virtual copies ([#1254](https://github.com/minodisk/handpic/issues/1254)) ([5ea303c](https://github.com/minodisk/handpic/commit/5ea303cea2106ad5f14268e4fd98eb6c22421b8a))
+* **engine:** clear a closed folder's judgments on a Delete Sidecars redo ([#1278](https://github.com/minodisk/handpic/issues/1278)) ([b0587b6](https://github.com/minodisk/handpic/commit/b0587b63ffc759dda140c947d65fb6e89cf71a44))
+* **engine:** copy a shared .xmp on a date split and a file rename ([#1268](https://github.com/minodisk/handpic/issues/1268)) ([ab3f368](https://github.com/minodisk/handpic/commit/ab3f3681287ab30b6267b28753f8a6a207a18075))
+* **engine:** let a stored shortcut override win over an un-overridden default ([#1274](https://github.com/minodisk/handpic/issues/1274)) ([6c1caa2](https://github.com/minodisk/handpic/commit/6c1caa2f8b4b00d34546dbd75c1dc5a3d4cf93ca))
+* **engine:** skip oversize sidecars in Rewrite Sidecars from Index ([#1258](https://github.com/minodisk/handpic/issues/1258)) ([9c2c247](https://github.com/minodisk/handpic/commit/9c2c247666c0bc628b19bb68d818b52c4eca56ee))
+* **engine:** trim the trailing spaces of the displayed lens name ([#1250](https://github.com/minodisk/handpic/issues/1250)) ([a8ff631](https://github.com/minodisk/handpic/commit/a8ff631b3ed8c404d0a88a655f7bf079546880f0))
+
+
+### Performance Improvements
+
+* **app:** read the 1:1 crop ahead of z ([#1287](https://github.com/minodisk/handpic/issues/1287)) ([dd31895](https://github.com/minodisk/handpic/commit/dd318950cd2c71c1dd2351ed2c333e512a632f4c))
+* **core:** score a faced no-AF file from the cue's RGB decode ([#1272](https://github.com/minodisk/handpic/issues/1272)) ([4764f14](https://github.com/minodisk/handpic/commit/4764f14c5466fc298445c6f60ff903482b5f70d1))
+* **core:** thumbnail every format towards 404 px ([#1271](https://github.com/minodisk/handpic/issues/1271)) ([a9a459f](https://github.com/minodisk/handpic/commit/a9a459f1ffafaf11b47dd60dda65805870d482d7))
+* **engine:** restore an undo of Move to Trash in chunks on Windows ([#1281](https://github.com/minodisk/handpic/issues/1281)) ([0723c2c](https://github.com/minodisk/handpic/commit/0723c2cfbc0555c784d8949081a5ac18a6510838))
+
 ## [2.0.1](https://github.com/minodisk/handpic/compare/v2.0.0...v2.0.1) (2026-11-23)
 
 
