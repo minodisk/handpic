@@ -1674,3 +1674,21 @@ The size band (0.5x to 2x of the judged face's long side) cannot tell a group fr
 #### TODO
 
 - [ ] Decide whether the gate needs a further rule (for example the faces' spread or a cluster around the judged face), or whether the cost on such frames is acceptable. Any change to the gate count means a `FACES_VERSION` bump and a pass 2 re-run.
+
+### App: real-device checks of the settings layer under the title bar (settings-under-title-bar)
+
+#### Background
+
+The `settings-under-title-bar` feature moved the settings layer below the title bar: the layer's wrapper in `Handpic::render` is `absolute` with `top(TITLE_BAR_HEIGHT)`, `left_0`, `right_0` and `bottom_0`, so the title bar (app icon, "Handpic", the folder's name, the gear, the window drag, the traffic lights / window controls) stays drawn and usable while the settings are open. CI and `mise run ci:local` cover the build and a UI test (`the_settings_layer_lies_under_the_title_bar_and_fills_the_rest`) of the layer's bounds, which also clicks the title bar's folder-name overlay with the settings open and finds them still open. The OS-level window drag, the traffic lights, the window controls, the gear while open (inferred from `open_settings` returning while open, not tested), a shortcut capture under way surviving a title bar press, and a file drop on the title bar (inferred from the hit test, no guard, recorded as Inferred in `docs/agents/app.md`) were never exercised on a device. Plan: `docs/plans/_archived/20261125-settings-under-title-bar/plan.md`.
+
+Files: `crates/app/src/main.rs`, `crates/app/src/settingsview.rs`, `docs/agents/app.md`.
+
+#### TODO
+
+- [ ] On macOS, run `mise run app:dev`, open the settings with `cmd+,`, then check each of these. Expected: all as described.
+  1. Drag the window by the title bar: it moves.
+  2. The traffic lights no longer overlap the "Settings" heading (the heading starts below the 34 px bar).
+  3. Press the gear while the settings are open: nothing happens.
+  4. Start a shortcut capture on the Keyboard Shortcuts page, then drag the window by the title bar: the capture state still reads sensibly.
+- [ ] On Windows and on Linux, on a device, open the settings with `ctrl+,`. Expect the window controls (minimize / maximize / close) at the title bar's right and the window drag to work while the settings are open.
+- [ ] On any platform, drop a file or folder onto the title bar while the settings are open and record whether it opens that folder under the settings (expected from the hit test: it does). Then update `docs/agents/app.md`'s pointer rule from Inferred to Measured.

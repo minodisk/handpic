@@ -145,3 +145,5 @@ below it.
   checked by hand on macOS only.
 
 ## Progress
+
+(2026-11-25) Step 1 complete

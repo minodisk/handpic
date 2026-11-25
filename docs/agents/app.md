@@ -1070,6 +1070,13 @@ as it does `handpic-core`. A dependency added to the engine also lands in
   `Hsla::to_rgb()` (gpui-pre's `color.rs`) on the `gpui_kit` re-export; the
   method needs no import. Source:
   `docs/plans/_archived/20261118-preview-theme-background/learnings.md`, Step 1.
+- Rule: a bare `cargo test` inside `crates/app` can pick a toolchain too old
+  for `gpui-pre-macos` 0.3.12 (`result_option_map_or_default` is unstable
+  there). Run the app's tests through `mise run ci:local`, or
+  `mise x rust@1.98.1 -- cargo test --bin handpic`, which pins the app's
+  toolchain. Source:
+  `docs/plans/_archived/20261125-settings-under-title-bar/learnings.md`,
+  Step 1.
 - Rule: `crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2
   against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
@@ -4477,7 +4484,8 @@ neither a directory nor a file opens nothing and puts the Tauri
 - Rule: GPUI fires `on_drop` only on a hovered hitbox, and the settings,
   the trash dialog and the folder dialogs are `occlude()`d layers, so
   a drop over an open dialog or the settings does not reach the root and is
-  ignored (as a
+  ignored (the settings layer starts below the title bar, so a drop on the
+  bar itself is not; see the settings modal's pointer rule) (as a
   click in the tree is blocked by the same layers), where Tauri's drop had been
   window-wide except under its format gate.
 - Rule: while an OS file drag is over the window, the main area (the tree,
