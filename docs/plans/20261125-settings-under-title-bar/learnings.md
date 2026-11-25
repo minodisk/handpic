@@ -2,7 +2,7 @@
 
 ## Step 1
 
-- The layer's wrapper in `Handpic::render` is now `absolute`, `top(TITLE_BAR_HEIGHT)`, `left_0`, `right_0`, `bottom_0`; `settingsview.rs`'s box keeps `size_full` and gained a `settings-box` `debug_selector` for the UI test `the_settings_layer_lies_under_the_title_bar_and_fills_the_rest`, which also clicks inside the title bar with the settings open and finds them still open (the gear stays a no-op, as `open_settings` returns while open).
+- The layer's wrapper in `Handpic::render` is now `absolute`, `top(TITLE_BAR_HEIGHT)`, `left_0`, `right_0`, `bottom_0`; `settingsview.rs`'s box keeps `size_full` and gained a `settings-box` `debug_selector` for the UI test `the_settings_layer_lies_under_the_title_bar_and_fills_the_rest`, which also clicks the title bar's folder-name overlay (not the gear) with the settings open and finds them still open (the gear stays a no-op, as `open_settings` returns while open; inferred from the code, not tested).
 - The test compares against `window_paddings` rather than assuming zero, so it holds whether or not the test window reports a client-side frame.
 - A bare `cargo test` inside `crates/app` picked a toolchain too old for `gpui-pre-macos` 0.3.12 (`result_option_map_or_default` unstable). Run the app's tests through `mise run ci:local` (or `mise x rust@1.98.1 -- cargo ...`), which pins the app's toolchain.
 - File drop on the title bar while the settings are open: not measured. From the hit test it reaches the root `div`'s `on_drop` and opens the folder under the open settings; recorded as Inferred in `docs/agents/app.md`, no guard (user's choice).

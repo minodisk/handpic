@@ -2286,8 +2286,9 @@ not open.
   and emits `Closed`. The title bar is the only outside to press and a press
   there is not a close, so there is no press-outside close; `ctrl+,` while
   shown does nothing (the window's `key_down` is not on the path), nor does
-  the title bar's gear (`open_settings` returns while the settings are open;
-  the UI test above clicks the bar and finds them still open). The box's
+  the title bar's gear (`open_settings` returns while the settings are open,
+  Inferred from the code; the UI test above clicks the bar's folder-name
+  overlay, not the gear, and checks only that the settings stay open). The box's
   `capture_any_mouse_down`, which cancels a shortcut capture, does not see
   a press on the title bar, so a capture under way survives a window drag
   (Inferred, not checked by hand).
