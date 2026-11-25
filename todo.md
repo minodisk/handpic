@@ -1615,3 +1615,62 @@ Files: `install.ps1`.
 - [ ] Route the delete through a chunked move like `trash_listed`'s `run_chunked`, keeping the per-sidecar `(done, total)` progress and each `Trashed`'s `owner`.
 - [ ] Add a unit test with a fake mover showing the outcome (moved and failed files, the recorded run, each `Trashed`'s `owner`) matches the per-file path.
 - [ ] On Windows, record a timing of a large sidecar delete before and after, and check that the progress circle still moves.
+
+### App: real-device check of the group threshold setting (all-faces-check Step 4)
+
+`all-faces-check` Step 4 added the `groupMinFaces` setting (2 to 20, default 5) to the GPUI app's (`crates/app`) settings modal, Culling page, as `Faces in a group photo` under the auto-advance switch. Pass 3 takes its threshold from it, and lowering it re-lists the open folder so pass 3 runs on the rows that now qualify. Unit and scan-level tests plus CI cover the parse, the range, the visibility rule and the lowering trigger. Nobody has driven the number field in the running app. The step was ticked on the automated criteria only. gpui-component's own number field was not used, because it commits on every keystroke. This is a custom `NumberInput` committed on Enter, blur or a step. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/app/src/settingsview.rs`, `crates/app/src/main.rs` (`set_group_min_faces`).
+
+#### TODO
+
+- [ ] On Windows, open the settings (`ctrl+,`), Culling page. Expected: `Faces in a group photo` under the auto-advance switch shows 5 on a fresh store; typing `3` and Enter (or Tab away) applies it and, with a folder open, the status line shows `checking faces` only when some frame's `faces_group` is 3 or 4; `-` / `+` step by one within 2 to 20 and apply at once; typing `25` or `1` and Enter shows the refusal in the status line and the field goes back to the value in force; Escape in the field commits it and closes; typed digits are not taken as shortcuts; the value survives a restart.
+- [ ] On macOS and Linux, repeat the Windows check (`meta+,` opens the settings on macOS).
+
+### App: real-device check of the all-faces meta rows and the strip's closed-eyes mark (all-faces-check Step 5)
+
+`all-faces-check` Step 5 added to the meta pane's `Analysis` group the rows `Similar faces`, `Faces judged`, `Faces with closed eyes` and `Faces with soft eyes`. The three counts are read through the group threshold's visibility rule (`group::shown`) and hidden on a frame under the gate. It also widened the strip cell's closed-eyes mark (`mark::closed_eyes_mark`) to turn on for a closed count of at least 1. Unit tests cover the row builders and the pure rule. No test paints the pane or the cell, and the counts were never compared with a real group photo folder. The step was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/app/src/meta.rs`, `crates/app/src/mark.rs`, `crates/app/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, open a real group photo folder (for example a team-sport ARW folder) and let the scan finish (`checking faces` gone from the status line). Expected: on a frame whose meta pane `Similar faces` is at or above `Faces in a group photo`, the `Analysis` group ends with `Faces judged`, `Faces with closed eyes` and `Faces with soft eyes` that agree with what the photo shows (blinks counted, a soft back row counted), and the amber `eye-off` mark sits on the strip cell exactly when that closed count is at least 1 or the judged face is closed; on a frame under the number only `Similar faces` shows and no mark comes from the counts; raising the number past a marked frame's `Similar faces` hides its count rows and its counts' mark at once, lowering it back brings them back.
+- [ ] On macOS and Linux, repeat the Windows check.
+
+### App: real-device check of the Anyone closed / Anyone soft filter items (all-faces-check Step 6)
+
+`all-faces-check` Step 6 added `Anyone closed` and `Anyone soft` to the filter menu's `Eyes` section (stored and MCP names `anyone_closed` / `anyone_soft`). They pass a frame whose closed (soft) count, read through the group threshold's visibility rule, is at least 1, and are OR-ed with the section's other items. Unit tests cover the predicate, the stored round trip, the menu rows and the `companion.rs` cases. No test drives the items through a real scan, and the judged readings were never compared with a real group photo folder. The step was ticked on the automated criteria only. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/app/src/filter.rs`, `crates/app/src/menu.rs`, `crates/app/src/main.rs`.
+
+#### TODO
+
+- [ ] On Windows, open a real group photo folder (for example a team-sport ARW folder), let the scan finish (`checking faces` gone from the status line), then check `Filter ▾` > `Eyes` > `Anyone closed`. Expected: the strip narrows to the frames whose meta pane `Faces with closed eyes` is at least 1 (each a real blink on some face, or a false closed reading worth noting), no frame whose `Similar faces` is under `Faces in a group photo` stays; `Anyone soft` likewise against `Faces with soft eyes`; adding `Open` widens the strip to those frames plus the open-eyed ones; raising the number in the settings past a shown frame's `Similar faces` hides it at once; the checks survive a restart.
+- [ ] On macOS and Linux, repeat the Windows check.
+
+### Core: mesh the faces under `EYES_MIN_FACE` from the full JPEG so the all-faces counts cover them (all-faces-check)
+
+`all-faces-check` leaves faces whose box is under `EYES_MIN_FACE` (60 px) unjudged. On the measured ARW team-sport folders that is 24 to 48% of the confident faces (`measurement.md`, item 1). `Faces judged` in the meta pane shows how much was covered. The plan's Option B cuts small faces from the full JPEG for the mesh. It is cheaper to add now that pass 3 reads the full JPEG anyway. `EYES_CLOSED_EAR` was fitted on preview-resolution crops and would need new labeled faces to trust on full-size crops. The judged face (preview mesh) and the counts (full-size mesh) could also disagree about the same face. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/core/src/eyes.rs`.
+
+#### TODO
+
+- [ ] Decide whether to mesh faces under `EYES_MIN_FACE` from the full JPEG. If so, label full-size crops, re-fit the closed threshold for them, and bump `ALLFACES_VERSION`.
+
+### Core: the judged face can be counted twice in the all-faces counts and the gate count (all-faces-check)
+
+A judged crop face whose whole-image box overlaps it at or under `NMS_THRESHOLD` IoU is counted twice, in the gate count and in the judged count alike (1 of 258 AF frames on `2026-09-19`). A low-resolution box may differ more. Matching by eye landmarks instead of IoU would close it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`, `gate_count`).
+
+#### TODO
+
+- [ ] Replace the IoU match of the judged face with one by eye landmarks, and add a test for the overlap at or under 0.3. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
+
+### Core: the default group threshold N = 5 passes no posed group photo of the measured folders (all-faces-check)
+
+The 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 score floor (three faces score 0.64 to 0.75). That frame has no AF point, so the AF path's 0.6 floor does not apply. The frames at 5 or more that were measured are basketball frames. The user kept the default at 5 in Step 4. The meta pane's `Similar faces` row is what lets users tune it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/app/src/settings.rs` (`groupMinFaces`, `group::DEFAULT`).
+
+#### TODO
+
+- [ ] Decide whether to lower the default (4 or 3), or to use the 0.6 floor on the no-AF path as well, after more posed group photos are checked.
+
+### Core: the gate's size band lets a background row at the player's size through (all-faces-check)
+
+The size band (0.5x to 2x of the judged face's long side) cannot tell a group from a background row at the same distance. `2026-11-07/_DSC1611.ARW` counts 9 at 640x448: one player and eight spectators on the bench behind. A frame like that passes the gate and pays pass 3. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`gate_count`).
+
+#### TODO
+
+- [ ] Decide whether the gate needs a further rule (for example the faces' spread or a cluster around the judged face), or whether the cost on such frames is acceptable. Any change to the gate count means a `FACES_VERSION` bump and a pass 2 re-run.
