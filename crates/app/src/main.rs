@@ -6654,14 +6654,16 @@ impl Render for Handpic {
                     .then(|| modal::backdrop(cx)),
             );
         // The settings are a sibling of the app's view, outside its key
-        // context and dispatch path, drawn over it while it keeps painting.
+        // context and dispatch path, drawn over it below the title bar while
+        // it keeps painting, so the bar's drag and window controls still work.
         div().relative().size_full().child(main).children(
             self.settings_view.read(cx).is_open().then(|| {
                 div()
                     .absolute()
-                    .top_0()
+                    .top(TITLE_BAR_HEIGHT)
                     .left_0()
-                    .size_full()
+                    .right_0()
+                    .bottom_0()
                     .child(self.settings_view.clone())
             }),
         )

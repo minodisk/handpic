@@ -248,9 +248,9 @@ view. The `WindowOptions` pass through untouched. Nothing reads the window's roo
 `on_app_quit`, the bounds saved on quit and the tree's keyboard flag hold
 the view, its focus handle or the `Window`, so they are unchanged. The trash
 dialog and the folder operations' dialog are component dialogs (see "The
-trash dialog is a component `Dialog`"); the settings are a full-window layer
-the view draws beside its own root `div` (see "The settings modal is its own
-entity").
+trash dialog is a component `Dialog`"); the settings are a layer under the
+title bar, covering the rest of the window, that the view draws beside its
+own root `div` (see "The settings modal is its own entity").
 
 What `Root` adds to every frame, read at 0.9.1: its own `div` (the `Root` key
 context and the `Tab` / `TabPrev` / `Copy` handlers), gpui-base's
@@ -2224,12 +2224,27 @@ and the tree's `folder` and `folder-open`, a path in none of them with
 `settingsview.rs`'s `SettingsView` is an `Entity` the window creates once and
 holds; `settingsmodal.rs` is its pure model (the open state, the shortcut
 row capturing a key, `modal.ts`'s key rule, the pages' order and titles in
-`TABS`). It is shown over the whole window, not in a dialog
-(the user's choice, 2026-11-15): `Handpic::render` wraps its root `div` (the
-one with the `Handpic` key context, the focus, the key listener and
-`on_drop`) in an outer full-size `div` and, while the modal is open, adds
-the view entity as a second child, in an `absolute` full-size `div`. The
-view's box is `size_full`, opaque on `popover`, `occlude()`d
+`TABS`). It is shown over the whole window below the title bar, not in a
+dialog (the user's choice, 2026-11-15): `Handpic::render` wraps its root
+`div` (the one with the `Handpic` key context, the focus, the key listener
+and `on_drop`) in an outer full-size `div` and, while the modal is open, adds
+the view entity as a second child, in an `absolute` `div` set
+`top(TITLE_BAR_HEIGHT)`, `left_0`, `right_0` and `bottom_0` (a full-height
+box moved down would overflow the window's bottom). The title bar is the
+first in-flow child of the root's `flex_col` and the outer `div` lies inside
+`Root`'s `window_border()`, so on every platform that offset is the bar's
+bottom and the Linux client-side frame's padding is already outside it. The
+title bar (the icon, the folder's name, the gear, the window drag, the macOS
+traffic lights and the Windows / Linux window controls) stays drawn and
+takes presses while the settings are shown; before 2026-11-25 the layer
+covered it too, so the window could not be dragged and the traffic lights
+overlapped the `Settings` heading. The UI test
+`the_settings_layer_lies_under_the_title_bar_and_fills_the_rest` reads the
+box's bounds (its `settings-box` debug selector) back: its top is
+`TITLE_BAR_HEIGHT` below the view's and it reaches the viewport's other
+edges (Measured, on the test platform, whose window has no paddings; the
+OS window drag and the traffic lights are not on it). The view's box is
+`size_full`, opaque on `popover`, `occlude()`d
 and under `FocusTrapElement::focus_trap` on its own focus handle. The main
 layout stays rendered underneath, not replaced: the preview canvas's paint
 takes the pending page and releases the scan pause (`hold.rs`'s
@@ -2268,12 +2283,17 @@ The status line under the box shows `NOT_SAVED` while the settings store did
 not open.
 
 - Rule: the closes. `close` (Escape or the view's own `×`) closes the model
-  and emits `Closed`. A full-window view has no outside to press, so there
-  is no press-outside close; `ctrl+,` while shown does nothing (the window's
-  `key_down` is not on the path).
+  and emits `Closed`. The title bar is the only outside to press and a press
+  there is not a close, so there is no press-outside close; `ctrl+,` while
+  shown does nothing (the window's `key_down` is not on the path), nor does
+  the title bar's gear (`open_settings` returns while the settings are open;
+  the UI test above clicks the bar and finds them still open). The box's
+  `capture_any_mouse_down`, which cancels a shortcut capture, does not see
+  a press on the title bar, so a capture under way survives a window drag
+  (Inferred, not checked by hand).
 - Rule: the pointer. The box's `occlude()` blocks the hitboxes painted
-  before it, the whole main layout, so a press, a hover or a wheel scroll
-  over the settings does not reach the tree, the preview canvas, the strip
+  before it under its bounds, the whole main layout but the title bar, so a
+  press, a hover or a wheel scroll over the settings does not reach the tree, the preview canvas, the strip
   or their tooltips. The deferred layers the main view may still draw paint
   after it: the sort and filter menus are closed on open and the right-click
   menu on any key, the `ctrl+,` included; a trash or folder dialog held by
@@ -2282,6 +2302,10 @@ not open.
   `backdrop` (deferred, so it paints over the settings layer too). The tree pane's `on_mouse_down_out` is a capture-phase
   listener that ignores occlusion, so a press inside the settings hands the
   tree's keyboard back to the photo, as a press inside the old dialog did.
+  Over the title bar the hover and the gear's tooltip work while the
+  settings are shown, and a file dropped on the bar reaches the root `div`'s
+  `on_drop` and opens its folder under the open settings (Inferred from the
+  hit test, not measured; the user chose not to guard it, 2026-11-25).
 - Rule: the key routing. The layer is a sibling of the `Handpic` `div`,
   outside the app view's dispatch path, so no key with the focus inside it
   reaches the window's `key_down`; that handler also returns at once while
