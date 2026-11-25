@@ -1,7 +1,7 @@
 //! The settings as their own entity with its own focus handle, over the
-//! pure `settingsmodal` model, drawn by the main view over the whole window,
-//! outside its key context, while open, its body gpui-component's
-//! `Settings`. A change is emitted as a `Change` for the main view, which
+//! pure `settingsmodal` model, drawn by the main view over the window below
+//! its title bar, outside its key context, while open, its body
+//! gpui-component's `Settings`. A change is emitted as a `Change` for the main view, which
 //! owns the values, to apply.
 
 use gpui_kit::component::{
@@ -1139,11 +1139,13 @@ impl SettingsView {
         )
     }
 
-    /// The box, filling the window, opaque and occluding the main view under
-    /// it, with Tab and Shift+Tab kept inside it by its focus trap.
+    /// The box, filling the window below the title bar, opaque and occluding
+    /// the main view under it, with Tab and Shift+Tab kept inside it by its
+    /// focus trap.
     fn layer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .id("settings-box")
+            .debug_selector(|| "settings-box".to_owned())
             .when(self.model.capturing.is_some(), |d| {
                 d.key_context(CAPTURE_CONTEXT)
             })

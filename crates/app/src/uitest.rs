@@ -442,6 +442,42 @@ fn the_settings_modal_drops_the_paging_keys_until_escape_closes_it() {
 }
 
 #[test]
+fn the_settings_layer_lies_under_the_title_bar_and_fills_the_rest() {
+    let mut ui = Ui::open();
+    ui.open_folder(&[("a.dng", 1)]);
+    let open = if cfg!(target_os = "macos") {
+        "cmd-,"
+    } else {
+        "ctrl-,"
+    };
+    let settings = ui.read(|view| view.settings_view.clone());
+    ui.cx.simulate_keystrokes(open);
+    assert!(settings.read_with(&ui.cx, |settings, _| settings.is_open()));
+    let bounds = ui
+        .cx
+        .debug_bounds("settings-box")
+        .expect("the settings box is not drawn");
+    let (viewport, pad) = ui.cx.update(|window, _| {
+        (
+            window.viewport_size(),
+            gpui_kit::component::window_paddings(window),
+        )
+    });
+    assert_eq!(bounds.origin.x, pad.left);
+    assert_eq!(
+        bounds.origin.y,
+        pad.top + gpui_kit::component::TITLE_BAR_HEIGHT
+    );
+    assert_eq!(bounds.right(), viewport.width - pad.right);
+    assert_eq!(bounds.bottom(), viewport.height - pad.bottom);
+    ui.cx.simulate_click(
+        gpui_kit::point(viewport.width / 2., pad.top + px(10.)),
+        gpui_kit::Modifiers::default(),
+    );
+    assert!(settings.read_with(&ui.cx, |settings, _| settings.is_open()));
+}
+
+#[test]
 fn the_settings_key_opens_the_settings_from_the_tree_but_not_from_a_rename() {
     let mut ui = Ui::open();
     let folder = ui.open_folder(&[("a.dng", 1), ("b.dng", 1)]);
