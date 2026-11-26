@@ -788,9 +788,14 @@ runs no such detection, and a frame without an AF point pays nothing for
 its gate count. At 320x224 the small faces score lower: at 0.8 the run
 counted about half the faces the 640x448 run counts on the team-sport
 frames, so it counts from 0.6 (`allfaces::GATE_LOW_RES_CONFIDENCE`), where
-it counts about as many; the 640x448 path keeps 0.8. The sizes and floors
-tried and what each counts are in the all-faces-check plan's
-`measurement.md`.
+it counts about as many. The 640x448 path of a frame without an AF point
+counts from 0.6 too: three faces of the 7-person posed group `L1005161`
+score 0.64 to 0.75, so at 0.8 it counted 4 and missed the default threshold
+of 5. On the three Leica DNG folders measured (1511 frames) the lower floor
+brought 3 frames to 5 or more, all posed groups, and changed no gate count of
+the AF folders. The sizes and floors tried and what each counts are in the
+all-faces-check plan's `measurement.md`, the 640x448 floor's before and
+after in the gate-floor-no-af plan's.
 
 The entry point costs about what pass 2 cost with the first version of the
 check inside it, which ran it on every frame (163.3 / 165.4 / 209.3 ms

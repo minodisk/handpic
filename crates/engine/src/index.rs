@@ -197,7 +197,12 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// face (`allfaces::SAME_FACE_OVERLAP`) for the judged face found again, so the
 /// gate count no longer counts it twice
 /// (`docs/plans/_archived/20261126-judged-face-eye-match/`).
-pub const FACES_VERSION: i64 = 15;
+/// `16` re-runs it after the gate of a frame with no trusted AF point started
+/// counting faces from `allfaces::GATE_LOW_RES_CONFIDENCE` (0.6) instead of
+/// `sharpness::FACE_CONFIDENCE` (0.8), as an AF frame's gate does, so a posed
+/// group whose faces score 0.64 to 0.75 reaches the group threshold; only
+/// `faces_group` moves (`docs/plans/_archived/20261126-gate-floor-no-af/`).
+pub const FACES_VERSION: i64 = 16;
 
 /// The version of what the third pass, `handpic_core::scan::extract_face_counts`,
 /// produces, stored on every `files` row as `allfaces_extractor` next to its

@@ -1421,13 +1421,13 @@ The judged face found again in the whole-preview search is dropped by an IoU abo
 
 - [ ] Find a rule that separates the remaining twins from different people (for example the mesh, the box's aspect or the full-size image), or accept them. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
 
-### Core: the default group threshold N = 5 passes no posed group photo of the measured folders (all-faces-check)
+### Core: pass 3 judges faces from 0.8 while the gate now counts from 0.6 (gate-floor-no-af)
 
-The 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 score floor (three faces score 0.64 to 0.75). That frame has no AF point, so the AF path's 0.6 floor does not apply. The frames at 5 or more that were measured are basketball frames. The user kept the default at 5 in Step 4. The meta pane's `Similar faces` row is what lets users tune it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/app/src/settings.rs` (`groupMinFaces`, `group::DEFAULT`).
+`gate-floor-no-af` made the gate count (`allfaces::gate_count`) use `GATE_LOW_RES_CONFIDENCE` (0.6) on frames without an AF point too. Pass 3's candidates (`allfaces::candidates`) still use `FACE_CONFIDENCE` (0.8). On `2026-02-01/L1005161.DNG` the gate counts 7, but pass 3 judges at most the 4 faces scoring 0.8 or above (three faces score 0.64 to 0.75), so `Similar faces` exceeds `Faces judged` by 3. `L1005172.DNG` has 3 faces between 0.6 and 0.8 and `L1005173.DNG` has 2. Lowering the candidates' floor is a separate change and was out of scope for that plan. Plan: `docs/plans/_archived/20261126-gate-floor-no-af/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`).
 
 #### TODO
 
-- [ ] Decide whether to lower the default (4 or 3), or to use the 0.6 floor on the no-AF path as well, after more posed group photos are checked.
+- [ ] Decide whether to lower the candidates' floor to 0.6 so `Faces judged` follows the gate count. If so, measure the extra pass 3 work and the false closed readings on low-score faces, then bump `ALLFACES_VERSION`.
 
 ### App: real-device checks of the settings layer under the title bar (settings-under-title-bar)
 

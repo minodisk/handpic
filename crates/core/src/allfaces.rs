@@ -10,9 +10,9 @@
 //! preview detection whose box is of a similar size (`GATE_MIN_SIZE` to
 //! `GATE_MAX_SIZE` of the judged face's long side): a face at half the linear
 //! size stands about twice as far, a passer-by or a spectator, not a member of
-//! the group. Confident is `FACE_CONFIDENCE` on the 640x448 search of a frame
-//! without an AF point and `GATE_LOW_RES_CONFIDENCE` on the low-resolution
-//! search of a frame with one.
+//! the group. Confident is `GATE_LOW_RES_CONFIDENCE` on both searches, the
+//! 640x448 one of a frame without an AF point and the low-resolution one of
+//! a frame with one.
 //!
 //! A candidate scores at least `sharpness::FACE_CONFIDENCE`, has a box long
 //! side of at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`) and is
@@ -54,11 +54,15 @@ pub const GATE_MIN_SIZE: f32 = 0.5;
 /// The largest box long side, over the judged face's, a face counts toward
 /// the gate with.
 pub const GATE_MAX_SIZE: f32 = 2.0;
-/// The score floor of a face counted toward the gate on the low-resolution
-/// `faces::GATE_INPUT` search, under `FACE_CONFIDENCE`: at 320x224 the small
-/// faces score 0.6 to 0.8, and at this floor the search counts about as many
-/// faces as the 640x448 one does at `FACE_CONFIDENCE` (see the
-/// all-faces-check plan's `measurement.md`).
+/// The score floor of a face counted toward the gate, under
+/// `FACE_CONFIDENCE`, on both searches. On the low-resolution
+/// `faces::GATE_INPUT` search of a frame with an AF point the small faces
+/// score 0.6 to 0.8 at 320x224, and at this floor the search counts about as
+/// many faces as the 640x448 one does at `FACE_CONFIDENCE` (see the
+/// all-faces-check plan's `measurement.md`). On the 640x448 search of a frame
+/// without one, members of a posed group score 0.64 to 0.75 too, so the gate
+/// counts from this floor there as well (the gate-floor-no-af plan's
+/// `measurement.md`).
 pub const GATE_LOW_RES_CONFIDENCE: f32 = 0.6;
 
 /// The intersection over the smaller of the two boxes' areas above which a
@@ -105,7 +109,8 @@ pub struct Measured {
 /// judged face, and every face scoring at least `floor` whose box long
 /// side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of the judged face's and
 /// that is not the judged face found again (`same_face`). 0 without a judged
-/// face.
+/// face. Pass 2 passes `GATE_LOW_RES_CONFIDENCE` as `floor` on both of its
+/// searches.
 pub fn gate_count(faces: &[Face], judged: Option<&Face>, floor: f32) -> u32 {
     let Some(judged) = judged else {
         return 0;
