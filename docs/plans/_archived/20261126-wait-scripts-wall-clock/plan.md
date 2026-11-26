@@ -32,7 +32,7 @@ Once this is done, each script bounds a slice by real elapsed time, the
 no-runs path stays inside `--max-wait`, the slice-count caps in
 `pr-runner.md` and `merger.md` give about 30 minutes whatever the network
 speed, and the two items are gone from `todo.md`. Background:
-[the agent-workflow-fixes plan](../_archived/20261123-agent-workflow-fixes/plan.md)
+[the agent-workflow-fixes plan](../20261123-agent-workflow-fixes/plan.md)
 and its `learnings.md`.
 
 ## Steps
