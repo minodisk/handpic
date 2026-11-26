@@ -22,7 +22,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 
 - [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
 
-
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
 #### Background

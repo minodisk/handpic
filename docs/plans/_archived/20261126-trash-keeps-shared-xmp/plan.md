@@ -151,3 +151,5 @@ this way (`trash::delete_for_good`); after this plan both follow one rule.
    a separate decision.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
