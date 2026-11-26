@@ -129,3 +129,5 @@ burst, a computed `rank`, a null rank for a frame with neither score.
    their names and meanings.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
