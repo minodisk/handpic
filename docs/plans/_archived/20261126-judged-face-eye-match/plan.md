@@ -225,3 +225,4 @@ gate count (all-faces-check)". Background:
 - (2026-11-27) Overlap measured (`overlap-measurement.md`): no separating
   cut. The user chose the partial fix, the union at 0.55, with the `todo.md`
   item reworded rather than deleted.
+- (2026-11-27) Step 1 complete
