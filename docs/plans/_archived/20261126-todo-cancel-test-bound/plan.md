@@ -26,16 +26,16 @@ full-suite load.
 
 The item is stale. The test was already rewritten by `6a5e5dfc` (#1269,
 2026-11-24 08:36, "test: remove the timing dependence of the scan tests"; plan:
-[todo-flaky-scan-tests](../_archived/20261123-todo-flaky-scan-tests/plan.md)).
+[todo-flaky-scan-tests](../20261123-todo-flaky-scan-tests/plan.md)).
 At HEAD the test in `crates/core/src/scan.rs` has no wall-clock assertion. It
 waits on an `mpsc` channel that the scan thread's end disconnects, bounded only
 by the hang guard `HANG` (30 s, under `LONG_PAUSE`), drops the pause or the
 permit, asserts, then joins. This is the shape
-[shared-crates.md](../../agents/shared-crates.md) ("A cancel or stop test must
+[shared-crates.md](../../../agents/shared-crates.md) ("A cancel or stop test must
 not bound the scan by wall-clock time") prescribes.
 
 The two failing runs (`took 1.14s` / `took 1.10s`) were recorded in
-[sidecar-and-keymap-decisions' learnings](../_archived/20261123-sidecar-and-keymap-decisions/learnings.md)
+[sidecar-and-keymap-decisions' learnings](../20261123-sidecar-and-keymap-decisions/learnings.md)
 on 2026-11-23, in `5ea303ce` (#1254), against the old code. The `took` message
 they quote no longer exists in the test. The wrap-up of that plan (`8f8271a6`,
 #1283, 2026-11-24 23:15) filed the item from that pre-fix note, after #1269 had
