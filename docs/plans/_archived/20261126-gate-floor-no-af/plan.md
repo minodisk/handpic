@@ -165,3 +165,5 @@ which names the measured folders and how they were measured.
   classification in the measurement is where it would show.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
