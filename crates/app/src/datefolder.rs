@@ -458,8 +458,8 @@ mod tests {
     }
 }
 
-/// The folder rename and the split on this crate's `notify` (8.2.2 in
-/// `Cargo.lock`, 8.2.0 in the root lock): the engine's own tests run on the
+/// The folder rename and the split on this crate's `notify` (the version
+/// this workspace's `Cargo.lock` resolves): the engine's own tests run on the
 /// root lock and cannot run from this workspace, so the release-and-settle
 /// path the rename relies on is checked here, on a temp dir.
 #[cfg(test)]

@@ -1083,8 +1083,10 @@ as it does `handpic-core`. A dependency added to the engine also lands in
   toolchain. Source:
   `docs/plans/_archived/20261125-settings-under-title-bar/learnings.md`,
   Step 1.
-- Rule: `crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2
-  against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
+- Rule: `crates/app/Cargo.lock` resolves its own versions (its `notify` is
+  8.2.2, which the root lock matches since
+  `docs/plans/_archived/20261126-notify-lock-align/plan.md`; the rest of
+  `notify`'s subtree can still differ). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
   The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
   "The tree follows the disk through one `TreeWatch`"), and so does the
