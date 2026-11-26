@@ -81,33 +81,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
 
 #### TODO
 
-- [x] MakerNote check (exiftool 13.59, 2026-09-22): Sony α7 V ARW writes
-      `AFTracking` + `FocusFrameSize` + `FocusLocation` but no per-face list;
-      `AFAreaMode` is enciphered; Leica M11-P DNG writes only
-      `FocusDistance`. The scan now uses the Sony AF frame and skips detection
-      when face tracking was engaged
-      (`docs/plans/20260922-sony-eye-af-window/`).
-- [x] Measured on Linux WSL2 (not the Mac): detection latency on real
-      α7 V ARW / M11-P DNG previews and `riffle-cli scan` before/after adding
-      detection and the AF-frame skip; see `docs/humans/performance.md` "Face
-      detection cost".
-- [x] Optionally, detect closed eyes. YuNet's five landmarks carry no
-      eyelid points, so it needed a second model. Four were surveyed on
-      2026-10-07 against 504 hand-labeled faces (`model-survey.md`,
-      `eyes-truth.md`); none fits the scan's second pass. Adopted: MediaPipe
-      Face Landmarker v2 (Apache-2.0, 4.9 MB ONNX converted from Google's
-      TFLite, `crates/core/src/eyes.rs`), judging closed eyes by the eye
-      aspect ratio (closed iff at most 0.137) of one face, the one nearest a
-      trusted AF point, else the largest face at or above 0.8, at or above a
-      60 px face side, on demand for the shown file only (`eyes_of`), shown
-      as the meta pane's `Eyes: Closed (NN%)` / `Open (NN%)` row. Cost:
-      `riffle-app` 47.5 -> 52.5 MB, `riffle-cli` 24.6 -> 29.6 MB; ~35 ms
-      per face (p95 41 ms), the whole call 80-92 ms on an ARW with an AF
-      point and 140-156 ms on a DNG without one. Accuracy: face AUC 0.974,
-      precision 0.94 / recall 0.86 at the threshold. See
-      `docs/plans/_archived/20261007-closed-eyes-detection/` and
-      `docs/humans/performance.md` "Closed-eyes judgment on demand
-      (Windows 11)".
 - [ ] Judge every face at or above the 60 px floor, not only the AF-nearest
       (or largest) one, so a bystander's blink shows too. Each face is one
       more model run (~35 ms; ~1.8 faces per file on the 2134-ARW folder,
@@ -117,18 +90,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       `eyes-truth.md` did not label. Files: `crates/engine/src/ondemand.rs`
       (`read_eyes`), `crates/core/src/eyes.rs` (`judged_face`),
       `crates/app/src/meta.rs`.
-- [x] Estimate the head pose of the judged face. MediaPipe's face geometry
-      pipeline (perspective unprojection at its 63 deg camera, weighted
-      Procrustes onto the canonical face) is ported to
-      `crates/core/src/pose.rs` and runs on the points of the `eyes_of`
-      model run, shown as the meta pane's `Head pose` row (yaw, pitch,
-      roll; right, up and clockwise positive). On demand only, nothing in
-      the index, so there is no strip filter for it. Cost: 8.2 µs per face,
-      no change to the `eyes_of` total. Accuracy on 159 labeled faces: the
-      sign right on 94% (yaw), 95% (pitch), 15 of 18 (roll); the yaw class
-      on 68%, the gap at the frontal / oblique boundary. See
-      `docs/plans/20261007-head-pose/` and `docs/humans/performance.md`
-      "Closed-eyes judgment on demand (Windows 11)".
 - [ ] Measure the good-photo mark's precision on labels. Decision B rests
       on the user's stars and the mark rate; no labeled set was made. Done
       when 100-150 faced AF frames drawn stratified around the cuts and at
@@ -147,39 +108,6 @@ Face/eye-aware detection and scoring (`crates/core/src/faces.rs`, `crates/core/s
       the rated frames of `D:\photos\samples\ARW\good-mark-2026-10-09\`.
       Files: `crates/engine/src/index.rs`, `crates/app/src/meta.rs`,
       `crates/core/src/eyes.rs`.
-- [x] Give the no-AF path a good-photo mark once it has a focus cue. Done
-      in `docs/plans/_archived/20261010-af-eye-good-bad-cascade/` Step 2: pass 2 runs
-      the cue, the EAR, the pose, the eye offset and the edge gap on the
-      largest confident face of the whole preview when a frame has no
-      trusted AF point (`FACES_VERSION` 9), and `Focus` carries the cue
-      without a point, so the same cuts mark it. The check of those cuts on
-      starred no-AF frames kept them shared; see
-      `docs/plans/_archived/20261123-mesh-presence-side-faces/learnings.md`.
-- [x] Measure the AF eye in-focus probability over each eye's eyelid
-      region from the face mesh instead of the window between the eyes.
-      The scan's second pass runs MediaPipe Face Landmarker v2 on the face
-      nearest the AF point, scores each eye's contour bounding box (margin
-      0.5 of its longer side) with a refitted logistic and takes the sharper
-      eye; when neither eye's region counts (under 24 px or without a clear edge) it scores the window as
-      before (61% of the training frames, 60% of the 2134-ARW folder's
-      faces). The head pose was measured as an eye rule and did not beat the
-      sharper eye, so it is not used. Held-out AUC 0.754 -> 0.800, precision
-      / coverage 89.1% / 95.3% -> 88.6% / 95.9%; pass 2 on the 2134-ARW
-      folder 12.9 -> 21.5 s at 24 threads (+66%). `FACES_VERSION` 6. See
-      `docs/plans/_archived/20261008-mesh-eye-focus/` and
-      `docs/humans/performance.md` "Focus candidate pass".
-- [x] Measure whether de-rotating the face crop by YuNet's eye line (the
-      MediaPipe pipeline's roll step) fits the face mesh better. It does
-      not, in any variant (always, dead bands of 10 / 20 deg, a YuNet
-      eye-distance guard): always-rotate turns 7 off meshes on and 15 on
-      meshes off on 131 readable labeled frames and drops the held-out AF
-      eye AUC 0.800 -> 0.783; the share of AF frames with `eye_offset` over
-      0.10 stays 28.7% on six folders. Where the rotation moves a fit,
-      YuNet's two eye points are not on two eyes. The residual misfits are
-      side faces (78% of the off meshes, weighted), then cut, rotated past
-      90 deg, seen from above and not-a-face. Nothing in the scan or the
-      index changed. See `docs/plans/20261010-mesh-roll/` (Decision,
-      `compare.md`, `misfit-truth.md`).
 - [ ] Faces rolled past 90 deg (a baby lying head-down,
       `D:\photos\2026\2026-07-11\_DSC2638.ARW`) get a mesh fitted as if
       upright, and the eye line cannot de-rotate them: `faces.rs` orders
