@@ -517,7 +517,7 @@ const FEATURES_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\txmp\tdop\tsha
 /// and `subsec`; the XMP and `.dop` flags (`Pick` / `Reject` / `None`, `-`
 /// when there is no sidecar, `err` when it is unreadable); from
 /// `scan::extract_analysis`, what the scan stores: `sharpness` and the cue
-/// face's box side (the longer of width and height) in preview pixels; from the path `eyes_of` takes: `af` / `noaf`
+/// face's box side (the longer of width and height) in preview pixels; from the path `ondemand::read_eyes` takes: `af` / `noaf`
 /// (a trusted AF point), the judged face's box side, the EAR of its more
 /// closed eye, the eyes-open probability (`1 -` the closed one), `yaw`,
 /// `pitch` and `roll` in degrees; from the analysis again, the cue mesh's
