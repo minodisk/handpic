@@ -167,8 +167,4 @@ cap 2. It closes the `todo.md` item "Core: split the disk read from
 
 ## Progress
 
-- Step 1 done: `reader` now splits the preview and full reads from the decode
-  (`read_preview_undecoded`, `read_full_undecoded`, `Undecoded::decode`), so the
-  scan's read slots and the app's preview read no longer span an HDR PQ CR3's
-  `hevc::to_jpeg`. The cap 2 measurement is left pending as its own item in
-  `todo.md`.
+- (2026-11-27) Step 1 complete
