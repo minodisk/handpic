@@ -94,3 +94,5 @@ Once this is done, `todo.md` no longer lists work that is already complete.
   Left as is.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete (stale todo.md item removed; the test already waits on ended.recv_timeout(HANG) since 6a5e5dfc, #1269)
