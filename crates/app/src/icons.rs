@@ -6,8 +6,8 @@
 //! controls draw. It also serves the
 //! app's own icon PNG to the title bar's `img(..)`.
 
-// The own SVGs below are derivatives of the Lucide `star` and `scan-face`
-// icons, lucide-static v1.48.0
+// The own SVGs below are derivatives of the Lucide `star`, `scan-face` and
+// `settings` icons, lucide-static v1.48.0
 // (https://github.com/lucide-icons/lucide), ISC License, Copyright (c) 2026
 // Lucide Icons and Contributors.
 //
@@ -16,7 +16,8 @@
 // copyright notice and this permission notice appear in all copies.
 //
 // The Face focus Low icon is `scan-face` with its mouth turned down, and the
-// filled star is `star` with `fill="currentColor"`, derivatives.
+// filled star is `star` with `fill="currentColor"`, and the title bar's gear
+// is `settings` at `stroke-width="1.5"`, derivatives.
 //
 // Full notice in `crates/app/LICENSE-lucide`. The unmodified icons come
 // from `gpui-kit-assets`, under its own `LICENSE-LUCIDE`.
@@ -35,6 +36,7 @@ pub const SCAN_FACE_FROWN: &str = "icons/scan-face-frown.svg";
 pub const EYE_OFF: &str = "icons/eye-off.svg";
 pub const FOLDER: &str = "icons/folder.svg";
 pub const FOLDER_OPEN: &str = "icons/folder-open.svg";
+pub const SETTINGS_THIN: &str = "icons/settings-thin.svg";
 pub const APP: &str = "icons/app.png";
 
 const APP_PNG: &[u8] = include_bytes!("../icons/64x64.png");
@@ -43,9 +45,12 @@ const STAR_FILLED_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox
 
 const SCAN_FACE_FROWN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M8 16s1.5-2 4-2 4 2 4 2"/><path d="M9 9h.01"/><path d="M15 9h.01"/></svg>"#;
 
-const SVGS: [(&str, &str); 2] = [
+const SETTINGS_THIN_SVG: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></svg>"#;
+
+const SVGS: [(&str, &str); 3] = [
     (STAR_FILLED, STAR_FILLED_SVG),
     (SCAN_FACE_FROWN, SCAN_FACE_FROWN_SVG),
+    (SETTINGS_THIN, SETTINGS_THIN_SVG),
 ];
 
 // `star` and the folders are left out: the default
@@ -99,7 +104,7 @@ mod tests {
 
     use super::*;
 
-    const PATHS: [&str; 9] = [
+    const PATHS: [&str; 10] = [
         STAR,
         STAR_FILLED,
         RECTANGLE_VERTICAL,
@@ -109,6 +114,7 @@ mod tests {
         EYE_OFF,
         FOLDER,
         FOLDER_OPEN,
+        SETTINGS_THIN,
     ];
 
     #[test]
