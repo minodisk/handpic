@@ -21,7 +21,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 `todo.md`'s "Core: decide which score ranks frames within a burst, the
 AF-frame window or the eye-midpoint window" is open. The check behind it
-([burst-rank.md](../_archived/20261123-todo-four-closeouts/burst-rank.md))
+([burst-rank.md](../20261123-todo-four-closeouts/burst-rank.md))
 found that the stored `sharpness` (the AF-frame window) and the eye-midpoint
 window it replaced disagree on the order of a burst's frames: median
 per-burst Spearman 0.500, the same top frame in 62% of bursts.
