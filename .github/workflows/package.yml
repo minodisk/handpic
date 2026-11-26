@@ -11,10 +11,13 @@ name: Package
 # HANDPIC_UPDATE_TEST_REPO and the updater's four archives are signed with the
 # checked-in test key (crates/app/packaging/test/). Without it a dispatch signs
 # nothing. Only a caller can ask for the production signature
-# (`sign_production`, an input a dispatch does not have, since
-# secrets.UPDATE_SIGNING_KEY would resolve on a dispatch too): each leg then
-# signs its archives with the UPDATE_SIGNING_KEY secret through
-# sign-production.sh, before its checks.
+# (`sign_production`, an input a dispatch does not have, so a dispatch on main
+# does not sign with it either): each leg then declares the `release`
+# environment, whose deployment branch policy allows only main and which holds
+# the UPDATE_SIGNING_KEY secret, and signs its archives with it through
+# sign-production.sh, before its checks. The caller passes that secret by name;
+# a job calling this workflow cannot declare the environment itself, so the
+# legs do. Without sign_production a leg declares no environment.
 on:
   workflow_dispatch:
     inputs:
@@ -35,7 +38,7 @@ on:
         required: true
         type: string
       sign_production:
-        description: Sign the updater's archives with the production key (the UPDATE_SIGNING_KEY secret)
+        description: Sign the updater's archives with the production key (the `release` environment's UPDATE_SIGNING_KEY secret)
         required: false
         default: false
         type: boolean
@@ -60,6 +63,9 @@ jobs:
           - os: macos-15-intel
             arch: x86_64
     runs-on: ${{ matrix.os }}
+    environment:
+      name: ${{ inputs.sign_production && 'release' || '' }}
+      deployment: false
     # A cold release build of the GPUI app takes longer than CI's debug one.
     timeout-minutes: 90
     steps:
@@ -214,6 +220,9 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    environment:
+      name: ${{ inputs.sign_production && 'release' || '' }}
+      deployment: false
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -430,6 +439,9 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.sign_production && 'release' || '' }}
+      deployment: false
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4

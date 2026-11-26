@@ -260,7 +260,8 @@ those four updater archives in place, also `mise run app:sign`, run with the
 test key under a dispatch's `update_test_repo` input (`owner/name`), which
 also gives the build `HANDPIC_UPDATE_TEST_REPO`, or, under a caller's
 `sign_production` input, through `sign-production.sh` with the production
-key from the `UPDATE_SIGNING_KEY` secret (base64) against `update.pub`;
+key from the `release` environment's `UPDATE_SIGNING_KEY` secret (base64,
+the environment allowing only `main`) against `update.pub`;
 `assets.sh`, the eleven asset names of a release), uploading each package
 and one `SHA256SUMS`, computed after signing, as workflow artifacts
 (`test-release.sh` publishes such a test run's artifacts as a release of the
@@ -269,7 +270,8 @@ scratch repository it names, never `minodisk/handpic`);
 to `main` and publishes a release of `minodisk/handpic` with those eleven
 assets: a release candidate dispatched with a prerelease `version` input
 (published as a GitHub prerelease, never latest, only from `main`; a dispatch
-on another ref publishes nothing), or the final release when a merged release
+on another ref is rejected at `guard` by the environment, a branch packaged
+through `package.yml`'s `update_test_repo` instead), or the final release when a merged release
 PR makes release-please's draft, published once every asset is attached,
 both behind a `guard` job that checks the version and the secret before the
 build; `crates/app`'s `src/datadir.rs` places

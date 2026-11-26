@@ -1349,19 +1349,6 @@ Files: `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs` (
 
 ---
 
-### Release: decide whether to protect `UPDATE_SIGNING_KEY` from branch dispatches (native-release)
-
-#### Background
-
-A branch dispatch of `release.yml` signs unreviewed branch code with the production key, and the "never publishes from a non-`main` ref" check lives in that branch's own workflow (accepted risks of native-release Step 2). Options: move the secret into a protected GitHub environment restricted to `main` (branch dry runs like run 44884797276 would then need the test key), or add tag / release protection rules. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
-
-Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Decide and record the choice. Done when the matching Rule in `docs/agents/app.md` ("a branch dispatch ... runs that branch's `release.yml` with the production key") is updated or removed.
-
----
 
 ### App: real-device check of the Sort / Filter menus with no folder, the status row's reserved slot and shortened strip names (todo-three-decisions)
 

@@ -44,13 +44,33 @@ token lacks the `workflow` scope.
 
 `package.yml` is both `workflow_dispatch` and `workflow_call`. On a direct
 dispatch, `secrets.<NAME>` resolves to the repository secret of that name,
-not to nothing, so a step gated on the secret being present would sign with
-the production key on any dispatch.
+not to nothing, so a step gated on a repository secret being present would
+use it on any dispatch. `UPDATE_SIGNING_KEY` is no repository secret any
+more but the `release` environment's (see the next section), and a dispatch
+on `main` would still reach it if a leg declared the environment.
 
 - Rule: gate what a secret enables on an input declared only under
   `workflow_call` (`sign_production`), which a dispatch cannot pass
   (`gh workflow run` refuses an undeclared input). Hand the secret through
   `env` to the one step that needs it, never through `GITHUB_ENV`.
+
+### An environment secret reaches a reusable workflow's job, not its caller (Inferred)
+
+GitHub's "Reuse workflows" docs (read 2026-11-26): a job that calls a
+reusable workflow (`uses:`) cannot declare `environment`. A job inside the
+reusable workflow declares it and then reads the environment's secrets, but
+the caller must still pass the secret by name (`secrets: NAME: ${{
+secrets.NAME }}`, allowed "even if it only exists in the environment"), or
+it resolves to an empty string. `release.yml`'s `build` passes
+`UPDATE_SIGNING_KEY` and `package.yml`'s legs declare the `release`
+environment under `sign_production` (`name: ${{ inputs.sign_production &&
+'release' || '' }}`, `deployment: false`); `guard` declares it always.
+
+- Rule: put a secret a branch must not read in an environment whose
+  deployment branch policy allows only `main`, declare that environment on
+  every job that reads it, and pass the secret by name from the caller of a
+  reusable workflow. `deployment: false` reads the secrets without creating
+  deployment records.
 
 ### Prove a signing secret before the long build (Inferred)
 

@@ -734,12 +734,14 @@ packages the built `target/release` binary with a script under
   it), before the checks, so the checks and the uploads see the signed
   bytes. Without the input a dispatch signs nothing. The production
   signature is only for a caller: `release.yml` calls the workflow with
-  `sign_production: true` and the `UPDATE_SIGNING_KEY` secret, and each leg
-  then runs `sign-production.sh` on its archives at the same place, before
-  its checks. `sign_production` is a `workflow_call` input a dispatch does
-  not have, because `secrets.UPDATE_SIGNING_KEY` resolves to the repository
-  secret on a direct dispatch too; gating on the secret's presence would let
-  any dispatch sign with the production key. A dispatch's `version` and
+  `sign_production: true` and the `UPDATE_SIGNING_KEY` secret passed by
+  name, and each leg then declares the `release` environment, which holds
+  that secret, and runs `sign-production.sh` on its archives at the same
+  place, before its checks. Without `sign_production` a leg's environment
+  name is empty, so a dispatch declares no environment. `sign_production`
+  is a `workflow_call` input a dispatch does not have, so a dispatch on
+  `main`, which the environment's branch policy admits, still signs nothing
+  with the production key. A dispatch's `version` and
   `update_test_repo` behave as before; a caller has no `update_test_repo`.
   The `checksums` job computes `SHA256SUMS`
   over the downloaded artifacts, so after signing, and installs the
@@ -860,9 +862,11 @@ the names `crates/engine/src/update.rs` asks for. It has two ways in:
 
 The jobs, shared by both ways in:
 
-1. `guard` (`ubuntu-latest`, minutes) resolves the version and whether the
-   run publishes, and fails before any build on a version the run may not
-   build or publish, or on an `UPDATE_SIGNING_KEY` secret that is empty,
+1. `guard` (`ubuntu-latest`, minutes, in the `release` environment)
+   resolves the version, and fails before any build on a version the run may
+   not build or publish, on a ref other than `main` (only if the
+   environment's policy were ever loosened; GitHub rejects such a dispatch
+   before the job starts), or on an `UPDATE_SIGNING_KEY` secret that is empty,
    does not decode to a 64-byte key, or does not match
    `crates/app/packaging/update.pub`, each with a message that names the
    secret. It proves the key by signing a scratch `.tar.gz` with
@@ -872,26 +876,31 @@ The jobs, shared by both ways in:
    and the asset names carry it; the build then writes the same version
    again (`set-version.sh` is idempotent).
 2. `build` calls `package.yml` with the version, `sign_production: true` and
-   the secret, so the four updater archives are signed with the production
-   key in their own legs and `SHA256SUMS` is computed after signing.
-3. `publish` (only when the run publishes) downloads the artifacts, checks
+   the secret by name, so the four updater archives are signed with the
+   production key in their own legs, each in the `release` environment, and
+   `SHA256SUMS` is computed after signing. The calling job itself declares
+   no environment: a job that calls a reusable workflow cannot.
+3. `publish` (whenever the build succeeded) downloads the artifacts, checks
    that they are exactly `assets.sh`'s eleven, that `SHA256SUMS` names the
    other ten and that `sha256sum --check --strict` passes, and uploads them
    unrenamed (zipsign binds a signature to the file's name).
 
 A dispatch on any ref but `main` (`gh workflow run release.yml --ref
-<branch> -f version=2.0.0-rc.0`) runs the guard and the build, uploads the
-signed packages and `SHA256SUMS` as workflow artifacts, and creates no tag
-and no release. A dispatch has its own concurrency group per version, so a
-candidate's build of about 75 minutes neither queues the pushes'
-`release-please` runs nor another candidate.
+<branch> -f version=2.0.0-rc.0`) is rejected at `guard` by the `release`
+environment's branch policy: no step runs, and `build` and `publish` are
+skipped. A branch is packaged through `package.yml` with the test key
+instead (`gh workflow run package.yml --ref <branch> -f
+update_test_repo=<owner/name>`). A dispatch has its own concurrency group
+per version, so a candidate's build of about 75 minutes neither queues the
+pushes' `release-please` runs nor another candidate.
 
-- Rule: the secret `UPDATE_SIGNING_KEY` is the 64-byte zipsign private key
-  that `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
-  <private-key>`), set by the user on the secret's page on github.com or
-  piped to `gh secret set UPDATE_SIGNING_KEY` after checking it is
-  non-empty. No agent reads, copies or asks for the key. `gh secret list`
-  cannot tell an empty secret from a set one
+- Rule: the secret `UPDATE_SIGNING_KEY` is the `release` environment's
+  secret (not a repository secret), the 64-byte zipsign private key that
+  `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
+  <private-key>`), set by the user on the environment's page on github.com
+  or piped to `gh secret set UPDATE_SIGNING_KEY --env release` after
+  checking it is non-empty. No agent reads, copies or asks for the key.
+  `gh secret list --env release` cannot tell an empty secret from a set one
   ([`github-actions-workflows.md`](./github-actions-workflows.md#an-empty-secret-looks-set-in-gh-secret-list-hit)),
   which is what the guard is for.
 - Rule: the key reaches a job only through `env` on the one step that signs;
@@ -900,14 +909,33 @@ candidate's build of about 75 minutes neither queues the pushes'
   never prints the key.
 - Rule: `assets.sh` is the one list of a release's asset names; a new or
   renamed package changes it with the packaging script.
-- Rule: a branch dispatch (`--ref <branch> -f version=…`) runs that branch's
-  `release.yml` with the production key, so unreviewed branch code signs
-  archives (only workflow artifacts, nothing published). "Never publishes
-  from a non-`main` ref" holds only for the workflow code on `main`: a branch
-  could change the check. A protected environment holding
-  `UPDATE_SIGNING_KEY`, or tag / release protection rules, would be the
-  stronger guarantee. Accepted risk, not a finding; it needs the user's
-  call before such a branch dispatch.
+- Rule (decided 2026-11-26, plan `20261126-release-key-environment`): the
+  production key lives only in the `release` environment, whose deployment
+  branch policy allows only `main` (a custom branch policy, admins not
+  allowed to bypass), so no workflow run on another ref can read it,
+  whatever that ref's workflow file says. The repository-level secret is
+  deleted. `release.yml`'s `guard` declares the environment
+  unconditionally and `package.yml`'s `macos`, `windows` and `linux` legs
+  declare it only under `sign_production` (`name: ${{ inputs.sign_production
+  && 'release' || '' }}`), all with `deployment: false`, so the runs create
+  no deployment records. The calling `build` job cannot declare an
+  environment (a job that calls a reusable workflow cannot), so it passes
+  `UPDATE_SIGNING_KEY` by name, which GitHub resolves to the environment's
+  secret inside the legs; without that pass the secret is empty there. A
+  branch dispatch of `release.yml` is rejected at `guard` before any step
+  runs, with GitHub's environment protection annotation (expected wording,
+  to be confirmed by verification (a): "Branch "<branch>" is not allowed to
+  deploy to release due to environment protection rules."); a branch dry run
+  is `gh workflow run package.yml --ref <branch> -f
+  update_test_repo=<owner/name>` with the test key. Both directions are
+  verified: (a) a `release.yml` dispatch on a branch fails at `guard` with
+  no step run and `build` and `publish` skipped; (b) a release candidate
+  dispatched on `main` publishes and `verify-release.sh` reports
+  `STATUS=ok`. The environment, its policy and its secret are the user's to
+  change; an agent runs such a `gh api` or `gh secret` command only when
+  the user approves it. Still not covered: the key reaches four runners
+  that run third-party actions, there is no required reviewer, and anyone
+  who can push to `main` can sign.
 
 ### The release runbook (Inferred)
 
