@@ -12,6 +12,11 @@ set -o nounset
 # so a case can be a sequence of PR states. A fixture reading `FAIL` makes that
 # call fail, as a network error or an `api.github.com` outage does.
 #
+# The script reads the time with `date +%s` and waits with `sleep`, so both are
+# stubbed too, over a clock file: `sleep N` advances it by N without sleeping,
+# and each `gh` call advances it by the case's LATENCY (default 0). Every case
+# is then deterministic and none waits in real time.
+#
 # Run it directly, or via `mise run ci`.
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,6 +31,7 @@ if [[ "$1 $2" != "pr view" ]]; then
 	echo "stub gh: unexpected arguments: $*" >&2
 	exit 1
 fi
+echo $(($(cat "${STUB_CASE}/clock") + STUB_LATENCY)) >"${STUB_CASE}/clock"
 count=$(($(cat "${STUB_CASE}/count") + 1))
 echo "${count}" >"${STUB_CASE}/count"
 last=$(cat "${STUB_CASE}/last")
@@ -38,7 +44,21 @@ if [[ "$(cat "${STUB_CASE}/${count}.json")" == FAIL ]]; then
 fi
 cat "${STUB_CASE}/${count}.json"
 STUB
-chmod +x "${stub_dir}/gh"
+
+cat >"${stub_dir}/date" <<'STUB'
+#!/usr/bin/env bash
+if [[ "$*" != "+%s" ]]; then
+	echo "stub date: unexpected arguments: $*" >&2
+	exit 1
+fi
+cat "${STUB_CASE}/clock"
+STUB
+
+cat >"${stub_dir}/sleep" <<'STUB'
+#!/usr/bin/env bash
+echo $(($(cat "${STUB_CASE}/clock") + $1)) >"${STUB_CASE}/clock"
+STUB
+chmod +x "${stub_dir}/gh" "${stub_dir}/date" "${stub_dir}/sleep"
 
 failures=0
 cases=0
@@ -49,9 +69,11 @@ function indent() {
 	printf '  %s\n' "${text//$'\n'/$'\n'  }"
 }
 
-# expect <name> <expected exit> <max_wait_sec> <fixture>... -- <expected line>...
-# Runs the script against the fixtures, one per `gh pr view` call, and checks
-# the exit code and that each expected line is present in the output.
+# [INTERVAL=n] [GRACE=n] [LATENCY=n] expect <name> <expected exit> <max_wait_sec> <fixture>... -- <expected line>...
+# Runs the script against the fixtures, one per `gh pr view` call, with
+# interval_sec INTERVAL (default 1), BLOCKED_GRACE GRACE (default 2) and each
+# call taking LATENCY seconds (default 0), and checks the exit code and that
+# each expected line is present in the output.
 function expect() {
 	local name="$1"
 	local expected_status="$2"
@@ -70,9 +92,11 @@ function expect() {
 	shift
 	echo 0 >"${case_dir}/count"
 	echo "${n}" >"${case_dir}/last"
+	echo 1000 >"${case_dir}/clock"
 
-	output=$(PATH="${stub_dir}:${PATH}" STUB_CASE="${case_dir}" BLOCKED_GRACE=2 PR_APPROVER_LOGIN="" \
-		bash "${target}" 1 1 "${max_wait}" 2>&1) || status=$?
+	output=$(PATH="${stub_dir}:${PATH}" STUB_CASE="${case_dir}" STUB_LATENCY="${LATENCY:-0}" \
+		BLOCKED_GRACE="${GRACE:-2}" PR_APPROVER_LOGIN="" \
+		bash "${target}" 1 "${INTERVAL:-1}" "${max_wait}" 2>&1) || status=$?
 
 	if [[ "${status}" -ne "${expected_status}" ]]; then
 		echo "FAIL: ${name}: expected exit ${expected_status}, got ${status}" >&2
@@ -161,18 +185,35 @@ expect "fails on every call of the slice" 1 2 \
 
 expect "fails at the end after a success" 2 2 \
 	"$(pr BLOCKED "${jobs_running}")" \
-	"$(pr BLOCKED "${jobs_running}")" \
 	FAIL -- \
-	'[elapsed 1s] ACTION=wait; retrying in 1s' \
+	'[elapsed 0s] ACTION=wait; retrying in 1s' \
+	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
 	'wait-pr-actionable.sh: timed out after 2s (last call failed; reporting the last successful state)' \
 	'ACTION=wait'
 
-expect "a failed call keeps the blocked grace" 0 2 \
+expect "a failed call keeps the blocked grace" 0 3 \
 	"$(pr BLOCKED "${jobs_done},${ci_done}")" \
 	FAIL \
 	"$(pr BLOCKED "${jobs_done},${ci_done}")" -- \
 	'[elapsed 1s] pr-status.sh failed; retrying in 1s' \
 	'ACTION=blocked' 'mergeStateStatus=BLOCKED'
+
+LATENCY=5 expect "call latency alone passes the deadline" 2 3 \
+	"$(pr BLOCKED "${jobs_running}")" \
+	"$(pr CLEAN "${jobs_done},${ci_done}")" -- \
+	'wait-pr-actionable.sh: timed out after 3s (last ACTION=wait)' \
+	'ACTION=wait'
+
+INTERVAL=60 GRACE=60 LATENCY=46 expect "a 60 120 slice meets the blocked grace" 0 120 \
+	"$(pr BLOCKED "${jobs_done},${ci_done}")" -- \
+	'[elapsed 46s] ACTION=blocked; retrying in 60s' \
+	'ACTION=blocked' 'mergeStateStatus=BLOCKED'
+
+INTERVAL=60 GRACE=60 LATENCY=46 expect "a 60 60 slice holds one observation" 2 60 \
+	"$(pr BLOCKED "${jobs_done},${ci_done}")" -- \
+	'[elapsed 46s] ACTION=blocked; retrying in 14s' \
+	'wait-pr-actionable.sh: timed out after 60s (last ACTION=blocked)' \
+	'ACTION=blocked'
 
 if [[ "${failures}" -gt 0 ]]; then
 	echo "wait-pr-actionable: ${failures} failure(s) in ${cases} cases" >&2

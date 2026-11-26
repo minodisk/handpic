@@ -151,17 +151,20 @@ Hold six integer counters — `address_rounds`, `wait_timeouts`,
 variables). Each iteration, run this single command.
 
 ```bash
-<wait-pr-actionable command> <PR-number> 60 60
+<wait-pr-actionable command> <PR-number> 60 120
 ```
 
-The `60 60` (poll every 60 s, at most 60 s of sleeps) makes one slice: two
-`pr-status.sh` calls 60 s apart, which also covers the script's 60 s
-`BLOCKED_GRACE`. The harness moves a foreground command to the background
-after about 180 s, and this slice returns by itself before that: measured on
-the Windows host with a slow `api.github.com` (2026-11-23), one call took up to
-about 46 s, so a slice takes about 70-150 s. Pass the Bash tool's `timeout` of
-`600000` (ms) explicitly on every run: the default foreground timeout can be as
-low as 120 s, shorter than a slow slice.
+The `60 120` (poll every 60 s, a deadline of 120 s of real time, the
+`pr-status.sh` calls included) makes one slice: a call at 0 s and another 60 s
+after the first returns, two observations at least 60 s apart, which covers the
+script's 60 s `BLOCKED_GRACE` whenever the first call takes under 60 s. The
+slice lasts 120 s, plus at most the call in flight at the deadline. The harness
+moves a foreground command to the background after about 180 s, and this slice
+returns by itself before that: measured on the Windows host with a slow
+`api.github.com` (2026-11-23), one call took up to about 46 s, so a slice takes
+120 s to about 152 s. Pass the Bash tool's `timeout` of `600000` (ms)
+explicitly on every run: the default foreground timeout can be as low as 120 s,
+shorter than a slice.
 
 **Run every script under `.claude/skills/**/scripts` exactly as written in its
 code block, as a standalone Bash call** — the `<wait-pr-actionable command>`
@@ -212,7 +215,7 @@ Handle the exit code as follows.
     - `review_required_timeouts < 4` (the first slices; hold off until the
       fourth so a normal post-push review wait is not misdetected): treat it as
       ordinary waiting (increment `wait_timeouts` and re-run)
-    - `review_required_timeouts >= 4` (roughly 5–10 minutes stalled): run
+    - `review_required_timeouts >= 4` (about 8 minutes stalled, 4 × 120 s): run
       `head-reviewed-by-copilot.sh` once to check the reviewer's state:
 
       ```bash
@@ -254,15 +257,15 @@ Handle the exit code as follows.
         non-zero** (aborted because a Team reviewer is pending, say), **treat
         that as ordinary waiting too** (increment `wait_timeouts` and re-run)
   - Otherwise increment `wait_timeouts` and re-run as-is while
-    `wait_timeouts < 15` (about 20–35 minutes in total, by the slice's
-    70–150 s). Once it is reached, treat
+    `wait_timeouts < 15` (about 30 minutes in total: 15 slices × 120 s,
+    whatever the network speed). Once it is reached, treat
     it as checks / the approver being stalled and return `aborted` (reason:
     `wait_timeout`) with the last observed state
 - **1**: error: `pr-status.sh` failed on every call of the slice. The
   script has already retried it every 60 s within the slice (a network error,
   a short `api.github.com` outage), so one exit 1 stands for an outage as long
-  as a slice (a slice that ends on a failed call after a success exits 2). Increment `pr_status_failures` and re-run. If
-  `pr_status_failures > 5` it may be a persistent error (expired auth,
+  as a slice, 120 s (a slice that ends on a failed call after a success exits 2). Increment `pr_status_failures` and re-run. If
+  `pr_status_failures > 5` (six slices, about 12 minutes of failures) it may be a persistent error (expired auth,
   insufficient permissions, bad arguments), so return `aborted` (reason:
   `pr_status_failure`) with the last stderr
 
