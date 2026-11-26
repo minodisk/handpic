@@ -133,4 +133,4 @@ gate frames, `_DSC1899` and `_DSC1524` among them, and leaves the about 20
 twins between 0.3 and 0.532 double-counted. Only the union can take such a
 cut; replacing at it would add 18 or 42 double counts.
 
-No cut was chosen and no code was changed; see `learnings.md`.
+The user chose the union at 0.55 on 2026-11-27: it lowers 11 gate frames, all the same face, and drops no person, while the twins under 0.532 stay double-counted (see `learnings.md` and the reworded `todo.md` item).
