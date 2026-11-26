@@ -19,10 +19,10 @@
 - So the fallback shipped: `thumbs::read` warns on any read error other
   than rusqlite's `Query returned no rows` (`no_row`, tested against a real
   `Index::thumbnail` miss so a rusqlite message change fails the test), and
-  `Handpic::thumbnail` warns on a `NotScanned` answer for a cell the scan
-  reported, `retried=true` for the expected first answer from a read that
-  ran before the commit, `retried=false` for a cell left missing until the
-  pass ends (`Strip::after_ready`, kept in the new `reported` set because
+  `Handpic::thumbnail` logs a `NotScanned` answer for a cell the scan
+  reported: `retried=true` at `info` for the expected first answer from a
+  read that ran before the commit, `retried=false` at `warn` for a cell left
+  missing until the pass ends (`Strip::after_ready`, kept in the new `reported` set because
   `ready` is consumed by the first answer).
 - `python3` in Git Bash hung, as `CLAUDE.md` warns; use `perl` or
   `mise x -- python`.

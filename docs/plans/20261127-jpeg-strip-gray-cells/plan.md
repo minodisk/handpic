@@ -131,7 +131,7 @@ Suspects, none confirmed:
 No test reproduced the fault, so Step 1 shipped the fallback: a warn line
 for a thumbnail read error other than no row (`crates/app/src/thumbs.rs`,
 `read` and `no_row`) and one for a `NotScanned` answer on a cell the scan
-reported committed (`crates/app/src/main.rs`, `thumbnail`, through
+reported committed (`warn` only when it was not already retried, `info` otherwise) (`crates/app/src/main.rs`, `thumbnail`, through
 `Strip::after_ready` in `crates/app/src/strip.rs`). The causes above stay
 unconfirmed; what was tried is in [learnings.md](./learnings.md).
 
@@ -146,3 +146,5 @@ unconfirmed; what was tried is in [learnings.md](./learnings.md).
   viewport centre (`strip.rs:276-290`). It does not explain the gray cells.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete (diagnostics fallback; device re-run pending in todo.md)

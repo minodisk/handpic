@@ -4510,10 +4510,16 @@ impl Handpic {
             }
             Read::NotScanned => {
                 if let Some(retried) = self.strip.after_ready(index) {
-                    log::warn!(
-                        "thumbnail not scanned after the scan reported it: path={} retried={retried}",
-                        self.files[index].display()
-                    );
+                    let path = self.files[index].display();
+                    if retried {
+                        log::info!(
+                            "thumbnail not scanned after the scan reported it: path={path} retried=true"
+                        );
+                    } else {
+                        log::warn!(
+                            "thumbnail not scanned after the scan reported it: path={path} retried=false"
+                        );
+                    }
                 }
                 self.strip.answer(index, Answer::NotScanned);
             }
