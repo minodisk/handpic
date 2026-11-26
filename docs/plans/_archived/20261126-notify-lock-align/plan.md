@@ -19,7 +19,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 ## Purpose
 
-The engine's `treewatch`, `watch` and `rename` tests run in CI on the root `Cargo.lock`, which resolves `notify` 8.2.0, while the shipped app resolves `notify` 8.2.2 through `crates/app/Cargo.lock`. The folder rename depends on a notify-internal ordering on Windows (`configure` queuing behind `Unwatch`, the `watch::settle` barrier), so the tests that guard it should run on the shipped version. The user decided to move the root lock to 8.2.2 (rather than pin the app lock to 8.2.0). Background: [the measurement plan](../_archived/20261123-todo-measurements/plan.md) (Trade-offs, "Item 2: which lock is right") and `docs/agents/shared-crates.md` ("A `notify` watch on Windows pins the watched folder's ancestors, not the folder itself").
+The engine's `treewatch`, `watch` and `rename` tests run in CI on the root `Cargo.lock`, which resolves `notify` 8.2.0, while the shipped app resolves `notify` 8.2.2 through `crates/app/Cargo.lock`. The folder rename depends on a notify-internal ordering on Windows (`configure` queuing behind `Unwatch`, the `watch::settle` barrier), so the tests that guard it should run on the shipped version. The user decided to move the root lock to 8.2.2 (rather than pin the app lock to 8.2.0). Background: [the measurement plan](../20261123-todo-measurements/plan.md) (Trade-offs, "Item 2: which lock is right") and `docs/agents/shared-crates.md` ("A `notify` watch on Windows pins the watched folder's ancestors, not the folder itself").
 
 Once done, CI's three-platform `test` job exercises the engine's watcher and rename tests on the `notify` version the app ships, and the guides no longer describe two different versions.
 
