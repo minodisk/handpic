@@ -30,14 +30,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 
 - [ ] Decide whether Move to Trash leaves a shared `.xmp` in place (or copies it into the Trash) when a RAW sharing it stays, and apply it with a test.
 
-### Core: load-sensitive timing bound in `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit`
-
-The test in `crates/core/src/scan.rs` asserts a cancel ends within 1 s. It took 1.14 s and 1.10 s in two of three `mise run ci:local` runs on Windows while the full `handpic-core` suite ran, and passes alone in 0.57 s. `docs/agents/shared-crates.md` ("A cancel or stop test must not bound the scan by wall-clock time") already warns against this shape. Source: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/learnings.md`, Step 1.
-
-#### TODO
-
-- [ ] Reproduce under full-suite load, then make the test wait on an event rather than wall-clock time (or loosen the bound with a reasoned margin). Done when `mise run ci:local` passes on Windows several runs in a row without it failing.
-
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
 #### Background
