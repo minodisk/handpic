@@ -22,13 +22,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 
 - [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
 
-### Engine: Move to Trash takes a `.xmp` shared with a RAW that stays
-
-`sidecar-and-keymap-decisions` Step 3 made a date split and a file rename copy a `.xmp` shared by RAWs of one stem (`a.ARW` and `a.NEF`), so neither loses it. Moving one of them to the Trash still takes the shared `.xmp` with it (`trash::groups_of`), so the RAW that stays loses its sidecar. The plan left it out of scope. Plan: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/plan.md` (Trade-offs and risks). Files: `crates/engine/src/trash.rs` (`groups_of`), `crates/engine/src/rename.rs` (`shared_xmps`).
-
-#### TODO
-
-- [ ] Decide whether Move to Trash leaves a shared `.xmp` in place (or copies it into the Trash) when a RAW sharing it stays, and apply it with a test.
 
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 

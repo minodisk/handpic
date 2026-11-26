@@ -445,6 +445,13 @@ test restore's `restored` list for it, not just that the files return.
   That keeps a sidecar from going to the Trash with a same-stem file of
   another folder. It moves no index rows: the next rescan's reconcile drops
   the gone rows.
+- A `.xmp` shared by stem with a RAW of the listing that is not among the
+  paths stays in place, and one several moved RAWs share is moved once,
+  after all of them went, its `Trashed` record placed after the last of
+  them so `restore` and `redo` still read each RAW followed by its sidecars.
+  `trash::run_listed` holds this rule for both `trash_listed` and
+  `delete_for_good`; a foreign path never stands for a RAW of the folder.
+  Source: `docs/plans/20261126-trash-keeps-shared-xmp/plan.md`.
 - Once the engine has recorded the run, the app must keep its undo entry
   even if the open folder changed meanwhile; only the strip refresh is
   conditional on the open folder being the run's folder.

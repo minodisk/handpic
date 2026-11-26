@@ -456,7 +456,11 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   rejects, pressing `CmdOrCtrl+A` and choosing it moves the folder's
   rejects. Each RAW goes with the sidecars sitting next to it — both `.xmp`
   and `.ARW.dop` when both are there, no matter which format is currently
-  selected; in a view-only JPEG folder each JPEG goes alone. It asks first
+  selected; in a view-only JPEG folder each JPEG goes alone. A `.xmp` that
+  another RAW of the same name (`FOO.ARW` and `FOO.DNG` sharing `FOO.xmp`)
+  still uses stays in the folder: it goes only when every RAW sharing it
+  goes in the same move, and the undo of a move that left it brings back
+  only the RAW and its `.ARW.dop`. It asks first
   with the count alone ("Move 3 files to the Trash?"): `Move to Trash` moves
   them, `Cancel` or `Escape` leaves everything untouched. While they go,
   the status line counts them (`moving to Trash 12 / 300`; on Windows it
@@ -488,7 +492,8 @@ title bar, as a window of pages (`Sidecar`, `Culling`, `Keyboard Shortcuts`,
   listed as an error), and that move is undoable in turn.
 - **Delete Permanently…**: the item below `Move to Trash…` in the strip's
   right-click menu (`Delete N Files Permanently…` for a selection of N) deletes
-  the same files, each RAW with the sidecars next to it and a JPEG alone,
+  the same files, each RAW with the sidecars next to it and a JPEG alone (a
+  `.xmp` shared with a RAW that stays is kept, as for a move),
   without going through the Trash, so the disk space comes back at once. It
   cannot be undone: nothing goes to the Trash and the undo history has no step for
   it. The dialog says so and opens on `Cancel`, and neither `Enter` nor `Space`
