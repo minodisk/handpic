@@ -349,11 +349,19 @@ copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
 `gpui-pre-reqwest`), and the Apache-2.0 text of
 their `LICENSE-APACHE`), `crates/app/LICENSE-lucide`, the themes' `LICENSE`
 as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`
-and `LICENSE-mediapipe`, and Handpic's own license texts, the root
-`LICENSE-MIT` and `LICENSE-APACHE` (Handpic is `MIT OR Apache-2.0`).
+and `LICENSE-mediapipe`, `crates/core/LICENSE-pillow`, and Handpic's own
+license texts, the root `LICENSE-MIT` and `LICENSE-APACHE` (Handpic is
+`MIT OR Apache-2.0`).
+
+`crates/core/src/resample.rs` ports PIL's bilinear and bicubic resampling.
+Decided on 2026-11-27, the conservative reading: the port is treated as
+derived from Pillow, so it ships Pillow's MIT-CMU notice,
+`crates/core/LICENSE-pillow` (a header naming the port, then Pillow's
+upstream `LICENSE` unchanged).
 
 - Rule: every package gets its notices from `notices.sh`, never a list of
-  its own; a new bundled asset under another license adds its notice there.
+  its own; a new bundled asset under another license adds its notice there,
+  and so does a port of third-party code.
 - Rule: a version bump of the GPUI crates re-checks `NOTICE-gpui`'s crate
   list, versions and copyright lines against the crates' `LICENSE-APACHE`.
 

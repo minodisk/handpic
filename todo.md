@@ -1408,18 +1408,6 @@ Files: `LICENSE-MIT`, `LICENSE-APACHE`.
 
 - [ ] After the merge to `main`, run `gh api repos/minodisk/handpic --jq .license`. Done when it is no longer `null` and its `spdx_id` is `Apache-2.0` (not `NOASSERTION`), and the repository page's sidebar lists both licenses. Re-check after a few minutes before concluding it failed.
 
-### Core: check whether the PIL resampling port needs a Pillow notice
-
-#### Background
-
-`crates/core/src/resample.rs` is a reimplementation of PIL's bilinear and bicubic resampling filters. The dual-license work (MIT OR Apache-2.0) did not assess whether it needs a Pillow (MIT-CMU) notice, and the shipped `licenses/` folder and the READMEs' third-party list have none. `crates/core/src/sequence.rs` derives from `minodisk/lapse` (MIT, same author) and needs no notice. Plan: `docs/plans/_archived/20261124-dual-license/plan.md`.
-
-Files: `crates/core/src/resample.rs`, `tools/package/notices.sh`, `README.md`, `README.ja.md`.
-
-#### TODO
-
-- [ ] Decide whether `resample.rs` is a derived work of Pillow. If it is, add a Pillow notice file, list it in `tools/package/notices.sh` and name it in both READMEs' License sections. Done when the decision and any added notice are recorded in `docs/agents/app.md`'s license section.
-
 ### App: real-device check of the Windows one-line install script (install-scripts)
 
 #### Background

@@ -199,6 +199,7 @@ Handpic は次のいずれかのライセンスで提供します。どちらを
 
 - YuNet 顔検出モデル: MIT、[crates/core/models/LICENSE](./crates/core/models/LICENSE)
 - MediaPipe Face Landmarker モデルと移植した顔ジオメトリのデータ: Apache-2.0、[crates/core/models/LICENSE-mediapipe](./crates/core/models/LICENSE-mediapipe)
+- Pillow から移植したリサンプリング: MIT-CMU、[crates/core/LICENSE-pillow](./crates/core/LICENSE-pillow)
 - gpui-kit から取り込んだテーマ: Apache-2.0（Harper と Fahrenheit は CC BY-SA 4.0）、[crates/app/themes/LICENSE](./crates/app/themes/LICENSE)
 - GPUI のクレート: Apache-2.0、[crates/app/packaging/NOTICE-gpui](./crates/app/packaging/NOTICE-gpui)
 - Lucide のアイコンとそれを元にした 2 つのアイコン: ISC、[crates/app/LICENSE-lucide](./crates/app/LICENSE-lucide)
