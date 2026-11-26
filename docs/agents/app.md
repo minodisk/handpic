@@ -924,15 +924,19 @@ pushes' `release-please` runs nor another candidate.
   `UPDATE_SIGNING_KEY` by name, which GitHub resolves to the environment's
   secret inside the legs; without that pass the secret is empty there. A
   branch dispatch of `release.yml` is rejected at `guard` before any step
-  runs, with GitHub's environment protection annotation (expected wording,
-  to be confirmed by verification (a): "Branch "<branch>" is not allowed to
-  deploy to release due to environment protection rules."); a branch dry run
+  runs, with GitHub's environment protection annotation (measured on 2026-11-27,
+  run 45846600132: "Branch "<branch>" is not allowed to deploy to release
+  due to environment protection rules."); a branch dry run
   is `gh workflow run package.yml --ref <branch> -f
-  update_test_repo=<owner/name>` with the test key. Both directions are
-  verified: (a) a `release.yml` dispatch on a branch fails at `guard` with
-  no step run and `build` and `publish` skipped; (b) a release candidate
-  dispatched on `main` publishes and `verify-release.sh` reports
-  `STATUS=ok`. The environment, its policy and its secret are the user's to
+  update_test_repo=<owner/name>` with the test key. Verified (measured
+  2026-11-27, run 45846600132): a `release.yml` dispatch on a branch fails
+  at `guard` with no step run and `build`, `publish` and `release-please`
+  skipped, from the branch policy alone (`deployment: false`). An empty
+  environment name means "no environment" (measured, run 45846638280: the
+  four legs of a plain `package.yml` dispatch started). Not yet verified
+  until the user deletes the repository-level secret and cuts a release
+  candidate on `main`: that `verify-release.sh` reports `STATUS=ok`, which
+  proves the legs sign with the `release` environment's secret. The environment, its policy and its secret are the user's to
   change; an agent runs such a `gh api` or `gh secret` command only when
   the user approves it. Still not covered: the key reaches four runners
   that run third-party actions, there is no required reviewer, and anyone

@@ -242,4 +242,5 @@ After the merge:
 
 ## Progress
 
-- (2026-11-26) Step 1 complete. Still pending, per `learnings.md`: verification (a), the empty-environment-name check, and the manual deletion of the repository secret after the merge.
+- (2026-11-26) Step 1 complete.
+- (2026-11-27) Verification (a) and the empty-environment-name check measured on the PR branch (runs 45846600132, 45846638280; see `learnings.md`). Still pending, the user's: the repository secret's deletion after the merge and verification (b), filed in `todo.md`.

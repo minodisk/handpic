@@ -1516,3 +1516,18 @@ The todo-ondemand-eyes-of feature fixed `CLAUDE.md` to name `overlay::detect` an
 #### TODO
 
 - [ ] In those four files, replace `faces_of` / `eyes_of` as the callers' names with `overlay::detect` / `overlay::judge`, or mark them as the removed Tauri app's commands where the text is history. Keep the `eyes_of` mentions in other todo.md items, which are history.
+
+### Release: real-device check that a release from `main` signs with the `release` environment's key (release-key-environment)
+
+#### Background
+
+release-key-environment moved the production updater key `UPDATE_SIGNING_KEY` from a repository secret into the `release` GitHub environment, whose deployment branch policy allows only `main`. The `guard` job and the three signing legs of `package.yml` now read it through that environment. A branch dispatch of `release.yml` is rejected by the environment protection. That rejection was measured on the PR branch, and so was the empty-environment-name case for a plain `package.yml` dispatch. What was never exercised is a real release from `main` signing with the environment's secret. That needs the key registered in the environment, the repository-level secret deleted after the merge, and a real dispatch. An agent cannot run it, because no agent may touch the key. Plan: `docs/plans/_archived/20261126-release-key-environment/plan.md` (Verification (b)).
+
+Files: `.github/workflows/release.yml`, `.github/workflows/package.yml`, `.claude/skills/release/scripts/verify-release.sh`
+
+#### TODO
+
+- [ ] After the merge, delete the repository-level secret with `gh secret delete UPDATE_SIGNING_KEY --repo minodisk/handpic`, then confirm with `gh secret list --repo minodisk/handpic` that only the `release` environment's copy remains (`gh secret list --env release --repo minodisk/handpic`).
+- [ ] On `main`, dispatch a release candidate with `gh workflow run release.yml --ref main -f version=<the next unused x.y.z-rc.N>`. Then run `mise exec cargo:zipsign@0.2.2 -- bash .claude/skills/release/scripts/verify-release.sh v<version>`. Expected: `guard` passes and `STATUS=ok`, which shows the legs signed with the `release` environment's secret. Then turn the "Not yet verified" sentence of the decision Rule in `docs/agents/app.md` into "Verified".
+
+---
