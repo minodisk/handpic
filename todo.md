@@ -1228,12 +1228,11 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 #### Background
 
-`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency). `todo-four-closeouts` (`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`) saw it exceed the limit: on #1272 the "Lint and test the app" step had passed (1103 tests) and the job was cancelled in "Bundle and check Handpic.app", which recompiles the gpui crates, and a rerun passed. The same job was also the last to finish on #1256 and #1260. `todo-ten-closeouts` (`docs/plans/_archived/20261123-todo-ten-closeouts/plan.md`) saw it again: the `app (macos-latest)` job was cancelled at the 30-minute limit on #1267 and #1286, and a rerun passed at 28m33s, 1m27s under the limit. So a cold-cache run now exceeds 30 minutes more often than not, and the limit is no longer a margin to watch but a recurring failure.
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compiled in a second variant (plain for the bundle step, `test-support` for clippy and tests), and cold-cache `app (macos-latest)` runs took 24 to 29.5 minutes against `timeout-minutes: 30` and were cancelled at the limit on #1267, #1272 and #1286. `macos-ci-bundle-reuse` (`docs/plans/20261127-macos-ci-bundle-reuse/plan.md`) made the bundle step build with the `screenshot` feature, so it reuses the test build's dependencies and compiles only `handpic-app`, and kept the limit at 30 (see "The macOS bundle step reuses the test build" in `docs/agents/app.md`). The saving is expected to bring a cold run to about 17 to 21 minutes but was not seen on a cold run yet. Files: `.github/workflows/ci.yml` (the `app` job), `mise.toml` (`app:bundle:macos`).
 
 #### TODO
 
-- [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
-- [ ] Raise the job's `timeout-minutes` in `.github/workflows/ci.yml` or avoid the bundle step's second gpui build (the 28m33s pass leaves no room to wait). Done when a cold-cache macOS app job finishes inside its limit on three consecutive PRs.
+- [ ] A cold-cache `app (macos-latest)` job (one whose `actions/cache` step restores nothing) finishes inside the 30-minute limit on three consecutive PRs. If one does not, raise `timeout-minutes` in `.github/workflows/ci.yml` and record it in `docs/agents/app.md`.
 
 ---
 

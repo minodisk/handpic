@@ -113,18 +113,25 @@ cargo test
 """
 
 [tasks."app:bundle:macos"]
-description = "Build Handpic.app from the GPUI app under crates/app/target (macOS; release, or the profile given as its argument, e.g. `debug`)"
+description = "Build Handpic.app from the GPUI app under crates/app/target (macOS; release, or the profile given as its argument, e.g. `debug`, with the cargo features `--features` gives, none by default)"
 dir = "crates/app"
 tools = { rust = { version = "1.98.1", components = "rustfmt,clippy" } }
 shell = "bash -c"
-usage = 'arg "[profile]" default="release"'
+usage = '''
+arg "[profile]" default="release"
+flag "--features <features>" help="Cargo features to build the app with"
+'''
 run = """
 set -euo pipefail
 profile="${usage_profile:-release}"
+set --
+if [ -n "${usage_features:-}" ]; then
+  set -- --features "$usage_features"
+fi
 if [ "$profile" = debug ]; then
-  cargo build
+  cargo build "$@"
 else
-  cargo build --profile "$profile"
+  cargo build --profile "$profile" "$@"
 fi
 app="target/$profile/Handpic.app"
 rm -rf "$app"
