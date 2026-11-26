@@ -154,3 +154,5 @@ Taken at plan approval (2026-11-26), the recommended option each time:
   keep their assertions as they are so they still pin the per-file outcome.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete

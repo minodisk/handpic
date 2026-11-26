@@ -1604,17 +1604,15 @@ Files: `install.ps1`.
 - [ ] On the same Windows machine, force a failure (for example a wrong digest in a local copy of `install.ps1` piped to `iex`). Expect the error to print and the shell to stay open. Expect `$ErrorActionPreference` and `$ProgressPreference` to be unchanged in the session afterwards.
 - [ ] On Windows 11 on Arm (if one is at hand), run the same one-liner. Expect the x64 setup to install and start (the setup allows `x64compatible`).
 
-### Engine: Delete Sidecars… still moves one sidecar per shell operation on Windows
+### Engine: real-device check of the chunked Delete Sidecars… move on Windows (chunked-sidecar-delete)
 
 #### Background
 
-`foldersidecars::delete` still moves each sidecar alone (`trash::run` with `trash_one`) on Windows. The `todo-trash-quit-fixes` plan measured the same per-operation cost for the Undo of Move to Trash at about 140 ms a file, against about 6.5-7 ms a file once restored in chunks (600 files: 83.9 s and 88.3 s before, 3.99 s and 3.82 s after). Seen while planning that plan, outside its five items. Plan: `docs/plans/_archived/20261123-todo-trash-quit-fixes/plan.md`. Files: `crates/engine/src/foldersidecars.rs` (`delete`), `crates/engine/src/trash.rs` (`run`, `run_chunked`, `trash_one`).
+`foldersidecars::delete_run` now moves the sidecars through `trash::move_groups`, so `trash::run_chunked` on Windows: up to `CHUNK` (100) sidecars per shell operation, with the per-file fallback after a failed chunk. Before this it moved one sidecar per shell operation. The unit tests cover the outcome with fake movers: the moved and failed files, the recorded run, each `Trashed`'s `owner` and `cleared`. They never reach the real Recycle Bin, and the Windows timing and the progress circle were never exercised. The earlier per-operation cost was about 140 ms a file, against about 6.5-7 ms a file once chunked (the `todo-trash-quit-fixes` measurement for the Undo of Move to Trash). Plan: `docs/plans/_archived/20261126-chunked-sidecar-delete/plan.md`. Files: `crates/engine/src/foldersidecars.rs`, `crates/engine/src/trash.rs`.
 
 #### TODO
 
-- [ ] Route the delete through a chunked move like `trash_listed`'s `run_chunked`, keeping the per-sidecar `(done, total)` progress and each `Trashed`'s `owner`.
-- [ ] Add a unit test with a fake mover showing the outcome (moved and failed files, the recorded run, each `Trashed`'s `owner`) matches the per-file path.
-- [ ] On Windows, record a timing of a large sidecar delete before and after, and check that the progress circle still moves.
+- [ ] On Windows 11, on a folder of a few hundred sidecars, run `Delete Sidecars…`. Expect the move to take about 7 ms a file (one shell operation per 100 sidecars) rather than about 140 ms, and record the timing. Expect the status row's progress circle to step per chunk and end full. Then `Undo` and `Redo` (`Ctrl+Z` and its redo key): expect the sidecars to be restored and then moved to the Recycle Bin again.
 
 ### App: real-device check of the group threshold setting (all-faces-check Step 4)
 
