@@ -1121,19 +1121,6 @@ Files: `crates/app/src/context.rs`, `crates/app/src/main.rs`.
 - [ ] On Windows, run `mise run app:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
 
-### App: a held open-and-collapse click leaves the row expanded when a rename moves the folder
-
-#### Background
-
-`native-tree-no-chevron` made a click on an expanded row that is not open open the folder and collapse the row. `tree_row_clicked` collapses the row and sets `Handpic::reveal_collapsed`, and `reveal` skips the chain's last step only when the path matches it through `tree::relation`. When the gate holds the open (`deferred_open`, `self.gate.in_flight()`), a rename that moves that folder before the deferred reveal runs makes the stored path no longer match, so `reveal` expands the end and the row ends up expanded. Local review noted this and no test covers it. `crates/app` has no GPUI window test. Plan: `docs/plans/_archived/20261117-native-tree-no-chevron/plan.md`.
-
-Files: `crates/app/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collapsed`, `deferred_open`), `crates/app/src/tree.rs` (`relation`), `crates/app/src/folderops.rs`.
-
-#### TODO
-
-- [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
-- [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.
-
 ### App: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
 
 #### Background
