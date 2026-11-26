@@ -28,8 +28,8 @@ its read. This plan splits the byte read from the decode so a read slot covers
 the read alone, and measures what a folder of HDR PQ CR3 files then costs at
 cap 2. It closes the `todo.md` item "Core: split the disk read from
 `hevc::to_jpeg` so a read slot covers the read alone", filed by
-[the preview read gate plan](../_archived/20261107-preview-read-gate/plan.md)
-(see its [learnings](../_archived/20261107-preview-read-gate/learnings.md),
+[the preview read gate plan](../20261107-preview-read-gate/plan.md)
+(see its [learnings](../20261107-preview-read-gate/learnings.md),
 "Deferred issues").
 
 ## Steps
