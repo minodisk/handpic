@@ -15,6 +15,10 @@ image to `crates/core/src/hevc.rs` to decode); no maker-specific parsing lives
 there. For a new Sony MakerNote field, also read
 [Sony MakerNote fields: verify each tag's type and model `Condition` in Sony.pm directly](#sony-makernote-fields-verify-each-tags-type-and-model-condition-in-sonypm-directly-hit).
 
+No parser for a further RAW container is planned for now (user decision,
+2026-11-26): the major formats are supported, and Pentax bodies can write
+DNG, which `arw.rs` already reads. It is reconsidered on request.
+
 The tags follow [`shared-crates.md`](./shared-crates.md): **Hit** broke something
 here, **Measured** steered a design decision, **Inferred** comes from sources
 or docs only.

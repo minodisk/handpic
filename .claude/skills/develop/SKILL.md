@@ -347,6 +347,13 @@ Agent(
 Return value: the terminal state, the commit hash, the list of changed files,
 and the acceptance-criteria check results.
 
+When a step reverts an earlier change, the `implementer` prompt carries these
+rules. Prefer `git show <commit> -- <paths> | git apply -R --index`. When a
+file must be restored from an old commit, first list the later changes with
+`git log <base>..origin/main -- <file>`, re-apply the unrelated later hunks,
+and confirm with `git diff` (a plain `git checkout <base> -- <file>` once
+dropped an unrelated later PR's hunks).
+
 If the terminal state is `LOCAL_CHECK_FAILED` (it tried the local checks three
 times, gave up, and stopped without committing), do not go to 2.3: report the
 situation to the user and ask for direction.
