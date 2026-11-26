@@ -16,6 +16,7 @@ use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, F
 use crate::fullsharp::full_eye_sharpnesses;
 use crate::reader::{read_full_undecoded, read_metadata, read_preview_undecoded};
 use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
+
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
 
