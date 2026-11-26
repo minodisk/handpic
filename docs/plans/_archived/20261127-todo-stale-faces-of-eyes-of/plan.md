@@ -118,3 +118,5 @@ outright that the name was a command of the removed Tauri app.
   it is that plan's own record, and the todo item names four files only.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
