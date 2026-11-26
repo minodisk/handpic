@@ -292,16 +292,17 @@ pub fn delete_preview(
     }
 }
 
-/// Move every sidecar of `doomed` with `mover`, never stopping at a failure,
-/// which is reported under the RAW's path (the meta pane keys its errors by
-/// the file shown) and leaves the sidecar where it is. Returns the summary
-/// (`moved` lists the sidecars), every file moved in order with the RAW it
-/// belongs to (`Trashed::owner`, which a redo clears again), for `Runs`, and
-/// the RAWs that lost a sidecar, whose rows are cleared.
+/// Move every sidecar of `doomed` with `mover`, given one sidecar-only
+/// `Group` per sidecar (`trash::run`, or `trash::run_chunked` on Windows),
+/// which never stops at a failure. A failure is reported under the RAW's
+/// path (the meta pane keys its errors by the file shown) and leaves the
+/// sidecar where it is. Returns the summary (`moved` lists the sidecars),
+/// every file moved in order with the RAW it belongs to (`Trashed::owner`,
+/// which a redo clears again), for `Runs`, and the RAWs that lost a sidecar,
+/// whose rows are cleared.
 pub fn delete(
     doomed: Vec<Doomed>,
-    mover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
-    progress: impl FnMut(usize, usize),
+    mover: impl FnOnce(Vec<Group>) -> (trash::Summary, Vec<Trashed>),
 ) -> (trash::Summary, Vec<Trashed>, Vec<String>) {
     let raw_of: Vec<(String, String)> = doomed
         .iter()
@@ -320,7 +321,7 @@ pub fn delete(
             sidecars: Vec::new(),
         })
         .collect();
-    let (mut summary, mut moved) = trash::run(groups, mover, progress);
+    let (mut summary, mut moved) = mover(groups);
     for trashed in &mut moved {
         let path = trashed.path.to_string_lossy();
         trashed.owner = raw_of
@@ -359,7 +360,9 @@ pub fn delete(
 /// running scan and holds that refusal across the call (the app's
 /// idle gate), and drains the sidecar writer first, since a judgment still in
 /// its debounce window would mint a sidecar right after the delete.
-/// `progress` is called after each sidecar with the sidecars done and their
+/// The sidecars move one at a time, or up to `trash::CHUNK` per shell
+/// operation on Windows (`trash::move_groups`). `progress` is called after
+/// each sidecar, or each chunk on Windows, with the sidecars done and their
 /// total.
 pub fn delete_run(
     dir: &str,
@@ -369,7 +372,8 @@ pub fn delete_run(
     progress: impl FnMut(usize, usize),
 ) -> Result<trash::Summary, String> {
     let doomed = doomed(dir, format)?;
-    let (mut summary, moved, cleared) = delete(doomed, trash::trash_one, progress);
+    let (mut summary, moved, cleared) =
+        delete(doomed, |groups| trash::move_groups(groups, progress));
     summary.run_id = runs.record(moved);
     if let Some(index) = index {
         index::lock(index).clear_judgments(dir, &cleared)?;
@@ -947,19 +951,21 @@ mod tests {
         let doomed = doomed(&f.key, SidecarFormat::Both).unwrap();
         let mut progress = Vec::new();
 
-        let (summary, moved, cleared) = delete(
-            doomed,
-            |path| {
-                let name = path.file_name().unwrap();
-                if name.to_string_lossy().contains("fail") {
-                    return Err("refused".to_string());
-                }
-                let to = trash.join(name);
-                std::fs::rename(path, &to).map_err(|e| e.to_string())?;
-                Ok(Some(to))
-            },
-            |done, total| progress.push((done, total)),
-        );
+        let (summary, moved, cleared) = delete(doomed, |groups| {
+            trash::run(
+                groups,
+                |path| {
+                    let name = path.file_name().unwrap();
+                    if name.to_string_lossy().contains("fail") {
+                        return Err("refused".to_string());
+                    }
+                    let to = trash.join(name);
+                    std::fs::rename(path, &to).map_err(|e| e.to_string())?;
+                    Ok(Some(to))
+                },
+                |done, total| progress.push((done, total)),
+            )
+        });
 
         let key = |path: &Path| path.to_string_lossy().into_owned();
         assert_eq!(
@@ -997,11 +1003,9 @@ mod tests {
             Ok(Some(to))
         };
         let runs = Runs::default();
-        let (_, moved, cleared) = delete(
-            doomed(&f.key, SidecarFormat::Xmp).unwrap(),
-            to_trash,
-            |_, _| {},
-        );
+        let (_, moved, cleared) = delete(doomed(&f.key, SidecarFormat::Xmp).unwrap(), |groups| {
+            trash::run(groups, to_trash, |_, _| {})
+        });
         let id = runs.record(moved).unwrap();
         index::lock(&f.index)
             .clear_judgments(&f.key, &cleared)
@@ -1055,6 +1059,192 @@ mod tests {
         let redone = runs.take(summary.run_id.unwrap()).unwrap();
         assert_eq!(redone.moved.len(), 1);
         assert_eq!(redone.moved[0].owner, Some(a.clone()));
+    }
+
+    fn file_name(path: &Path) -> String {
+        path.file_name().unwrap().to_string_lossy().into_owned()
+    }
+
+    /// A mover that renames into `trash`, telling no destination as the
+    /// Windows `trash_one` does, and refuses any file whose name holds `fail`.
+    fn renamer(trash: &Path) -> impl FnMut(&Path) -> Result<Option<PathBuf>, String> + '_ {
+        move |path: &Path| {
+            let name = path.file_name().unwrap();
+            if name.to_string_lossy().contains("fail") {
+                return Err("refused".to_string());
+            }
+            std::fs::rename(path, trash.join(name)).map_err(|e| e.to_string())?;
+            Ok(None)
+        }
+    }
+
+    /// A `move_many` like the Windows shell: it renames into `trash` all it
+    /// can, going on past a `fail` file or one it cannot rename, then errs.
+    /// Each call's file names are kept in `calls`.
+    fn shell<'a>(
+        trash: &'a Path,
+        calls: &'a std::cell::RefCell<Vec<Vec<String>>>,
+    ) -> impl FnMut(&[PathBuf]) -> Result<(), String> + 'a {
+        move |paths: &[PathBuf]| {
+            calls
+                .borrow_mut()
+                .push(paths.iter().map(|path| file_name(path)).collect());
+            let mut result = Ok(());
+            for path in paths {
+                let name = path.file_name().unwrap();
+                if name.to_string_lossy().contains("fail")
+                    || std::fs::rename(path, trash.join(name)).is_err()
+                {
+                    result = Err("Some operations were aborted".to_string());
+                }
+            }
+            result
+        }
+    }
+
+    /// What a delete gave, by file name: the summary's moved sidecars and
+    /// failures, the cleared RAWs, the run `Runs` recorded (each file with
+    /// where it went and its owner) and the last progress call.
+    #[derive(Debug, PartialEq)]
+    struct Outcome {
+        moved: Vec<String>,
+        failed: Vec<(String, String)>,
+        cleared: Vec<String>,
+        recorded: Vec<(String, Option<PathBuf>, Option<String>)>,
+        last_progress: Option<(usize, usize)>,
+    }
+
+    /// Delete the `format` sidecars of a folder holding `raws` and
+    /// `sidecars`, through `trash::run_chunked` when `chunked`, else
+    /// `trash::run`, and return the outcome, the progress calls and the
+    /// chunk calls.
+    fn delete_outcome(
+        name: &str,
+        raws: &[&str],
+        sidecars: &[&str],
+        format: SidecarFormat,
+        chunked: bool,
+    ) -> (Outcome, Vec<(usize, usize)>, Vec<Vec<String>>) {
+        let f = Fixture::new(name);
+        let trash = f.dir.join("trash");
+        std::fs::create_dir(&trash).unwrap();
+        for raw in raws {
+            f.raw(raw);
+        }
+        for sidecar in sidecars {
+            put(&f.dir, sidecar, 1);
+        }
+        let calls = std::cell::RefCell::new(Vec::new());
+        let mut progress = Vec::new();
+        let (summary, moved, cleared) = delete(doomed(&f.key, format).unwrap(), |groups| {
+            let report = |done: usize, total: usize| progress.push((done, total));
+            if chunked {
+                trash::run_chunked(
+                    groups,
+                    Path::exists,
+                    shell(&trash, &calls),
+                    renamer(&trash),
+                    report,
+                )
+            } else {
+                trash::run(groups, renamer(&trash), report)
+            }
+        });
+        let runs = Runs::default();
+        let run = runs.take(runs.record(moved).unwrap()).unwrap();
+        let outcome = Outcome {
+            moved: summary
+                .moved
+                .iter()
+                .map(|path| file_name(Path::new(path)))
+                .collect(),
+            failed: summary
+                .failed
+                .iter()
+                .map(|failure| (file_name(Path::new(&failure.path)), failure.message.clone()))
+                .collect(),
+            cleared: cleared
+                .iter()
+                .map(|path| file_name(Path::new(path)))
+                .collect(),
+            recorded: run
+                .moved
+                .iter()
+                .map(|trashed| {
+                    (
+                        file_name(&trashed.path),
+                        trashed.trashed_at.clone(),
+                        trashed.owner.as_deref().map(file_name),
+                    )
+                })
+                .collect(),
+            last_progress: progress.last().copied(),
+        };
+        (outcome, progress, calls.into_inner())
+    }
+
+    #[test]
+    fn the_chunked_delete_agrees_with_the_per_file_one() {
+        let raws = ["a.ARW", "b.ARW", "c.ARW", "fail.ARW"];
+        let sidecars = ["a.xmp", "a.ARW.dop", "b.xmp", "fail.xmp"];
+        let (per_file, per_file_progress, _) = delete_outcome(
+            "delete-per-file",
+            &raws,
+            &sidecars,
+            SidecarFormat::Both,
+            false,
+        );
+        let (chunked, chunked_progress, calls) = delete_outcome(
+            "delete-chunked",
+            &raws,
+            &sidecars,
+            SidecarFormat::Both,
+            true,
+        );
+
+        assert_eq!(chunked, per_file);
+        let owned = |sidecar: &str, raw: &str| (sidecar.to_string(), None, Some(raw.to_string()));
+        assert_eq!(
+            per_file,
+            Outcome {
+                moved: ["a.xmp", "a.ARW.dop", "b.xmp"].map(String::from).to_vec(),
+                failed: vec![("fail.ARW".to_string(), "fail.xmp: refused".to_string())],
+                cleared: ["a.ARW", "b.ARW"].map(String::from).to_vec(),
+                recorded: vec![
+                    owned("a.xmp", "a.ARW"),
+                    owned("a.ARW.dop", "a.ARW"),
+                    owned("b.xmp", "b.ARW"),
+                ],
+                last_progress: Some((4, 4)),
+            }
+        );
+        assert_eq!(per_file_progress, [(1, 4), (2, 4), (3, 4), (4, 4)]);
+        assert_eq!(chunked_progress, [(4, 4)]);
+        assert_eq!(calls, [vec!["a.xmp", "a.ARW.dop", "b.xmp", "fail.xmp"]]);
+    }
+
+    #[test]
+    fn a_chunked_delete_moves_an_xmp_two_raws_share_once_and_records_it_twice() {
+        let (outcome, _, calls) = delete_outcome(
+            "delete-shared",
+            &["a.ARW", "a.NEF"],
+            &["a.xmp"],
+            SidecarFormat::Xmp,
+            true,
+        );
+
+        assert_eq!(calls, [vec!["a.xmp", "a.xmp"]]);
+        let owned = ("a.xmp".to_string(), None, Some("a.ARW".to_string()));
+        assert_eq!(
+            outcome,
+            Outcome {
+                moved: ["a.xmp", "a.xmp"].map(String::from).to_vec(),
+                failed: Vec::new(),
+                cleared: vec!["a.ARW".to_string()],
+                recorded: vec![owned.clone(), owned],
+                last_progress: Some((2, 2)),
+            }
+        );
     }
 
     #[test]
