@@ -14,7 +14,7 @@ use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
-use crate::reader::{read_full, read_metadata, read_preview};
+use crate::reader::{read_full_undecoded, read_metadata, read_preview_undecoded};
 use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus, FACE_CONFIDENCE};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
@@ -100,8 +100,9 @@ fn extract_unless(
         let _slot = slots.acquire(cancel)?;
         #[cfg(test)]
         tests::cancel_mid_read(cancel);
-        read_preview(path)
+        read_preview_undecoded(path)
     };
+    let read = read.and_then(|(arw, image)| Ok((arw, image.decode()?)));
     let (arw, preview) = match read {
         Ok(read) => read,
         Err(e) => {
@@ -252,9 +253,9 @@ fn extract_analysis_unless(
         let _slot = slots.acquire(cancel)?;
         #[cfg(test)]
         tests::cancel_mid_read(cancel);
-        read_preview(path)
+        read_preview_undecoded(path)
     };
-    let (arw, preview) = match read {
+    let (arw, image) = match read {
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
@@ -262,6 +263,10 @@ fn extract_analysis_unless(
     if canceled(cancel) {
         return None;
     }
+    let preview = match image.decode() {
+        Ok(preview) => preview,
+        Err(e) => return Some(Err(e.to_string())),
+    };
     let focus = trusted_focus(&arw.shot);
     let (cue, faces, gate_count, scored) = cue_and_gate(&preview, arw.orientation, focus, cancel)?;
     if canceled(cancel) {
@@ -375,9 +380,9 @@ fn extract_face_counts_unless(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
-        read_preview(path)
+        read_preview_undecoded(path)
     };
-    let (arw, preview) = match read {
+    let (arw, image) = match read {
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
@@ -385,6 +390,10 @@ fn extract_face_counts_unless(
     if canceled(cancel) {
         return None;
     }
+    let preview = match image.decode() {
+        Ok(preview) => preview,
+        Err(e) => return Some(Err(e.to_string())),
+    };
     let (cue, whole, rgb) = match trusted_focus(&arw.shot) {
         Some(at) => {
             let (cue, rgb) = af_cue(&preview, arw.orientation, at, cancel)?;
@@ -564,13 +573,13 @@ fn full_sharps(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
-        read_full(path)
+        read_full_undecoded(path)
     };
     yield_to_pause(cancel);
     if canceled(cancel) {
         return None;
     }
-    let Ok((_, full)) = read else {
+    let Ok(full) = read.and_then(|(_, image)| image.decode()) else {
         return Some(FullSharps {
             judged: None,
             others: None,
@@ -1581,6 +1590,80 @@ mod tests {
             assert!(cancel.load(Ordering::Relaxed));
         }
         drop(mid_read);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_hevc_decode_of_an_hdr_pq_file_holds_no_read_slot() {
+        use crate::reader::tests::AT_HEVC_DECODE;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let dir = dir("hevc-slot");
+        // A lone `free` box: `hevc::to_jpeg` is reached and finds no `hvcC`.
+        let mut data = 64u32.to_be_bytes().to_vec();
+        data.extend_from_slice(b"free");
+        data.resize(64, 0);
+        let path = write(
+            &dir,
+            "hdr.CR3",
+            &crate::cr3::tests::hdr_pq(None, Some(data)).build(),
+        );
+        let slots = ReadSlots::new(1);
+        let free = Rc::new(RefCell::new(Vec::new()));
+        let (seen, gate) = (free.clone(), slots.clone());
+        AT_HEVC_DECODE.set(Some(Box::new(move || {
+            seen.borrow_mut().push(gate.lock().free)
+        })));
+        let unset = AtomicBool::new(false);
+        let failed = |message: &str| message == "HEVC preview without hvcC";
+        assert!(failed(
+            &extract_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+                .message
+        ));
+        assert!(failed(
+            &extract_analysis_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+        ));
+        assert!(failed(
+            &extract_face_counts_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+        ));
+        let larger = Arw {
+            preview: Some(Embedded {
+                offset: 10,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            full: Some(Embedded {
+                offset: 20,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            orientation: 1,
+            shot: Shot::default(),
+            hevc: false,
+        };
+        let others = [[(30.0, 30.0), (70.0, 30.0)]];
+        let sharps = full_sharps(
+            &path,
+            &larger,
+            &Cue::default(),
+            &others,
+            100,
+            &unset,
+            &slots,
+        );
+        assert_eq!(sharps.map(|s| s.others), Some(None), "the decode failed");
+        AT_HEVC_DECODE.set(None);
+        assert_eq!(
+            *free.borrow(),
+            [1, 1, 1, 1],
+            "every site decodes with the one permit given back"
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

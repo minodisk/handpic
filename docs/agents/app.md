@@ -5701,7 +5701,8 @@ to the update on the main thread), and splits `draw` into
 stopped at `drawImage`. It starts at the latest press of the file that ended up
 shown. `source=read|prefetch` says whether the image came from its own read or
 the prefetch ring; a hit's `read`, `decode`, `orient` and `hop` are 0, and
-its `wait` is the time `go` took before the hit. `px=` is the preview JPEG's
+its `wait` is the time `go` took before the hit. An HDR PQ CR3's HEVC decode
+(`reader::Undecoded::decode`) counts in `decode`, after `read` ends. `px=` is the preview JPEG's
 stored size and `decoded=` the size it was decoded at for the fit view, both
 unrotated.
 

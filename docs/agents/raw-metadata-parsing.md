@@ -444,7 +444,9 @@ two of the four R5 Mark II samples on raw.pixls.us are like this.
   crop of the 1620x1080 preview. `Arw::hevc` still marks an `HEVC` track
   with no `JPEG` one; the reader fails with `reader::HEVC_UNSUPPORTED` only
   when such a file has no `PRVW` / `THMB` it can read.
-- `reader::embedded_from` passes an HEVC `Embedded`'s bytes to
+- `reader::Undecoded::decode`, the second half of every `read_preview` /
+  `read_full` (whose read alone is `read_preview_undecoded` /
+  `read_full_undecoded`), passes an HEVC `Embedded`'s bytes to
   `hevc::to_jpeg`, which builds an Annex B stream (the `hvcC` parameter sets,
   then the `IMGD` NAL units), decodes it with the pure-Rust `hpvcd` crate,
   tone-maps the frame to sRGB (full-range BT.2020 Y'CbCr to R'G'B', the

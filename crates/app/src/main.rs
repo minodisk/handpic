@@ -244,13 +244,27 @@ fn guarded<T>(f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
 /// Read `path`'s preview and decode it at the scale `canvas` (device pixels,
 /// `(0, 0)` when unknown) needs for the fit view (`fitscale::scale_for`).
 fn load(path: &Path, slots: &ReadSlots, canvas: (u32, u32)) -> Result<Loaded, String> {
+    load_with(path, slots, canvas, |image| {
+        image.decode().map_err(|e| e.to_string())
+    })
+}
+
+/// `load` with the preview turned into its JPEG by `finish`, after the read,
+/// so an HDR PQ CR3's HEVC decode counts in `decode`, not `read`.
+fn load_with(
+    path: &Path,
+    slots: &ReadSlots,
+    canvas: (u32, u32),
+    finish: impl FnOnce(reader::Undecoded) -> Result<Vec<u8>, String>,
+) -> Result<Loaded, String> {
     let started = Instant::now();
     let paused = slots.pause();
-    let preview = reader::read_preview(path);
-    let (arw, jpeg) = preview.map_err(|e| e.to_string())?;
+    let preview = reader::read_preview_undecoded(path);
+    let (arw, image) = preview.map_err(|e| e.to_string())?;
     let read = started.elapsed();
     let meta = handpic_engine::exif::metadata(file_name(path), &arw.shot);
     let started = Instant::now();
+    let jpeg = finish(image)?;
     let mut d = mozjpeg::Decompress::new_mem(&jpeg).map_err(|e| e.to_string())?;
     let stored = (d.width() as u32, d.height() as u32);
     d.scale(fitscale::scale_for(stored, arw.orientation, canvas));
@@ -7831,6 +7845,27 @@ mod tests {
             keymap.bindings_for_input(&[Keystroke::parse(key).unwrap()], &stack);
         assert!(!pending);
         bindings.len()
+    }
+
+    #[test]
+    fn the_preview_is_decoded_after_its_read_and_timed_as_decode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.jpg");
+        let mut c = mozjpeg::Compress::new(mozjpeg::ColorSpace::JCS_RGB);
+        c.set_size(16, 8);
+        let mut c = c.start_compress(Vec::new()).unwrap();
+        c.write_scanlines(&[128u8; 16 * 8 * 3]).unwrap();
+        std::fs::write(&path, c.finish().unwrap()).unwrap();
+        let slots = ReadSlots::new(1);
+        let slow = Duration::from_millis(300);
+        let loaded = load_with(&path, &slots, (0, 0), |image| {
+            std::thread::sleep(slow);
+            image.decode().map_err(|e| e.to_string())
+        })
+        .unwrap();
+        assert!(loaded.read < slow, "read {:?}", loaded.read);
+        assert!(loaded.decode >= slow, "decode {:?}", loaded.decode);
+        assert_eq!(loaded.held.px, (16, 8));
     }
 
     #[test]

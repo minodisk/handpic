@@ -435,13 +435,13 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] On macOS and Linux, delete a read-only file with `Delete Permanently…` and see whether it fails. If it fails, decide whether to clear the read-only flag first or leave it.
 
-### Core: split the disk read from `hevc::to_jpeg` so a read slot covers the read alone
+### App: measure pass 1 on a folder of HDR PQ CR3 files at cap 2, before and after the HEVC split
 
-`read_preview` ends in the HEVC decode of an HDR PQ CR3 (65-125 ms of CPU per file), and that runs inside `ReadSlots::acquire` in the three scan sites and inside the app's preview pause. With `READ_SLOTS` at 2 and no HDR PQ CR3 run in the sweep, a folder of such files pays a calculated 33-63 ms/file against 3-6 uncapped, while the permits sit idle at the disk. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/core/src/scan.rs`, `crates/core/src/reader.rs`, `crates/app/src/main.rs` (the preview load).
+The scan now decodes an HDR PQ CR3's HEVC preview (65-125 ms of CPU per file) after its read slot drops (`reader::read_preview_undecoded`, `Undecoded::decode`). Before, the decode ran inside the slot, a calculated 33-63 ms/file at `READ_SLOTS` 2 against 3-6 uncapped; neither figure was measured, since the measurement needs a local release build of the app, which was not run. Plan: `docs/plans/_archived/20261126-hevc-outside-read-slot/plan.md`. Files: `crates/core/src/scan.rs`, `docs/agents/shared-crates.md` (the read cap section).
 
 #### TODO
 
-- [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
+- [ ] Samples: of the six `hvcC` files in `D:\Photos\samples\CR3` (`R8.CR3`, `R5m2.CR3`, `Canon_EOS_R5m2_102A6405.CR3`, `Canon_EOS-1D_X_Mark_III_AJKC0638.CR3`, `Canon_EOS-1D_X_Mark_III_AJKL0637.CR3`, `Canon_EOS_R10_IMG_1205.CR3`), keep those `reader::read_metadata(..).hevc` (or `handpic-cli info`) calls HDR PQ and that decode without a panic, and copy them to a few hundred files in one folder under `D:\Photos	ests\`. Open it in a release build of the app with a fresh `--index`, on the commit before the split and on the split, and take pass 1's ms/file from the `scan extract:` log line (its time over its files). Done when both figures and the method are in `docs/agents/shared-crates.md`'s read cap section.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 

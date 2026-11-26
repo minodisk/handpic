@@ -1026,10 +1026,16 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   2026-11-26): on NVMe cap 2 makes pass 1 slower, but pass 1 is fast there
   to begin with, so the cost is small, while the wait the user feels is the
   preview read on SATA, which cap 2 protects. HDR PQ CR3 is untested.
-- The cap also covers `hevc::to_jpeg` until the read is split from it:
-  `read_preview` ends in that decode (65-125 ms of CPU per HDR PQ CR3), so at a
-  cap of 2 such a folder pays a calculated 33-63 ms/file, and a preview read
-  of such a file pauses the scan for the decode as well.
+- The cap does not cover `hevc::to_jpeg` (65-125 ms of CPU per HDR PQ CR3):
+  the scan reads through `reader::read_preview_undecoded` /
+  `read_full_undecoded` inside the slot and calls `Undecoded::decode` after
+  the slot drops, in pass 2 after the read's `yield_to_pause` too, so a
+  pause holds the decode back as well. Before the split such a folder paid a
+  calculated 33-63 ms/file at a cap of 2 against 3-6 uncapped; pass 1's
+  ms/file on such a folder at cap 2, before and after, is not measured yet
+  (`todo.md`). The app's preview `load` also decodes after its read, the
+  decode counted in the `page` line's `decode`, not `read`, and its pause
+  still runs to the paint (`hold.rs`), the decode included.
 - `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
   it first sees one, then reads anyway, so a stuck or leaked pause never stalls
   the scan. The worst case is about 1 s per `acquire` (one per pass 1 file, two
