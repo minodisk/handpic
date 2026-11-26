@@ -414,7 +414,7 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 #### Background
 
-Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). Files: `crates/app/src/uitest.rs`.
+Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/_archived/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). Files: `crates/app/src/uitest.rs`.
 
 #### TODO
 
