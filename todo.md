@@ -513,18 +513,6 @@ Files: `crates/core/src/copy.rs`, `crates/cli/src/main.rs`, `docs/humans/perform
 
 - [ ] Copy the same fresh, never-read files from the card into a destination on a faster or emptier drive (the NVMe `C:`) by `handpic-cli copybench <card-dir> <dst-dir>` and by an Explorer copy, with idle time between runs, and record the MB/s. Done when the table in `docs/humans/performance.md` has the Explorer row and the 8 MiB x 4 defaults and the per-file `sync_all` are confirmed or changed.
 
-### Core: `copy::copy_files` can replace a destination created between its check and the rename
-
-#### Background
-
-The import-from-card feature's `copy::copy_files` checks `dst.exists()` before reading and again just before `fs::rename`, but `fs::rename` replaces the destination on every platform. A file created at the destination in that window, such as a sidecar the app writes for a RAW that just landed, would be replaced. A per-OS no-replace rename closes it (`MoveFileExW` without `MOVEFILE_REPLACE_EXISTING`, `renameat2` with `RENAME_NOREPLACE`, `renamex_np` with `RENAME_EXCL`). Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
-
-Files: `crates/core/src/copy.rs`.
-
-#### TODO
-
-- [ ] Replace the final `fs::rename` with a no-replace rename on Windows, Linux and macOS, and keep the failing-job message `exists: ...`. Done when a unit test that creates the destination between the check and the rename (through a hook or a stub) leaves the existing file untouched on the platform CI runs.
-
 ### Engine: Undo of Move to Trash leaves an orphaned `$I` file per restored file on Windows
 
 #### Background
