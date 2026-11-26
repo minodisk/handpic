@@ -40,7 +40,8 @@ pub const WHOLE_INPUT: (usize, usize) = (640, 448);
 /// `WHOLE_INPUT`'s area: about 20 ms against 80 ms on one thread, the decode
 /// included, but a 50 px face of a 1616 px preview shrinks to 10 px and
 /// scores lower, so the gate counts from `allfaces::GATE_LOW_RES_CONFIDENCE`
-/// on it (see the all-faces-check plan's `measurement.md`).
+/// (the floor of the `WHOLE_INPUT` gate too) on it (see the all-faces-check
+/// plan's `measurement.md`).
 pub const GATE_INPUT: (usize, usize) = (320, 224);
 /// Minimum detection score kept.
 pub const SCORE_THRESHOLD: f32 = 0.6;

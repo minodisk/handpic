@@ -29,9 +29,9 @@ untrusted mesh, no EAR or pose under the presence floor), `src/allfaces.rs` the
 all-faces check of group photos (`gate_count`, the gate count pass 2 stores in
 `scan::Analysis::gate_count`: the judged face and the whole-preview faces
 whose box long side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of its,
-searched at `faces::GATE_INPUT` from `GATE_LOW_RES_CONFIDENCE` on an AF frame
-and over the cue's own whole-image search from `FACE_CONFIDENCE` without
-one; `candidates`: the other whole-image faces at
+counted from `GATE_LOW_RES_CONFIDENCE` on both searches, at
+`faces::GATE_INPUT` on an AF frame and over the cue's own whole-image
+search without one; `candidates`: the other whole-image faces at
 `FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not the judged face found
 again (`same_face`: an IoU above `NMS_THRESHOLD` or an overlap over the
 smaller box above `SAME_FACE_OVERLAP`; the gate count drops it the same

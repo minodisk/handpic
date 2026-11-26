@@ -15,8 +15,7 @@ use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
 use crate::reader::{read_full_undecoded, read_metadata, read_preview_undecoded};
-use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus, FACE_CONFIDENCE};
-
+use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
 
@@ -173,7 +172,8 @@ pub struct Analysis {
     /// `allfaces::gate_count`, how many confident faces of a size similar to
     /// the judged face's the whole preview holds, the judged face included:
     /// over a `faces::GATE_INPUT` detection with an AF point, over the
-    /// whole-image detection the cue already ran without one. 0 when the cue
+    /// whole-image detection the cue already ran without one, faces counted
+    /// from `allfaces::GATE_LOW_RES_CONFIDENCE` on both. 0 when the cue
     /// judged no face (no detection is run for it); `None` when that
     /// detection failed, and always for a JPEG file.
     pub gate_count: Option<u32>,
@@ -294,7 +294,8 @@ type CueAndGate = (Cue, Vec<Face>, Option<u32>, Option<f64>);
 /// of its own (`af_gate_count`); without one the faces are searched for on
 /// the whole image at `faces::WHOLE_INPUT`, the cue judges the largest
 /// confident one, the score falls back to them and the gate counts over
-/// them, taken on the cue's decode when it made one (`score_rgb`), the fourth
+/// them from the same floor as the AF path (`whole_gate_count`), taken on the
+/// cue's decode when it made one (`score_rgb`), the fourth
 /// value. `None` once `cancel` abandoned the file.
 fn cue_and_gate(
     preview: &[u8],
@@ -320,14 +321,19 @@ fn cue_and_gate(
             }
             let faces = detection.as_ref().map(|d| d.faces.clone());
             let (cue, rgb) = whole_image_cue_rgb(preview, orientation, detection, cancel)?;
-            let gate = faces
-                .as_ref()
-                .map(|f| allfaces::gate_count(f, cue.face.as_ref(), FACE_CONFIDENCE));
+            let gate = faces.as_ref().map(|f| whole_gate_count(f, &cue));
             let faces = faces.unwrap_or_default();
             let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
             Some((cue, faces, gate, scored))
         }
     }
+}
+
+/// The gate count of a frame without an AF point whose cue is `cue`, over
+/// the `faces` of the cue's own whole-image search, faces counted from
+/// `allfaces::GATE_LOW_RES_CONFIDENCE` as on the AF path.
+fn whole_gate_count(faces: &[Face], cue: &Cue) -> u32 {
+    allfaces::gate_count(faces, cue.face.as_ref(), allfaces::GATE_LOW_RES_CONFIDENCE)
 }
 
 /// The gate count of an AF frame whose cue is `cue`, over a whole-preview
@@ -1188,6 +1194,7 @@ mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
     use crate::eyes::MESH_CALLS;
+    use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -1952,6 +1959,28 @@ mod tests {
             Some(None),
             "a failed detection is unknown"
         );
+    }
+
+    #[test]
+    fn without_an_af_point_the_gate_counts_faces_from_the_low_resolution_floor() {
+        let at = |x: f32, score: f32| Face {
+            x,
+            ..scored(score, 100.0)
+        };
+        let judged = Cue {
+            face: Some(at(0.0, 0.9)),
+            ..Cue::default()
+        };
+        let floor = at(200.0, allfaces::GATE_LOW_RES_CONFIDENCE);
+        let between = at(400.0, 0.7);
+        let below = at(600.0, allfaces::GATE_LOW_RES_CONFIDENCE.next_down());
+        let sure = at(800.0, FACE_CONFIDENCE);
+        assert_eq!(
+            whole_gate_count(&[floor, between, below, sure], &judged),
+            4,
+            "the judged face, the faces at and over the floor, none under it"
+        );
+        assert_eq!(whole_gate_count(&[floor], &Cue::default()), 0);
     }
 
     #[test]
