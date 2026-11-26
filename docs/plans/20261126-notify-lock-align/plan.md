@@ -34,7 +34,7 @@ Once done, CI's three-platform `test` job exercises the engine's watcher and ren
     - `docs/agents/app.md`'s rule "`crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2 against 8.2.0 in the root lock)" no longer names 8.2.0 as the root lock's version.
     - The doc comment of `mod watch_release` in `crates/app/src/datefolder.rs` no longer names 8.2.0 as the root lock's version (comment only).
     - No source change in `crates/engine` (the `settle` doc comment in `crates/engine/src/watch.rs` speaks of "notify 8.2" and stays true), no change to `crates/engine/Cargo.toml`, and no change to `todo.md` (the item is removed in the wrap-up phase).
-    - `mise run ci:local` passes locally and the PR's GitHub checks pass (the `test` job on all three platforms, which is what covers 8.2.2's new macOS backend dependencies).
+    - Local `mise run ci:local` was skipped by the user's standing rule (see `learnings.md`); verification rests on the PR's GitHub checks passing (the `test` job on all three platforms, which is what covers 8.2.2's new macOS backend dependencies).
   - Implementation approach:
     - The lock change: at the repository root, `mise x -- cargo update -p notify --precise 8.2.2`. A planning-time `--dry-run` of that command printed exactly the changes listed in "Done when"; compare the real run against it with `git diff Cargo.lock`. Do not run a bare `cargo update` and do not touch `crates/app/Cargo.lock`.
     - On this host run `cargo`, `python` and `node` through `mise x --`. Never build the full root workspace locally (it has run this host out of memory): build and test only `-p handpic-engine`.
@@ -55,7 +55,7 @@ Once done, CI's three-platform `test` job exercises the engine's watcher and ren
 
 - **The `datefolder.rs` comment.** Rewording it puts a `crates/app` path in the diff, so `mise run ci:local` selects the app's check and tests for a comment change. Taken: reword it, since leaving it leaves a false comment.
 - **`docs/agents/app.md` was not in the requested file list.** Its rule names 8.2.0 as the root lock's version and becomes false, so the step fixes it.
-- **The stress run is a local build and test loop.** The behavior under test is Windows-specific and load-dependent, and the acceptance criteria ask for it, so the step runs it locally, limited to `-p handpic-engine`.
+- **The stress run is a local build and test loop.** The behavior under test is Windows-specific and load-dependent, and the acceptance criteria ask for it, so the step runs it locally, limited to `-p handpic-engine`. **Update:** the user dropped this run (it starved other sessions on the host); see `learnings.md` for the partial result. The PR's three-platform `test` job stands in for it.
 - **If the stress run fails on 8.2.2.** A failure means the shipped app has the defect today; the options are then to pin `crates/app/Cargo.lock` to 8.2.0 instead, or to fix the release path. Neither is decided here: the step stops and reports.
 - **`notify-types` and the rest of the subtree still differ.** `--precise` on `notify` alone leaves `notify-types` at 2.1.0 in the root lock (2.3.0 in the app's). Left, per "no unnecessary bumps".
 - **The requirement in `crates/engine/Cargo.toml` stays `notify = "8.2.0"`.** Not raised.
