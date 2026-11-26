@@ -128,3 +128,5 @@ update staging folder (native-release)", leaving only the real-machine check.
   is per user, so that is the user whose launch staged it.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete (the uninstall on a real Windows machine is pending as the todo.md manual check)
