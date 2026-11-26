@@ -15,10 +15,12 @@
 //! search of a frame with one.
 //!
 //! A candidate scores at least `sharpness::FACE_CONFIDENCE`, has a box long
-//! side of at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`) and does
-//! not overlap the judged face (an IoU above `faces::NMS_THRESHOLD`), which is
-//! counted from the cue's own mesh instead. The largest come first, at most
-//! `MAX_FACES` faces per frame with the judged one. A candidate counts only
+//! side of at least `eyes::EYES_MIN_FACE` (`candidate::meshes_face`) and is
+//! not the judged face found again (`same_face`: an IoU above
+//! `faces::NMS_THRESHOLD`, or an overlap over the smaller box above
+//! `SAME_FACE_OVERLAP`), which is counted from the cue's own mesh instead.
+//! The largest come first, at most `MAX_FACES` faces per frame with the
+//! judged one. A candidate counts only
 //! when its mesh fits the face (`MAX_EYE_OFFSET`) and the model's presence
 //! logit backs it as it backs the cue's EAR: a side face's mesh
 //! `eyes::mesh_trusted` turns down, or a presence under
@@ -59,6 +61,15 @@ pub const GATE_MAX_SIZE: f32 = 2.0;
 /// all-faces-check plan's `measurement.md`).
 pub const GATE_LOW_RES_CONFIDENCE: f32 = 0.6;
 
+/// The intersection over the smaller of the two boxes' areas above which a
+/// whole-preview face is the judged face found again, whatever its IoU: a
+/// box on the ear or a larger or partial box of the same face. On the
+/// measured AF folders every pair above 0.532 was the same face, while
+/// different people reached 0.532 and twins went down to 0.306, so the cut
+/// catches only part of the twins (the judged-face-eye-match plan's
+/// `overlap-measurement.md`).
+pub const SAME_FACE_OVERLAP: f32 = 0.55;
+
 /// The counts of one frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FaceCounts {
@@ -93,8 +104,8 @@ pub struct Measured {
 /// `faces` of a whole-preview detection in the same stored coordinates: the
 /// judged face, and every face scoring at least `floor` whose box long
 /// side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of the judged face's and
-/// that does not overlap it by more than `NMS_THRESHOLD` (the judged face
-/// found again). 0 without a judged face.
+/// that is not the judged face found again (`same_face`). 0 without a judged
+/// face.
 pub fn gate_count(faces: &[Face], judged: Option<&Face>, floor: f32) -> u32 {
     let Some(judged) = judged else {
         return 0;
@@ -104,7 +115,7 @@ pub fn gate_count(faces: &[Face], judged: Option<&Face>, floor: f32) -> u32 {
     let similar = faces
         .iter()
         .filter(|f| f.score >= floor && band.contains(&long_side(f)))
-        .filter(|f| iou(f, judged) <= NMS_THRESHOLD)
+        .filter(|f| !same_face(f, judged))
         .count();
     1 + similar as u32
 }
@@ -113,14 +124,27 @@ fn long_side(face: &Face) -> f32 {
     face.width.max(face.height)
 }
 
+/// Whether the whole-preview face `face` is the `judged` face found again:
+/// an IoU above `NMS_THRESHOLD`, or an intersection over the smaller box's
+/// area above `SAME_FACE_OVERLAP`.
+fn same_face(face: &Face, judged: &Face) -> bool {
+    if iou(face, judged) > NMS_THRESHOLD {
+        return true;
+    }
+    let w = (face.x + face.width).min(judged.x + judged.width) - face.x.max(judged.x);
+    let h = (face.y + face.height).min(judged.y + judged.height) - face.y.max(judged.y);
+    let smaller = (face.width * face.height).min(judged.width * judged.height);
+    w > 0.0 && h > 0.0 && w * h > SAME_FACE_OVERLAP * smaller
+}
+
 /// The candidates among a whole-image detection's `faces`: at or above
-/// `FACE_CONFIDENCE`, accepted by `meshes_face`, not overlapping `judged` by
-/// more than `NMS_THRESHOLD`, the largest box first, at most `limit`.
+/// `FACE_CONFIDENCE`, accepted by `meshes_face`, not `judged` found again
+/// (`same_face`), the largest box first, at most `limit`.
 pub fn candidates(faces: &[Face], judged: Option<&Face>, limit: usize) -> Vec<Face> {
     let mut found: Vec<Face> = faces
         .iter()
         .filter(|f| f.score >= FACE_CONFIDENCE && meshes_face(f))
-        .filter(|f| judged.is_none_or(|j| iou(f, j) <= NMS_THRESHOLD))
+        .filter(|f| judged.is_none_or(|j| !same_face(f, j)))
         .copied()
         .collect();
     found.sort_by(|a, b| (b.width * b.height).total_cmp(&(a.width * a.height)));
@@ -271,6 +295,33 @@ mod tests {
             "the low-resolution floor counts a face at it and those above"
         );
         assert_eq!(count(&[low, below, shy], Some(&judged)), 1);
+    }
+
+    #[test]
+    fn a_box_mostly_over_the_judged_face_is_the_judged_face_whatever_its_iou() {
+        let judged = face(100.0, 100.0, 0.9);
+        // The same face boxed twice as large around it: IoU 0.25, overlap 1.
+        let larger = Face {
+            y: -50.0,
+            left_eye: (110.0, 30.0),
+            right_eye: (190.0, 30.0),
+            ..face(50.0, 200.0, 0.9)
+        };
+        assert!(iou(&larger, &judged) <= NMS_THRESHOLD);
+        assert!(same_face(&larger, &judged));
+        assert_eq!(gate_count(&[larger], Some(&judged), FACE_CONFIDENCE), 1);
+        assert!(candidates(&[larger], Some(&judged), MAX_FACES).is_empty());
+        // A neighbour overlapping by 0.2 of the smaller box is still counted.
+        let near = face(180.0, 100.0, 0.9);
+        assert!(!same_face(&near, &judged));
+        assert_eq!(
+            gate_count(&[larger, near], Some(&judged), FACE_CONFIDENCE),
+            2
+        );
+        assert_eq!(
+            candidates(&[larger, near], Some(&judged), MAX_FACES),
+            [near]
+        );
     }
 
     #[test]

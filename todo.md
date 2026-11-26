@@ -1452,11 +1452,11 @@ Files: `install.ps1`.
 
 ### Core: the judged face can be counted twice in the all-faces counts and the gate count (all-faces-check)
 
-A judged crop face whose whole-image box overlaps it at or under `NMS_THRESHOLD` IoU is counted twice, in the gate count and in the judged count alike (1 of 258 AF frames on `2026-09-19`). A low-resolution box may differ more. Matching by eye landmarks instead of IoU would close it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`, `gate_count`).
+The judged face found again in the whole-preview search is dropped by an IoU above `NMS_THRESHOLD` or an intersection over the smaller box above `SAME_FACE_OVERLAP` (0.55). A second box of the same face (on the ear, larger or partial) whose overlap is between about 0.3 and 0.55 is still counted twice, mostly in the 320x224 gate count: about 20 AF frames on `2026-11-07`. Neither the eye landmarks nor the overlap separate those twins from different people (people up to 0.532, twins from 0.306). Measurements: `docs/plans/_archived/20261126-judged-face-eye-match/measurement.md` (eye landmarks) and `overlap-measurement.md` in the same folder. Files: `crates/core/src/allfaces.rs` (`same_face`, `candidates`, `gate_count`).
 
 #### TODO
 
-- [ ] Replace the IoU match of the judged face with one by eye landmarks, and add a test for the overlap at or under 0.3. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
+- [ ] Find a rule that separates the remaining twins from different people (for example the mesh, the box's aspect or the full-size image), or accept them. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
 
 ### Core: the default group threshold N = 5 passes no posed group photo of the measured folders (all-faces-check)
 

@@ -807,6 +807,42 @@ full-eye-sharp-only plan removed.
 - Source: `docs/plans/_archived/20261008-burst-keep-score/learnings.md`,
   Steps 3, 5, 5b, 7.
 
+### Matching the judged face against the other faces: eye landmarks do not work, and no overlap cut separates every twin (Measured)
+
+`allfaces::gate_count` and `allfaces::candidates` must not count the judged
+face a second time. `allfaces::same_face` treats two boxes as one face when
+the IoU is above `NMS_THRESHOLD` or the overlap over the smaller box is above
+`SAME_FACE_OVERLAP` (0.55). Before changing that rule, know what was measured
+(`2026-09-19`, the whole of `2026-11-07`: 3354 AF frames with a judged face,
+and the no-AF DNG folder `2026-02-01`).
+
+- Do not match by eye landmarks. The same face's eyes move by up to 0.43 of
+  the box side between the crop detection and the 640x448 whole-image search,
+  and by up to 0.69 on the 320x224 gate search. That is more than one face's
+  own eye distance (0.04 to 0.4). The missed twins are profiles where one
+  detection puts the eyes on the ear, and partial boxes. Their eye distance
+  (0.35 to 0.57) overlaps a real neighbour's (0.47). Replacing the IoU rule
+  with an eye match added a double count on 84 and 133 AF frames at a 0.2
+  cut, against about 1 today.
+- No overlap-over-smaller-box cut separates the twins (0.306 to 0.740) from
+  different people (0.301 to 0.532). Above 0.532 every pair is the same face.
+- Replace against union: for an IoU above 0.3 the overlap is at least
+  0.4615. At a cut at or under 0.46 the two rules are therefore the same.
+  Above it, replacing turns IoU-matched same-face pairs into double counts
+  (18 gate frames at 0.55, 42 at 0.6). Any cut above the highest neighbour
+  therefore has to be the union with IoU, never a replacement.
+- What is left. About 30 AF frames of `2026-11-07` had a 320x224 gate count
+  that held the judged face twice (a box on the ear, a larger box or a
+  partial box) at overlap 0.3 to 0.55. The union at 0.55 fixed only 11 of
+  them. The rest need another rule, not a different cut. This is the open
+  `todo.md` item "the judged face can be counted twice in the all-faces
+  counts and the gate count".
+- Changing the rule changes `gate_count`, so bump `FACES_VERSION`
+  (14 to 15 here). `ALLFACES_VERSION` did not need a bump.
+- Source:
+  `docs/plans/_archived/20261126-judged-face-eye-match/learnings.md`
+  (`measurement.md`, `overlap-measurement.md` beside it).
+
 ### A learned discard score over the stored technical features did not hold on fresh folders (Hit)
 
 The plan trained scores (`LR/T`: logistic regression over the preview's
