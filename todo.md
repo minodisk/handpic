@@ -1046,17 +1046,6 @@ Files: `crates/app/src/mark.rs` (`MarkState::color`), `crates/app/src/main.rs` (
 
 - [ ] Give the menu's `Good` icon a green that reads on light and dark menu surfaces, leaving the strip's and the `f` overlay's green over the photo as is, and check it on screen.
 
-### Engine: align the two `notify` locks so CI tests the version the app ships
-
-The `treewatch` / `watch` tests run in CI on the root `Cargo.lock`'s notify 8.2.0, while the app ships what `crates/app/Cargo.lock` resolves, notify 8.2.2. On 2026-11-23 the re-check confirmed that `configure` still queues behind `Unwatch` on 8.2.2 (a scratch binary, 900 iterations under 24 spinning threads: 6 failures without `configure`, 0 with it; the engine's own `treewatch` tests were not run against 8.2.2; `docs/agents/shared-crates.md`). Moving the root lock to 8.2.2, or pinning the app lock to 8.2.0, is a lock change the measurement plan did not make. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md` (Trade-offs, "Item 2: which lock is right").
-
-Files: `Cargo.lock`, `crates/app/Cargo.lock`, `crates/engine/src/watch.rs`, `docs/agents/shared-crates.md`.
-
-#### TODO
-
-- [ ] Decide which lock moves (root to 8.2.2, or app pinned to 8.2.0), make the change, and run the engine's `treewatch`, `watch` and `rename` tests on the chosen version looped under load.
-- [ ] Update the version statement in `docs/agents/shared-crates.md` ("A `notify` watch on Windows ...") to match.
-
 ### Engine: measure a file manager's permanent delete (Shift+Delete) of a folder holding a watched one on Windows
 
 The 2026-11-23 measurement showed that `std::fs` deletes of a watched folder or its ancestors succeed, and that the shell's move to the Recycle Bin of an ancestor is refused (`0x80270021`). The shell's permanent delete (Shift+Delete in Explorer) was not measured, and `docs/humans/usage.md` would describe it if it behaves differently. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md`.

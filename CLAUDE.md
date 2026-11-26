@@ -755,3 +755,8 @@ change. Do not edit code and open a PR by hand or through `/pr` alone.
 On the Windows host, run `python` and `node` through `mise x --` (for example
 `mise x -- python script.py`); a bare invocation can hang or be missing from
 `PATH` in Git Bash.
+
+Do not run load tests locally: no generated CPU load (spinning threads or
+processes) and no test loops repeated under it. Many other sessions share the
+host, and a saturating run starves them. Leave such verification to CI, or ask
+the user before running anything of the kind.
