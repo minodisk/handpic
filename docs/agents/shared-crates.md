@@ -1333,8 +1333,10 @@ when idle). `treewatch::State::remove` runs it after each real `unwatch`, and
 watcher, so `rename_folder` needs no retry. `watch::set`'s plain drop of the
 previous watcher (its comment says that releases the handle) is still only
 eventually true; it is not on a rename path. A notify upgrade must re-check
-that `configure` still queues behind `Unwatch` (loop the `treewatch` tests
-under load).
+that `configure` still queues behind `Unwatch` by reading the new version's
+source (as the 8.2.2 re-check below did). The behavioral check is the PR's
+three-platform `test` job (the engine's `treewatch`, `watch` and `rename`
+tests); agents do not run local load loops.
 
 Re-checked on notify 8.2.2, the version `crates/app/Cargo.lock` resolves,
 on 2026-11-23. The source: `unwatch` still only sends `Action::Unwatch`,
@@ -1587,6 +1589,18 @@ the same value for `handpic-app`, `handpic-core` and `handpic-engine`. Neither
 `Cargo.lock` changed. After a license change, `bash tools/package/notices.sh <tmp>`
 should list `LICENSE-MIT` and `LICENSE-APACHE` beside the existing notices.
 Source: `docs/plans/_archived/20261124-dual-license/learnings.md`, Step 1.
+
+### Aligning one crate in the root `Cargo.lock` can silently move other crates' edges (Hit)
+
+`cargo update -p <crate> --precise <ver>` can re-resolve unrelated packages.
+For the notify 8.2.0 -> 8.2.2 alignment it also moved the `windows-sys` edge
+of seven other packages (`errno`, `rustix`, `tempfile` and four more) from
+0.61.2 to 0.52.0.
+
+- Fix: read `git diff Cargo.lock` before committing. The diff should be only
+  the planned crate plus the dependencies that crate pulls in or drops; restore
+  any other edge, and check that `cargo metadata --locked` accepts the lock.
+- Source: `docs/plans/_archived/20261126-notify-lock-align/learnings.md`, Step 1.
 
 ## Verification
 
