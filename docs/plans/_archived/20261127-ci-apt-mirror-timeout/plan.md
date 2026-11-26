@@ -67,3 +67,5 @@ The same scan found one unrelated timeout, a hung test: run 45091844682 attempt 
 - **The `app (macos-latest)` 30-minute limit** has its own todo item and is out of scope.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
