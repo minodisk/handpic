@@ -87,3 +87,5 @@ nowhere useful. The only `faces_of` in `crates/app` is a test helper in
   is, being outside the item.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete
