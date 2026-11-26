@@ -1435,30 +1435,6 @@ Test copies get their own `--settings`, `--index`, `--log` and `--mcp-port`, and
 - [ ] On macOS, a 2.0.0 `Handpic.app` in `/Applications` updates to the new bundle from a test feed (`tools/package/test-release.sh`) and restarts into it. (The DMG's launch, `Contents/MacOS/Handpic` and `codesign --verify --strict` passed on 2026-11-26.)
 - [ ] Dispatch the `Package` workflow by hand on the branch; expect its logs' listings (the ZIP's contents, the installed folder, the bundle) to show `Handpic.exe` and `Contents/MacOS/Handpic`.
 
-### Agents: `wait-post-merge-runs.sh`'s no-runs path ignores `--max-wait`
-
-#### Background
-
-The `agent-workflow-fixes` plan shortened the wait slices that `merger` passes (`wait-post-merge-runs.sh --max-wait=30`) so each stays under the harness's 180 s backgrounding limit. While no workflow run has appeared yet, the script keeps polling until `INITIAL_GRACE` (60 s) whatever `--max-wait` says. With a slow `api.github.com` (about 36 s per `gh run list` call, measured on 2026-11-23) one slice can take about 170 s, close to that limit. The script then exits 0 (`no_runs`) by itself, so nothing is wrong yet, but the margin is thin. Plan: `docs/plans/_archived/20261123-agent-workflow-fixes/plan.md`.
-
-Files: `.claude/skills/merge/scripts/wait-post-merge-runs.sh`, `.claude/agents/merger.md` (step 5)
-
-#### TODO
-
-- [ ] Make the no-runs path honor `--max-wait` (bound `INITIAL_GRACE` by it, or document and test why it must not be), keeping the exit codes and `merger.md` step 5's reading of `no_runs` unchanged.
-
-### Agents: the wait scripts count the sum of sleeps, not real elapsed time
-
-#### Background
-
-`wait-pr-actionable.sh` and `wait-post-merge-runs.sh` bound a slice by the sum of their sleeps. `gh` latency (13-46 s a call on 2026-11-23) adds on top, so the `agent-workflow-fixes` plan's rescaled slice-count limits give about 20-35 minutes of total wait on a slow network and less on a fast one. A wall-clock bound inside the scripts, counting real elapsed time, would make both the slice and the totals predictable. It changes the scripts' semantics, so it was left out to keep runs holding the older definitions unaffected. Plan: `docs/plans/_archived/20261123-agent-workflow-fixes/plan.md`.
-
-Files: `.claude/skills/pr/scripts/wait-pr-actionable.sh`, `.claude/skills/merge/scripts/wait-post-merge-runs.sh`, `.claude/agents/pr-runner.md`, `.claude/agents/merger.md`
-
-#### TODO
-
-- [ ] Bound each script's slice by wall-clock time (for example `SECONDS`), then re-derive the slice-count limits in `pr-runner.md` and `merger.md` so the total wait is about 30 minutes whatever the network speed. Keep the exit codes and the `ACTION=` values, and extend the scripts' tests.
-
 ### Repo: post-merge check that GitHub detects the MIT OR Apache-2.0 license (dual-license)
 
 #### Background

@@ -56,29 +56,34 @@ You are given:
 ### 1. Check the state
 
 ```bash
-bash .claude/skills/pr/scripts/wait-pr-actionable.sh <PR-number> 60 60
+bash .claude/skills/pr/scripts/wait-pr-actionable.sh <PR-number> 60 120
 ```
 
-The `60 60` (poll every 60 s, at most 60 s of sleeps) makes one slice: two
-`pr-status.sh` calls 60 s apart, which also covers the script's 60 s
-`BLOCKED_GRACE`. The harness moves a foreground command to the background
-after about 180 s, and this slice returns by itself before that (about
-70-150 s, measured with a slow `api.github.com`). Pass the Bash tool's
+The `60 120` (poll every 60 s, a deadline of 120 s of real time, the
+`pr-status.sh` calls included) makes one slice: a call at 0 s and another 60 s
+after the first returns, two observations at least 60 s apart, which covers the
+script's 60 s `BLOCKED_GRACE` whenever the first call takes under 60 s. The
+slice lasts 120 s, plus at most the call in flight at the deadline. The harness
+moves a foreground command to the background after about 180 s, and this slice
+returns by itself before that (120 s to about 152 s, with the calls of up to
+about 46 s measured on a slow `api.github.com`). Pass the Bash tool's
 `timeout` of `600000` (ms) explicitly on every run: the default foreground
-timeout can be as low as 120 s, shorter than a slow slice.
+timeout can be as low as 120 s, shorter than a slice.
 
 Hold two integer counters, `pr_wait_timeouts` and `pr_status_failures`, **in
 your own conversation** (not as shell variables). Branch on the exit code.
 
 - **0**: read `ACTION=` from the output and branch per the table below
 - **2**: timeout (the end of the slice). Increment `pr_wait_timeouts` and re-run
-  as-is while `pr_wait_timeouts < 15` (about 20–35 minutes in total). Once it is
+  as-is while `pr_wait_timeouts < 15` (about 30 minutes in total: 15 slices ×
+  120 s, whatever the network speed). Once it is
   reached, return `NOT_READY` (ACTION is the last value observed, or
   `wait_timeout` if none) with the last observed state
 - **1**: error: `pr-status.sh` failed on every call of the slice. The
   script has already retried it every 60 s within the slice (a network error,
-  a short `api.github.com` outage). Increment `pr_status_failures` and re-run. If
-  `pr_status_failures > 5`, return `FAILED` (reason: `pr_status_failure`) with
+  a short `api.github.com` outage), so one exit 1 stands for an outage as long
+  as a slice, 120 s. Increment `pr_status_failures` and re-run. If
+  `pr_status_failures > 5` (six slices, about 12 minutes of failures), return `FAILED` (reason: `pr_status_failure`) with
   the last stderr
 
 | ACTION                                                                      | What to do                                              |
@@ -179,16 +184,19 @@ the sync and cleanup just because it was already merged.
 ### 5. Wait for post-merge
 
 ```bash
-bash .claude/skills/merge/scripts/wait-post-merge-runs.sh --max-wait=30 <merge commit SHA>
+bash .claude/skills/merge/scripts/wait-post-merge-runs.sh --max-wait=120 <merge commit SHA>
 ```
 
-The `--max-wait=30` makes one slice of two `gh run list` calls 30 s apart
-(three, 60 s, while no run has appeared yet: the script's `INITIAL_GRACE`),
-which returns by itself before the harness moves a foreground command to the
-background after about 180 s (one call took up to about 36 s with a slow
-`api.github.com`). Pass the Bash tool's `timeout` of `600000` (ms) explicitly
-on every run: the default foreground timeout can be as low as 120 s, shorter
-than a slow slice.
+The `--max-wait=120` makes one slice: a deadline of 120 s of real time, the
+`gh run list` calls included, polled every 30 s, the slice lasting 120 s plus
+at most the call in flight at the deadline. While no run has appeared yet, the
+script's 60 s `INITIAL_GRACE`, counted on the same clock, ends the slice with
+`STATUS=no_runs` after about 60 s plus one call. Either returns by itself
+before the harness moves a foreground command to the background after about
+180 s (one call took up to about 36 s with a slow `api.github.com`, so a slice
+takes 120 s to about 156 s). Pass the Bash tool's `timeout` of `600000` (ms)
+explicitly on every run: the default foreground timeout can be as low as
+120 s, shorter than a slice.
 
 Depending on what changed, the main commit after a squash-merge automatically
 starts workflows. Reporting completion just because "the PR closed" misses
@@ -204,8 +212,8 @@ own conversation**. Branch on the exit code.
   or manual handling needs human judgment). Return `POST_MERGE_FAILED` with the
   failed runs' URLs
 - **2**: `STATUS=timeout`. Increment `post_merge_timeouts` and re-run as-is
-  while `post_merge_timeouts < 20` (about 15–35 minutes in total, by the
-  slice's 40–100 s). Once it is
+  while `post_merge_timeouts < 15` (about 30 minutes in total: 15 slices ×
+  120 s, whatever the network speed). Once it is
   reached, return `POST_MERGE_TIMEOUT`. The script counts elapsed from 0 on each
   call, so re-running alone extends the wait
 - **3**: `gh run list` itself failed (rate limit, expired auth). Increment
@@ -227,12 +235,12 @@ deploy".
 So do not report guesses about whether a deploy fired. Return only "post-merge
 is success", so the caller can judge.
 
-**Do not drop `--max-wait=30` or switch to `run_in_background: true`.** The
+**Do not drop `--max-wait=120` or switch to `run_in_background: true`.** The
 default `MAX_WAIT` is 1800 seconds (30 minutes), which the harness would move
 to the background after about 180 s and the Bash tool's foreground execution
 (whose default timeout can be as low as 120 s, and 600 s at most even with
 `timeout: 600000`) would kill, leaving the exit code unobservable. Tick it off
-in the foreground in 30-second slices with
+in the foreground in 120-second slices with
 `timeout: 600000` and express the total wait with the counter (do not
 background it, for the same reason as step 1: the foreground run is what lets
 the counters tick and keeps the exit code observable to branch on).

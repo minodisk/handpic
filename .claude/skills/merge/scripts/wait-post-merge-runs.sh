@@ -15,13 +15,21 @@ set -o nounset
 # Options via env:
 #   POLL_INTERVAL   Seconds. Default 30
 #   MAX_WAIT        Seconds. Default 1800 (30 minutes). Only used when --max-wait is absent.
-#                   Agent callers pass --max-wait=30 and the Bash tool's
+#                   Agent callers pass --max-wait=120 and the Bash tool's
 #                   `timeout: 600000` (ms), because the default foreground
 #                   timeout can be as low as 120 s and the harness moves a
 #                   foreground command to the background after about 180 s
-#   INITIAL_GRACE   Seconds. Default 60 (waiting for runs to appear in the list)
+#   INITIAL_GRACE   Seconds. Default 60 (waiting for runs to appear in the list),
+#                   capped at the max wait
 #
 # Behavior:
+#   - The max wait is a deadline on real elapsed time (`date +%s`), the time
+#     spent inside gh included. After each poll it times out if the deadline
+#     has passed, else sleeps POLL_INTERVAL or the time left, whichever is
+#     shorter, and times out with the last observed state when that sleep
+#     reaches the deadline, making no further call. So one call of this script
+#     lasts the max wait, plus at most the poll in flight when the deadline
+#     passes
 #   - Lists every run whose head is that commit with `gh run list --commit=<sha>`
 #   - Polls until zero runs are queued / in_progress / waiting / requested /
 #     pending (waiting includes waiting on an environment approval)
@@ -47,7 +55,8 @@ set -o nounset
 #     excluding superseded; includes a canceled with no later success and a
 #     canceled still awaiting a verdict) / SUPERSEDED_COUNT
 #   - A timeout is exit 2
-#   - no_runs (still zero after the initial grace) is exit 0 with STATUS=no_runs
+#   - no_runs (still zero after the initial grace, counted on the same clock
+#     and ending by the max wait) is exit 0 with STATUS=no_runs
 #   - A failure of `gh run list` itself is exit 3. gh's error output is not
 #     captured but passed through to this script's stderr, followed by one line
 #     containing the SHA
@@ -90,7 +99,6 @@ poll_interval="${POLL_INTERVAL:-30}"
 # so it fails fast with exit 4 rather than silently taking the default.
 max_wait="${max_wait_flag-${MAX_WAIT:-1800}}"
 initial_grace="${INITIAL_GRACE:-60}"
-elapsed=0
 # How many runs on the default branch the superseded check looks back through.
 # The same workflow typically re-runs right after a cancellation, so 20 is
 # enough.
@@ -121,6 +129,40 @@ function print_result() {
 	echo "SUPERSEDED_COUNT=$superseded"
 }
 
+function clock() {
+	date +%s
+}
+
+function no_runs() {
+	echo "no workflow runs found for commit $sha after $((now - start))s (typical for chore-only merges)"
+	echo "STATUS=no_runs"
+	exit 0
+}
+
+# End the slice with the last observed state. pending / awaiting / total /
+# runs_json and print_result's inputs must be set before calling.
+function time_out() {
+	echo "timeout after $((now - start))s; pending=$pending awaiting_supersede=$awaiting total=$total" >&2
+	if [[ "$pending" -gt 0 ]]; then
+		echo "$runs_json" | jq -r '.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending") | "\(.status)\t\(.workflowName)\t\(.url)"' | sort >&2
+	else
+		# Every run was complete and only the superseded check was pending.
+		# Print the results with the pending canceled counted as a
+		# failure.
+		print_result
+	fi
+	echo "STATUS=timeout"
+	exit 2
+}
+
+start=$(clock)
+deadline=$((start + max_wait))
+if [[ "$initial_grace" -lt "$max_wait" ]]; then
+	grace_end=$((start + initial_grace))
+else
+	grace_end=$deadline
+fi
+
 while true; do
 	# gh's stderr is not captured to a temp file but passed straight through to
 	# this script's stderr (it survives in the caller's log, so nothing is lost).
@@ -136,15 +178,22 @@ while true; do
 
 	if [[ "$total" -eq 0 ]]; then
 		# GitHub can be slow to create the runs. Past the initial grace, treat it as no_runs.
-		if [[ "$elapsed" -lt "$initial_grace" ]]; then
-			echo "[elapsed ${elapsed}s] no runs yet; retrying in ${poll_interval}s" >&2
-			sleep "$poll_interval"
-			elapsed=$((elapsed + poll_interval))
-			continue
+		now=$(clock)
+		if [[ "$now" -ge "$grace_end" ]]; then
+			no_runs
 		fi
-		echo "no workflow runs found for commit $sha after ${elapsed}s (typical for chore-only merges)"
-		echo "STATUS=no_runs"
-		exit 0
+		nap=$((grace_end - now))
+		if [[ "$nap" -gt "$poll_interval" ]]; then
+			nap=$poll_interval
+		fi
+		echo "[elapsed $((now - start))s] no runs yet; retrying in ${nap}s" >&2
+		sleep "$nap"
+		# The grace ends by the deadline, so a slice that reaches it has no runs.
+		now=$(clock)
+		if [[ "$now" -ge "$deadline" ]]; then
+			no_runs
+		fi
+		continue
 	fi
 
 	pending=$(echo "$runs_json" | jq '[.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending")] | length')
@@ -205,25 +254,23 @@ while true; do
 		fi
 	fi
 
-	if [[ "$elapsed" -ge "$max_wait" ]]; then
-		echo "timeout after ${elapsed}s; pending=$pending awaiting_supersede=$awaiting total=$total" >&2
-		if [[ "$pending" -gt 0 ]]; then
-			echo "$runs_json" | jq -r '.[] | select(.status == "queued" or .status == "in_progress" or .status == "waiting" or .status == "requested" or .status == "pending") | "\(.status)\t\(.workflowName)\t\(.url)"' | sort >&2
-		else
-			# Every run was complete and only the superseded check was pending.
-			# Print the results with the pending canceled counted as a
-			# failure.
-			print_result
-		fi
-		echo "STATUS=timeout"
-		exit 2
+	now=$(clock)
+	if [[ "$now" -ge "$deadline" ]]; then
+		time_out
 	fi
 
-	if [[ "$pending" -gt 0 ]]; then
-		echo "[elapsed ${elapsed}s] $pending/$total runs still in progress; retrying in ${poll_interval}s" >&2
-	else
-		echo "[elapsed ${elapsed}s] $awaiting canceled run(s) waiting for a newer run to finish; retrying in ${poll_interval}s" >&2
+	nap=$((deadline - now))
+	if [[ "$nap" -gt "$poll_interval" ]]; then
+		nap=$poll_interval
 	fi
-	sleep "$poll_interval"
-	elapsed=$((elapsed + poll_interval))
+	if [[ "$pending" -gt 0 ]]; then
+		echo "[elapsed $((now - start))s] $pending/$total runs still in progress; retrying in ${nap}s" >&2
+	else
+		echo "[elapsed $((now - start))s] $awaiting canceled run(s) waiting for a newer run to finish; retrying in ${nap}s" >&2
+	fi
+	sleep "$nap"
+	now=$(clock)
+	if [[ "$now" -ge "$deadline" ]]; then
+		time_out
+	fi
 done
