@@ -572,9 +572,11 @@ executable and the `.icns` present).
   debug` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
-- Pending manual checks, not done here: the Dock / Finder icon of the built
-  `.app` on a Mac, and the running window's icon after the install task on a
-  Wayland and an X11 session.
+- Pending manual checks, not done here: the taskbar, title bar and Explorer
+  icon on Windows, and the running window's icon after the install task on a
+  Wayland and an X11 session. The Dock / Finder icon of the built `.app` was
+  seen on macOS on 2026-11-26
+  (`docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`).
 
 ### The `Package` workflow builds the distributables (Inferred)
 
@@ -3216,15 +3218,20 @@ It re-renders `rendered_frame`'s scene into the live render target, copies it
 to a staging texture and skips `present`; the next present re-renders the
 whole scene, and no stale or blank frame was seen on screen after captures
 (the window restored, uncovered, re-grabbed from the screen). On Windows it
-is implemented (D3D11), on macOS through Metal (not verified here), on Linux
+is implemented (D3D11), on macOS through Metal (it captured through MCP on
+a Mac, arm64, on 2026-11-26), on Linux
 it fails with "not implemented", which the tool returns as its error; a lost
 device is an error too.
 
 A next-frame callback runs before that frame's draw, so the view's
 `screenshot` registers one inside another: the inner one captures after the
 frame the outer one let through, and a previous tool call's change is on the
-image (checked with `set_overlays` then `screenshot`). A covered window still
-draws and the capture is current. A minimized one draws no frame, so after
+image (checked with `set_overlays` then `screenshot`). On Windows a covered
+window still draws and the capture is current. On macOS, once, a window
+behind other apps' windows returned a frame that lacked a tree expand until
+the window was brought to the front (2026-11-26,
+`docs/plans/_archived/20261126-macos-device-checks-mcp/learnings.md`), so
+bring it to the front before a capture there. A minimized one draws no frame, so after
 `SCREENSHOT_FRAME_WAIT` (500 ms) the last drawn frame is taken as it is and a
 change made while minimized is not on it. The image is in device pixels, the
 render target's size.
