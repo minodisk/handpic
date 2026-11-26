@@ -21,7 +21,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 
 `crates/core/src/resample.rs` is a port of PIL's bilinear and bicubic
 resampling. The dual-license work
-([plan](../_archived/20261124-dual-license/plan.md)) left open whether that
+([plan](../20261124-dual-license/plan.md)) left open whether that
 port needs a Pillow (MIT-CMU) notice, and `todo.md` still carries the
 question. The user has decided it: a port gets a notice, the conservative
 reading, as with the themes removed for having no determined license. This
