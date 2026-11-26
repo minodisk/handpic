@@ -1,6 +1,16 @@
 # todo
 
 ## Cross-cutting / other
+### App: a `Rename by Capture Date…` split that removes the folder leaves a deferred open naming a missing folder
+
+#### Background
+
+The reveal-collapsed-rename work (plan: `docs/plans/_archived/20261127-reveal-collapsed-rename/plan.md`) noticed this while planning and left it out of its PR. In `date_folder_ran`'s split branch, when `self.deferred_open.is_some()` the flow goes to `settle_folder_run`, which opens the deferred folder even when `split.removed` means it is gone. This happens after a click on the split folder, or on a folder under it, during the run. Nobody has run it in the app, and no test covers it. Files: `crates/app/src/folderops.rs` (`date_folder_ran`, `settle_folder_run`), `crates/app/src/main.rs` (`open`, `deferred_open`).
+
+#### TODO
+
+- [ ] Make a deferred open of a folder the split removed land where an open of it would after the split (its first date folder, as the `opens` branch does), or drop it. Add a UI test in `folderops.rs`: hold the gate, click the folder, run a split that removes it, and check what opens.
+
 ### App: real-device Ctrl+C and window check of the app:watch task
 
 #### Background
@@ -1109,19 +1119,6 @@ Files: `crates/app/src/context.rs`, `crates/app/src/main.rs`.
 
 - [ ] On Windows, run `mise run app:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
-
-### App: a held open-and-collapse click leaves the row expanded when a rename moves the folder
-
-#### Background
-
-`native-tree-no-chevron` made a click on an expanded row that is not open open the folder and collapse the row. `tree_row_clicked` collapses the row and sets `Handpic::reveal_collapsed`, and `reveal` skips the chain's last step only when the path matches it through `tree::relation`. When the gate holds the open (`deferred_open`, `self.gate.in_flight()`), a rename that moves that folder before the deferred reveal runs makes the stored path no longer match, so `reveal` expands the end and the row ends up expanded. Local review noted this and no test covers it. `crates/app` has no GPUI window test. Plan: `docs/plans/_archived/20261117-native-tree-no-chevron/plan.md`.
-
-Files: `crates/app/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collapsed`, `deferred_open`), `crates/app/src/tree.rs` (`relation`), `crates/app/src/folderops.rs`.
-
-#### TODO
-
-- [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
-- [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.
 
 ### App: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
 

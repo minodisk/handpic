@@ -4595,7 +4595,12 @@ strip needed one because `uniform_list` is vertical only.
   folder (`tree::relation`), leaves the chain's end collapsed and unlisted
   (its spelling comes from its parent's listing, its count from the open's
   `set_listed_count`). The field survives an open deferred by the gate
-  (`deferred_open`) or waiting in `reveal_wanted`, and any other reveal
+  (`deferred_open`) or waiting in `reveal_wanted`, and a folder rename that
+  lands under the deferred open (`folder_renamed`, the `Rename by Capture
+  Date…` rename, whose run does not refuse the click) rebases it with
+  `deferred_open`, so the renamed row stays collapsed; the tree's `Rename…`
+  cannot land there, since it refuses the click while in flight and a held
+  one is dropped by the deferred open. Any other reveal
   drops it, as does a later open of the folder by another route (a plain
   click, `Enter`, a pick or a drop), the last request winning. The open folder's row toggles through `tree_toggle` without
   reopening (no re-listing, no new scan), and does nothing when it cannot
