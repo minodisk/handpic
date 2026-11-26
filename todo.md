@@ -1484,17 +1484,6 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 - [ ] On Windows, on a fresh `--index`, watch the strip while the status row shows `analyzing N / M`. Expect the mark to appear on cells live as pass 2 reaches them, with no re-listing.
 - [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
 - [ ] On macOS and Linux, when at hand, repeat the checks above.
-
-### Docs: stale `faces_of` / `eyes_of` caller names remain outside CLAUDE.md
-
-#### Background
-
-The todo-ondemand-eyes-of feature fixed `CLAUDE.md` to name `overlay::detect` and `overlay::judge` as the callers of `ondemand::read_faces` / `read_eyes`. Those two are in `crates/app/src/overlay.rs`. The `faces_of` / `eyes_of` names were the removed Tauri app's commands. They still appear in doc comments and docs that the docs-only plan left alone. Plan: `docs/plans/_archived/20261126-todo-ondemand-eyes-of/plan.md`. Files: `crates/engine/src/ondemand.rs`, `crates/cli/src/main.rs`, `docs/agents/shared-crates.md`, `docs/agents/tract-onnx-inference.md`.
-
-#### TODO
-
-- [ ] In those four files, replace `faces_of` / `eyes_of` as the callers' names with `overlay::detect` / `overlay::judge`, or mark them as the removed Tauri app's commands where the text is history. Keep the `eyes_of` mentions in other todo.md items, which are history.
-
 ### Release: real-device check that a release from `main` signs with the `release` environment's key (release-key-environment)
 
 #### Background

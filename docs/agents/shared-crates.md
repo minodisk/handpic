@@ -1084,8 +1084,8 @@ so `docs/humans/performance.md`'s numbers stay comparable.
 
 These three were measured through the earlier webview app, but the Rust code
 they time is what the app still runs: the scan's pass 1
-(`index::run_scan`), `ondemand::read_faces` (then the `faces_of` command) and
-`ondemand::read_eyes` (then `eyes_of`). They moved here from
+(`index::run_scan`), `ondemand::read_faces` (then the removed Tauri app's `faces_of` command) and
+`ondemand::read_eyes` (then its `eyes_of` command; the GPUI app calls the two reads from `overlay::detect` / `overlay::judge`). They moved here from
 `docs/humans/performance.md` / `.ja.md`, which keep only measurements a reader
 can repeat with the app or the CLI.
 
@@ -1108,7 +1108,7 @@ can repeat with the app or the CLI.
   file and ~16ms per file, the effective throughput works out to ~63MB/s
   (derived, not measured). The thread-count sweep that pins this on the drive
   (2026-09-22, `handpic-cli scan`) stays in `performance.md`.
-- **`faces_of`, now `ondemand::read_faces` (2026-09-25).** Read the preview +
+- **The Tauri app's `faces_of` command, now `ondemand::read_faces` (2026-09-25).** Read the preview +
   `detect_around`. Linux WSL2 (24 hardware threads), release build, the
   command's body called directly on two α7 V ARWs read from the Windows NTFS
   drive, warm page cache, 20 calls each after a first one:
@@ -1121,10 +1121,10 @@ can repeat with the app or the CLI.
   The first call of a session also builds the model. A cold read from a card
   or a slow disk, and the redraw, are not in these numbers. The timing ran
   from a temporary `#[ignore]`d test removed before committing.
-- **`eyes_of`, now `ondemand::read_eyes` (2026-10-07).** Windows 11,
+- **The Tauri app's `eyes_of` command, now `ondemand::read_eyes` (2026-10-07).** Windows 11,
   release build, one thread, `main` at `392f9c25`, the
-  `#[ignore]`d `times_eyes_of_on_real_files` test (it left with the earlier
-  app), run with no app running; the first file of each set left out because
+  `#[ignore]`d `times_eyes_of_on_real_files` test (in
+  `crates/engine/src/ondemand.rs`), run with no app running; the first file of each set left out because
   it pays the plan builds (256ms on the ARW, 315ms on the DNG). The call then
   fed the meta pane's `Eyes open: NN%` row:
 

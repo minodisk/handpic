@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::index::EyesPose;
 
-/// The faces `faces_of` found, each with its YuNet score and its five
+/// The faces `read_faces` found, each with its YuNet score and its five
 /// landmarks (the eyes, the nose tip and the mouth corners, each pair left of
 /// the image first), in the preview's stored pixel coordinates.
 #[derive(Debug, serde::Serialize)]
@@ -99,7 +99,7 @@ pub fn read_faces(path: &Path) -> Result<FacesResponse, String> {
     })
 }
 
-/// The `eyes_of` answer: the judgment, or `None` when the eyes are unknown
+/// The `read_eyes` answer: the judgment, or `None` when the eyes are unknown
 /// (no face, a face below the floor, a model failure), whether a newer
 /// request superseded this one before it finished, and how long each stage
 /// took, in microseconds, for the `eyes` timing line.
@@ -356,7 +356,7 @@ mod tests {
         remove_temp_dir(&dir);
     }
 
-    /// The `eyes_of` breakdown on real files, one line per file: set
+    /// The `read_eyes` breakdown on real files, one line per file: set
     /// `HANDPIC_EYES_FILES` to RAW paths separated by `;`, then run in
     /// release with `--ignored --nocapture`. The first file pays the model
     /// builds.
