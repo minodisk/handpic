@@ -105,6 +105,14 @@ function expect() {
 		return
 	fi
 
+	# pr-status.sh's output is printed verbatim: a printf format regression
+	# (e.g. a missing space before "$out") shows up as a blank line.
+	if grep -q '^$' <<<"${output}"; then
+		echo "FAIL: ${name}: output has a blank line" >&2
+		indent "${output}" >&2
+		failures=$((failures + 1))
+	fi
+
 	local line
 	for line in "$@"; do
 		if ! grep -qxF "${line}" <<<"${output}"; then

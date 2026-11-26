@@ -85,14 +85,14 @@ function time_out() {
 	if [[ "$failed" == true ]]; then
 		if [[ -n "$last_out" ]]; then
 			echo "wait-pr-actionable.sh: timed out after ${MAX_WAIT}s (last call failed; reporting the last successful state)" >&2
-			printf '%s\n'"$last_out"
+			printf '%s\n' "$last_out"
 			exit 2
 		fi
 		echo "wait-pr-actionable.sh: pr-status.sh failed on every call for ${MAX_WAIT}s" >&2
 		exit 1
 	fi
 	echo "wait-pr-actionable.sh: timed out after ${MAX_WAIT}s (last ACTION=${action})" >&2
-	printf '%s\n'"$last_out"
+	printf '%s\n' "$last_out"
 	exit 2
 }
 
@@ -113,12 +113,12 @@ while true; do
 		blocked)
 			blocked_since="${blocked_since:-$now}"
 			if ((now - blocked_since >= GRACE)); then
-				printf '%s\n'"$out"
+				printf '%s\n' "$out"
 				exit 0
 			fi
 			;;
 		*)
-			printf '%s\n'"$out"
+			printf '%s\n' "$out"
 			exit 0
 			;;
 		esac

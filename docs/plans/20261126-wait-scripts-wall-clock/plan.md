@@ -215,3 +215,5 @@ and its `learnings.md`.
   slices adds a few seconds each and is not counted.
 
 ## Progress
+
+- 2026-11-26: Step 1 done. The wait scripts now bound their slices by real elapsed time (PR: filled in when opened).
