@@ -193,7 +193,11 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// about 1% (`docs/plans/_archived/20261123-todo-four-closeouts/no-af-decode.md`).
 /// `14` fills `faces_group`, the gate count (`Analysis::gate_count`), which
 /// pass 3 picks its files by (`docs/plans/20261123-all-faces-check/`).
-pub const FACES_VERSION: i64 = 14;
+/// `15` also takes a whole-preview face whose box lies mostly over the judged
+/// face (`allfaces::SAME_FACE_OVERLAP`) for the judged face found again, so the
+/// gate count no longer counts it twice
+/// (`docs/plans/_archived/20261126-judged-face-eye-match/`).
+pub const FACES_VERSION: i64 = 15;
 
 /// The version of what the third pass, `handpic_core::scan::extract_face_counts`,
 /// produces, stored on every `files` row as `allfaces_extractor` next to its

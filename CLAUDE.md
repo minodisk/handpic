@@ -32,8 +32,10 @@ whose box long side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of its,
 searched at `faces::GATE_INPUT` from `GATE_LOW_RES_CONFIDENCE` on an AF frame
 and over the cue's own whole-image search from `FACE_CONFIDENCE` without
 one; `candidates`: the other whole-image faces at
-`FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not overlapping the judged
-face, the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
+`FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not the judged face found
+again (`same_face`: an IoU above `NMS_THRESHOLD` or an overlap over the
+smaller box above `SAME_FACE_OVERLAP`; the gate count drops it the same
+way), the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
 counted only within `MAX_EYE_OFFSET` and, as the cue's EAR, never an
 untrusted one or one under the presence floor; `counts`, the `FaceCounts` of faces
 judged, closed by `EYES_CLOSED_EAR` and soft under `LOW_BELOW`, the soft
