@@ -330,7 +330,8 @@ impl Writer<'_> {
 }
 
 /// Give the temp file the source's modified time, flush it, and rename it to
-/// `dst` unless `dst` appeared meanwhile; the bytes written.
+/// `dst`, the rename itself refusing a `dst` that appeared meanwhile (see
+/// [`rename_into_place`] for the filesystems that cannot); the bytes written.
 fn finish(f: InFlight, dst: &Path) -> Result<u64, String> {
     let result = (|| {
         if let Some(t) = f.modified {
@@ -342,15 +343,161 @@ fn finish(f: InFlight, dst: &Path) -> Result<u64, String> {
             .sync_all()
             .map_err(|e| format!("flush: {}: {e}", f.temp.display()))?;
         drop(f.file);
-        if dst.exists() {
-            return Err(format!("exists: {}", dst.display()));
-        }
-        fs::rename(&f.temp, dst).map_err(|e| format!("rename: {}: {e}", dst.display()))
+        rename_into_place(&f.temp, dst).map_err(|e| {
+            if e.kind() == io::ErrorKind::AlreadyExists {
+                format!("exists: {}", dst.display())
+            } else {
+                format!("rename: {}: {e}", dst.display())
+            }
+        })
     })();
     if result.is_err() {
         let _ = fs::remove_file(&f.temp);
     }
     result.map(|()| f.written)
+}
+
+/// [`rename_noreplace`], or, on a filesystem that does not support it, a
+/// check for `to` followed by a plain rename, which leaves the race between
+/// the two open there only.
+fn rename_into_place(from: &Path, to: &Path) -> io::Result<()> {
+    match rename_noreplace(from, to) {
+        Err(e) if unsupported(&e) => {
+            if to.exists() {
+                return Err(io::ErrorKind::AlreadyExists.into());
+            }
+            fs::rename(from, to)
+        }
+        result => result,
+    }
+}
+
+/// Rename `from` to `to`, failing with `AlreadyExists` when `to` exists.
+#[cfg(target_os = "linux")]
+fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
+    let (from, to) = (c_path(from)?, c_path(to)?);
+    // The raw syscall, not the libc wrapper, so the binary needs no glibc 2.28.
+    // SAFETY: both pointers are NUL-terminated strings that outlive the call.
+    let r = unsafe {
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
+            from.as_ptr(),
+            libc::AT_FDCWD,
+            to.as_ptr(),
+            libc::RENAME_NOREPLACE,
+        )
+    };
+    if r == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn unsupported(e: &io::Error) -> bool {
+    matches!(e.raw_os_error(), Some(libc::EINVAL | libc::ENOSYS))
+}
+
+/// Rename `from` to `to`, failing with `AlreadyExists` when `to` exists.
+#[cfg(target_os = "macos")]
+fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
+    let (from, to) = (c_path(from)?, c_path(to)?);
+    // SAFETY: both pointers are NUL-terminated strings that outlive the call.
+    if unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn unsupported(e: &io::Error) -> bool {
+    e.raw_os_error() == Some(libc::ENOTSUP)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn c_path(path: &Path) -> io::Result<std::ffi::CString> {
+    use std::os::unix::ffi::OsStrExt;
+    Ok(std::ffi::CString::new(path.as_os_str().as_bytes())?)
+}
+
+/// Rename `from` to `to`, failing with `AlreadyExists` when `to` exists.
+#[cfg(windows)]
+fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn MoveFileExW(existing: *const u16, new: *const u16, flags: u32) -> i32;
+    }
+
+    let wide = |path: &Path| -> io::Result<Vec<u16>> {
+        Ok(verbatim(path)?
+            .as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect())
+    };
+    let (from, to) = (wide(from)?, wide(to)?);
+    // No MOVEFILE_REPLACE_EXISTING, and no MOVEFILE_COPY_ALLOWED: the temp
+    // file is always in the destination's folder.
+    // SAFETY: both pointers are NUL-terminated UTF-16 strings that outlive the call.
+    if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } != 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
+/// `path` made absolute and given the `\\?\` prefix, so a path past
+/// `MAX_PATH` reaches the API in the form `fs::rename` would give it. Like
+/// std, it asks `GetFullPathNameW` and opens no handle, which a few volumes
+/// (RAM disks, FUSE mounts) refuse `canonicalize`.
+#[cfg(windows)]
+fn verbatim(path: &Path) -> io::Result<PathBuf> {
+    use std::ffi::OsString;
+    use std::path::{Component, Prefix};
+
+    let abs = std::path::absolute(path)?;
+    let mut parts = abs.components();
+    let prefix = match parts.next() {
+        Some(Component::Prefix(p)) => p.kind(),
+        _ => return Ok(abs),
+    };
+    let mut out = match prefix {
+        Prefix::Disk(_) => {
+            let mut s = OsString::from(r"\\?\");
+            s.push(abs.as_os_str());
+            return Ok(PathBuf::from(s));
+        }
+        Prefix::UNC(server, share) => {
+            let mut s = OsString::from(r"\\?\UNC\");
+            s.push(server);
+            s.push(r"\");
+            s.push(share);
+            PathBuf::from(s)
+        }
+        _ => return Ok(abs),
+    };
+    out.extend(parts);
+    Ok(out)
+}
+
+#[cfg(windows)]
+fn unsupported(_: &io::Error) -> bool {
+    false
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn rename_noreplace(_: &Path, _: &Path) -> io::Result<()> {
+    Err(io::ErrorKind::Unsupported.into())
+}
+
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+fn unsupported(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::Unsupported
 }
 
 fn temp_path(dst: &Path) -> PathBuf {
@@ -460,6 +607,77 @@ mod tests {
         assert_eq!(names(dst.path()), vec!["a.ARW", "b.ARW"]);
         let last = last.unwrap();
         assert_eq!((last.files_done, last.bytes_done), (2, 6));
+    }
+
+    #[test]
+    fn the_rename_refuses_a_destination_created_after_the_check() {
+        let src = tempfile::tempdir().unwrap();
+        let dst = tempfile::tempdir().unwrap();
+        let now = SystemTime::now();
+        write(&src.path().join("a.ARW"), &[1; 20], now);
+        write(&src.path().join("b.ARW"), b"bee", now);
+        let jobs: Vec<Job> = ["a.ARW", "b.ARW"]
+            .iter()
+            .map(|n| Job {
+                src: src.path().join(n),
+                dst: dst.path().join(n),
+            })
+            .collect();
+
+        let a = dst.path().join("a.ARW");
+        let summary = copy_files_with(&jobs, small(), &AtomicBool::new(false), |p| {
+            if p.job == 0 && p.files_done == 0 && !a.exists() {
+                fs::write(&a, b"sidecar").unwrap();
+            }
+        });
+
+        assert!(matches!(&summary.results[0], Outcome::Failed(e) if e.starts_with("exists:")));
+        assert_eq!(summary.results[1], Outcome::Copied(3));
+        assert_eq!(fs::read(&a).unwrap(), b"sidecar");
+        assert_eq!(names(dst.path()), vec!["a.ARW", "b.ARW"]);
+    }
+
+    #[test]
+    fn rename_noreplace_refuses_an_existing_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let (from, to) = (dir.path().join("from"), dir.path().join("to"));
+        fs::write(&from, b"from").unwrap();
+        fs::write(&to, b"to").unwrap();
+
+        let e = rename_noreplace(&from, &to).unwrap_err();
+
+        assert_eq!(e.kind(), io::ErrorKind::AlreadyExists, "{e}");
+        assert_eq!(fs::read(&from).unwrap(), b"from");
+        assert_eq!(fs::read(&to).unwrap(), b"to");
+    }
+
+    #[test]
+    fn rename_noreplace_moves_onto_a_free_destination() {
+        let dir = tempfile::tempdir().unwrap();
+        let (from, to) = (dir.path().join("from"), dir.path().join("to"));
+        fs::write(&from, b"from").unwrap();
+
+        rename_noreplace(&from, &to).unwrap();
+
+        assert!(!from.exists());
+        assert_eq!(fs::read(&to).unwrap(), b"from");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn rename_noreplace_takes_a_path_past_max_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("a".repeat(150)).join("b".repeat(150));
+        fs::create_dir_all(&folder).unwrap();
+        let to = folder.join("c.ARW");
+        let from = temp_path(&to);
+        assert!(to.as_os_str().len() > 260);
+        fs::write(&from, b"from").unwrap();
+
+        rename_noreplace(&from, &to).unwrap();
+
+        assert!(!from.exists());
+        assert_eq!(fs::read(&to).unwrap(), b"from");
     }
 
     #[test]
