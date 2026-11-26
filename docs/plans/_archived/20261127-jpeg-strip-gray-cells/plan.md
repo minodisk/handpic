@@ -22,7 +22,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 Close the `todo.md` item "App: a JPEG folder's strip cells in view stay gray
 until pass 1 ends". On 2026-11-23 (Windows 11, debug build, fresh index, 500
 JPEGs, 1600 px window; finding D of
-[results.md](../_archived/20261123-windows-device-checks-mcp-visual/results.md))
+[results.md](../20261123-windows-device-checks-mcp-visual/results.md))
 the cells at positions 3 to 9 stayed gray until pass 1 ended while positions
 1, 2, 10 and 11 had thumbnails. Once this is done, the cells in view of a
 freshly opened folder fill in as pass 1 commits their rows.
