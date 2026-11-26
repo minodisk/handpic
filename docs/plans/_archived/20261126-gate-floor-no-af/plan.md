@@ -35,8 +35,8 @@ DNGs) reaches the default gate, and the todo.md item "Core: the default group
 threshold N = 5 passes no posed group photo of the measured folders
 (all-faces-check)" can be closed.
 
-Background: [the all-faces-check plan](../_archived/20261123-all-faces-check/plan.md)
-and its [measurement.md](../_archived/20261123-all-faces-check/measurement.md),
+Background: [the all-faces-check plan](../20261123-all-faces-check/plan.md)
+and its [measurement.md](../20261123-all-faces-check/measurement.md),
 which names the measured folders and how they were measured.
 
 ## Steps
