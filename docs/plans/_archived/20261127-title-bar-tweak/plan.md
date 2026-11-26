@@ -27,9 +27,9 @@ plan ships it with the docs that describe the title bar and `icons.rs`
 brought in line.
 
 Earlier title bar work:
-[the bar](../_archived/20261116-native-title-bar/plan.md),
-[the gear](../_archived/20261117-native-title-bar-settings/plan.md),
-[the folder name](../_archived/20261118-native-title-bar-folder-name/plan.md).
+[the bar](../20261116-native-title-bar/plan.md),
+[the gear](../20261117-native-title-bar-settings/plan.md),
+[the folder name](../20261118-native-title-bar-folder-name/plan.md).
 
 ## Steps
 
