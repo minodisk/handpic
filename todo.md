@@ -1373,18 +1373,6 @@ Test copies get their own `--settings`, `--index`, `--log` and `--mcp-port`, and
 - [ ] On Windows 11, a 2.0.0 portable copy offered the new release fails its install and stays on 2.0.0, as accepted; record the message shown.
 - [ ] On macOS, a 2.0.0 `Handpic.app` in `/Applications` updates to the new bundle from a test feed (`tools/package/test-release.sh`) and restarts into it. (The DMG's launch, `Contents/MacOS/Handpic` and `codesign --verify --strict` passed on 2026-11-26.)
 
-### Core: check whether the PIL resampling port needs a Pillow notice
-
-#### Background
-
-`crates/core/src/resample.rs` is a reimplementation of PIL's bilinear and bicubic resampling filters. The dual-license work (MIT OR Apache-2.0) did not assess whether it needs a Pillow (MIT-CMU) notice, and the shipped `licenses/` folder and the READMEs' third-party list have none. `crates/core/src/sequence.rs` derives from `minodisk/lapse` (MIT, same author) and needs no notice. Plan: `docs/plans/_archived/20261124-dual-license/plan.md`.
-
-Files: `crates/core/src/resample.rs`, `tools/package/notices.sh`, `README.md`, `README.ja.md`.
-
-#### TODO
-
-- [ ] Decide whether `resample.rs` is a derived work of Pillow. If it is, add a Pillow notice file, list it in `tools/package/notices.sh` and name it in both READMEs' License sections. Done when the decision and any added notice are recorded in `docs/agents/app.md`'s license section.
-
 ### App: real-device check of the Windows one-line install script (install-scripts)
 
 #### Background
