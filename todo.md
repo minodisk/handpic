@@ -1708,14 +1708,12 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 - [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
 - [ ] On macOS and Linux, when at hand, repeat the checks above.
 
-### Docs: CLAUDE.md's `src/ondemand.rs` description names an `eyes_of` that does not exist in the GPUI app
+### Docs: stale `faces_of` / `eyes_of` caller names remain outside CLAUDE.md
 
 #### Background
 
-`CLAUDE.md` describes the engine's `src/ondemand.rs` as "behind the app's `faces_of` and `eyes_of`". The `eyes-mark-tier-mcp` Step 4 checked the callers of `ondemand::read_eyes`: there is no `eyes_of` in the GPUI app, and the on-demand eyes go through `overlay::judge` (the only caller, reached from `analyze_current` in `main.rs` on a ticket from `Marks::wanted_eyes`). `faces_of` does exist, in `crates/app/src/faces.rs` / `companion.rs`. Plan: `docs/plans/_archived/20261123-eyes-mark-tier-mcp/plan.md`.
-
-Files: `CLAUDE.md`, `crates/app/src/overlay.rs`.
+The todo-ondemand-eyes-of feature fixed `CLAUDE.md` to name `overlay::detect` and `overlay::judge` as the callers of `ondemand::read_faces` / `read_eyes`. Those two are in `crates/app/src/overlay.rs`. The `faces_of` / `eyes_of` names were the removed Tauri app's commands. They still appear in doc comments and docs that the docs-only plan left alone. Plan: `docs/plans/_archived/20261126-todo-ondemand-eyes-of/plan.md`. Files: `crates/engine/src/ondemand.rs`, `crates/cli/src/main.rs`, `docs/agents/shared-crates.md`, `docs/agents/tract-onnx-inference.md`.
 
 #### TODO
 
-- [ ] Reword the `src/ondemand.rs` description in `CLAUDE.md` so it names `overlay::judge` (and `faces_of`) instead of `eyes_of`.
+- [ ] In those four files, replace `faces_of` / `eyes_of` as the callers' names with `overlay::detect` / `overlay::judge`, or mark them as the removed Tauri app's commands where the text is history. Keep the `eyes_of` mentions in other todo.md items, which are history.
