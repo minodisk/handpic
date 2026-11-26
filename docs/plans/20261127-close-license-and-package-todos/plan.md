@@ -49,3 +49,5 @@ Evidence:
 - The license section's note that `mise run ci:local` had been stopped locally for memory pressure is history of the dual-license PR, not an open task, and goes with the section.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
