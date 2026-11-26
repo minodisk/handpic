@@ -114,3 +114,5 @@ documentation that lists the third-party notices, and closes the todo item.
   and the source file is out of scope.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete
