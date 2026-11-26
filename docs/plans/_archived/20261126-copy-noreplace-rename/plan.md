@@ -27,7 +27,7 @@ that last check and the rename, such as a sidecar the app writes for a RAW
 that just landed, is replaced. This is the `todo.md` item "Core:
 `copy::copy_files` can replace a destination created between its check and
 the rename", left by the import-from-card work
-([plan](../_archived/20261106-import-from-card/plan.md)).
+([plan](../20261106-import-from-card/plan.md)).
 
 Once done, the final rename itself refuses an existing destination on
 Windows, Linux and macOS, the job fails with the same `exists: ...` message
