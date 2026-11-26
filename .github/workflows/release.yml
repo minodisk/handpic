@@ -3,10 +3,14 @@ name: Release
 # Two ways in, sharing the guard, the build (package.yml, signing with the
 # production key) and the publish:
 # - A release candidate: `gh workflow run release.yml --ref main -f
-#   version=2.0.0-rc.1`. The version must have a prerelease part. Only a run
-#   on main publishes, as a GitHub prerelease never marked latest, tagged
-#   v<version> at the dispatched commit; a dispatch on another ref builds and
-#   signs, uploads the workflow artifacts and creates no tag and no release.
+#   version=2.0.0-rc.1`. The version must have a prerelease part. It is
+#   published as a GitHub prerelease never marked latest, tagged v<version> at
+#   the dispatched commit. Only main can run it: the guard and the build's legs
+#   read the production key from the `release` environment, whose deployment
+#   branch policy allows only main, so GitHub rejects a dispatch on another ref
+#   at the guard and nothing builds. A branch is packaged with the test key
+#   instead: `gh workflow run package.yml --ref <branch> -f
+#   update_test_repo=<owner/name>`.
 # - The final release: a merged release PR, for which the release-please job
 #   reports release_created. The tag's version is built, the assets are
 #   uploaded to the draft release-please made, and the draft is published only
@@ -17,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: A release candidate's version (x.y.z-<prerelease>, e.g. 2.0.0-rc.1); published as a prerelease only from main
+        description: A release candidate's version (x.y.z-<prerelease>, e.g. 2.0.0-rc.1), published as a prerelease; runs only on main (package a branch with package.yml's update_test_repo)
         required: true
         type: string
 
@@ -51,7 +55,10 @@ jobs:
   # Fails before any build of about 75 minutes: on a version the run may not
   # build or publish, and on an UPDATE_SIGNING_KEY secret that is empty, does
   # not decode to a 64-byte key or does not match update.pub (proved by
-  # signing a scratch archive the way each leg signs its own).
+  # signing a scratch archive the way each leg signs its own). The secret is
+  # the `release` environment's, which allows only main, so GitHub rejects a
+  # dispatch on another ref here before any step runs; the ref check below
+  # only fires if that policy is ever loosened.
   guard:
     needs: release-please
     if: >-
@@ -59,11 +66,13 @@ jobs:
       needs.release-please.outputs.release_created == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    environment:
+      name: release
+      deployment: false
     permissions:
       contents: read
     outputs:
       version: ${{ steps.version.outputs.version }}
-      publish: ${{ steps.version.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
 
@@ -84,20 +93,18 @@ jobs:
               echo "version: $version has no prerelease part; a stable release is cut by merging the release PR" >&2
               exit 1
             fi
-            publish=false
-            if [[ "$GITHUB_REF" == refs/heads/main ]]; then
-              publish=true
-              releases="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"
-              if grep -qxF "v$version" <<<"$releases"; then
-                echo "version: the release v$version exists already" >&2
-                exit 1
-              fi
-              if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
-                echo "version: the tag v$version exists already" >&2
-                exit 1
-              fi
-            else
-              echo "Dispatched on $GITHUB_REF, not main: nothing is published."
+            if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+              echo "release.yml runs only on main; package a branch with: gh workflow run package.yml --ref <branch> -f update_test_repo=<owner/name>" >&2
+              exit 1
+            fi
+            releases="$(gh release list --limit 1000 --json tagName --jq '.[].tagName')"
+            if grep -qxF "v$version" <<<"$releases"; then
+              echo "version: the release v$version exists already" >&2
+              exit 1
+            fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v$version" >/dev/null; then
+              echo "version: the tag v$version exists already" >&2
+              exit 1
             fi
           else
             version="${TAG#v}"
@@ -109,11 +116,9 @@ jobs:
               echo "version: crates/app/Cargo.toml reads $checked_in, not the tag's $version" >&2
               exit 1
             fi
-            publish=true
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "publish=$publish" >> "$GITHUB_OUTPUT"
-          echo "version $version, publish $publish"
+          echo "version $version"
 
       - uses: jdx/mise-action@v2
         with:
@@ -150,9 +155,7 @@ jobs:
   # is published only after every one is attached.
   publish:
     needs: [release-please, guard, build]
-    if: >-
-      !cancelled() && needs.build.result == 'success' &&
-      needs.guard.outputs.publish == 'true'
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

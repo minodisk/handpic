@@ -1341,20 +1341,6 @@ Files: `crates/app/packaging/windows/handpic.iss`, `docs/agents/app.md`, `docs/p
 
 ---
 
-### Release: decide whether to protect `UPDATE_SIGNING_KEY` from branch dispatches (native-release)
-
-#### Background
-
-A branch dispatch of `release.yml` signs unreviewed branch code with the production key, and the "never publishes from a non-`main` ref" check lives in that branch's own workflow (accepted risks of native-release Step 2). Options: move the secret into a protected GitHub environment restricted to `main` (branch dry runs like run 44884797276 would then need the test key), or add tag / release protection rules. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
-
-Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Decide and record the choice. Done when the matching Rule in `docs/agents/app.md` ("a branch dispatch ... runs that branch's `release.yml` with the production key") is updated or removed.
-
----
-
 ### App: real-device check of the Sort / Filter menus with no folder, the status row's reserved slot and shortened strip names (todo-three-decisions)
 
 #### Background
@@ -1508,3 +1494,18 @@ The todo-ondemand-eyes-of feature fixed `CLAUDE.md` to name `overlay::detect` an
 #### TODO
 
 - [ ] In those four files, replace `faces_of` / `eyes_of` as the callers' names with `overlay::detect` / `overlay::judge`, or mark them as the removed Tauri app's commands where the text is history. Keep the `eyes_of` mentions in other todo.md items, which are history.
+
+### Release: real-device check that a release from `main` signs with the `release` environment's key (release-key-environment)
+
+#### Background
+
+release-key-environment moved the production updater key `UPDATE_SIGNING_KEY` from a repository secret into the `release` GitHub environment, whose deployment branch policy allows only `main`. The `guard` job and the three signing legs of `package.yml` now read it through that environment. A branch dispatch of `release.yml` is rejected by the environment protection. That rejection was measured on the PR branch, and so was the empty-environment-name case for a plain `package.yml` dispatch. What was never exercised is a real release from `main` signing with the environment's secret. That needs the key registered in the environment, the repository-level secret deleted after the merge, and a real dispatch. An agent cannot run it, because no agent may touch the key. Plan: `docs/plans/_archived/20261126-release-key-environment/plan.md` (Verification (b)).
+
+Files: `.github/workflows/release.yml`, `.github/workflows/package.yml`, `.claude/skills/release/scripts/verify-release.sh`
+
+#### TODO
+
+- [ ] After the merge, delete the repository-level secret with `gh secret delete UPDATE_SIGNING_KEY --repo minodisk/handpic`, then confirm with `gh secret list --repo minodisk/handpic` that only the `release` environment's copy remains (`gh secret list --env release --repo minodisk/handpic`).
+- [ ] On `main`, dispatch a release candidate with `gh workflow run release.yml --ref main -f version=<the next unused x.y.z-rc.N>`. Then run `mise exec cargo:zipsign@0.2.2 -- bash .claude/skills/release/scripts/verify-release.sh v<version>`. Expected: `guard` passes and `STATUS=ok`, which shows the legs signed with the `release` environment's secret. Then turn the "Not yet verified" sentence of the decision Rule in `docs/agents/app.md` into "Verified".
+
+---

@@ -24,7 +24,8 @@ the native-release plan's "What remains before PR #928 can be merged"
 
 1. Done: the Windows `handpic.exe` is a GUI-subsystem binary (PR #1194).
 2. Done: `release.yml` builds, signs with the production key and publishes;
-   the `UPDATE_SIGNING_KEY` secret is registered.
+   the `UPDATE_SIGNING_KEY` secret is registered (since 2026-11-26 in the
+   `release` environment, which allows only `main`).
 3. Done: the rc dry run on the real feed (`v2.0.0-rc.1` to `v2.0.0-rc.2`,
    both kept as prereleases). **Measured** on one Windows PC: the portable
    ZIP and the Inno Setup update, the feed and release-please leaving the
@@ -70,8 +71,9 @@ workflow (`.github/workflows/release.yml`, see
 1. `release-please` tags `main` `v<version>` and creates a **draft** GitHub
    Release with the changelog as its notes.
 2. `guard` checks that `crates/app/Cargo.toml` on the release commit reads
-   the tag's version and that the `UPDATE_SIGNING_KEY` secret is a key
-   matching `crates/app/packaging/update.pub`.
+   the tag's version and that the `release` environment's
+   `UPDATE_SIGNING_KEY` secret is a key matching
+   `crates/app/packaging/update.pub`.
 3. `build` (`package.yml`, about 75 minutes) builds every platform's
    packages and signs the updater's archives with the production key in
    each leg; `SHA256SUMS` is computed after signing.
@@ -198,6 +200,9 @@ the dispatched commit and a GitHub **prerelease** never marked latest, so
 `/releases/latest` and stable installs are not affected; prerelease installs
 are offered it. Nothing is committed and the release PR is untouched.
 Verify it with the same script (`verify-release.sh v2.0.0-rc.1`). A dispatch
-on another ref only builds and signs, uploading workflow artifacts. Delete a
+on another ref is rejected at `guard` by the `release` environment's
+`main`-only branch policy and builds nothing; package a branch with the test
+key instead (`gh workflow run package.yml --ref <branch> -f
+update_test_repo=<owner/name>`). Delete a
 candidate with `gh release delete v<version> --cleanup-tag` (only when the
 user asks).
