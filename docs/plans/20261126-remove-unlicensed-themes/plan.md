@@ -171,3 +171,5 @@ Background: [the native-themes plan](../_archived/20261115-native-themes/plan.md
    catches a count change but not which files.
 
 ## Progress
+
+- 2026-11-26: Step 1 done: the three files removed, `FILES` at 18, the LICENSE attribution for Harper / Fahrenheit, the docs and READMEs updated, the todo section deleted.
