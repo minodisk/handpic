@@ -241,3 +241,5 @@ After the merge:
   part can be rehearsed on a branch, with the test key.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete. Still pending, per `learnings.md`: verification (a), the empty-environment-name check, and the manual deletion of the repository secret after the merge.

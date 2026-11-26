@@ -913,8 +913,9 @@ pushes' `release-please` runs nor another candidate.
   production key lives only in the `release` environment, whose deployment
   branch policy allows only `main` (a custom branch policy, admins not
   allowed to bypass), so no workflow run on another ref can read it,
-  whatever that ref's workflow file says. The repository-level secret is
-  deleted. `release.yml`'s `guard` declares the environment
+  whatever that ref's workflow file says, once the repository-level secret
+  is deleted (a manual setting after this lands; until then a job without
+  the `environment:` key still reads it). `release.yml`'s `guard` declares the environment
   unconditionally and `package.yml`'s `macos`, `windows` and `linux` legs
   declare it only under `sign_production` (`name: ${{ inputs.sign_production
   && 'release' || '' }}`), all with `deployment: false`, so the runs create
