@@ -30,7 +30,7 @@ whole-preview face that is the judged face found again by an IoU above
 `faces::NMS_THRESHOLD` (0.3). When the two boxes of the same face overlap at
 or under 0.3, that face is counted twice, in the gate count and in the judged
 count alike (1 of 258 AF frames on `2026-09-19` at 640x448, see
-[the all-faces-check measurement](../_archived/20261123-all-faces-check/measurement.md)).
+[the all-faces-check measurement](../20261123-all-faces-check/measurement.md)).
 
 The first attempt matched the two detections by their eye landmarks. It was
 measured and rejected: the same face's eye landmarks move by up to 0.43 of the
@@ -49,7 +49,7 @@ neighbour `2026-11-07/_DSC1517` at about 0.36. This plan replaces the IoU
 match with that overlap under a measured cut, and closes the `todo.md` item
 "Core: the judged face can be counted twice in the all-faces counts and the
 gate count (all-faces-check)". Background:
-[the all-faces-check plan](../_archived/20261123-all-faces-check/plan.md).
+[the all-faces-check plan](../20261123-all-faces-check/plan.md).
 
 ## Steps
 
