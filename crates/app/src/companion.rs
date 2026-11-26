@@ -51,7 +51,7 @@ use handpic_engine::{
 use serde_json::{Map, Value, json};
 
 use crate::{
-    burst::BurstMember,
+    burst::{self, BurstMember},
     cache, context, datefolder,
     dialog::{Button, Dialog},
     exif::{GROUPS, Group, Groups},
@@ -1387,7 +1387,9 @@ fn cancel_operation(view: &View) -> Result<Action, String> {
 
 /// `companion.ts`'s `burstOf`: the current file's burst in capture order,
 /// positions 1-based; empty when the file is a burst of its own. A frame the
-/// filter hides is listed with `visible: false`.
+/// filter hides is listed with `visible: false`. Each frame carries its
+/// `eye_sharpness` (the stored `full_eye_sharp`) and its `rank` by
+/// `burst::burst_ranks` over the whole burst.
 fn burst_of(view: &View, path: &str) -> Vec<Value> {
     let Some(member) = view.bursts.get(path).filter(|m| m.size > 1) else {
         return Vec::new();
@@ -1398,14 +1400,30 @@ fn burst_of(view: &View, path: &str) -> Vec<Value> {
         .filter(|(_, other)| other.burst == member.burst)
         .collect();
     frames.sort_by_key(|(_, other)| other.position);
+    let scores: Vec<(Option<f64>, Option<f64>)> = frames
+        .iter()
+        .map(|(other, _)| {
+            let facts = view.facts.get(*other);
+            (
+                facts
+                    .and_then(|f| f.focus)
+                    .and_then(|f| f.eyes.full_eye_sharp),
+                facts.and_then(|f| f.sharpness),
+            )
+        })
+        .collect();
+    let ranks = burst::burst_ranks(&scores);
     frames
         .into_iter()
-        .map(|(other, frame)| {
+        .zip(scores.into_iter().zip(ranks))
+        .map(|((other, frame), ((eye_sharpness, sharpness), rank))| {
             let state = view.judgments.get(other).cloned().unwrap_or_default();
             json!({
                 "path": other,
                 "position": frame.position + 1,
-                "sharpness": view.facts.get(other).and_then(|f| f.sharpness),
+                "sharpness": sharpness,
+                "eye_sharpness": eye_sharpness,
+                "rank": rank,
                 "rating": state.rating,
                 "flag": flag_name(state.flag),
                 "label": state.label,
@@ -2594,6 +2612,8 @@ mod tests {
                     "path": "/d/a",
                     "position": 1,
                     "sharpness": 0.5,
+                    "eye_sharpness": null,
+                    "rank": 2,
                     "rating": null,
                     "flag": "none",
                     "label": "Red",
@@ -2603,6 +2623,8 @@ mod tests {
                     "path": "/d/b",
                     "position": 2,
                     "sharpness": 0.8,
+                    "eye_sharpness": null,
+                    "rank": 1,
                     "rating": 3,
                     "flag": "none",
                     "label": null,
@@ -2612,12 +2634,73 @@ mod tests {
                     "path": "/d/c",
                     "position": 3,
                     "sharpness": null,
+                    "eye_sharpness": null,
+                    "rank": null,
                     "rating": null,
                     "flag": "reject",
                     "label": null,
                     "visible": true,
                 },
             ])
+        );
+    }
+
+    fn eye_sharp(full_eye_sharp: Option<f64>, sharpness: Option<f64>) -> Facts {
+        Facts {
+            focus: Some(Focus {
+                point: None,
+                manual_focus: false,
+                eyes: StoredEyes {
+                    full_eye_sharp,
+                    ..StoredEyes::default()
+                },
+            }),
+            sharpness,
+            ..sharp(0.)
+        }
+    }
+
+    #[test]
+    fn ranks_a_mixed_burst_by_eye_sharpness_then_sharpness() {
+        let files = paths(&["/d/a", "/d/b", "/d/c", "/d/d"]);
+        let bursts = bursts(&[
+            ("/d/a", 0, 0, 4),
+            ("/d/b", 0, 1, 4),
+            ("/d/c", 0, 2, 4),
+            ("/d/d", 0, 3, 4),
+        ]);
+        let facts = HashMap::from([
+            ("/d/a".to_owned(), eye_sharp(None, Some(900.))),
+            ("/d/b".to_owned(), eye_sharp(Some(0.12), Some(400.))),
+            ("/d/c".to_owned(), eye_sharp(Some(0.24), Some(100.))),
+            ("/d/d".to_owned(), eye_sharp(None, None)),
+        ]);
+        let view = View {
+            bursts: &bursts,
+            facts: &facts,
+            ..view(&files)
+        };
+        let frames: Vec<(Value, Value, Value, Value)> = get_view(&view)["burst"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|frame| {
+                (
+                    frame["path"].clone(),
+                    frame["sharpness"].clone(),
+                    frame["eye_sharpness"].clone(),
+                    frame["rank"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            frames,
+            [
+                (json!("/d/a"), json!(900.), json!(null), json!(3)),
+                (json!("/d/b"), json!(400.), json!(0.12), json!(2)),
+                (json!("/d/c"), json!(100.), json!(0.24), json!(1)),
+                (json!("/d/d"), json!(null), json!(null), json!(null)),
+            ]
         );
     }
 

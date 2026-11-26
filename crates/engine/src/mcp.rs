@@ -67,7 +67,8 @@ const INSTRUCTIONS: &str = "Handpic is a desktop app the user culls RAW photos (
 ARW, Canon CR3, Nikon NEF, Fujifilm RAF, OM System ORF, DNG) and JPEGs with. This server \
 connects you to the running app, and every action the user takes in it has a tool here, so you \
 can assist while they cull or drive it on their behalf: read what Handpic is showing (the \
-current photo, the selection, its burst, the sharpness score, the AF point, the shooting \
+current photo, the selection, its burst with each frame's rank by eye sharpness (falling back \
+to the sharpness score), the sharpness score, the AF point, the shooting \
 settings and the current stars, pick / reject flag and color label), look at a small copy of a \
 photo's preview, move through the photos and the bursts, select photos, set the sort, the \
 filter, the panes shown and the overlays (grayscale included), browse the folders, open one, \
@@ -1089,8 +1090,14 @@ impl Companion {
         description = "What Handpic is showing now: the open folder, the number of photos \
         visible after the filter, the current photo and its 1-based position, the selected \
         paths, the view mode (normal, or zoom for the 1:1 focus check), the sort order, whether a filter is active, and the current photo's \
-        burst (empty when it is not part of one) with each frame's sharpness score, stars \
-        (null when unrated), pick / reject flag, color label, and whether the filter shows it \
+        burst (empty when it is not part of one), in capture order, with each frame's \
+        sharpness score (of the preview), `eye_sharpness` (the eyes' sharpness on the full \
+        JPEG, null when the second pass measured none), `rank` (1 first: the frames with an \
+        `eye_sharpness` by it, higher first, then the frames with only a sharpness score by \
+        that, higher first, the two never compared, ties in capture order; null with neither \
+        score; a rank by eye sharpness, not a pick of the frame to keep; it moves while the \
+        second pass is still filling the scores, so call `wait_for_idle` first for settled \
+        ranks), stars (null when unrated), pick / reject flag, color label, and whether the filter shows it \
         (a frame it hides cannot be shown or selected). The current photo carries \
         `photo_tier`, `good` when the scan's second pass judged it a good photo (the bright \
         green focus mark: the face's eyes sharp at full size, open and toward the camera, \

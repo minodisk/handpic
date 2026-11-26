@@ -329,7 +329,10 @@ apart, regrouped whenever the entries are set; `burst_marks` and
 and `burst_frame_step`, the `burstPrevious` / `burstNext` and
 `burstFramePrevious` / `burstFrameNext` moves over the shown files' ids;
 `reject_rest`, the `rejectRest` changes: the current file's other burst
-members over `all` not rejected yet, stars and label kept),
+members over `all` not rejected yet, stars and label kept; `burst_ranks`,
+each frame's 1-based rank in capture order: the frames with a
+`full_eye_sharp` by it, then the others by `sharpness`, each higher first,
+ties in capture order, none with neither score),
 `src/group.rs` the group threshold (the gate count a frame needs for pass
 3, `DEFAULT` 5 within `MIN` 2 and `MAX` 20; `from_setting`, the
 `groupMinFaces` value; `parse` and `valid`, the modal's and
@@ -463,7 +466,8 @@ off the UI thread; its pure parts also built for the tests),
 over a snapshot of the view: the strip's selection, its targets as
 `selected`, the current photo's `photo_tier` (`good` or null, the engine's
 `StoredEyes::photo_tier` over its `Facts`' focus), its burst
-(`burstOf`, each frame's sharpness from the `Facts`), the coverage table
+(`burstOf`, each frame's sharpness and `eye_sharpness`, the stored
+`full_eye_sharp`, from the `Facts`, and its `rank` by `burst::burst_ranks`), the coverage table
 (`Coverage`: every keymap action, right-click item, menu item, folder
 operation and settings page mapped to its tool, to a tool refused with
 `not_in_app` until the feature lands (`rename_file`) or to the

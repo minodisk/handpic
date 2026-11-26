@@ -1725,7 +1725,16 @@ burst of one, else every member in position order, a hidden one with
 `visible: false`); each frame's `sharpness` is `Facts.sharpness`, set from the
 entries read and patched by pass 2's `ready` files (`apply_face_ready`), as
 the Tauri `sharpness` map was filled from `folder_entries` and patched by
-`faces-progress` (`applySharpnessReady`).
+`faces-progress` (`applySharpnessReady`). Each frame also carries
+`eye_sharpness`, its `Facts.focus.eyes.full_eye_sharp` (null without it), and
+`rank`, `burst::burst_ranks` over every member, the hidden ones included:
+the frames with a `full_eye_sharp` by it, higher first, then the frames with
+only a `sharpness` by that, higher first, the two scales never compared,
+ties in capture order, a frame with neither score null. Pass 2 patches both
+scores, so the ranks move until it is over and a client wanting settled
+ranks calls `wait_for_idle` first, as for `photo_tier`. It is a rank by eye
+sharpness, not a best-of-burst pick (see `shared-crates.md` on what the
+full-size eye measure says).
 
 - Rule: a test run with MCP on passes `--mcp-port` with a free port other
   than 41917 (an installed Handpic or an earlier Tauri build may hold it), seeds `"mcpEnabled": true`

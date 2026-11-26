@@ -142,18 +142,6 @@ Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/cor
 
 ---
 
-### Core: decide which score ranks frames within a burst, the AF-frame window or the eye-midpoint window
-
-#### Background
-
-`todo-four-closeouts` Step 2 compared, over faced, face-tracked Sony frames, today's stored `sharpness` (the AF-frame window) with the eye-midpoint window it replaced. Over 69 bursts of 2026-09-19, 2026-09-13-a and 2026-09-13-b, the median per-burst Spearman was 0.500, the 10th percentile -0.420, and the same top frame came out in 62% of bursts, against a bar of 0.9 and 80%. The scoring was kept as is (Trade-offs 2 (a)). The check is not the exact pre-#334 pipeline. Plan: `docs/plans/_archived/20261123-todo-four-closeouts/plan.md`, numbers in `burst-rank.md` beside it. Files: `crates/core/src/sharpness.rs` (`score`, `eye_af_frame`), `crates/engine/src/index.rs` (`FACES_VERSION`), `crates/app/src/burst.rs`.
-
-#### TODO
-
-- [ ] Decide whether the score that ranks frames within a burst returns to the eye-midpoint window (with a `FACES_VERSION` bump) or whether the burst ranking reads `full_eye_sharp` instead, or keep the AF-frame window and record why.
-
----
-
 ### Core: a file with a trusted AF point still decodes its preview twice in pass 2
 
 #### Background
