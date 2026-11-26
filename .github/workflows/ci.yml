@@ -79,9 +79,13 @@ jobs:
       - uses: actions/checkout@v4
 
       # GPUI's Linux platform links against fontconfig, Wayland, X11 and
-      # xkbcommon, and renders through Vulkan.
+      # xkbcommon, and renders through Vulkan. The step normally takes about
+      # 9 s; in November 2026 a throttled runner mirror stretched the apt step
+      # to 25-29 minutes in three runs and the job's 30-minute limit fell on a
+      # later step, so this limit makes a slow mirror fail under this step's name.
       - name: Install the Linux GPUI dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \

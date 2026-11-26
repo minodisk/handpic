@@ -383,15 +383,15 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 - [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
 
-### Agents: `test (ubuntu-latest)` hangs on docs-only commits
+### App: `uitest::opens_with_no_folder` hung on `app (ubuntu-latest)`
 
 #### Background
 
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) hit the `test (ubuntu-latest)` job stalling on docs-only commits. PR 904's first run was cancelled. Main run 42128694204 hit the job's 30-minute `timeout-minutes` with the `riffle_core` test binary running. Both reruns took about 4 minutes, against the usual 5-6. PR 901's ubuntu job stalled in `actions/cache`. Files: `.github/workflows/`, `docs/agents/github-actions-workflows.md`.
+Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/_archived/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). Files: `crates/app/src/uitest.rs`.
 
 #### TODO
 
-- [ ] Collect the hung runs' logs and decide whether the cause is a flaky test, a cache stall or a runner problem. Then lower the job timeout, add a per-test timeout, or add a "rerun, then check X" note to `docs/agents/github-actions-workflows.md`. Done when the cause is identified, or a decision that reruns are enough is recorded with a rerun-only rule in that guide.
+- [ ] Find why `uitest::opens_with_no_folder` can hang. Done when the hang is reproduced or its cause found from the test's code, and fixed, or a per-test bound added so it fails fast.
 
 ### Core: re-measure the import copy pipeline against Explorer on a fast destination
 
