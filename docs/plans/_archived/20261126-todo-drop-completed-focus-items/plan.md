@@ -88,3 +88,5 @@ section read as what remains, and leaves `todo.md` with no checked item.
       text names in backticks.
 
 ## Progress
+
+- (2026-11-26) Step 1 complete
