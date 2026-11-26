@@ -399,6 +399,18 @@ the plan).
 - Source: `docs/plans/_archived/20261005-folder-sidecars/learnings.md`,
   Step 2.
 
+`foldersidecars::delete` takes the move as an
+`FnOnce(Vec<Group>) -> (Summary, Vec<Trashed>)` (the shape of
+`trash::redo_back`'s `again`). `delete_run` passes `trash::move_groups`, which
+is `pub(crate)` for this. On Windows the sidecars therefore move through the
+chunked mover, one shell operation per chunk. A `.xmp` shared by `a.ARW` and
+`a.NEF` goes into `move_many` twice. The second rename fails and the per-file
+fallback finds the file gone and counts it moved, so the summary and the
+recorded run list it twice. Both entries belong to `a.ARW`, the first match by
+path, and only `a.ARW` is cleared. Do not "fix" the duplicate without changing
+that pinned behavior. Source:
+`docs/plans/_archived/20261126-chunked-sidecar-delete/learnings.md`, Step 1.
+
 ### A bulk sidecar rewrite must skip what `reconcile_of` skips (Hit)
 
 `sidecar::reconcile_of` leaves a sidecar larger than `MAX_SIDECAR_BYTES`

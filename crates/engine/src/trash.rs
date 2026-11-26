@@ -1263,24 +1263,31 @@ pub fn trash_one(path: &Path) -> Result<Option<PathBuf>, String> {
         .map_err(|e| e.to_string())
 }
 
-/// The chunk mover of `trash_listed` and `redo_run`: one shell
-/// operation for all of `paths`.
+/// The chunk mover of `trash_listed`, `redo_run` and
+/// `foldersidecars::delete_run`: one shell operation for all of `paths`.
 #[cfg(windows)]
 fn trash_many(paths: &[PathBuf]) -> Result<(), String> {
     ::trash::delete_all(paths).map_err(|e| e.to_string())
 }
 
-/// Move `groups` to the Trash in chunks: a shell operation costs far more
-/// than the files it moves.
+/// Move `groups` to the Trash in chunks, for `trash_listed` and
+/// `foldersidecars::delete_run`: a shell operation costs far more than the
+/// files it moves.
 #[cfg(windows)]
-fn move_groups(groups: Vec<Group>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+pub(crate) fn move_groups(
+    groups: Vec<Group>,
+    progress: impl FnMut(usize, usize),
+) -> (Summary, Vec<Trashed>) {
     run_chunked(groups, Path::exists, trash_many, trash_one, progress)
 }
 
 /// Move `groups` to the Trash one file at a time: macOS needs where each file
 /// went, and `::trash::delete_all` is a loop of single moves on Linux.
 #[cfg(not(windows))]
-fn move_groups(groups: Vec<Group>, progress: impl FnMut(usize, usize)) -> (Summary, Vec<Trashed>) {
+pub(crate) fn move_groups(
+    groups: Vec<Group>,
+    progress: impl FnMut(usize, usize),
+) -> (Summary, Vec<Trashed>) {
     run(groups, trash_one, progress)
 }
 
