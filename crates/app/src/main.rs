@@ -4509,6 +4509,12 @@ impl Handpic {
                 }
             }
             Read::NotScanned => {
+                if let Some(retried) = self.strip.after_ready(index) {
+                    log::warn!(
+                        "thumbnail not scanned after the scan reported it: path={} retried={retried}",
+                        self.files[index].display()
+                    );
+                }
                 self.strip.answer(index, Answer::NotScanned);
             }
             Read::Failed(reason) => {
