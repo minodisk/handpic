@@ -23,7 +23,7 @@ Two RAWs of one stem in a folder (`a.ARW` and `a.NEF`) share `a.xmp`. Moving
 one of them to the Trash takes the shared `.xmp` along today
 (`trash::groups_of`), so the RAW that stays loses its sidecar and its
 judgment. The
-[sidecar-and-keymap-decisions plan](../_archived/20261123-sidecar-and-keymap-decisions/plan.md)
+[sidecar-and-keymap-decisions plan](../20261123-sidecar-and-keymap-decisions/plan.md)
 fixed this for the date split and the file rename and left the Trash out of
 scope; `todo.md` carries it as "Engine: Move to Trash takes a `.xmp` shared
 with a RAW that stays".
