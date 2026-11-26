@@ -1349,7 +1349,6 @@ Files: `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs` (
 
 ---
 
-
 ### App: real-device check of the Sort / Filter menus with no folder, the status row's reserved slot and shortened strip names (todo-three-decisions)
 
 #### Background
