@@ -2,12 +2,15 @@ The theme files in this folder are copied unchanged from gpui-kit
 (formerly gpui-component), https://github.com/longbridge/gpui-kit, folder
 `themes/`, at tag v0.9.1, commit 39ab849a93b5f15507b969164d49891db8d5b470,
 the release of the `gpui-component` 0.9.1 crate this app pins. gpui-kit is
-licensed under the Apache License, Version 2.0, reproduced below.
+licensed under the Apache License, Version 2.0, reproduced below, and so
+are these files, except `harper.json` and `fahrenheit.json`, which adapt
+works under Creative Commons Attribution-ShareAlike 4.0 International and
+are distributed under that license (see the end of these notes). Three of
+gpui-kit's 21 theme files, adapting schemes whose licenses could not be
+determined, are not copied.
 
 Each file names the color scheme it adapts in its `author` and `url` fields:
 
-adventure.json      Adventure       iTerm2-Color-Schemes  https://github.com/mbadolato/iTerm2-Color-Schemes
-alduin.json         Alduin          AlessandroYorba       https://github.com/AlessandroYorba/Alduin
 asciinema.json      Asciinema       asciinema.org         https://asciinema.org
 aurora.json         Aurora          Longbridge            https://github.com/longbridge/gpui-kit
 ayu.json            Ayu             Zed Industries        https://github.com/zed-industries/zed/blob/e62dd2a0e584154886ff86cc1e9e3e060558b977/assets/themes/ayu
@@ -19,7 +22,6 @@ gruvbox.json        Gruvbox         Pavel Pertsev         https://github.com/mor
 harper.json         Harper          iTerm2-Color-Schemes  https://github.com/mbadolato/iTerm2-Color-Schemes
 hybrid.json         Hybrid          Andrew Wong           https://github.com/w0ng/vim-hybrid
 jellybeans.json     Jellybeans      nanotech              https://github.com/nanotech/jellybeans.vim
-kibble.json         Kibble          iTerm2-Color-Schemes  https://github.com/mbadolato/iTerm2-Color-Schemes
 macos-classic.json  macOS Classic   huacnlee              https://github.com/huacnlee/zed-theme-macos-classic
 mellifluous.json    Mellifluous     Ramojus Lapinskas     https://github.com/ramojus/mellifluous.nvim
 molokai.json        Molokai         Tomas Restrepo        https://github.com/tomasr/molokai
@@ -31,69 +33,60 @@ twilight.json       Twilight        MacroMates            https://macromates.com
 The license of each scheme's own upstream, checked on 2026-11-23 (the
 notices the licenses require follow the notes):
 
-adventure.json      undetermined (1)
-alduin.json         undetermined (2)
-asciinema.json      Apache-2.0 (3)
+asciinema.json      Apache-2.0 (1)
 aurora.json         Apache-2.0, gpui-kit's own (Longbridge)
-ayu.json            MIT (4)
+ayu.json            MIT (2)
 catppuccin.json     MIT
 everforest.json     MIT
-fahrenheit.json     CC-BY-SA-4.0 (5)
+fahrenheit.json     CC-BY-SA-4.0 (3)
 flexoki.json        MIT
-gruvbox.json        MIT (6)
-harper.json         CC-BY-SA-4.0 (7)
-hybrid.json         MIT (8)
+gruvbox.json        MIT (4)
+harper.json         CC-BY-SA-4.0 (5)
+hybrid.json         MIT (6)
 jellybeans.json     MIT
-kibble.json         undetermined (9)
 macos-classic.json  MIT
 mellifluous.json    MIT
-molokai.json        MIT (10)
-solarized.json      MIT (11)
+molokai.json        MIT (7)
+solarized.json      MIT (8)
 spaceduck.json      MIT
 tokyonight.json     Apache-2.0
-twilight.json       TextMate bundle license (12)
+twilight.json       TextMate bundle license (9)
 
-(1) The iTerm2-Color-Schemes repository is MIT (Copyright (c) 2011 to
-    Present Mark Badolato), but its LICENSE says that license covers the
-    collection and that "the copyright/license for each individual theme
-    belongs to the author of that theme". Its CREDITS.md credits Adventure
-    to hongzimao (https://github.com/hongzimao/iTerm2-Color-Schemes, a fork
-    that states no license of its own) and Adventure Time, the file's
-    second theme, to zdj (https://github.com/zdj/themes, no license
-    stated). The authors' own terms could not be determined.
-(2) Neither the repository nor its colors/alduin.vim states a license (the
-    file names its author, Alessandro Yorba). Could not be determined.
-(3) The palette is the asciinema theme of asciinema-player
+(1) The palette is the asciinema theme of asciinema-player
     (https://github.com/asciinema/asciinema-player,
     src/less/themes/_asciinema.less: the foreground, the background and the
     six base colors match), Apache-2.0, Copyright 2011-2021 Marcin Kulik.
     The project ships no NOTICE file.
-(4) Zed's assets/themes/LICENSES at that commit credits Ayu to
+(2) Zed's assets/themes/LICENSES at that commit credits Ayu to
     https://github.com/dempfi/ayu, MIT, Copyright (c) 2016 Ike Ku.
-(5) CREDITS.md of iTerm2-Color-Schemes: created by jonascarpay, based on
-    fcpg's vim-fahrenheit (https://github.com/fcpg/vim-fahrenheit), whose
-    README licenses it under Creative Commons Attribution-ShareAlike 4.0
-    International. Whether an adaptation under share-alike terms may ship
-    in this app is an open decision.
-(6) The repository has no LICENSE file; its README's License section says
+(3) The iTerm2-Color-Schemes repository is MIT (Copyright (c) 2011 to
+    Present Mark Badolato), but its LICENSE says that license covers the
+    collection and that "the copyright/license for each individual theme
+    belongs to the author of that theme". Its CREDITS.md: created by
+    jonascarpay, based on fcpg's vim-fahrenheit
+    (https://github.com/fcpg/vim-fahrenheit), whose README licenses it
+    under Creative Commons Attribution-ShareAlike 4.0 International. Kept
+    in this app and distributed under CC BY-SA 4.0 with the attribution
+    given at the end of these notes.
+(4) The repository has no LICENSE file; its README's License section says
     MIT/X11 and names no copyright holder (colors/gruvbox.vim: Author
     morhetz). Zed's assets/themes/LICENSES reproduces the MIT text for
     Gruvbox with a placeholder copyright line.
-(7) CREDITS.md of iTerm2-Color-Schemes credits idleberg
+(5) CREDITS.md of iTerm2-Color-Schemes (whose collection license leaves
+    each theme's terms to its author, as in (3)) credits idleberg
     (https://github.com/idleberg/Harper-iTerm2), whose README says "This
     work by Jan T. Sott is licensed under a Creative Commons
-    Attribution-ShareAlike 4.0 Unported License". Whether an adaptation
-    under share-alike terms may ship in this app is an open decision.
-(8) The header of colors/hybrid.vim: Maintainer Andrew Wong (w0ng), License
+    Attribution-ShareAlike 4.0 Unported License". Kept in this app and
+    distributed under CC BY-SA 4.0 with the attribution given at the end of
+    these notes.
+(6) The header of colors/hybrid.vim: Maintainer Andrew Wong (w0ng), License
     MIT, no copyright line. Its palette is credited there to
     Tomorrow-Night.vim (https://github.com/chriskempson/vim-tomorrow-theme).
-(9) The collection is MIT as in (1), but CREDITS.md credits Kibble to no
-    one, so its author's terms could not be determined.
-(10) The repository's LICENSE.md: "monokai theme copyright Wimer
+(7) The repository's LICENSE.md: "monokai theme copyright Wimer
     Hazenberg." (no license stated for Monokai itself), then MIT for
     molokai.vim.
-(11) The site links https://github.com/altercation/solarized, MIT.
-(12) https://github.com/textmate/themes.tmbundle (Themes/Twilight.tmTheme,
+(8) The site links https://github.com/altercation/solarized, MIT.
+(9) https://github.com/textmate/themes.tmbundle (Themes/Twilight.tmTheme,
     author Michael Sheets). Its README puts its files under: "Permission to
     copy, use, modify, sell and distribute this software is granted. This
     software is provided "as is" without express or implied warranty, and
@@ -115,8 +108,8 @@ given upstream, the license text reproduced once after the list:
   Wimer Hazenberg)
 - Solarized: Copyright (c) 2011 Ethan Schoonover
 - Spaceduck: Copyright (c) 2020 pineapplegiant
-- iTerm2-Color-Schemes, the collection Adventure, Fahrenheit, Harper and
-  Kibble come from: Copyright (c) 2011 to Present Mark Badolato
+- iTerm2-Color-Schemes, the collection Fahrenheit and Harper come from:
+  Copyright (c) 2011 to Present Mark Badolato
 
     Permission is hereby granted, free of charge, to any person obtaining a
     copy of this software and associated documentation files (the
@@ -143,9 +136,29 @@ Folke Lemaitre; its LICENSE carries no copyright line and the project no
 NOTICE file), both under the Apache License, Version 2.0, whose text is
 reproduced below.
 
-Harper (Jan T. Sott) and Fahrenheit (fcpg's vim-fahrenheit, ported by
-jonascarpay) are licensed upstream under Creative Commons
-Attribution-ShareAlike 4.0, https://creativecommons.org/licenses/by-sa/4.0/.
+The Creative Commons Attribution-ShareAlike 4.0 International schemes,
+kept in this app under share-alike with this attribution:
+
+- Harper, by Jan T. Sott (idleberg),
+  https://github.com/idleberg/Harper-iTerm2, reached through
+  https://github.com/mbadolato/iTerm2-Color-Schemes. Licensed under
+  Creative Commons Attribution-ShareAlike 4.0 International,
+  https://creativecommons.org/licenses/by-sa/4.0/. Changes: gpui-kit
+  adapted the palette into a gpui-kit theme file, `harper.json`, copied
+  here unchanged.
+- Fahrenheit, by fcpg (vim-fahrenheit,
+  https://github.com/fcpg/vim-fahrenheit), ported to iTerm2 by
+  jonascarpay, reached through
+  https://github.com/mbadolato/iTerm2-Color-Schemes. Licensed under
+  Creative Commons Attribution-ShareAlike 4.0 International,
+  https://creativecommons.org/licenses/by-sa/4.0/. Changes: gpui-kit
+  adapted the palette into a gpui-kit theme file, `fahrenheit.json`,
+  copied here unchanged.
+
+`harper.json` and `fahrenheit.json` are distributed under Creative Commons
+Attribution-ShareAlike 4.0 International, not under gpui-kit's Apache-2.0
+and not under Handpic's `MIT OR Apache-2.0`. The app only reads them as
+data.
 
 ---
 

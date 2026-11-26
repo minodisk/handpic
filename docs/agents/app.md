@@ -91,7 +91,8 @@ writes `shadow` only when a config sets it (Hybrid, macOS Classic,
 Mellifluous and Molokai do), so `apply` sets `theme.shadow = true` before
 `change`; otherwise Neutral chosen after Molokai would keep the shadow off.
 `highlight` is not reset, since the app draws no code view. The shipped themes are
-gpui-kit's 21 theme files at the 0.9.1 release, copied unchanged into
+18 of gpui-kit's 21 theme files at the 0.9.1 release (the three whose
+license could not be determined are left out, see below), copied unchanged into
 `crates/app/themes/` (with its `LICENSE`), embedded with `include_str!`
 and parsed once into `ThemeConfig`s (`serde_json` over `ThemeSet`); the app
 never registers them (`ThemeRegistry::load_themes_from_str` would make
@@ -318,7 +319,7 @@ file name), and `gpui-kit-assets` embeds Lucide (ISC).
 
 The shipped themes under `crates/app/themes/` are copied unchanged from
 gpui-kit's `themes/` at tag v0.9.1 (commit `39ab849a`), under the same
-Apache-2.0; their `LICENSE` names that source, each file's own `author` and
+Apache-2.0 but for the two CC BY-SA 4.0 ones below; their `LICENSE` names that source, each file's own `author` and
 `url` (the color scheme it adapts) and carries the license text.
 
 Each adapted scheme's own upstream license was checked on 2026-11-23 and is
@@ -327,17 +328,20 @@ Apache-2.0 upstreams require: MIT for Ayu, Catppuccin, Everforest,
 Flexoki, Gruvbox, Hybrid, Jellybeans, macOS Classic, Mellifluous, Molokai,
 Solarized and Spaceduck; Apache-2.0 for Asciinema (asciinema-player's
 palette), Aurora (gpui-kit's own) and Tokyo Night; the TextMate themes
-bundle's permissive notice for Twilight. Not settled, and still shipped
-(2.0.1 already ships all 21):
+bundle's permissive notice for Twilight. The rest, decided on 2026-11-23
+(releases up to 2.1.0 shipped all 21):
 
-- Undetermined: `alduin.json` (no license in its repository or its
-  `alduin.vim`), `adventure.json` (iTerm2-Color-Schemes is MIT as a
-  collection but leaves each theme's terms to its author: Adventure's,
-  hongzimao, and Adventure Time's, zdj, state none) and `kibble.json`
-  (credited to no one in the collection's `CREDITS.md`).
-- Creative Commons Attribution-ShareAlike 4.0: `harper.json` (Jan T. Sott)
-  and `fahrenheit.json` (a port of fcpg's vim-fahrenheit). Whether a
-  share-alike adaptation may ship in the app is undecided.
+- Removed: `alduin.json`, `adventure.json` and `kibble.json`, whose
+  schemes' terms could not be determined. They are not copied, and a
+  re-copy at a `gpui-component` bump must leave them out (the comment on
+  `theme.rs`'s `FILES` says so); a stored name of one of their themes reads
+  as Neutral.
+- Kept with attribution: `harper.json` (Jan T. Sott) and `fahrenheit.json`
+  (a port of fcpg's vim-fahrenheit), whose schemes are Creative Commons
+  Attribution-ShareAlike 4.0 International. The `LICENSE` gives each one's
+  author, source, license and changes, and distributes the two files under
+  CC BY-SA 4.0, not under gpui-kit's Apache-2.0 or Handpic's
+  `MIT OR Apache-2.0`; the app only reads them as data.
 
 `tools/package/notices.sh <dir>` copies the set every package ships into one
 `licenses/` folder: `crates/app/packaging/NOTICE-gpui` (the GPUI crates'
