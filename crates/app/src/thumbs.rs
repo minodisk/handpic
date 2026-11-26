@@ -125,8 +125,19 @@ fn read(reader: &Mutex<Index>, path: &str) -> Read {
             let entry = index::lock(reader).entry(path);
             Read::Failed(entry.ok().flatten().and_then(|e| e.error).unwrap_or(e))
         }
-        Err(_) => Read::NotScanned,
+        Err(e) => {
+            if !no_row(&e) {
+                log::warn!("thumbnail read failed, the cell waits for the scan: {e}");
+            }
+            Read::NotScanned
+        }
     }
+}
+
+/// Whether a failed thumbnail read is the index having no row for the file,
+/// which the scan has not reached, rather than the read itself failing.
+fn no_row(e: &str) -> bool {
+    e.ends_with(": Query returned no rows")
 }
 
 fn decode(jpeg: &[u8], orientation: u16) -> Result<Arc<RenderImage>, String> {
@@ -144,13 +155,24 @@ fn decode(jpeg: &[u8], orientation: u16) -> Result<Arc<RenderImage>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::Thumbs;
+    use super::{Thumbs, no_row};
     use gpui_kit::RenderImage;
+    use handpic_engine::index::Index;
     use image::{Frame, RgbaImage};
     use std::sync::Arc;
 
     fn image() -> Arc<RenderImage> {
         Arc::new(RenderImage::new(vec![Frame::new(RgbaImage::new(1, 1))]))
+    }
+
+    #[test]
+    fn only_a_missing_row_reads_as_no_row() {
+        let dir = tempfile::tempdir().unwrap();
+        let index = Index::open(&dir.path().join("index.sqlite")).unwrap();
+        let e = index.thumbnail("D:/a/0.JPG").unwrap_err();
+        assert!(no_row(&e), "{e}");
+        assert!(!no_row("D:/a/0.JPG: database is locked"));
+        assert!(!no_row("D:/a/0.JPG: no cached thumbnail"));
     }
 
     #[test]
