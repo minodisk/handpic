@@ -134,3 +134,5 @@ step's second gpui build", leaving only the part later PRs can verify.
   jobs.
 
 ## Progress
+
+(2026-11-27) Step 1 complete

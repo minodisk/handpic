@@ -1472,3 +1472,13 @@ Files: `.github/workflows/release.yml`, `.github/workflows/package.yml`, `.claud
 - [ ] On `main`, dispatch a release candidate with `gh workflow run release.yml --ref main -f version=<the next unused x.y.z-rc.N>`. Then run `mise exec cargo:zipsign@0.2.2 -- bash .claude/skills/release/scripts/verify-release.sh v<version>`. Expected: `guard` passes and `STATUS=ok`, which shows the legs signed with the `release` environment's secret. Then turn the "Not yet verified" sentence of the decision Rule in `docs/agents/app.md` into "Verified".
 
 ---
+
+### App: no CI job builds the app without `test-support` before `Package`
+
+#### Background
+
+`macos-ci-bundle-reuse` (`docs/plans/_archived/20261127-macos-ci-bundle-reuse/plan.md`) switched the macOS `app` job's bundle step to `--features screenshot` so it reuses the test build. With that, no CI job before `Package` builds the app without GPUI's `test-support`. A test-only GPUI API used in non-test code (the rule under "The main view opens on GPUI's test platform" in `docs/agents/app.md`) therefore surfaces only in the `Package` workflow's release build. Clippy and the tests still cover the default feature set's code. A cheap follow-up is a feature-less `cargo check` on one leg, if the cost of a second GPUI check variant is acceptable. Files: `.github/workflows/ci.yml`, `docs/agents/app.md`.
+
+#### TODO
+
+- [ ] Decide whether a feature-less `cargo check` on one `app` job leg is worth its cost (a second GPUI check variant). If so, add it, and update the rule in `docs/agents/app.md` under "The main view opens on GPUI's test platform" to say which job now catches a test-only API in non-test code.
