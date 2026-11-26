@@ -135,7 +135,7 @@ and the keys share the view's `perform`).
   | During pass 2 | 106 | 16.3 / 35.5 / 41.3 | `read` |
   | After the scan | 120 | 12.2 / 19.5 / 33.9 | `prefetch` |
 
-The rows differ in the page's source as well as the scan's priority: during the passes every page was its own read, after the scan the prefetch ring served it. The gap between the rows is therefore not the cost of the QoS; the like-for-like comparison is the Windows figure below.
+The rows differ in the page's source as well as the scan's priority: during the passes every page was its own read, after the scan the prefetch ring served it. The gap between the rows is therefore not the cost of the QoS. The Windows figure below is for reference only: another machine, 20 files with alternating runs, and the pages' source not recorded.
 
 - The Windows reference: 18.4 / 25.0 ms (ARW, p50 / p95) while the second
   pass runs, from `docs/humans/performance.md` (the table after "While the
