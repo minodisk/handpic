@@ -126,4 +126,10 @@ mod tests {
         assert_eq!(desktop_value(&desktop, "Icon"), IDENTIFIER);
         assert_eq!(desktop_value(&desktop, "Exec"), env!("CARGO_BIN_NAME"));
     }
+
+    #[test]
+    fn the_uninstaller_deletes_the_update_staging() {
+        let iss = packaging("windows/handpic.iss");
+        assert!(iss.contains(&format!(r#""{{localappdata}}\{IDENTIFIER}\update""#)));
+    }
 }

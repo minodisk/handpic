@@ -2597,10 +2597,17 @@ call.
   `cx.quit()`, not `cx.restart()`, which would start the old exe while the
   setup replaces it. The staging folder of an Inno Setup install is removed
   at launch (a failure, such as the relaunching setup still running from it,
-  is logged and left to the next launch). Only a launch clears it, so after
-  an uninstall from Settings → Apps the staged setup and its ZIP stay in
-  `<cache dir>\<IDENTIFIER>\update` (Observed 2026-11-21, rc.2);
-  `handpic.iss` has no `[UninstallDelete]` for it yet.
+  is logged and left to the next launch). An uninstall leaves no next
+  launch, and an uninstall from Settings → Apps left the staged setup and
+  its ZIP in `<cache dir>\<IDENTIFIER>\update` (Observed 2026-11-21, rc.2),
+  so the uninstaller deletes that folder too, through the one
+  `[UninstallDelete]` entry of `handpic.iss`
+  (`{localappdata}\dev.minodisk.handpic\update`, which a `datadir.rs` test
+  holds to `update_staging`), and keeps the index, the settings and the logs.
+  An install gains it once a setup built with the entry has installed over
+  it. **Unverified**: the uninstall is not yet checked on a real machine
+  (the `todo.md` item "App: the Inno Setup uninstaller leaves the update
+  staging folder (native-release)").
 - Rule: the `.app` install's bundle. The engine's `install` takes the
   bundle from the executable's path (`app_bundle`, the `<x>.app` of
   `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
