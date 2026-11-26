@@ -26,7 +26,7 @@ remain outside CLAUDE.md".
 app the engine's on-demand reads are called from `crates/app/src/overlay.rs`:
 `ondemand::read_faces` by `overlay::detect` and `ondemand::read_eyes` by
 `overlay::judge`.
-[The earlier plan](../_archived/20261126-todo-ondemand-eyes-of/plan.md) fixed
+[The earlier plan](../20261126-todo-ondemand-eyes-of/plan.md) fixed
 `CLAUDE.md` only. Doc comments and agent guides still name the two commands
 as if they existed, so a reader greps for names that lead nowhere. Once this
 is done, every remaining mention either names the real functions or says
