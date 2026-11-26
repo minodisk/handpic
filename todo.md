@@ -958,7 +958,7 @@ The `native-title-bar-settings` feature added a gpui-component `Button` with the
 - The tooltip showed on hover.
 - The gear and its hover fill were visible in Neutral Light and Dark.
 
-Seen on Windows 11 on 2026-11-21: the window controls and the bar's drag after the change, a judgment key and paging right after closing the settings the gear opened, and the gear pressed with the tree holding the keyboard, with `Sort ▾` open and with a right-click menu open; never exercised: a shipped non-Neutral theme, the gear during an inline rename, macOS, Linux. The Step 1 checkbox was ticked on the automated criteria and the checks above. Plan: `docs/plans/_archived/20261117-native-title-bar-settings/plan.md`.
+Seen on Windows 11 on 2026-11-21: the window controls and the bar's drag after the change, a judgment key and paging right after closing the settings the gear opened, and the gear pressed with the tree holding the keyboard, with `Sort ▾` open and with a right-click menu open; never exercised: a shipped non-Neutral theme, the gear during an inline rename, macOS, Linux. The Step 1 checkbox was ticked on the automated criteria and the checks above. Plan: `docs/plans/_archived/20261117-native-title-bar-settings/plan.md`. The `title-bar-tweak` feature then retuned the bar: 13 px text, an 18 px app icon and a gear with a thinner stroke (`icons::SETTINGS_THIN`, 14 px) in a `TITLE_BAR_HEIGHT`-wide, full-height, square-cornered ghost `Button` with no `mr_2` margin, after the window controls' own box. That look was seen and approved only on Windows 11 in a dev build; macOS and Linux are unseen. Plan: `docs/plans/_archived/20261127-title-bar-tweak/plan.md`.
 
 Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/app/src/settingsmodal.rs`, `crates/app/src/icons.rs`, `docs/agents/app.md`.
 
@@ -966,8 +966,8 @@ Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/ap
 
 - [ ] On Windows (`mise run app:dev`), switch to one shipped (non-Neutral) theme in Settings > Appearance, in Light or Dark. Expect the gear and its hover fill to be visible and to follow the theme.
 - [ ] On Windows, click the gear during an inline folder rename. Expect the settings to open and the rename to end as a press elsewhere ends it.
-- [ ] On macOS (`mise run app:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
-- [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
+- [ ] On macOS (`mise run app:dev`), open a folder and look at the title bar. Expect the gear flush at the bar's right edge (no `mr_2` margin), its hover fill filling the bar's height with square corners, the 14 px icon not clipped, and the 18 px app icon and 13 px text looking right beside the traffic lights. A press and drag on the gear should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
+- [ ] On Linux, under client-side decorations, open a folder and look at the title bar. Expect the gear flush beside the window controls, its hover fill filling the bar's height with square corners, the icon not clipped, and the 18 px app icon and 13 px text looking right. A press and drag on the gear should not move the window, the rest of the bar should still drag, and a click should open the settings.
 
 ### App: real-device check of the settings controls drawn with gpui-component (native-component-controls)
 
