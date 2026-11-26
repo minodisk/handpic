@@ -169,3 +169,5 @@ collapsed (if the test confirms it is broken), and the todo section is gone.
   todo candidate in `learnings.md`, not a change in this PR.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete. Test (c) failed before the fix, so the carry rule was the chosen fix (evidence in `learnings.md`).
