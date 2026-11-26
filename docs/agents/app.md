@@ -572,9 +572,11 @@ executable and the `.icns` present).
   debug` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
-- Pending manual checks, not done here: the Dock / Finder icon of the built
-  `.app` on a Mac, and the running window's icon after the install task on a
-  Wayland and an X11 session.
+- Pending manual checks, not done here: the taskbar, title bar and Explorer
+  icon on Windows, and the running window's icon after the install task on a
+  Wayland and an X11 session. The Dock / Finder icon of the built `.app` was
+  seen on macOS on 2026-11-26
+  (`docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`).
 
 ### The `Package` workflow builds the distributables (Inferred)
 
