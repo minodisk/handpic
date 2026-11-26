@@ -30,7 +30,7 @@ Once done, CI's three-platform `test` job exercises the engine's watcher and ren
     - The root `Cargo.lock` has `notify` 8.2.2 with the same checksum as the entry in `crates/app/Cargo.lock`, and `crates/app/Cargo.lock` is unchanged (it already has 8.2.2).
     - The root `Cargo.lock` diff holds only what the `notify` bump itself causes: `notify` 8.2.0 -> 8.2.2, `fsevent-sys` 4.1.0 removed, `objc2-core-services` 0.3.2 added, and `windows-sys` 0.60.2 with `windows-targets` 0.53.5 and its eight `windows_*` 0.53.1 crates removed. No other package changes version (`notify-types` stays at 2.1.0). Any difference from this list is explained in `learnings.md`.
     - The local stress run was dropped by the user (it starved other sessions on the host); learnings.md records the partial iterations and failures completed before it was stopped, and verification rests on the PR's three-platform `test` job.
-    - `docs/agents/shared-crates.md` ("A `notify` watch on Windows pins the watched folder's ancestors, not the folder itself") no longer says the root lock stays at 8.2.0 or that aligning the locks is still open: it states that both locks resolve `notify` 8.2.2 since this change, so CI's engine tests run on the shipped version, and gives the stress run's result (date, iterations, load, failures) next to the 2026-11-23 scratch-binary re-check, which stays as the record it is.
+    - `docs/agents/shared-crates.md` ("A `notify` watch on Windows pins the watched folder's ancestors, not the folder itself") no longer says the root lock stays at 8.2.0 or that aligning the locks is still open: it states that both locks resolve `notify` 8.2.2 since this change, so CI's engine tests run on the shipped version, (the 2026-11-23 scratch-binary re-check stays as the record it is). The dropped stress run is recorded in `learnings.md` only.
     - `docs/agents/app.md`'s rule "`crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2 against 8.2.0 in the root lock)" no longer names 8.2.0 as the root lock's version.
     - The doc comment of `mod watch_release` in `crates/app/src/datefolder.rs` no longer names 8.2.0 as the root lock's version (comment only).
     - No source change in `crates/engine` (the `settle` doc comment in `crates/engine/src/watch.rs` speaks of "notify 8.2" and stays true), no change to `crates/engine/Cargo.toml`, and no change to `todo.md` (the item is removed in the wrap-up phase).
@@ -63,3 +63,5 @@ Once done, CI's three-platform `test` job exercises the engine's watcher and ren
 - **macOS backend change.** 8.2.2 replaces `fsevent-sys` with `objc2-core-foundation` / `objc2-core-services`; the PR's macOS `test` job is the first run of the engine's tests on it.
 
 ## Progress
+
+- (2026-11-27) Step 1 complete: root lock at notify 8.2.2 (Round 1 restored the seven `windows-sys` edges cargo had moved), guides and comment reworded; the local stress run was dropped, verification rests on the PR checks

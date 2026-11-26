@@ -8,8 +8,16 @@
   commit `739a17ee`, printed exactly the planned changes: `notify` 8.2.0 ->
   8.2.2, `fsevent-sys` 4.1.0 removed, `objc2-core-services` 0.3.2 added,
   `windows-sys` 0.60.2, `windows-targets` 0.53.5 and the eight `windows_*`
-  0.53.1 crates removed. Nothing else changed in `Cargo.lock`, and
-  `notify-types` stays at 2.1.0. The new `notify` checksum
+  0.53.1 crates removed. `notify`'s own `windows-sys` edge moves from 0.60.2
+  to 0.61.2, since 0.60.2 is gone. Nothing else changed in `Cargo.lock`, and
+  `notify-types` stays at 2.1.0. Review round 1 found that the first
+  committed lock also moved the `windows-sys` edge of seven other packages
+  (`errno`, `quinn-udp`, `rustix`, `rustls-platform-verifier`,
+  `self-replace`, `tempfile`, `winapi-util`) from 0.61.2 to 0.52.0: cargo
+  re-resolved them when it ran from the lock as it stood. The lock was
+  regenerated from `origin/main`'s and those seven edges restored to 0.61.2
+  (`cargo metadata --locked` accepts it), so the diff is the planned set plus
+  the `notify` edge only. The new `notify` checksum
   (`c41a04a5f59df9322cc657286dd2d79f90816119b22c5f847607c850110205ab`) is the
   same as the one in `crates/app/Cargo.lock`, which was not touched.
 - `mise x -- cargo tree -p handpic-engine -i notify` reports `notify v8.2.2`
