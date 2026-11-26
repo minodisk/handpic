@@ -34,7 +34,7 @@ CC BY-SA 4.0 themes with attribution (native-themes)". After it, every theme
 the app ships has a known license whose notice the packages carry. It lands as
 a normal PR in the next regular release, not a hotfix.
 
-Background: [the native-themes plan](../_archived/20261115-native-themes/plan.md).
+Background: [the native-themes plan](../20261115-native-themes/plan.md).
 
 ## Steps
 
