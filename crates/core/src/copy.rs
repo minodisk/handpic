@@ -377,6 +377,7 @@ fn rename_into_place(from: &Path, to: &Path) -> io::Result<()> {
 fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     let (from, to) = (c_path(from)?, c_path(to)?);
     // The raw syscall, not the libc wrapper, so the binary needs no glibc 2.28.
+    // SAFETY: both pointers are NUL-terminated strings that outlive the call.
     let r = unsafe {
         libc::syscall(
             libc::SYS_renameat2,
@@ -403,6 +404,7 @@ fn unsupported(e: &io::Error) -> bool {
 #[cfg(target_os = "macos")]
 fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     let (from, to) = (c_path(from)?, c_path(to)?);
+    // SAFETY: both pointers are NUL-terminated strings that outlive the call.
     if unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) } == 0 {
         Ok(())
     } else {
@@ -441,6 +443,7 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     let (from, to) = (wide(from)?, wide(to)?);
     // No MOVEFILE_REPLACE_EXISTING, and no MOVEFILE_COPY_ALLOWED: the temp
     // file is always in the destination's folder.
+    // SAFETY: both pointers are NUL-terminated UTF-16 strings that outlive the call.
     if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), 0) } != 0 {
         Ok(())
     } else {
@@ -448,18 +451,38 @@ fn rename_noreplace(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-/// `path` with its folder canonicalized, so a path past `MAX_PATH` reaches
-/// the API in the `\\?\` form `fs::rename` would give it.
+/// `path` made absolute and given the `\\?\` prefix, so a path past
+/// `MAX_PATH` reaches the API in the form `fs::rename` would give it. Like
+/// std, it asks `GetFullPathNameW` and opens no handle, which a few volumes
+/// (RAM disks, FUSE mounts) refuse `canonicalize`.
 #[cfg(windows)]
 fn verbatim(path: &Path) -> io::Result<PathBuf> {
-    let name = path
-        .file_name()
-        .ok_or_else(|| io::Error::from(io::ErrorKind::InvalidInput))?;
-    let parent = match path.parent() {
-        Some(p) if !p.as_os_str().is_empty() => p,
-        _ => Path::new("."),
+    use std::ffi::OsString;
+    use std::path::{Component, Prefix};
+
+    let abs = std::path::absolute(path)?;
+    let mut parts = abs.components();
+    let prefix = match parts.next() {
+        Some(Component::Prefix(p)) => p.kind(),
+        _ => return Ok(abs),
     };
-    Ok(fs::canonicalize(parent)?.join(name))
+    let mut out = match prefix {
+        Prefix::Disk(_) => {
+            let mut s = OsString::from(r"\\?\");
+            s.push(abs.as_os_str());
+            return Ok(PathBuf::from(s));
+        }
+        Prefix::UNC(server, share) => {
+            let mut s = OsString::from(r"\\?\UNC\");
+            s.push(server);
+            s.push(r"\");
+            s.push(share);
+            PathBuf::from(s)
+        }
+        _ => return Ok(abs),
+    };
+    out.extend(parts);
+    Ok(out)
 }
 
 #[cfg(windows)]
