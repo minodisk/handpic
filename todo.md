@@ -441,7 +441,7 @@ The scan now decodes an HDR PQ CR3's HEVC preview (65-125 ms of CPU per file) af
 
 #### TODO
 
-- [ ] Samples: of the six `hvcC` files in `D:\Photos\samples\CR3` (`R8.CR3`, `R5m2.CR3`, `Canon_EOS_R5m2_102A6405.CR3`, `Canon_EOS-1D_X_Mark_III_AJKC0638.CR3`, `Canon_EOS-1D_X_Mark_III_AJKL0637.CR3`, `Canon_EOS_R10_IMG_1205.CR3`), keep those `reader::read_metadata(..).hevc` (or `handpic-cli info`) calls HDR PQ and that decode without a panic, and copy them to a few hundred files in one folder under `D:\Photos	ests\`. Open it in a release build of the app with a fresh `--index`, on the commit before the split and on the split, and take pass 1's ms/file from the `scan extract:` log line (its time over its files). Done when both figures and the method are in `docs/agents/shared-crates.md`'s read cap section.
+- [ ] Samples: of the six `hvcC` files in `D:\Photos\samples\CR3` (`R8.CR3`, `R5m2.CR3`, `Canon_EOS_R5m2_102A6405.CR3`, `Canon_EOS-1D_X_Mark_III_AJKC0638.CR3`, `Canon_EOS-1D_X_Mark_III_AJKL0637.CR3`, `Canon_EOS_R10_IMG_1205.CR3`), keep those `reader::read_metadata(..).hevc` (or `handpic-cli info`) calls HDR PQ and that decode without a panic, and copy them to a few hundred files in one folder under `D:\Photos\tests\`. Open it in a release build of the app with a fresh `--index`, on the commit before the split and on the split, and take pass 1's ms/file from the `scan extract:` log line (its time over its files). Done when both figures and the method are in `docs/agents/shared-crates.md`'s read cap section.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
