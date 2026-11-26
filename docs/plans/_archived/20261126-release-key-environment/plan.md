@@ -24,7 +24,7 @@ a repository secret. A dispatch of `release.yml` on any branch runs that
 branch's workflow code with the key, so unreviewed branch code can sign
 archives, and "never publishes from a non-`main` ref" is a check inside the
 branch's own workflow. This was an accepted risk of
-[native-release](../_archived/20261121-native-release/plan.md) Step 2 and is
+[native-release](../20261121-native-release/plan.md) Step 2 and is
 the open `todo.md` item "Release: decide whether to protect
 `UPDATE_SIGNING_KEY` from branch dispatches".
 
