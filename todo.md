@@ -1177,17 +1177,6 @@ Files: `crates/app/src/mark.rs` (`MarkState::color`), `crates/app/src/main.rs` (
 
 - [ ] Give the menu's `Good` icon a green that reads on light and dark menu surfaces, leaving the strip's and the `f` overlay's green over the photo as is, and check it on screen.
 
-### App: remove the three shipped themes with no license and keep the two CC BY-SA 4.0 themes with attribution (native-themes)
-
-The 21 vendored files in `crates/app/themes/` come from gpui-kit's Apache-2.0 repository, but each adapts a third-party scheme. On 2026-11-23 every scheme's own upstream license was checked and noted in `crates/app/themes/LICENSE`, with the MIT and Apache-2.0 notices added (`docs/agents/app.md`, "The license notices are due at packaging"; `docs/plans/_archived/20261123-todo-measurements/learnings.md`). Five files were not settled, and 2.0.1 already ships them. Decided on 2026-11-23: remove `alduin.json` (no license in its repository or `alduin.vim`), `adventure.json` (iTerm2-Color-Schemes is MIT as a collection but leaves each theme's terms to its author; Adventure's, hongzimao, and Adventure Time's, zdj, state none) and `kibble.json` (credited to no one in the collection's `CREDITS.md`), in a separate PR that ships in the next normal release; keep `harper.json` (Jan T. Sott) and `fahrenheit.json` (a port of fcpg's vim-fahrenheit), both Creative Commons Attribution-ShareAlike 4.0, with their attribution. Plan: `docs/plans/_archived/20261115-native-themes/plan.md`.
-
-Files: `crates/app/themes/`, `crates/app/themes/LICENSE`, `crates/app/src/theme.rs`, `docs/agents/app.md`.
-
-#### TODO
-
-- [ ] Delete `alduin.json`, `adventure.json` and `kibble.json` from `crates/app/themes/`; drop their rows and notes from `crates/app/themes/LICENSE` and the guide's license section (`docs/agents/app.md`, "The license notices are due at packaging", and the "gpui-kit's 21 theme files" sentence, now 18); update every other place that names the 21 files or 36 themes, and any test or `theme.rs` list that names them. Fall back to `NEUTRAL` for a stored theme name that is no longer shipped (check `theme.rs`'s existing rule covers it). Ship it in the next normal release (no hotfix).
-- [ ] Keep `harper.json` and `fahrenheit.json`: confirm `crates/app/themes/LICENSE` carries each one's author, source and the CC BY-SA 4.0 name and link, and rewrite its "open decision" wording to state that they are kept under share-alike with attribution.
-
 ### Engine: align the two `notify` locks so CI tests the version the app ships
 
 The `treewatch` / `watch` tests run in CI on the root `Cargo.lock`'s notify 8.2.0, while the app ships what `crates/app/Cargo.lock` resolves, notify 8.2.2. On 2026-11-23 the re-check confirmed that `configure` still queues behind `Unwatch` on 8.2.2 (a scratch binary, 900 iterations under 24 spinning threads: 6 failures without `configure`, 0 with it; the engine's own `treewatch` tests were not run against 8.2.2; `docs/agents/shared-crates.md`). Moving the root lock to 8.2.2, or pinning the app lock to 8.2.0, is a lock change the measurement plan did not make. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md` (Trade-offs, "Item 2: which lock is right").

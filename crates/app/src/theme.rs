@@ -17,10 +17,11 @@ use serde_json::{Value, json};
 pub const NEUTRAL: &str = "Neutral";
 
 /// gpui-kit's theme files at the `gpui-component` 0.9.1 release, unchanged
-/// (`themes/LICENSE`); a bump of the crate copies them again.
-const FILES: [&str; 21] = [
-    include_str!("../themes/adventure.json"),
-    include_str!("../themes/alduin.json"),
+/// (`themes/LICENSE`); a bump of the crate copies them again. Its
+/// `adventure.json`, `alduin.json` and `kibble.json` are left out on purpose:
+/// their schemes' licenses could not be determined, so a re-copy must not
+/// bring them back.
+const FILES: [&str; 18] = [
     include_str!("../themes/asciinema.json"),
     include_str!("../themes/aurora.json"),
     include_str!("../themes/ayu.json"),
@@ -32,7 +33,6 @@ const FILES: [&str; 21] = [
     include_str!("../themes/harper.json"),
     include_str!("../themes/hybrid.json"),
     include_str!("../themes/jellybeans.json"),
-    include_str!("../themes/kibble.json"),
     include_str!("../themes/macos-classic.json"),
     include_str!("../themes/mellifluous.json"),
     include_str!("../themes/molokai.json"),
@@ -664,7 +664,7 @@ mod tests {
             assert!(!set.name.is_empty());
             assert!(!set.themes.is_empty(), "{}", set.name);
         }
-        assert_eq!(FILES.len(), 21);
+        assert_eq!(FILES.len(), 18);
     }
 
     #[test]
@@ -729,6 +729,18 @@ mod tests {
         ] {
             let setting = Setting::from_setting(Some(&value));
             assert_eq!((setting.light, setting.dark), (NEUTRAL, NEUTRAL), "{value}");
+        }
+    }
+
+    #[test]
+    fn a_removed_theme_is_neutral_and_not_offered() {
+        for name in ["Adventure", "Adventure Time", "Alduin", "Kibble"] {
+            let value = json!({"light": name, "dark": name});
+            let setting = Setting::from_setting(Some(&value));
+            assert_eq!((setting.light, setting.dark), (NEUTRAL, NEUTRAL), "{name}");
+            for mode in [ThemeMode::Light, ThemeMode::Dark] {
+                assert!(names(mode).all(|listed| listed != name), "{name}");
+            }
         }
     }
 
