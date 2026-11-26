@@ -517,6 +517,22 @@ Made in this revision (planning, 2026-11-24):
 - The setting and the rescan trigger are one step, after a step in which
   the app runs pass 3 at the default.
 
+Made by the user on 2026-11-26, after the plan was archived:
+
+- Faces under `EYES_MIN_FACE` are not meshed from the full JPEG: the
+  follow-up the first Decisions bullet names (Option B of the "Small faces"
+  trade-off) is declined. The meta pane's `Faces judged` row already tells
+  how many faces could be judged, and the gain is small against the labeled
+  full-size crops and the `EYES_CLOSED_EAR` re-fit it would need.
+- The gate gets no further rule against a background row at the judged
+  face's size, and the cost is accepted. On `2026-11-07/_DSC1611.ARW` the
+  gate counts 9 at 640x448 (one player, eight spectators on the bench
+  behind), so the frame pays pass 3, but what is counted is correct as the
+  faces in that photo. Only pass 3's cost grows, which is not worth the
+  `FACES_VERSION` bump and the pass 2 re-run a gate change needs (the
+  trade-off "The size band and the low-resolution input are baked into the
+  stored gate count").
+
 ## Trade-offs and risks
 
 - **A group frame is read and decoded twice.** Pass 3 reads the preview

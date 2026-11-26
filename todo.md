@@ -308,10 +308,6 @@ samples, as done for the Sigma BF `0x0147` in
       center, so the origin and orientation of the frame are unconfirmed; an
       off-center landscape and a portrait sample are needed (see the Step 2
       survey in `docs/plans/_archived/20260930-olympus-orf/learnings.md`).
-- [ ] Tier 3: decide per container whether a new parser is worth it,
-      given the samples available. CR3, NEF, RAF and ORF are done
-      (`crates/core/src/cr3.rs`, `crates/core/src/nef.rs`,
-      `crates/core/src/raf.rs`, `crates/core/src/orf.rs`); the rest remain.
 - [ ] Check the Sigma BF AF point's open assumptions against public BF
       samples: portrait orientation, manual-focus behavior, and the
       1000x667 scale (see the `SIGMA_BF_AF_GRID_W` doc comment in
@@ -381,21 +377,6 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
-
-#### Background
-
-The `bad-photo-labels` Decision found no usable removal filter. The base rate of bad frames is 5.52% [4.15, 7.04], and about 94% of the non-picks the earlier evaluations counted as negatives are not bad. The best filter, `R0` at q5, removes 19.3% of the bad frames at `P` 23.1%, against the 50% / 50% bars. The dedicated models `B0` / `L0` did not meet the +10 point bar. One cue catches bad frames: the folder's bottom sharpness decile, a bad rate of 17.7% [11.1, 25.5], which is 3.2x the base rate. Frames with no AF face read 14.6% (2.65x), outside the pre-registered bins. The Decision left open whether the goal stays a removal filter at these bars or a later plan pre-registers a different use, such as a cue shown to the human rather than a cut, with its own bar. No plan was opened. Basis: `docs/plans/_archived/20261017-bad-photo-labels/plan.md` (Decision, "Left for the user to decide") and `docs/plans/_archived/20261017-bad-photo-labels/badfilter.md`. Files: `docs/plans/_archived/20261017-bad-photo-labels/labels.py`, `docs/plans/_archived/20261017-bad-photo-labels/badfilter.py`, `docs/plans/_archived/20261017-bad-photo-labels/badmodel.py`.
-
-The `discard-labels` feature later measured a different question, "OK to discard?" with "hide / sort last" semantics, on 600 blind labels (plan: `docs/plans/_archived/20261018-discard-labels/plan.md`, Decision). 48.45% [42.03, 55.11] of the frames are OK to discard, so the strict 5.52% base rate is the narrow subset. No `G0` cut is usable: q5 `RR` 17.3% [11.3, 24.0] against the 15% bar, q10 23.7%, q20 27.9%. A strict-bad rate sits below the discard rate in every `G0` band, so the two labels rank the bands alike. A cue shown to the human (a discard candidate marked, not cut) was not measured as such. The Decision found automation bias: the unblinded `RR@5` was about 1.4% (1 of 71) against 17.3% blind. A cue shown to the human therefore needs its own blind measurement.
-
-The `discard-retarget` feature then tried to make a better removal cut on the same 600 blind labels (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision). A 2x2 of discard target and burst-relative features gave no usable cut under either bar. `G0+B` is not better than `G0` (`DP` -1.9 [-6.5, +2.9] at q5), and `D0` / `D0+B` have a weighted `RR` of 32.7-42.7% and a higher `PL`. The preview's in-focus probability (removed since by the full-eye-sharp-only plan) alone was still the best single score by AUC (0.777). So a cue shown to the human is still the only unmeasured use, and the retarget gives no evidence that a better model is nearby.
-
-#### TODO
-
-- [ ] Ask the user whether the goal stays a removal filter or becomes a cue shown to the human (for example marking the folder's bottom sharpness decile, or frames with no AF face).
-- [ ] If a cue, write a plan that pre-registers its own bar (precision of the marked frames against the 5.52% base rate, share of the bad frames covered, and the cost of the marks) before reading any number. It reuses `labels.tsv` and the sampler.
-
 ### Core: decide whether a second bad-photo labeling round for the cue readings is wanted
 
 #### Background
@@ -461,14 +442,6 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 #### TODO
 
 - [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
-
-### App: decide the scan's read cap now that NVMe was measured
-
-`READ_SLOTS` (2) was picked on a SATA SSD (preview read p50 14-16 ms at 2, 20-25 ms at 4, 29-57 ms at 8, 154-156 ms uncapped at 22, pass 1 about 7 ms/file at every cap but 1). On 2026-11-23 the app measured the NVMe `CT1000P5PSSD8` (C:) on cold copies of 1800 α7 V ARW with the pause on: at cap 22 pass 1 ran 1.53-2.49 ms/file and the read of a file pass 1 had not read was 10.3-21.7 ms p50 over three runs; at cap 2 it ran 4.19-11.09 ms/file (4.19 and 4.46 at about 10 % CPU load, against 1.53 for cap 22 at the same load) with 8.8-14.6 ms p50 over four runs. So on NVMe cap 2 costs pass 1 two to three times its speed and buys no shorter preview read. `READ_SLOTS` was not changed. Numbers and method: `docs/agents/shared-crates.md` ("The scan's reads are capped and yield to the preview's at the disk"), `docs/plans/_archived/20261123-todo-measurements/learnings.md`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/scan.rs` (`READ_SLOTS`), `docs/agents/shared-crates.md`.
-
-#### TODO
-
-- [ ] Decide the cap: keep 2 everywhere (the SATA preview wait), raise it (which costs SATA the waits above), or pick it per drive (how the drive kind would be told apart is open). Done when `READ_SLOTS`, or its replacement, and the guide's read cap section say which.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
@@ -1390,18 +1363,6 @@ Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/ap
 
 ---
 
-### Develop: check intervening commits before restoring a file from an old commit in a revert (revert-page-present-now)
-
-#### Background
-
-While reverting #1219, `git checkout c57ec2ff -- docs/agents/app.md` silently dropped the hunks of #1222 (`e433fdf5`), an unrelated change that landed after that base; local review caught it and they were re-applied. Reverse-applying the reverted commit's diff (`git show 6809229f -- <paths> | git apply -R --index`) applied cleanly elsewhere. Record: `docs/plans/_archived/20261122-revert-page-present-now/learnings.md`. Files: `.claude/skills/develop/SKILL.md`.
-
-#### TODO
-
-- [ ] Decide whether reverts are frequent enough to document. If so, add to the `develop` skill (or a decided guide with a stated trigger): prefer `git show <commit> -- <paths> | git apply -R --index`; when a file must be restored from an old commit, run `git log <base>..origin/main -- <file>` first, re-apply unrelated later hunks and confirm with `git diff`. Otherwise close this item with that reason.
-
----
-
 ### App: real-device check of the Sort / Filter menus with no folder, the status row's reserved slot and shortened strip names (todo-three-decisions)
 
 #### Background
@@ -1510,14 +1471,6 @@ Files: `install.ps1`.
 - [ ] On Windows, open a real group photo folder (for example a team-sport ARW folder), let the scan finish (`checking faces` gone from the status line), then check `Filter ▾` > `Eyes` > `Anyone closed`. Expected: the strip narrows to the frames whose meta pane `Faces with closed eyes` is at least 1 (each a real blink on some face, or a false closed reading worth noting), no frame whose `Similar faces` is under `Faces in a group photo` stays; `Anyone soft` likewise against `Faces with soft eyes`; adding `Open` widens the strip to those frames plus the open-eyed ones; raising the number in the settings past a shown frame's `Similar faces` hides it at once; the checks survive a restart.
 - [ ] On macOS and Linux, repeat the Windows check.
 
-### Core: mesh the faces under `EYES_MIN_FACE` from the full JPEG so the all-faces counts cover them (all-faces-check)
-
-`all-faces-check` leaves faces whose box is under `EYES_MIN_FACE` (60 px) unjudged. On the measured ARW team-sport folders that is 24 to 48% of the confident faces (`measurement.md`, item 1). `Faces judged` in the meta pane shows how much was covered. The plan's Option B cuts small faces from the full JPEG for the mesh. It is cheaper to add now that pass 3 reads the full JPEG anyway. `EYES_CLOSED_EAR` was fitted on preview-resolution crops and would need new labeled faces to trust on full-size crops. The judged face (preview mesh) and the counts (full-size mesh) could also disagree about the same face. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/core/src/eyes.rs`.
-
-#### TODO
-
-- [ ] Decide whether to mesh faces under `EYES_MIN_FACE` from the full JPEG. If so, label full-size crops, re-fit the closed threshold for them, and bump `ALLFACES_VERSION`.
-
 ### Core: the judged face can be counted twice in the all-faces counts and the gate count (all-faces-check)
 
 A judged crop face whose whole-image box overlaps it at or under `NMS_THRESHOLD` IoU is counted twice, in the gate count and in the judged count alike (1 of 258 AF frames on `2026-09-19`). A low-resolution box may differ more. Matching by eye landmarks instead of IoU would close it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`, `gate_count`).
@@ -1533,14 +1486,6 @@ The 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 score floor (three fa
 #### TODO
 
 - [ ] Decide whether to lower the default (4 or 3), or to use the 0.6 floor on the no-AF path as well, after more posed group photos are checked.
-
-### Core: the gate's size band lets a background row at the player's size through (all-faces-check)
-
-The size band (0.5x to 2x of the judged face's long side) cannot tell a group from a background row at the same distance. `2026-11-07/_DSC1611.ARW` counts 9 at 640x448: one player and eight spectators on the bench behind. A frame like that passes the gate and pays pass 3. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`gate_count`).
-
-#### TODO
-
-- [ ] Decide whether the gate needs a further rule (for example the faces' spread or a cluster around the judged face), or whether the cost on such frames is acceptable. Any change to the gate count means a `FACES_VERSION` bump and a pass 2 re-run.
 
 ### App: real-device checks of the settings layer under the title bar (settings-under-title-bar)
 

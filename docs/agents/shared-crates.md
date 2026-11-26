@@ -792,6 +792,14 @@ full-eye-sharp-only plan removed.
   as `SOFT_BELOW` itself, and the app's `mark.rs` mirrors `LOW_BELOW` as
   `LOW_FULL_EYE_SHARP`, pinned by a test (`fullsharp.rs` against the
   figures, `mark.rs` against the core constant).
+- The Low mark is the bad-photo cue shown to the human, and no removal
+  filter is pursued (user decision, 2026-11-26). Low (the strip's gray
+  frowning face, the judged face's `full_eye_sharp` under `LOW_BELOW`) is a
+  different rule from the cues the bad-photo labels measured (the folder's
+  bottom sharpness decile, frames with no AF face), and its precision
+  against those labels is deliberately left unmeasured; do not quote their
+  rates for it. Source:
+  `docs/plans/_archived/20261017-bad-photo-labels/plan.md` (Decision).
 - Burst-level technical features do not predict a kept scene: burst length
   does (>= 15 frames: 79% hold a pick). Do not rebuild a burst "keep" or
   "best" mark from sharpness / eyes / pose. The first frame of a burst also
@@ -1014,8 +1022,10 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   cap 2) pass 1 took 2.8 s against 7.5 and 8.0 s for 1800 files, and the
   read p50 stayed about 9 to 10 ms either way: the NVMe drive served the
   preview read as fast behind 22 reads in flight as behind 2. `READ_SLOTS`
-  was not changed; which cap to ship (one cap, or one per drive kind) is an
-  open decision. HDR PQ CR3 is untested.
+  stays 2 on every drive, one cap with no per-drive cap (user decision,
+  2026-11-26): on NVMe cap 2 makes pass 1 slower, but pass 1 is fast there
+  to begin with, so the cost is small, while the wait the user feels is the
+  preview read on SATA, which cap 2 protects. HDR PQ CR3 is untested.
 - The cap also covers `hevc::to_jpeg` until the read is split from it:
   `read_preview` ends in that decode (65-125 ms of CPU per HDR PQ CR3), so at a
   cap of 2 such a folder pays a calculated 33-63 ms/file, and a preview read
