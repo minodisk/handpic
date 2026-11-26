@@ -24,7 +24,7 @@ Close the `todo.md` item
 
 `foldersidecars::delete` moves each sidecar to the Recycle Bin in a shell
 operation of its own (`trash::run` with `trash_one`). The
-[todo-trash-quit-fixes plan](../_archived/20261123-todo-trash-quit-fixes/plan.md)
+[todo-trash-quit-fixes plan](../20261123-todo-trash-quit-fixes/plan.md)
 measured that per-operation cost at about 140 ms a file for the Undo of Move
 to Trash, against about 6.5-7 ms a file once chunked. Once this is done,
 `Delete Sidecars…` on Windows moves its sidecars through the same chunked
