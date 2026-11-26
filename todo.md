@@ -1484,6 +1484,7 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 - [ ] On Windows, on a fresh `--index`, watch the strip while the status row shows `analyzing N / M`. Expect the mark to appear on cells live as pass 2 reaches them, with no re-listing.
 - [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
 - [ ] On macOS and Linux, when at hand, repeat the checks above.
+
 ### Release: real-device check that a release from `main` signs with the `release` environment's key (release-key-environment)
 
 #### Background
