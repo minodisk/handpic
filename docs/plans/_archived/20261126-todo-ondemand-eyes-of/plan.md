@@ -35,7 +35,7 @@ An agent reading `CLAUDE.md` to find the callers greps for names that lead
 nowhere useful. The only `faces_of` in `crates/app` is a test helper in
 `src/faces.rs`, and the only `eyes_of` is an unrelated test helper in
 `src/companion.rs`. The item was found during Step 4 of
-[eyes-mark-tier-mcp](../_archived/20261123-eyes-mark-tier-mcp/plan.md).
+[eyes-mark-tier-mcp](../20261123-eyes-mark-tier-mcp/plan.md).
 
 ## Steps
 
