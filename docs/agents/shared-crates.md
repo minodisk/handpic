@@ -909,8 +909,10 @@ by order only.
   with a relative priority of -5, below the first pass's 0 (the floor is
   -15). Measured on a Mac (arm64) on 2026-11-26, release build, cold index,
   1755 ARW: paging every 0.5 s during pass 2 gave `keypressToPixels` p50
-  16.3 / p95 35.5 ms against 12.2 / 19.5 ms after the scan, pass 2 took
-  104 s, and no `ran at normal priority` line was logged
+  16.3 / p95 35.5 ms, every page its own read, against 12.2 / 19.5 ms
+  from the prefetch ring after the scan (so the gap is not the QoS cost; the
+  Windows figure measured the same way while the pass ran is 18.4 / 25.0),
+  pass 2 took 104 s, and no `ran at normal priority` line was logged
   (`docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`).
 - `thread-priority` has no macOS QoS API, so it is a Windows-only dependency
   and the unix branches call `libc` directly (`pthread_set_qos_class_self_np`,

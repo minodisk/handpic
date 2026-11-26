@@ -140,3 +140,5 @@ line number.
 - `todo.md` is edited by other sessions; an item reworded on `main` between planning (`020e89c7`) and the edit must be re-read, not overwritten.
 
 ## Progress
+
+- 2026-11-26: Step 1 done (results.md, learnings.md, todo.md, two docs/agents sentences)
