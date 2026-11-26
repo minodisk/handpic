@@ -44,6 +44,12 @@ Source: "{#LicensesDir}\*"; DestDir: "{app}\licenses"; Flags: ignoreversion
 [Icons]
 Name: "{autoprograms}\Handpic"; Filename: "{app}\{#Binary}"
 
+; The app's update staging (datadir::update_staging), which only a launch
+; clears and an uninstall never reaches. The index, settings and logs beside
+; it are kept on purpose.
+[UninstallDelete]
+Type: filesandordirs; Name: "{localappdata}\dev.minodisk.handpic\update"
+
 ; The app's updater runs this setup as the app quits, with /WAITPID=<pid> (the
 ; quitting app, waited for before anything is installed, so its exe is not in
 ; use) and, on Restart Now, /RELAUNCH, which starts the installed app at the

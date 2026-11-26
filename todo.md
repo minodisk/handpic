@@ -1366,13 +1366,13 @@ Files: `crates/app/src/settings.rs`, `crates/app/packaging/windows/handpic.iss`,
 
 #### Background
 
-Observed in the native-release rc dry run (2026-11-21): after an uninstall from Settings, Apps, the staging folder `<cache dir>\dev.minodisk.handpic\update` still held the staged rc.2 setup and its ZIP. Only the next launch of an install clears it, and after an uninstall there is none. The index, settings and logs are kept by design; the staging folder is not user data. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
+Observed in the native-release rc dry run (2026-11-21): after an uninstall from Settings, Apps, the staging folder `<cache dir>\dev.minodisk.handpic\update` still held the staged rc.2 setup and its ZIP. `handpic.iss` now deletes it through an `[UninstallDelete]` entry and keeps the index, settings and logs; the uninstall itself is not yet checked. Inno Setup records the entry in the uninstall log at install time, so only an install that a setup built with the entry has installed or upgraded deletes the folder. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
 
-Files: `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs` (`update_staging`), `docs/agents/app.md`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
+Files: `crates/app/packaging/windows/handpic.iss`, `docs/agents/app.md`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
 
 #### TODO
 
-- [ ] Have the uninstaller delete the staging folder (an `[UninstallDelete]` entry in `handpic.iss`), and check on Windows that an uninstall after a staged update leaves no `update` folder and keeps the index and settings. Record the result in the rc dry run section of `packaging-updater.md`, and drop the "has no `[UninstallDelete]`" clause from the Inno Setup rule in `docs/agents/app.md`.
+- [ ] Pending manual check, on Windows: with an Inno Setup install made by a setup built with the `[UninstallDelete]` entry and an update staged by it, uninstall from Settings → Apps and confirm `%LOCALAPPDATA%\dev.minodisk.handpic\update` is gone while `index.sqlite`, `settings.sqlite` and the logs remain. Once checked, record the result in the rc dry run section of `docs/plans/20261109-gpui-port/packaging-updater.md` and replace the **Unverified** note in the Inno Setup rule of `docs/agents/app.md`.
 
 ---
 
