@@ -202,7 +202,15 @@ const EXTRACTOR_VERSION: i64 = 13;
 /// `sharpness::FACE_CONFIDENCE` (0.8), as an AF frame's gate does, so a posed
 /// group whose faces score 0.64 to 0.75 reaches the group threshold; only
 /// `faces_group` moves (`docs/plans/_archived/20261126-gate-floor-no-af/`).
-pub const FACES_VERSION: i64 = 16;
+/// `17` scores a file with a trusted AF point on the luma of the cue's RGB
+/// decode too, with the same AF point and eye-AF frame, instead of a
+/// grayscale decode of its own, which saves a decode (a median 3.2 ms per
+/// 1616x1080 ARW preview); the score moves (a median 1.4%, the luma reading
+/// higher on 281 of 282 frames) but on the 282 trusted-AF Sony ARWs of one
+/// real folder the within-burst order did not (Spearman median and minimum
+/// 1.000 over 50 bursts, the same top frame in 50 of 50); only Sony bursts
+/// were checked (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`).
+pub const FACES_VERSION: i64 = 17;
 
 /// The version of what the third pass, `handpic_core::scan::extract_face_counts`,
 /// produces, stored on every `files` row as `allfaces_extractor` next to its

@@ -1,0 +1,84 @@
+diff --git a/crates/cli/src/main.rs b/crates/cli/src/main.rs
+index 0e1dd68f..818c87bf 100644
+--- a/crates/cli/src/main.rs
++++ b/crates/cli/src/main.rs
+@@ -107,6 +107,13 @@ fn main() -> Result<()> {
+             }
+             check(&dirs.iter().map(PathBuf::from).collect::<Vec<_>>(), threads)
+         }
++        Some("lumascore") => match &args[1..] {
++            [checks, inputs @ ..] if !inputs.is_empty() => lumascore(
++                &inputs.iter().map(PathBuf::from).collect::<Vec<_>>(),
++                checks.parse()?,
++            ),
++            _ => bail!("usage: handpic-cli lumascore <checks> <dir|file>..."),
++        },
+         Some("facechoice") => facechoice::run(&args[1..]),
+         Some("previews") => previews(&parse_previews(&args[1..])?),
+         Some("copybench") => match &args[1..] {
+@@ -1901,3 +1908,65 @@ mod tests {
+         assert_eq!(counts["arw"], (0, 1));
+     }
+ }
++
++/// The header of `lumascore`.
++const LUMASCORE_HEADER: &str = "folder\tfile\tcapture_time\tsubsec\taf\teye_af\twidth\theight\tsharpness\tsharp_luma\tgray_ms\tluma_ms\tstored";
++
++/// The pass 2 score of every RAW file given or in the folders given, on one
++/// thread, against the score on the luma of the cue's RGB decode: after one
++/// untimed read of every file, `sharpness` is `score_preview` with the trusted
++/// AF point and the `eye_af_frame` frame (timed as `gray_ms`), `sharp_luma`
++/// `score_gray` on `candidate::luma` of `decode_rgb` with the same focus and
++/// frame (the luma and the window timed as `luma_ms`, the RGB decode not),
++/// and `stored` `scan::extract_analysis`'s `sharpness` on the first `checks`
++/// files with an AF point. `-` for a missing value and every value of a
++/// `noaf` file.
++fn lumascore(inputs: &[PathBuf], checks: usize) -> Result<()> {
++    let paths = raw_paths(inputs)?;
++    for p in &paths {
++        reader::read_preview(p)?;
++    }
++    println!("{LUMASCORE_HEADER}");
++    let mut checked = 0;
++    for p in &paths {
++        let (a, jpeg) = reader::read_preview(p)?;
++        let folder = p
++            .parent()
++            .and_then(Path::file_name)
++            .unwrap_or_default()
++            .to_string_lossy();
++        let name = p.file_name().unwrap_or_default().to_string_lossy();
++        let time = a.shot.capture_time.as_deref().unwrap_or("-");
++        let subsec = a.shot.subsec.as_deref().unwrap_or("-");
++        let Some(focus) = sharpness::trusted_focus(&a.shot) else {
++            println!("{folder}\t{name}\t{time}\t{subsec}\tnoaf\t-\t-\t-\t-\t-\t-\t-\t-");
++            continue;
++        };
++        let eye_af = sharpness::eye_af_frame(&a.shot);
++        let frame = eye_af.map(|(_, frame)| frame);
++        let t = Instant::now();
++        let gray = sharpness::score_preview(&jpeg, Some(focus), frame, &[]);
++        let gray_ms = t.elapsed().as_secs_f64() * 1000.0;
++        let (rgb, w, h) = decode_rgb(&jpeg)?;
++        let t = Instant::now();
++        let luma = sharpness::score_gray(&candidate::luma(&rgb, w, h), w, h, Some(focus), frame, &[]);
++        let luma_ms = t.elapsed().as_secs_f64() * 1000.0;
++        let stored = if checked < checks {
++            checked += 1;
++            match scan::extract_analysis(p).map_err(|e| anyhow!(e))?.sharpness {
++                Some(s) => s.to_string(),
++                None => "-".to_string(),
++            }
++        } else {
++            "-".to_string()
++        };
++        let value = |s: Result<f64>| s.map_or("-".to_string(), |s| s.to_string());
++        println!(
++            "{folder}\t{name}\t{time}\t{subsec}\taf\t{}\t{w}\t{h}\t{}\t{}\t{gray_ms:.3}\t{luma_ms:.3}\t{stored}",
++            eye_af.is_some() as u8,
++            value(gray),
++            value(luma),
++        );
++    }
++    Ok(())
++}

@@ -148,16 +148,6 @@ Related: `crates/core/src/sharpness.rs`, `crates/core/src/faces.rs`, `crates/cor
 
 ---
 
-### Core: a file with a trusted AF point still decodes its preview twice in pass 2
-
-#### Background
-
-`todo-four-closeouts` Step 3 made a faced no-AF file score from the cue's RGB decode (`FACES_VERSION` 13), but left the files with a trusted AF point alone: they still decode the preview twice (full-size RGB for the cue's crop, grayscale for the score). Reusing the RGB's luma would save a grayscale decode (about 4-5 ms on a 1616x1080 ARW preview) per file. On ARW, CR3, NEF, RAF and ORF previews the BT.601 luma of the RGB differs from mozjpeg's Y channel on about half the pixels (score 0.1-1.1% off), so it needs its own ranking check on Sony bursts and a `FACES_VERSION` bump. Plan: `docs/plans/_archived/20261123-todo-four-closeouts/plan.md`, luma-vs-Y check in `no-af-decode.md` beside it. Files: `crates/core/src/scan.rs` (`cue`, `score`), `crates/core/src/candidate.rs` (`focus_cue_unless`), `crates/core/src/sharpness.rs` (`score_gray`).
-
-#### TODO
-
-- [ ] Measure the saving and the within-burst Spearman of the luma-reuse score on real Sony bursts with a trusted AF point (`handpic-cli features`, `burst_spearman.py` from the plan folder), and adopt it with a `FACES_VERSION` bump only if the ranking holds, otherwise record "measured, not adopted".
-
 ### Core: the review of the closed-eyes labels is still open
 
 `closed-eyes-detection` (`docs/plans/_archived/20261007-closed-eyes-detection/plan.md`) set the closed-eyes threshold (0.137) and measured its AUCs on a truth set the agent labeled. The user's review of its `closed` faces is still open. Files: `crates/core/src/eyes.rs`, `docs/plans/_archived/20261007-closed-eyes-detection/eyes-truth.md`.

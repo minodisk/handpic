@@ -686,9 +686,15 @@ retried.
   on every pixel, so no score changed. On ARW, CR3, NEF, RAF and ORF
   previews the two differ on about half the pixels (score 0.1-1.1% off),
   and no real burst of faced no-AF frames of those makes exists on this
-  host, so their ranking is unchecked. Before extending the luma reuse to
-  another make, or to a file with a trusted AF point, run a ranking check on
-  its bursts and bump `FACES_VERSION`. A
+  host, so their ranking is unchecked. Since `FACES_VERSION` 17 a file with
+  a trusted AF point scores on that luma too, with the same AF point and
+  eye-AF frame: on 282 trusted-AF Sony ARWs the score moved a median 1.4%
+  but the within-burst order did not (Spearman 1.000 in 50 of 50 bursts, the
+  same top frame in each), saving a median 3.2 ms per 1616x1080 preview
+  (`docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`); the other
+  makes' AF bursts were not checked. Before changing what that luma is
+  computed from, run a ranking check on real bursts and bump
+  `FACES_VERSION`. A
   file with no face pays nothing, because `whole_image_cue` returns
   `Cue::unknown()` before any decode. The face-free frame itself stays
   Neutral: the sharpness score did not separate picks from non-picks
