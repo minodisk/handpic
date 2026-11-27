@@ -232,3 +232,5 @@ into `todo.md`. Only confirmed facts are listed; nothing in the code changes.
   On a conflict, keep the other session's lines and re-apply these.
 
 ## Progress
+
+- 2026-11-28: Step 1 done (cameras.md / cameras.ja.md: 22 DNG rows, the DNG paragraph and the Sony orientation paragraph; todo.md: Sony orientation item removed, Tier 1 narrowed, four items added)
