@@ -1644,12 +1644,14 @@ way (at the start as at the confirm, the `Pending` kept for the same id),
 cannot be canceled while it runs, and reports `finished` with the split's
 status line or the new path.
 
-`wait_for_idle` after a confirmed import can return idle with the destination
-folder open but not yet showing the copies (`no RAW files in ...`): the
-watcher's re-list shows them about a second later, and a menu import has the
-same race (`import_ran` re-lists only on `resync.changed()`). A client that
-needs the copies reads `get_view` again, or calls `wait_for_idle` once more,
-before trusting the listing.
+The copies show in the open destination folder during the run, at the
+watcher's reports (at most `MAX_WAIT` apart while copies keep landing, deferred while a scan runs),
+not all at the run's end. `wait_for_idle` after a confirmed import can still
+return idle with the folder not yet showing the last copies: the watcher's
+report of them comes up to `DEBOUNCE` after the last rename, and a menu
+import has the same race (`import_ran` re-lists only on
+`resync.changed()`). A client that needs every copy reads `get_view` again,
+or calls `wait_for_idle` once more, before trusting the listing.
 
 `rename_folder` is the tree's inline `Rename…` with the name given: the
 engine checks the folder and the name with `rename::folder_target`
@@ -5700,7 +5702,16 @@ the backdrop's condition and the gate's `Held` variant.
   `Cancel` stopped a run with no `.handpic-tmp` file left; the strip of the
   open date folder stayed empty until that folder's copies ended (results
   in
-  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`).
+  `../plans/_archived/20261127-windows-device-checks-folder-dialogs/results.md`;
+  fixed by the watcher's `MAX_WAIT`, next line).
+- Seen (2026-11-28, Windows 11, a debug build with `--features screenshot`,
+  through MCP): with the watcher's `MAX_WAIT`, a 100-file (5.2 GB) import
+  into the open date folder filled the strip during the run: 0 files listed
+  until 18 were copied, 19 at 25 copied, 70 at 76 copied, and the last 30
+  when the scan under way at the run's end finished, 14 s after it; the log
+  showed a `resync:` line about every 2 s during the 12.6 s run, those
+  during a scan `deferred` (results in
+  `../plans/_archived/20261128-watch-max-wait/results.md`).
 - Seen (2026-11-23, Windows 11, through MCP): a `rewrite_sidecars` and a
   `delete_sidecars` during pass 1 of a fresh index noted `waiting for the
   scan to finish`, and the dialog opened once pass 2 ended (results in
