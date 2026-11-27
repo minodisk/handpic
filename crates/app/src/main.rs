@@ -7064,7 +7064,7 @@ fn menu_row(at: usize, row: Row, cx: &mut Context<Handpic>) -> AnyElement {
             } else {
                 icons::SCAN_FACE
             })
-            .text_color(rgb(state.color()))
+            .text_color(rgb(state.menu_color(theme::is_light(cx.theme().popover))))
             .into_any_element(),
         ),
         Lead::Face(None) => Some(div().size(px(MENU_ICON)).flex_none().into_any_element()),

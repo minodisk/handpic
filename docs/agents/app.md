@@ -167,7 +167,9 @@ strip and the status row), the strip's file name `#d4d4d4` and scan failure
 `Roles::of` gives today's values for Neutral dark and
 otherwise derives them from the tokens (the surface and text from
 `background` / `foreground`, the band from `foreground` with alpha, the dim
-from `background` with alpha, the surround the least luminant, by relative
+from `background` with alpha, black instead on a light `background`
+(`theme::is_light`: relative luminance above 0.179, where black and white
+text contrast equally), the surround the least luminant, by relative
 luminance, of the opaque `background`, `popover`, `title_bar`, `status_bar`
 and `sidebar`), which Neutral light takes. The pane colors map onto tokens exactly: the
 panes `popover`, muted text `muted_foreground`, errors `danger`, the
@@ -2174,7 +2176,10 @@ dimmed, shows capture order and keeps the stored key.
   band's mapping too), `No label` inside a small outline secondary `Tag`,
   the Tag's colors left to its own dark / light choice; `Portrait` and `Landscape` the Lucide `rectangle-vertical` and
   `rectangle-horizontal`; `Face focus` the Tauri icons (`scan-face` for
-  `Good`, its frown derivative for `Low`, in `MarkState::color()`) with an
+  `Good`, its frown derivative for `Low`, in `MarkState::menu_color()`:
+  `MarkState::color()`, but `Good` green-700 `#15803d` on a `popover`
+  `theme::is_light` calls light, the strip's icon and the `f` overlay
+  keeping `color()`) with an
   empty 12 px slot for `Neutral`. `menu.rs` names the kind (`Lead`), never an
   asset path.
 - Rule: the rating rows run 5, 4, 3, 2, 1, 0 stars from the top, the labels

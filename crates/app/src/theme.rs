@@ -163,7 +163,8 @@ pub struct Roles {
     /// `.cell.burst::before`'s band, and the band of a rejected cell.
     pub band: Hsla,
     pub band_dimmed: Hsla,
-    /// `.cell.rejected`'s `opacity: 0.45` over the strip's surface.
+    /// `.cell.rejected`'s `opacity: 0.45` over the strip's surface; black on a
+    /// light background, which the surface's own color would only wash out.
     pub rejected_dim: Hsla,
     /// The preview's surround behind the photo, the theme's darkest surface.
     pub preview: Hsla,
@@ -194,7 +195,11 @@ impl Roles {
             failure: colors.muted_foreground,
             band: colors.foreground.alpha(0.08),
             band_dimmed: colors.foreground.alpha(0.036),
-            rejected_dim: colors.background.alpha(0.55),
+            rejected_dim: if is_light(colors.background) {
+                Hsla::black().alpha(0.55)
+            } else {
+                colors.background.alpha(0.55)
+            },
             preview: darkest(
                 colors.background,
                 &[
@@ -221,6 +226,15 @@ fn darkest(fallback: Hsla, others: &[Hsla]) -> Hsla {
                 darkest
             }
         })
+}
+
+/// The relative luminance at which black and white text contrast equally:
+/// `(L + 0.05) / 0.05 = 1.05 / (L + 0.05)` gives `L = sqrt(0.0525) - 0.05`.
+const LIGHT_ABOVE: f32 = 0.179;
+
+/// Whether `color` is light, black reading better on it than white.
+pub fn is_light(color: Hsla) -> bool {
+    luminance(color) > LIGHT_ABOVE
 }
 
 /// The relative luminance of `color`'s sRGB.
@@ -447,7 +461,7 @@ mod tests {
 
     use super::{
         DARK, FILES, LIGHT, Mode, NEUTRAL, Palette, Roles, SCROLLBAR_TRACK, SHIPPED, Setting,
-        darkest, finish, luminance, map, names, resolve, shipped,
+        darkest, finish, is_light, luminance, map, names, resolve, shipped,
     };
 
     fn hex(value: u32) -> Hsla {
@@ -553,6 +567,20 @@ mod tests {
         assert_eq!(roles.band_dimmed, colors.foreground.alpha(0.036));
         assert_eq!(roles.rejected_dim, colors.background.alpha(0.55));
         assert_eq!(roles.preview, colors.background);
+    }
+
+    #[test]
+    fn a_light_background_dims_a_rejected_cell_with_black() {
+        let roles = Roles::of(&mapped_with(&LIGHT), false);
+        assert_eq!(roles.rejected_dim, Hsla::black().alpha(0.55));
+    }
+
+    #[test]
+    fn white_is_light_and_near_black_is_not() {
+        assert!(is_light(hex(0xffffffff)));
+        assert!(is_light(hex(0xf5f5f5ff)));
+        assert!(!is_light(hex(0x0a0a0aff)));
+        assert!(!is_light(hex(0x1a1b26ff)));
     }
 
     #[test]

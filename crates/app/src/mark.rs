@@ -31,6 +31,15 @@ impl MarkState {
         }
     }
 
+    /// The filter menu's color: `color` but for `Good` on a light surface,
+    /// Tailwind's green-700, about 5.0:1 on white where `#33ff33` is 1.4:1.
+    pub fn menu_color(self, light_surface: bool) -> u32 {
+        match self {
+            MarkState::Good if light_surface => 0x15803d,
+            _ => self.color(),
+        }
+    }
+
     /// The strip cell's icon, `focus.ts`'s `FOCUS_MARK_ICONS`: the smiling
     /// face on a good photo, the frowning one on a low one, none otherwise.
     pub fn icon(self) -> Option<&'static str> {
@@ -406,6 +415,16 @@ mod tests {
         assert_eq!(MarkState::Good.color(), 0x33ff33);
         assert_eq!(MarkState::Low.color(), 0x999999);
         assert_eq!(MarkState::Neutral.color(), 0xffffff);
+    }
+
+    #[test]
+    fn the_menu_darkens_only_good_and_only_on_a_light_surface() {
+        assert_eq!(MarkState::Good.menu_color(true), 0x15803d);
+        assert_eq!(MarkState::Good.menu_color(false), 0x33ff33);
+        for state in [MarkState::Low, MarkState::Neutral] {
+            assert_eq!(state.menu_color(true), state.color());
+            assert_eq!(state.menu_color(false), state.color());
+        }
     }
 
     #[test]
