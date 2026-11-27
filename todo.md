@@ -1,16 +1,6 @@
 # todo
 
 ## Cross-cutting / other
-### App: a `Rename by Capture Date…` split that removes the folder leaves a deferred open naming a missing folder
-
-#### Background
-
-The reveal-collapsed-rename work (plan: `docs/plans/_archived/20261127-reveal-collapsed-rename/plan.md`) noticed this while planning and left it out of its PR. In `date_folder_ran`'s split branch, when `self.deferred_open.is_some()` the flow goes to `settle_folder_run`, which opens the deferred folder even when `split.removed` means it is gone. This happens after a click on the split folder, or on a folder under it, during the run. Nobody has run it in the app, and no test covers it. Files: `crates/app/src/folderops.rs` (`date_folder_ran`, `settle_folder_run`), `crates/app/src/main.rs` (`open`, `deferred_open`).
-
-#### TODO
-
-- [ ] Make a deferred open of a folder the split removed land where an open of it would after the split (its first date folder, as the `opens` branch does), or drop it. Add a UI test in `folderops.rs`: hold the gate, click the folder, run a split that removes it, and check what opens.
-
 ### App: real-device Ctrl+C and window check of the app:watch task
 
 #### Background
