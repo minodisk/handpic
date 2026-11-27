@@ -22,7 +22,7 @@ A plan folder moves under `_archived/` when it completes, so link another plan o
 The gate count (`allfaces::gate_count`, the meta pane's `Similar faces`)
 counts faces from `allfaces::GATE_LOW_RES_CONFIDENCE` (0.6) on both of its
 searches since
-[the gate-floor-no-af plan](../_archived/20261126-gate-floor-no-af/plan.md),
+[the gate-floor-no-af plan](../20261126-gate-floor-no-af/plan.md),
 but pass 3's candidates (`allfaces::candidates`) are still taken from
 `sharpness::FACE_CONFIDENCE` (0.8). So `Similar faces` exceeds
 `Faces judged` (`2026-02-01/L1005161.DNG`: 7 against 4; three of its faces
@@ -47,7 +47,7 @@ the remaining work in it).
     - Before anything is committed, the before / after measurement below is
       done once and recorded in `measurement.md` in this plan folder (the
       precedent is
-      [the gate-floor-no-af measurement](../_archived/20261126-gate-floor-no-af/measurement.md)),
+      [the gate-floor-no-af measurement](../20261126-gate-floor-no-af/measurement.md)),
       and the stop condition was checked against it.
     - `measurement.md` holds, per measured set: the frames, the frames at
       the default gate (gate count 5 or more), the faces judged before and
