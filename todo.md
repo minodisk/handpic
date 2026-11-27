@@ -270,9 +270,13 @@ samples, as done for the Sigma BF `0x0147` in
 
 #### TODO
 
-- [ ] Tier 1: verify preview/EXIF extraction on public DNG samples from
-      Pentax, Ricoh GR, other Leica bodies, and phones; add each
-      working body to the `docs/humans/cameras.md` table.
+- [ ] Tier 1: verify preview/EXIF extraction on DNG samples of the
+      bodies raw.pixls.us did not hold in the 2026-11-27 survey: the
+      Leica M11 family beyond the M11-P, the Q3 and the SL3, the Pentax
+      KF (its samples there are PEF only), the Ricoh GR IV, and ProRAW
+      from the iPhone 13 or later; add each working body to the
+      `docs/humans/cameras.md` table. The Pentax, Ricoh GR, Leica and
+      phone bodies raw.pixls.us holds are done and listed there.
 - [ ] Tier 2: read the AF point from the exiftool-decoded MakerNote
       tags above, confirming on samples, for bodies whose container
       Riffle can already read. Canon `AFInfo2` (EOS bodies) and Nikon
@@ -298,6 +302,58 @@ samples, as done for the Sigma BF `0x0147` in
       `crates/core/src/arw.rs` and the archived plan's
       [Trade-offs and risks](docs/plans/_archived/20260924-sigma-bf-af-point/plan.md#trade-offs-and-risks)).
 
+### Core: Pentax and Ricoh DNGs show no lens name
+
+#### Background
+
+Found in the 2026-11-27 raw.pixls.us survey. The DNGs of the Pentax K-1, K-1 Mark II, K-3 Mark III, K-3 Mark III Monochrome, K-70 and KP and of the Ricoh GR III and GR IIIx carry no Exif lens name; the lens is recorded only in the Pentax MakerNote's `LensType`, which Handpic does not read, so the meta pane shows no lens for them (`docs/humans/cameras.md` says so).
+
+Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `docs/humans/cameras.md`, `docs/humans/cameras.ja.md`.
+
+#### TODO
+
+- [ ] Read the lens from the Pentax MakerNote's `LensType` on the Pentax and Ricoh DNGs (exiftool's `Pentax.pm` holds the id table), check it against `exiftool` on the raw.pixls.us samples, and drop the "no lens name" sentence from both cameras docs.
+
+### Core: Pentax and Ricoh DNGs read the full-size JPEG for every thumbnail and preview
+
+#### Background
+
+Found in the 2026-11-27 raw.pixls.us survey. The Pentax and Ricoh GR DNGs hold no small JPEG preview: IFD0 has only a 160x120 uncompressed image, and the one JPEG is the full-size one at the end of the file (2.9 to 6.4 MB on the samples, 6000x4000 to 7360x4912). Handpic therefore reads and decodes that JPEG for every thumbnail and every preview of these bodies. The Pentax MakerNote also holds a preview of about 52 KB, which Handpic does not use. Nobody has measured what this costs on a folder of such files.
+
+Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`.
+
+#### TODO
+
+- [ ] Measure pass 1 and a page turn on a folder of Pentax or Ricoh DNGs against a body with a small preview. If the cost shows, read the Pentax MakerNote's preview for the thumbnail (its size first: under 1280 px on the long edge it cannot serve as the preview), as the Leica M (Typ 240) MakerNote preview is read.
+
+### Core: Leica M10 shows no aperture, and four phone DNGs show no shooting settings
+
+#### Background
+
+Found in the 2026-11-27 raw.pixls.us survey.
+
+- The Leica M10 sample has no `FNumber` and no `ApertureValue`; its aperture (5.6) is only in the Leica MakerNote, which Handpic does not read for it, so the meta pane shows no aperture (`docs/humans/cameras.md` says so). The M10-R records `ApertureValue` and is fine.
+- On the HUAWEI ANE-LX1, OnePlus A6003, Xiaomi M2010J19CG and Google Pixel 2 XL DNGs, `reader::read_metadata` returns the make and the model but none of the shooting fields (exposure, aperture, ISO, focal length, exposure bias, capture time), although `exiftool` reads them. These four also have no embedded JPEG preview, so they are outside what Handpic supports and are not listed; the missing fields may still point at an Exif layout other DNGs share. The cause is not known.
+
+Files: `crates/core/src/arw.rs`, `crates/core/src/reader.rs`, `docs/humans/cameras.md`, `docs/humans/cameras.ja.md`.
+
+#### TODO
+
+- [ ] Read the Leica M10's aperture from its Leica MakerNote, check it against `exiftool`, and drop the "no aperture" sentence from both cameras docs.
+- [ ] Find where `exiftool` reads the shooting fields of the four phone DNGs from, and decide whether Handpic should read them there. Done when the cause is written here or fixed.
+
+### Docs: cameras.ja.md lags behind cameras.md
+
+#### Background
+
+`docs/humans/cameras.ja.md` still has the policy paragraph from before #656 ("2010 年より前"), about 30 pre-2016 Fujifilm and FinePix rows, and two extra rows in the embedded JPEG size table, all of which `docs/humans/cameras.md` no longer has. Found while adding the 2026-11-27 raw.pixls.us survey's DNG bodies, which touched only the rows and paragraphs that change added.
+
+Files: `docs/humans/cameras.md`, `docs/humans/cameras.ja.md`.
+
+#### TODO
+
+- [ ] Bring `docs/humans/cameras.ja.md` in line with `docs/humans/cameras.md`: replace the policy paragraph, delete the delisted rows and the two size rows, and fix the sentences that name them.
+
 ### Core: M-RAW RAF files are unverified
 
 #### Background
@@ -310,7 +366,7 @@ No raw.pixls.us sample of the listed Fujifilm bodies is an M-RAW (multi-image) R
 
 The `raf-older-bodies` sweep of 228 RAFs from 87 bodies (`docs/plans/_archived/20260930-raf-older-bodies/learnings.md`) found no M-RAW either: `0x48` is zero on all of them.
 
-### Docs: Sony AF point, face tracking and portrait orientation are unconfirmed for lack of samples
+### Docs: Sony AF point and face tracking are unconfirmed for lack of samples
 
 #### Background
 
@@ -318,14 +374,12 @@ The `sony-arw-coverage` verification (`docs/plans/_archived/20260930-sony-arw-co
 
 - Every α9 III and α7CR sample is manual focus (`FocusMode` 0, point at the exact center, `FocusFrameSize` invalid). `trusted_focus` drops the point as designed, so both bodies show `–` for AF point and AF frame size.
 - Face tracking: the raw.pixls.us samples hold no `AFTracking` 1. The local samples later checked in `sony-face-tracking-docs` (`docs/plans/_archived/20261001-sony-face-tracking-docs/plan.md`) record it on the α7 IV, α7R V, α7S III, α6700 and ZV-E1, so those show `✓`. The α1, α9 III, α7C II and α7CR stay `–` because no sample of them recorded it.
-- No sample is a portrait frame (Orientation 1 on all 66 files), so orientation is unverified on every listed Sony body.
 
 Files: `docs/humans/cameras.md`.
 
 #### TODO
 
 - [ ] Find an AF-C sample of a person from the α9 III and α7CR (portrait orientation if possible), and turn their `–` for AF point / AF frame size into `✓` if the point lands on the subject.
-- [ ] Confirm orientation on a portrait ARW sample and record the result in `docs/humans/cameras.md`.
 
 ### Engine: PhotoLab Uuid lookup on macOS: real-device checks and external volumes
 
