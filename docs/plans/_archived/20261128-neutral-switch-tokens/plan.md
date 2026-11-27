@@ -169,4 +169,5 @@ dark and the off track (`switch`) is lightened. The PR body records this.
 
 ## Progress
 
-- (2026-11-28) Step 1 complete; the manual check is still pending (see learnings.md)
+- (2026-11-28) Step 1 complete
+- (2026-11-28) Manual check run on Windows 11 and passed (see results.md)

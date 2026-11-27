@@ -2629,7 +2629,13 @@ not open.
   switch lights its thumb when off, but the component paints the thumb with
   that one token, and a light thumb would vanish on the light on track, so
   the off track is lightened instead (`#737373` under the `#0a0a0a` thumb in
-  Neutral dark). Each key on the Keyboard
+  Neutral dark). Seen on Windows 11 on 2026-11-28 at 100 % (MCP
+  `screenshot`, pixel runs): dark off `#737373` / `#0a0a0a` on `#171717`,
+  on `#e5e5e5`; light off `#d4d4d4` / `#ffffff` on `#ffffff`, on `#171717`.
+  Focused and off in dark, the 1 px `ring` border merges with the track but
+  the 3 px `#454545` halo outside it still marks the focus
+  (`docs/plans/_archived/20261128-neutral-switch-tokens/results.md`).
+  Each key on the Keyboard
   Shortcuts page is a `Kbd` (the `muted` fill, half the theme radius) with
   its text set back to the old chip's 13 px `foreground`, its `×`
   `small_button` beside it rather than inside, since `Kbd` is not a

@@ -10,9 +10,21 @@
   section, with the same plan tag, stays (it covers the keyboard checks, not
   the look).
 
+## Manual check (wrap-up, 2026-11-28)
+
+- Ran on this Windows host and passed (`results.md`); no `todo.md` item.
+- `PostMessage` input to the instance's own window by PID covered `Ctrl+,`,
+  `Escape`, the sidebar click and the switch clicks; a posted click also
+  gave the switch the focus, so the focused states came for free.
+- A focused off switch in dark keeps a 3 px `#454545` halo outside the
+  merged `#737373` ring border, so `#737373` was kept over `#a1a1a1`.
+- Practical: `powershell -File` needs `-ExecutionPolicy Bypass` on this
+  host, and a Python MCP client printing Japanese or accented text needs
+  `sys.stdout.reconfigure(encoding="utf-8")` under the cp932 console.
+
 ## Deferred issues (todo candidates)
 
-- Pending manual check (the main agent's wrap-up, per the plan's "Manual
+- (Settled in the wrap-up: run and passed, see above.) Pending manual check (the main agent's wrap-up, per the plan's "Manual
   check"): on Windows, a debug build with the `screenshot` feature
   (`mise run app:dev:screenshot`) on a temp `--index` / `--settings` /
   `--log`, `--mcp-port 47880` and `--import-settings` of
