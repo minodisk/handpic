@@ -412,19 +412,20 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### Core: decide whether a second bad-photo labeling round for the cue readings is wanted
+### Core: read the cue-labels round once the user has labeled it
 
 #### Background
 
-The `bad-photo-labels` labels hold 80 bad frames of 1,200, with 13 of 27 held-out folders holding none. The Decision does not expect a second round of the same kind to change its answer on a removal filter. A round for a different question could give the cue readings more power: `|pitch|` > 45 reads 3.2x the base rate on only 19 sampled frames, with an interval of [0.0, 40.5]. The Decision left this to the user. Basis: `docs/plans/_archived/20261017-bad-photo-labels/plan.md` (Decision, "Left for the user to decide"). Files: `docs/plans/_archived/20261017-bad-photo-labels/sample.py`, `docs/plans/_archived/20261017-bad-photo-labels/labeling.md`, `docs/plans/_archived/20261017-bad-photo-labels/labels.py`.
+The `cue-labels` plan (`docs/plans/_archived/20261128-cue-labels/plan.md`) prepared a blind labeling round for the cue readings (head pose, closed eyes and the rest), which the user asked for on 2026-11-28 after the `bad-photo-labels` Decision left it open (`|pitch|` > 45 read 3.2x the strict base rate on 19 frames, interval [0.0, 40.5]). The round is 900 shuffled RAW copies in `D:\Photos\tests\2026-11-28-cue-labels\sample`, with `manifest.tsv` and `strata.tsv` beside it (outside the repository), drawn by `sample.py` from the 2026-10-12 app dump in three strata on the dump's readings: `pitch45` (`|pitch|` > 45, 300 of 434), `closed` (EAR <= 0.137, 100 of 1,068) and `rest` (500 blind controls of 14,968, per folder). The question is "OK to discard?", as in `discard-labels`: rating 1 = keep, unmarked = OK to discard.
 
-The `discard-labels` feature ran a blind 600-frame round for the "OK to discard?" question (plan: `docs/plans/_archived/20261018-discard-labels/plan.md`, Decision). It took the user about 30 minutes, about 3 s per frame against the 1.5-2.5 s estimated, so size a further round at about 3 s per frame (1,000 frames about 50 minutes). It did not oversample the `|pitch|` > 45 stratum.
+What a reader of the labels needs: the population is the 19 folders of `D:\Photos\2026` still intact since the dump (the eight culled folders hold only what the user kept), less the 2,400 frames of the three earlier rounds, 16,470 frames; and today's app reads fewer poses than the dump (in `2026-09-27-a`, 16 of 94 dump `pitch45` frames still have a pitch), so the today's-reading bins have wide intervals. The question, the readings, the bars and the follow-up rule were pre-registered before any label in `docs/plans/_archived/20261128-cue-labels/cues.md`; the guide is `docs/plans/_archived/20261128-cue-labels/labeling.md`; the run's checks, the manifest's SHA-256 and the strata table are in `docs/plans/_archived/20261128-cue-labels/learnings.md`.
 
-The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget/plan.md`) names what a further round would need if one is wanted: mostly more blind controls. The 150 controls stand for 25,071 frames (`π` down to 0.0042), so a `D0` fold's Kish effective sample size is only 166-195 of 504-597 labeled frames. The same Decision lists pre-registered model changes to try with it (clipped `1/π` weights, a linear `D0`, a target that keeps picks out of the cut). It sized the round at about 3 s per frame (600 frames about 30 minutes, 1,000 about 50 minutes). Rule branch 2 ("more labels") was not triggered, since effect A at q5 was negative.
+This waits on the user.
 
 #### TODO
 
-- [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
+- [ ] The user labels the sample folder per `labeling.md` and says "done".
+- [ ] Then write a plan that exports the labels (`labels.py`, as the archived rounds' ones), reads today's values of the sampled copies, computes the pre-registered readings of `cues.md` and writes the Decision by its follow-up rule, changing no bar.
 
 ### App: `uitest::opens_with_no_folder` hung on `app (ubuntu-latest)`
 
