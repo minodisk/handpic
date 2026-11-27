@@ -349,11 +349,19 @@ copyright lines, Longbridge's, Zed Industries' and Sean McArthur's (for
 `gpui-pre-reqwest`), and the Apache-2.0 text of
 their `LICENSE-APACHE`), `crates/app/LICENSE-lucide`, the themes' `LICENSE`
 as `LICENSE-themes`, and the models' `LICENSE` (YuNet) as `LICENSE-yunet`
-and `LICENSE-mediapipe`, and Handpic's own license texts, the root
-`LICENSE-MIT` and `LICENSE-APACHE` (Handpic is `MIT OR Apache-2.0`).
+and `LICENSE-mediapipe`, `crates/core/LICENSE-pillow`, and Handpic's own
+license texts, the root `LICENSE-MIT` and `LICENSE-APACHE` (Handpic is
+`MIT OR Apache-2.0`).
+
+`crates/core/src/resample.rs` ports PIL's bilinear and bicubic resampling.
+Decided on 2026-11-27, the conservative reading: the port is treated as
+derived from Pillow, so it ships Pillow's MIT-CMU notice,
+`crates/core/LICENSE-pillow` (a header naming the port, then Pillow's
+upstream `LICENSE` unchanged).
 
 - Rule: every package gets its notices from `notices.sh`, never a list of
-  its own; a new bundled asset under another license adds its notice there.
+  its own; a new bundled asset under another license adds its notice there,
+  and so does a port of third-party code.
 - Rule: a version bump of the GPUI crates re-checks `NOTICE-gpui`'s crate
   list, versions and copyright lines against the crates' `LICENSE-APACHE`.
 
@@ -400,7 +408,8 @@ screenshot -- -D warnings`, as do `mise run app:check` and `mise run
 ci:local` (its `clippy app screenshot` check, selected wherever `clippy
 app` is) on a Windows host. Windows is where the `screenshot` tool was
 checked live, Linux's `render_to_image` is not implemented, and the macOS leg
-already compiles a second variant of the app for its bundle step. The feature
+already builds the app with the feature in its bundle step (see "The macOS
+bundle step reuses the test build"), though not under clippy. The feature
 turns on `test-support` in a direct `gpui-pre-platform` dependency, the same
 crate and feature the UI tests' dev-dependency turns on (see "The main view
 opens on GPUI's test platform"), so the default `clippy --all-targets` already
@@ -408,6 +417,34 @@ builds the GPUI crates that way and this run only re-checks `handpic-app`.
 
 - Rule: keep the feature command string identical in `ci.yml`,
   `tools/ci/local.sh` and `app:check`.
+
+### The macOS bundle step reuses the test build (Measured)
+
+The `app (macos-latest)` job has `timeout-minutes: 30`, and cold-cache runs
+(the `actions/cache` step restoring nothing) took 24 to 29.5 minutes and
+were cancelled at the limit on some PRs: "Lint and test the app" 15 to
+19 minutes and "Bundle and check Handpic.app" 8 to 10 minutes. A warm run
+takes 2 to 5 minutes. The bundle step's plain `cargo build` had the
+dev-dependency `gpui-pre-platform` with `test-support` off, so the GPUI
+crates compiled a second time in another feature variant after `cargo test`
+built them with it. On 2026-11-27 the step was changed to `mise run
+app:bundle:macos debug --features screenshot` rather than the timeout
+raised: the `screenshot` feature (`["dep:gpui-pre-platform", "image/png"]`,
+`gpui-pre-platform` with `test-support`) turns on the same dependency
+features the dev-dependencies do (`gpui-pre-platform` with `test-support`,
+`image` with `png`), and `cargo test` and `cargo build` share the dev
+profile's dependency artifacts, so the step compiles only `handpic-app`.
+Raising the limit would have kept the duplicate compilation on every cold
+run and the second variant in the macOS cache (2.4 GB) of a repository whose
+caches overrun the 10 GB limit and are evicted. The step checks only the
+bundle's layout, which the feature does not change; the release bundle comes
+from `package.yml`, still with no feature. So `ci.yml` no longer builds a
+default-feature, non-test app on any platform; `Package` still does.
+
+- Rule: the CI bundle build keeps the dependency feature set of `cargo test`.
+  A `Compiling gpui-*` line in the bundle step's log means they differ;
+  compare `cargo tree -e features --features screenshot` with the test
+  build's before raising `timeout-minutes`.
 
 ### Without NASM, mozjpeg silently loses SIMD (Measured)
 
@@ -556,8 +593,8 @@ the distributables").
 
 ### macOS gets `Handpic.app` from a mise task (Inferred)
 
-`mise run app:bundle:macos [profile]` (release by default) builds and lays
-out `crates/app/target/<profile>/Handpic.app` with the checked-in
+`mise run app:bundle:macos [profile] [--features <features>]` (release and
+no cargo feature by default) builds and lays out `crates/app/target/<profile>/Handpic.app` with the checked-in
 `crates/app/packaging/macos/Info.plist`, `Contents/MacOS/Handpic` (the
 Cargo bin `handpic`, copied under the shipped name) and
 `crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
@@ -565,15 +602,16 @@ numeric form `tools/package/version.sh numeric` prints into the copied
 `Info.plist`'s `CFBundleShortVersionString` and `CFBundleVersion` (`plutil
 -replace`; the checked-in file keeps `0.0.0`) and copies the notices into
 `Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `app`
-CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
-executable and the `.icns` present).
+CI job's macOS leg bundles the debug build with the `screenshot` feature (see
+"The macOS bundle step reuses the test build") and checks it (`plutil -lint`,
+the executable and the `.icns` present).
 
 - Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`, the
   one the Tauri app had, which the app replaced. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
 - Rule: the `app` CI job's macOS leg runs `mise run app:bundle:macos
-  debug` itself, so CI exercises the task this section describes. The
+  debug --features screenshot` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
 - Pending manual checks, not done here: the taskbar, title bar and Explorer
@@ -734,12 +772,14 @@ packages the built `target/release` binary with a script under
   it), before the checks, so the checks and the uploads see the signed
   bytes. Without the input a dispatch signs nothing. The production
   signature is only for a caller: `release.yml` calls the workflow with
-  `sign_production: true` and the `UPDATE_SIGNING_KEY` secret, and each leg
-  then runs `sign-production.sh` on its archives at the same place, before
-  its checks. `sign_production` is a `workflow_call` input a dispatch does
-  not have, because `secrets.UPDATE_SIGNING_KEY` resolves to the repository
-  secret on a direct dispatch too; gating on the secret's presence would let
-  any dispatch sign with the production key. A dispatch's `version` and
+  `sign_production: true` and the `UPDATE_SIGNING_KEY` secret passed by
+  name, and each leg then declares the `release` environment, which holds
+  that secret, and runs `sign-production.sh` on its archives at the same
+  place, before its checks. Without `sign_production` a leg's environment
+  name is empty, so a dispatch declares no environment. `sign_production`
+  is a `workflow_call` input a dispatch does not have, so a dispatch on
+  `main`, which the environment's branch policy admits, still signs nothing
+  with the production key. A dispatch's `version` and
   `update_test_repo` behave as before; a caller has no `update_test_repo`.
   The `checksums` job computes `SHA256SUMS`
   over the downloaded artifacts, so after signing, and installs the
@@ -860,9 +900,11 @@ the names `crates/engine/src/update.rs` asks for. It has two ways in:
 
 The jobs, shared by both ways in:
 
-1. `guard` (`ubuntu-latest`, minutes) resolves the version and whether the
-   run publishes, and fails before any build on a version the run may not
-   build or publish, or on an `UPDATE_SIGNING_KEY` secret that is empty,
+1. `guard` (`ubuntu-latest`, minutes, in the `release` environment)
+   resolves the version, and fails before any build on a version the run may
+   not build or publish, on a ref other than `main` (only if the
+   environment's policy were ever loosened; GitHub rejects such a dispatch
+   before the job starts), or on an `UPDATE_SIGNING_KEY` secret that is empty,
    does not decode to a 64-byte key, or does not match
    `crates/app/packaging/update.pub`, each with a message that names the
    secret. It proves the key by signing a scratch `.tar.gz` with
@@ -872,26 +914,31 @@ The jobs, shared by both ways in:
    and the asset names carry it; the build then writes the same version
    again (`set-version.sh` is idempotent).
 2. `build` calls `package.yml` with the version, `sign_production: true` and
-   the secret, so the four updater archives are signed with the production
-   key in their own legs and `SHA256SUMS` is computed after signing.
-3. `publish` (only when the run publishes) downloads the artifacts, checks
+   the secret by name, so the four updater archives are signed with the
+   production key in their own legs, each in the `release` environment, and
+   `SHA256SUMS` is computed after signing. The calling job itself declares
+   no environment: a job that calls a reusable workflow cannot.
+3. `publish` (whenever the build succeeded) downloads the artifacts, checks
    that they are exactly `assets.sh`'s eleven, that `SHA256SUMS` names the
    other ten and that `sha256sum --check --strict` passes, and uploads them
    unrenamed (zipsign binds a signature to the file's name).
 
 A dispatch on any ref but `main` (`gh workflow run release.yml --ref
-<branch> -f version=2.0.0-rc.0`) runs the guard and the build, uploads the
-signed packages and `SHA256SUMS` as workflow artifacts, and creates no tag
-and no release. A dispatch has its own concurrency group per version, so a
-candidate's build of about 75 minutes neither queues the pushes'
-`release-please` runs nor another candidate.
+<branch> -f version=2.0.0-rc.0`) is rejected at `guard` by the `release`
+environment's branch policy: no step runs, and `build` and `publish` are
+skipped. A branch is packaged through `package.yml` with the test key
+instead (`gh workflow run package.yml --ref <branch> -f
+update_test_repo=<owner/name>`). A dispatch has its own concurrency group
+per version, so a candidate's build of about 75 minutes neither queues the
+pushes' `release-please` runs nor another candidate.
 
-- Rule: the secret `UPDATE_SIGNING_KEY` is the 64-byte zipsign private key
-  that `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
-  <private-key>`), set by the user on the secret's page on github.com or
-  piped to `gh secret set UPDATE_SIGNING_KEY` after checking it is
-  non-empty. No agent reads, copies or asks for the key. `gh secret list`
-  cannot tell an empty secret from a set one
+- Rule: the secret `UPDATE_SIGNING_KEY` is the `release` environment's
+  secret (not a repository secret), the 64-byte zipsign private key that
+  `mise run app:keygen` wrote, base64-encoded on one line (`base64 -w0
+  <private-key>`), set by the user on the environment's page on github.com
+  or piped to `gh secret set UPDATE_SIGNING_KEY --env release` after
+  checking it is non-empty. No agent reads, copies or asks for the key.
+  `gh secret list --env release` cannot tell an empty secret from a set one
   ([`github-actions-workflows.md`](./github-actions-workflows.md#an-empty-secret-looks-set-in-gh-secret-list-hit)),
   which is what the guard is for.
 - Rule: the key reaches a job only through `env` on the one step that signs;
@@ -900,14 +947,38 @@ candidate's build of about 75 minutes neither queues the pushes'
   never prints the key.
 - Rule: `assets.sh` is the one list of a release's asset names; a new or
   renamed package changes it with the packaging script.
-- Rule: a branch dispatch (`--ref <branch> -f version=…`) runs that branch's
-  `release.yml` with the production key, so unreviewed branch code signs
-  archives (only workflow artifacts, nothing published). "Never publishes
-  from a non-`main` ref" holds only for the workflow code on `main`: a branch
-  could change the check. A protected environment holding
-  `UPDATE_SIGNING_KEY`, or tag / release protection rules, would be the
-  stronger guarantee. Accepted risk, not a finding; it needs the user's
-  call before such a branch dispatch.
+- Rule (decided 2026-11-26, plan `20261126-release-key-environment`): the
+  production key lives only in the `release` environment, whose deployment
+  branch policy allows only `main` (a custom branch policy, admins not
+  allowed to bypass), so no workflow run on another ref can read it,
+  whatever that ref's workflow file says, once the repository-level secret
+  is deleted (a manual setting after this lands; until then a job without
+  the `environment:` key still reads it). `release.yml`'s `guard` declares the environment
+  unconditionally and `package.yml`'s `macos`, `windows` and `linux` legs
+  declare it only under `sign_production` (`name: ${{ inputs.sign_production
+  && 'release' || '' }}`), all with `deployment: false`, so the runs create
+  no deployment records. The calling `build` job cannot declare an
+  environment (a job that calls a reusable workflow cannot), so it passes
+  `UPDATE_SIGNING_KEY` by name, which GitHub resolves to the environment's
+  secret inside the legs; without that pass the secret is empty there. A
+  branch dispatch of `release.yml` is rejected at `guard` before any step
+  runs, with GitHub's environment protection annotation (measured on 2026-11-27,
+  run 45846600132: "Branch "<branch>" is not allowed to deploy to release
+  due to environment protection rules."); a branch dry run
+  is `gh workflow run package.yml --ref <branch> -f
+  update_test_repo=<owner/name>` with the test key. Verified (measured
+  2026-11-27, run 45846600132): a `release.yml` dispatch on a branch fails
+  at `guard` with no step run and `build`, `publish` and `release-please`
+  skipped, from the branch policy alone (`deployment: false`). An empty
+  environment name means "no environment" (measured, run 45846638280: the
+  four legs of a plain `package.yml` dispatch started). Not yet verified
+  until the user deletes the repository-level secret and cuts a release
+  candidate on `main`: that `verify-release.sh` reports `STATUS=ok`, which
+  proves the legs sign with the `release` environment's secret. The environment, its policy and its secret are the user's to
+  change; an agent runs such a `gh api` or `gh secret` command only when
+  the user approves it. Still not covered: the key reaches four runners
+  that run third-party actions, there is no required reviewer, and anyone
+  who can push to `main` can sign.
 
 ### The release runbook (Inferred)
 
@@ -1083,8 +1154,10 @@ as it does `handpic-core`. A dependency added to the engine also lands in
   toolchain. Source:
   `docs/plans/_archived/20261125-settings-under-title-bar/learnings.md`,
   Step 1.
-- Rule: `crates/app/Cargo.lock` resolves its own versions (`notify` 8.2.2
-  against 8.2.0 in the root lock). `watch::set` (watch, replace, the debounce)
+- Rule: `crates/app/Cargo.lock` resolves its own versions (its `notify` is
+  8.2.2, which the root lock matches since
+  `docs/plans/_archived/20261126-notify-lock-align/plan.md`; the rest of
+  `notify`'s subtree can still differ). `watch::set` (watch, replace, the debounce)
   works on 8.2.2: copying into and deleting from the open folder resynced it.
   The tree watcher's `unwatch` + `settle` returns promptly on 8.2.2 too (see
   "The tree follows the disk through one `TreeWatch`"), and so does the
@@ -2209,7 +2282,8 @@ dimmed, shows capture order and keeps the stored key.
 the rendered alpha mask in the element's `text_color`, so a stroked Lucide
 icon and a filled derivative both draw in one color. `icons.rs` holds a
 path constant per icon (`icons/<name>.svg`), the SVG strings of the app's
-own derivatives (the filled star, the frowning `scan-face`),
+own derivatives (the filled star, the frowning `scan-face`, the title bar's
+thin `settings` gear),
 `Catalog`, the catalog icons selected with `gpui_kit::assets::icon_assets!`
 (`rectangle-vertical`, `rectangle-horizontal`, `scan-face`), and `Icons`,
 whose `load` answers the own paths with borrowed bytes, then `Catalog`'s,
@@ -2222,7 +2296,7 @@ and the tree's `folder` and `folder-open`, a path in none of them with
   the `icon_assets!` list and a path constant, the literal its `IconName`
   variant's `path()` gives (`path()` is not `const`); an icon the default
   `Assets` already holds needs only the path constant. Only a derivative (a
-  filled shape, the `scan-face` frown) is copied in as an own SVG: copy its
+  filled shape, the `scan-face` frown, a thinner stroke) is copied in as an own SVG: copy its
   base from `lucide-static` at the version the header names (v1.48.0, as
   the Tauri frontend's `icons.ts` did), add its SVG and path constants and its
   entry in `SVGS`, and name it in the header comment, with any
@@ -2606,10 +2680,17 @@ call.
   `cx.quit()`, not `cx.restart()`, which would start the old exe while the
   setup replaces it. The staging folder of an Inno Setup install is removed
   at launch (a failure, such as the relaunching setup still running from it,
-  is logged and left to the next launch). Only a launch clears it, so after
-  an uninstall from Settings → Apps the staged setup and its ZIP stay in
-  `<cache dir>\<IDENTIFIER>\update` (Observed 2026-11-21, rc.2);
-  `handpic.iss` has no `[UninstallDelete]` for it yet.
+  is logged and left to the next launch). An uninstall leaves no next
+  launch, and an uninstall from Settings → Apps left the staged setup and
+  its ZIP in `<cache dir>\<IDENTIFIER>\update` (Observed 2026-11-21, rc.2),
+  so the uninstaller deletes that folder too, through the one
+  `[UninstallDelete]` entry of `handpic.iss`
+  (`{localappdata}\dev.minodisk.handpic\update`, which a `datadir.rs` test
+  holds to `update_staging`), and keeps the index, the settings and the logs.
+  An install gains it once a setup built with the entry has installed over
+  it. **Unverified**: the uninstall is not yet checked on a real machine
+  (the `todo.md` item "App: the Inno Setup uninstaller leaves the update
+  staging folder (native-release)").
 - Rule: the `.app` install's bundle. The engine's `install` takes the
   bundle from the executable's path (`app_bundle`, the `<x>.app` of
   `<x>.app/Contents/MacOS/<exe>`) and hands it to `self_update`'s bundle
@@ -3335,7 +3416,10 @@ after about 11 ms, one retry) and fails the test if it is still held after
   the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
-  (the macOS job's bundle step, `cargo build`) fails.
+  (`cargo build`, the `Package` workflow's release build) fails. The macOS
+  CI job's bundle step builds with `screenshot`, which turns `test-support`
+  on too (see "The macOS bundle step reuses the test build"), so it no
+  longer catches this.
 
 ### The UI tests drive the view with keys over generated DNGs (Measured)
 
@@ -4142,12 +4226,13 @@ The window draws no OS title bar. `main()` opens it with
 `impl Render for Handpic` puts `TitleBar::new()` first in the root's
 `flex_col`, a `flex_shrink_0` row of `TITLE_BAR_HEIGHT` (34 px) in flow on
 every platform, so the main area below it shrinks by itself. Its first child
-is an `h_flex().gap_2().text_sm()` of `img(icons::APP)` at 16 px and the
-text "Handpic" at 14 px in `cx.theme().foreground`; its second, which the bar's
+is an `h_flex().gap_2().text_size(px(13.))` of `img(icons::APP)` at 18 px and
+the text "Handpic" at 13 px in `cx.theme().foreground`; its second, which the bar's
 `justify_between` row puts at the right end (left of the window controls on
-Windows / Linux), is `settings_button`: a ghost, small, `tab_stop(false)`
-gpui-component `Button` with `IconName::Settings` in a `div` with a `mr_2`
-margin and the tooltip. The bar draws the window controls on
+Windows / Linux), is `settings_button`: a ghost, `tab_stop(false)`
+gpui-component `Button` with `Icon::default().path(icons::SETTINGS_THIN)` (Lucide
+`settings` at `stroke-width="1.5"`) in a full-height `div` (`h_full()`, no
+margin) holding the tooltip. The bar draws the window controls on
 Windows (hit-tested through `WindowControlArea`) and Linux and moves the
 window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/plan.md).
 
@@ -4157,7 +4242,7 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   inner row, which starts after the left padding and ends before the window
   controls. A `relative`, `flex_shrink_0` `div` wraps `TitleBar` (its
   height stays `TITLE_BAR_HEIGHT`) and, while a folder is open, holds after
-  it an `absolute().inset_0()` overlay at `text_sm` in the theme's
+  it an `absolute().inset_0()` overlay at `text_size(px(13.))` in the theme's
   `foreground`, padded `TITLE_NAME_MARGIN` (160 px) a side so the name,
   `min_w_0().truncate()`, ends in an ellipsis before the icon, "Handpic",
   the gear or the controls. The name is read in `render`, so another open,
@@ -4170,6 +4255,16 @@ window itself. Source: [the plan](../plans/_archived/20261116-native-title-bar/p
   manual check is pending in the plan); the fallback is a third `TitleBar`
   child, centered only between the left group and the gear. Source:
   [the plan](../plans/_archived/20261118-native-title-bar-folder-name/plan.md).
+- Rule: the gear's `Button` is `.with_size(px(14. / 0.75))`,
+  `.w(TITLE_BAR_HEIGHT)`, `.h_full()` and `.rounded(ButtonRounded::None)`.
+  gpui-component draws a button's icon at 0.75 of the button's size, so
+  `px(14. / 0.75)` gives a 14 px icon; the box is then set to
+  `TITLE_BAR_HEIGHT` wide, the bar's full height, with square corners, after
+  the window controls' own box, so its hover fill sits flush with them. Seen
+  in a dev build on Windows 11, where the user approved it; the margin-less
+  square gear is unseen on macOS (traffic lights on the left, none beside it) and
+  Linux, a manual check pending. Source: the plan
+  `docs/plans/20261127-title-bar-tweak/plan.md`.
 - Rule: keep `title: Some("Handpic")`. `title_bar_options()` has `title:
   None`, which would empty the taskbar and Alt+Tab text.
 - A press on the bar still reaches the root `div`'s `track_focus`, so a click
@@ -4554,7 +4649,12 @@ strip needed one because `uniform_list` is vertical only.
   folder (`tree::relation`), leaves the chain's end collapsed and unlisted
   (its spelling comes from its parent's listing, its count from the open's
   `set_listed_count`). The field survives an open deferred by the gate
-  (`deferred_open`) or waiting in `reveal_wanted`, and any other reveal
+  (`deferred_open`) or waiting in `reveal_wanted`, and a folder rename that
+  lands under the deferred open (`folder_renamed`, the `Rename by Capture
+  Date…` rename, whose run does not refuse the click) rebases it with
+  `deferred_open`, so the renamed row stays collapsed; the tree's `Rename…`
+  cannot land there, since it refuses the click while in flight and a held
+  one is dropped by the deferred open. Any other reveal
   drops it, as does a later open of the folder by another route (a plain
   click, `Enter`, a pick or a drop), the last request winning. The open folder's row toggles through `tree_toggle` without
   reopening (no re-listing, no new scan), and does nothing when it cannot
@@ -5710,7 +5810,8 @@ to the update on the main thread), and splits `draw` into
 stopped at `drawImage`. It starts at the latest press of the file that ended up
 shown. `source=read|prefetch` says whether the image came from its own read or
 the prefetch ring; a hit's `read`, `decode`, `orient` and `hop` are 0, and
-its `wait` is the time `go` took before the hit. `px=` is the preview JPEG's
+its `wait` is the time `go` took before the hit. An HDR PQ CR3's HEVC decode
+(`reader::Undecoded::decode`) counts in `decode`, after `read` ends. `px=` is the preview JPEG's
 stored size and `decoded=` the size it was decoded at for the fit view, both
 unrotated.
 

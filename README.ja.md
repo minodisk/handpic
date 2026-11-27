@@ -93,7 +93,7 @@ Handpic は Apple や Microsoft の署名を受けていないので、ダウン
 
 他のソフトが作ったサイドカーはその場で編集します。スター、フラグ、ラベル以外（現像設定、キーワードなど）には手を触れません。
 
-同じフォルダーにある、名前が同じで拡張子だけが違う 2 つの RAW（`FOO.ARW` と `FOO.DNG`）は `FOO.xmp` を共有するため、サポートしていません。一方をゴミ箱に移すと、共有の `FOO.xmp` も一緒に移り、もう一方の判定も持っていかれます。完全に削除する場合は、共有の `FOO.xmp` を残します。RAW ごとに `FOO.ARW.dop` を作る PhotoLab (.dop) 形式だけを最初から使い、フォルダーに `FOO.xmp` を置かないか（**Both** では共有の `FOO.xmp` も書き込みます。また、選んだ形式にかかわらず、既存の `FOO.xmp` はゴミ箱への移動でも一緒に移ります）、そうした RAW を別々のフォルダーに分けてください。
+同じフォルダーにある、名前が同じで拡張子だけが違う 2 つの RAW（`FOO.ARW` と `FOO.DNG`）は `FOO.xmp` を共有するため、サポートしていません。2 つは 1 つの判定を共有します。一方をゴミ箱に移すときも完全に削除するときも、共有の `FOO.xmp` はもう一方のために残し、その移動を取り消すと戻るのは RAW とその `FOO.ARW.dop` だけです。`FOO.xmp` は、共有するすべての RAW が同じ操作で移るときだけ一緒に移ります。RAW ごとに `FOO.ARW.dop` を作る PhotoLab (.dop) 形式だけを最初から使い、フォルダーに `FOO.xmp` を置かないか（**Both** では共有の `FOO.xmp` も書き込みます。また、選んだ形式にかかわらず、既存の `FOO.xmp` はそうした RAW の最後の 1 つと一緒にゴミ箱に移ります）、そうした RAW を別々のフォルダーに分けてください。
 
 ### Lightroom
 
@@ -199,6 +199,7 @@ Handpic は次のいずれかのライセンスで提供します。どちらを
 
 - YuNet 顔検出モデル: MIT、[crates/core/models/LICENSE](./crates/core/models/LICENSE)
 - MediaPipe Face Landmarker モデルと移植した顔ジオメトリのデータ: Apache-2.0、[crates/core/models/LICENSE-mediapipe](./crates/core/models/LICENSE-mediapipe)
+- Pillow から移植したリサンプリング: MIT-CMU、[crates/core/LICENSE-pillow](./crates/core/LICENSE-pillow)
 - gpui-kit から取り込んだテーマ: Apache-2.0（Harper と Fahrenheit は CC BY-SA 4.0）、[crates/app/themes/LICENSE](./crates/app/themes/LICENSE)
 - GPUI のクレート: Apache-2.0、[crates/app/packaging/NOTICE-gpui](./crates/app/packaging/NOTICE-gpui)
 - Lucide のアイコンとそれを元にした 2 つのアイコン: ISC、[crates/app/LICENSE-lucide](./crates/app/LICENSE-lucide)

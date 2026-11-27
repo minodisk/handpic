@@ -140,3 +140,22 @@ broken assumption. A normal session produces none. The checks:
 
 The check logs under `handpic::scan`. The checks are not exhaustive, so no
 `invariant:` line proves nothing broke.
+
+### Thumbnail read lines (strip cells that stay gray)
+
+Two lines in `crates/app` name why a strip cell shows no image while pass 1
+still runs. Grep for them when cells in view stay gray on a fresh-index open.
+
+- `thumbnail read failed, the cell waits for the scan:` (`WARN`, from
+  `thumbs::read`) is any read error except rusqlite's `Query returned no
+  rows` (`no_row`; a row not yet committed is normal and silent).
+- `thumbnail not scanned after the scan reported it: ... retried=<bool>` (from
+  `Handpic::thumbnail`): the scan reported the cell but the read answered
+  `NotScanned`. `retried=true` (`INFO`) is the expected first answer from a
+  read that ran before the commit. `retried=false` (`WARN`) means the cell
+  stayed missing until the pass ended.
+- Neither line for a gray cell points at the scan order (rows not written
+  early), or an image decoded but not painted, rather than the reader.
+- The gray-cell cause was not reproduced in tests (the device's 90 s pass 1
+  against about 2 s in the test), so these lines are the diagnosis tool.
+  Source: `docs/plans/_archived/20261127-jpeg-strip-gray-cells/learnings.md`.

@@ -571,6 +571,14 @@ Left for the user to decide (no plan is opened for them here):
   > 45 reads 3.2x on 19 sampled frames), knowing it would not be expected to
   change the answer of 2 and 4.
 
+Answered by the user on 2026-11-26, after the plan was archived: the first
+question closes with no removal filter pursued. The cue shown to the human
+already exists, the strip's Low mark (the gray frowning face, the judged
+face's `full_eye_sharp` under `LOW_FULL_EYE_SHARP`, 0.110, in
+`crates/app/src/mark.rs`). It is a different rule from the cues read above,
+and its precision against these labels is not measured. The second question
+stays open.
+
 ## Progress
 
 - (2026-10-17) Plan written; 1,200 frames cue-heavy, shuffled order and bar option B chosen by the user

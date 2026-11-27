@@ -79,9 +79,13 @@ jobs:
       - uses: actions/checkout@v4
 
       # GPUI's Linux platform links against fontconfig, Wayland, X11 and
-      # xkbcommon, and renders through Vulkan.
+      # xkbcommon, and renders through Vulkan. The step normally takes about
+      # 9 s; in November 2026 a throttled runner mirror stretched the apt step
+      # to 25-29 minutes in three runs and the job's 30-minute limit fell on a
+      # later step, so this limit makes a slow mirror fail under this step's name.
       - name: Install the Linux GPUI dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 5
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y \
@@ -132,11 +136,13 @@ jobs:
           mise exec rust@1.98.1 -- cargo test
 
       # The debug build keeps the step short; the layout is the release one's.
+      # The screenshot feature gives the build the dependency features
+      # `cargo test` already compiled, so only handpic-app compiles here.
       - name: Bundle and check Handpic.app
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          mise run app:bundle:macos debug
+          mise run app:bundle:macos debug --features screenshot
           app=crates/app/target/debug/Handpic.app
           plutil -lint "$app/Contents/Info.plist"
           test -x "$app/Contents/MacOS/handpic"

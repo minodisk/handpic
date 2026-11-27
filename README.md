@@ -293,11 +293,13 @@ stars, the flag and the label (develop settings, keywords, ...) is left
 untouched.
 
 Two RAWs of the same stem with different extensions in one folder (`FOO.ARW`
-and `FOO.DNG`) share `FOO.xmp` and are not supported: moving one of them
-to the Trash takes the shared `FOO.xmp` with it, and the other's
-judgment along. Deleting one permanently keeps the shared `FOO.xmp`. Use the PhotoLab (.dop) format alone from the start, which writes one
+and `FOO.DNG`) share `FOO.xmp` and are not supported: they share one
+judgment. Moving one of them to the Trash or deleting it permanently keeps
+the shared `FOO.xmp` for the other, and the undo of that move brings back
+only the RAW and its `FOO.ARW.dop`; the `FOO.xmp` goes only when every RAW
+sharing it goes in the same run. Use the PhotoLab (.dop) format alone from the start, which writes one
 `FOO.ARW.dop` per RAW, with no `FOO.xmp` in the folder (**Both** writes the
-shared `FOO.xmp` too, and Handpic moves an existing `FOO.xmp` along with a file moved to the Trash whichever
+shared `FOO.xmp` too, and Handpic moves an existing `FOO.xmp` to the Trash with the last of those RAWs whichever
 format is chosen), or keep such RAWs in separate folders.
 
 ### Lightroom
@@ -463,6 +465,7 @@ The third-party material bundled in the repository follows its own license:
 
 - The YuNet face detection model: MIT, [crates/core/models/LICENSE](./crates/core/models/LICENSE)
 - The MediaPipe Face Landmarker model and the ported face geometry data: Apache-2.0, [crates/core/models/LICENSE-mediapipe](./crates/core/models/LICENSE-mediapipe)
+- The resampling ported from Pillow: MIT-CMU, [crates/core/LICENSE-pillow](./crates/core/LICENSE-pillow)
 - The themes vendored from gpui-kit: Apache-2.0, except Harper and Fahrenheit, CC BY-SA 4.0, [crates/app/themes/LICENSE](./crates/app/themes/LICENSE)
 - The GPUI crates: Apache-2.0, [crates/app/packaging/NOTICE-gpui](./crates/app/packaging/NOTICE-gpui)
 - The Lucide icons and the two icons derived from them: ISC, [crates/app/LICENSE-lucide](./crates/app/LICENSE-lucide)

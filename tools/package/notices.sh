@@ -19,6 +19,7 @@ notices=(
 	"crates/app/themes/LICENSE:LICENSE-themes"
 	"crates/core/models/LICENSE:LICENSE-yunet"
 	"crates/core/models/LICENSE-mediapipe:LICENSE-mediapipe"
+	"crates/core/LICENSE-pillow:LICENSE-pillow"
 	"LICENSE-MIT:LICENSE-MIT"
 	"LICENSE-APACHE:LICENSE-APACHE"
 )

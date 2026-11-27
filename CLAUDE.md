@@ -29,11 +29,13 @@ untrusted mesh, no EAR or pose under the presence floor), `src/allfaces.rs` the
 all-faces check of group photos (`gate_count`, the gate count pass 2 stores in
 `scan::Analysis::gate_count`: the judged face and the whole-preview faces
 whose box long side is within `GATE_MIN_SIZE` to `GATE_MAX_SIZE` of its,
-searched at `faces::GATE_INPUT` from `GATE_LOW_RES_CONFIDENCE` on an AF frame
-and over the cue's own whole-image search from `FACE_CONFIDENCE` without
-one; `candidates`: the other whole-image faces at
-`FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not overlapping the judged
-face, the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
+counted from `GATE_LOW_RES_CONFIDENCE` on both searches, at
+`faces::GATE_INPUT` on an AF frame and over the cue's own whole-image
+search without one; `candidates`: the other whole-image faces at
+`FACE_CONFIDENCE` and `EYES_MIN_FACE` or more, not the judged face found
+again (`same_face`: an IoU above `NMS_THRESHOLD` or an overlap over the
+smaller box above `SAME_FACE_OVERLAP`; the gate count drops it the same
+way), the largest first, `MAX_FACES` with the judged one; `measured`, a mesh
 counted only within `MAX_EYE_OFFSET` and, as the cue's EAR, never an
 untrusted one or one under the presence floor; `counts`, the `FaceCounts` of faces
 judged, closed by `EYES_CLOSED_EAR` and soft under `LOW_BELOW`, the soft
@@ -221,10 +223,11 @@ embeds `icons/icon.ico` as the exe's icon resource ID 1 on Windows
 (`winresource`), it sets the app identity (`IDENTIFIER`, "Handpic") at
 startup so its OS notifications can be delivered, its window opens with
 `app_id` `IDENTIFIER` under
-gpui-component's `TitleBar` (the app icon and "Handpic" at `text_sm`, the
+gpui-component's `TitleBar` (the app icon at 18 px and "Handpic" at 13 px, the
 open folder's name at the same size centered across the whole bar by a
 listener-free overlay and truncated before the sides, and at its right end
-a gear `Button` whose click opens the settings as `ctrl+,` does, its press
+a gear `Button`, the thin `settings` derivative in a square-cornered box the
+bar's height wide and high like a window control's, whose click opens the settings as `ctrl+,` does, its press
 kept from the bar's window drag) in place of the OS title bar, and
 `packaging/` holds the macOS `Info.plist` and the Linux
 `dev.minodisk.handpic.desktop` the `app:bundle:macos` (`Handpic.app` under
@@ -260,7 +263,8 @@ those four updater archives in place, also `mise run app:sign`, run with the
 test key under a dispatch's `update_test_repo` input (`owner/name`), which
 also gives the build `HANDPIC_UPDATE_TEST_REPO`, or, under a caller's
 `sign_production` input, through `sign-production.sh` with the production
-key from the `UPDATE_SIGNING_KEY` secret (base64) against `update.pub`;
+key from the `release` environment's `UPDATE_SIGNING_KEY` secret (base64,
+the environment allowing only `main`) against `update.pub`;
 `assets.sh`, the eleven asset names of a release), uploading each package
 and one `SHA256SUMS`, computed after signing, as workflow artifacts
 (`test-release.sh` publishes such a test run's artifacts as a release of the
@@ -269,7 +273,8 @@ scratch repository it names, never `minodisk/handpic`);
 to `main` and publishes a release of `minodisk/handpic` with those eleven
 assets: a release candidate dispatched with a prerelease `version` input
 (published as a GitHub prerelease, never latest, only from `main`; a dispatch
-on another ref publishes nothing), or the final release when a merged release
+on another ref is rejected at `guard` by the environment, a branch packaged
+through `package.yml`'s `update_test_repo` instead), or the final release when a merged release
 PR makes release-please's draft, published once every asset is attached,
 both behind a `guard` job that checks the version and the secret before the
 build; `crates/app`'s `src/datadir.rs` places
@@ -367,8 +372,9 @@ click on an item does, the window writing the changed sort or filter;
 the right end of the header row on the strip's top edge, the
 color label rows gpui-component `Tag`s, the other leads Lucide icons
 from `src/icons.rs` (served by `Icons`, the application's one
-`AssetSource`, to `svg().path(..)`: the two own derivatives, the filled
-star and the frowning `scan-face`, under their license header,
+`AssetSource`, to `svg().path(..)`: the three own derivatives, the filled
+star, the frowning `scan-face` and the title bar's thin `settings` gear,
+under their license header,
 then the `gpui-kit-assets` catalog icons selected with `icon_assets!`
 (the orientation rectangles, `scan-face` and the closed-eyes mark's
 `eye-off`), then
@@ -755,3 +761,8 @@ change. Do not edit code and open a PR by hand or through `/pr` alone.
 On the Windows host, run `python` and `node` through `mise x --` (for example
 `mise x -- python script.py`); a bare invocation can hang or be missing from
 `PATH` in Git Bash.
+
+Do not run load tests locally: no generated CPU load (spinning threads or
+processes) and no test loops repeated under it. Many other sessions share the
+host, and a saturating run starves them. Leave such verification to CI, or ask
+the user before running anything of the kind.

@@ -6,8 +6,9 @@ set -o nounset
 
 # sign-production.sh — signs the given updater archives in place with the
 # production key, which it reads base64-encoded from the UPDATE_SIGNING_KEY
-# environment variable (the repository secret of that name), through
-# `mise run app:sign` against the checked-in crates/app/packaging/update.pub.
+# environment variable (the `release` environment's secret of that name),
+# through `mise run app:sign` against the checked-in
+# crates/app/packaging/update.pub.
 # The key is decoded into a private temporary folder, removed on exit, and
 # never printed. It fails, naming the secret, when the value is empty, does
 # not decode to a 64-byte key, or does not match update.pub (sign.sh's own

@@ -137,7 +137,7 @@ AF point (`partial::focus_point`) live in stored coordinates.
   scales each face by the decoded size against the stored one before
   `to_stored`. mozjpeg rounds a scaled side up (`ceil(dim * n / 8)`), so map
   with the actual sizes, not `n / 8`, and keep `Detection::width` / `height`
-  at the stored size: `faces_of` and the UI scale the boxes by it.
+  at the stored size: `ondemand::read_faces` hands it on as `FacesResponse::width` / `height`, and `mark::face_marks` scales the boxes by it.
 - The AF point these coordinates meet comes from the MakerNote parsing
   described in [`raw-metadata-parsing.md`](./raw-metadata-parsing.md).
 
@@ -214,7 +214,7 @@ and a labeled set, not only whether it loads.
   all 468 points; only the 33 basis points enter the Procrustes solves. The
   pipeline also drops a face whose normalized points lie within 1e-3 of their
   mean (`too_compact`, a `None`). It costs about 8 us per face, release,
-  single thread, so it does not move the `eyes_of` time (Measured). Only the
+  single thread, so it does not move the `ondemand::read_eyes` time (Measured). Only the
   roll is bounded (`MAX_ROLL`). A yaw past 90 deg is kept, because the sign
   was right on 16 of 18 readable far profiles. The 63 deg vertical FOV is kept
   because the FOV is not measurable from `Shot`, which lacks the 35 mm
@@ -320,7 +320,7 @@ release `handpic-cli` (whose `eyes` and `bench` call it) by 4.97 MB and the
 release app binary of the time (which did not call it yet) by 8 KB. Measure a model's
 binary cost on a build where the app actually calls it.
 
-Once `eyes_of` called it, that release app binary grew from 47,499,776 B to
+Once the removed Tauri app's `eyes_of` command called it, that release app binary grew from 47,499,776 B to
 52,494,336 B (+4,994,560 B, +10.5%), about the ONNX file, so a model's full
 size lands on every binary that reaches it. Source:
 [closed-eyes-detection learnings, Step 3](../plans/_archived/20261007-closed-eyes-detection/learnings.md).

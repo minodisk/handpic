@@ -44,13 +44,35 @@ token lacks the `workflow` scope.
 
 `package.yml` is both `workflow_dispatch` and `workflow_call`. On a direct
 dispatch, `secrets.<NAME>` resolves to the repository secret of that name,
-not to nothing, so a step gated on the secret being present would sign with
-the production key on any dispatch.
+not to nothing, so a step gated on a repository secret being present would
+use it on any dispatch. `UPDATE_SIGNING_KEY` moves to the `release`
+environment (see the next section) and its repository copy is deleted once
+that lands; until then a direct dispatch on any ref still resolves it to the
+repository copy, and from then on only a dispatch on `main` whose leg
+declares the environment would reach it.
 
 - Rule: gate what a secret enables on an input declared only under
   `workflow_call` (`sign_production`), which a dispatch cannot pass
   (`gh workflow run` refuses an undeclared input). Hand the secret through
   `env` to the one step that needs it, never through `GITHUB_ENV`.
+
+### An environment secret reaches a reusable workflow's job, not its caller (Inferred)
+
+GitHub's "Reuse workflows" docs (read 2026-11-26): a job that calls a
+reusable workflow (`uses:`) cannot declare `environment`. A job inside the
+reusable workflow declares it and then reads the environment's secrets, but
+the caller must still pass the secret by name (`secrets: NAME: ${{
+secrets.NAME }}`, allowed "even if it only exists in the environment"), or
+it resolves to an empty string. `release.yml`'s `build` passes
+`UPDATE_SIGNING_KEY` and `package.yml`'s legs declare the `release`
+environment under `sign_production` (`name: ${{ inputs.sign_production &&
+'release' || '' }}`, `deployment: false`); `guard` declares it always.
+
+- Rule: put a secret a branch must not read in an environment whose
+  deployment branch policy allows only `main`, declare that environment on
+  every job that reads it, and pass the secret by name from the caller of a
+  reusable workflow. `deployment: false` reads the secrets without creating
+  deployment records.
 
 ### Prove a signing secret before the long build (Inferred)
 
@@ -126,6 +148,42 @@ Both are pinned in `mise.toml` and run by the `lint` task (so by
 
 - Rule: run them ad hoc through mise, e.g.
   `mise exec -- shellcheck -x tools/stats/*.sh` or `mise exec -- actionlint`.
+
+## A job that hits its timeout
+
+### Read the timed-out attempt's step durations before blaming a step (Measured)
+
+A rerun overwrites what `gh run view` shows, which is the latest attempt
+only. Read the timed-out attempt's steps through
+`gh api repos/{owner}/{repo}/actions/runs/<id>/attempts/<n>/jobs` (each
+step's `started_at` / `completed_at`) and the job's log through
+`gh api --allow-escape-sequences repos/{owner}/{repo}/actions/jobs/<job id>/logs`
+(without the flag `gh` refuses a log holding ANSI colors). The step the job
+timeout lands on, and the `Terminate orphan process ...` lines, name only
+what was running at the cutoff, not what used the time; find the step with
+the long duration instead.
+
+Three Ubuntu jobs that hit the 30-minute limit in November 2026 had all
+spent it in apt, the runner's mirror throttled: main run 42128694204 (job
+127599427099, `Fetched 56.6 MB in 25min 31s (37.0 kB/s)` from
+`azure.archive.ubuntu.com`), PR 904's run 42123498474 (job 127581623540,
+`Fetched 56.5 MB in 26min 36s (35.4 kB/s)`) and PR 901's run 42086725922
+(job 127453726517, `Fetched 33.9 MB in 28min 59s (19.5 kB/s)`). The
+2026-11-05 main run's step was the since-removed "Install the Linux WebView
+dependencies", and the test binary its orphan line named was the pre-rename
+`riffle_core`; in PR 901 the `actions/cache` step was only where the timeout
+landed. Every rerun passed. `ci.yml`'s remaining apt step, "Install the
+Linux GPUI dependencies", now carries its own `timeout-minutes: 5`.
+
+A test step that logs `has been running for over 60 seconds` names a hung
+test instead, as run 45091844682's attempt 1 did for
+`uitest::opens_with_no_folder` before the job limit cancelled it.
+
+- Rule: on a timed-out job, read the attempt's step durations first. An apt
+  step whose log ends in a low `Fetched ... (NN kB/s)` is the runner's
+  mirror: rerun, nothing to fix in the repository. A test logging
+  `has been running for over 60 seconds` is a hung test: rerun, and record
+  that test in `todo.md`.
 
 ## A dedicated branch as a data store
 

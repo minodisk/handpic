@@ -87,6 +87,9 @@ pub struct Strip {
     /// come back from a query that ran before the commit, and must not be
     /// left `missing` until the scan ends.
     ready: HashSet<usize>,
+    /// Ever reported committed by the scan, which a `NotScanned` answer
+    /// should then no longer be: kept for `after_ready`.
+    reported: HashSet<usize>,
     /// Processed and failed: shown once, never retried.
     failed: HashSet<usize>,
     /// The judged cells' stars, flag and label.
@@ -342,9 +345,20 @@ impl Strip {
         for path in paths {
             if let Some(&index) = self.index_of.get(path) {
                 self.ready.insert(index);
+                self.reported.insert(index);
                 self.missing.remove(&index);
             }
         }
+    }
+
+    /// What a `NotScanned` answer for `index`, not yet recorded, means for a
+    /// cell the scan has reported committed: `Some(true)` when the cell is
+    /// asked again, `Some(false)` when it is left missing until the scan
+    /// ends. `None` for a cell the scan has not reported.
+    pub fn after_ready(&self, index: usize) -> Option<bool> {
+        self.reported
+            .contains(&index)
+            .then(|| self.ready.contains(&index))
     }
 
     /// The scan is over: ask again for the cells it had nothing for.
@@ -733,6 +747,21 @@ mod tests {
         s.mark_ready(&["D:/a/0.ARW".into()]);
         s.answer(0, Answer::NotScanned);
         assert_eq!(s.next_to_request(1000.), Some(0));
+    }
+
+    #[test]
+    fn a_second_not_scanned_answer_after_ready_is_told_apart_from_the_retry() {
+        let mut s = strip(2);
+        s.request(0);
+        assert_eq!(s.after_ready(0), None);
+        s.mark_ready(&["D:/a/0.ARW".into()]);
+        assert_eq!(s.after_ready(0), Some(true));
+        s.answer(0, Answer::NotScanned);
+        s.request(0);
+        assert_eq!(s.after_ready(0), Some(false));
+        s.answer(0, Answer::NotScanned);
+        assert_eq!(s.next_to_request(1000.), Some(1));
+        assert_eq!(s.after_ready(1), None);
     }
 
     #[test]

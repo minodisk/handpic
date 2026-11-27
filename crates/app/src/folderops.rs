@@ -1373,6 +1373,7 @@ impl Handpic {
         let moved = |p: &str| tree::rebase(p, path, new_path, IGNORE_CASE);
         self.tree_open = self.tree_open.take().map(|p| moved(&p).unwrap_or(p));
         self.tree_cursor = self.tree_cursor.take().map(|p| moved(&p).unwrap_or(p));
+        self.reveal_collapsed = self.reveal_collapsed.take().map(|p| moved(&p).unwrap_or(p));
         let (old, new) = canonical;
         self.undo.map_trash_dirs(|dir| {
             tree::rebase(dir, &old, &new, IGNORE_CASE).unwrap_or_else(|| dir.to_owned())
@@ -2214,6 +2215,8 @@ fn rows(texts: Vec<String>) -> Vec<Row> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use gpui_kit::{Bounds, Pixels, ScrollDelta, ScrollEvent, point, px};
 
     use super::*;
@@ -2364,5 +2367,142 @@ mod tests {
             d.footer
         );
         close_dialog(&mut ui);
+    }
+
+    /// The drawn row of `path`.
+    fn row_of<'a>(view: &'a Handpic, path: &str) -> &'a tree::Row {
+        view.tree_rows
+            .iter()
+            .find(|row| row.path == path)
+            .unwrap_or_else(|| panic!("{path} is not drawn"))
+    }
+
+    /// The path of the drawn row named `name` under the temporary folder.
+    fn drawn_path(ui: &Ui, name: &str) -> String {
+        ui.read(|view| {
+            view.tree_rows
+                .iter()
+                .find(|row| row.depth > 0 && row.name == name)
+                .map(|row| row.path.clone())
+                .unwrap_or_else(|| panic!("{name} is not drawn"))
+        })
+    }
+
+    /// A folder `clicked` holding a folder `inner` in the temporary folder,
+    /// which the tree takes as a root; with nothing open, `clicked`'s row
+    /// drawn expanded and listed. Its path as the tree spells it.
+    fn expanded_folder(ui: &mut Ui) -> String {
+        fs::create_dir_all(ui.dir().join("clicked").join("inner")).unwrap();
+        let root = ui.dir().to_string_lossy().into_owned();
+        ui.wait_until("the roots", |view| view.roots_loaded);
+        ui.update(|view, cx| {
+            view.tree.add_roots([tree::Child {
+                name: "root".into(),
+                path: root.clone(),
+                is_link: false,
+            }]);
+            view.tree_changed(cx);
+            view.tree_toggle(root, cx);
+        });
+        ui.wait_until("the root's listing", |view| {
+            view.tree_rows.iter().any(|row| row.name == "clicked")
+        });
+        let clicked = drawn_path(ui, "clicked");
+        ui.update(|view, cx| view.tree_toggle(clicked.clone(), cx));
+        ui.wait_until("the folder's listing", |view| {
+            view.tree_rows.iter().any(|row| row.name == "inner")
+        });
+        ui.read(|view| {
+            assert!(row_of(view, &clicked).expanded);
+            assert_eq!(view.tree_open_row, None);
+        });
+        clicked
+    }
+
+    /// The held click's open has landed on `name`, its reveal done.
+    fn wait_revealed(ui: &mut Ui, name: &str, path: &str) {
+        ui.wait_until("the held click's open", |view| {
+            view.dir.as_ref().is_some_and(|dir| dir.ends_with(name))
+                && view.status_of().idle()
+                && view.tree_cursor.as_deref() == Some(path)
+                && view
+                    .tree_open_row
+                    .is_some_and(|at| view.tree_rows[at].path == path)
+        });
+    }
+
+    #[test]
+    fn a_held_collapse_click_drops_a_held_rename_and_keeps_the_row_collapsed() {
+        let mut ui = Ui::open();
+        let clicked = expanded_folder(&mut ui);
+        let held = ui.update(|view, cx| {
+            view.gate.enter_in_flight();
+            view.request_rename(clicked.clone(), "renamed".into(), cx);
+            view.gate.waiting()
+        });
+        assert_eq!(held, Some(rename::LABEL));
+        ui.update(|view, cx| {
+            view.tree_row_clicked(clicked.clone(), cx);
+            assert!(!row_of(view, &clicked).expanded);
+            assert_eq!(view.reveal_collapsed.as_deref(), Some(clicked.as_str()));
+            assert!(view.deferred_open.is_some());
+        });
+        ui.update(|view, cx| {
+            view.gate.leave_in_flight();
+            view.settle_folder_run(cx);
+        });
+        wait_revealed(&mut ui, "clicked", &clicked);
+        ui.read(|view| {
+            assert!(!row_of(view, &clicked).expanded);
+            assert_eq!(view.gate.waiting(), None);
+        });
+        assert!(Path::new(&clicked).is_dir());
+        assert!(!ui.dir().join("renamed").exists());
+    }
+
+    #[test]
+    fn a_click_on_a_folder_under_a_rename_in_flight_is_refused() {
+        let mut ui = Ui::open();
+        let clicked = expanded_folder(&mut ui);
+        let inner = drawn_path(&ui, "inner");
+        ui.update(|view, cx| {
+            view.request_rename(clicked.clone(), "renamed".into(), cx);
+            assert!(view.gate.in_flight());
+            for path in [&clicked, &inner] {
+                view.tree_note = None;
+                view.tree_row_clicked(path.clone(), cx);
+                assert_eq!(view.tree_note.as_deref(), Some(RENAMING));
+                assert!(row_of(view, &clicked).expanded);
+                assert_eq!(view.reveal_collapsed, None);
+                assert_eq!(view.deferred_open, None);
+            }
+        });
+        ui.wait_until("the rename's end", |view| !view.gate.in_flight());
+        assert!(ui.dir().join("renamed").is_dir());
+    }
+
+    #[test]
+    fn a_held_collapse_click_follows_a_date_folder_rename() {
+        let mut ui = Ui::open();
+        let clicked = expanded_folder(&mut ui);
+        ui.update(|view, cx| {
+            view.gate.enter_in_flight();
+            view.tree_row_clicked(clicked.clone(), cx);
+            assert!(!row_of(view, &clicked).expanded);
+            assert!(view.deferred_open.is_some());
+        });
+        let renamed = Path::new(&clicked)
+            .with_file_name("2026-11-27")
+            .to_string_lossy()
+            .into_owned();
+        let old = canonicalize(&clicked);
+        fs::rename(&clicked, &renamed).unwrap();
+        let new = canonicalize(&renamed);
+        ui.update(|view, cx| {
+            view.gate.leave_in_flight();
+            view.folder_renamed(&clicked, &renamed, (old, new), None, cx);
+        });
+        wait_revealed(&mut ui, "2026-11-27", &renamed);
+        ui.read(|view| assert!(!row_of(view, &renamed).expanded));
     }
 }

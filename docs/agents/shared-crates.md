@@ -445,6 +445,13 @@ test restore's `restored` list for it, not just that the files return.
   That keeps a sidecar from going to the Trash with a same-stem file of
   another folder. It moves no index rows: the next rescan's reconcile drops
   the gone rows.
+- A `.xmp` shared by stem with a RAW of the listing that is not among the
+  paths stays in place, and one several moved RAWs share is moved once,
+  after all of them went, its `Trashed` record placed after the last of
+  them so `restore` and `redo` still read each RAW followed by its sidecars.
+  `trash::run_listed` holds this rule for both `trash_listed` and
+  `delete_for_good`; a foreign path never stands for a RAW of the folder.
+  Source: `docs/plans/20261126-trash-keeps-shared-xmp/plan.md`.
 - Once the engine has recorded the run, the app must keep its undo entry
   even if the open folder changed meanwhile; only the strip refresh is
   conditional on the open folder being the run's folder.
@@ -792,12 +799,56 @@ full-eye-sharp-only plan removed.
   as `SOFT_BELOW` itself, and the app's `mark.rs` mirrors `LOW_BELOW` as
   `LOW_FULL_EYE_SHARP`, pinned by a test (`fullsharp.rs` against the
   figures, `mark.rs` against the core constant).
+- The Low mark is the bad-photo cue shown to the human, and no removal
+  filter is pursued (user decision, 2026-11-26). Low (the strip's gray
+  frowning face, the judged face's `full_eye_sharp` under `LOW_BELOW`) is a
+  different rule from the cues the bad-photo labels measured (the folder's
+  bottom sharpness decile, frames with no AF face), and its precision
+  against those labels is deliberately left unmeasured; do not quote their
+  rates for it. Source:
+  `docs/plans/_archived/20261017-bad-photo-labels/plan.md` (Decision).
 - Burst-level technical features do not predict a kept scene: burst length
   does (>= 15 frames: 79% hold a pick). Do not rebuild a burst "keep" or
   "best" mark from sharpness / eyes / pose. The first frame of a burst also
   out-ranks any feature.
 - Source: `docs/plans/_archived/20261008-burst-keep-score/learnings.md`,
   Steps 3, 5, 5b, 7.
+
+### Matching the judged face against the other faces: eye landmarks do not work, and no overlap cut separates every twin (Measured)
+
+`allfaces::gate_count` and `allfaces::candidates` must not count the judged
+face a second time. `allfaces::same_face` treats two boxes as one face when
+the IoU is above `NMS_THRESHOLD` or the overlap over the smaller box is above
+`SAME_FACE_OVERLAP` (0.55). Before changing that rule, know what was measured
+(`2026-09-19`, the whole of `2026-11-07`: 3354 AF frames with a judged face,
+and the no-AF DNG folder `2026-02-01`).
+
+- Do not match by eye landmarks. The same face's eyes move by up to 0.43 of
+  the box side between the crop detection and the 640x448 whole-image search,
+  and by up to 0.69 on the 320x224 gate search. That is more than one face's
+  own eye distance (0.04 to 0.4). The missed twins are profiles where one
+  detection puts the eyes on the ear, and partial boxes. Their eye distance
+  (0.35 to 0.57) overlaps a real neighbour's (0.47). Replacing the IoU rule
+  with an eye match added a double count on 84 and 133 AF frames at a 0.2
+  cut, against about 1 today.
+- No overlap-over-smaller-box cut separates the twins (0.306 to 0.740) from
+  different people (0.301 to 0.532). Above 0.532 every pair is the same face.
+- Replace against union: for an IoU above 0.3 the overlap is at least
+  0.4615. At a cut at or under 0.46 the two rules are therefore the same.
+  Above it, replacing turns IoU-matched same-face pairs into double counts
+  (18 gate frames at 0.55, 42 at 0.6). Any cut above the highest neighbour
+  therefore has to be the union with IoU, never a replacement.
+- What is left. About 30 AF frames of `2026-11-07` had a 320x224 gate count
+  that held the judged face twice (a box on the ear, a larger box or a
+  partial box) at overlap 0.3 to 0.55. The union at 0.55 fixed only 11 of
+  them. The rest need another rule, not a different cut. This is the open
+  `todo.md` item "the judged face can be counted twice in the all-faces
+  counts and the gate count".
+- Changing the rule changes `gate_count`, so bump `FACES_VERSION`
+  (14 to 15 here). `ALLFACES_VERSION` did not need a bump.
+- Source:
+  `docs/plans/_archived/20261126-judged-face-eye-match/learnings.md`
+  (`measurement.md`, `overlap-measurement.md` beside it).
 
 ### A learned discard score over the stored technical features did not hold on fresh folders (Hit)
 
@@ -1014,12 +1065,20 @@ so `docs/humans/performance.md`'s numbers stay comparable.
   cap 2) pass 1 took 2.8 s against 7.5 and 8.0 s for 1800 files, and the
   read p50 stayed about 9 to 10 ms either way: the NVMe drive served the
   preview read as fast behind 22 reads in flight as behind 2. `READ_SLOTS`
-  was not changed; which cap to ship (one cap, or one per drive kind) is an
-  open decision. HDR PQ CR3 is untested.
-- The cap also covers `hevc::to_jpeg` until the read is split from it:
-  `read_preview` ends in that decode (65-125 ms of CPU per HDR PQ CR3), so at a
-  cap of 2 such a folder pays a calculated 33-63 ms/file, and a preview read
-  of such a file pauses the scan for the decode as well.
+  stays 2 on every drive, one cap with no per-drive cap (user decision,
+  2026-11-26): on NVMe cap 2 makes pass 1 slower, but pass 1 is fast there
+  to begin with, so the cost is small, while the wait the user feels is the
+  preview read on SATA, which cap 2 protects. HDR PQ CR3 is untested.
+- The cap does not cover `hevc::to_jpeg` (65-125 ms of CPU per HDR PQ CR3):
+  the scan reads through `reader::read_preview_undecoded` /
+  `read_full_undecoded` inside the slot and calls `Undecoded::decode` after
+  the slot drops, in pass 2 after the read's `yield_to_pause` too, so a
+  pause holds the decode back as well. Before the split such a folder paid a
+  calculated 33-63 ms/file at a cap of 2 against 3-6 uncapped; pass 1's
+  ms/file on such a folder at cap 2, before and after, is not measured yet
+  (`todo.md`). The app's preview `load` also decodes after its read, the
+  decode counted in the `page` line's `decode`, not `read`, and its pause
+  still runs to the paint (`hold.rs`), the decode included.
 - `MAX_PAUSE` (1 s): a worker honours a pause for at most that long from when
   it first sees one, then reads anyway, so a stuck or leaked pause never stalls
   the scan. The worst case is about 1 s per `acquire` (one per pass 1 file, two
@@ -1038,8 +1097,8 @@ so `docs/humans/performance.md`'s numbers stay comparable.
 
 These three were measured through the earlier webview app, but the Rust code
 they time is what the app still runs: the scan's pass 1
-(`index::run_scan`), `ondemand::read_faces` (then the `faces_of` command) and
-`ondemand::read_eyes` (then `eyes_of`). They moved here from
+(`index::run_scan`), `ondemand::read_faces` (then the removed Tauri app's `faces_of` command) and
+`ondemand::read_eyes` (then its `eyes_of` command; the GPUI app calls the two reads from `overlay::detect` / `overlay::judge`). They moved here from
 `docs/humans/performance.md` / `.ja.md`, which keep only measurements a reader
 can repeat with the app or the CLI.
 
@@ -1062,7 +1121,7 @@ can repeat with the app or the CLI.
   file and ~16ms per file, the effective throughput works out to ~63MB/s
   (derived, not measured). The thread-count sweep that pins this on the drive
   (2026-09-22, `handpic-cli scan`) stays in `performance.md`.
-- **`faces_of`, now `ondemand::read_faces` (2026-09-25).** Read the preview +
+- **The Tauri app's `faces_of` command, now `ondemand::read_faces` (2026-09-25).** Read the preview +
   `detect_around`. Linux WSL2 (24 hardware threads), release build, the
   command's body called directly on two α7 V ARWs read from the Windows NTFS
   drive, warm page cache, 20 calls each after a first one:
@@ -1075,10 +1134,10 @@ can repeat with the app or the CLI.
   The first call of a session also builds the model. A cold read from a card
   or a slow disk, and the redraw, are not in these numbers. The timing ran
   from a temporary `#[ignore]`d test removed before committing.
-- **`eyes_of`, now `ondemand::read_eyes` (2026-10-07).** Windows 11,
+- **The Tauri app's `eyes_of` command, now `ondemand::read_eyes` (2026-10-07).** Windows 11,
   release build, one thread, `main` at `392f9c25`, the
-  `#[ignore]`d `times_eyes_of_on_real_files` test (it left with the earlier
-  app), run with no app running; the first file of each set left out because
+  `#[ignore]`d `times_eyes_of_on_real_files` test (in
+  `crates/engine/src/ondemand.rs`), run with no app running; the first file of each set left out because
   it pays the plan builds (256ms on the ARW, 315ms on the DNG). The call then
   fed the meta pane's `Eyes open: NN%` row:
 
@@ -1287,12 +1346,13 @@ when idle). `treewatch::State::remove` runs it after each real `unwatch`, and
 watcher, so `rename_folder` needs no retry. `watch::set`'s plain drop of the
 previous watcher (its comment says that releases the handle) is still only
 eventually true; it is not on a rename path. A notify upgrade must re-check
-that `configure` still queues behind `Unwatch` (loop the `treewatch` tests
-under load).
+that `configure` still queues behind `Unwatch` by reading the new version's
+source (as the 8.2.2 re-check below did). The behavioral check is the PR's
+three-platform `test` job (the engine's `treewatch`, `watch` and `rename`
+tests); agents do not run local load loops.
 
-Re-checked on notify 8.2.2, the version `crates/app/Cargo.lock` resolves
-(the root lock stays at 8.2.0, which CI's `treewatch` tests run), on
-2026-11-23. The source: `unwatch` still only sends `Action::Unwatch`,
+Re-checked on notify 8.2.2, the version `crates/app/Cargo.lock` resolves,
+on 2026-11-23. The source: `unwatch` still only sends `Action::Unwatch`,
 `configure` still sends `Action::Configure` with a reply channel on the same
 channel and blocks on the reply, and the server loop still handles the
 actions in order, `Unwatch` running `stop_watch` before it reaches the
@@ -1307,8 +1367,10 @@ a scratch binary on `notify = "=8.2.2"` that creates `a\b`, watches `b`
 three batches, with 24 busy threads loading every core: without
 `configure` the rename failed 2, 0 and 4 times (6 in 900), with `configure`
 between the `unwatch` and the rename 0 times in 900. So `watch::settle`
-holds on 8.2.2. Whether to align the two locks, so CI covers the shipped
-version, is still open.
+holds on 8.2.2. Since 2026-11-26 the root `Cargo.lock` resolves `notify`
+8.2.2 too, so CI's engine `treewatch`, `watch` and `rename` tests run on the
+version the app ships (only `notify` is aligned, not its whole dependency
+subtree: `notify-types` is 2.1.0 in the root lock and 2.3.0 in the app's).
 
 Delete was measured the same way on 2026-11-23 (Windows 11, NTFS, a
 scratch binary on notify 8.2.2 and again on 8.2.0, the same results; a
@@ -1347,7 +1409,9 @@ open has no watch at all.
   the asynchronous release is from
   `docs/plans/_archived/20260929-treewatch-unwatch-barrier/learnings.md`,
   Step 1; the delete measurement and the 8.2.2 re-check are from
-  `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1; the trash check is from
+  `docs/plans/_archived/20261123-todo-measurements/learnings.md`, Step 1; the
+  lock alignment is from
+  `docs/plans/_archived/20261126-notify-lock-align/plan.md`, Step 1; the trash check is from
   `docs/plans/_archived/20260928-trash-rejected-from-tree/learnings.md`, Step 1.
 
 ### `Writer::set` / `set_now` carry `#[allow(clippy::too_many_arguments)]`, not a parameter struct (Hit)
@@ -1538,6 +1602,18 @@ the same value for `handpic-app`, `handpic-core` and `handpic-engine`. Neither
 `Cargo.lock` changed. After a license change, `bash tools/package/notices.sh <tmp>`
 should list `LICENSE-MIT` and `LICENSE-APACHE` beside the existing notices.
 Source: `docs/plans/_archived/20261124-dual-license/learnings.md`, Step 1.
+
+### Aligning one crate in the root `Cargo.lock` can silently move other crates' edges (Hit)
+
+`cargo update -p <crate> --precise <ver>` can re-resolve unrelated packages.
+For the notify 8.2.0 -> 8.2.2 alignment it also moved the `windows-sys` edge
+of seven other packages (`errno`, `rustix`, `tempfile` and four more) from
+0.61.2 to 0.52.0.
+
+- Fix: read `git diff Cargo.lock` before committing. The diff should be only
+  the planned crate plus the dependencies that crate pulls in or drops; restore
+  any other edge, and check that `cargo metadata --locked` accepts the lock.
+- Source: `docs/plans/_archived/20261126-notify-lock-align/learnings.md`, Step 1.
 
 ## Verification
 

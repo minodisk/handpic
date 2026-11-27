@@ -14,8 +14,8 @@ use crate::decode::{decode_rgb, thumbnail_jpeg_near};
 use crate::eyes::judged_face;
 use crate::faces::{decode_gate, detect_around, detect_gate_upright, Detection, Face};
 use crate::fullsharp::full_eye_sharpnesses;
-use crate::reader::{read_full, read_metadata, read_preview};
-use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus, FACE_CONFIDENCE};
+use crate::reader::{read_full_undecoded, read_metadata, read_preview_undecoded};
+use crate::sharpness::{eye_af_frame, score_gray, score_preview, trusted_focus};
 
 /// Quality of the cached thumbnails. 80 gives ~19KB for a 404x270 frame.
 pub const THUMBNAIL_QUALITY: f32 = 80.0;
@@ -100,8 +100,9 @@ fn extract_unless(
         let _slot = slots.acquire(cancel)?;
         #[cfg(test)]
         tests::cancel_mid_read(cancel);
-        read_preview(path)
+        read_preview_undecoded(path)
     };
+    let read = read.and_then(|(arw, image)| Ok((arw, image.decode()?)));
     let (arw, preview) = match read {
         Ok(read) => read,
         Err(e) => {
@@ -172,7 +173,8 @@ pub struct Analysis {
     /// `allfaces::gate_count`, how many confident faces of a size similar to
     /// the judged face's the whole preview holds, the judged face included:
     /// over a `faces::GATE_INPUT` detection with an AF point, over the
-    /// whole-image detection the cue already ran without one. 0 when the cue
+    /// whole-image detection the cue already ran without one, faces counted
+    /// from `allfaces::GATE_LOW_RES_CONFIDENCE` on both. 0 when the cue
     /// judged no face (no detection is run for it); `None` when that
     /// detection failed, and always for a JPEG file.
     pub gate_count: Option<u32>,
@@ -252,9 +254,9 @@ fn extract_analysis_unless(
         let _slot = slots.acquire(cancel)?;
         #[cfg(test)]
         tests::cancel_mid_read(cancel);
-        read_preview(path)
+        read_preview_undecoded(path)
     };
-    let (arw, preview) = match read {
+    let (arw, image) = match read {
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
@@ -262,6 +264,10 @@ fn extract_analysis_unless(
     if canceled(cancel) {
         return None;
     }
+    let preview = match image.decode() {
+        Ok(preview) => preview,
+        Err(e) => return Some(Err(e.to_string())),
+    };
     let focus = trusted_focus(&arw.shot);
     let (cue, faces, gate_count, scored) = cue_and_gate(&preview, arw.orientation, focus, cancel)?;
     if canceled(cancel) {
@@ -289,7 +295,8 @@ type CueAndGate = (Cue, Vec<Face>, Option<u32>, Option<f64>);
 /// of its own (`af_gate_count`); without one the faces are searched for on
 /// the whole image at `faces::WHOLE_INPUT`, the cue judges the largest
 /// confident one, the score falls back to them and the gate counts over
-/// them, taken on the cue's decode when it made one (`score_rgb`), the fourth
+/// them from the same floor as the AF path (`whole_gate_count`), taken on the
+/// cue's decode when it made one (`score_rgb`), the fourth
 /// value. `None` once `cancel` abandoned the file.
 fn cue_and_gate(
     preview: &[u8],
@@ -315,14 +322,19 @@ fn cue_and_gate(
             }
             let faces = detection.as_ref().map(|d| d.faces.clone());
             let (cue, rgb) = whole_image_cue_rgb(preview, orientation, detection, cancel)?;
-            let gate = faces
-                .as_ref()
-                .map(|f| allfaces::gate_count(f, cue.face.as_ref(), FACE_CONFIDENCE));
+            let gate = faces.as_ref().map(|f| whole_gate_count(f, &cue));
             let faces = faces.unwrap_or_default();
             let scored = rgb.as_ref().and_then(|rgb| score_rgb(rgb, &faces));
             Some((cue, faces, gate, scored))
         }
     }
+}
+
+/// The gate count of a frame without an AF point whose cue is `cue`, over
+/// the `faces` of the cue's own whole-image search, faces counted from
+/// `allfaces::GATE_LOW_RES_CONFIDENCE` as on the AF path.
+fn whole_gate_count(faces: &[Face], cue: &Cue) -> u32 {
+    allfaces::gate_count(faces, cue.face.as_ref(), allfaces::GATE_LOW_RES_CONFIDENCE)
 }
 
 /// The gate count of an AF frame whose cue is `cue`, over a whole-preview
@@ -375,9 +387,9 @@ fn extract_face_counts_unless(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
-        read_preview(path)
+        read_preview_undecoded(path)
     };
-    let (arw, preview) = match read {
+    let (arw, image) = match read {
         Ok(read) => read,
         Err(e) => return Some(Err(e.to_string())),
     };
@@ -385,6 +397,10 @@ fn extract_face_counts_unless(
     if canceled(cancel) {
         return None;
     }
+    let preview = match image.decode() {
+        Ok(preview) => preview,
+        Err(e) => return Some(Err(e.to_string())),
+    };
     let (cue, whole, rgb) = match trusted_focus(&arw.shot) {
         Some(at) => {
             let (cue, rgb) = af_cue(&preview, arw.orientation, at, cancel)?;
@@ -564,13 +580,13 @@ fn full_sharps(
     }
     let read = {
         let _slot = slots.acquire(cancel)?;
-        read_full(path)
+        read_full_undecoded(path)
     };
     yield_to_pause(cancel);
     if canceled(cancel) {
         return None;
     }
-    let Ok((_, full)) = read else {
+    let Ok(full) = read.and_then(|(_, image)| image.decode()) else {
         return Some(FullSharps {
             judged: None,
             others: None,
@@ -1179,6 +1195,7 @@ mod tests {
     use super::*;
     use crate::arw::{Codec, Embedded};
     use crate::eyes::MESH_CALLS;
+    use crate::sharpness::FACE_CONFIDENCE;
     use std::sync::Mutex;
     use std::time::{Duration, Instant};
 
@@ -1585,6 +1602,80 @@ mod tests {
     }
 
     #[test]
+    fn the_hevc_decode_of_an_hdr_pq_file_holds_no_read_slot() {
+        use crate::reader::tests::AT_HEVC_DECODE;
+        use std::cell::RefCell;
+        use std::rc::Rc;
+        let dir = dir("hevc-slot");
+        // A lone `free` box: `hevc::to_jpeg` is reached and finds no `hvcC`.
+        let mut data = 64u32.to_be_bytes().to_vec();
+        data.extend_from_slice(b"free");
+        data.resize(64, 0);
+        let path = write(
+            &dir,
+            "hdr.CR3",
+            &crate::cr3::tests::hdr_pq(None, Some(data)).build(),
+        );
+        let slots = ReadSlots::new(1);
+        let free = Rc::new(RefCell::new(Vec::new()));
+        let (seen, gate) = (free.clone(), slots.clone());
+        AT_HEVC_DECODE.set(Some(Box::new(move || {
+            seen.borrow_mut().push(gate.lock().free)
+        })));
+        let unset = AtomicBool::new(false);
+        let failed = |message: &str| message == "HEVC preview without hvcC";
+        assert!(failed(
+            &extract_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+                .message
+        ));
+        assert!(failed(
+            &extract_analysis_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+        ));
+        assert!(failed(
+            &extract_face_counts_unless(&path, &unset, &slots)
+                .unwrap()
+                .unwrap_err()
+        ));
+        let larger = Arw {
+            preview: Some(Embedded {
+                offset: 10,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            full: Some(Embedded {
+                offset: 20,
+                length: 1,
+                codec: Codec::Jpeg,
+            }),
+            orientation: 1,
+            shot: Shot::default(),
+            hevc: false,
+        };
+        let others = [[(30.0, 30.0), (70.0, 30.0)]];
+        let sharps = full_sharps(
+            &path,
+            &larger,
+            &Cue::default(),
+            &others,
+            100,
+            &unset,
+            &slots,
+        );
+        assert_eq!(sharps.map(|s| s.others), Some(None), "the decode failed");
+        AT_HEVC_DECODE.set(None);
+        assert_eq!(
+            *free.borrow(),
+            [1, 1, 1, 1],
+            "every site decodes with the one permit given back"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn a_file_canceled_mid_pipeline_is_not_delivered() {
         let dir = dir("cancel-mid");
         let path = write(&dir, "a.ARW", &fixture(1, &jpeg(64, 48)));
@@ -1869,6 +1960,28 @@ mod tests {
             Some(None),
             "a failed detection is unknown"
         );
+    }
+
+    #[test]
+    fn without_an_af_point_the_gate_counts_faces_from_the_low_resolution_floor() {
+        let at = |x: f32, score: f32| Face {
+            x,
+            ..scored(score, 100.0)
+        };
+        let judged = Cue {
+            face: Some(at(0.0, 0.9)),
+            ..Cue::default()
+        };
+        let floor = at(200.0, allfaces::GATE_LOW_RES_CONFIDENCE);
+        let between = at(400.0, 0.7);
+        let below = at(600.0, allfaces::GATE_LOW_RES_CONFIDENCE.next_down());
+        let sure = at(800.0, FACE_CONFIDENCE);
+        assert_eq!(
+            whole_gate_count(&[floor, between, below, sure], &judged),
+            4,
+            "the judged face, the faces at and over the floor, none under it"
+        );
+        assert_eq!(whole_gate_count(&[floor], &Cue::default()), 0);
     }
 
     #[test]

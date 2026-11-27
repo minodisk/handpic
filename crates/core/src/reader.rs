@@ -51,11 +51,19 @@ fn head_of(file: &mut File, limit: usize) -> Result<Vec<u8>> {
 /// A prefix too short to parse is an error rather than a wrong answer, so in
 /// that case the whole file is read and parsed instead.
 pub fn read_preview(path: &Path) -> Result<(Arw, Vec<u8>)> {
-    neutral(if is_jpeg_file(path) {
+    decoded(read_preview_undecoded(path))
+}
+
+/// `read_preview`'s read alone: the preview as it sits in the file, which
+/// `Undecoded::decode` turns into the JPEG `read_preview` hands out. A caller
+/// gating the disk releases it before the decode, an HDR PQ CR3's HEVC one
+/// costing far more than the read.
+pub fn read_preview_undecoded(path: &Path) -> Result<(Arw, Undecoded)> {
+    if is_jpeg_file(path) {
         read_jpeg(path)
     } else {
         read_embedded(path, Kind::Preview)
-    })
+    }
 }
 
 /// Parse `buf` with the parser for `path`'s container, chosen by extension,
@@ -102,23 +110,56 @@ fn take_far_note(file: &mut File, arw: &mut Arw, far: arw::FarNote) {
 /// metadata is in the prefix but the JPEG itself is several MB long, so the
 /// ranged read is the normal path here rather than a fallback.
 pub fn read_full(path: &Path) -> Result<(Arw, Vec<u8>)> {
-    neutral(if is_jpeg_file(path) {
+    decoded(read_full_undecoded(path))
+}
+
+/// `read_full`'s read alone, as `read_preview_undecoded` is `read_preview`'s.
+pub fn read_full_undecoded(path: &Path) -> Result<(Arw, Undecoded)> {
+    if is_jpeg_file(path) {
         read_jpeg(path)
     } else {
         read_embedded(path, Kind::Full)
-    })
+    }
 }
 
-/// The one exit of every JPEG `read_preview` and `read_full` hand out.
-fn neutral(read: Result<(Arw, Vec<u8>)>) -> Result<(Arw, Vec<u8>)> {
-    let (arw, mut jpeg) = read?;
-    jpeg::neutralize_orientation(&mut jpeg);
-    Ok((arw, jpeg))
+fn decoded(read: Result<(Arw, Undecoded)>) -> Result<(Arw, Vec<u8>)> {
+    let (arw, image) = read?;
+    Ok((arw, image.decode()?))
 }
 
-fn read_jpeg(path: &Path) -> Result<(Arw, Vec<u8>)> {
+/// An embedded image as read, a JPEG or an HDR PQ CR3's HEVC, not decoded yet.
+pub struct Undecoded {
+    bytes: Vec<u8>,
+    codec: Codec,
+}
+
+impl Undecoded {
+    /// The one exit of every JPEG `read_preview` and `read_full` hand out: an
+    /// HEVC image decoded (`hevc::to_jpeg`), the Exif Orientation set to 1.
+    pub fn decode(self) -> Result<Vec<u8>> {
+        let mut jpeg = match self.codec {
+            Codec::Jpeg => self.bytes,
+            Codec::Hevc => {
+                #[cfg(test)]
+                tests::AT_HEVC_DECODE.with_borrow(|hook| hook.as_ref().map(|hook| hook()));
+                hevc::to_jpeg(&self.bytes)?
+            }
+        };
+        jpeg::neutralize_orientation(&mut jpeg);
+        Ok(jpeg)
+    }
+}
+
+fn read_jpeg(path: &Path) -> Result<(Arw, Undecoded)> {
     let buf = std::fs::read(path)?;
-    Ok((jpeg::parse(&buf)?, buf))
+    let arw = jpeg::parse(&buf)?;
+    Ok((
+        arw,
+        Undecoded {
+            bytes: buf,
+            codec: Codec::Jpeg,
+        },
+    ))
 }
 
 #[derive(Clone, Copy)]
@@ -143,7 +184,7 @@ impl Kind {
     }
 }
 
-fn read_embedded(path: &Path, kind: Kind) -> Result<(Arw, Vec<u8>)> {
+fn read_embedded(path: &Path, kind: Kind) -> Result<(Arw, Undecoded)> {
     let mut file = File::open(path)?;
     let head = head_of(&mut file, HEAD_LIMIT)?;
     // Anything past the prefix exists only if the file is longer than it.
@@ -160,14 +201,10 @@ fn read_embedded(path: &Path, kind: Kind) -> Result<(Arw, Vec<u8>)> {
         }
         Err(e) => return Err(e),
     };
-    // Decode once, after the read is settled: a decode error is not a
-    // truncated-read error and must not trigger the whole-file retry.
+    // The decode is the caller's, after the read is settled: a decode error
+    // is not a truncated-read error and must not trigger the whole-file retry.
     let (arw, bytes, codec) = found;
-    let jpeg = match codec {
-        Codec::Jpeg => bytes,
-        Codec::Hevc => hevc::to_jpeg(&bytes)?,
-    };
-    Ok((arw, jpeg))
+    Ok((arw, Undecoded { bytes, codec }))
 }
 
 /// Parse just a file's metadata, reading the same bounded prefix as
@@ -228,8 +265,15 @@ fn embedded_from(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    thread_local! {
+        /// Run on this thread as an HEVC decode starts, for a test to look
+        /// at what the caller holds then.
+        pub(crate) static AT_HEVC_DECODE: std::cell::RefCell<Option<Box<dyn Fn()>>> =
+            const { std::cell::RefCell::new(None) };
+    }
 
     fn temp_file(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let path =

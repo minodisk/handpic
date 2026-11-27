@@ -247,8 +247,9 @@ PhotoLab install before assuming the moved `.dop` still matches. When an
 `a.DNG` in the same folder shares `a.ARW`'s `a.xmp` (`rename::shared_xmps`),
 `file_plan` copies `a.xmp` to the new name and leaves the original with the
 DNG, and a date split (`datefolder.rs`) copies it into each date folder,
-moving it with the last of its RAWs to leave; `trash::groups_of` still takes
-it along when `a.ARW` alone goes to the Trash. See
+moving it with the last of its RAWs to leave; a Move to Trash or a delete
+of `a.ARW` alone leaves it in place (`trash::run_listed`), and it goes only
+with the last of its RAWs. See
 `docs/plans/_archived/20260928-rename-from-tree-and-strip/learnings.md` for
 the open follow-ups.
 

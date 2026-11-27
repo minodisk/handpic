@@ -1,6 +1,16 @@
 # todo
 
 ## Cross-cutting / other
+### App: a `Rename by Capture Date…` split that removes the folder leaves a deferred open naming a missing folder
+
+#### Background
+
+The reveal-collapsed-rename work (plan: `docs/plans/_archived/20261127-reveal-collapsed-rename/plan.md`) noticed this while planning and left it out of its PR. In `date_folder_ran`'s split branch, when `self.deferred_open.is_some()` the flow goes to `settle_folder_run`, which opens the deferred folder even when `split.removed` means it is gone. This happens after a click on the split folder, or on a folder under it, during the run. Nobody has run it in the app, and no test covers it. Files: `crates/app/src/folderops.rs` (`date_folder_ran`, `settle_folder_run`), `crates/app/src/main.rs` (`open`, `deferred_open`).
+
+#### TODO
+
+- [ ] Make a deferred open of a folder the split removed land where an open of it would after the split (its first date folder, as the `opens` branch does), or drop it. Add a UI test in `folderops.rs`: hold the gate, click the folder, run a split that removes it, and check what opens.
+
 ### App: real-device Ctrl+C and window check of the app:watch task
 
 #### Background
@@ -21,22 +31,6 @@ Files: `mise.toml` (`[tasks."app:watch"]`)
 #### TODO
 
 - [ ] Pending manual check, with PhotoLab: give a frame a virtual copy in PhotoLab, close PhotoLab, change the frame's flag in Handpic (with `.dop` sidecars on), reopen the folder in PhotoLab and confirm it shows the new flag on both the master and the virtual copy. If it does not, file the per-item `ModificationDate` rule as the suspect.
-
-### Engine: Move to Trash takes a `.xmp` shared with a RAW that stays
-
-`sidecar-and-keymap-decisions` Step 3 made a date split and a file rename copy a `.xmp` shared by RAWs of one stem (`a.ARW` and `a.NEF`), so neither loses it. Moving one of them to the Trash still takes the shared `.xmp` with it (`trash::groups_of`), so the RAW that stays loses its sidecar. The plan left it out of scope. Plan: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/plan.md` (Trade-offs and risks). Files: `crates/engine/src/trash.rs` (`groups_of`), `crates/engine/src/rename.rs` (`shared_xmps`).
-
-#### TODO
-
-- [ ] Decide whether Move to Trash leaves a shared `.xmp` in place (or copies it into the Trash) when a RAW sharing it stays, and apply it with a test.
-
-### Core: load-sensitive timing bound in `scan::tests::a_cancel_ends_a_scan_waiting_on_a_pause_or_a_permit`
-
-The test in `crates/core/src/scan.rs` asserts a cancel ends within 1 s. It took 1.14 s and 1.10 s in two of three `mise run ci:local` runs on Windows while the full `handpic-core` suite ran, and passes alone in 0.57 s. `docs/agents/shared-crates.md` ("A cancel or stop test must not bound the scan by wall-clock time") already warns against this shape. Source: `docs/plans/_archived/20261123-sidecar-and-keymap-decisions/learnings.md`, Step 1.
-
-#### TODO
-
-- [ ] Reproduce under full-suite load, then make the test wait on an event rather than wall-clock time (or loosen the bound with a reasoned margin). Done when `mise run ci:local` passes on Windows several runs in a row without it failing.
 
 ### App: real-device checks of the four display fixes (todo-four-display-fixes)
 
@@ -296,10 +290,6 @@ samples, as done for the Sigma BF `0x0147` in
       center, so the origin and orientation of the frame are unconfirmed; an
       off-center landscape and a portrait sample are needed (see the Step 2
       survey in `docs/plans/_archived/20260930-olympus-orf/learnings.md`).
-- [ ] Tier 3: decide per container whether a new parser is worth it,
-      given the samples available. CR3, NEF, RAF and ORF are done
-      (`crates/core/src/cr3.rs`, `crates/core/src/nef.rs`,
-      `crates/core/src/raf.rs`, `crates/core/src/orf.rs`); the rest remain.
 - [ ] Check the Sigma BF AF point's open assumptions against public BF
       samples: portrait orientation, manual-focus behavior, and the
       1000x667 scale (see the `SIGMA_BF_AF_GRID_W` doc comment in
@@ -369,21 +359,6 @@ PhotoLab's database holding the old folder.
       and either patch the `.dop`'s `Name` on rename or document what to
       expect.
 
-### Core: decide whether a bad-photo cue shown to the human replaces the removal filter
-
-#### Background
-
-The `bad-photo-labels` Decision found no usable removal filter. The base rate of bad frames is 5.52% [4.15, 7.04], and about 94% of the non-picks the earlier evaluations counted as negatives are not bad. The best filter, `R0` at q5, removes 19.3% of the bad frames at `P` 23.1%, against the 50% / 50% bars. The dedicated models `B0` / `L0` did not meet the +10 point bar. One cue catches bad frames: the folder's bottom sharpness decile, a bad rate of 17.7% [11.1, 25.5], which is 3.2x the base rate. Frames with no AF face read 14.6% (2.65x), outside the pre-registered bins. The Decision left open whether the goal stays a removal filter at these bars or a later plan pre-registers a different use, such as a cue shown to the human rather than a cut, with its own bar. No plan was opened. Basis: `docs/plans/_archived/20261017-bad-photo-labels/plan.md` (Decision, "Left for the user to decide") and `docs/plans/_archived/20261017-bad-photo-labels/badfilter.md`. Files: `docs/plans/_archived/20261017-bad-photo-labels/labels.py`, `docs/plans/_archived/20261017-bad-photo-labels/badfilter.py`, `docs/plans/_archived/20261017-bad-photo-labels/badmodel.py`.
-
-The `discard-labels` feature later measured a different question, "OK to discard?" with "hide / sort last" semantics, on 600 blind labels (plan: `docs/plans/_archived/20261018-discard-labels/plan.md`, Decision). 48.45% [42.03, 55.11] of the frames are OK to discard, so the strict 5.52% base rate is the narrow subset. No `G0` cut is usable: q5 `RR` 17.3% [11.3, 24.0] against the 15% bar, q10 23.7%, q20 27.9%. A strict-bad rate sits below the discard rate in every `G0` band, so the two labels rank the bands alike. A cue shown to the human (a discard candidate marked, not cut) was not measured as such. The Decision found automation bias: the unblinded `RR@5` was about 1.4% (1 of 71) against 17.3% blind. A cue shown to the human therefore needs its own blind measurement.
-
-The `discard-retarget` feature then tried to make a better removal cut on the same 600 blind labels (plan: `docs/plans/_archived/20261019-discard-retarget/plan.md`, Decision). A 2x2 of discard target and burst-relative features gave no usable cut under either bar. `G0+B` is not better than `G0` (`DP` -1.9 [-6.5, +2.9] at q5), and `D0` / `D0+B` have a weighted `RR` of 32.7-42.7% and a higher `PL`. The preview's in-focus probability (removed since by the full-eye-sharp-only plan) alone was still the best single score by AUC (0.777). So a cue shown to the human is still the only unmeasured use, and the retarget gives no evidence that a better model is nearby.
-
-#### TODO
-
-- [ ] Ask the user whether the goal stays a removal filter or becomes a cue shown to the human (for example marking the folder's bottom sharpness decile, or frames with no AF face).
-- [ ] If a cue, write a plan that pre-registers its own bar (precision of the marked frames against the 5.52% base rate, share of the bad frames covered, and the cost of the marks) before reading any number. It reuses `labels.tsv` and the sampler.
-
 ### Core: decide whether a second bad-photo labeling round for the cue readings is wanted
 
 #### Background
@@ -398,15 +373,15 @@ The `discard-retarget` Decision (`docs/plans/_archived/20261019-discard-retarget
 
 - [ ] Ask the user whether a second labeling round is wanted and for which question (for example the `|pitch|` > 45 stratum). If so, write a plan that pre-registers the question and its bar, and oversamples that stratum with `sample.py`.
 
-### Agents: `test (ubuntu-latest)` hangs on docs-only commits
+### App: `uitest::opens_with_no_folder` hung on `app (ubuntu-latest)`
 
 #### Background
 
-The `ef-gate-fill` feature (plan: `docs/plans/_archived/20261104-ef-gate-fill/plan.md`) hit the `test (ubuntu-latest)` job stalling on docs-only commits. PR 904's first run was cancelled. Main run 42128694204 hit the job's 30-minute `timeout-minutes` with the `riffle_core` test binary running. Both reruns took about 4 minutes, against the usual 5-6. PR 901's ubuntu job stalled in `actions/cache`. Files: `.github/workflows/`, `docs/agents/github-actions-workflows.md`.
+Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, cold cache), logged `test uitest::opens_with_no_folder has been running for over 60 seconds` at 01:17:55 and was cancelled at the job's 30-minute limit at 01:32:39. The rerun passed. Found by the `ci-apt-mirror-timeout` scan of rerun and failed CI runs (plan: `docs/plans/_archived/20261127-ci-apt-mirror-timeout/plan.md`); how to read such a job is in `docs/agents/github-actions-workflows.md` ("A job that hits its timeout"). Files: `crates/app/src/uitest.rs`.
 
 #### TODO
 
-- [ ] Collect the hung runs' logs and decide whether the cause is a flaky test, a cache stall or a runner problem. Then lower the job timeout, add a per-test timeout, or add a "rerun, then check X" note to `docs/agents/github-actions-workflows.md`. Done when the cause is identified, or a decision that reruns are enough is recorded with a rerun-only rule in that guide.
+- [ ] Find why `uitest::opens_with_no_folder` can hang. Done when the hang is reproduced or its cause found from the test's code, and fixed, or a per-test bound added so it fails fast.
 
 ### Core: re-measure the import copy pipeline against Explorer on a fast destination
 
@@ -442,21 +417,13 @@ Files: `crates/engine/src/trash.rs` (`remove_one`).
 
 - [ ] On macOS and Linux, delete a read-only file with `Delete Permanently…` and see whether it fails. If it fails, decide whether to clear the read-only flag first or leave it.
 
-### Core: split the disk read from `hevc::to_jpeg` so a read slot covers the read alone
+### App: measure pass 1 on a folder of HDR PQ CR3 files at cap 2, before and after the HEVC split
 
-`read_preview` ends in the HEVC decode of an HDR PQ CR3 (65-125 ms of CPU per file), and that runs inside `ReadSlots::acquire` in the three scan sites and inside the app's preview pause. With `READ_SLOTS` at 2 and no HDR PQ CR3 run in the sweep, a folder of such files pays a calculated 33-63 ms/file against 3-6 uncapped, while the permits sit idle at the disk. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/core/src/scan.rs`, `crates/core/src/reader.rs`, `crates/app/src/main.rs` (the preview load).
-
-#### TODO
-
-- [ ] Have a `reader` function return the undecoded `(arw, bytes, codec)` so the guards cover the bytes and `to_jpeg` runs outside them. Done when a slot and the pause no longer span the decode and a run on a folder of HDR PQ CR3 files shows the pass's ms/file at cap 2.
-
-### App: decide the scan's read cap now that NVMe was measured
-
-`READ_SLOTS` (2) was picked on a SATA SSD (preview read p50 14-16 ms at 2, 20-25 ms at 4, 29-57 ms at 8, 154-156 ms uncapped at 22, pass 1 about 7 ms/file at every cap but 1). On 2026-11-23 the app measured the NVMe `CT1000P5PSSD8` (C:) on cold copies of 1800 α7 V ARW with the pause on: at cap 22 pass 1 ran 1.53-2.49 ms/file and the read of a file pass 1 had not read was 10.3-21.7 ms p50 over three runs; at cap 2 it ran 4.19-11.09 ms/file (4.19 and 4.46 at about 10 % CPU load, against 1.53 for cap 22 at the same load) with 8.8-14.6 ms p50 over four runs. So on NVMe cap 2 costs pass 1 two to three times its speed and buys no shorter preview read. `READ_SLOTS` was not changed. Numbers and method: `docs/agents/shared-crates.md` ("The scan's reads are capped and yield to the preview's at the disk"), `docs/plans/_archived/20261123-todo-measurements/learnings.md`. Plan: `docs/plans/_archived/20261107-preview-read-gate/plan.md`. Files: `crates/app/src/scan.rs` (`READ_SLOTS`), `docs/agents/shared-crates.md`.
+The scan now decodes an HDR PQ CR3's HEVC preview (65-125 ms of CPU per file) after its read slot drops (`reader::read_preview_undecoded`, `Undecoded::decode`). Before, the decode ran inside the slot, a calculated 33-63 ms/file at `READ_SLOTS` 2 against 3-6 uncapped; neither figure was measured, since the measurement needs a local release build of the app, which was not run. Plan: `docs/plans/_archived/20261126-hevc-outside-read-slot/plan.md`. Files: `crates/core/src/scan.rs`, `docs/agents/shared-crates.md` (the read cap section).
 
 #### TODO
 
-- [ ] Decide the cap: keep 2 everywhere (the SATA preview wait), raise it (which costs SATA the waits above), or pick it per drive (how the drive kind would be told apart is open). Done when `READ_SLOTS`, or its replacement, and the guide's read cap section say which.
+- [ ] Samples: of the six `hvcC` files in `D:\Photos\samples\CR3` (`R8.CR3`, `R5m2.CR3`, `Canon_EOS_R5m2_102A6405.CR3`, `Canon_EOS-1D_X_Mark_III_AJKC0638.CR3`, `Canon_EOS-1D_X_Mark_III_AJKL0637.CR3`, `Canon_EOS_R10_IMG_1205.CR3`), keep those `reader::read_metadata(..).hevc` (or `handpic-cli info`) calls HDR PQ and that decode without a panic, and copy them to a few hundred files in one folder under `D:\Photos\tests\`. Open it in a release build of the app with a fresh `--index`, on the commit before the split and on the split, and take pass 1's ms/file from the `scan extract:` log line (its time over its files). Done when both figures and the method are in `docs/agents/shared-crates.md`'s read cap section.
 
 ### Core: the cold-disk cost of pass 2's full-size eye read is unmeasured
 
@@ -491,7 +458,7 @@ Files: `crates/app/src/focus.rs` (`scan_focus_paths`), `crates/app/src/main.rs` 
 
 #### TODO
 
-- [ ] Reproduce on a JPEG folder with a fresh index, find whether the hot list misses the cells in view or their finished thumbnails are not read back until the pass ends, and fix it.
+- [ ] On Windows, re-run the 500-JPEG fresh-index open (`jpeg500`, debug build, 1600 px window, `--log <path>`) and, while cells in view stay gray during pass 1, read `Handpic.log` for the two diagnostics lines added by `docs/plans/_archived/20261127-jpeg-strip-gray-cells/plan.md`: `thumbnail read failed, the cell waits for the scan:` (`crates/app/src/thumbs.rs`, a reader error other than no row) and `thumbnail not scanned after the scan reported it: path=… retried=false` (a `[WARN]` line; `retried=true` is the benign `info` case; `crates/app/src/main.rs` `thumbnail`, a cell left missing until the pass ends). Either names the cause to fix. With neither line for the gray cells, their rows were not written before the pass ended, so look at the scan order (the hot list) instead; a UI test on 300 generated JPEGs, whose pass 1 took about 2 s, filled every cell in view within 60 ms of its row (`learnings.md` of that plan).
 
 ### App: measure the scan pause in `load` on the SATA SSD with presses on files pass 1 has not read yet
 
@@ -971,7 +938,7 @@ The `native-title-bar-settings` feature added a gpui-component `Button` with the
 - The tooltip showed on hover.
 - The gear and its hover fill were visible in Neutral Light and Dark.
 
-Seen on Windows 11 on 2026-11-21: the window controls and the bar's drag after the change, a judgment key and paging right after closing the settings the gear opened, and the gear pressed with the tree holding the keyboard, with `Sort ▾` open and with a right-click menu open; never exercised: a shipped non-Neutral theme, the gear during an inline rename, macOS, Linux. The Step 1 checkbox was ticked on the automated criteria and the checks above. Plan: `docs/plans/_archived/20261117-native-title-bar-settings/plan.md`.
+Seen on Windows 11 on 2026-11-21: the window controls and the bar's drag after the change, a judgment key and paging right after closing the settings the gear opened, and the gear pressed with the tree holding the keyboard, with `Sort ▾` open and with a right-click menu open; never exercised: a shipped non-Neutral theme, the gear during an inline rename, macOS, Linux. The Step 1 checkbox was ticked on the automated criteria and the checks above. Plan: `docs/plans/_archived/20261117-native-title-bar-settings/plan.md`. The `title-bar-tweak` feature then retuned the bar: 13 px text, an 18 px app icon and a gear with a thinner stroke (`icons::SETTINGS_THIN`, 14 px) in a `TITLE_BAR_HEIGHT`-wide, full-height, square-cornered ghost `Button` with no `mr_2` margin, after the window controls' own box. That look was seen and approved only on Windows 11 in a dev build; macOS and Linux are unseen. Plan: `docs/plans/_archived/20261127-title-bar-tweak/plan.md`.
 
 Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/app/src/settingsmodal.rs`, `crates/app/src/icons.rs`, `docs/agents/app.md`.
 
@@ -979,8 +946,8 @@ Files: `crates/app/src/main.rs` (`settings_button`, `open_settings`), `crates/ap
 
 - [ ] On Windows (`mise run app:dev`), switch to one shipped (non-Neutral) theme in Settings > Appearance, in Light or Dark. Expect the gear and its hover fill to be visible and to follow the theme.
 - [ ] On Windows, click the gear during an inline folder rename. Expect the settings to open and the rename to end as a press elsewhere ends it.
-- [ ] On macOS (`mise run app:dev`), expect the gear at the bar's right edge with its `mr_2` margin. A press and drag on it should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
-- [ ] On Linux, under client-side decorations, expect the gear left of the window controls. A press and drag on it should not move the window, the rest of the bar should still drag, and a click should open the settings.
+- [ ] On macOS (`mise run app:dev`), open a folder and look at the title bar. Expect the gear flush at the bar's right edge (no `mr_2` margin), its hover fill filling the bar's height with square corners, the 14 px icon not clipped, and the 18 px app icon and 13 px text looking right beside the traffic lights. A press and drag on the gear should not move the window (the bar's `start_window_move`), while the rest of the bar still drags. A click should open the settings and the tooltip should show `Cmd+,`.
+- [ ] On Linux, under client-side decorations, open a folder and look at the title bar. Expect the gear flush beside the window controls, its hover fill filling the bar's height with square corners, the icon not clipped, and the 18 px app icon and 13 px text looking right. A press and drag on the gear should not move the window, the rest of the bar should still drag, and a click should open the settings.
 
 ### App: real-device check of the settings controls drawn with gpui-component (native-component-controls)
 
@@ -1069,17 +1036,6 @@ Files: `crates/app/src/mark.rs` (`MarkState::color`), `crates/app/src/main.rs` (
 
 - [ ] Give the menu's `Good` icon a green that reads on light and dark menu surfaces, leaving the strip's and the `f` overlay's green over the photo as is, and check it on screen.
 
-### Engine: align the two `notify` locks so CI tests the version the app ships
-
-The `treewatch` / `watch` tests run in CI on the root `Cargo.lock`'s notify 8.2.0, while the app ships what `crates/app/Cargo.lock` resolves, notify 8.2.2. On 2026-11-23 the re-check confirmed that `configure` still queues behind `Unwatch` on 8.2.2 (a scratch binary, 900 iterations under 24 spinning threads: 6 failures without `configure`, 0 with it; the engine's own `treewatch` tests were not run against 8.2.2; `docs/agents/shared-crates.md`). Moving the root lock to 8.2.2, or pinning the app lock to 8.2.0, is a lock change the measurement plan did not make. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md` (Trade-offs, "Item 2: which lock is right").
-
-Files: `Cargo.lock`, `crates/app/Cargo.lock`, `crates/engine/src/watch.rs`, `docs/agents/shared-crates.md`.
-
-#### TODO
-
-- [ ] Decide which lock moves (root to 8.2.2, or app pinned to 8.2.0), make the change, and run the engine's `treewatch`, `watch` and `rename` tests on the chosen version looped under load.
-- [ ] Update the version statement in `docs/agents/shared-crates.md` ("A `notify` watch on Windows ...") to match.
-
 ### Engine: measure a file manager's permanent delete (Shift+Delete) of a folder holding a watched one on Windows
 
 The 2026-11-23 measurement showed that `std::fs` deletes of a watched folder or its ancestors succeed, and that the shell's move to the Recycle Bin of an ancestor is refused (`0x80270021`). The shell's permanent delete (Shift+Delete in Explorer) was not measured, and `docs/humans/usage.md` would describe it if it behaves differently. Plan: `docs/plans/_archived/20261123-todo-measurements/plan.md`.
@@ -1143,19 +1099,6 @@ Files: `crates/app/src/context.rs`, `crates/app/src/main.rs`.
 
 - [ ] On Windows, run `mise run app:dev` with `--settings` and `--log` pointing into a test folder (as `docs/agents/app.md` requires, so the real store is not touched). Open a folder and right-click a strip cell of a picked, rated (for example 3 stars), labeled file. Expected: the flag group reads Pick, Unflag, Reject. The rating group shows five rows of 5 down to 1 lit yellow stars, then a row of five dim stars. The label group is Red to Purple, then No label. The checks sit on Pick, the 3-star row and the file's label. Each row shows its shortcut at the right end (`p`, `u`, `x`, `5` ... `1`, `0`). Clicking a star row sets that rating.
 - [ ] On macOS and Linux (any platform at hand), repeat the Windows check above.
-
-### App: a held open-and-collapse click leaves the row expanded when a rename moves the folder
-
-#### Background
-
-`native-tree-no-chevron` made a click on an expanded row that is not open open the folder and collapse the row. `tree_row_clicked` collapses the row and sets `Handpic::reveal_collapsed`, and `reveal` skips the chain's last step only when the path matches it through `tree::relation`. When the gate holds the open (`deferred_open`, `self.gate.in_flight()`), a rename that moves that folder before the deferred reveal runs makes the stored path no longer match, so `reveal` expands the end and the row ends up expanded. Local review noted this and no test covers it. `crates/app` has no GPUI window test. Plan: `docs/plans/_archived/20261117-native-tree-no-chevron/plan.md`.
-
-Files: `crates/app/src/main.rs` (`tree_row_clicked`, `reveal`, `reveal_collapsed`, `deferred_open`), `crates/app/src/tree.rs` (`relation`), `crates/app/src/folderops.rs`.
-
-#### TODO
-
-- [ ] Confirm whether the case is real: hold an open-and-collapse click with a scan or listing in flight, rename that folder before the gate releases, and check whether the row ends up expanded.
-- [ ] If it is, carry `reveal_collapsed` along with the folder's rename (compare with how the rename carries the tree rows and index rows), or clear it on a rename, and add a unit test for the chosen rule.
 
 ### App: real-device check of the color label Tags in the menus and the strip band (native-label-tags)
 
@@ -1265,12 +1208,11 @@ The `native-qa` feature added a `screenshot` MCP tool, listed only in a `--featu
 
 #### Background
 
-`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compile in a second variant (plain for the bundle step, `test-support` for clippy and tests). The macOS `app` job took 22m17s on PR #1165 (Step 4) against the job's `timeout-minutes: 30`. Plan: `docs/plans/_archived/20261118-native-qa/plan.md`. Files: `.github/workflows/ci.yml` (the `native` job), `crates/app/Cargo.toml` (the dev-dependency). `todo-four-closeouts` (`docs/plans/_archived/20261123-todo-four-closeouts/learnings.md`) saw it exceed the limit: on #1272 the "Lint and test the app" step had passed (1103 tests) and the job was cancelled in "Bundle and check Handpic.app", which recompiles the gpui crates, and a rerun passed. The same job was also the last to finish on #1256 and #1260. `todo-ten-closeouts` (`docs/plans/_archived/20261123-todo-ten-closeouts/plan.md`) saw it again: the `app (macos-latest)` job was cancelled at the 30-minute limit on #1267 and #1286, and a rerun passed at 28m33s, 1m27s under the limit. So a cold-cache run now exceeds 30 minutes more often than not, and the limit is no longer a margin to watch but a recurring failure.
+`native-qa` Step 4 added `gpui-pre-platform` with `test-support` as a dev-dependency of `crates/app`, so the GPUI crates compiled in a second variant (plain for the bundle step, `test-support` for clippy and tests), and cold-cache `app (macos-latest)` runs took 24 to 29.5 minutes against `timeout-minutes: 30` and were cancelled at the limit on #1267, #1272 and #1286. `macos-ci-bundle-reuse` (`docs/plans/20261127-macos-ci-bundle-reuse/plan.md`) made the bundle step build with the `screenshot` feature, so it reuses the test build's dependencies and compiles only `handpic-app`, and kept the limit at 30 (see "The macOS bundle step reuses the test build" in `docs/agents/app.md`). The saving is expected to bring a cold run to about 17 to 21 minutes but was not seen on a cold run yet. Files: `.github/workflows/ci.yml` (the `app` job), `mise.toml` (`app:bundle:macos`).
 
 #### TODO
 
-- [ ] Read the macOS `app` job's duration on later PRs, in particular a cold-cache run. If it nears 30 minutes, cache more or split the job, or raise the timeout, and record it in `docs/agents/app.md`'s CI entry.
-- [ ] Raise the job's `timeout-minutes` in `.github/workflows/ci.yml` or avoid the bundle step's second gpui build (the 28m33s pass leaves no room to wait). Done when a cold-cache macOS app job finishes inside its limit on three consecutive PRs.
+- [ ] A cold-cache `app (macos-latest)` job (one whose `actions/cache` step restores nothing) finishes inside the 30-minute limit on three consecutive PRs. If one does not, raise `timeout-minutes` in `.github/workflows/ci.yml` and record it in `docs/agents/app.md`.
 
 ---
 
@@ -1354,39 +1296,13 @@ Files: `crates/app/src/settings.rs`, `crates/app/packaging/windows/handpic.iss`,
 
 #### Background
 
-Observed in the native-release rc dry run (2026-11-21): after an uninstall from Settings, Apps, the staging folder `<cache dir>\dev.minodisk.handpic\update` still held the staged rc.2 setup and its ZIP. Only the next launch of an install clears it, and after an uninstall there is none. The index, settings and logs are kept by design; the staging folder is not user data. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
+Observed in the native-release rc dry run (2026-11-21): after an uninstall from Settings, Apps, the staging folder `<cache dir>\dev.minodisk.handpic\update` still held the staged rc.2 setup and its ZIP. `handpic.iss` now deletes it through an `[UninstallDelete]` entry and keeps the index, settings and logs; the uninstall itself is not yet checked. Inno Setup records the entry in the uninstall log at install time, so only an install that a setup built with the entry has installed or upgraded deletes the folder. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
 
-Files: `crates/app/packaging/windows/handpic.iss`, `crates/app/src/datadir.rs` (`update_staging`), `docs/agents/app.md`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
-
-#### TODO
-
-- [ ] Have the uninstaller delete the staging folder (an `[UninstallDelete]` entry in `handpic.iss`), and check on Windows that an uninstall after a staged update leaves no `update` folder and keeps the index and settings. Record the result in the rc dry run section of `packaging-updater.md`, and drop the "has no `[UninstallDelete]`" clause from the Inno Setup rule in `docs/agents/app.md`.
-
----
-
-### Release: decide whether to protect `UPDATE_SIGNING_KEY` from branch dispatches (native-release)
-
-#### Background
-
-A branch dispatch of `release.yml` signs unreviewed branch code with the production key, and the "never publishes from a non-`main` ref" check lives in that branch's own workflow (accepted risks of native-release Step 2). Options: move the secret into a protected GitHub environment restricted to `main` (branch dry runs like run 44884797276 would then need the test key), or add tag / release protection rules. Plan: `docs/plans/_archived/20261121-native-release/plan.md`.
-
-Files: `.github/workflows/release.yml`, the repository settings, `docs/agents/app.md`.
+Files: `crates/app/packaging/windows/handpic.iss`, `docs/agents/app.md`, `docs/plans/20261109-gpui-port/packaging-updater.md`.
 
 #### TODO
 
-- [ ] Decide and record the choice. Done when the matching Rule in `docs/agents/app.md` ("a branch dispatch ... runs that branch's `release.yml` with the production key") is updated or removed.
-
----
-
-### Develop: check intervening commits before restoring a file from an old commit in a revert (revert-page-present-now)
-
-#### Background
-
-While reverting #1219, `git checkout c57ec2ff -- docs/agents/app.md` silently dropped the hunks of #1222 (`e433fdf5`), an unrelated change that landed after that base; local review caught it and they were re-applied. Reverse-applying the reverted commit's diff (`git show 6809229f -- <paths> | git apply -R --index`) applied cleanly elsewhere. Record: `docs/plans/_archived/20261122-revert-page-present-now/learnings.md`. Files: `.claude/skills/develop/SKILL.md`.
-
-#### TODO
-
-- [ ] Decide whether reverts are frequent enough to document. If so, add to the `develop` skill (or a decided guide with a stated trigger): prefer `git show <commit> -- <paths> | git apply -R --index`; when a file must be restored from an old commit, run `git log <base>..origin/main -- <file>` first, re-apply unrelated later hunks and confirm with `git diff`. Otherwise close this item with that reason.
+- [ ] Pending manual check, on Windows: with an Inno Setup install made by a setup built with the `[UninstallDelete]` entry and an update staged by it, uninstall from Settings → Apps and confirm `%LOCALAPPDATA%\dev.minodisk.handpic\update` is gone while `index.sqlite`, `settings.sqlite` and the logs remain. Once checked, record the result in the rc dry run section of `docs/plans/20261109-gpui-port/packaging-updater.md` and replace the **Unverified** note in the Inno Setup rule of `docs/agents/app.md`.
 
 ---
 
@@ -1409,7 +1325,7 @@ Build in `crates/app` first. Work only on copies under `D:\Photos\tests\` holdin
 
 #### Background
 
-The `capital-exe-name` feature ships the Cargo bin `handpic` as `Handpic.exe` in the Windows portable ZIP and the Inno Setup install, and as `Contents/MacOS/Handpic` in `Handpic.app`; Linux keeps `handpic`. The engine's updater now looks the executable up in an archive by a fixed name per install kind (`Handpic/Handpic.exe`, `Handpic/bin/handpic`) instead of the running exe's own file name, and writes it onto the running exe's path, so a portable `handpic.exe` keeps its name. The unit tests cover the lookup and the kept name, `mise run app:package:windows` was run locally and its ZIP listed, and a throwaway Inno Setup script showed an upgrade writes the new casing (`x.exe` then `DestName` `X.exe` left `X.exe`). Nobody ran a real upgrade over a 2.0.0 install, a real portable update from a test feed, the macOS bundle or a `Package` run. A 2.0.0 portable copy is expected to fail its update (it looks for `Handpic/handpic.exe`) and to be reinstalled by hand, as accepted. Seen on macOS on 2026-11-26 (results in `docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`): the DMG of `mise run app:package:macos` passed `hdiutil verify`. Its `Handpic.app`, copied to `~/Applications`, held `Contents/MacOS/Handpic`, passed `codesign --verify --strict` (ad hoc, identifier `dev.minodisk.handpic`) and launched. The update from a 2.0.0 bundle was not run (it needs a test feed). Plan: `docs/plans/20261123-capital-exe-name/plan.md`.
+The `capital-exe-name` feature ships the Cargo bin `handpic` as `Handpic.exe` in the Windows portable ZIP and the Inno Setup install, and as `Contents/MacOS/Handpic` in `Handpic.app`; Linux keeps `handpic`. The engine's updater now looks the executable up in an archive by a fixed name per install kind (`Handpic/Handpic.exe`, `Handpic/bin/handpic`) instead of the running exe's own file name, and writes it onto the running exe's path, so a portable `handpic.exe` keeps its name. The unit tests cover the lookup and the kept name, `mise run app:package:windows` was run locally and its ZIP listed, and a throwaway Inno Setup script showed an upgrade writes the new casing (`x.exe` then `DestName` `X.exe` left `X.exe`). Nobody ran a real upgrade over a 2.0.0 install, a real portable update from a test feed or the macOS bundle. A 2.0.0 portable copy is expected to fail its update (it looks for `Handpic/handpic.exe`) and to be reinstalled by hand, as accepted. Seen on macOS on 2026-11-26 (results in `docs/plans/_archived/20261126-macos-device-checks-mcp/results.md`): the DMG of `mise run app:package:macos` passed `hdiutil verify`. Its `Handpic.app`, copied to `~/Applications`, held `Contents/MacOS/Handpic`, passed `codesign --verify --strict` (ad hoc, identifier `dev.minodisk.handpic`) and launched. The update from a 2.0.0 bundle was not run (it needs a test feed). Seen in the v2.1.0 `Release` run 45712125456 on 2026-11-25 (after #1241's merge `3bafc9b`), which ran `package.yml` through `workflow_call`: its Windows job's log listed `Handpic.exe` in the installed folder and `Handpic\Handpic.exe` in the extracted ZIP, and the published v2.1.0 assets (`SHA256SUMS` checked) hold `Handpic/Handpic.exe` in the portable ZIP and `Handpic.app/Contents/MacOS/Handpic` in both macOS tarballs. Plan: `docs/plans/20261123-capital-exe-name/plan.md`.
 
 Files: `tools/package/windows.sh`, `crates/app/packaging/windows/handpic.iss`, `tools/package/macos.sh`, `crates/app/packaging/macos/Info.plist`, `mise.toml` (`[tasks."app:bundle:macos"]`), `crates/engine/src/update.rs` (`portable_asset`, `install`).
 
@@ -1421,31 +1337,6 @@ Test copies get their own `--settings`, `--index`, `--log` and `--mcp-port`, and
 - [ ] On Windows 11, a portable copy whose exe is `handpic.exe`, running a build with this change, updates from a test feed (`tools/package/test-release.sh`) to a newer build. Expect the new version after `Restart Now`; record the exe's file name afterwards (expected `handpic.exe`). Repeat with a copy whose exe is `Handpic.exe` (expected to stay `Handpic.exe`).
 - [ ] On Windows 11, a 2.0.0 portable copy offered the new release fails its install and stays on 2.0.0, as accepted; record the message shown.
 - [ ] On macOS, a 2.0.0 `Handpic.app` in `/Applications` updates to the new bundle from a test feed (`tools/package/test-release.sh`) and restarts into it. (The DMG's launch, `Contents/MacOS/Handpic` and `codesign --verify --strict` passed on 2026-11-26.)
-- [ ] Dispatch the `Package` workflow by hand on the branch; expect its logs' listings (the ZIP's contents, the installed folder, the bundle) to show `Handpic.exe` and `Contents/MacOS/Handpic`.
-
-### Repo: post-merge check that GitHub detects the MIT OR Apache-2.0 license (dual-license)
-
-#### Background
-
-The dual-license work added `LICENSE-MIT` and `LICENSE-APACHE` at the repository root, the SPDX expression in every crate manifest, a License section in both READMEs and the two files in the shipped `licenses/` folder. CI and the local `cargo metadata` and `notices.sh` runs cover the manifests and the shipped notices. What was never exercised is GitHub's own license detection, which can only run after the merge to `main` and can lag a push by some minutes. `mise run ci:local` was also stopped locally for host memory pressure and left to the PR's GitHub Actions. Plan: `docs/plans/_archived/20261124-dual-license/plan.md`.
-
-Files: `LICENSE-MIT`, `LICENSE-APACHE`.
-
-#### TODO
-
-- [ ] After the merge to `main`, run `gh api repos/minodisk/handpic --jq .license`. Done when it is no longer `null` and its `spdx_id` is `Apache-2.0` (not `NOASSERTION`), and the repository page's sidebar lists both licenses. Re-check after a few minutes before concluding it failed.
-
-### Core: check whether the PIL resampling port needs a Pillow notice
-
-#### Background
-
-`crates/core/src/resample.rs` is a reimplementation of PIL's bilinear and bicubic resampling filters. The dual-license work (MIT OR Apache-2.0) did not assess whether it needs a Pillow (MIT-CMU) notice, and the shipped `licenses/` folder and the READMEs' third-party list have none. `crates/core/src/sequence.rs` derives from `minodisk/lapse` (MIT, same author) and needs no notice. Plan: `docs/plans/_archived/20261124-dual-license/plan.md`.
-
-Files: `crates/core/src/resample.rs`, `tools/package/notices.sh`, `README.md`, `README.ja.md`.
-
-#### TODO
-
-- [ ] Decide whether `resample.rs` is a derived work of Pillow. If it is, add a Pillow notice file, list it in `tools/package/notices.sh` and name it in both READMEs' License sections. Done when the decision and any added notice are recorded in `docs/agents/app.md`'s license section.
 
 ### App: real-device check of the Windows one-line install script (install-scripts)
 
@@ -1498,37 +1389,21 @@ Files: `install.ps1`.
 - [ ] On Windows, open a real group photo folder (for example a team-sport ARW folder), let the scan finish (`checking faces` gone from the status line), then check `Filter ▾` > `Eyes` > `Anyone closed`. Expected: the strip narrows to the frames whose meta pane `Faces with closed eyes` is at least 1 (each a real blink on some face, or a false closed reading worth noting), no frame whose `Similar faces` is under `Faces in a group photo` stays; `Anyone soft` likewise against `Faces with soft eyes`; adding `Open` widens the strip to those frames plus the open-eyed ones; raising the number in the settings past a shown frame's `Similar faces` hides it at once; the checks survive a restart.
 - [ ] On macOS and Linux, repeat the Windows check.
 
-### Core: mesh the faces under `EYES_MIN_FACE` from the full JPEG so the all-faces counts cover them (all-faces-check)
-
-`all-faces-check` leaves faces whose box is under `EYES_MIN_FACE` (60 px) unjudged. On the measured ARW team-sport folders that is 24 to 48% of the confident faces (`measurement.md`, item 1). `Faces judged` in the meta pane shows how much was covered. The plan's Option B cuts small faces from the full JPEG for the mesh. It is cheaper to add now that pass 3 reads the full JPEG anyway. `EYES_CLOSED_EAR` was fitted on preview-resolution crops and would need new labeled faces to trust on full-size crops. The judged face (preview mesh) and the counts (full-size mesh) could also disagree about the same face. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/core/src/eyes.rs`.
-
-#### TODO
-
-- [ ] Decide whether to mesh faces under `EYES_MIN_FACE` from the full JPEG. If so, label full-size crops, re-fit the closed threshold for them, and bump `ALLFACES_VERSION`.
-
 ### Core: the judged face can be counted twice in the all-faces counts and the gate count (all-faces-check)
 
-A judged crop face whose whole-image box overlaps it at or under `NMS_THRESHOLD` IoU is counted twice, in the gate count and in the judged count alike (1 of 258 AF frames on `2026-09-19`). A low-resolution box may differ more. Matching by eye landmarks instead of IoU would close it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`, `gate_count`).
+The judged face found again in the whole-preview search is dropped by an IoU above `NMS_THRESHOLD` or an intersection over the smaller box above `SAME_FACE_OVERLAP` (0.55). A second box of the same face (on the ear, larger or partial) whose overlap is between about 0.3 and 0.55 is still counted twice, mostly in the 320x224 gate count: about 20 AF frames on `2026-11-07`. Neither the eye landmarks nor the overlap separate those twins from different people (people up to 0.532, twins from 0.306). Measurements: `docs/plans/_archived/20261126-judged-face-eye-match/measurement.md` (eye landmarks) and `overlap-measurement.md` in the same folder. Files: `crates/core/src/allfaces.rs` (`same_face`, `candidates`, `gate_count`).
 
 #### TODO
 
-- [ ] Replace the IoU match of the judged face with one by eye landmarks, and add a test for the overlap at or under 0.3. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
+- [ ] Find a rule that separates the remaining twins from different people (for example the mesh, the box's aspect or the full-size image), or accept them. Changing the gate count means a `FACES_VERSION` bump; changing only the counts means an `ALLFACES_VERSION` bump.
 
-### Core: the default group threshold N = 5 passes no posed group photo of the measured folders (all-faces-check)
+### Core: pass 3 judges faces from 0.8 while the gate now counts from 0.6 (gate-floor-no-af)
 
-The 7-person `2026-02-01/L1005161.DNG` counts 4 at the 0.8 score floor (three faces score 0.64 to 0.75). That frame has no AF point, so the AF path's 0.6 floor does not apply. The frames at 5 or more that were measured are basketball frames. The user kept the default at 5 in Step 4. The meta pane's `Similar faces` row is what lets users tune it. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs`, `crates/app/src/settings.rs` (`groupMinFaces`, `group::DEFAULT`).
-
-#### TODO
-
-- [ ] Decide whether to lower the default (4 or 3), or to use the 0.6 floor on the no-AF path as well, after more posed group photos are checked.
-
-### Core: the gate's size band lets a background row at the player's size through (all-faces-check)
-
-The size band (0.5x to 2x of the judged face's long side) cannot tell a group from a background row at the same distance. `2026-11-07/_DSC1611.ARW` counts 9 at 640x448: one player and eight spectators on the bench behind. A frame like that passes the gate and pays pass 3. Plan: `docs/plans/_archived/20261123-all-faces-check/plan.md`. Files: `crates/core/src/allfaces.rs` (`gate_count`).
+`gate-floor-no-af` made the gate count (`allfaces::gate_count`) use `GATE_LOW_RES_CONFIDENCE` (0.6) on frames without an AF point too. Pass 3's candidates (`allfaces::candidates`) still use `FACE_CONFIDENCE` (0.8). On `2026-02-01/L1005161.DNG` the gate counts 7, but pass 3 judges at most the 4 faces scoring 0.8 or above (three faces score 0.64 to 0.75), so `Similar faces` exceeds `Faces judged` by 3. `L1005172.DNG` has 3 faces between 0.6 and 0.8 and `L1005173.DNG` has 2. Lowering the candidates' floor is a separate change and was out of scope for that plan. Plan: `docs/plans/_archived/20261126-gate-floor-no-af/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`).
 
 #### TODO
 
-- [ ] Decide whether the gate needs a further rule (for example the faces' spread or a cluster around the judged face), or whether the cost on such frames is acceptable. Any change to the gate count means a `FACES_VERSION` bump and a pass 2 re-run.
+- [ ] Decide whether to lower the candidates' floor to 0.6 so `Faces judged` follows the gate count. If so, measure the extra pass 3 work and the false closed readings on low-score faces, then bump `ALLFACES_VERSION`.
 
 ### App: real-device checks of the settings layer under the title bar (settings-under-title-bar)
 
@@ -1563,12 +1438,27 @@ Files: `crates/app/src/main.rs` (`strip_cells`, `paint_face_icon`), `crates/app/
 - [ ] On Windows, at the minimum strip height (`stripheight::MIN`), expect the mark to sit right of the face focus icon without overlapping it or the burst badge (including a three-digit `999/999` badge), and to be dimmed with a rejected cell.
 - [ ] On macOS and Linux, when at hand, repeat the checks above.
 
-### Docs: stale `faces_of` / `eyes_of` caller names remain outside CLAUDE.md
+### Release: real-device check that a release from `main` signs with the `release` environment's key (release-key-environment)
 
 #### Background
 
-The todo-ondemand-eyes-of feature fixed `CLAUDE.md` to name `overlay::detect` and `overlay::judge` as the callers of `ondemand::read_faces` / `read_eyes`. Those two are in `crates/app/src/overlay.rs`. The `faces_of` / `eyes_of` names were the removed Tauri app's commands. They still appear in doc comments and docs that the docs-only plan left alone. Plan: `docs/plans/_archived/20261126-todo-ondemand-eyes-of/plan.md`. Files: `crates/engine/src/ondemand.rs`, `crates/cli/src/main.rs`, `docs/agents/shared-crates.md`, `docs/agents/tract-onnx-inference.md`.
+release-key-environment moved the production updater key `UPDATE_SIGNING_KEY` from a repository secret into the `release` GitHub environment, whose deployment branch policy allows only `main`. The `guard` job and the three signing legs of `package.yml` now read it through that environment. A branch dispatch of `release.yml` is rejected by the environment protection. That rejection was measured on the PR branch, and so was the empty-environment-name case for a plain `package.yml` dispatch. What was never exercised is a real release from `main` signing with the environment's secret. That needs the key registered in the environment, the repository-level secret deleted after the merge, and a real dispatch. An agent cannot run it, because no agent may touch the key. Plan: `docs/plans/_archived/20261126-release-key-environment/plan.md` (Verification (b)).
+
+Files: `.github/workflows/release.yml`, `.github/workflows/package.yml`, `.claude/skills/release/scripts/verify-release.sh`
 
 #### TODO
 
-- [ ] In those four files, replace `faces_of` / `eyes_of` as the callers' names with `overlay::detect` / `overlay::judge`, or mark them as the removed Tauri app's commands where the text is history. Keep the `eyes_of` mentions in other todo.md items, which are history.
+- [ ] After the merge, delete the repository-level secret with `gh secret delete UPDATE_SIGNING_KEY --repo minodisk/handpic`, then confirm with `gh secret list --repo minodisk/handpic` that only the `release` environment's copy remains (`gh secret list --env release --repo minodisk/handpic`).
+- [ ] On `main`, dispatch a release candidate with `gh workflow run release.yml --ref main -f version=<the next unused x.y.z-rc.N>`. Then run `mise exec cargo:zipsign@0.2.2 -- bash .claude/skills/release/scripts/verify-release.sh v<version>`. Expected: `guard` passes and `STATUS=ok`, which shows the legs signed with the `release` environment's secret. Then turn the "Not yet verified" sentence of the decision Rule in `docs/agents/app.md` into "Verified".
+
+---
+
+### App: no CI job builds the app without `test-support` before `Package`
+
+#### Background
+
+`macos-ci-bundle-reuse` (`docs/plans/_archived/20261127-macos-ci-bundle-reuse/plan.md`) switched the macOS `app` job's bundle step to `--features screenshot` so it reuses the test build. With that, no CI job before `Package` builds the app without GPUI's `test-support`. A test-only GPUI API used in non-test code (the rule under "The main view opens on GPUI's test platform" in `docs/agents/app.md`) therefore surfaces only in the `Package` workflow's release build. Clippy and the tests still cover the default feature set's code. A cheap follow-up is a feature-less `cargo check` on one leg, if the cost of a second GPUI check variant is acceptable. Files: `.github/workflows/ci.yml`, `docs/agents/app.md`.
+
+#### TODO
+
+- [ ] Decide whether a feature-less `cargo check` on one `app` job leg is worth its cost (a second GPUI check variant). If so, add it, and update the rule in `docs/agents/app.md` under "The main view opens on GPUI's test platform" to say which job now catches a test-only API in non-test code.

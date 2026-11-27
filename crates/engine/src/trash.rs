@@ -8,9 +8,12 @@
 //! again through closures so the tests never touch the real Trash. What an
 //! undo brought back is kept in `Runs` too, and `redo` moves exactly those
 //! files to the Trash again.
-//! `delete_for_good` runs the same grouping and loop with a remover instead
-//! of a mover, for `delete_listed` (`commands::delete_files`): nothing is
-//! recorded, as nothing can come back.
+//! Both a Move to Trash and `delete_for_good` group the files through
+//! `run_listed`, which keeps a `.xmp` shared by stem with a RAW that stays
+//! and moves one several moved RAWs share once, after all of them went.
+//! `delete_for_good` runs that with a remover instead of a mover, for
+//! `delete_listed` (`commands::delete_files`): nothing is recorded, as
+//! nothing can come back.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -291,7 +294,9 @@ pub fn sidecars_of<'a>(
 /// sidecars of `sidecars` (the listing of `dir`) that exist for it, whatever
 /// format is selected, and a JPEG alone, since nothing next to a JPEG is read
 /// or written. A path of another folder is returned as a `Failure` and not
-/// grouped, so a sidecar of `dir` is never taken along with it.
+/// grouped, so a sidecar of `dir` is never taken along with it. A `.xmp`
+/// another RAW of the same stem shares is still in each group: `run_listed`
+/// sorts those out.
 pub fn groups_of(
     dir: &Path,
     paths: &[String],
@@ -391,12 +396,10 @@ pub fn remove_one(path: &Path) -> Result<Option<PathBuf>, String> {
 }
 
 /// Delete `paths` of `dir` with `remover`, grouped and ordered as a move to
-/// the Trash is: a RAW first, its sidecars only if it went, a JPEG alone, and
-/// a path of another folder a `Failure`, never touched. The summary's
-/// `run_id` stays `None`, so no undo is offered. `files` is the listing of
-/// `dir`: a `.xmp` shared by name with a RAW that is not among `paths` (a
-/// `FOO.xmp` of `FOO.ARW` and `FOO.DNG`) is kept, as nothing can bring it
-/// back and the kept RAW still uses it.
+/// the Trash is (see `run_listed`): a RAW first, its sidecars only if it
+/// went, a JPEG alone, a `.xmp` shared with a RAW that stays kept, and a path
+/// of another folder a `Failure`, never touched. The summary's `run_id`
+/// stays `None`, so no undo is offered.
 pub fn delete_for_good(
     dir: &Path,
     paths: &[String],
@@ -405,7 +408,61 @@ pub fn delete_for_good(
     remover: impl FnMut(&Path) -> Result<Option<PathBuf>, String>,
     progress: impl FnMut(usize, usize),
 ) -> Summary {
+    run_listed(dir, paths, files, sidecars, remover, |groups, remover| {
+        run(groups, remover, progress)
+    })
+    .0
+}
+
+/// Group `paths` of `dir` (see `groups_of`) and move them with `move_all`,
+/// for both a Move to Trash and a delete. `files` is the listing of `dir`: a
+/// `.xmp` shared by stem with a RAW that is not among `paths` (a `FOO.xmp`
+/// of `FOO.ARW` and `FOO.DNG`) stays, as the RAW that stays still uses it. A
+/// `.xmp` shared by several of `paths` goes after `move_all`, once, with
+/// `mover`, and only when every one of them went: otherwise a RAW that failed
+/// would lose it. Its record follows those of the last of them in `moved`,
+/// which `restore` and `redo` read as each RAW followed by its sidecars. A
+/// path of another folder is a `Failure` and never stands for a RAW of `dir`.
+pub fn run_listed<M: FnMut(&Path) -> Result<Option<PathBuf>, String>>(
+    dir: &Path,
+    paths: &[String],
+    files: &[String],
+    sidecars: &HashMap<String, SidecarStat>,
+    mut mover: M,
+    move_all: impl FnOnce(Vec<Group>, &mut M) -> (Summary, Vec<Trashed>),
+) -> (Summary, Vec<Trashed>) {
     let (mut groups, foreign) = groups_of(dir, paths, sidecars);
+    let shared = take_shared_xmps(&mut groups, files);
+    let (mut summary, mut moved) = move_all(groups, &mut mover);
+    for (sidecar, raws) in shared {
+        if !raws.iter().all(|raw| summary.moved.contains(raw)) {
+            continue;
+        }
+        match mover(&sidecar) {
+            Ok(trashed_at) => {
+                let mut at = moved
+                    .iter()
+                    .rposition(|trashed| raws.iter().any(|raw| trashed.path == Path::new(raw)))
+                    .map_or(moved.len(), |at| at + 1);
+                while at < moved.len() && !is_media(&moved[at].path) {
+                    at += 1;
+                }
+                moved.insert(at, trashed(sidecar, trashed_at));
+            }
+            Err(message) => summary.failed.push(Failure {
+                path: sidecar.to_string_lossy().into_owned(),
+                message,
+            }),
+        }
+    }
+    summary.failed.extend(foreign);
+    (summary, moved)
+}
+
+/// Drop from `groups` each `.xmp` whose lower-cased stem is that of a RAW of
+/// `files` not among the groups, and take out of every group each `.xmp`
+/// several groups list, returned with the RAWs that list it.
+fn take_shared_xmps(groups: &mut [Group], files: &[String]) -> HashMap<PathBuf, Vec<String>> {
     let name_of = |path: &str| {
         Path::new(path)
             .file_name()
@@ -415,6 +472,10 @@ pub fn delete_for_good(
         Path::new(path)
             .file_stem()
             .map(|stem| stem.to_string_lossy().to_lowercase())
+    };
+    let is_xmp = |path: &Path| {
+        path.extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"))
     };
     let chosen: std::collections::HashSet<String> = groups
         .iter()
@@ -428,55 +489,30 @@ pub fn delete_for_good(
         })
         .filter_map(|file| stem_of(file))
         .collect();
-    for group in &mut groups {
+    for group in groups.iter_mut() {
         group.sidecars.retain(|sidecar| {
-            let is_xmp = sidecar
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"));
             let shared = sidecar
                 .file_stem()
                 .is_some_and(|stem| kept_stems.contains(&stem.to_string_lossy().to_lowercase()));
-            !(is_xmp && shared)
+            !(is_xmp(sidecar) && shared)
         });
     }
-    // A `.xmp` shared by several selected RAWs goes after `run`, and only
-    // when every one of them went: otherwise a RAW that failed would lose it.
     let mut users: HashMap<PathBuf, Vec<String>> = HashMap::new();
-    for group in &groups {
-        for sidecar in &group.sidecars {
-            if sidecar
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("xmp"))
-            {
-                users
-                    .entry(sidecar.clone())
-                    .or_default()
-                    .push(group.raw.to_string_lossy().into_owned());
-            }
+    for group in groups.iter() {
+        for sidecar in group.sidecars.iter().filter(|sidecar| is_xmp(sidecar)) {
+            users
+                .entry(sidecar.clone())
+                .or_default()
+                .push(group.raw.to_string_lossy().into_owned());
         }
     }
     users.retain(|_, raws| raws.len() > 1);
-    for group in &mut groups {
+    for group in groups.iter_mut() {
         group
             .sidecars
             .retain(|sidecar| !users.contains_key(sidecar));
     }
-    let shared = users;
-    let mut remover = remover;
-    let (mut summary, _) = run(groups, &mut remover, progress);
-    for (sidecar, raws) in shared {
-        if !raws.iter().all(|raw| summary.moved.contains(raw)) {
-            continue;
-        }
-        if let Err(message) = remover(&sidecar) {
-            summary.failed.push(Failure {
-                path: sidecar.to_string_lossy().into_owned(),
-                message,
-            });
-        }
-    }
-    summary.failed.extend(foreign);
-    summary
+    users
 }
 
 /// How many groups `run_chunked` moves per shell operation: about 30 times
@@ -1028,7 +1064,8 @@ pub fn newest_by_path(items: Vec<::trash::TrashItem>) -> HashMap<String, ::trash
 
 /// Move `paths`, files of the folder `dir` as the listing gave them, to the
 /// OS trash in their order, each RAW together with the `.xmp` and `.dop`
-/// sidecars that exist for it and a JPEG alone (see `groups_of`), and record
+/// sidecars that exist for it and a JPEG alone (see `groups_of`), a `.xmp`
+/// shared with a RAW that stays kept in place (see `run_listed`), and record
 /// the run in `runs`. A path outside `dir` fails without being moved, one
 /// gone meanwhile fails too. `progress` is called after each group moved, or
 /// each chunk on Windows (see `move_groups`).
@@ -1040,13 +1077,14 @@ pub fn trash_listed(
 ) -> Result<Summary, String> {
     let dir = crate::listing::canonicalize(dir);
     let listing = crate::listing::read_listing(Path::new(&dir), Some(SidecarFormat::Both))?;
-    let (groups, foreign) = groups_of(
+    let (mut summary, moved) = run_listed(
         Path::new(&dir),
         paths,
+        &listing.files,
         &crate::listing::stat_sidecars(&listing.sidecars),
+        trash_one,
+        |groups, _| move_groups(groups, progress),
     );
-    let (mut summary, moved) = move_groups(groups, progress);
-    summary.failed.extend(foreign);
     summary.run_id = runs.record(moved);
     Ok(summary)
 }
@@ -1308,8 +1346,8 @@ mod tests {
     use super::{
         cleared, create_missing, delete_for_good, groups_of, newest_by_path, redo, redo_chunked,
         relocate, remove_one, restore, restore_chunked, restore_recorded, run, run_chunked,
-        trash_key, Back, Group, Restored, Runs, Summary, TrashRun, Trashed, ALREADY_EXISTS, CHUNK,
-        GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
+        run_listed, trash_key, Back, Group, Restored, Runs, Summary, TrashRun, Trashed,
+        ALREADY_EXISTS, CHUNK, GONE, MAX_RUNS, NOT_IN_TRASH, RAW_NOT_RESTORED,
     };
     use crate::listing::{read_listing, stat_sidecars};
     use crate::sidecar::SidecarFormat;
@@ -2172,6 +2210,147 @@ mod tests {
         assert!(dir.join("a.xmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&other);
+    }
+
+    /// Move `names` of `dir` into `trash` through `run_listed` and `run`,
+    /// the `mover` failing for any file named in `refuse`.
+    fn trash_in(
+        dir: &Path,
+        trash: &Path,
+        names: &[&str],
+        refuse: &[&str],
+    ) -> (Summary, Vec<Trashed>) {
+        let listing = read_listing(dir, Some(SidecarFormat::Both)).unwrap();
+        let paths: Vec<String> = names.iter().map(|name| key(&dir.join(name))).collect();
+        let mut inner = mover(trash.to_path_buf());
+        run_listed(
+            dir,
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            |path: &Path| {
+                if refuse.iter().any(|name| path.file_name().unwrap() == *name) {
+                    return Err("locked".to_string());
+                }
+                inner(path)
+            },
+            |groups, mover| run(groups, mover, |_, _| {}),
+        )
+    }
+
+    #[test]
+    fn a_move_to_trash_keeps_an_xmp_a_kept_raw_shares_and_its_undo_brings_back_only_the_rest() {
+        let dir = temp_dir("trash-shared-xmp");
+        let trash = temp_dir("trash-shared-xmp-bin");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.ARW.dop"] {
+            write(&dir.join(name));
+        }
+        let (summary, moved) = trash_in(&dir, &trash, &["a.ARW"], &[]);
+        assert_eq!(summary.moved, [key(&dir.join("a.ARW"))]);
+        assert!(summary.failed.is_empty(), "{:?}", summary.failed);
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.ARW.dop"].map(|name| dir.join(name))
+        );
+        assert!(dir.join("a.xmp").exists());
+        assert!(dir.join("a.NEF").exists());
+        let run = TrashRun { id: 1, moved };
+        let in_trash = ["a.ARW", "a.ARW.dop"].map(|name| key(&dir.join(name)));
+        let in_trash: Vec<&str> = in_trash.iter().map(String::as_str).collect();
+        let (restored, asked) = restore_with(&run, &in_trash, &[]);
+        assert_eq!(asked, in_trash);
+        assert_eq!(restored.restored, [key(&dir.join("a.ARW"))]);
+        assert_eq!(
+            back_paths(&restored),
+            ["a.ARW", "a.ARW.dop"].map(|name| dir.join(name))
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&trash);
+    }
+
+    #[test]
+    fn a_move_to_trash_of_every_raw_sharing_an_xmp_moves_it_once_after_the_last() {
+        let dir = temp_dir("trash-shared-both");
+        let trash = temp_dir("trash-shared-both-bin");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.ARW.dop", "a.NEF.dop", "b.ARW"] {
+            write(&dir.join(name));
+        }
+        let (summary, moved) = trash_in(&dir, &trash, &["a.ARW", "a.NEF", "b.ARW"], &[]);
+        assert!(summary.failed.is_empty(), "{:?}", summary.failed);
+        assert_eq!(summary.moved.len(), 3);
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.ARW.dop", "a.NEF", "a.NEF.dop", "a.xmp", "b.ARW"]
+                .map(|name| dir.join(name))
+        );
+        assert!(!dir.join("a.xmp").exists());
+        assert!(trash.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&trash);
+    }
+
+    #[test]
+    fn a_move_to_trash_keeps_an_xmp_when_one_of_the_raws_sharing_it_fails() {
+        let dir = temp_dir("trash-shared-failure");
+        let trash = temp_dir("trash-shared-failure-bin");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.NEF.dop"] {
+            write(&dir.join(name));
+        }
+        let (summary, moved) = trash_in(&dir, &trash, &["a.ARW", "a.NEF"], &["a.ARW"]);
+        assert_eq!(summary.moved, [key(&dir.join("a.NEF"))]);
+        assert_eq!(summary.failed.len(), 1);
+        assert_eq!(summary.failed[0].path, key(&dir.join("a.ARW")));
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.NEF", "a.NEF.dop"].map(|name| dir.join(name))
+        );
+        assert!(dir.join("a.ARW").exists());
+        assert!(dir.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&trash);
+    }
+
+    #[test]
+    fn a_chunked_move_to_trash_hands_a_shared_xmp_over_at_most_once() {
+        let dir = temp_dir("trash-shared-chunked");
+        let trash = temp_dir("trash-shared-chunked-bin");
+        for name in ["a.ARW", "a.NEF", "a.xmp", "a.ARW.dop"] {
+            write(&dir.join(name));
+        }
+        let listing = read_listing(&dir, Some(SidecarFormat::Both)).unwrap();
+        let paths = ["a.ARW", "a.NEF"].map(|name| key(&dir.join(name)));
+        let calls = RefCell::new(Vec::new());
+        let (summary, moved) = run_listed(
+            &dir,
+            &paths,
+            &listing.files,
+            &stat_sidecars(&listing.sidecars),
+            mover(trash.clone()),
+            |groups, mover| {
+                run_chunked(
+                    groups,
+                    Path::exists,
+                    move_many(&trash, &calls),
+                    mover,
+                    |_, _| {},
+                )
+            },
+        );
+        assert!(summary.failed.is_empty(), "{:?}", summary.failed);
+        let handed = calls
+            .into_inner()
+            .into_iter()
+            .flatten()
+            .filter(|name| name == "a.xmp")
+            .count();
+        assert!(handed <= 1, "{handed}");
+        assert_eq!(
+            moved_paths(&moved),
+            ["a.ARW", "a.ARW.dop", "a.NEF", "a.xmp"].map(|name| dir.join(name))
+        );
+        assert!(trash.join("a.xmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&trash);
     }
 
     #[test]
