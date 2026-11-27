@@ -5789,7 +5789,7 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
 - Not verified in the running app: the IME in the editor and a rename
   during an import run; the hand checks are pending in `todo.md`.
 
-### An import's end posts a system-only notification while inactive (Inferred)
+### An import's end posts a system-only notification while inactive (Measured)
 
 - `import::done_notification` decides and words it: nothing while the main
   window is active, else `Import finished` or `Import canceled` over
@@ -5816,13 +5816,22 @@ selection; `rename.rs` is the pure part (`commit`, `edit_outcome`,
   `Handpic.app` in a trusted location and asks for authorization on the
   first post; Linux needs a notification daemon and cannot retract or
   replace one. Not unit-tested beyond the decision and the text (no
-  `gpui::test` harness here); the hand check on Windows is pending in
-  `../plans/20261116-native-import-notification/learnings.md`.
+  `gpui::test` harness here); the delivery, the click and the active case
+  were checked by hand on Windows (below), the taskbar button's icon and
+  grouping were not.
 - Seen (2026-11-22, Windows 11): an import that ended while the window was
   inactive posted a toast at the desktop's bottom-right with the header
   `Handpic`, the title `Import finished` and the status line's summary as its
   body, under a generic app icon, not Handpic's (results in
-  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`).
+  `../plans/_archived/20261122-windows-device-checks-5/learnings.md`). On
+  2026-11-27 a cancel with Notepad in front posted `Import canceled` /
+  `Import canceled, 13 files copied`, a finished run `Import finished` /
+  `Imported 18 files (676.5 MB)` about 0.9 s after `Run`, a click on that
+  toast brought the Handpic window to the front, a run with the window kept
+  in front posted nothing for 10 s, and no log had a
+  `failed to register AppUserModelID` or `cannot show a system notification`
+  line (results in
+  `docs/plans/_archived/20261127-windows-device-checks-c6/results.md`).
 
 ## Timings
 
