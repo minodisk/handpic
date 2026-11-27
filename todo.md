@@ -34,7 +34,7 @@ Files: `docs/plans/_archived/20261128-af-luma-reuse/luma-reuse.md`, `crates/core
 #### TODO
 
 - [ ] When real bursts of another make are on the host, run `lumascore.patch`'s subcommand (in `docs/plans/_archived/20261128-af-luma-reuse/`) and `burst_spearman.py one` on them, and record the within-burst Spearman and the top-frame share. If the ranking holds, update the "other makes' AF bursts were not checked" sentence in `docs/agents/shared-crates.md`; if it breaks, restrict the reuse by make and bump `FACES_VERSION`.
-/^>>>>>>> d968115f/d
+
 ### App: the strip's Copy Path copies the Windows verbatim prefix
 
 #### Background
