@@ -408,7 +408,8 @@ screenshot -- -D warnings`, as do `mise run app:check` and `mise run
 ci:local` (its `clippy app screenshot` check, selected wherever `clippy
 app` is) on a Windows host. Windows is where the `screenshot` tool was
 checked live, Linux's `render_to_image` is not implemented, and the macOS leg
-already compiles a second variant of the app for its bundle step. The feature
+already builds the app with the feature in its bundle step (see "The macOS
+bundle step reuses the test build"), though not under clippy. The feature
 turns on `test-support` in a direct `gpui-pre-platform` dependency, the same
 crate and feature the UI tests' dev-dependency turns on (see "The main view
 opens on GPUI's test platform"), so the default `clippy --all-targets` already
@@ -416,6 +417,34 @@ builds the GPUI crates that way and this run only re-checks `handpic-app`.
 
 - Rule: keep the feature command string identical in `ci.yml`,
   `tools/ci/local.sh` and `app:check`.
+
+### The macOS bundle step reuses the test build (Measured)
+
+The `app (macos-latest)` job has `timeout-minutes: 30`, and cold-cache runs
+(the `actions/cache` step restoring nothing) took 24 to 29.5 minutes and
+were cancelled at the limit on some PRs: "Lint and test the app" 15 to
+19 minutes and "Bundle and check Handpic.app" 8 to 10 minutes. A warm run
+takes 2 to 5 minutes. The bundle step's plain `cargo build` had the
+dev-dependency `gpui-pre-platform` with `test-support` off, so the GPUI
+crates compiled a second time in another feature variant after `cargo test`
+built them with it. On 2026-11-27 the step was changed to `mise run
+app:bundle:macos debug --features screenshot` rather than the timeout
+raised: the `screenshot` feature (`["dep:gpui-pre-platform", "image/png"]`,
+`gpui-pre-platform` with `test-support`) turns on the same dependency
+features the dev-dependencies do (`gpui-pre-platform` with `test-support`,
+`image` with `png`), and `cargo test` and `cargo build` share the dev
+profile's dependency artifacts, so the step compiles only `handpic-app`.
+Raising the limit would have kept the duplicate compilation on every cold
+run and the second variant in the macOS cache (2.4 GB) of a repository whose
+caches overrun the 10 GB limit and are evicted. The step checks only the
+bundle's layout, which the feature does not change; the release bundle comes
+from `package.yml`, still with no feature. So `ci.yml` no longer builds a
+default-feature, non-test app on any platform; `Package` still does.
+
+- Rule: the CI bundle build keeps the dependency feature set of `cargo test`.
+  A `Compiling gpui-*` line in the bundle step's log means they differ;
+  compare `cargo tree -e features --features screenshot` with the test
+  build's before raising `timeout-minutes`.
 
 ### Without NASM, mozjpeg silently loses SIMD (Measured)
 
@@ -564,8 +593,8 @@ the distributables").
 
 ### macOS gets `Handpic.app` from a mise task (Inferred)
 
-`mise run app:bundle:macos [profile]` (release by default) builds and lays
-out `crates/app/target/<profile>/Handpic.app` with the checked-in
+`mise run app:bundle:macos [profile] [--features <features>]` (release and
+no cargo feature by default) builds and lays out `crates/app/target/<profile>/Handpic.app` with the checked-in
 `crates/app/packaging/macos/Info.plist`, `Contents/MacOS/Handpic` (the
 Cargo bin `handpic`, copied under the shipped name) and
 `crates/app/icons/icon.icns` as `Contents/Resources/icon.icns`, writes the
@@ -573,15 +602,16 @@ numeric form `tools/package/version.sh numeric` prints into the copied
 `Info.plist`'s `CFBundleShortVersionString` and `CFBundleVersion` (`plutil
 -replace`; the checked-in file keeps `0.0.0`) and copies the notices into
 `Contents/Resources/licenses/` (`notices.sh`). It does not sign. The `app`
-CI job's macOS leg bundles the debug build and checks it (`plutil -lint`, the
-executable and the `.icns` present).
+CI job's macOS leg bundles the debug build with the `screenshot` feature (see
+"The macOS bundle step reuses the test build") and checks it (`plutil -lint`,
+the executable and the `.icns` present).
 
 - Rule: the bundle identifier and the Linux `app_id` are `IDENTIFIER`, the
   one the Tauri app had, which the app replaced. `datadir.rs`'s
   tests check that `Info.plist` and the `.desktop` file agree with
   `IDENTIFIER` and the binary's name; change them together.
 - Rule: the `app` CI job's macOS leg runs `mise run app:bundle:macos
-  debug` itself, so CI exercises the task this section describes. The
+  debug --features screenshot` itself, so CI exercises the task this section describes. The
   Windows-only NASM `PATH` problem (see "winget's NASM is per-user and not on
   `PATH`") that keeps other steps on `mise exec` does not apply on macOS.
 - Pending manual checks, not done here: the taskbar, title bar and Explorer
@@ -3377,7 +3407,10 @@ after about 11 ms, one retry) and fails the test if it is still held after
   the wait instead.
 - Rule: non-test code must not use a test-only GPUI API. `cargo test` and
   `clippy --all-targets` see `test-support` and pass it; only a plain build
-  (the macOS job's bundle step, `cargo build`) fails.
+  (`cargo build`, the `Package` workflow's release build) fails. The macOS
+  CI job's bundle step builds with `screenshot`, which turns `test-support`
+  on too (see "The macOS bundle step reuses the test build"), so it no
+  longer catches this.
 
 ### The UI tests drive the view with keys over generated DNGs (Measured)
 
