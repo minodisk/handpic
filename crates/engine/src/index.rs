@@ -209,7 +209,11 @@ pub const FACES_VERSION: i64 = 16;
 /// counts. Bump it on any change to those counts (`crates/core/src/allfaces.rs`,
 /// or the cue and the full-size measure they reuse); pass 3 then re-runs on
 /// every row at the gate. A row pass 2 writes or resets goes back to `0`.
-pub const ALLFACES_VERSION: i64 = 1;
+/// `2` takes the other faces from `allfaces::GATE_LOW_RES_CONFIDENCE` (0.6)
+/// instead of `sharpness::FACE_CONFIDENCE` (0.8), the floor the gate counts
+/// from, so a posed group's faces scoring 0.64 to 0.75 are judged too
+/// (`docs/plans/_archived/20261128-candidates-floor/`).
+pub const ALLFACES_VERSION: i64 = 2;
 
 /// Files per transaction while scanning. `thumbnail` / `folder_entries` read
 /// through their own connection (`Index::open_reader`) and do not wait on

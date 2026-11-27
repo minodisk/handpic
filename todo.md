@@ -1210,14 +1210,6 @@ Files: `install.ps1`.
 - [ ] On Windows, open a real group photo folder (for example a team-sport ARW folder), let the scan finish (`checking faces` gone from the status line), then check `Filter ▾` > `Eyes` > `Anyone closed`. Expected: the strip narrows to the frames whose meta pane `Faces with closed eyes` is at least 1 (each a real blink on some face, or a false closed reading worth noting), no frame whose `Similar faces` is under `Faces in a group photo` stays; `Anyone soft` likewise against `Faces with soft eyes`; adding `Open` widens the strip to those frames plus the open-eyed ones; raising the number in the settings past a shown frame's `Similar faces` hides it at once; the checks survive a restart.
 - [ ] On macOS and Linux, repeat the Windows check.
 
-### Core: pass 3 judges faces from 0.8 while the gate now counts from 0.6 (gate-floor-no-af)
-
-`gate-floor-no-af` made the gate count (`allfaces::gate_count`) use `GATE_LOW_RES_CONFIDENCE` (0.6) on frames without an AF point too. Pass 3's candidates (`allfaces::candidates`) still use `FACE_CONFIDENCE` (0.8). On `2026-02-01/L1005161.DNG` the gate counts 7, but pass 3 judges at most the 4 faces scoring 0.8 or above (three faces score 0.64 to 0.75), so `Similar faces` exceeds `Faces judged` by 3. `L1005172.DNG` has 3 faces between 0.6 and 0.8 and `L1005173.DNG` has 2. Lowering the candidates' floor is a separate change and was out of scope for that plan. Plan: `docs/plans/_archived/20261126-gate-floor-no-af/plan.md`. Files: `crates/core/src/allfaces.rs` (`candidates`).
-
-#### TODO
-
-- [ ] Decide whether to lower the candidates' floor to 0.6 so `Faces judged` follows the gate count. If so, measure the extra pass 3 work and the false closed readings on low-score faces, then bump `ALLFACES_VERSION`.
-
 ### App: real-device checks of the settings layer under the title bar (settings-under-title-bar)
 
 #### Background
