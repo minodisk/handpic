@@ -483,7 +483,6 @@ Run 45091844682 attempt 1, `app (ubuntu-latest)` (job 137424185183, 2026-11-23, 
 - [ ] When the watchdog next fires in CI, read the phase and the log lines from the job log, find the cause and fix it. Done when the cause is fixed.
 
 ### Core: re-measure the import copy pipeline against Explorer on a fast destination
-
 #### Background
 
 The import-from-card feature's `riffle-cli copybench` measured the copy pipeline (8 MiB x 4 buffers, per-file `sync_all`) only against `D:` (a Crucial BX500, DRAM-less, 96 % full). That drive capped every method at 8-22 MB/s, including `robocopy`, while the card read alone ran at 135 MB/s. The numbers cannot tell the methods apart, and Explorer itself was never timed. The defaults stay at 8 MiB x 4, and `FILE_FLAG_SEQUENTIAL_SCAN` and dropping `sync_all` showed no gain on that drive. Plan: docs/plans/_archived/20261106-import-from-card/plan.md.
