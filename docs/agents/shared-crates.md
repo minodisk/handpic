@@ -814,7 +814,7 @@ full-eye-sharp-only plan removed.
 - Source: `docs/plans/_archived/20261008-burst-keep-score/learnings.md`,
   Steps 3, 5, 5b, 7.
 
-### Matching the judged face against the other faces: eye landmarks do not work, and no overlap cut separates every twin (Measured)
+### Matching the judged face against the other faces: eye landmarks, overlap and box shape do not separate every twin, and the rest is accepted (Measured)
 
 `allfaces::gate_count` and `allfaces::candidates` must not count the judged
 face a second time. `allfaces::same_face` treats two boxes as one face when
@@ -838,17 +838,26 @@ and the no-AF DNG folder `2026-02-01`).
   Above it, replacing turns IoU-matched same-face pairs into double counts
   (18 gate frames at 0.55, 42 at 0.6). Any cut above the highest neighbour
   therefore has to be the union with IoU, never a replacement.
-- What is left. About 30 AF frames of `2026-11-07` had a 320x224 gate count
-  that held the judged face twice (a box on the ear, a larger box or a
-  partial box) at overlap 0.3 to 0.55. The union at 0.55 fixed only 11 of
-  them. The rest need another rule, not a different cut. This is the open
-  `todo.md` item "the judged face can be counted twice in the all-faces
-  counts and the gate count".
+- Do not match by box shape or size either. Over the 39 counted pairs at
+  IoU at or under 0.3 and overlap 0.3 to 0.55, the aspect ratio between the
+  two boxes is 1.001 to 1.481 for the 24 twins and 1.002 to 1.258 for the 10
+  different people, and the long-side ratio 1.011 to 1.753 against 1.017 to
+  1.931. Above the highest neighbour only 4 twins (17%) fall on the aspect
+  ratio and none on the long side. The gate's size band already caps a gate
+  pair's long-side ratio at 2.0.
+- What is left, accepted. About 30 AF frames of `2026-11-07` had a 320x224
+  gate count that held the judged face twice (a box on the ear, a larger box
+  or a partial box) at overlap 0.3 to 0.55. The union at 0.55 fixed 11 of
+  them. The remaining 21 gate frames and 3 candidate pairs (overlap about
+  0.3 to 0.55) stay double-counted: neither the eye landmarks, the overlap
+  nor the box shape and size separate them from different people, and the
+  mesh and full-size-image rules were left out of scope.
 - Changing the rule changes `gate_count`, so bump `FACES_VERSION`
   (14 to 15 here). `ALLFACES_VERSION` did not need a bump.
 - Source:
   `docs/plans/_archived/20261126-judged-face-eye-match/learnings.md`
-  (`measurement.md`, `overlap-measurement.md` beside it).
+  (`measurement.md`, `overlap-measurement.md` beside it) and
+  `docs/plans/_archived/20261128-judged-face-box-shape/measurement.md`.
 
 ### A learned discard score over the stored technical features did not hold on fresh folders (Hit)
 
