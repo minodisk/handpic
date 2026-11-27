@@ -106,3 +106,4 @@ The check, as run (2026-11-28, Windows 11):
 ## Progress
 
 - 2026-11-28: Step 1 done. Docs-only; no local build or `mise run ci:local` was run, and the PR's GitHub checks verify the links and the Markdown lint.
+- (2026-11-28) Step 1 complete
