@@ -185,11 +185,11 @@ where
             Ok(dir) => {
                 // A queued event can arrive past the deadline; the due report
                 // goes first so a steady stream cannot hold it back.
-                let now = Instant::now();
-                if let Some(due) = pending.take_if(|burst| burst.deadline <= now) {
-                    emit(&due.dir);
+                let (due, next) = step(pending.take(), dir, Instant::now());
+                if let Some(due) = due {
+                    emit(&due);
                 }
-                pending = Some(burst(pending.take(), dir, now));
+                pending = Some(next);
             }
             Err(RecvTimeoutError::Timeout) => {
                 if let Some(Burst { dir, .. }) = pending.take() {
@@ -199,6 +199,16 @@ where
             Err(RecvTimeoutError::Disconnected) => return,
         }
     }
+}
+
+/// What an event on `dir` at `now` does to the `pending` report: the folder
+/// whose report was already due, to emit first (a queued event can arrive past
+/// the deadline), and the new pending burst.
+fn step(mut pending: Option<Burst>, dir: String, now: Instant) -> (Option<String>, Burst) {
+    let due = pending
+        .take_if(|burst| burst.deadline <= now)
+        .map(|burst| burst.dir);
+    (due, burst(pending, dir, now))
 }
 
 /// A folder's pending report: when its burst began and when it is due.
@@ -211,7 +221,8 @@ struct Burst {
 /// The pending report after an event on `dir` at `now`. The same folder's
 /// burst keeps its first event and is due at the earlier of `DEBOUNCE` from
 /// now and `MAX_WAIT` from that first event. Another folder starts a new
-/// burst: the old one is no longer open, so its pending report is dropped.
+/// burst: the old one is no longer open, so its pending report is dropped
+/// (`step` still emits one that was already due, which the app ignores).
 fn burst(pending: Option<Burst>, dir: String, now: Instant) -> Burst {
     match pending {
         Some(Burst {
@@ -374,22 +385,19 @@ mod tests {
         let step = Duration::from_millis(100);
         let mut pending: Option<Burst> = None;
         let mut reports = Vec::new();
-        let mut report_due = |pending: &mut Option<Burst>, now: Instant| {
-            if pending.as_ref().is_some_and(|b| b.deadline <= now) {
-                reports.push(pending.take().unwrap().deadline - start);
-            }
-        };
         let mut now = start;
         for _ in 0..70 {
-            report_due(&mut pending, now);
-            pending = Some(burst(pending.take(), "/photos".to_string(), now));
+            let deadline = pending.as_ref().map(|b| b.deadline);
+            let (due, next) = super::step(pending.take(), "/photos".to_string(), now);
+            if due.is_some() {
+                reports.push(deadline.unwrap() - start);
+            }
+            pending = Some(next);
             now += step;
         }
         let last = now - step;
-        while pending.is_some() {
-            report_due(&mut pending, now);
-            now += step;
-        }
+        // The stream stopped: the timeout path reports at the deadline.
+        reports.push(pending.take().unwrap().deadline - start);
         assert_eq!(
             reports,
             vec![
