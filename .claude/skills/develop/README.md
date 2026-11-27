@@ -196,7 +196,7 @@ one-to-one onto the nodes in the diagram above.
 | **3** | **Wrap-up** (once) | |
 | 3.1 | Chore branch prep | `ensure-new-branch.sh` |
 | 3.2 | Extract learnings | `learnings-extractor` (agent) + main consolidates into the existing guides and saves follow-ups as the feature's todo candidates |
-| 3.3 | Curate todo.md | `todo-curator` (agent) + main writes without consent (pending manual checks land as items too; deferred judgments go to the PR body) |
+| 3.3 | Curate todo.md | `todo-curator` (agent) + main writes without consent (deferred judgments go to the PR body) + main runs the pending manual checks this host can run, recording them in `results.md`, and files only the rest, each with its reason |
 | 3.4 | Promote settings | `settings-promoter` (agent) + `commit-settings.sh` |
 | 3.5 | Archive the plan + tidy auto memory | `archive-plan.sh` + main |
 | 3.6 | Create and watch the chore PR | `pr-runner` (agent) |
@@ -206,7 +206,7 @@ one-to-one onto the nodes in the diagram above.
 | S.2 | Persist the plan (= 1.2) | `ensure-plan-dir.sh` + `Write` (no commit) |
 | S.3 | Implementation (= 2.2) | `implementer` (agent) |
 | S.4 | Local review (= 2.3) | `local-review-runner` (agent) + `local-review-reviewer` + `commit-review-history.sh` |
-| S.5 | Wrap-up (= 3.2–3.5) | `learnings-extractor` → `todo-curator` (pending manual checks land in `todo.md` too) → `settings-promoter` + `commit-settings.sh` → append Progress → archive with a plain `mv` → tidy auto memory |
+| S.5 | Wrap-up (= 3.2–3.5) | `learnings-extractor` → `todo-curator` (main runs the pending manual checks this host can run, as in 3.3; the rest land in `todo.md`) → `settings-promoter` + `commit-settings.sh` → append Progress → archive with a plain `mv` → tidy auto memory |
 | S.6 | Create and watch the PR | `pr-runner` (agent) |
 | S.7 | Merge | `merger` (agent) |
 
@@ -581,9 +581,14 @@ a delete-the-whole-line convention, so git history retains what was completed
 and it can be restored with `git revert` or by re-adding). The "record only"
 part from `learnings-extractor` is not applied to its proposed target directly:
 it is saved under `## Deferred issues (todo candidates)` in the feature's file
-and lands in `todo.md` via `todo-curator`, as do the manual checks a feature
-left pending. Existing issues are merged, and the outcome is written into the
-PR body. `todo-curator`'s deferred judgments are
+and lands in `todo.md` via `todo-curator`. The manual checks a feature left
+pending come back from `todo-curator` as candidates of their own, classified
+against the host: main runs the ones this host can run (the app through MCP
+and screenshots, the log, a shell command, an installer), records them in the
+plan folder's `results.md`, and files only the rest, each with a one-line
+"not runnable here" reason (another OS, hardware the host lacks, or the
+user). Existing issues are merged, and the outcome, the checks run among it,
+is written into the PR body. `todo-curator`'s deferred judgments are
 recorded in the PR body. Creating or appending to `docs/learnings/` has ended;
 reusable points are consolidated into the existing guides, and measurements and
 history stay in the feature's `learnings.md` and go to the archive. The reason
